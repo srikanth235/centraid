@@ -3,7 +3,7 @@
   "id": "agenda",
   "name": "Agenda",
   "description": "Your calendar as a projection of the personal vault: upcoming events from core.event, proposals, RSVPs and cancellation asks through consent-checked typed commands (cancelling is medium-risk, so it parks for the owner's confirmation). No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your upcoming schedule and lets you propose, move, and respond to events.",
@@ -254,10 +254,17 @@
   "queries": [
     {
       "name": "upcoming",
-      "description": "Non-cancelled events from today forward, soonest first, with the calendars they could land on.",
+      "description": "Non-cancelled events, soonest first, with the calendars they could land on and each event's calendar_id. Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
         "additionalProperties": false
       },
       "output": {

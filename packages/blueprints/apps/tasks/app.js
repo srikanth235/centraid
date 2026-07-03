@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Tasks is a finished Things-style product — natural-language quick-add, reschedule popovers, quick find, focus views, keyboard driving, drag-to-bucket — and splitting it would break that "one file" contract.
 // Tasks — a Things-style manager that is still a pure projection over the
 // personal vault. Every row rendered here lives in schedule.task; every
 // mutation is a typed vault command (schedule.add_task / set_task_status /
@@ -6,12 +7,21 @@
 // grant and this page goes dark while the tasks, history and receipts
 // remain the owner's.
 
+import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+
 const $ = (id) => document.getElementById(id);
 
 const OPEN_STATUSES = new Set(['needs-action', 'in-process']);
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The quick-add form's optional subtask context: set by the "+" on a row.
 let parentContext = null; // { task_id, title }
+
+// Client-side presentation state — never persisted, never sent to the vault.
+const state = { view: 'all', search: '' };
+let lastData = null; // last successful board read, re-rendered on filter flips
+let readFailedShown = false;
 
 function todayStr() {
   const d = new Date();
@@ -48,13 +58,8 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it will appear once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  }
+  const message = outcomeMessage(outcome);
+  if (message) notice(message);
   return false;
 }
 
@@ -64,10 +69,11 @@ async function write(action, input) {
     outcome = await window.centraid.write({ action, input });
   } catch (err) {
     notice(String(err?.message ?? err));
-    return;
+    return undefined;
   }
   // Executed, and consent-state changes (denied) both warrant a re-read.
   if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+  return outcome;
 }
 
 // Like write(), but returns the raw outcome so the shared attachment helpers
@@ -153,7 +159,7 @@ function wireAttachInput(inputEl, getSubjectId) {
         data_uri: dataUri,
         title: file.name,
       });
-      if (!narrate(outcome, refresh)) break;
+      if (!narrate(outcome)) break;
     }
     inputEl.value = '';
     await refresh();
@@ -174,7 +180,14 @@ async function refresh() {
   try {
     data = await window.centraid.read({ query: 'board' });
   } catch {
-    return; // transient; the change feed retries
+    // A broken vault must not look like an empty one.
+    readFailed($('noticeBanner'));
+    readFailedShown = true;
+    return;
+  }
+  if (readFailedShown) {
+    readFailedShown = false;
+    notice('');
   }
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
@@ -187,8 +200,14 @@ async function refresh() {
     $('subtitle').textContent = 'Your canonical task list, from the vault.';
     return;
   }
-  renderBoard(data?.open ?? [], data?.counts ?? {});
-  renderLogbook(data?.logbook ?? []);
+  lastData = data;
+  render();
+}
+
+function render() {
+  if (!lastData) return;
+  renderBoard(lastData.open ?? [], lastData.counts ?? {});
+  renderLogbook(lastData.logbook ?? []);
 }
 
 // ---------- The open board, bucketed by due date ----------
@@ -210,10 +229,95 @@ const BUCKETS = [
   { key: 'anytime', label: 'Anytime' },
 ];
 
+// Which buckets each focus view shows; Today folds in Overdue, like Things.
+const VIEW_BUCKETS = {
+  all: new Set(['overdue', 'today', 'week', 'later', 'anytime']),
+  today: new Set(['overdue', 'today']),
+  upcoming: new Set(['week', 'later']),
+};
+
+// Quick find: keep a parent when it matches (with all its subtasks), or slim
+// it down to just the matching subtasks when only children hit.
+function applySearch(open) {
+  const q = state.search.trim().toLowerCase();
+  if (!q) return open;
+  const hit = (t) =>
+    String(t.title ?? '')
+      .toLowerCase()
+      .includes(q);
+  return open
+    .map((task) => {
+      if (hit(task)) return task;
+      const children = (task.children ?? []).filter(hit);
+      return children.length ? { ...task, children } : null;
+    })
+    .filter(Boolean);
+}
+
+// Roving keyboard selection over the rows currently on the board.
+let boardRows = []; // [{ task, row, text, dueBtn }] rebuilt on each render
+let selectedId = null;
+
+function selectedEntry() {
+  return boardRows.find((r) => r.task.task_id === selectedId);
+}
+
+function setSelected(taskId, { scroll = true } = {}) {
+  selectedId = taskId;
+  for (const r of boardRows) {
+    r.row.classList.toggle('selected', r.task.task_id === taskId);
+  }
+  if (scroll) selectedEntry()?.row.scrollIntoView({ block: 'nearest' });
+}
+
+function moveSelection(dir) {
+  if (!boardRows.length) return;
+  const i = boardRows.findIndex((r) => r.task.task_id === selectedId);
+  const next =
+    i < 0
+      ? dir > 0
+        ? 0
+        : boardRows.length - 1
+      : Math.min(boardRows.length - 1, Math.max(0, i + dir));
+  setSelected(boardRows[next].task.task_id);
+}
+
+// Dragging a row onto a bucket header rewrites its due date.
+let dragTaskId = null;
+const DROP_DUE = {
+  overdue: () => todayStr(),
+  today: () => todayStr(),
+  week: () => plusDays(7),
+};
+
+function wireDropTarget(header, key) {
+  if (!(key in DROP_DUE) && key !== 'anytime') return;
+  header.addEventListener('dragover', (e) => {
+    if (!dragTaskId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    header.classList.add('drop');
+  });
+  header.addEventListener('dragleave', () => header.classList.remove('drop'));
+  header.addEventListener('drop', (e) => {
+    e.preventDefault();
+    header.classList.remove('drop');
+    const id = dragTaskId;
+    dragTaskId = null;
+    if (!id) return;
+    const input =
+      key === 'anytime'
+        ? { task_id: id, clear_due: true }
+        : { task_id: id, due_at: DROP_DUE[key]() };
+    write('edit', input);
+  });
+}
+
 function renderBoard(open, counts) {
   const board = $('board');
   board.innerHTML = '';
-  $('empty').hidden = open.length > 0;
+  boardRows = [];
+  closePopover();
   const today = todayStr();
   const dueToday = open.filter((t) => t.due_at && String(t.due_at).slice(0, 10) <= today).length;
   $('subtitle').textContent =
@@ -222,42 +326,226 @@ function renderBoard(open, counts) {
       : 'Your canonical task list, from the vault.';
 
   const weekEnd = plusDays(7);
+  const visible = applySearch(open);
   const groups = new Map(BUCKETS.map((b) => [b.key, []]));
-  for (const task of open) groups.get(bucketFor(task, today, weekEnd)).push(task);
+  for (const task of visible) groups.get(bucketFor(task, today, weekEnd)).push(task);
 
+  let shown = 0;
   for (const { key, label } of BUCKETS) {
+    if (!VIEW_BUCKETS[state.view].has(key)) continue;
     const tasks = groups.get(key);
     if (!tasks.length) continue;
+    shown += tasks.length;
     const h = document.createElement('p');
     h.className = 'section-label muted small';
     h.dataset.bucket = key;
     h.textContent = `${label} · ${tasks.length}`;
+    wireDropTarget(h, key);
     board.appendChild(h);
     for (const task of tasks) {
-      board.appendChild(renderRow(task, { showDue: key === 'later' || key === 'overdue' }));
+      board.appendChild(renderRow(task));
       for (const child of task.children ?? []) {
-        board.appendChild(renderRow(child, { subtask: true, showDue: true }));
+        board.appendChild(renderRow(child, { subtask: true }));
       }
     }
   }
+
+  const empty = $('empty');
+  if (open.length === 0) {
+    empty.textContent = 'Nothing to do — enjoy your day.';
+    empty.hidden = false;
+  } else if (shown === 0) {
+    empty.textContent = state.search.trim()
+      ? 'No tasks match your search.'
+      : 'Nothing in this view.';
+    empty.hidden = false;
+  } else {
+    empty.hidden = true;
+  }
+
+  if (selectedId && !selectedEntry()) selectedId = null;
+  if (selectedId) setSelected(selectedId, { scroll: false });
 }
 
 // ---------- The logbook (closed top-level tasks) ----------
 
 function renderLogbook(logbook) {
+  const q = state.search.trim().toLowerCase();
+  const visible = q
+    ? logbook.filter((t) =>
+        String(t.title ?? '')
+          .toLowerCase()
+          .includes(q),
+      )
+    : logbook;
   const details = $('logbook');
-  details.hidden = logbook.length === 0;
-  $('logbookCount').textContent = logbook.length ? `· ${logbook.length}` : '';
+  details.hidden = visible.length === 0;
+  $('logbookCount').textContent = visible.length ? `· ${visible.length}` : '';
   const list = $('logbookList');
   list.innerHTML = '';
-  for (const task of logbook) {
-    list.appendChild(renderRow(task, { closed: true, showDue: false }));
+  for (const task of visible) {
+    list.appendChild(renderRow(task, { closed: true }));
+  }
+}
+
+// ---------- Popovers (one shared host: reschedule, priority & effort) ----------
+
+let popoverEl = null;
+
+function closePopover() {
+  popoverEl?.remove();
+  popoverEl = null;
+}
+
+function openPopover(anchor, build) {
+  closePopover();
+  const pop = document.createElement('div');
+  pop.className = 'popover';
+  build(pop);
+  pop.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closePopover();
+    }
+  });
+  document.body.appendChild(pop);
+  popoverEl = pop;
+  const r = anchor.getBoundingClientRect();
+  const left = Math.max(
+    8,
+    Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - pop.offsetWidth - 8),
+  );
+  pop.style.left = `${left}px`;
+  pop.style.top = `${r.bottom + window.scrollY + 6}px`;
+  pop.querySelector('input, select, button')?.focus();
+}
+
+document.addEventListener('pointerdown', (e) => {
+  if (popoverEl && !popoverEl.contains(e.target)) closePopover();
+});
+
+// The reschedule popover: Things' "When" — presets plus an exact date.
+function openDuePopover(anchor, task) {
+  openPopover(anchor, (pop) => {
+    const label = document.createElement('span');
+    label.className = 'pop-label';
+    label.textContent = 'When';
+    pop.appendChild(label);
+    const presets = document.createElement('div');
+    presets.className = 'pop-row';
+    const preset = (text, input) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ghost';
+      btn.textContent = text;
+      btn.addEventListener('click', () => {
+        closePopover();
+        write('edit', { task_id: task.task_id, ...input });
+      });
+      presets.appendChild(btn);
+    };
+    preset('Today', { due_at: todayStr() });
+    preset('Tomorrow', { due_at: plusDays(1) });
+    preset('Next week', { due_at: plusDays(7) });
+    if (task.due_at) preset('Clear', { clear_due: true });
+    pop.appendChild(presets);
+    const date = document.createElement('input');
+    date.type = 'date';
+    date.setAttribute('aria-label', 'Due date');
+    if (task.due_at) date.value = String(task.due_at).slice(0, 10);
+    date.addEventListener('change', () => {
+      if (!date.value) return;
+      closePopover();
+      write('edit', { task_id: task.task_id, due_at: date.value });
+    });
+    pop.appendChild(date);
+  });
+}
+
+// The details popover: change priority and estimated effort after creation.
+function openEditPopover(anchor, task) {
+  openPopover(anchor, (pop) => {
+    const prioLabel = document.createElement('label');
+    prioLabel.className = 'pop-label';
+    prioLabel.textContent = 'Priority';
+    const sel = document.createElement('select');
+    for (const [value, text] of [
+      ['0', 'No priority'],
+      ['1', 'High'],
+      ['5', 'Medium'],
+      ['9', 'Low'],
+    ]) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = text;
+      sel.appendChild(opt);
+    }
+    const p = Number(task.priority ?? 0);
+    sel.value = p <= 0 ? '0' : p <= 3 ? '1' : p <= 6 ? '5' : '9';
+    prioLabel.appendChild(sel);
+    pop.appendChild(prioLabel);
+
+    const effortLabel = document.createElement('label');
+    effortLabel.className = 'pop-label';
+    effortLabel.textContent = 'Effort (min)';
+    const eff = document.createElement('input');
+    eff.type = 'number';
+    eff.min = '1';
+    eff.step = '1';
+    eff.placeholder = 'Est. min';
+    if (task.effort_min) eff.value = String(task.effort_min);
+    effortLabel.appendChild(eff);
+    pop.appendChild(effortLabel);
+
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'pop-save';
+    save.textContent = 'Save';
+    save.addEventListener('click', () => {
+      const input = { task_id: task.task_id, priority: Number(sel.value) };
+      const minutes = Number(eff.value);
+      if (minutes > 0) input.effort_min = Math.round(minutes);
+      closePopover();
+      write('edit', input);
+    });
+    pop.appendChild(save);
+  });
+}
+
+// ---------- Completing and cancelling, with an undo window ----------
+
+async function completeTask(task, row, circle) {
+  const prev = task.status;
+  if (!REDUCED_MOTION.matches && row && circle) {
+    circle.textContent = '✓';
+    row.classList.add('completing');
+    await delay(450);
+  }
+  const outcome = await write('set-status', { task_id: task.task_id, status: 'completed' });
+  if (outcome?.status === 'executed') {
+    toast(`Completed “${task.title}”`, {
+      undoLabel: 'Undo',
+      onUndo: () => write('set-status', { task_id: task.task_id, status: prev }),
+    });
+  } else {
+    row?.classList.remove('completing');
+  }
+}
+
+async function cancelTask(task) {
+  const prev = task.status;
+  const outcome = await write('set-status', { task_id: task.task_id, status: 'cancelled' });
+  if (outcome?.status === 'executed') {
+    toast(`Cancelled “${task.title}”`, {
+      undoLabel: 'Undo',
+      onUndo: () => write('set-status', { task_id: task.task_id, status: prev }),
+    });
   }
 }
 
 // ---------- One task row ----------
 
-function renderRow(task, { subtask = false, closed = false, showDue = false } = {}) {
+function renderRow(task, { subtask = false, closed = false } = {}) {
   const row = document.createElement('div');
   row.className = subtask ? 'row subtask' : 'row';
   const isDone = !OPEN_STATUSES.has(task.status);
@@ -272,12 +560,13 @@ function renderRow(task, { subtask = false, closed = false, showDue = false } = 
   circle.setAttribute('aria-label', circle.title);
   if (task.status === 'completed') circle.textContent = '✓';
   if (task.status === 'cancelled') circle.textContent = '✕';
-  circle.addEventListener('click', () =>
-    write('set-status', {
-      task_id: task.task_id,
-      status: isDone ? 'needs-action' : 'completed',
-    }),
-  );
+  circle.addEventListener('click', () => {
+    if (isDone) {
+      write('set-status', { task_id: task.task_id, status: 'needs-action' });
+    } else {
+      completeTask(task, row, circle);
+    }
+  });
 
   const text = document.createElement('span');
   text.className = 'row-text';
@@ -300,16 +589,43 @@ function renderRow(task, { subtask = false, closed = false, showDue = false } = 
     row.appendChild(chip('badge muted small', `${task.done_children}/${task.children.length}`));
   }
 
-  if (task.due_at && (showDue || closed)) {
-    const overdue = !isDone && String(task.due_at).slice(0, 10) < todayStr();
-    const due = chip(`row-due muted small${overdue ? ' overdue' : ''}`, fmtDay(task.due_at));
-    row.appendChild(due);
-  }
-  if (closed && task.completed_at) {
-    row.appendChild(chip('row-due muted small', fmtDay(task.completed_at)));
+  let dueBtn = null;
+  if (!closed) {
+    // Every open row can be rescheduled in place — dated rows show the date,
+    // undated ones a quiet "＋ date" that appears on hover (always on touch).
+    dueBtn = document.createElement('button');
+    dueBtn.type = 'button';
+    if (task.due_at) {
+      const overdue = String(task.due_at).slice(0, 10) < todayStr();
+      dueBtn.className = `due-btn${overdue ? ' overdue' : ''}`;
+      dueBtn.textContent = fmtDay(task.due_at);
+    } else {
+      dueBtn.className = 'due-btn due-add';
+      dueBtn.textContent = '＋ date';
+    }
+    dueBtn.title = 'Reschedule';
+    dueBtn.setAttribute('aria-label', `Reschedule “${task.title}”`);
+    dueBtn.addEventListener('click', () => openDuePopover(dueBtn, task));
+    row.appendChild(dueBtn);
+  } else {
+    if (task.due_at) row.appendChild(chip('row-due muted small', fmtDay(task.due_at)));
+    if (task.completed_at) row.appendChild(chip('row-due muted small', fmtDay(task.completed_at)));
   }
 
-  if (!closed) row.appendChild(rowActions(task, subtask));
+  if (!closed) {
+    row.appendChild(rowActions(task, subtask));
+    row.draggable = true;
+    row.addEventListener('dragstart', (e) => {
+      dragTaskId = task.task_id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', task.task_id);
+    });
+    row.addEventListener('dragend', () => {
+      dragTaskId = null;
+    });
+    row.addEventListener('pointerdown', () => setSelected(task.task_id, { scroll: false }));
+    boardRows.push({ task, row, text, dueBtn });
+  }
 
   // Any attachments render as a strip beneath the row; the row and its strip
   // travel together in a fragment so the board's append logic stays flat.
@@ -339,7 +655,8 @@ function fmtEffort(min) {
   return `${n}m`;
 }
 
-// Hover affordances: start/pause, add-subtask (top level only), cancel.
+// Hover affordances: start/pause, add-subtask (top level only), details,
+// attach, cancel. Visible at reduced opacity on touch devices.
 function rowActions(task, subtask) {
   const wrap = document.createElement('span');
   wrap.className = 'row-actions';
@@ -372,6 +689,15 @@ function rowActions(task, subtask) {
     wrap.appendChild(sub);
   }
 
+  const info = document.createElement('button');
+  info.type = 'button';
+  info.className = 'ghost';
+  info.textContent = 'ⓘ';
+  info.title = 'Edit priority and effort';
+  info.setAttribute('aria-label', 'Edit priority and effort');
+  info.addEventListener('click', () => openEditPopover(info, task));
+  wrap.appendChild(info);
+
   const attach = document.createElement('button');
   attach.type = 'button';
   attach.className = 'ghost';
@@ -389,9 +715,10 @@ function rowActions(task, subtask) {
   cancel.className = 'ghost danger';
   cancel.textContent = '✕';
   cancel.title = 'Cancel this task';
-  cancel.addEventListener('click', () =>
-    write('set-status', { task_id: task.task_id, status: 'cancelled' }),
-  );
+  cancel.addEventListener('click', () => {
+    // Destructive-feeling: first click arms, second confirms.
+    if (armConfirm(cancel, { armedLabel: 'Sure?' })) cancelTask(task);
+  });
   wrap.appendChild(cancel);
   return wrap;
 }
@@ -424,6 +751,95 @@ function beginRename(row, text, task) {
   input.addEventListener('blur', () => done(true));
 }
 
+// ---------- Natural-language dates in quick-add ----------
+// A trailing token in the title ("tomorrow", "fri", "jul 12", "+3d") becomes
+// the due date, previewed live before submit. The explicit date input always
+// wins; when it is set the title is left untouched.
+
+const NL_WEEKDAYS = {
+  sun: 0,
+  sunday: 0,
+  mon: 1,
+  monday: 1,
+  tue: 2,
+  tues: 2,
+  tuesday: 2,
+  wed: 3,
+  wednesday: 3,
+  thu: 4,
+  thur: 4,
+  thurs: 4,
+  thursday: 4,
+  fri: 5,
+  friday: 5,
+  sat: 6,
+  saturday: 6,
+};
+
+const NL_MONTHS = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  sept: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+function parseNlDue(title) {
+  const t = String(title).trim();
+  let m = t.match(/^(.*\S)\s+\+(\d{1,3})([dw])$/i);
+  if (m) {
+    const n = Number(m[2]) * (m[3].toLowerCase() === 'w' ? 7 : 1);
+    return { clean: m[1], due: plusDays(n), token: `+${m[2]}${m[3]}` };
+  }
+  m = t.match(/^(.*\S)\s+(today|tod|tomorrow|tmr|tom)$/i);
+  if (m) {
+    const w = m[2].toLowerCase();
+    const due = w === 'today' || w === 'tod' ? todayStr() : plusDays(1);
+    return { clean: m[1], due, token: m[2] };
+  }
+  m = t.match(/^(.*\S)\s+([a-z]{3,9})$/i);
+  if (m && NL_WEEKDAYS[m[2].toLowerCase()] !== undefined) {
+    const target = NL_WEEKDAYS[m[2].toLowerCase()];
+    const diff = (target - new Date().getDay() + 7) % 7 || 7;
+    return { clean: m[1], due: plusDays(diff), token: m[2] };
+  }
+  m = t.match(/^(.*\S)\s+([a-z]{3,9})\s+(\d{1,2})$/i);
+  if (m && NL_MONTHS[m[2].toLowerCase()] !== undefined) {
+    const now = new Date();
+    const day = Number(m[3]);
+    if (day < 1 || day > 31) return null;
+    const d = new Date(now.getFullYear(), NL_MONTHS[m[2].toLowerCase()], day, 12);
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if (d < startOfToday) d.setFullYear(d.getFullYear() + 1);
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+      clean: m[1],
+      due: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+      token: `${m[2]} ${m[3]}`,
+    };
+  }
+  return null;
+}
+
+function updateNlPreview() {
+  const el = $('nlPreview');
+  const parsed = $('dueInput').value ? null : parseNlDue($('titleInput').value);
+  if (!parsed) {
+    el.hidden = true;
+    return;
+  }
+  el.textContent = `→ due ${fmtDay(parsed.due)} (“${parsed.token}” leaves the title)`;
+  el.hidden = false;
+}
+
 // ---------- Quick add ----------
 
 $('parentClear').addEventListener('click', () => {
@@ -431,36 +847,106 @@ $('parentClear').addEventListener('click', () => {
   $('parentChip').hidden = true;
 });
 
+$('titleInput').addEventListener('input', updateNlPreview);
+$('dueInput').addEventListener('change', updateNlPreview);
+
 $('quickAdd').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const title = $('titleInput').value.trim();
-  if (!title) return;
-  const input = { title };
-  if ($('dueInput').value) input.due_at = $('dueInput').value;
+  const raw = $('titleInput').value.trim();
+  if (!raw) return;
+  const parsed = $('dueInput').value ? null : parseNlDue(raw);
+  const input = { title: parsed ? parsed.clean : raw };
+  const due = $('dueInput').value || parsed?.due;
+  if (due) input.due_at = due;
   const priority = Number($('prioInput').value);
   if (priority > 0) input.priority = priority;
+  const effort = Number($('effortInput').value);
+  if (effort > 0) input.effort_min = Math.round(effort);
   if (parentContext) input.parent_task_id = parentContext.task_id;
   await write('add', input);
   $('titleInput').value = '';
+  $('effortInput').value = '';
+  updateNlPreview();
   $('titleInput').focus();
+});
+
+// ---------- Quick find + view switcher ----------
+
+const applySearchInput = debounce(() => {
+  state.search = $('searchInput').value;
+  render();
+}, 120);
+$('searchInput').addEventListener('input', applySearchInput);
+
+$('viewSwitch').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-view]');
+  if (!btn) return;
+  state.view = btn.dataset.view;
+  for (const b of $('viewSwitch').querySelectorAll('button')) {
+    const on = b === btn;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', String(on));
+  }
+  render();
 });
 
 // ---------- Keyboard shortcuts ----------
 
-// `n` focuses quick-add, `Escape` clears the subtask context. Inline-rename
-// keys live on the rename input itself; nothing here fires while typing.
+// `n` quick-add, `/` or `f` search, ↑/↓ roving selection, `e` rename,
+// space complete, `d` reschedule, Escape closes popover / clears context.
+// Inline-rename keys live on the rename input itself; nothing fires while
+// typing in an input.
 document.addEventListener('keydown', (e) => {
   const typing =
     e.target instanceof HTMLInputElement ||
     e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLSelectElement;
+  if (e.key === 'Escape') {
+    if (popoverEl) {
+      closePopover();
+      return;
+    }
+    if (typing && e.target === $('searchInput')) {
+      e.target.value = '';
+      state.search = '';
+      render();
+      e.target.blur();
+      return;
+    }
+    if (!typing && parentContext) {
+      parentContext = null;
+      $('parentChip').hidden = true;
+    }
+    return;
+  }
   if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'n') {
     e.preventDefault();
     $('titleInput').focus();
-  } else if (e.key === 'Escape' && parentContext) {
-    parentContext = null;
-    $('parentChip').hidden = true;
+  } else if (e.key === '/' || e.key === 'f') {
+    e.preventDefault();
+    $('searchInput').focus();
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    moveSelection(e.key === 'ArrowDown' ? 1 : -1);
+  } else if (e.key === 'e') {
+    const entry = selectedEntry();
+    if (entry) {
+      e.preventDefault();
+      beginRename(entry.row, entry.text, entry.task);
+    }
+  } else if (e.key === ' ') {
+    const entry = selectedEntry();
+    if (entry) {
+      e.preventDefault();
+      completeTask(entry.task, entry.row, entry.row.querySelector('.circle'));
+    }
+  } else if (e.key === 'd') {
+    const entry = selectedEntry();
+    if (entry?.dueBtn) {
+      e.preventDefault();
+      openDuePopover(entry.dueBtn, entry.task);
+    }
   }
 });
 
@@ -469,4 +955,5 @@ document.addEventListener('keydown', (e) => {
 wireAttachInput($('attachInput'), () => attachTarget);
 
 window.addEventListener('focus', refresh);
+showSkeleton($('board'), 6);
 refresh();

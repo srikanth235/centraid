@@ -69,6 +69,10 @@
           "modality": {
             "type": "string",
             "enum": ["sensed", "self_reported", "derived"]
+          },
+          "observed_at": {
+            "type": "string",
+            "description": "ISO-8601 instant for backdated readings; defaults to now."
           }
         },
         "required": ["vital_type", "value_num"],
@@ -211,10 +215,16 @@
   "queries": [
     {
       "name": "readings",
-      "description": "Vital readings — health.vital rows joined to their core.observation rows — newest first.",
+      "description": "Vital readings — health.vital rows joined to their core.observation rows — newest first. Optional `limit` widens the window (default 200); `total` and `truncated` report honestly when older rows were cut.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -222,6 +232,12 @@
         "properties": {
           "readings": {
             "type": "array"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
           },
           "vaultDenied": {
             "type": "object"

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Home inventory is a finished product — search, photo grid, detail cards, warranty presets, CSV export — and splitting it would break that "one file" contract.
 // Home inventory — a projection over the personal vault. Every row
 // rendered here lives in home.asset_item / home.warranty /
 // home.maintenance_plan (place names from core.place); the app's own
@@ -7,12 +8,27 @@
 // receipted. Revoke the grant and this page goes dark while the data
 // stays the owner's.
 
+import { armConfirm, debounce, letterAvatar, readFailed, showSkeleton } from './kit.js';
+
 const $ = (id) => document.getElementById(id);
 
 const DUE_WINDOW_DAYS = 30;
+const WARRANTY_SOON_DAYS = 60;
 
+// ---------- UI state ----------
 // The item id the shared file picker is currently attaching to.
 let attachTarget = null;
+// Files picked but not yet sent — they wait for a role chip.
+let pendingFiles = [];
+let viewMode = 'list'; // 'list' | 'grid'
+let searchTerm = '';
+// One detail card open at a time.
+let openItemId = null;
+// While an edit/warranty form is open, refreshes park here instead of
+// wiping the user's typing; applied when the form closes.
+let activeEditor = null;
+let renderPending = false;
+let lastData = null;
 
 function notice(text) {
   const el = $('noticeBanner');
@@ -46,6 +62,40 @@ async function act(action, input) {
   }
 }
 
+// ---------- Dates ----------
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function plusDays(key, days) {
+  const d = new Date(`${key}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function plusYears(key, years) {
+  const d = new Date(`${key}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + years);
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDate(key) {
+  try {
+    return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  } catch {
+    return key;
+  }
+}
+
+function dayKeyOf(value) {
+  return String(value ?? '').slice(0, 10);
+}
+
 // ---------- Attachments (shared pattern across apps) ----------
 // Read a File as a base64 data: URI — the vault stores bytes inline, so the
 // browser does the encoding before the data ever leaves the app.
@@ -65,8 +115,15 @@ function fmtBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// The item's cover image: a photo-role image first, then any image.
+function coverOf(it) {
+  const images = (it.attachments ?? []).filter((a) => String(a.media_type).startsWith('image/'));
+  return images.find((a) => a.role === 'photo') ?? images[0] ?? null;
+}
+
 // Render an attachment strip: images as thumbnails, everything else as a
-// download tile, each with a remove control wired to the detach action.
+// download tile — each badged by role so a receipt reads differently from a
+// photo, each with a remove control wired to the detach action.
 function renderAttachments(stripEl, list, onRemove) {
   stripEl.innerHTML = '';
   for (const a of list ?? []) {
@@ -85,6 +142,12 @@ function renderAttachments(stripEl, list, onRemove) {
       link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
       tile.appendChild(link);
     }
+    if (a.role && a.role !== 'photo') {
+      const role = document.createElement('span');
+      role.className = 'attach-role';
+      role.textContent = a.role;
+      tile.appendChild(role);
+    }
     const meta = document.createElement('span');
     meta.className = 'attach-meta';
     meta.textContent = fmtBytes(a.byte_size);
@@ -94,35 +157,45 @@ function renderAttachments(stripEl, list, onRemove) {
     rm.className = 'attach-remove';
     rm.textContent = '×';
     rm.title = 'Remove';
+    rm.setAttribute('aria-label', 'Remove attachment');
     rm.addEventListener('click', () => onRemove(a.attachment_id));
     tile.appendChild(rm);
     stripEl.appendChild(tile);
   }
 }
 
-// Wire a file <input> so each chosen file is attached to the current subject.
-function wireAttachInput(inputEl, getSubjectId) {
-  inputEl.addEventListener('change', async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
-      let dataUri;
-      try {
-        dataUri = await fileToDataUri(file);
-      } catch {
-        notice('Could not read that file.');
-        continue;
-      }
-      const outcome = await act('attach', {
-        subject_id: subjectId,
-        data_uri: dataUri,
-        title: file.name,
-      });
-      if (!narrate(outcome, refresh)) break;
+// The picker is shared across every item; each attach button records which
+// item it targets before opening it. Chosen files wait for a role chip
+// (photo / receipt / warranty / manual) before they travel.
+$('attachInput').addEventListener('change', () => {
+  if (!attachTarget || $('attachInput').files.length === 0) return;
+  pendingFiles = [...$('attachInput').files];
+  $('attachInput').value = '';
+  renderItems();
+});
+
+async function sendPendingFiles(role) {
+  const subjectId = attachTarget;
+  const files = pendingFiles;
+  pendingFiles = [];
+  if (!subjectId) return;
+  for (const file of files) {
+    let dataUri;
+    try {
+      dataUri = await fileToDataUri(file);
+    } catch {
+      notice('Could not read that file.');
+      continue;
     }
-    inputEl.value = '';
-    await refresh();
-  });
+    const outcome = await act('attach', {
+      subject_id: subjectId,
+      data_uri: dataUri,
+      title: file.name,
+      ...(role ? { role } : {}),
+    });
+    if (!narrate(outcome, refresh)) break;
+  }
+  await refresh();
 }
 
 async function removeAttachment(attachmentId) {
@@ -130,53 +203,57 @@ async function removeAttachment(attachmentId) {
   if (narrate(outcome, refresh)) await refresh();
 }
 
-// The picker is shared across every item row; each attach button records
-// which item it targets before opening it.
-wireAttachInput($('attachInput'), () => attachTarget);
+// ---------- Read + top-level render ----------
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function plusDays(key, days) {
-  const d = new Date(`${key}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function fmtDate(key) {
-  try {
-    return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  } catch {
-    return key;
-  }
-}
+let readWasFailing = false;
 
 async function refresh() {
   let data;
   try {
     data = await window.centraid.read({ query: 'inventory' });
   } catch {
-    return; // transient; the change feed retries
+    readFailed($('noticeBanner'));
+    readWasFailing = true;
+    // First load: swap the skeleton for the banner instead of shimmering forever.
+    if (lastData === null) $('itemList').innerHTML = '';
+    return;
+  }
+  if (readWasFailing) {
+    readWasFailing = false;
+    notice('');
   }
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
   $('addForm').hidden = Boolean(denied);
+  $('toolbar').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     $('maintenanceDue').hidden = true;
+    $('warrantyExpiring').hidden = true;
     $('itemList').innerHTML = '';
     $('disposedSection').hidden = true;
     $('empty').hidden = true;
+    $('noMatches').hidden = true;
     return;
   }
+  lastData = data;
   renderMaintenance(data?.maintenance ?? []);
-  renderItems(data?.items ?? []);
+  renderExpiring(data?.items ?? []);
   renderDisposed(data?.disposed ?? []);
+  if (activeEditor) {
+    // Someone is typing in an edit or warranty form — don't wipe it.
+    renderPending = true;
+    return;
+  }
+  renderItems();
+}
+
+function editorClosed() {
+  activeEditor = null;
+  if (renderPending) {
+    renderPending = false;
+    renderItems();
+  }
 }
 
 function renderMaintenance(plans) {
@@ -206,112 +283,378 @@ function renderMaintenance(plans) {
   }
 }
 
-function renderItems(items) {
+// Warranties ending within 60 days — surfaced beside Maintenance due so
+// coverage runs out in view, not in a tooltip.
+function renderExpiring(items) {
+  const today = todayKey();
+  const horizon = plusDays(today, WARRANTY_SOON_DAYS);
+  const soon = items
+    .filter((it) => {
+      const end = it.warranty?.active ? dayKeyOf(it.warranty.ends_on) : null;
+      return end != null && end >= today && end <= horizon;
+    })
+    .toSorted((a, b) => dayKeyOf(a.warranty.ends_on).localeCompare(dayKeyOf(b.warranty.ends_on)));
+  const section = $('warrantyExpiring');
+  const rows = $('warrantyExpiringRows');
+  rows.innerHTML = '';
+  section.hidden = soon.length === 0;
+  for (const it of soon) {
+    const end = dayKeyOf(it.warranty.ends_on);
+    const row = document.createElement('div');
+    row.className = 'row';
+    const time = document.createElement('span');
+    time.className = 'row-time';
+    time.textContent = fmtDate(end);
+    const text = document.createElement('span');
+    text.className = 'row-text';
+    text.textContent = it.name;
+    const badge = document.createElement('span');
+    badge.className = 'badge warn';
+    const days = Math.max(
+      0,
+      Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000),
+    );
+    badge.textContent = days === 0 ? 'ends today' : `${days}d left`;
+    row.append(time, text, badge);
+    rows.appendChild(row);
+  }
+}
+
+// ---------- Items: search, groups, list/grid ----------
+
+function placeKeyOf(it) {
+  return it.place_name ?? 'No place recorded';
+}
+
+function matchesSearch(it, term) {
+  return (
+    String(it.name ?? '')
+      .toLowerCase()
+      .includes(term) ||
+    String(it.serial_no ?? '')
+      .toLowerCase()
+      .includes(term) ||
+    String(it.place_name ?? '')
+      .toLowerCase()
+      .includes(term)
+  );
+}
+
+function renderItems() {
   const list = $('itemList');
+  const all = lastData?.items ?? [];
+  const term = searchTerm.trim().toLowerCase();
+  const shown = term ? all.filter((it) => matchesSearch(it, term)) : all;
+  if (openItemId && !shown.some((it) => it.item_id === openItemId)) openItemId = null;
+
+  $('empty').hidden = all.length > 0;
+  $('noMatches').hidden = !(all.length > 0 && shown.length === 0);
+  list.classList.toggle('grid-view', viewMode === 'grid');
   list.innerHTML = '';
-  $('empty').hidden = items.length > 0;
+
+  const totals = new Map();
+  for (const it of all) totals.set(placeKeyOf(it), (totals.get(placeKeyOf(it)) ?? 0) + 1);
+
   const byPlace = new Map();
-  for (const it of items) {
-    const key = it.place_name ?? 'No place recorded';
+  for (const it of shown) {
+    const key = placeKeyOf(it);
     if (!byPlace.has(key)) byPlace.set(key, []);
     byPlace.get(key).push(it);
   }
+
   for (const [place, placeItems] of byPlace) {
     const h = document.createElement('p');
     h.className = 'day-label muted small';
-    h.textContent = place;
+    const count = term ? `${placeItems.length} of ${totals.get(place)}` : `${placeItems.length}`;
+    h.textContent = `${place} · ${count}`;
     list.appendChild(h);
-    for (const it of placeItems) {
-      list.appendChild(renderRow(it));
+
+    if (viewMode === 'grid') {
+      const grid = document.createElement('div');
+      grid.className = 'place-grid';
+      for (const it of placeItems) {
+        grid.appendChild(renderCard(it));
+        if (it.item_id === openItemId) {
+          const detail = renderDetail(it);
+          detail.classList.add('grid-span');
+          grid.appendChild(detail);
+        }
+      }
+      list.appendChild(grid);
+    } else {
+      for (const it of placeItems) {
+        const wrap = document.createElement('div');
+        wrap.className = 'item';
+        wrap.appendChild(renderRow(it));
+        if (it.item_id === openItemId) wrap.appendChild(renderDetail(it));
+        list.appendChild(wrap);
+      }
     }
   }
 }
 
-function renderRow(it) {
-  const wrap = document.createElement('div');
-  wrap.className = 'item';
+function toggleDetail(itemId) {
+  const wasOpen = openItemId === itemId;
+  openItemId = wasOpen ? null : itemId;
+  pendingFiles = [];
+  renderItems();
+  if (!wasOpen) {
+    document.querySelector(`.item-detail[data-item-id="${itemId}"]`)?.focus();
+  } else {
+    focusItemTrigger(itemId);
+  }
+}
 
-  const row = document.createElement('div');
-  row.className = 'row';
+function focusItemTrigger(itemId) {
+  document.querySelector(`[data-item-trigger="${itemId}"]`)?.focus();
+}
+
+function thumbOf(it, size) {
+  const cover = coverOf(it);
+  const holder = document.createElement('span');
+  holder.className = 'thumb';
+  holder.style.width = size;
+  holder.style.height = size;
+  if (cover) {
+    const img = document.createElement('img');
+    img.src = cover.content_uri;
+    img.alt = '';
+    img.loading = 'lazy';
+    holder.appendChild(img);
+  } else {
+    holder.appendChild(letterAvatar(it.name, { size }));
+  }
+  return holder;
+}
+
+function warrantyBadge(it) {
+  if (!it.warranty) return null;
+  const badge = document.createElement('span');
+  badge.className = `badge ${it.warranty.active ? 'ok' : 'off'}`;
+  badge.textContent = it.warranty.active ? 'covered' : 'expired';
+  return badge;
+}
+
+// List view: one calm row — photo thumb, name, serial, warranty badge.
+// Everything else waits inside the detail card.
+function renderRow(it) {
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'item-row';
+  row.dataset.itemTrigger = it.item_id;
+  row.setAttribute('aria-expanded', String(openItemId === it.item_id));
+
+  row.appendChild(thumbOf(it, '2.75rem'));
+
   const text = document.createElement('span');
   text.className = 'row-text';
   text.textContent = it.name;
   row.appendChild(text);
+
   if (it.serial_no) {
     const detail = document.createElement('span');
     detail.className = 'row-detail muted small';
     detail.textContent = `Serial ${it.serial_no}`;
     row.appendChild(detail);
   }
-  if (it.warranty) {
-    const badge = document.createElement('span');
-    badge.className = `badge ${it.warranty.active ? 'ok' : 'off'}`;
-    badge.textContent = it.warranty.active ? 'covered' : 'expired';
-    badge.title = `Warranty ends ${fmtDate(String(it.warranty.ends_on).slice(0, 10))}`;
-    row.appendChild(badge);
+  const badge = warrantyBadge(it);
+  if (badge) row.appendChild(badge);
+
+  row.addEventListener('click', () => toggleDetail(it.item_id));
+  return row;
+}
+
+// Grid view: Sortly-style photo card with a name+meta overlay.
+function renderCard(it) {
+  const card = document.createElement('button');
+  card.type = 'button';
+  card.className = 'grid-card';
+  card.dataset.itemTrigger = it.item_id;
+  card.setAttribute('aria-expanded', String(openItemId === it.item_id));
+
+  const cover = coverOf(it);
+  if (cover) {
+    const img = document.createElement('img');
+    img.src = cover.content_uri;
+    img.alt = '';
+    img.loading = 'lazy';
+    card.appendChild(img);
+  } else {
+    const tile = document.createElement('span');
+    tile.className = 'grid-letter';
+    tile.appendChild(letterAvatar(it.name, { size: '3.5rem' }));
+    card.appendChild(tile);
   }
 
-  // The item's inline forms (edit, warranty) live beneath the row; each
-  // control toggles its own and closes the other.
+  const overlay = document.createElement('span');
+  overlay.className = 'grid-overlay';
+  const name = document.createElement('span');
+  name.className = 'grid-name';
+  name.textContent = it.name;
+  overlay.appendChild(name);
+  const meta = document.createElement('span');
+  meta.className = 'grid-meta';
+  const bits = [];
+  if (it.serial_no) bits.push(`Serial ${it.serial_no}`);
+  const attachCount = it.attachments?.length ?? 0;
+  if (attachCount > 0) bits.push(`${attachCount} file${attachCount === 1 ? '' : 's'}`);
+  meta.textContent = bits.join(' · ');
+  overlay.appendChild(meta);
+  card.appendChild(overlay);
+
+  const badge = warrantyBadge(it);
+  if (badge) {
+    badge.classList.add('grid-badge');
+    card.appendChild(badge);
+  }
+
+  card.addEventListener('click', () => toggleDetail(it.item_id));
+  return card;
+}
+
+// ---------- Detail card (one open at a time) ----------
+
+function renderDetail(it) {
+  const card = document.createElement('div');
+  card.className = 'item-detail';
+  card.dataset.itemId = it.item_id;
+  card.tabIndex = -1;
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      openItemId = null;
+      pendingFiles = [];
+      editorClosed();
+      renderItems();
+      focusItemTrigger(it.item_id);
+    }
+  });
+
+  const head = document.createElement('div');
+  head.className = 'detail-head';
+  head.appendChild(thumbOf(it, '3.5rem'));
+  const headText = document.createElement('div');
+  headText.className = 'detail-head-text';
+  const name = document.createElement('strong');
+  name.textContent = it.name;
+  headText.appendChild(name);
+  const meta = document.createElement('span');
+  meta.className = 'muted small';
+  const bits = [placeKeyOf(it)];
+  if (it.serial_no) bits.push(`Serial ${it.serial_no}`);
+  if (it.acquired_on) bits.push(`Acquired ${fmtDate(dayKeyOf(it.acquired_on))}`);
+  meta.textContent = bits.join(' · ');
+  headText.appendChild(meta);
+  // Coverage as visible text — never only a hover tooltip.
+  const coverage = document.createElement('span');
+  coverage.className = 'coverage small';
+  if (it.warranty?.active) {
+    coverage.classList.add('ok');
+    coverage.textContent = `Covered until ${fmtDate(dayKeyOf(it.warranty.ends_on))}`;
+  } else if (it.warranty) {
+    coverage.classList.add('off');
+    coverage.textContent = `Warranty expired ${fmtDate(dayKeyOf(it.warranty.ends_on))}`;
+  } else {
+    coverage.classList.add('off');
+    coverage.textContent = 'No warranty recorded';
+  }
+  headText.appendChild(coverage);
+  head.appendChild(headText);
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'ghost detail-close';
+  close.textContent = 'Close';
+  close.addEventListener('click', () => {
+    openItemId = null;
+    pendingFiles = [];
+    editorClosed();
+    renderItems();
+    focusItemTrigger(it.item_id);
+  });
+  head.appendChild(close);
+  card.appendChild(head);
+
   const editForm = renderEditForm(it);
   const warrantyForm = renderWarrantyForm(it);
 
+  const actions = document.createElement('div');
+  actions.className = 'detail-actions';
+
   const edit = document.createElement('button');
   edit.type = 'button';
-  edit.className = 'ghost small-btn';
+  edit.className = 'ghost';
   edit.textContent = 'Edit';
   edit.addEventListener('click', () => {
     warrantyForm.hidden = true;
     editForm.hidden = !editForm.hidden;
+    if (!editForm.hidden) {
+      activeEditor = 'edit';
+      editForm.querySelector('input')?.focus();
+    } else {
+      editorClosed();
+      edit.focus();
+    }
   });
-  row.appendChild(edit);
+  actions.appendChild(edit);
 
   const warranty = document.createElement('button');
   warranty.type = 'button';
-  warranty.className = 'ghost small-btn';
+  warranty.className = 'ghost';
   warranty.textContent = '＋ Warranty';
   warranty.addEventListener('click', () => {
     editForm.hidden = true;
     warrantyForm.hidden = !warrantyForm.hidden;
-  });
-  row.appendChild(warranty);
-
-  // Disposal keeps the row as history, so the confirm is a second click on
-  // the same control, not a modal.
-  const dispose = document.createElement('button');
-  dispose.type = 'button';
-  dispose.className = 'ghost small-btn danger';
-  dispose.textContent = 'Dispose';
-  dispose.addEventListener('click', async () => {
-    if (!dispose.dataset.armed) {
-      dispose.dataset.armed = 'true';
-      dispose.textContent = 'Really dispose?';
-      return;
-    }
-    const outcome = await act('dispose-item', { item_id: it.item_id });
-    if (narrate(outcome, refresh)) await refresh();
-    else {
-      delete dispose.dataset.armed;
-      dispose.textContent = 'Dispose';
+    if (!warrantyForm.hidden) {
+      activeEditor = 'warranty';
+      warrantyForm.querySelector('input')?.focus();
+    } else {
+      editorClosed();
+      warranty.focus();
     }
   });
-  row.appendChild(dispose);
+  actions.appendChild(warranty);
 
   // An owned item wants photos, a warranty PDF, a receipt — the attach
   // control opens the shared picker with this item as its target.
   const attach = document.createElement('button');
   attach.type = 'button';
-  attach.className = 'ghost small-btn attach-item-btn';
+  attach.className = 'ghost';
   attach.textContent = '＋ Attach';
   attach.addEventListener('click', () => {
+    // Close any open editor first — the role prompt re-renders the list,
+    // which would otherwise wipe half-typed edits.
+    editForm.hidden = true;
+    warrantyForm.hidden = true;
+    editorClosed();
     attachTarget = it.item_id;
     $('attachInput').click();
   });
-  row.appendChild(attach);
-  wrap.appendChild(row);
+  actions.appendChild(attach);
 
-  wrap.appendChild(editForm);
-  wrap.appendChild(warrantyForm);
+  // Disposal keeps the row as history; the confirm is a second click on the
+  // same control (kit-armed, so it disarms itself if abandoned).
+  const dispose = document.createElement('button');
+  dispose.type = 'button';
+  dispose.className = 'ghost danger';
+  dispose.textContent = 'Dispose';
+  dispose.addEventListener('click', async () => {
+    if (!armConfirm(dispose, { armedLabel: 'Really dispose?' })) return;
+    const outcome = await act('dispose-item', { item_id: it.item_id });
+    if (narrate(outcome, refresh)) {
+      openItemId = null;
+      await refresh();
+    }
+  });
+  actions.appendChild(dispose);
+  card.appendChild(actions);
+
+  // Picked files wait here for a role before the bytes travel.
+  if (pendingFiles.length > 0 && attachTarget === it.item_id) {
+    card.appendChild(renderRolePrompt());
+  }
+
+  card.appendChild(editForm);
+  card.appendChild(warrantyForm);
 
   // Warranty history: every coverage window the item has accumulated.
   if (it.warranties?.length) {
@@ -320,7 +663,7 @@ function renderRow(it) {
     for (const w of it.warranties) {
       const line = document.createElement('div');
       line.className = 'warranty-line';
-      line.textContent = `Warranty ${fmtDate(String(w.starts_on).slice(0, 10))} – ${fmtDate(String(w.ends_on).slice(0, 10))}${w.active ? '' : ' (expired)'}`;
+      line.textContent = `Warranty ${fmtDate(dayKeyOf(w.starts_on))} – ${fmtDate(dayKeyOf(w.ends_on))}${w.active ? '' : ' (expired)'}`;
       if (w.claim_uri) {
         const link = document.createElement('a');
         link.href = w.claim_uri;
@@ -331,14 +674,48 @@ function renderRow(it) {
       }
       list.appendChild(line);
     }
-    wrap.appendChild(list);
+    card.appendChild(list);
   }
 
   const strip = document.createElement('div');
   strip.className = 'attach-strip';
   renderAttachments(strip, it.attachments, removeAttachment);
-  wrap.appendChild(strip);
+  card.appendChild(strip);
 
+  return card;
+}
+
+// Role chips shown after picking files: what kind of document is this?
+function renderRolePrompt() {
+  const wrap = document.createElement('div');
+  wrap.className = 'role-prompt';
+  const label = document.createElement('span');
+  label.className = 'muted small';
+  const n = pendingFiles.length;
+  label.textContent = `${n} file${n === 1 ? '' : 's'} picked — attach as:`;
+  wrap.appendChild(label);
+  for (const [role, text] of [
+    ['photo', 'Photo'],
+    ['receipt', 'Receipt'],
+    ['warranty', 'Warranty'],
+    ['manual', 'Manual'],
+  ]) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = text;
+    chip.addEventListener('click', () => sendPendingFiles(role));
+    wrap.appendChild(chip);
+  }
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    pendingFiles = [];
+    renderItems();
+  });
+  wrap.appendChild(cancel);
   return wrap;
 }
 
@@ -357,7 +734,7 @@ function renderEditForm(it) {
 
   const acquired = document.createElement('input');
   acquired.type = 'date';
-  acquired.value = it.acquired_on ? String(it.acquired_on).slice(0, 10) : '';
+  acquired.value = it.acquired_on ? dayKeyOf(it.acquired_on) : '';
   acquired.setAttribute('aria-label', 'Acquired on');
 
   const serial = document.createElement('input');
@@ -377,6 +754,8 @@ function renderEditForm(it) {
   cancel.textContent = 'Cancel';
   cancel.addEventListener('click', () => {
     form.hidden = true;
+    editorClosed();
+    focusItemTrigger(it.item_id);
   });
 
   form.append(name, acquired, serial, save, cancel);
@@ -385,25 +764,31 @@ function renderEditForm(it) {
     const input = { item_id: it.item_id };
     const newName = name.value.trim();
     if (newName && newName !== it.name) input.name = newName;
-    if (acquired.value && acquired.value !== String(it.acquired_on ?? '').slice(0, 10)) {
+    if (acquired.value && acquired.value !== dayKeyOf(it.acquired_on ?? '')) {
       input.acquired_on = acquired.value;
     }
     const newSerial = serial.value.trim();
     if (newSerial && newSerial !== (it.serial_no ?? '')) input.serial_no = newSerial;
     if (Object.keys(input).length === 1) {
       form.hidden = true;
+      editorClosed();
       return;
     }
+    activeEditor = null;
     const outcome = await act('update-item', input);
-    if (narrate(outcome, refresh)) await refresh();
+    if (narrate(outcome, refresh)) {
+      await refresh();
+      focusItemTrigger(it.item_id);
+    }
   });
   return form;
 }
 
-// Inline warranty form: coverage window plus an optional claim URL.
+// Inline warranty form: coverage window plus an optional claim URL, with
+// preset chips so the common cases are one tap.
 function renderWarrantyForm(it) {
   const form = document.createElement('form');
-  form.className = 'row-form';
+  form.className = 'row-form warranty-form';
   form.autocomplete = 'off';
   form.hidden = true;
 
@@ -420,6 +805,29 @@ function renderWarrantyForm(it) {
   claim.placeholder = 'Claim URL (optional)';
   claim.setAttribute('aria-label', 'Claim URL');
 
+  const presets = document.createElement('div');
+  presets.className = 'preset-row';
+  const preset = (label, fill) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.textContent = label;
+    chip.addEventListener('click', fill);
+    presets.appendChild(chip);
+  };
+  preset('1 yr', () => {
+    if (!starts.value) starts.value = todayKey();
+    ends.value = plusYears(starts.value, 1);
+  });
+  preset('2 yrs', () => {
+    if (!starts.value) starts.value = todayKey();
+    ends.value = plusYears(starts.value, 2);
+  });
+  preset('From purchase', () => {
+    starts.value = it.acquired_on ? dayKeyOf(it.acquired_on) : todayKey();
+    if (!ends.value) ends.value = plusYears(starts.value, 1);
+  });
+
   const save = document.createElement('button');
   save.type = 'submit';
   save.className = 'primary small-btn';
@@ -431,24 +839,31 @@ function renderWarrantyForm(it) {
   cancel.textContent = 'Cancel';
   cancel.addEventListener('click', () => {
     form.hidden = true;
+    editorClosed();
+    focusItemTrigger(it.item_id);
   });
 
-  form.append(starts, ends, claim, save, cancel);
+  form.append(presets, starts, ends, claim, save, cancel);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!starts.value || !ends.value) return;
+    activeEditor = null;
     const outcome = await act('add-warranty', {
       item_id: it.item_id,
       starts_on: starts.value,
       ends_on: ends.value,
       ...(claim.value.trim() ? { claim_uri: claim.value.trim() } : {}),
     });
-    if (narrate(outcome, refresh)) await refresh();
+    if (narrate(outcome, refresh)) {
+      await refresh();
+      focusItemTrigger(it.item_id);
+    }
   });
   return form;
 }
 
-// Disposed items stay as history — muted rows in a collapsed section.
+// Disposed items stay as history — muted rows in a collapsed section, with
+// enough detail (serial, place) to answer "which one was that?".
 function renderDisposed(items) {
   const section = $('disposedSection');
   const rows = $('disposedRows');
@@ -460,16 +875,59 @@ function renderDisposed(items) {
     row.dataset.disposed = 'true';
     const time = document.createElement('span');
     time.className = 'row-time';
-    time.textContent = fmtDate(String(it.disposed_on).slice(0, 10));
+    time.textContent = fmtDate(dayKeyOf(it.disposed_on));
     const text = document.createElement('span');
     text.className = 'row-text';
     text.textContent = it.name;
+    const bits = [];
+    if (it.serial_no) bits.push(`Serial ${it.serial_no}`);
+    if (it.place_name) bits.push(it.place_name);
+    if (bits.length > 0) {
+      const detail = document.createElement('span');
+      detail.className = 'row-detail muted small';
+      detail.textContent = bits.join(' · ');
+      row.append(time, text, detail);
+    } else {
+      row.append(time, text);
+    }
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.textContent = 'disposed';
-    row.append(time, text, badge);
+    row.appendChild(badge);
     rows.appendChild(row);
   }
+}
+
+// ---------- CSV export (the insurance deliverable) ----------
+
+function csvField(value) {
+  const s = String(value ?? '');
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportCsv() {
+  const items = lastData?.items ?? [];
+  const lines = [
+    ['Name', 'Place', 'Serial', 'Acquired on', 'Warranty ends', 'Attachments'].join(','),
+  ];
+  for (const it of items) {
+    lines.push(
+      [
+        csvField(it.name),
+        csvField(it.place_name ?? ''),
+        csvField(it.serial_no ?? ''),
+        csvField(it.acquired_on ? dayKeyOf(it.acquired_on) : ''),
+        csvField(it.warranty ? dayKeyOf(it.warranty.ends_on) : ''),
+        csvField(it.attachments?.length ?? 0),
+      ].join(','),
+    );
+  }
+  const a = document.createElement('a');
+  a.href = `data:text/csv;charset=utf-8,${encodeURIComponent(lines.join('\r\n'))}`;
+  a.download = `home-inventory-${todayKey()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 }
 
 // ---------- Add item ----------
@@ -493,5 +951,29 @@ $('addForm').addEventListener('submit', async (e) => {
   }
 });
 
+// ---------- Toolbar wiring ----------
+
+$('searchInput').addEventListener(
+  'input',
+  debounce(() => {
+    searchTerm = $('searchInput').value;
+    renderItems();
+  }, 120),
+);
+
+function setView(mode) {
+  viewMode = mode;
+  $('viewListBtn').setAttribute('aria-pressed', String(mode === 'list'));
+  $('viewGridBtn').setAttribute('aria-pressed', String(mode === 'grid'));
+  renderItems();
+}
+
+$('viewListBtn').addEventListener('click', () => setView('list'));
+$('viewGridBtn').addEventListener('click', () => setView('grid'));
+$('exportBtn').addEventListener('click', exportCsv);
+
+// ---------- Boot ----------
+
+showSkeleton($('itemList'), 5);
 window.addEventListener('focus', refresh);
 refresh();

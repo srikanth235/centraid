@@ -9,6 +9,9 @@
   --surface: #ffffff;
   --line: rgba(31, 31, 35, 0.07);
   --danger: #dc2626;
+  /* kit.css fallbacks */
+  --text: var(--ink);
+  --muted: var(--ink-soft);
 }
 
 :root[data-theme='dark'] {
@@ -37,6 +40,11 @@
   box-sizing: border-box;
 }
 
+/* `hidden` must win over the display rules the layout classes set. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
@@ -61,7 +69,39 @@ main {
   }
 }
 
+/* When a thread is open the page stops scrolling and the thread section
+   becomes a real messenger column: header on top, message log scrolling in
+   the middle, compose pinned at the bottom. */
+body.thread-open {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+}
+
+body.thread-open main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding-bottom: 0;
+}
+
+.thread-col {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -109,7 +149,7 @@ button {
 }
 
 .primary {
-  height: 2.75rem;
+  min-height: 2.75rem;
   padding: 0 1.125rem;
   border-radius: 0.625rem;
   border: none;
@@ -125,187 +165,8 @@ button {
   cursor: default;
 }
 
-/* ---------- Inbox ---------- */
-
-.thread-row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  width: 100%;
-  padding: 0.75rem 0.125rem;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  color: var(--ink);
-  text-align: left;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.thread-row:last-child {
-  border-bottom: none;
-}
-
-.row-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  word-break: break-word;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.row-when {
-  flex-shrink: 0;
-  color: var(--ink-faint);
-  font-size: 0.8rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.badge {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-}
-
-/* ---------- Thread view ---------- */
-
-.thread-head {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.back {
-  border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: var(--surface);
-  color: var(--app-color, var(--accent));
-  font-weight: 600;
-  font-size: 0.875rem;
-  padding: 0.375rem 0.75rem;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.thread-title {
-  margin: 0;
-  font-weight: 600;
-  font-size: 1rem;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Message bubbles. Alignment comes from the query's `mine` flag — the
-   owner party read from core.vault — so "my side" is a vault fact. Runs of
-   the same sender group: the name shows once per run, on their side. */
-.msg {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: 0.6rem;
-}
-
-.msg[data-mine='true'] {
-  align-items: flex-end;
-}
-
-.msg-sender {
-  margin: 0 0 0.2rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-}
-
-.msg-meta {
-  margin: 0.15rem 0 0;
-  font-size: 0.68rem;
-  color: var(--ink-faint);
-}
-
-.msg-body {
-  margin: 0;
-  max-width: min(85%, 28rem);
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
-  border-bottom-left-radius: 0.25rem;
-  background: var(--surface);
-  font-size: 0.95rem;
-  line-height: 1.4;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.msg[data-mine='true'] .msg-body {
-  border-bottom-left-radius: 1rem;
-  border-bottom-right-radius: 0.25rem;
-  background: var(--app-color, var(--accent));
-  border-color: transparent;
-  color: #fff;
-}
-
-.msg[data-delivery='draft'] .msg-body {
-  border-style: dashed;
-  color: var(--ink-soft);
-}
-
-.msg[data-mine='true'][data-delivery='draft'] .msg-body {
-  background: color-mix(in srgb, var(--app-color, var(--accent)) 18%, transparent);
-  border-style: dashed;
-  border-color: var(--app-color, var(--accent));
-  color: var(--ink);
-}
-
-/* ---------- Compose ---------- */
-
-.compose {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 1rem;
-}
-
-.compose textarea {
-  width: 100%;
-  min-height: 4.25rem;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 1rem;
-  resize: vertical;
-  -webkit-appearance: none;
-}
-
-.compose textarea:focus {
-  outline: none;
-  border-color: var(--app-color, var(--accent));
-}
-
-.compose-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.empty {
-  color: var(--ink-soft);
-  font-size: 0.9rem;
-  text-align: center;
-  padding: 2rem 0;
-}
-
-/* ---------- Attachments (shared pattern across apps) ---------- */
-
 .ghost {
+  min-height: 2.5rem;
   border-radius: 0.625rem;
   border: 1px solid var(--line);
   background: transparent;
@@ -320,13 +181,508 @@ button {
   color: var(--app-color, var(--accent));
 }
 
+.new-msg {
+  flex-shrink: 0;
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+}
+
+/* ---------- Toolbar: search + channel chips ---------- */
+
+.toolbar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.toolbar input[type='search'] {
+  flex: 1;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  -webkit-appearance: none;
+}
+
+.toolbar input[type='search']:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.chip {
+  min-height: 2.5rem;
+  padding: 0.25rem 0.875rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip.selected {
+  background: var(--app-color, var(--accent));
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ---------- New message form ---------- */
+
+.new-msg-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  padding: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.new-msg-form input[type='text'],
+.new-msg-form textarea {
+  width: 100%;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  resize: vertical;
+  -webkit-appearance: none;
+}
+
+.new-msg-form input:focus,
+.new-msg-form textarea:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.recipient-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.recipient-list:empty {
+  display: none;
+}
+
+.recipient-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.75rem;
+  padding: 0.3rem 0.25rem;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.9375rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.recipient-row:last-child {
+  border-bottom: none;
+}
+
+.recipient-row[aria-selected='true'],
+.recipient-row:hover {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+  border-radius: 0.5rem;
+}
+
+.new-msg-row {
+  display: flex;
+  align-items: center;
+}
+
+.new-msg-row .chip-row {
+  margin-bottom: 0;
+}
+
+.new-msg-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* ---------- Inbox rows (Gmail-clean) ---------- */
+
+.thread-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 0.625rem 0.25rem;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thread-row:last-child {
+  border-bottom: none;
+}
+
+.thread-row:hover {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 6%, transparent);
+  border-radius: 0.625rem;
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.row-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-snippet {
+  font-size: 0.83rem;
+  color: var(--ink-soft);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-snippet .draft-mark {
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+}
+
+.row-side {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.row-when {
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.08rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---------- Thread view ---------- */
+
+.thread-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+
+.back {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thread-title-btn {
+  flex: 1;
+  min-width: 0;
+  min-height: 2.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  border: none;
+  background: none;
+  color: var(--ink);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.625rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.thread-title-btn:hover {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 6%, transparent);
+}
+
+.thread-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Details drawer: participants + shared files, revealed from the title. */
+.thread-details {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 0.625rem 0.25rem;
+  max-height: 40%;
+  overflow-y: auto;
+}
+
+.participant-list {
+  list-style: none;
+  margin: 0 0 0.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.participant-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+}
+
+/* ---------- Message log ---------- */
+
+#messageList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.25rem;
+  overscroll-behavior: contain;
+}
+
+/* WhatsApp-style day chips between runs. */
+.day-sep {
+  display: flex;
+  justify-content: center;
+  margin: 0.75rem 0;
+}
+
+.day-sep span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+}
+
+/* Message bubbles. Alignment comes from the query's `mine` flag — the
+   owner party read from core.vault — so "my side" is a vault fact. Runs of
+   the same sender group: the name shows once per run, on their side. */
+.msg {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin-bottom: 0.35rem;
+}
+
+.msg[data-mine='true'] {
+  align-items: flex-end;
+}
+
+.msg-sender {
+  margin: 0.35rem 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+
+.msg-body {
+  margin: 0;
+  max-width: min(85%, 28rem);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 1.125rem;
+  border-bottom-left-radius: 0.3rem;
+  background: var(--surface);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.msg[data-mine='true'] .msg-body {
+  border-bottom-left-radius: 1.125rem;
+  border-bottom-right-radius: 0.3rem;
+  background: var(--app-color, var(--accent));
+  border-color: transparent;
+  color: #fff;
+}
+
+/* Delivery ticks (mine only). Read = both ticks take the accent. */
+.msg-ticks {
+  font-size: 0.72rem;
+  letter-spacing: -0.12em;
+  color: var(--ink-faint);
+}
+
+.msg-ticks[data-read='true'] {
+  color: var(--app-color, var(--accent));
+}
+
+/* Drafts: dashed, muted, each with its own Send. A visible draft is always
+   sendable — no session state required. */
+.msg[data-delivery='draft'] .msg-body {
+  border-style: dashed;
+  color: var(--ink-soft);
+}
+
+.msg[data-mine='true'][data-delivery='draft'] .msg-body {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 18%, transparent);
+  border-style: dashed;
+  border-color: var(--app-color, var(--accent));
+  color: var(--ink);
+}
+
+.msg-send {
+  min-height: 2.5rem;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--app-color, var(--accent));
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.msg-send:hover {
+  text-decoration: underline;
+}
+
+/* Awaiting the owner: the consent state, worn by the bubble itself. */
+.msg[data-pending='true'] .msg-body {
+  opacity: 0.75;
+}
+
+.msg .kit-pending-chip {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.failed-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 99px;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+/* Optimistic bubble: appended before the vault confirms; reconciled on the
+   next read. */
+.msg[data-optimistic='true'] .msg-body {
+  opacity: 0.6;
+}
+
+/* ---------- Compose (pinned) ---------- */
+
+.compose {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.compose textarea {
+  flex: 1;
+  min-height: 2.75rem;
+  max-height: 9rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 1.375rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  resize: none;
+  -webkit-appearance: none;
+}
+
+.compose textarea:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.compose-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
 .small-btn {
   font-size: 0.85rem;
   padding: 0.45rem 0.9rem;
 }
 
 .attach-block {
-  margin-top: 1rem;
+  margin-top: 0.25rem;
 }
 
 .attach-strip {

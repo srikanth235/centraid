@@ -43,7 +43,9 @@
       <header class="head">
         <div>
           <h1>Subscriptions</h1>
-          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+          <p id="subtitle" class="muted">
+            What you pay on repeat — one honest monthly number, straight from your vault.
+          </p>
         </div>
       </header>
 
@@ -59,39 +61,97 @@
         <div id="totalCard" class="total-card" hidden>
           <span class="total-label muted small">Active, per month</span>
           <span id="totalValue" class="total-value"></span>
+          <span id="totalYear" class="total-year"></span>
         </div>
 
-        <form id="addForm" class="panel" autocomplete="off">
-          <div class="field-row">
-            <select id="accountSelect" aria-label="Account"></select>
-            <input
-              id="amountInput"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Amount"
-              aria-label="Amount"
-              class="amount-in"
-            />
-            <select id="cadenceSelect" aria-label="Cadence">
-              <option value="FREQ=MONTHLY">Monthly</option>
-              <option value="FREQ=WEEKLY">Weekly</option>
-              <option value="FREQ=YEARLY">Yearly</option>
-            </select>
+        <form id="addForm" class="panel" autocomplete="off" hidden>
+          <div class="field">
+            <label class="field-label" for="payeeSelect">What service?</label>
+            <select id="payeeSelect"></select>
+            <p id="payeeHint" class="muted small field-hint" hidden>
+              Nobody to pay yet — payees are the people and companies in your vault. Add one in the
+              People app (or let a bank import bring it in) and it shows up here. You can still add
+              the charge now; the row wears the account name until you set the service.
+            </p>
           </div>
           <div class="field-row">
-            <select id="payeeSelect" aria-label="Paid to (optional)"></select>
+            <div class="field amount-field">
+              <label class="field-label" for="amountInput">How much?</label>
+              <input
+                id="amountInput"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                placeholder="9.99"
+                class="amount-in"
+              />
+            </div>
+            <div class="field">
+              <label class="field-label" for="cadenceSelect">How often?</label>
+              <select id="cadenceSelect">
+                <option value="FREQ=MONTHLY">Monthly</option>
+                <option value="FREQ=WEEKLY">Weekly</option>
+                <option value="FREQ=YEARLY">Yearly</option>
+                <option value="custom">Every N weeks / months…</option>
+              </select>
+            </div>
+            <div id="customCadence" class="field custom-cadence" hidden>
+              <span class="field-label" id="customCadenceLabel">Every</span>
+              <div class="field-row custom-cadence-row">
+                <input
+                  id="intervalInput"
+                  type="number"
+                  min="1"
+                  max="99"
+                  step="1"
+                  value="3"
+                  aria-label="Number of weeks or months between charges"
+                />
+                <select id="intervalUnit" aria-label="Weeks or months">
+                  <option value="FREQ=WEEKLY">weeks</option>
+                  <option value="FREQ=MONTHLY" selected>months</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="field-row form-foot">
+            <div class="field">
+              <label class="field-label" for="accountSelect">Charged to</label>
+              <select id="accountSelect"></select>
+            </div>
             <button type="submit" class="primary small-btn">Add subscription</button>
           </div>
         </form>
 
+        <div id="toolbar" class="toolbar" hidden>
+          <div class="pills" role="group" aria-label="Filter by status">
+            <button type="button" class="pill" data-filter="active" aria-pressed="true">
+              Active
+            </button>
+            <button type="button" class="pill" data-filter="paused" aria-pressed="false">
+              Paused
+            </button>
+            <button type="button" class="pill" data-filter="all" aria-pressed="false">All</button>
+          </div>
+          <select id="sortSelect" aria-label="Sort subscriptions">
+            <option value="cost">Sort: Cost</option>
+            <option value="name">Sort: Name</option>
+          </select>
+        </div>
+
         <section id="subList" aria-label="Subscriptions"></section>
+        <button id="endedToggle" class="ghost ended-toggle" type="button" hidden></button>
+        <section id="endedList" aria-label="Cancelled subscriptions" hidden></section>
+
         <p id="empty" class="empty" hidden>
-          No subscriptions yet. Add the recurring charges you carry above.
+          No subscriptions yet. Add your first recurring charge above — start with the one you keep
+          meaning to cancel.
         </p>
         <p id="noAccounts" class="empty" hidden>
           No accounts in your vault yet — subscriptions charge an account, which arrives with your
-          bank activity.
+          bank activity. Connect or import a bank account first; the moment one lands, the add form
+          appears here.
         </p>
       </div>
 

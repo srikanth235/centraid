@@ -87,10 +87,13 @@ export default async ({ ctx }) => {
     const projectById = new Map((projects.rows ?? []).map((p) => [p.project_id, p]));
     const activityById = new Map((activities.rows ?? []).map((a) => [a.activity_id, a]));
 
-    // Tracked hours per project and the unbilled queue the invoice flow
-    // selects from: billable, closed, and not yet on a line.
+    // Tracked hours (and billed-rate value) per project, the unbilled queue
+    // the invoice flow selects from (billable, closed, not yet on a line),
+    // and the full recent-entries projection the timesheet renders.
     const hoursByProject = new Map();
+    const valueByProject = new Map();
     const unbilled = [];
+    const entryList = [];
     for (const entry of entries.rows ?? []) {
       const act = activityById.get(entry.activity_id);
       if (!act?.started_at || !act.ended_at) continue;
@@ -98,7 +101,24 @@ export default async ({ ctx }) => {
       if (!Number.isFinite(ms) || ms <= 0) continue;
       const hours = ms / 3_600_000;
       hoursByProject.set(entry.project_id, (hoursByProject.get(entry.project_id) ?? 0) + hours);
+      valueByProject.set(
+        entry.project_id,
+        (valueByProject.get(entry.project_id) ?? 0) + Math.round(hours * (entry.rate_minor ?? 0)),
+      );
       const project = projectById.get(entry.project_id);
+      entryList.push({
+        entry_id: entry.entry_id,
+        project_id: entry.project_id,
+        project: project?.name ?? entry.project_id,
+        client_id: project?.client_id ?? null,
+        client: project ? (clientName.get(project.client_id) ?? project.client_id) : '',
+        started_at: act.started_at,
+        hours,
+        rate_minor: entry.rate_minor,
+        note: act.note ?? null,
+        billable: entry.billable === 1,
+        billed: entry.invoice_line_id != null,
+      });
       if (entry.billable === 1 && entry.invoice_line_id === null && project) {
         unbilled.push({
           entry_id: entry.entry_id,
@@ -114,21 +134,40 @@ export default async ({ ctx }) => {
       }
     }
     unbilled.sort((a, b) => a.date.localeCompare(b.date));
+    // Newest first, capped: the timesheet pages by week and eight weeks of
+    // chart never need more than this.
+    entryList.sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)));
+    const recentEntries = entryList.slice(0, 500);
 
     // Invoice totals from their lines (amount_minor is integer minor units);
-    // an invoice with no lines yet falls back to its own total_minor.
+    // an invoice with no lines yet falls back to its own total_minor. Lines
+    // are also projected per invoice — qty_scaled is hours × 100 by the
+    // business-domain convention, so hours = qty_scaled / 100.
     const lineTotal = new Map();
+    const linesByInvoice = new Map();
     for (const line of lines.rows ?? []) {
       lineTotal.set(line.invoice_id, (lineTotal.get(line.invoice_id) ?? 0) + line.amount_minor);
+      if (!linesByInvoice.has(line.invoice_id)) linesByInvoice.set(line.invoice_id, []);
+      linesByInvoice.get(line.invoice_id).push({
+        line_id: line.line_id,
+        description: line.description,
+        hours: line.qty_scaled / 100,
+        unit_price_minor: line.unit_price_minor,
+        amount_minor: line.amount_minor,
+      });
     }
 
+    const clientCurrency = new Map(clientRows.map((c) => [c.client_id, c.currency]));
     const projectRows = (projects.rows ?? []).map((p) => ({
       project_id: p.project_id,
       client_id: p.client_id,
       name: p.name,
       status: p.status,
       client: clientName.get(p.client_id) ?? p.client_id,
+      currency: clientCurrency.get(p.client_id) ?? 'EUR',
       hours: hoursByProject.get(p.project_id) ?? 0,
+      budget_minor: p.budget_minor ?? null,
+      tracked_minor: valueByProject.get(p.project_id) ?? 0,
     }));
     const statusRank = { active: 0, proposed: 1, done: 2, cancelled: 3 };
     projectRows.sort(
@@ -147,6 +186,7 @@ export default async ({ ctx }) => {
         status: c.status,
         currency: c.currency,
         default_rate_minor: c.default_rate_minor,
+        payment_terms_days: c.payment_terms_days,
         projects: projectCount.get(c.client_id) ?? 0,
       }))
       .toSorted((a, b) => a.name.localeCompare(b.name));
@@ -160,7 +200,9 @@ export default async ({ ctx }) => {
         due_on: inv.due_on,
         currency: inv.currency,
         total_minor: lineTotal.get(inv.invoice_id) ?? inv.total_minor,
+        client_id: inv.client_id,
         client: clientName.get(inv.client_id) ?? inv.client_id,
+        lines: linesByInvoice.get(inv.invoice_id) ?? [],
         attachments: attByInvoice.get(inv.invoice_id) ?? [],
       }))
       .toSorted((a, b) => String(b.issued_on).localeCompare(String(a.issued_on)));
@@ -194,6 +236,7 @@ export default async ({ ctx }) => {
       projects: projectRows,
       invoices: invoiceRows,
       unbilled,
+      entries: recentEntries,
       parties: candidateParties,
       credits,
     };
@@ -203,6 +246,7 @@ export default async ({ ctx }) => {
       projects: [],
       invoices: [],
       unbilled: [],
+      entries: [],
       parties: [],
       credits: [],
       vaultDenied: { code: err.code, message: err.message },

@@ -9,16 +9,28 @@
  */
 
 const CADENCE = {
-  DAILY: { label: 'Daily', perMonth: 365 / 12 },
-  WEEKLY: { label: 'Weekly', perMonth: 52 / 12 },
-  MONTHLY: { label: 'Monthly', perMonth: 1 },
-  YEARLY: { label: 'Yearly', perMonth: 1 / 12 },
+  DAILY: { label: 'Daily', unit: 'days', perMonth: 365 / 12 },
+  WEEKLY: { label: 'Weekly', unit: 'weeks', perMonth: 52 / 12 },
+  MONTHLY: { label: 'Monthly', unit: 'months', perMonth: 1 },
+  YEARLY: { label: 'Yearly', unit: 'years', perMonth: 1 / 12 },
 };
 
-/** Read the FREQ out of an rrule string; default monthly. */
+/**
+ * Read FREQ (and an optional INTERVAL) out of an rrule string; default
+ * monthly. `FREQ=MONTHLY;INTERVAL=3` → every 3 months at a third of the
+ * monthly rate, so quarterly charges stop masquerading as monthly ones.
+ */
 function cadenceOf(rrule) {
-  const m = /FREQ=([A-Z]+)/.exec(String(rrule ?? ''));
-  return CADENCE[m?.[1]] ?? CADENCE.MONTHLY;
+  const text = String(rrule ?? '');
+  const freq = /FREQ=([A-Z]+)/.exec(text);
+  const base = CADENCE[freq?.[1]] ?? CADENCE.MONTHLY;
+  const interval = Number(/INTERVAL=(\d+)/.exec(text)?.[1] ?? 1);
+  if (!Number.isFinite(interval) || interval <= 1) return base;
+  return {
+    label: `Every ${interval} ${base.unit}`,
+    unit: base.unit,
+    perMonth: base.perMonth / interval,
+  };
 }
 
 /** Shared attachment-projection shape (see the Notes app). */

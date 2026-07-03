@@ -55,39 +55,100 @@
       </div>
       <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
 
+      <!-- Metric cards: one per vital family that has data; tapping selects. -->
+      <section id="cardGrid" class="card-grid" aria-label="Vital summaries"></section>
+
+      <!-- The big time-axis chart for the selected metric. -->
+      <section id="chartPanel" class="chart-panel" aria-label="Trend" hidden>
+        <div class="chart-head">
+          <div class="chart-title-wrap">
+            <span id="chartTitle" class="chart-title"></span>
+            <span id="chartWhen" class="muted small"></span>
+          </div>
+          <span id="chartValue" class="chart-value"></span>
+        </div>
+        <div id="rangeBar" class="range-bar" role="group" aria-label="Time range">
+          <button type="button" data-range="W">W</button>
+          <button type="button" data-range="M" class="on">M</button>
+          <button type="button" data-range="6M">6M</button>
+          <button type="button" data-range="Y">Y</button>
+          <button type="button" data-range="All">All</button>
+        </div>
+        <div id="chartBody" class="chart-body"></div>
+        <p id="chartEmpty" class="muted small" hidden>Not enough readings in this range yet.</p>
+      </section>
+
+      <!-- Logging: value(s) + unit, backdating, context — one gesture. -->
       <form id="logForm" class="log" autocomplete="off">
-        <select id="typeSelect" aria-label="Vital type">
-          <option value="heart_rate">Heart rate</option>
-          <option value="bp_systolic">BP systolic</option>
-          <option value="bp_diastolic">BP diastolic</option>
-          <option value="spo2">SpO₂</option>
-          <option value="body_weight">Body weight</option>
-          <option value="glucose">Glucose</option>
-          <option value="temp">Temperature</option>
-        </select>
-        <input id="valueInput" type="number" step="any" placeholder="Value" aria-label="Value" />
-        <button type="submit" class="primary">Log</button>
-        <button id="trendsButton" type="button">Trends</button>
+        <div class="log-main">
+          <select id="typeSelect" aria-label="Vital type"></select>
+          <div class="value-wrap">
+            <input
+              id="valueInput"
+              type="number"
+              step="any"
+              inputmode="decimal"
+              placeholder="Value"
+              aria-label="Value"
+            />
+            <span id="bpSep" class="bp-sep" hidden>/</span>
+            <input
+              id="valueInput2"
+              type="number"
+              step="any"
+              inputmode="decimal"
+              placeholder="80"
+              aria-label="Diastolic value"
+              hidden
+            />
+            <span id="unitSuffix" class="unit-suffix" aria-hidden="true"></span>
+          </div>
+          <button type="submit" class="primary">Log</button>
+        </div>
+        <div class="log-extras">
+          <button id="whenToggle" type="button" class="when-toggle" aria-expanded="false">
+            When: now ▾
+          </button>
+          <input id="whenInput" type="datetime-local" aria-label="Observed at" hidden />
+          <div id="contextChips" class="chip-row" role="group" aria-label="Context">
+            <button type="button" class="chip" data-context="rest">Rest</button>
+            <button type="button" class="chip" data-context="exercise">After exercise</button>
+            <button type="button" class="chip" data-context="sleep">Sleep</button>
+            <button type="button" class="chip" data-context="post_meal">After meal</button>
+          </div>
+        </div>
       </form>
 
-      <section id="sparkPanel" class="spark-panel" aria-label="Trend" hidden>
-        <div class="spark-head">
-          <span id="sparkTitle" class="spark-title"></span>
-          <span id="sparkLatest" class="spark-latest"></span>
+      <!-- Highlights: client-side comparisons plus the vault's own summary. -->
+      <section id="highlights" class="highlights" aria-label="Highlights" hidden></section>
+      <section id="trendsCard" class="trends-card" aria-label="Vault summary" hidden>
+        <div class="trends-head">
+          <span class="trends-title">Vault summary</span>
+          <select id="trendsDays" aria-label="Summary window">
+            <option value="7">7 days</option>
+            <option value="30">30 days</option>
+            <option value="90" selected>90 days</option>
+            <option value="365">1 year</option>
+          </select>
+          <button id="trendsButton" type="button">Summarize</button>
         </div>
-        <div id="sparkChart" class="spark-chart"></div>
-        <div class="spark-foot muted small">
-          <span id="sparkMin"></span>
-          <span id="sparkCount"></span>
-          <span id="sparkMax"></span>
+        <div id="trendsResult" class="trends-result muted small">
+          A consent-checked summary computed inside the vault — count, range and average land here.
         </div>
       </section>
 
+      <!-- History: the selected metric only, grouped by day. -->
+      <section class="history-head" aria-hidden="true">
+        <span id="historyTitle" class="history-title"></span>
+        <span id="historyNote" class="muted small"></span>
+        <button id="exportButton" type="button" class="ghost-btn" hidden>Export CSV</button>
+      </section>
       <section id="readingList" aria-label="Vital readings"></section>
       <input id="attachInput" type="file" multiple hidden aria-hidden="true" />
       <p id="empty" class="empty" hidden>
         No readings yet. Log a vital above — it lands in the vault, not in this app.
       </p>
+      <p class="muted small shortcut-hint">Tip: press <kbd>l</kbd> to jump to the log field.</p>
     </main>
     <script type="module" src="app.js"></script>
   </body>

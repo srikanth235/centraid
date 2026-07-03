@@ -39,8 +39,11 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+export default async ({ query, ctx }) => {
   const purpose = 'dpv:HealthMonitoring';
+  // The cap is a projection courtesy, not a secret: the caller can widen it
+  // (charts want a year of history), and the result says when rows were cut.
+  const limit = Math.max(1, Math.min(2000, Math.trunc(Number(query?.limit)) || 200));
   try {
     const [vitals, observations, contents, attachments] = await Promise.all([
       ctx.vault.read({ entity: 'health.vital', purpose }),
@@ -59,7 +62,7 @@ export default async ({ ctx }) => {
     const byObservation = new Map((observations.rows ?? []).map((o) => [o.observation_id, o]));
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByVital = attachmentsBySubject('health.vital', attachments.rows ?? [], contentById);
-    const readings = (vitals.rows ?? [])
+    const joined = (vitals.rows ?? [])
       .map((v) => {
         const o = byObservation.get(v.observation_id);
         if (!o) return null;
@@ -78,10 +81,15 @@ export default async ({ ctx }) => {
         };
       })
       .filter(Boolean)
-      .toSorted((a, b) => String(b.observed_at).localeCompare(String(a.observed_at)))
-      .slice(0, 200);
-    return { readings };
+      .toSorted((a, b) => String(b.observed_at).localeCompare(String(a.observed_at)));
+    const readings = joined.slice(0, limit);
+    return { readings, total: joined.length, truncated: joined.length > limit };
   } catch (err) {
-    return { readings: [], vaultDenied: { code: err.code, message: err.message } };
+    return {
+      readings: [],
+      total: 0,
+      truncated: false,
+      vaultDenied: { code: err.code, message: err.message },
+    };
   }
 };

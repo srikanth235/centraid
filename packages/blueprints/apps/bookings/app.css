@@ -118,7 +118,8 @@ button {
 }
 
 input,
-select {
+select,
+textarea {
   font: inherit;
   font-size: 0.875rem;
   color: var(--ink);
@@ -126,11 +127,18 @@ select {
   border: 1px solid var(--line);
   border-radius: 0.5rem;
   padding: 0.4rem 0.6rem;
+  min-height: 2.5rem;
   -webkit-appearance: none;
 }
 
+textarea {
+  resize: vertical;
+  min-height: 3rem;
+}
+
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--app-color, var(--accent));
 }
@@ -155,6 +163,7 @@ select {
 .small-btn {
   font-size: 0.85rem;
   padding: 0.45rem 0.9rem;
+  min-height: 2.5rem;
 }
 
 .ghost {
@@ -163,7 +172,8 @@ select {
   background: transparent;
   color: var(--ink-soft);
   font-size: 0.78rem;
-  padding: 0.25rem 0.6rem;
+  padding: 0.25rem 0.7rem;
+  min-height: 2.5rem;
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
 }
@@ -199,6 +209,7 @@ select {
 
 /* ---------- Availability ---------- */
 
+/* Wraps onto a second row at narrow widths instead of squeezing. */
 .day-toggles {
   display: flex;
   gap: 0.3rem;
@@ -206,8 +217,8 @@ select {
 }
 
 .day-toggle {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 0.5rem;
   border: 1px solid var(--line);
   background: transparent;
@@ -222,10 +233,37 @@ select {
   color: #fff;
 }
 
+.kind-toggles {
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.kind-toggle {
+  min-height: 2.5rem;
+  padding: 0 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.kind-toggle[aria-pressed='true'] {
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+.avail-empty {
+  margin: 0.25rem 0 0.35rem;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  margin-bottom: 0.35rem;
 }
 
 .chips:empty {
@@ -242,7 +280,156 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/* A blocked window is a "not here" — striped and muted, never accent. */
+.chip.blocked {
+  border-style: dashed;
+  color: var(--ink-faint);
+  background:
+    repeating-linear-gradient(-45deg, var(--line) 0 4px, transparent 4px 9px), var(--surface);
+}
+
+.chip.alt {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* ---------- Week strip (read-only 7-day glance) ---------- */
+
+.week-strip {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.6rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.week-day {
+  font-size: 0.68rem;
+  text-align: center;
+  color: var(--ink-soft);
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-col.today .week-day {
+  color: var(--app-color, var(--accent));
+  font-weight: 700;
+}
+
+.week-col-body {
+  position: relative;
+  height: 7.5rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.week-col.today .week-col-body {
+  border-color: var(--app-color, var(--accent));
+}
+
+.week-avail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--app-color, var(--accent));
+  opacity: 0.14;
+}
+
+.week-avail.blocked {
+  background: repeating-linear-gradient(-45deg, var(--ink-faint) 0 3px, transparent 3px 7px);
+  opacity: 0.3;
+}
+
+.week-avail.alt {
+  background: var(--ink-faint);
+  opacity: 0.12;
+}
+
+.week-evt {
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  border-radius: 3px;
+  background: var(--app-color, var(--accent));
+  opacity: 0.9;
+}
+
+.week-evt.tentative {
+  background: transparent;
+  border: 1.5px dashed var(--app-color, var(--accent));
+}
+
+/* ---------- Filter pills & duration presets ---------- */
+
+.pills {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.25rem 0 0.6rem;
+}
+
+.pill,
+.preset {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.85rem;
+  min-height: 2.5rem;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pill[aria-pressed='true'] {
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+.preset {
+  border-radius: 0.5rem;
+}
+
+.preset[aria-pressed='true'] {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
 /* ---------- Booking rows ---------- */
+
+/* The queue lives on a card — Calendly-clean, one row per booking. */
+#bookingList:not(:empty) {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.35rem 0.875rem 0.5rem;
+}
+
+.group-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  margin: 0.9rem 0 0.1rem;
+}
+
+.group-label:first-child {
+  margin-top: 0.35rem;
+}
 
 .booking {
   display: flex;
@@ -255,6 +442,13 @@ select {
 
 .booking:last-child {
   border-bottom: none;
+}
+
+.booking-notes {
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .booking-main {
@@ -380,11 +574,11 @@ select {
   position: absolute;
   top: 0.15rem;
   right: 0.15rem;
-  width: 1.15rem;
-  height: 1.15rem;
+  min-width: 1.4rem;
+  height: 1.4rem;
   line-height: 1;
   border: none;
-  border-radius: 50%;
+  border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
   font-size: 0.85rem;
@@ -392,6 +586,24 @@ select {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Armed detach swaps × for a word — let the pill grow to fit it. */
+.attach-remove[data-kit-armed] {
+  width: auto;
+  padding: 0 0.4rem;
+  font-size: 0.7rem;
+}
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ---------- App-level knobs ---------- */

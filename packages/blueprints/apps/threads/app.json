@@ -199,7 +199,7 @@
   "queries": [
     {
       "name": "inbox",
-      "description": "Every thread, most recent activity first, with its participants' display names.",
+      "description": "Every thread, most recent activity first, with its participants' display names, a last-message snippet, a draft flag, and the party directory for starting new conversations.",
       "input": {
         "type": "object",
         "properties": {},
@@ -209,6 +209,9 @@
         "type": "object",
         "properties": {
           "threads": {
+            "type": "array"
+          },
+          "parties": {
             "type": "array"
           },
           "vaultDenied": {

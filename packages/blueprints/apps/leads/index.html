@@ -68,13 +68,33 @@
               hidden
             />
             <input
-              id="currencyInput"
-              type="text"
-              value="EUR"
-              maxlength="3"
-              aria-label="Currency"
-              class="currency"
+              id="rateInput"
+              type="number"
+              min="0"
+              step="0.01"
+              inputmode="decimal"
+              placeholder="Rate/h"
+              aria-label="Hourly rate (optional)"
+              class="rate"
             />
+            <select id="currencyInput" class="currency" aria-label="Currency">
+              <option value="EUR" selected>EUR</option>
+              <option value="USD">USD</option>
+              <option value="GBP">GBP</option>
+              <option value="INR">INR</option>
+              <option value="JPY">JPY</option>
+              <option value="CNY">CNY</option>
+              <option value="CHF">CHF</option>
+              <option value="CAD">CAD</option>
+              <option value="AUD">AUD</option>
+              <option value="SEK">SEK</option>
+              <option value="NOK">NOK</option>
+              <option value="DKK">DKK</option>
+              <option value="PLN">PLN</option>
+              <option value="BRL">BRL</option>
+              <option value="SGD">SGD</option>
+              <option value="AED">AED</option>
+            </select>
             <button type="submit" class="primary small-btn">Add lead</button>
           </div>
           <div id="contactRow" class="field-row" hidden>
@@ -98,6 +118,15 @@
             <button type="button" id="modeToggle" class="link-btn">New contact instead</button>
           </p>
         </form>
+
+        <div class="toolbar">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search name or note…"
+            aria-label="Search leads"
+          />
+        </div>
 
         <div id="board" class="board"></div>
         <p id="empty" class="empty" hidden>No leads yet. Add your first prospect above.</p>

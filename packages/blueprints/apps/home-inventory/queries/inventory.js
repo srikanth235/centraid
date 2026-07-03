@@ -43,12 +43,11 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
 export default async ({ ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
-    const [items, warranties, plans, places, contents, attachments] = await Promise.all([
+    const [items, warranties, plans, places, attachments] = await Promise.all([
       ctx.vault.read({ entity: 'home.asset_item', purpose }),
       ctx.vault.read({ entity: 'home.warranty', purpose }),
       ctx.vault.read({ entity: 'home.maintenance_plan', purpose }),
       ctx.vault.read({ entity: 'core.place', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
       ctx.vault.read({
         entity: 'core.attachment',
         where: [{ column: 'subject_type', op: 'eq', value: 'home.asset_item' }],
@@ -58,7 +57,22 @@ export default async ({ ctx }) => {
     const today = new Date().toISOString().slice(0, 10);
 
     const placeName = new Map((places.rows ?? []).map((p) => [p.place_id, p.name]));
-    const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+
+    // Fetch only the content items this app's attachments reference — a
+    // wholesale core.content_item read would ship every photo's bytes on
+    // every refresh (same scoping pattern as the threads query).
+    const contentIds = [
+      ...new Set((attachments.rows ?? []).map((a) => a.content_id).filter(Boolean)),
+    ];
+    const contentById = new Map();
+    if (contentIds.length > 0) {
+      const contents = await ctx.vault.read({
+        entity: 'core.content_item',
+        where: [{ column: 'content_id', op: 'in', value: contentIds }],
+        purpose,
+      });
+      for (const c of contents.rows ?? []) contentById.set(c.content_id, c);
+    }
     const attByItem = attachmentsBySubject('home.asset_item', attachments.rows ?? [], contentById);
 
     // Full warranty history per item, newest coverage first (an item can

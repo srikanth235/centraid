@@ -8,17 +8,30 @@
 // nothing: revoke the grant and this page goes dark while the library
 // remains the owner's.
 
+import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+
 const $ = (id) => document.getElementById(id);
 
 // Client-side ceiling per file. The command caps the data: URI at roughly
 // 11M characters; 8 MB of bytes base64-encodes comfortably under that.
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 
+// Tiles never render the full-resolution bytes — each image is downscaled
+// once to this longest edge and cached; the lightbox keeps the original.
+const THUMB_EDGE = 360;
+
 let assets = [];
 let albums = [];
 let selectedAlbum = null; // null = All
 let lightboxAssetId = null; // non-null while the lightbox is open
 let uploading = false;
+let readErrorShown = false;
+let searchQuery = '';
+let selectMode = false;
+let batchBusy = false;
+let selectAnchor = null; // last toggled asset_id, for shift-click ranges
+const selectedIds = new Set();
+const thumbCache = new Map(); // asset_id -> data URL string | Promise
 
 // ---------- Outcome narration (shared pattern across apps) ----------
 
@@ -34,14 +47,7 @@ function narrate(outcome, noteEl) {
     if (noteEl) noteEl.textContent = '';
     return true;
   }
-  let msg = null;
-  if (outcome?.status === 'parked') {
-    msg = 'Sent to the owner for confirmation — it lands once approved.';
-  } else if (outcome?.status === 'failed') {
-    msg = `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`;
-  } else if (outcome?.status === 'denied') {
-    msg = `Denied by consent: ${outcome.reason ?? ''}`;
-  }
+  const msg = outcomeMessage(outcome);
   if (msg != null) {
     notice(msg);
     if (noteEl) noteEl.textContent = msg;
@@ -64,15 +70,30 @@ function dayKey(iso) {
   return String(iso ?? '').slice(0, 10);
 }
 
+function isoDayOffset(days) {
+  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+}
+
 function fmtDay(key) {
   if (!key) return 'Undated';
-  const today = new Date().toISOString().slice(0, 10);
-  if (key === today) return 'Today';
+  if (key === isoDayOffset(0)) return 'Today';
+  if (key === isoDayOffset(-1)) return 'Yesterday';
   try {
     return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
-      weekday: 'long',
+      weekday: 'short',
       month: 'short',
       day: 'numeric',
+    });
+  } catch {
+    return key;
+  }
+}
+
+function fmtMonth(key) {
+  if (!key) return 'Undated';
+  try {
+    return new Date(`${key}-01T00:00:00`).toLocaleDateString(undefined, {
+      month: 'long',
       year: 'numeric',
     });
   } catch {
@@ -87,6 +108,28 @@ function toLocalInputValue(iso) {
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fmtBytes(n) {
+  if (n == null || !Number.isFinite(n)) return null;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Byte size straight off the asset row when the vault recorded one,
+// otherwise recovered from the base64 payload length.
+function assetBytes(asset) {
+  const recorded = asset.byte_size ?? asset.bytes ?? asset.size_bytes;
+  if (typeof recorded === 'number') return recorded;
+  const uri = asset.content_uri;
+  if (typeof uri === 'string' && uri.startsWith('data:')) {
+    const comma = uri.indexOf(',');
+    if (comma > 0 && uri.slice(0, comma).includes('base64')) {
+      return Math.round(((uri.length - comma - 1) * 3) / 4);
+    }
+  }
+  return null;
 }
 
 function isVideoAsset(asset) {
@@ -105,6 +148,54 @@ function isRenderableUri(uri) {
   );
 }
 
+// ---------- Thumbnails ----------
+
+// Downscale an image URI to THUMB_EDGE on the longest side, JPEG-encoded.
+// Anything that refuses (decode error, tainted canvas) falls back to the
+// original URI so a tile never goes blank.
+function makeThumb(uri) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const long = Math.max(img.naturalWidth, img.naturalHeight);
+      if (!long || long <= THUMB_EDGE) {
+        resolve(uri);
+        return;
+      }
+      const scale = THUMB_EDGE / long;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      try {
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      } catch {
+        resolve(uri);
+      }
+    };
+    img.onerror = () => resolve(uri);
+    img.src = uri;
+  });
+}
+
+function setThumbSrc(img, asset) {
+  const cached = thumbCache.get(asset.asset_id);
+  if (typeof cached === 'string') {
+    img.src = cached;
+    return;
+  }
+  const pending =
+    cached ??
+    makeThumb(asset.content_uri).then((thumb) => {
+      thumbCache.set(asset.asset_id, thumb);
+      return thumb;
+    });
+  if (!cached) thumbCache.set(asset.asset_id, pending);
+  pending.then((thumb) => {
+    img.src = thumb;
+  });
+}
+
 // ---------- Data ----------
 
 async function refresh() {
@@ -112,7 +203,14 @@ async function refresh() {
   try {
     data = await window.centraid.read({ query: 'library' });
   } catch {
-    return; // transient; the change feed retries
+    // A broken vault must not look like an empty one.
+    readFailed($('noticeBanner'));
+    readErrorShown = true;
+    return;
+  }
+  if (readErrorShown) {
+    notice('');
+    readErrorShown = false;
   }
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
@@ -126,14 +224,44 @@ async function refresh() {
   if (selectedAlbum && !albums.some((a) => a.album_id === selectedAlbum)) {
     selectedAlbum = null;
   }
+  for (const id of [...selectedIds]) {
+    if (!assets.some((a) => a.asset_id === id)) selectedIds.delete(id);
+  }
   renderToolbar();
   renderGrid();
+  renderSelectionBar();
   if (lightboxAssetId != null) renderLightbox();
 }
 
-function visibleAssets() {
+function albumAssets() {
   if (!selectedAlbum) return assets;
   return assets.filter((a) => a.album_ids?.includes(selectedAlbum));
+}
+
+function matchesSearch(asset) {
+  if (!searchQuery) return true;
+  const key = dayKey(asset.taken_at);
+  const hay = [
+    asset.title,
+    asset.kind,
+    asset.media_type,
+    key,
+    fmtDay(key),
+    fmtMonth(key.slice(0, 7)),
+    ...(asset.album_titles ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return searchQuery
+    .toLowerCase()
+    .split(/\s+/)
+    .every((token) => hay.includes(token));
+}
+
+// What the grid shows right now: the album filter, then the search filter.
+function visibleAssets() {
+  return albumAssets().filter(matchesSearch);
 }
 
 // ---------- Small builders ----------
@@ -186,6 +314,15 @@ function inlineInput({ value = '', placeholder, label, onSubmit, onCancel }) {
   return input;
 }
 
+// "Deleted 3 items · 1 awaiting approval · 2 failed"
+function batchSummary(verb, ok, parked, failed) {
+  const parts = [];
+  if (ok > 0) parts.push(`${verb} ${ok} ${ok === 1 ? 'item' : 'items'}`);
+  if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (failed > 0) parts.push(`${failed} failed`);
+  return parts.join(' · ') || 'Nothing to do';
+}
+
 // ---------- Albums toolbar ----------
 
 function renderToolbar() {
@@ -197,20 +334,16 @@ function renderChips() {
   const nav = $('albumChips');
   nav.innerHTML = '';
   nav.hidden = false;
-  nav.appendChild(
-    chip('All', selectedAlbum === null, () => {
-      selectedAlbum = null;
-      renderToolbar();
-      renderGrid();
-    }),
-  );
+  const pick = (albumId) => () => {
+    selectedAlbum = albumId;
+    if (selectMode) exitSelectMode();
+    renderToolbar();
+    renderGrid();
+  };
+  nav.appendChild(chip('All', selectedAlbum === null, pick(null)));
   for (const album of albums) {
     nav.appendChild(
-      chip(album.title ?? 'Album', selectedAlbum === album.album_id, () => {
-        selectedAlbum = album.album_id;
-        renderToolbar();
-        renderGrid();
-      }),
+      chip(album.title ?? 'Album', selectedAlbum === album.album_id, pick(album.album_id)),
     );
   }
   const add = document.createElement('button');
@@ -246,11 +379,13 @@ function renderAlbumTools() {
   tools.hidden = !album;
   if (!album) return;
 
-  const count = visibleAssets().length;
+  const count = albumAssets().length;
   const label = document.createElement('span');
   label.className = 'album-tools-label';
   label.textContent = `${count} ${count === 1 ? 'photo' : 'photos'} in this album`;
   tools.appendChild(label);
+
+  tools.appendChild(ghostBtn('Add photos', () => openPicker()));
 
   tools.appendChild(
     ghostBtn('Rename', () => {
@@ -273,12 +408,11 @@ function renderAlbumTools() {
   );
 
   const del = ghostBtn('Delete album', async () => {
-    if (!confirm(`Delete "${album.title ?? 'this album'}"? Its photos stay in your library.`)) {
-      return;
-    }
+    if (!armConfirm(del, { armedLabel: 'Delete album?' })) return;
     const outcome = await act('delete-album', { album_id: album.album_id });
     if (narrate(outcome)) {
       selectedAlbum = null;
+      toast('Album deleted — its photos stay in your library.');
       await refresh();
     }
   });
@@ -290,39 +424,49 @@ function renderAlbumTools() {
 
 function renderGrid() {
   const grid = $('grid');
+  grid.classList.toggle('selecting', selectMode);
   grid.innerHTML = '';
   const shown = visibleAssets();
   const empty = $('empty');
   empty.hidden = shown.length > 0;
   if (shown.length === 0) {
-    $('emptyText').textContent = selectedAlbum
-      ? 'Nothing in this album yet — open a photo under All and add it from there.'
-      : 'No photos yet — your library starts with the first upload.';
-    $('emptyUpload').hidden = Boolean(selectedAlbum);
+    const searching = searchQuery !== '';
+    $('emptyText').textContent = searching
+      ? `No matches for “${searchQuery}”.`
+      : selectedAlbum
+        ? 'Nothing in this album yet.'
+        : 'No photos yet — your library starts with the first upload.';
+    $('emptyUpload').hidden = searching;
   }
-  const byDay = new Map();
+  // Google-Photos-style timeline: sticky month headers, day labels inside.
+  const months = new Map(); // month key -> Map(day key -> assets)
   for (const asset of shown) {
-    const key = dayKey(asset.taken_at);
-    if (!byDay.has(key)) byDay.set(key, []);
-    byDay.get(key).push(asset);
+    const dk = dayKey(asset.taken_at);
+    const mk = dk.slice(0, 7);
+    if (!months.has(mk)) months.set(mk, new Map());
+    const days = months.get(mk);
+    if (!days.has(dk)) days.set(dk, []);
+    days.get(dk).push(asset);
   }
-  for (const [key, dayAssets] of byDay) {
-    const h = document.createElement('p');
-    h.className = 'day-label muted small';
-    h.textContent = fmtDay(key);
-    grid.appendChild(h);
-    for (const asset of dayAssets) {
-      grid.appendChild(renderTile(asset));
+  for (const [mk, days] of months) {
+    const mh = document.createElement('h2');
+    mh.className = 'month-label';
+    mh.textContent = fmtMonth(mk);
+    grid.appendChild(mh);
+    for (const [dk, dayAssets] of days) {
+      const h = document.createElement('p');
+      h.className = 'day-label muted small';
+      h.textContent = fmtDay(dk);
+      grid.appendChild(h);
+      for (const asset of dayAssets) {
+        grid.appendChild(renderTile(asset));
+      }
     }
   }
 }
 
-function renderTile(asset) {
-  const wrap = document.createElement('div');
-  wrap.className = 'tile-wrap';
-  const tile = document.createElement('button');
-  tile.type = 'button';
-  tile.className = 'tile';
+// The visual guts of a tile — shared by the grid and the album picker.
+function fillTileMedia(tile, asset) {
   if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
     const vid = document.createElement('video');
     vid.src = asset.content_uri;
@@ -339,8 +483,8 @@ function renderTile(asset) {
   } else if (isRenderableUri(asset.content_uri)) {
     const img = document.createElement('img');
     img.loading = 'lazy';
-    img.src = asset.content_uri;
     img.alt = asset.title ?? asset.kind ?? 'Photo';
+    setThumbSrc(img, asset);
     tile.appendChild(img);
   } else {
     tile.classList.add('placeholder');
@@ -352,16 +496,48 @@ function renderTile(asset) {
     title.textContent = asset.title ?? '';
     tile.append(type, title);
   }
-  tile.addEventListener('click', () => openLightbox(asset.asset_id));
+}
+
+function renderTile(asset) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tile-wrap';
+  wrap.dataset.assetId = asset.asset_id;
+  if (selectedIds.has(asset.asset_id)) wrap.classList.add('selected');
+
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'tile';
+  fillTileMedia(tile, asset);
+  tile.addEventListener('click', (e) => {
+    if (selectMode) toggleSelect(asset.asset_id, e.shiftKey);
+    else openLightbox(asset.asset_id);
+  });
   wrap.appendChild(tile);
+
+  // The selection dot: always present so select mode is one tap away;
+  // outside select mode it surfaces on hover/focus as an accelerator.
+  const check = document.createElement('button');
+  check.type = 'button';
+  check.className = 'tile-check';
+  check.setAttribute('aria-label', selectedIds.has(asset.asset_id) ? 'Deselect' : 'Select');
+  check.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!selectMode) enterSelectMode();
+    toggleSelect(asset.asset_id, e.shiftKey);
+  });
+  wrap.appendChild(check);
+
   // Inside an album, each tile offers the one contextual edit: leave it.
   if (selectedAlbum) {
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'tile-remove';
-    rm.textContent = '×';
     rm.title = 'Remove from album';
     rm.setAttribute('aria-label', 'Remove from album');
+    const glyph = document.createElement('span');
+    glyph.textContent = '×';
+    glyph.setAttribute('aria-hidden', 'true');
+    rm.appendChild(glyph);
     rm.addEventListener('click', async () => {
       const outcome = await act('remove-from-album', {
         album_id: selectedAlbum,
@@ -372,6 +548,194 @@ function renderTile(asset) {
     wrap.appendChild(rm);
   }
   return wrap;
+}
+
+// ---------- Multi-select ----------
+
+function enterSelectMode() {
+  selectMode = true;
+  selectAnchor = null;
+  $('selectBtn').textContent = 'Cancel';
+  $('selectBtn').dataset.active = 'true';
+  document.body.classList.add('has-selection');
+  renderGrid();
+  renderSelectionBar();
+}
+
+function exitSelectMode() {
+  selectMode = false;
+  selectedIds.clear();
+  selectAnchor = null;
+  $('selectBtn').textContent = 'Select';
+  delete $('selectBtn').dataset.active;
+  document.body.classList.remove('has-selection');
+  renderGrid();
+  renderSelectionBar();
+}
+
+function toggleSelect(assetId, shiftKey) {
+  if (batchBusy) return;
+  const list = visibleAssets();
+  if (shiftKey && selectAnchor && selectAnchor !== assetId) {
+    const a = list.findIndex((x) => x.asset_id === selectAnchor);
+    const b = list.findIndex((x) => x.asset_id === assetId);
+    if (a >= 0 && b >= 0) {
+      const on = !selectedIds.has(assetId);
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i += 1) {
+        if (on) selectedIds.add(list[i].asset_id);
+        else selectedIds.delete(list[i].asset_id);
+      }
+      selectAnchor = assetId;
+      applySelection();
+      return;
+    }
+  }
+  if (selectedIds.has(assetId)) selectedIds.delete(assetId);
+  else selectedIds.add(assetId);
+  selectAnchor = assetId;
+  applySelection();
+}
+
+// Update tile state in place — no full re-render on every tap.
+function applySelection() {
+  for (const wrap of $('grid').querySelectorAll('.tile-wrap')) {
+    const on = selectedIds.has(wrap.dataset.assetId);
+    wrap.classList.toggle('selected', on);
+    const check = wrap.querySelector('.tile-check');
+    if (check) check.setAttribute('aria-label', on ? 'Deselect' : 'Select');
+  }
+  renderSelectionBar();
+}
+
+function renderSelectionBar() {
+  const bar = $('selectionBar');
+  bar.hidden = !selectMode;
+  bar.innerHTML = '';
+  if (!selectMode) return;
+
+  const n = selectedIds.size;
+  const count = document.createElement('span');
+  count.className = 'bar-count';
+  count.textContent = n === 0 ? 'Select photos' : `${n} selected`;
+  bar.appendChild(count);
+
+  // Add to album — a small menu that opens above the bar.
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'bar-menu-wrap';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'ghost bar-btn';
+  addBtn.textContent = 'Add to album ▾';
+  addBtn.disabled = n === 0;
+  addBtn.setAttribute('aria-haspopup', 'true');
+  addBtn.addEventListener('click', () => {
+    const open = menuWrap.querySelector('.album-menu');
+    if (open) {
+      open.remove();
+      return;
+    }
+    const menu = document.createElement('div');
+    menu.className = 'album-menu';
+    menu.setAttribute('role', 'menu');
+    if (albums.length === 0) {
+      const none = document.createElement('p');
+      none.className = 'album-menu-empty';
+      none.textContent = 'No albums yet — make one from the chips above.';
+      menu.appendChild(none);
+    }
+    for (const album of albums) {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'album-menu-item';
+      item.setAttribute('role', 'menuitem');
+      item.textContent = album.title ?? 'Album';
+      item.addEventListener('click', () => {
+        menu.remove();
+        batchAddToAlbum([...selectedIds], album, count);
+      });
+      menu.appendChild(item);
+    }
+    menuWrap.appendChild(menu);
+    const away = (e) => {
+      if (!menuWrap.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', away, true);
+      }
+    };
+    document.addEventListener('click', away, true);
+  });
+  menuWrap.appendChild(addBtn);
+  bar.appendChild(menuWrap);
+
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'ghost bar-btn danger';
+  del.textContent = 'Delete';
+  del.disabled = n === 0;
+  del.addEventListener('click', () => {
+    if (batchBusy || selectedIds.size === 0) return;
+    if (!armConfirm(del, { armedLabel: `Delete ${selectedIds.size}?` })) return;
+    batchDelete([...selectedIds], count);
+  });
+  bar.appendChild(del);
+
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'bar-close';
+  close.textContent = '×';
+  close.setAttribute('aria-label', 'Exit selection');
+  close.addEventListener('click', exitSelectMode);
+  bar.appendChild(close);
+}
+
+function setBarBusy(on) {
+  batchBusy = on;
+  for (const btn of $('selectionBar').querySelectorAll('button')) btn.disabled = on;
+}
+
+async function batchDelete(ids, progressEl) {
+  setBarBusy(true);
+  let ok = 0;
+  let parked = 0;
+  let failed = 0;
+  let lastBad = null;
+  for (let i = 0; i < ids.length; i += 1) {
+    progressEl.textContent = `Deleting ${i + 1} of ${ids.length}…`;
+    const outcome = await act('delete-asset', { asset_id: ids[i] });
+    if (outcome?.status === 'executed') ok += 1;
+    else if (outcome?.status === 'parked') parked += 1;
+    else {
+      failed += 1;
+      lastBad = outcome;
+    }
+  }
+  setBarBusy(false);
+  exitSelectMode();
+  await refresh();
+  toast(batchSummary('Deleted', ok, parked, failed));
+  if (lastBad) narrate(lastBad);
+}
+
+async function batchAddToAlbum(ids, album, progressEl) {
+  setBarBusy(true);
+  let ok = 0;
+  let parked = 0;
+  let skipped = 0;
+  for (let i = 0; i < ids.length; i += 1) {
+    progressEl.textContent = `Adding ${i + 1} of ${ids.length}…`;
+    const outcome = await act('add-to-album', { album_id: album.album_id, asset_id: ids[i] });
+    if (outcome?.status === 'executed') ok += 1;
+    else if (outcome?.status === 'parked') parked += 1;
+    else skipped += 1; // usually "already in the album" — a precondition, not an error
+  }
+  setBarBusy(false);
+  exitSelectMode();
+  await refresh();
+  const parts = [];
+  if (ok > 0) parts.push(`Added ${ok} to “${album.title ?? 'Album'}”`);
+  if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (skipped > 0) parts.push(`${skipped} already there`);
+  toast(parts.join(' · ') || 'Nothing to add');
 }
 
 // ---------- Lightbox ----------
@@ -397,6 +761,49 @@ function step(delta) {
   renderLightbox();
 }
 
+// Double-click zooms the stage image; while zoomed a pointer drag pans it.
+function wireZoom(img) {
+  let zoomed = false;
+  let panX = 0;
+  let panY = 0;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  const apply = () => {
+    img.style.transform = zoomed ? `translate(${panX}px, ${panY}px) scale(2.5)` : '';
+    img.classList.toggle('zoomed', zoomed);
+  };
+  img.classList.add('zoomable');
+  img.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    zoomed = !zoomed;
+    panX = 0;
+    panY = 0;
+    apply();
+  });
+  img.addEventListener('pointerdown', (e) => {
+    if (!zoomed) return;
+    dragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+    img.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  img.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    panX = e.clientX - startX;
+    panY = e.clientY - startY;
+    apply();
+  });
+  const stop = () => {
+    dragging = false;
+  };
+  img.addEventListener('pointerup', stop);
+  img.addEventListener('pointercancel', stop);
+  // A drag while zoomed must not fall through as a backdrop click.
+  img.addEventListener('click', (e) => e.stopPropagation());
+}
+
 function renderLightbox() {
   const box = $('lightbox');
   const asset = assets.find((a) => a.asset_id === lightboxAssetId);
@@ -410,6 +817,7 @@ function renderLightbox() {
   const stage = document.createElement('div');
   stage.className = 'lightbox-stage';
   swallow(stage);
+  let stageImg = null;
   if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
     const vid = document.createElement('video');
     vid.src = asset.content_uri;
@@ -418,10 +826,11 @@ function renderLightbox() {
     vid.setAttribute('aria-label', asset.title ?? 'Video');
     stage.appendChild(vid);
   } else if (isRenderableUri(asset.content_uri)) {
-    const img = document.createElement('img');
-    img.src = asset.content_uri;
-    img.alt = asset.title ?? asset.kind ?? 'Photo';
-    stage.appendChild(img);
+    stageImg = document.createElement('img');
+    stageImg.src = asset.content_uri; // the lightbox keeps the original bytes
+    stageImg.alt = asset.title ?? asset.kind ?? 'Photo';
+    wireZoom(stageImg);
+    stage.appendChild(stageImg);
   } else {
     const placeholder = document.createElement('div');
     placeholder.className = 'lightbox-placeholder';
@@ -492,6 +901,28 @@ function renderLightbox() {
   meta.append(cap, when);
   panel.appendChild(meta);
 
+  // Info line: kind · dimensions · size · when.
+  const info = document.createElement('p');
+  info.className = 'lightbox-info';
+  const setInfo = (w, h) => {
+    const parts = [asset.kind ?? 'photo'];
+    const width = asset.width ?? w;
+    const height = asset.height ?? h;
+    if (width && height) parts.push(`${width}×${height}`);
+    const size = fmtBytes(assetBytes(asset));
+    if (size) parts.push(size);
+    const t = asset.taken_at ? new Date(asset.taken_at) : null;
+    if (t && !Number.isNaN(t.getTime())) {
+      parts.push(t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+    }
+    info.textContent = parts.join(' · ');
+  };
+  setInfo();
+  if (stageImg && (asset.width == null || asset.height == null)) {
+    stageImg.addEventListener('load', () => setInfo(stageImg.naturalWidth, stageImg.naturalHeight));
+  }
+  panel.appendChild(info);
+
   // Album membership: one chip per album, click to join or leave.
   if (albums.length > 0) {
     const strip = document.createElement('div');
@@ -517,11 +948,20 @@ function renderLightbox() {
 
   const actions = document.createElement('div');
   actions.className = 'lightbox-actions';
+  if (isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')) {
+    const dl = document.createElement('a');
+    dl.className = 'ghost lightbox-download';
+    dl.textContent = 'Download';
+    dl.href = asset.content_uri;
+    dl.download = (asset.title ?? '').trim() || `photo-${asset.asset_id}`;
+    actions.appendChild(dl);
+  }
   const del = ghostBtn('Delete photo', async () => {
-    if (!confirm('Delete this photo? It leaves your library and every album it is in.')) return;
+    if (!armConfirm(del, { armedLabel: 'Delete photo?' })) return;
     const outcome = await act('delete-asset', { asset_id: asset.asset_id });
     if (narrate(outcome, note)) {
       closeLightbox();
+      toast('Photo deleted — it leaves every album it was in.');
       await refresh();
     }
   });
@@ -535,8 +975,118 @@ function renderLightbox() {
 }
 
 $('lightbox').addEventListener('click', closeLightbox);
+
+// ---------- Album picker ("Add photos" from inside an album) ----------
+
+function closePicker() {
+  const p = $('picker');
+  p.hidden = true;
+  p.innerHTML = '';
+}
+
+function openPicker() {
+  const album = albums.find((a) => a.album_id === selectedAlbum);
+  if (!album) return;
+  const picked = new Set();
+  const p = $('picker');
+  p.innerHTML = '';
+
+  const panel = document.createElement('div');
+  panel.className = 'picker-panel';
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  const head = document.createElement('h2');
+  head.className = 'picker-head';
+  head.textContent = `Add to “${album.title ?? 'Album'}”`;
+  panel.appendChild(head);
+
+  const candidates = assets.filter((a) => !(a.album_ids ?? []).includes(album.album_id));
+  const grid = document.createElement('div');
+  grid.className = 'picker-grid';
+  if (candidates.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'picker-empty muted';
+    none.textContent = 'Everything in your library is already in this album.';
+    grid.appendChild(none);
+  }
+
+  const count = document.createElement('span');
+  count.className = 'picker-count';
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'primary small-btn';
+  const syncFoot = () => {
+    count.textContent = picked.size === 0 ? 'Pick photos to add' : `${picked.size} selected`;
+    addBtn.textContent = picked.size === 0 ? 'Add' : `Add ${picked.size}`;
+    addBtn.disabled = picked.size === 0;
+  };
+
+  for (const asset of candidates) {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'picker-tile';
+    tile.setAttribute('aria-pressed', 'false');
+    tile.setAttribute('aria-label', asset.title ?? 'Photo');
+    fillTileMedia(tile, asset);
+    tile.addEventListener('click', () => {
+      if (picked.has(asset.asset_id)) picked.delete(asset.asset_id);
+      else picked.add(asset.asset_id);
+      tile.setAttribute('aria-pressed', picked.has(asset.asset_id) ? 'true' : 'false');
+      syncFoot();
+    });
+    grid.appendChild(tile);
+  }
+  panel.appendChild(grid);
+
+  const foot = document.createElement('div');
+  foot.className = 'picker-foot';
+  foot.appendChild(count);
+  foot.appendChild(ghostBtn('Cancel', closePicker));
+  addBtn.addEventListener('click', async () => {
+    const ids = [...picked];
+    addBtn.disabled = true;
+    let ok = 0;
+    let parked = 0;
+    let skipped = 0;
+    for (let i = 0; i < ids.length; i += 1) {
+      addBtn.textContent = `Adding ${i + 1} of ${ids.length}…`;
+      const outcome = await act('add-to-album', {
+        album_id: album.album_id,
+        asset_id: ids[i],
+      });
+      if (outcome?.status === 'executed') ok += 1;
+      else if (outcome?.status === 'parked') parked += 1;
+      else skipped += 1;
+    }
+    closePicker();
+    await refresh();
+    const parts = [];
+    if (ok > 0) parts.push(`Added ${ok} to “${album.title ?? 'Album'}”`);
+    if (parked > 0) parts.push(`${parked} awaiting approval`);
+    if (skipped > 0) parts.push(`${skipped} already there`);
+    toast(parts.join(' · ') || 'Nothing to add');
+  });
+  foot.appendChild(addBtn);
+  panel.appendChild(foot);
+  syncFoot();
+
+  p.appendChild(panel);
+  p.hidden = false;
+}
+
+$('picker').addEventListener('click', closePicker);
+
+// ---------- Keyboard ----------
+
 window.addEventListener('keydown', (e) => {
-  if ($('lightbox').hidden) return;
+  if (e.key === 'Escape' && !$('picker').hidden) {
+    closePicker();
+    return;
+  }
+  if ($('lightbox').hidden) {
+    if (e.key === 'Escape' && selectMode && !batchBusy) exitSelectMode();
+    return;
+  }
   const tag = e.target?.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') {
     if (e.key === 'Escape') e.target.blur();
@@ -545,6 +1095,37 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLightbox();
   else if (e.key === 'ArrowLeft') step(-1);
   else if (e.key === 'ArrowRight') step(1);
+});
+
+// ---------- Search ----------
+
+const applySearch = debounce(() => renderGrid(), 120);
+
+$('searchInput').addEventListener('input', () => {
+  searchQuery = $('searchInput').value.trim();
+  $('searchClear').hidden = searchQuery === '';
+  applySearch();
+});
+
+function clearSearch() {
+  $('searchInput').value = '';
+  $('searchClear').hidden = true;
+  if (searchQuery !== '') {
+    searchQuery = '';
+    renderGrid();
+  }
+}
+
+$('searchInput').addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  if ($('searchInput').value) clearSearch();
+  else $('searchInput').blur();
+});
+
+$('searchClear').addEventListener('click', () => {
+  clearSearch();
+  $('searchInput').focus();
 });
 
 // ---------- Upload ----------
@@ -558,46 +1139,53 @@ function fileToDataUri(file) {
   });
 }
 
-function setUploading(on) {
-  uploading = on;
-  $('uploadBtn').disabled = on;
-  $('emptyUpload').disabled = on;
-  $('uploadBtn').textContent = on ? 'Uploading…' : '＋ Add photos';
+// Decode once at upload time so the vault learns the pixel dimensions.
+async function imageDims(dataUri) {
+  try {
+    const img = new Image();
+    img.src = dataUri;
+    await img.decode();
+    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+      return { width: img.naturalWidth, height: img.naturalHeight };
+    }
+  } catch {
+    // Undecodable is fine — the upload proceeds without dimensions.
+  }
+  return null;
 }
 
-$('uploadBtn').addEventListener('click', () => $('fileInput').click());
-$('emptyUpload').addEventListener('click', () => $('fileInput').click());
-
-$('fileInput').addEventListener('change', async () => {
-  const files = [...$('fileInput').files];
-  $('fileInput').value = '';
-  if (files.length === 0 || uploading) return;
-
-  const parts = [];
+async function uploadFiles(files) {
+  if (uploading || files.length === 0) return;
   const oversized = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
-  if (oversized.length > 0) {
-    parts.push(
+  if (accepted.length === 0) {
+    toast(
       oversized.length === 1
-        ? `Skipped "${oversized[0].name}" — each upload tops out around 8 MB.`
+        ? `Skipped “${oversized[0].name}” — each upload tops out around 8 MB.`
         : `Skipped ${oversized.length} files — each upload tops out around 8 MB.`,
     );
-  }
-  if (accepted.length === 0) {
-    notice(parts.join(' '));
     return;
   }
 
-  setUploading(true);
+  uploading = true;
+  const btn = $('uploadBtn');
+  btn.disabled = true;
+  $('emptyUpload').disabled = true;
+
   let added = 0;
   let deduped = 0;
-  let stopped = false;
-  for (const file of accepted) {
+  let parked = 0;
+  let failed = 0;
+  let unreadable = 0;
+  let lastBad = null;
+  for (let i = 0; i < accepted.length; i += 1) {
+    btn.textContent = `Uploading ${i + 1} of ${accepted.length}…`;
+    const file = accepted[i];
     let dataUri;
     try {
       dataUri = await fileToDataUri(file);
     } catch {
-      parts.push(`Could not read "${file.name}".`);
+      unreadable += 1;
       continue;
     }
     const kind = file.type.startsWith('video/')
@@ -605,29 +1193,106 @@ $('fileInput').addEventListener('change', async () => {
       : file.type.startsWith('audio/')
         ? 'audio'
         : 'photo';
+    const dims = kind === 'photo' ? await imageDims(dataUri) : null;
     const outcome = await act('upload', {
       data_uri: dataUri,
       kind,
-      captured_at: new Date(file.lastModified).toISOString(),
-      title: file.name,
+      captured_at: new Date(file.lastModified || Date.now()).toISOString(),
+      ...(file.name ? { title: file.name } : {}),
+      ...(dims ? { width: dims.width, height: dims.height } : {}),
     });
-    if (!narrate(outcome)) {
-      stopped = true;
-      break;
+    // One bad file never sinks the batch — count it and keep going.
+    if (outcome?.status === 'executed') {
+      added += 1;
+      if (outcome.output?.deduped) deduped += 1;
+    } else if (outcome?.status === 'parked') {
+      parked += 1;
+    } else {
+      failed += 1;
+      lastBad = outcome;
     }
-    added += 1;
-    if (outcome.output?.deduped) deduped += 1;
   }
-  setUploading(false);
-  if (!stopped) {
-    if (added > 0) {
-      const dedupeNote = deduped > 0 ? ` (${deduped} already in the library)` : '';
-      parts.unshift(`Added ${added} ${added === 1 ? 'item' : 'items'}${dedupeNote}.`);
-    }
-    notice(parts.join(' '));
+
+  uploading = false;
+  btn.disabled = false;
+  btn.textContent = '＋ Add photos';
+  $('emptyUpload').disabled = false;
+
+  const parts = [];
+  if (added > 0) {
+    const dedupeNote = deduped > 0 ? ` (${deduped} already in the library)` : '';
+    parts.push(`Added ${added} ${added === 1 ? 'item' : 'items'}${dedupeNote}`);
   }
+  if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (failed > 0) parts.push(`${failed} refused`);
+  if (unreadable > 0) parts.push(`${unreadable} unreadable`);
+  if (oversized.length > 0) parts.push(`${oversized.length} over the 8 MB cap`);
+  toast(parts.join(' · ') || 'Nothing added');
+  if (lastBad) narrate(lastBad);
   await refresh();
+}
+
+$('uploadBtn').addEventListener('click', () => $('fileInput').click());
+$('emptyUpload').addEventListener('click', () => {
+  // Inside an album the natural "add" is from the library, not from disk.
+  if (selectedAlbum) openPicker();
+  else $('fileInput').click();
+});
+
+$('fileInput').addEventListener('change', async () => {
+  const files = [...$('fileInput').files];
+  $('fileInput').value = '';
+  await uploadFiles(files);
+});
+
+// Drag a file anywhere onto the page: a full-page "Drop to add" overlay.
+let dragDepth = 0;
+
+function dragHasFiles(e) {
+  return [...(e.dataTransfer?.types ?? [])].includes('Files');
+}
+
+window.addEventListener('dragenter', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth += 1;
+  $('dropOverlay').hidden = false;
+});
+
+window.addEventListener('dragover', (e) => {
+  if (dragHasFiles(e)) e.preventDefault();
+});
+
+window.addEventListener('dragleave', (e) => {
+  if (!dragHasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) $('dropOverlay').hidden = true;
+});
+
+window.addEventListener('drop', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('dropOverlay').hidden = true;
+  const files = [...(e.dataTransfer?.files ?? [])];
+  if (files.length > 0) uploadFiles(files);
+});
+
+// Paste an image (screenshot, copied photo) straight into the library.
+window.addEventListener('paste', (e) => {
+  const tag = e.target?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return; // never hijack a text field
+  const files = [...(e.clipboardData?.files ?? [])];
+  if (files.length > 0) uploadFiles(files);
+});
+
+// ---------- Boot ----------
+
+$('selectBtn').addEventListener('click', () => {
+  if (selectMode) exitSelectMode();
+  else enterSelectMode();
 });
 
 window.addEventListener('focus', refresh);
+showSkeleton($('grid'), 6);
 refresh();

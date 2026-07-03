@@ -57,6 +57,12 @@
 
       <form id="proposeForm" class="propose" autocomplete="off" hidden>
         <input id="summaryInput" type="text" placeholder="Propose an event…" />
+        <textarea
+          id="descInput"
+          rows="2"
+          placeholder="Add a description (optional)"
+          aria-label="Description"
+        ></textarea>
         <div class="propose-times">
           <input id="startInput" type="datetime-local" aria-label="Starts" />
           <input id="endInput" type="datetime-local" aria-label="Ends" />
@@ -68,20 +74,32 @@
       <div class="agenda-bar">
         <div class="view-toggle" role="group" aria-label="View">
           <button type="button" id="monthViewBtn" aria-pressed="true">Month</button>
+          <button type="button" id="weekViewBtn" aria-pressed="false">Week</button>
           <button type="button" id="listViewBtn" aria-pressed="false">List</button>
         </div>
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Search events"
+          aria-label="Search events"
+          hidden
+        />
         <div id="monthNav" class="month-nav">
-          <button type="button" id="prevMonth" aria-label="Previous month">‹</button>
+          <button type="button" id="todayBtn" class="today-btn">Today</button>
+          <button type="button" id="prevMonth" aria-label="Previous">‹</button>
           <span id="monthLabel"></span>
-          <button type="button" id="nextMonth" aria-label="Next month">›</button>
+          <button type="button" id="nextMonth" aria-label="Next">›</button>
         </div>
       </div>
 
-      <!-- One shared file input for the list view; a row's attach button sets
+      <div id="calendarChips" class="cal-chips" role="group" aria-label="Calendars" hidden></div>
+
+      <!-- One shared file input for the whole app; an attach button sets
            the target event, then triggers this. -->
       <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to an event" />
 
-      <section id="monthGrid" class="month-grid" aria-label="Month view"></section>
+      <section id="monthGrid" class="month-grid" role="grid" aria-label="Month view"></section>
+      <section id="weekView" class="week-view" aria-label="Week view" hidden></section>
       <section id="dayList" aria-label="Upcoming events" hidden></section>
       <p id="empty" class="empty" hidden>
         Nothing scheduled. Propose an event above, or import an .ics through the vault.
@@ -90,6 +108,18 @@
         The vault has no calendars yet — import an .ics file through the vault's ingest to create
         one.
       </p>
+
+      <!-- Event detail / day panel overlay — content is built per open. -->
+      <div id="overlay" class="overlay" hidden>
+        <div
+          id="overlayPanel"
+          class="panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="panelTitle"
+          tabindex="-1"
+        ></div>
+      </div>
     </main>
     <script type="module" src="app.js"></script>
   </body>

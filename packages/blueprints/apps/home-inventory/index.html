@@ -69,18 +69,46 @@
         </div>
       </form>
 
+      <!-- Sticky toolbar: search-as-you-type plus view toggle and CSV export. -->
+      <div id="toolbar" class="toolbar" hidden>
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Search name, serial, or place…"
+          aria-label="Search items"
+        />
+        <div class="toolbar-actions">
+          <div class="view-toggle" role="group" aria-label="View">
+            <button id="viewListBtn" type="button" class="ghost" aria-pressed="true">List</button>
+            <button id="viewGridBtn" type="button" class="ghost" aria-pressed="false">Grid</button>
+          </div>
+          <button id="exportBtn" type="button" class="ghost">Export CSV</button>
+        </div>
+      </div>
+
       <!-- One shared file picker; each item's attach button targets its own row. -->
       <input id="attachInput" type="file" multiple hidden />
 
-      <section id="maintenanceDue" aria-label="Maintenance due" hidden>
-        <p class="day-label muted small">Maintenance due</p>
-        <div id="maintenanceRows"></div>
-      </section>
+      <div class="attention">
+        <section id="warrantyExpiring" aria-label="Warranties expiring soon" hidden>
+          <p class="day-label muted small">Expiring soon</p>
+          <div id="warrantyExpiringRows"></div>
+        </section>
+
+        <section id="maintenanceDue" aria-label="Maintenance due" hidden>
+          <p class="day-label muted small">Maintenance due</p>
+          <div id="maintenanceRows"></div>
+          <p class="muted small section-hint">
+            From your maintenance plans — mark done coming soon.
+          </p>
+        </section>
+      </div>
 
       <section id="itemList" aria-label="Items by place"></section>
       <p id="empty" class="empty" hidden>
         Nothing here yet — add the first item above, or record assets in the vault.
       </p>
+      <p id="noMatches" class="empty" hidden>No items match your search.</p>
 
       <!-- Disposal keeps the row; the history stays, collapsed out of the way. -->
       <details id="disposedSection" hidden>

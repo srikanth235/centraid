@@ -8,6 +8,9 @@
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};
+  // Backdating: health.log_vital already accepts observed_at — pass it
+  // through only when it parses as a real instant, normalized to ISO.
+  const observedAt = input.observed_at ? new Date(String(input.observed_at)) : null;
   try {
     const outcome = await ctx.vault.invoke({
       command: 'health.log_vital',
@@ -16,6 +19,9 @@ export default async ({ body, ctx }) => {
         value_num: Number(input.value_num),
         ...(input.context ? { context: String(input.context) } : {}),
         ...(input.modality ? { modality: String(input.modality) } : {}),
+        ...(observedAt && !Number.isNaN(observedAt.getTime())
+          ? { observed_at: observedAt.toISOString() }
+          : {}),
       },
       purpose: 'dpv:HealthMonitoring',
     });

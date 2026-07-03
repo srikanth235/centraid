@@ -45,6 +45,19 @@
           <h1>Tasks</h1>
           <p id="subtitle" class="muted">Your canonical task list, from the vault.</p>
         </div>
+        <div class="head-tools">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Quick find ( / )"
+            aria-label="Search tasks"
+          />
+          <div id="viewSwitch" class="seg" role="group" aria-label="View">
+            <button type="button" data-view="all" class="on" aria-pressed="true">All</button>
+            <button type="button" data-view="today" aria-pressed="false">Today</button>
+            <button type="button" data-view="upcoming" aria-pressed="false">Upcoming</button>
+          </div>
+        </div>
       </header>
 
       <div id="consentBanner" class="banner" hidden>
@@ -61,7 +74,12 @@
           <button type="button" id="parentClear" aria-label="Stop adding a subtask">✕</button>
         </div>
         <div class="quick-add-row">
-          <input id="titleInput" type="text" placeholder="Add a task…" aria-label="Task title" />
+          <input
+            id="titleInput"
+            type="text"
+            placeholder="Add a task… try “call mom tomorrow”"
+            aria-label="Task title"
+          />
           <input id="dueInput" type="date" aria-label="Due date" />
           <select id="prioInput" aria-label="Priority">
             <option value="0">No priority</option>
@@ -69,8 +87,17 @@
             <option value="5">Medium</option>
             <option value="9">Low</option>
           </select>
+          <input
+            id="effortInput"
+            type="number"
+            min="1"
+            step="1"
+            placeholder="Est. min"
+            aria-label="Estimated minutes"
+          />
           <button type="submit" id="addBtn">Add</button>
         </div>
+        <p id="nlPreview" class="nl-preview" aria-live="polite" hidden></p>
       </form>
 
       <!-- One shared file input for the whole board; a row's attach button
@@ -78,10 +105,7 @@
       <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a task" />
 
       <section id="board" aria-label="Open tasks"></section>
-      <p id="empty" class="empty" hidden>
-        Nothing to do. Add a task above — it lands in your vault as a canonical
-        <code>schedule.task</code> row, receipted like every other write.
-      </p>
+      <p id="empty" class="empty" hidden>Nothing to do — enjoy your day.</p>
 
       <details id="logbook" hidden>
         <summary>Logbook <span id="logbookCount" class="muted small"></span></summary>
@@ -89,9 +113,8 @@
       </details>
 
       <p class="muted small footnote">
-        Every task lives in <code>schedule.task</code> in your vault — this app stores nothing of
-        its own. Adds, completions and edits run the schedule domain's typed commands, each one
-        consent-checked and receipted.
+        Your tasks live in your personal vault, not in this app. Every add, completion and edit is
+        checked against your consent and leaves a receipt you can review.
       </p>
     </main>
     <script type="module" src="app.js"></script>

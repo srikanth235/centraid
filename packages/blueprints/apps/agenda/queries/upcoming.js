@@ -1,7 +1,14 @@
 /**
- * The agenda projection: non-cancelled canonical events from the start of
- * today forward, plus the calendars a proposal could land on. Everything
- * comes from the vault — this app holds no rows of its own.
+ * The agenda projection: non-cancelled canonical events, plus the calendars
+ * a proposal could land on. Everything comes from the vault — this app holds
+ * no rows of its own.
+ *
+ * Input (all optional): `{ from, to }` ISO instants. Without them the window
+ * is the start of today forward (the list view's "upcoming"); the month and
+ * week views pass the visible range so past periods render too. Events are
+ * fetched from a few weeks before `from` so multi-day events that began
+ * earlier but span into the window still arrive; the in-memory filter below
+ * re-applies the true lower bound against each event's end.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -38,20 +45,31 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+// How far back of `from` the dtstart filter reaches so still-running
+// multi-day events are not cut off at the window edge.
+const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
+
+export default async ({ query, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
-    const startOfToday = `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
-    const [events, calendars, contents, attachments] = await Promise.all([
-      ctx.vault.read({
-        entity: 'core.event',
-        where: [
-          { column: 'status', op: 'ne', value: 'cancelled' },
-          { column: 'dtstart', op: 'gte', value: startOfToday },
-        ],
-        purpose,
-      }),
+    const from =
+      typeof query?.from === 'string' && query.from
+        ? query.from
+        : `${new Date().toISOString().slice(0, 10)}T00:00:00Z`;
+    const to = typeof query?.to === 'string' && query.to ? query.to : null;
+    const fromMs = new Date(from).getTime();
+    const fromLower = Number.isNaN(fromMs) ? from : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
+    const where = [
+      { column: 'status', op: 'ne', value: 'cancelled' },
+      { column: 'dtstart', op: 'gte', value: fromLower },
+    ];
+    if (to) where.push({ column: 'dtstart', op: 'lt', value: to });
+    const [events, calendars, exts, contents, attachments] = await Promise.all([
+      ctx.vault.read({ entity: 'core.event', where, purpose }),
       ctx.vault.read({ entity: 'schedule.calendar', purpose }),
+      // The event→calendar edge lives in schedule.event_ext; the UI colors
+      // and filters by calendar, so each event carries its calendar_id.
+      ctx.vault.read({ entity: 'schedule.event_ext', purpose }),
       ctx.vault.read({ entity: 'core.content_item', purpose }),
       ctx.vault.read({
         entity: 'core.attachment',
@@ -61,8 +79,18 @@ export default async ({ ctx }) => {
     ]);
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByEvent = attachmentsBySubject('core.event', attachments.rows ?? [], contentById);
+    const calByEvent = new Map((exts.rows ?? []).map((x) => [x.event_id, x.calendar_id]));
     const rows = (events.rows ?? [])
-      .map((e) => ({ ...e, attachments: attByEvent.get(e.event_id) ?? [] }))
+      .filter((e) => {
+        // True lower bound: keep anything still running at `from`.
+        const endMs = new Date(e.dtend ?? e.dtstart).getTime();
+        return Number.isNaN(endMs) || Number.isNaN(fromMs) || endMs >= fromMs;
+      })
+      .map((e) => ({
+        ...e,
+        calendar_id: calByEvent.get(e.event_id) ?? null,
+        attachments: attByEvent.get(e.event_id) ?? [],
+      }))
       .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
     return {
       events: rows,

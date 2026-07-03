@@ -45,6 +45,15 @@
           <h1>Docs</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
+        <div class="head-search">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search in Docs"
+            aria-label="Search documents by title"
+            autocomplete="off"
+          />
+        </div>
         <div class="head-actions">
           <button id="newFolderButton" type="button" class="ghost">New folder</button>
           <button id="uploadButton" type="button" class="primary small-btn">Upload</button>
@@ -83,6 +92,14 @@
 
         <section class="pane" aria-label="Documents">
           <div id="breadcrumb" class="breadcrumb"></div>
+          <div
+            id="bulkBar"
+            class="bulk-bar"
+            role="toolbar"
+            aria-label="Selection actions"
+            hidden
+          ></div>
+          <div id="listHeader" class="list-header" hidden></div>
           <div id="docList" class="doc-list"></div>
           <div id="emptyDrive" class="empty" hidden>
             <p>No documents yet.</p>
@@ -97,10 +114,24 @@
           <p id="emptyTrash" class="empty" hidden>
             The trash is empty. Trashed documents purge after about 30 days.
           </p>
+          <p id="emptySearch" class="empty" hidden>No documents match your search.</p>
         </section>
       </div>
 
       <input id="uploadInput" type="file" multiple hidden aria-hidden="true" />
+
+      <div id="dropOverlay" class="drop-overlay" hidden aria-hidden="true">
+        <div class="drop-card"><span id="dropTarget"></span></div>
+      </div>
+
+      <div
+        id="preview"
+        class="preview"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Document preview"
+        hidden
+      ></div>
 
       <p class="muted small footnote">
         Every write is a typed vault command — consent-checked and receipted.

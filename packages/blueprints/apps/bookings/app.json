@@ -154,7 +154,7 @@
   "queries": [
     {
       "name": "board",
-      "description": "Your work availability windows, and the bookings held on your calendar (tentative = pending your confirmation, confirmed = on the books), each with its client and attachments; plus calendars and parties for the request form.",
+      "description": "Your availability windows (work and blocked alike, with their kind and tz), and the bookings held on your calendar (tentative = pending your confirmation, confirmed = on the books), each with its client, notes and attachments; plus calendars and parties for the request form.",
       "input": {
         "type": "object",
         "properties": {},

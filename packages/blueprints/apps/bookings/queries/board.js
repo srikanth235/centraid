@@ -82,6 +82,7 @@ export default async ({ ctx }) => {
       .map((e) => ({
         event_id: e.event_id,
         summary: e.summary,
+        description: e.description ?? null,
         dtstart: e.dtstart,
         dtend: e.dtend,
         status: e.status, // tentative = pending, confirmed = booked
@@ -91,16 +92,17 @@ export default async ({ ctx }) => {
       }))
       .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
 
-    const availability = (rules.rows ?? [])
-      .filter((r) => r.kind === 'work')
-      .map((r) => ({
-        rule_id: r.rule_id,
-        weekday_mask: r.weekday_mask,
-        window_start: r.window_start,
-        window_end: r.window_end,
-        tz: r.tz,
-        days: maskDays(r.weekday_mask),
-      }));
+    // Every rule kind comes through — work windows are when you take
+    // bookings; blocked (and focus/personal) windows are when you don't.
+    const availability = (rules.rows ?? []).map((r) => ({
+      rule_id: r.rule_id,
+      weekday_mask: r.weekday_mask,
+      window_start: r.window_start,
+      window_end: r.window_end,
+      kind: r.kind ?? 'work',
+      tz: r.tz,
+      days: maskDays(r.weekday_mask),
+    }));
 
     return {
       availability,

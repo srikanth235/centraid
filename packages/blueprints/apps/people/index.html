@@ -55,63 +55,139 @@
       </div>
       <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
 
-      <div class="toolbar">
-        <input
-          id="searchInput"
-          type="text"
-          placeholder="Search people…"
-          aria-label="Search people"
-        />
-        <button type="button" id="addPersonBtn" class="ghost">＋ Add person</button>
+      <div id="listView">
+        <div class="toolbar">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search people…"
+            aria-label="Search people"
+            aria-keyshortcuts="/"
+          />
+          <button type="button" id="exportBtn" class="ghost" title="Download everyone as a .vcf">
+            Export
+          </button>
+          <button type="button" id="addPersonBtn" class="ghost">＋ Add person</button>
+        </div>
+
+        <form id="personForm" class="card-form" autocomplete="off" hidden>
+          <p class="muted small">New person — lands in the vault as a core.party.</p>
+          <input id="personNameInput" type="text" placeholder="Name" aria-label="Name" />
+          <input
+            id="personEmailInput"
+            type="email"
+            placeholder="Email (optional)"
+            aria-label="Email"
+          />
+          <input id="personTelInput" type="tel" placeholder="Phone (optional)" aria-label="Phone" />
+          <input
+            id="personHandleInput"
+            type="text"
+            placeholder="Handle (optional)"
+            aria-label="Handle"
+          />
+          <div class="card-form-actions">
+            <button type="button" id="cancelPerson" class="ghost">Cancel</button>
+            <button type="submit" class="primary">Add person</button>
+          </div>
+        </form>
+
+        <section id="peopleList" aria-label="People"></section>
+        <nav id="letterRail" aria-label="Jump to letter" hidden></nav>
+        <p id="empty" class="empty" hidden>
+          No people yet. Add someone above, resolve a handle, or import contacts through the vault's
+          ingest.
+        </p>
       </div>
 
-      <form id="personForm" class="card-form" autocomplete="off" hidden>
-        <p class="muted small">New person — lands in the vault as a core.party.</p>
-        <input id="personNameInput" type="text" placeholder="Name" aria-label="Name" />
-        <input
-          id="personEmailInput"
-          type="email"
-          placeholder="Email (optional)"
-          aria-label="Email"
-        />
-        <input id="personTelInput" type="tel" placeholder="Phone (optional)" aria-label="Phone" />
-        <input
-          id="personHandleInput"
-          type="text"
-          placeholder="Handle (optional)"
-          aria-label="Handle"
-        />
-        <div class="card-form-actions">
-          <button type="button" id="cancelPerson" class="ghost">Cancel</button>
-          <button type="submit" class="primary">Add person</button>
-        </div>
-      </form>
-
-      <form id="cardForm" class="card-form" autocomplete="off" hidden>
-        <p id="cardFormTitle" class="muted small"></p>
-        <div class="identity-row">
-          <input
-            id="displayNameInput"
-            type="text"
-            placeholder="Display name"
-            aria-label="Display name"
-          />
-          <button type="button" id="renamePartyBtn" class="ghost">Rename</button>
-        </div>
-        <input id="nicknameInput" type="text" placeholder="Nickname" aria-label="Nickname" />
-        <input id="noteInput" type="text" placeholder="Note" aria-label="Note" />
-        <div class="card-form-actions">
-          <label class="favorite-label"
-            ><input id="favoriteInput" type="checkbox" /> Favorite</label
+      <section id="detailPanel" aria-label="Contact details" hidden>
+        <div class="detail-top">
+          <button type="button" id="backBtn" class="ghost">← All people</button>
+          <button
+            type="button"
+            id="detailStarBtn"
+            class="star-btn"
+            aria-pressed="false"
+            aria-label="Toggle favorite"
           >
-          <button type="button" id="cancelCard" class="ghost">Cancel</button>
-          <button type="submit" class="primary">Save card</button>
+            ☆
+          </button>
         </div>
+        <div class="detail-hero">
+          <span id="detailAvatar" class="detail-avatar-slot"></span>
+          <div class="detail-hero-text">
+            <h2 id="detailName"></h2>
+            <p id="detailMeta" class="muted"></p>
+            <p id="detailBirthday" class="muted" hidden></p>
+          </div>
+        </div>
+        <div class="detail-chips">
+          <button type="button" id="chipMessage" class="chip">✉ Message</button>
+          <button type="button" id="chipEdit" class="chip">✎ Edit</button>
+          <label class="chip chip-label">
+            <input id="photoInput" type="file" accept="image/*" hidden />
+            <span>◉ Set photo</span>
+          </label>
+        </div>
+
+        <form id="composeForm" class="card-form" autocomplete="off" hidden>
+          <p id="composeTitle" class="muted small"></p>
+          <textarea
+            id="composeBody"
+            rows="3"
+            placeholder="Write a message…"
+            aria-label="Message body"
+          ></textarea>
+          <div class="card-form-actions">
+            <select id="channelInput" aria-label="Channel">
+              <option value="dm">DM</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+            </select>
+            <button type="button" id="cancelCompose" class="ghost">Cancel</button>
+            <button type="button" id="saveDraftBtn" class="ghost">Save draft</button>
+            <button type="submit" class="primary">Send</button>
+          </div>
+          <p class="muted small compose-hint">
+            Sending is high-risk in the vault: it waits for the owner's confirmation before the
+            draft is released.
+          </p>
+        </form>
+
+        <form id="cardForm" class="card-form" autocomplete="off" hidden>
+          <p id="cardFormTitle" class="muted small"></p>
+          <div class="identity-row">
+            <input
+              id="displayNameInput"
+              type="text"
+              placeholder="Display name"
+              aria-label="Display name"
+            />
+            <button type="button" id="renamePartyBtn" class="ghost">Rename</button>
+          </div>
+          <input id="nicknameInput" type="text" placeholder="Nickname" aria-label="Nickname" />
+          <input id="noteInput" type="text" placeholder="Note" aria-label="Note" />
+          <label class="field-label" for="birthdayInput">Birthday</label>
+          <input id="birthdayInput" type="date" aria-label="Birthday" />
+          <div class="card-form-actions">
+            <button type="button" id="cancelCard" class="ghost">Cancel</button>
+            <button type="submit" class="primary">Save card</button>
+          </div>
+        </form>
+
+        <h3 class="detail-section-head">Contact info</h3>
+        <section id="idList" aria-label="Identifiers"></section>
         <div class="handle-row">
           <select id="schemeInput" aria-label="Handle kind">
             <option value="email">Email</option>
             <option value="tel">Phone</option>
             <option value="handle">Handle</option>
+          </select>
+          <select id="handleLabelInput" aria-label="Handle label">
+            <option value="">No label</option>
+            <option value="home">Home</option>
+            <option value="work">Work</option>
+            <option value="other">Other</option>
           </select>
           <input
             id="handleValueInput"
@@ -121,6 +197,8 @@
           />
           <button type="button" id="linkHandleBtn" class="ghost">Link</button>
         </div>
+
+        <h3 class="detail-section-head">Files</h3>
         <div id="attachBlock" class="attach-block">
           <div id="attachStrip" class="attach-strip"></div>
           <label class="attach-add">
@@ -128,37 +206,7 @@
             <span class="ghost small-btn">＋ Attach file</span>
           </label>
         </div>
-      </form>
-
-      <form id="composeForm" class="card-form" autocomplete="off" hidden>
-        <p id="composeTitle" class="muted small"></p>
-        <textarea
-          id="composeBody"
-          rows="3"
-          placeholder="Write a message…"
-          aria-label="Message body"
-        ></textarea>
-        <div class="card-form-actions">
-          <select id="channelInput" aria-label="Channel">
-            <option value="dm">DM</option>
-            <option value="sms">SMS</option>
-            <option value="email">Email</option>
-          </select>
-          <button type="button" id="cancelCompose" class="ghost">Cancel</button>
-          <button type="button" id="saveDraftBtn" class="ghost">Save draft</button>
-          <button type="submit" class="primary">Send</button>
-        </div>
-        <p class="muted small compose-hint">
-          Sending is high-risk in the vault: it waits for the owner's confirmation before the draft
-          is released.
-        </p>
-      </form>
-
-      <section id="peopleList" aria-label="People"></section>
-      <p id="empty" class="empty" hidden>
-        No people yet. Add someone above, resolve a handle, or import contacts through the vault's
-        ingest.
-      </p>
+      </section>
     </main>
     <script type="module" src="app.js"></script>
   </body>

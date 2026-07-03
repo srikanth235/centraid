@@ -423,6 +423,481 @@ select {
   padding: 0 0 0.625rem;
 }
 
+/* ---------- Touch targets (≥40px on everything you press) ---------- */
+
+.ghost,
+.primary,
+select,
+input:not([type='checkbox']) {
+  min-height: 2.5rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  padding: 0 0.25rem;
+  cursor: pointer;
+}
+
+.check input[type='checkbox'] {
+  accent-color: var(--app-color, var(--accent));
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+/* ---------- Money dashboard ---------- */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin: 0 0 0.35rem;
+}
+
+@media (max-width: 560px) {
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.6rem 0.75rem;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+
+.stat-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.stat-sub {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+
+.stat.danger .stat-value {
+  color: var(--danger);
+}
+
+.stats-note {
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 0.5rem;
+}
+
+/* ---------- Client filter chip ---------- */
+
+#filterBar {
+  margin: 0 0 0.5rem;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+  background: transparent;
+  border-radius: 999px;
+  padding: 0.25rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+/* ---------- First-run checklist ---------- */
+
+.checklist {
+  gap: 0.65rem;
+}
+
+.checklist-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.checklist-step {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.checklist-step.done {
+  opacity: 0.55;
+}
+
+.checklist-num {
+  flex: none;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.checklist-step.done .checklist-num {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.checklist-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.checklist-label {
+  font-size: 0.9rem;
+}
+
+.checklist-step.done .checklist-label {
+  text-decoration: line-through;
+}
+
+/* ---------- Timesheet ---------- */
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.week-label {
+  font-variant-numeric: tabular-nums;
+  min-width: 9rem;
+  text-align: center;
+}
+
+.nav-btn {
+  min-width: 2.5rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.week-chart {
+  margin: 0.25rem 0 0.35rem;
+}
+
+.ts-day {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0 0.15rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.ts-day-name {
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.ts-day .amount {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+
+.ts-row {
+  padding-left: 0.5rem;
+}
+
+/* ---------- Unbilled groups ---------- */
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0 0.15rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.group-name {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* ---------- Invoice rows: due chips + expandable line items ---------- */
+
+.due {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.due.overdue {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.row.expandable {
+  cursor: pointer;
+}
+
+.inv-lines {
+  padding: 0.15rem 0 0.6rem 1rem;
+}
+
+.inv-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.2rem 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.inv-line-desc {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.inv-line-calc {
+  flex-shrink: 0;
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.inv-line .amount {
+  font-size: 0.82rem;
+}
+
+.field-row .invnum {
+  width: 8.5rem;
+  flex: none;
+}
+
+/* ---------- Project budget bars ---------- */
+
+.project-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.budget-bar {
+  max-width: 14rem;
+}
+
+.budget-over .kit-bar-fill {
+  background: var(--danger);
+}
+
+.budget-label {
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.budget-label.over-label {
+  color: var(--danger);
+}
+
+/* ---------- Client rows double as filter toggles ---------- */
+
+button.client-row {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-height: 2.5rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button.client-row:last-child {
+  border-bottom: none;
+}
+
+button.client-row.filtered {
+  box-shadow: inset 3px 0 0 var(--app-color, var(--accent));
+  padding-left: 0.5rem;
+}
+
+/* ---------- Invoice preview overlay (print-styled) ---------- */
+
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(15, 23, 42, 0.55);
+  overflow: auto;
+  padding: 2rem 1rem;
+}
+
+.preview-frame {
+  max-width: 40rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.preview-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* The sheet is the artifact the client receives: always paper-light, even
+   when the app itself is in dark mode. */
+.preview-sheet {
+  background: #fff;
+  color: #111827;
+  border-radius: 0.5rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  padding: 2rem;
+}
+
+.pv-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.pv-head h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+}
+
+.pv-status {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+}
+
+.pv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.pv-meta > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.pv-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6b7280;
+}
+
+.pv-value {
+  font-size: 0.9rem;
+}
+
+.pv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.pv-table th {
+  text-align: left;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6b7280;
+  border-bottom: 1px solid #d1d5db;
+  padding: 0.35rem 0.5rem 0.35rem 0;
+}
+
+.pv-table td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.45rem 0.5rem 0.45rem 0;
+  vertical-align: top;
+}
+
+.pv-table th:not(:first-child),
+.pv-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pv-table tfoot td {
+  border-bottom: none;
+  font-weight: 600;
+  padding-top: 0.6rem;
+}
+
+@media print {
+  body.previewing main,
+  body.previewing .kit-toasts {
+    display: none !important;
+  }
+  body.previewing {
+    background: #fff;
+    padding: 0;
+  }
+  body.previewing .preview-overlay {
+    position: static;
+    background: none;
+    padding: 0;
+    overflow: visible;
+  }
+  body.previewing .preview-actions {
+    display: none;
+  }
+  body.previewing .preview-frame {
+    max-width: none;
+  }
+  body.previewing .preview-sheet {
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+  }
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* ---------- App-level knobs ---------- */
 
 :root[data-app-font='sans'] {

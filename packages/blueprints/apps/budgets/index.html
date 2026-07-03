@@ -45,6 +45,13 @@
           <h1>Budgets</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
+        <div class="month-nav" role="group" aria-label="Month">
+          <button id="prevMonth" type="button" class="nav-btn" aria-label="Previous month">
+            ‹
+          </button>
+          <span id="monthLabel" class="month-label" role="status" aria-live="polite"></span>
+          <button id="nextMonth" type="button" class="nav-btn" aria-label="Next month">›</button>
+        </div>
       </header>
 
       <div id="consentBanner" class="banner" hidden>
@@ -54,6 +61,25 @@
         >
       </div>
       <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
+
+      <section id="summaryCard" class="summary" aria-label="Month summary" hidden>
+        <p class="summary-title muted small">Left this month</p>
+        <p id="summaryLeft" class="summary-left"></p>
+        <div class="summary-stats">
+          <div class="stat">
+            <span class="stat-label muted small">Budgeted</span>
+            <span id="statBudgeted" class="stat-value"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label muted small">Spent</span>
+            <span id="statSpent" class="stat-value"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label muted small">Income</span>
+            <span id="statIncome" class="stat-value pos"></span>
+          </div>
+        </div>
+      </section>
 
       <section id="budgetsSection" aria-label="Budgets">
         <p class="day-label muted small">Budgets</p>
@@ -75,9 +101,16 @@
             placeholder="Monthly limit"
             aria-label="Monthly limit"
           />
-          <button type="submit" class="primary">Set budget</button>
+          <button id="budgetSubmit" type="submit" class="primary">Set budget</button>
         </div>
       </form>
+
+      <section id="chartsSection" aria-label="Spending charts" hidden>
+        <p class="day-label muted small">Spending — last 6 months</p>
+        <div id="trendChart" class="chart-block"></div>
+        <p id="breakdownLabel" class="day-label muted small" hidden>This month by category</p>
+        <div id="breakdownList"></div>
+      </section>
 
       <!-- One shared file input for the whole ledger; a row's receipt button
            sets the target transaction, then triggers this. -->
@@ -91,11 +124,26 @@
 
       <section id="txnSection" aria-label="Transactions">
         <p class="day-label muted small">Transactions</p>
+        <div class="filters">
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search description or payee"
+            aria-label="Search transactions"
+          />
+          <div id="categoryChips" class="chips" role="group" aria-label="Filter by category"></div>
+        </div>
         <div id="txnList"></div>
-        <p id="emptyTxns" class="empty" hidden>
-          No transactions yet — import a statement through the vault's ingest to see them here.
-        </p>
+        <p id="emptyTxns" class="empty" hidden></p>
+        <p id="truncNote" class="muted small trunc" hidden></p>
       </section>
+
+      <div id="bulkBar" class="bulk-bar" role="region" aria-label="Bulk categorize" hidden>
+        <span id="bulkCount" class="bulk-count"></span>
+        <select id="bulkCategory" aria-label="Category for selected transactions"></select>
+        <button id="bulkApply" type="button" class="primary">Categorize</button>
+        <button id="bulkClear" type="button" class="ghost">Clear</button>
+      </div>
     </main>
     <script type="module" src="app.js"></script>
   </body>

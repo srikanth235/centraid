@@ -41,10 +41,27 @@
   <body>
     <main>
       <header class="head">
-        <div>
-          <h1>Photos</h1>
-          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        <h1>Photos</h1>
+        <div class="search" role="search">
+          <span class="search-icon" aria-hidden="true">⌕</span>
+          <input
+            id="searchInput"
+            type="search"
+            placeholder="Search photos"
+            aria-label="Search photos"
+            autocomplete="off"
+          />
+          <button
+            id="searchClear"
+            type="button"
+            class="search-clear"
+            aria-label="Clear search"
+            hidden
+          >
+            ×
+          </button>
         </div>
+        <button id="selectBtn" type="button" class="ghost head-btn">Select</button>
         <button id="uploadBtn" type="button" class="primary small-btn">＋ Add photos</button>
       </header>
 
@@ -81,6 +98,17 @@
       </p>
 
       <div id="lightbox" class="lightbox" hidden></div>
+      <div
+        id="selectionBar"
+        class="selection-bar"
+        role="toolbar"
+        aria-label="Selection actions"
+        hidden
+      ></div>
+      <div id="picker" class="picker" role="dialog" aria-label="Add photos to album" hidden></div>
+      <div id="dropOverlay" class="drop-overlay" aria-hidden="true" hidden>
+        <div class="drop-card">Drop to add to your library</div>
+      </div>
     </main>
     <script type="module" src="app.js"></script>
   </body>

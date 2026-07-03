@@ -63,7 +63,65 @@ main {
 }
 
 .head {
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.head-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+#searchInput {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.625rem;
+  width: 10.5rem;
+  min-height: 2.25rem;
+}
+
+#searchInput:focus-visible {
+  outline: 2px solid var(--app-color, var(--accent));
+  outline-offset: 1px;
+}
+
+/* Segmented view switcher — Things' focus lists (All / Today / Upcoming). */
+.seg {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.seg button {
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.75rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.seg button:hover {
+  color: var(--ink);
+}
+
+.seg button.on {
+  background: var(--app-color, var(--accent));
+  color: #fff;
 }
 
 .head h1 {
@@ -144,9 +202,21 @@ code {
 }
 
 .quick-add-row input[type='date'],
+.quick-add-row input[type='number'],
 .quick-add-row select {
   color: var(--ink-soft);
   font-size: 0.85rem;
+}
+
+#effortInput {
+  width: 5.25rem;
+}
+
+/* Live preview of a natural-language date parsed from the title's tail. */
+.nl-preview {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--app-color, var(--accent));
 }
 
 #addBtn {
@@ -163,6 +233,10 @@ code {
 
 #addBtn:hover {
   filter: brightness(1.08);
+}
+
+.parent-chip[hidden] {
+  display: none;
 }
 
 .parent-chip {
@@ -217,6 +291,14 @@ code {
   color: var(--app-color, var(--accent));
 }
 
+/* A bucket header lights up when a dragged row can be dropped on it. */
+.section-label.drop {
+  color: var(--app-color, var(--accent));
+  outline: 1.5px dashed var(--app-color, var(--accent));
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
 /* ---------- Task rows ---------- */
 
 .row {
@@ -241,6 +323,28 @@ code {
   font-size: 0.65rem;
 }
 
+/* Keyboard roving selection (↑/↓, then e / space / d). */
+.row.selected {
+  background: hsla(0, 0%, 50%, 0.09);
+  border-radius: 0.5rem;
+}
+
+/* The brief Things-style completion beat: circle fills, title strikes and
+   fades, then the refresh re-sorts the row into the Logbook. */
+.row.completing .circle {
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
+}
+
+.row.completing .row-text {
+  color: var(--ink-faint);
+  text-decoration: line-through;
+  opacity: 0.35;
+  transition:
+    opacity 0.45s ease,
+    color 0.45s ease;
+}
+
 /* A real control now: click completes, click again reopens. */
 .circle {
   width: 1.5rem;
@@ -259,6 +363,18 @@ code {
   transition:
     background 0.12s ease,
     border-color 0.12s ease;
+}
+
+/* Expand the tap target to ~40px without growing the drawn ring. */
+.circle {
+  position: relative;
+}
+
+.circle::after {
+  content: '';
+  position: absolute;
+  inset: -0.5rem;
+  border-radius: 50%;
 }
 
 .circle:hover {
@@ -338,6 +454,108 @@ code {
   color: var(--danger);
 }
 
+/* ---------- Reschedule affordance (every open row) ---------- */
+
+.due-btn {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+
+.due-btn:hover,
+.due-btn:focus-visible {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.due-btn.overdue {
+  color: var(--danger);
+}
+
+/* Undated rows earn the date only on hover/focus — calm by default. */
+.due-btn.due-add {
+  color: var(--ink-faint);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .due-add,
+.row:focus-within .due-add {
+  opacity: 1;
+}
+
+/* ---------- Popovers (reschedule, priority & effort) ---------- */
+
+.popover {
+  position: absolute;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 13rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  padding: 0.625rem;
+}
+
+.pop-row {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.pop-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+}
+
+.popover input,
+.popover select {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  min-height: 2.25rem;
+}
+
+.popover input:focus-visible,
+.popover select:focus-visible {
+  outline: 2px solid var(--app-color, var(--accent));
+  outline-offset: 1px;
+}
+
+.popover .ghost {
+  min-height: 2rem;
+  padding: 0.25rem 0.6rem;
+}
+
+.pop-save {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--app-color, var(--accent));
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
 /* ---------- Hover actions ---------- */
 
 .row-actions {
@@ -372,6 +590,33 @@ code {
 .ghost.danger:hover {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+/* Touch devices get no hover: keep row tools visible and comfortably big. */
+@media (hover: none) {
+  .row-actions {
+    opacity: 0.65;
+  }
+
+  .due-btn.due-add {
+    opacity: 0.55;
+  }
+
+  .ghost,
+  .due-btn {
+    min-height: 2.5rem;
+    min-width: 2.5rem;
+    padding: 0.35rem 0.55rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-actions,
+  .due-btn.due-add,
+  .circle,
+  .row.completing .row-text {
+    transition: none;
+  }
 }
 
 /* ---------- Logbook ---------- */

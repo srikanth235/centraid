@@ -43,7 +43,7 @@
       <header class="head">
         <div>
           <h1>Notes</h1>
-          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+          <p id="subtitle" class="muted">All your notes, saved in your vault.</p>
         </div>
       </header>
 
@@ -54,6 +54,17 @@
         >
       </div>
       <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
+
+      <div id="searchWrap" class="search-wrap" role="search">
+        <input
+          id="searchInput"
+          type="search"
+          placeholder="Search notes…"
+          aria-label="Search notes"
+          autocomplete="off"
+        />
+        <kbd class="search-hint" aria-hidden="true">/</kbd>
+      </div>
 
       <div id="notebookChips" class="chips" role="group" aria-label="Filter by notebook"></div>
 
@@ -93,13 +104,37 @@
           <span class="note-view-actions">
             <button id="pinButton" type="button" class="ghost"></button>
             <select id="moveSelect" aria-label="Notebook"></select>
-            <button id="editButton" type="button" class="ghost">Edit</button>
+            <button id="checklistButton" type="button" class="ghost" title="Insert checklist item">
+              ☑ Checklist
+            </button>
             <button id="deleteButton" type="button" class="ghost danger">Delete</button>
           </span>
         </div>
-        <h2 id="noteTitle" class="note-view-title"></h2>
-        <p id="noteMeta" class="muted small"></p>
-        <div id="noteBody" class="note-body"></div>
+        <input
+          id="noteTitleInput"
+          class="note-title-input"
+          type="text"
+          placeholder="Title"
+          aria-label="Note title"
+        />
+        <p class="muted small note-meta-line">
+          <span id="noteMeta"></span>
+          <span id="saveState" class="save-state" role="status" aria-live="polite"></span>
+        </p>
+        <div
+          id="noteBodyRender"
+          class="note-body"
+          tabindex="0"
+          aria-label="Note body — press Enter to edit"
+        ></div>
+        <textarea
+          id="noteBodyInput"
+          class="note-body-input"
+          rows="8"
+          placeholder="Write your note…"
+          aria-label="Note body"
+          hidden
+        ></textarea>
         <div id="attachBlock" class="attach-block">
           <div id="attachStrip" class="attach-strip"></div>
           <label class="attach-add">
@@ -107,17 +142,13 @@
             <span class="ghost small-btn">＋ Attach file</span>
           </label>
         </div>
-        <form id="editForm" autocomplete="off" hidden>
-          <input id="editTitleInput" type="text" aria-label="Note title" />
-          <textarea id="editBodyInput" rows="8" aria-label="Note body"></textarea>
-          <div class="quick-add-actions">
-            <button type="button" id="cancelEdit" class="ghost">Cancel</button>
-            <button type="submit" class="primary small-btn">Save</button>
-          </div>
-        </form>
       </section>
 
       <p id="empty" class="empty" hidden>No notes yet. Write the first one above.</p>
+
+      <div id="lightbox" class="lightbox" role="dialog" aria-label="Attachment preview" hidden>
+        <img id="lightboxImg" alt="" />
+      </div>
 
       <p class="muted small footnote">
         Every write is a typed vault command — consent-checked and receipted.

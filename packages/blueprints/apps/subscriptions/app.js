@@ -1,21 +1,37 @@
 // Subscriptions — money that repeats, as a projection over the personal
 // vault. Each row is a finance.recurring_series charging one of your
 // accounts; the app normalizes every cadence to a monthly figure so the
-// running total is honest. Adding, pausing and cancelling run through typed
-// finance commands (all risk low); files attach per subscription. The app
-// stores nothing — revoke the grant and this page goes dark while the
-// series, history and receipts remain the owner's.
+// running total is honest, and frames the yearly cost beside it because
+// that's the number that makes people cancel. Adding, pausing, cancelling
+// and reactivating run through typed finance commands (all risk low); files
+// attach per subscription. The app stores nothing — revoke the grant and
+// this page goes dark while the series, history and receipts remain the
+// owner's.
+//
+// Deliberately skipped: renewal dates ("renews in N days", an upcoming
+// view). finance.recurring_series stores a cadence but no anchor date, so
+// there is nothing truthful to project until the vault schema grows one.
+
+import {
+  armConfirm,
+  barSpan,
+  fmtMoney,
+  letterAvatar,
+  outcomeMessage,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
-const CADENCE_LABEL = {
-  'FREQ=WEEKLY': 'Weekly',
-  'FREQ=MONTHLY': 'Monthly',
-  'FREQ=YEARLY': 'Yearly',
-};
-
 let data = { subscriptions: [], monthly_active_minor: 0, accounts: [], parties: [] };
 let attachTarget = null; // series_id the shared file input attaches to
+const ui = { filter: 'active', sort: 'cost', showEnded: false };
+
+// A row without a payee party falls back to the charging account's name —
+// useful, but "Checking" must never masquerade as a service.
+const displayName = (s) => s.counterparty ?? s.account;
 
 function notice(text) {
   const el = $('noticeBanner');
@@ -28,13 +44,8 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  }
+  const message = outcomeMessage(outcome);
+  if (message) notice(message);
   return false;
 }
 
@@ -128,25 +139,23 @@ async function removeAttachment(attachmentId) {
 
 wireAttachInput($('attachInput'), () => attachTarget);
 
-// ---------- Formatting ----------
+// ---------- Read + render ----------
 
-function fmtMoney(minor, currency) {
-  const value = (minor ?? 0) / 100;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
-  } catch {
-    return `${value.toFixed(2)} ${currency ?? ''}`.trim();
-  }
-}
-
-// ---------- Render ----------
+let readBroken = false;
 
 async function refresh() {
   let next;
   try {
     next = await window.centraid.read({ query: 'list' });
   } catch {
-    return; // transient; the change feed retries
+    // A broken vault must not look like an empty one; focus retries.
+    readBroken = true;
+    readFailed($('noticeBanner'));
+    return;
+  }
+  if (readBroken) {
+    readBroken = false;
+    notice(''); // the retry landed — retire the failure banner
   }
   const denied = next?.vaultDenied;
   $('consentBanner').hidden = !denied;
@@ -158,23 +167,35 @@ async function refresh() {
   data = next;
   renderTotal();
   renderAddForm();
+  renderToolbar();
   renderList();
 }
 
-function renderTotal() {
-  const active = data.subscriptions.filter((s) => s.status === 'active');
-  const card = $('totalCard');
-  card.hidden = active.length === 0;
-  if (active.length === 0) return;
-  // Minor units in different currencies don't add — total per currency.
+/** Active spend per currency — minor units across currencies don't add. */
+function activeByCurrency() {
   const byCurrency = new Map();
-  for (const s of active) {
+  for (const s of data.subscriptions) {
+    if (s.status !== 'active') continue;
     const currency = s.currency || data.accounts[0]?.currency || 'USD';
     byCurrency.set(currency, (byCurrency.get(currency) ?? 0) + Number(s.monthly_minor ?? 0));
   }
-  $('totalValue').textContent = [...byCurrency.entries()]
+  return byCurrency;
+}
+
+function renderTotal() {
+  const byCurrency = activeByCurrency();
+  const card = $('totalCard');
+  card.hidden = byCurrency.size === 0;
+  if (byCurrency.size === 0) return;
+  const entries = [...byCurrency.entries()];
+  $('totalValue').textContent = entries
     .map(([currency, minor]) => fmtMoney(minor, currency))
     .join(' + ');
+  // The yearly frame is the emotional hook: €12.99/mo reads fine,
+  // €155.88/yr starts conversations.
+  $('totalYear').textContent = `≈ ${entries
+    .map(([currency, minor]) => fmtMoney(minor * 12, currency))
+    .join(' + ')} a year`;
 }
 
 function fillSelect(select, options, placeholder) {
@@ -202,57 +223,153 @@ function renderAddForm() {
     $('accountSelect'),
     data.accounts.map((a) => ({ value: a.account_id, label: `${a.name} · ${a.currency}` })),
   );
+  // An empty payee dropdown teaches nothing — swap it for the explanation.
+  const hasParties = data.parties.length > 0;
+  $('payeeSelect').hidden = !hasParties;
+  $('payeeHint').hidden = hasParties;
   fillSelect(
     $('payeeSelect'),
     data.parties.map((p) => ({ value: p.party_id, label: p.display_name })),
-    'Paid to… (optional)',
+    'Pick who you pay… (optional)',
   );
 }
 
-function renderList() {
-  const list = $('subList');
-  list.innerHTML = '';
-  $('empty').hidden = data.subscriptions.length > 0 || data.accounts.length === 0;
-  for (const s of data.subscriptions) {
-    list.appendChild(renderSub(s));
+// ---------- Toolbar: status pills + sort ----------
+
+function renderToolbar() {
+  $('toolbar').hidden = data.subscriptions.length === 0;
+  for (const pill of document.querySelectorAll('.pill')) {
+    pill.setAttribute('aria-pressed', String(pill.dataset.filter === ui.filter));
   }
 }
 
-function renderSub(s) {
+for (const pill of document.querySelectorAll('.pill')) {
+  pill.addEventListener('click', () => {
+    ui.filter = pill.dataset.filter;
+    renderToolbar();
+    renderList();
+  });
+}
+
+$('sortSelect').addEventListener('change', () => {
+  ui.sort = $('sortSelect').value;
+  renderList();
+});
+
+$('endedToggle').addEventListener('click', () => {
+  ui.showEnded = !ui.showEnded;
+  renderList();
+});
+
+// ---------- List ----------
+
+function sortSubs(list) {
+  return ui.sort === 'name'
+    ? list.toSorted((a, b) => displayName(a).localeCompare(displayName(b)))
+    : list.toSorted((a, b) => b.monthly_minor - a.monthly_minor);
+}
+
+function renderList() {
+  const live = data.subscriptions.filter((s) => s.status !== 'ended');
+  const ended = data.subscriptions.filter((s) => s.status === 'ended');
+  const visible = ui.filter === 'all' ? live : live.filter((s) => s.status === ui.filter);
+  // One shared scale so the bars read as a ranking across filters.
+  const maxMonthly = Math.max(0, ...live.map((s) => Number(s.monthly_minor ?? 0)));
+
+  const list = $('subList');
+  list.innerHTML = '';
+  $('empty').hidden = data.subscriptions.length > 0 || data.accounts.length === 0;
+  for (const s of sortSubs(visible)) list.appendChild(renderSub(s, maxMonthly));
+  if (visible.length === 0 && data.subscriptions.length > 0) {
+    const none = document.createElement('p');
+    none.className = 'muted small filter-empty';
+    none.textContent =
+      ui.filter === 'paused' ? 'Nothing paused right now.' : 'Nothing here — switch the filter.';
+    list.appendChild(none);
+  }
+
+  // Cancelled rows stay out of the way behind a disclosure, but never
+  // vanish — Reactivate is the way back.
+  const toggle = $('endedToggle');
+  toggle.hidden = ended.length === 0;
+  toggle.textContent = ui.showEnded
+    ? `Hide cancelled (${ended.length})`
+    : `Show cancelled (${ended.length})`;
+  toggle.setAttribute('aria-expanded', String(ui.showEnded));
+  const endedList = $('endedList');
+  endedList.hidden = ended.length === 0 || !ui.showEnded;
+  endedList.innerHTML = '';
+  if (ui.showEnded) {
+    for (const s of sortSubs(ended)) endedList.appendChild(renderSub(s, maxMonthly));
+  }
+}
+
+function renderSub(s, maxMonthly) {
   const row = document.createElement('div');
   row.className = 'sub';
   row.dataset.status = s.status;
 
+  row.appendChild(letterAvatar(displayName(s), { size: '2.5rem' }));
+
   const main = document.createElement('div');
   main.className = 'sub-main';
+  const nameLine = document.createElement('span');
+  nameLine.className = 'sub-name-line';
   const name = document.createElement('span');
   name.className = 'sub-name';
-  name.textContent = s.counterparty ?? s.account;
+  name.textContent = displayName(s);
+  nameLine.appendChild(name);
+  if (!s.counterparty) {
+    // The account is charging, but who's collecting? Mark it and point at
+    // the payee picker instead of letting "Checking" pose as a service.
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'unnamed-chip';
+    chip.textContent = 'unnamed — set the service';
+    chip.title = 'Pick who you pay in the form above';
+    chip.addEventListener('click', () => {
+      const payee = $('payeeSelect');
+      (payee.hidden ? $('payeeHint') : payee).scrollIntoView({ block: 'center' });
+      if (!payee.hidden) payee.focus();
+    });
+    nameLine.appendChild(chip);
+  }
   const sub = document.createElement('span');
   sub.className = 'sub-sub';
-  sub.textContent = `${fmtMoney(s.expected_minor, s.currency)} · ${s.cadence_label} · ${s.account}`;
-  main.append(name, sub);
+  sub.textContent =
+    `${fmtMoney(s.expected_minor, s.currency)} ${s.cadence_label.toLowerCase()} · ` +
+    `from ${s.account} · ≈ ${fmtMoney(s.monthly_minor * 12, s.currency)}/yr`;
+  main.append(nameLine, sub);
   row.appendChild(main);
 
   const amt = document.createElement('div');
   amt.className = 'sub-amount';
-  amt.innerHTML = `<b>${fmtMoney(s.monthly_minor, s.currency)}</b><span>/mo</span>`;
+  const value = document.createElement('b');
+  value.textContent = fmtMoney(s.monthly_minor, s.currency);
+  const per = document.createElement('span');
+  per.textContent = '/mo';
+  amt.append(value, per);
+  if (s.status !== 'ended' && maxMonthly > 0) {
+    amt.appendChild(barSpan(Number(s.monthly_minor ?? 0) / maxMonthly));
+  }
   row.appendChild(amt);
 
   const badge = document.createElement('span');
   badge.className = 'badge';
   if (s.status === 'active') badge.classList.add('active');
-  badge.textContent = s.status;
+  badge.textContent = s.status === 'ended' ? 'cancelled' : s.status;
   row.appendChild(badge);
 
   const actions = document.createElement('span');
   actions.className = 'sub-actions';
   if (s.status === 'active') {
     actions.appendChild(statusBtn(s, 'paused', 'Pause'));
-    actions.appendChild(statusBtn(s, 'ended', 'Cancel', true));
+    actions.appendChild(cancelBtn(s));
   } else if (s.status === 'paused') {
     actions.appendChild(statusBtn(s, 'active', 'Resume'));
-    actions.appendChild(statusBtn(s, 'ended', 'Cancel', true));
+    actions.appendChild(cancelBtn(s));
+  } else {
+    actions.appendChild(statusBtn(s, 'active', 'Reactivate'));
   }
   const attach = document.createElement('button');
   attach.type = 'button';
@@ -272,28 +389,70 @@ function renderSub(s) {
   return row;
 }
 
-function statusBtn(s, status, label, danger) {
+function statusBtn(s, status, label) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = danger ? 'ghost danger' : 'ghost';
+  btn.className = 'ghost';
   btn.textContent = label;
   btn.addEventListener('click', async () => {
     const outcome = await act('set-status', { series_id: s.series_id, status });
-    if (narrate(outcome)) await refresh();
+    if (!narrate(outcome)) return;
+    await refresh();
+    if (status === 'active' && s.status === 'ended') {
+      toast(`Reactivated ${displayName(s)}`);
+    }
+  });
+  return btn;
+}
+
+function cancelBtn(s) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'ghost danger';
+  btn.textContent = 'Cancel';
+  btn.addEventListener('click', async () => {
+    if (!armConfirm(btn, { armedLabel: `Cancel ${displayName(s)}?` })) return;
+    const outcome = await act('set-status', { series_id: s.series_id, status: 'ended' });
+    if (!narrate(outcome)) return;
+    await refresh();
+    toast(`Cancelled ${displayName(s)}`, {
+      undoLabel: 'Undo',
+      onUndo: async () => {
+        const undone = await act('set-status', { series_id: s.series_id, status: 'active' });
+        if (narrate(undone)) await refresh();
+      },
+    });
   });
   return btn;
 }
 
 // ---------- Add form ----------
 
+$('cadenceSelect').addEventListener('change', () => {
+  $('customCadence').hidden = $('cadenceSelect').value !== 'custom';
+});
+
+function chosenRrule() {
+  const value = $('cadenceSelect').value;
+  if (value !== 'custom') return value;
+  const n = Math.round(Number($('intervalInput').value));
+  if (!Number.isFinite(n) || n < 1) return null;
+  const freq = $('intervalUnit').value; // FREQ=WEEKLY | FREQ=MONTHLY
+  return n === 1 ? freq : `${freq};INTERVAL=${n}`;
+}
+
 $('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const account_id = $('accountSelect').value;
   const amount = parseFloat($('amountInput').value);
-  const rrule = $('cadenceSelect').value;
   const payee = $('payeeSelect').value;
+  const rrule = chosenRrule();
   if (!account_id || !Number.isFinite(amount) || amount <= 0) {
     notice('Pick an account and enter an amount.');
+    return;
+  }
+  if (!rrule) {
+    notice('Enter how many weeks or months between charges.');
     return;
   }
   const outcome = await act('add-subscription', {
@@ -304,9 +463,11 @@ $('addForm').addEventListener('submit', async (e) => {
   });
   if (narrate(outcome)) {
     $('amountInput').value = '';
+    toast('Subscription added');
     await refresh();
   }
 });
 
 window.addEventListener('focus', refresh);
+showSkeleton($('subList'), 4);
 refresh();

@@ -9,6 +9,9 @@
   --surface: #ffffff;
   --line: rgba(31, 31, 35, 0.07);
   --danger: #dc2626;
+  /* Aliases the shared kit reads (--text/--muted) — track the ink tokens. */
+  --text: var(--ink);
+  --muted: var(--ink-soft);
 }
 
 :root[data-theme='dark'] {
@@ -63,17 +66,85 @@ main {
 
 .head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
 }
 
 .head h1 {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin: 0 0 0.1rem;
+  margin: 0 0.25rem 0 0;
+}
+
+/* Rounded, Google-Photos-style search pill. */
+.search {
+  flex: 1;
+  min-width: 11rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.4rem 0 0.85rem;
+}
+
+.search:focus-within {
+  border-color: var(--app-color, var(--accent));
+}
+
+.search-icon {
+  color: var(--ink-faint);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0;
+  border-radius: 0;
+}
+
+.search input:focus {
+  outline: none;
+}
+
+.search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-clear {
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.search-clear:hover {
+  background: var(--line);
+}
+
+.head-btn {
+  border-radius: 999px;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.95rem;
+}
+
+.head-btn[data-active='true'] {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
 }
 
 .muted {
@@ -142,7 +213,7 @@ input:focus {
 }
 
 .primary {
-  border-radius: 0.5rem;
+  border-radius: 999px;
   border: none;
   background: var(--app-color, var(--accent));
   color: #fff;
@@ -152,17 +223,19 @@ input:focus {
 
 .small-btn {
   font-size: 0.85rem;
-  padding: 0.45rem 0.9rem;
+  padding: 0.45rem 0.95rem;
+  min-height: 2.5rem;
   flex: none;
 }
 
 .ghost {
-  border-radius: 0.5rem;
+  border-radius: 999px;
   border: 1px solid var(--line);
   background: transparent;
   color: var(--ink-soft);
-  font-size: 0.72rem;
-  padding: 0.2rem 0.55rem;
+  font-size: 0.8rem;
+  padding: 0.4rem 0.8rem;
+  min-height: 2.5rem;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -194,7 +267,8 @@ input:focus {
   background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.8rem;
-  padding: 0.3rem 0.75rem;
+  padding: 0.3rem 0.85rem;
+  min-height: 2.5rem;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -240,16 +314,36 @@ input:focus {
   margin-right: auto;
 }
 
-/* Photo grid — day labels span the full row; tiles are square. */
+/* Photo grid — sticky month headers and day labels span the full row;
+   tiles are square with 2px gaps. */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
   gap: 2px;
 }
 
+.grid .kit-skeleton {
+  grid-column: 1 / -1;
+  height: 6rem;
+  margin: 0.15rem 0;
+}
+
+.month-label {
+  grid-column: 1 / -1;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  background: var(--bg);
+}
+
 .day-label {
   grid-column: 1 / -1;
-  margin: 1rem 0 0.25rem;
+  margin: 0.35rem 0 0.2rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.72rem;
@@ -290,6 +384,78 @@ input:focus {
   transform: scale(1.04);
 }
 
+/* In select mode the hover zoom gives way to the selection affordance. */
+.grid.selecting .tile:hover img,
+.grid.selecting .tile:focus-visible img {
+  transform: none;
+}
+
+/* Selection dot — a real button with a ≥40px hit area; visible while
+   selecting or selected, and on hover/focus as a desktop accelerator
+   (the Select toggle in the header is the primary, always-visible way in). */
+.tile-check {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  opacity: 0;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tile-check::before {
+  content: '';
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  background: rgba(0, 0, 0, 0.25);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
+}
+
+.grid.selecting .tile-check,
+.tile-wrap.selected .tile-check,
+.tile-check:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .tile-wrap:hover .tile-check {
+    opacity: 1;
+  }
+}
+
+.tile-wrap.selected .tile-check::before {
+  background: var(--app-color, var(--accent));
+  border-color: #fff;
+}
+
+.tile-wrap.selected .tile-check::after {
+  content: '✓';
+  position: absolute;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* A selected tile insets its image over an accent wash — Google style. */
+.tile-wrap.selected .tile {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 20%, var(--surface));
+}
+
+.tile-wrap.selected .tile img,
+.tile-wrap.selected .tile video {
+  transform: scale(0.85);
+  border-radius: 0.375rem;
+}
+
 .tile-video-badge {
   position: absolute;
   bottom: 0.35rem;
@@ -302,15 +468,28 @@ input:focus {
   pointer-events: none;
 }
 
-/* Inside an album, each tile offers one contextual edit: leave it. */
+/* Inside an album, each tile offers one contextual edit: leave it.
+   The button owns a 40px corner; the visible glyph stays small. */
 .tile-remove {
   position: absolute;
-  top: 0.3rem;
-  right: 0.3rem;
-  width: 1.4rem;
-  height: 1.4rem;
-  line-height: 1;
+  top: 0;
+  right: 0;
+  width: 2.5rem;
+  height: 2.5rem;
   border: none;
+  background: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tile-remove span {
+  width: 1.5rem;
+  height: 1.5rem;
+  line-height: 1;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
@@ -318,6 +497,10 @@ input:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.grid.selecting .tile-remove {
+  display: none;
 }
 
 @media (hover: hover) {
@@ -371,6 +554,12 @@ input:focus {
   padding: 2rem 1rem;
   background: rgba(0, 0, 0, 0.85);
   cursor: pointer;
+}
+
+/* The class display wins over the UA [hidden] rule — restate it, or the
+   closed lightbox invisibly swallows every click on the page. */
+.lightbox[hidden] {
+  display: none;
 }
 
 .lightbox-stage {
@@ -464,6 +653,30 @@ input:focus {
   gap: 0.35rem;
 }
 
+/* Double-click zooms; while zoomed the image pans on drag. */
+.lightbox-stage img.zoomable {
+  cursor: zoom-in;
+  touch-action: none;
+  transition: transform 0.15s ease;
+}
+
+.lightbox-stage img.zoomed {
+  cursor: grab;
+  transition: none;
+}
+
+.lightbox-info {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.lightbox-download {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
 .lightbox-note {
   color: var(--ink-soft);
   font-size: 0.78rem;
@@ -511,6 +724,256 @@ input:focus {
   margin-top: 1.5rem;
   text-align: center;
   color: var(--ink-faint);
+}
+
+/* ---------- Floating selection bar ---------- */
+
+.selection-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100vw - 1.5rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.5rem 0.4rem 1rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+
+.selection-bar[hidden] {
+  display: none;
+}
+
+.bar-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bar-btn {
+  white-space: nowrap;
+}
+
+.bar-menu-wrap {
+  position: relative;
+  display: flex;
+}
+
+.album-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  max-height: 40vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  padding: 0.3rem;
+}
+
+.album-menu-item {
+  border: none;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  font-size: 0.85rem;
+  padding: 0.6rem 0.7rem;
+  min-height: 2.5rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.album-menu-item:hover,
+.album-menu-item:focus-visible {
+  background: var(--line);
+}
+
+.album-menu-empty {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  max-width: 14rem;
+}
+
+.bar-close {
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.bar-close:hover {
+  background: var(--line);
+}
+
+/* Lift kit toasts above the selection bar while it is showing. */
+body.has-selection .kit-toasts {
+  bottom: 4.75rem;
+}
+
+/* ---------- Drop-to-add overlay ---------- */
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none; /* the drop lands on the window, not the veil */
+}
+
+.drop-overlay[hidden] {
+  display: none;
+}
+
+.drop-card {
+  border: 2px dashed rgba(255, 255, 255, 0.85);
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 2rem 3rem;
+}
+
+/* ---------- Album picker (add photos from inside an album) ---------- */
+
+.picker {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.picker[hidden] {
+  display: none;
+}
+
+.picker-panel {
+  width: min(40rem, 100%);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  padding: 1rem;
+}
+
+.picker-head {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.picker-grid {
+  flex: 1;
+  min-height: 8rem;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
+  gap: 2px;
+  align-content: start;
+}
+
+.picker-empty {
+  grid-column: 1 / -1;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.picker-tile {
+  position: relative;
+  aspect-ratio: 1;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.picker-tile img,
+.picker-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.picker-tile:focus-visible {
+  outline-offset: -2px;
+}
+
+.picker-tile[aria-pressed='true'] {
+  outline: 3px solid var(--app-color, var(--accent));
+  outline-offset: -3px;
+}
+
+.picker-tile[aria-pressed='true']::after {
+  content: '✓';
+  position: absolute;
+  top: 0.3rem;
+  left: 0.3rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.picker-count {
+  margin-right: auto;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* ---------- App-level knobs ---------- */

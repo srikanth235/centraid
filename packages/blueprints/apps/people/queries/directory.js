@@ -1,8 +1,9 @@
 /**
- * The people projection: every party in the vault, sorted by display name,
- * joined in the handler with its identifiers (core.party_identifier) and
- * contact card (social.contact_card) if one decorates it. Everything comes
- * from the vault — this app holds no rows of its own.
+ * The people projection: every party in the vault, sorted by sort name
+ * (falling back to display name), joined in the handler with its identifiers
+ * (core.party_identifier) and contact card (social.contact_card) if one
+ * decorates it. Everything comes from the vault — this app holds no rows of
+ * its own.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -42,11 +43,10 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
 export default async ({ ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
-    const [parties, identifiers, cards, contents, attachments] = await Promise.all([
+    const [parties, identifiers, cards, attachments] = await Promise.all([
       ctx.vault.read({ entity: 'core.party', purpose }),
       ctx.vault.read({ entity: 'core.party_identifier', purpose }),
       ctx.vault.read({ entity: 'social.contact_card', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
       ctx.vault.read({
         entity: 'core.attachment',
         where: [{ column: 'subject_type', op: 'eq', value: 'core.party' }],
@@ -60,10 +60,24 @@ export default async ({ ctx }) => {
     }
     const cardByParty = new Map();
     for (const card of cards.rows ?? []) cardByParty.set(card.party_id, card);
-    const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const attByParty = attachmentsBySubject('core.party', attachments.rows ?? [], contentById);
+    // Fetch only the content items the attachments actually reference —
+    // the party edges above are the index, so an unscoped content read
+    // would drag every byte-blob in the vault through the gateway.
+    const attachmentRows = attachments.rows ?? [];
+    const contentIds = [...new Set(attachmentRows.map((a) => a.content_id).filter(Boolean))];
+    const contentById = new Map();
+    if (contentIds.length > 0) {
+      const contents = await ctx.vault.read({
+        entity: 'core.content_item',
+        where: [{ column: 'content_id', op: 'in', value: contentIds }],
+        purpose,
+      });
+      for (const c of contents.rows ?? []) contentById.set(c.content_id, c);
+    }
+    const attByParty = attachmentsBySubject('core.party', attachmentRows, contentById);
+    const sortKey = (p) => String(p.sort_name ?? p.display_name);
     const people = (parties.rows ?? [])
-      .toSorted((a, b) => String(a.display_name).localeCompare(String(b.display_name)))
+      .toSorted((a, b) => sortKey(a).localeCompare(sortKey(b)))
       .map((party) => ({
         ...party,
         identifiers: idsByParty.get(party.party_id) ?? [],
