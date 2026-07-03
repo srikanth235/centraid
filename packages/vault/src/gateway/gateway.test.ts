@@ -338,7 +338,17 @@ describe('confirmation routing + revocation + sweeps', () => {
     });
     expect(parked.status).toBe('parked');
     if (parked.status !== 'parked') return;
-    expect(gw.listParked()).toHaveLength(1);
+    const listed = gw.listParked();
+    expect(listed).toHaveLength(1);
+    // The consent surface names WHO wants the act and WHAT it is, so the
+    // owner reads what they're confirming, not just an opaque id.
+    expect(listed[0]).toMatchObject({
+      invocationId: parked.invocationId,
+      command: 'schedule.propose_event',
+      callerKind: 'agent',
+      caller: 'assistant',
+      input: proposeInput(),
+    });
     const outcome = gw.confirm(owner, parked.invocationId, true);
     expect(outcome.status).toBe('executed');
     if (outcome.status !== 'executed') return;

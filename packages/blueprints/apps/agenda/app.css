@@ -232,6 +232,285 @@ button {
   padding: 2rem 0;
 }
 
+/* ---------- Month view ---------- */
+
+.agenda-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.view-toggle button {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.7rem;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.view-toggle button[aria-pressed='true'] {
+  background: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+.month-nav[hidden] {
+  display: none;
+}
+
+.month-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.month-nav button {
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.month-nav button:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.month-grid[hidden] {
+  display: none;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  overflow: hidden;
+}
+
+.dow {
+  background: var(--surface);
+  text-align: center;
+  padding: 0.35rem 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cell {
+  background: var(--surface);
+  min-height: 4.5rem;
+  padding: 0.25rem 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow: hidden;
+}
+
+.cell[data-outside='true'] {
+  opacity: 0.45;
+}
+
+.cell[data-today='true'] .cell-date {
+  background: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+.cell-date {
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+  border-radius: 999px;
+  min-width: 1.25rem;
+  text-align: center;
+  padding: 0.05rem 0.25rem;
+}
+
+.pill {
+  font-size: 0.66rem;
+  line-height: 1.3;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 16%, transparent);
+  border-left: 2px solid var(--app-color, var(--accent));
+  border-radius: 0.25rem;
+  padding: 0.08rem 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill[data-status='tentative'] {
+  border-left-style: dashed;
+  color: var(--ink-soft);
+}
+
+.more {
+  font-size: 0.62rem;
+  padding-left: 0.3rem;
+}
+
+@media (max-width: 480px) {
+  .cell {
+    min-height: 3.25rem;
+  }
+  .pill {
+    display: none;
+  }
+  /* Narrow screens keep the grid scannable with dots instead of pills. */
+  .cell:has(.pill)::after {
+    content: '';
+    width: 0.35rem;
+    height: 0.35rem;
+    border-radius: 50%;
+    background: var(--app-color, var(--accent));
+  }
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
+}
+
+/* A list row's attach affordance, styled like the status badge. */
+.attach-btn {
+  flex-shrink: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--ink-faint);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+}
+
+.attach-btn:hover {
+  color: var(--app-color, var(--accent));
+  border-color: currentColor;
+}
+
+/* A row's own attachment strip sits beneath it, aligned past the time column. */
+.row-attachments {
+  padding: 0 0 0.625rem 9.25rem;
+}
+
+@media (max-width: 480px) {
+  .row-attachments {
+    padding-left: 0;
+  }
+}
+
 /* ---------- App-level knobs ---------- */
 
 :root[data-app-font='sans'] {

@@ -98,6 +98,11 @@ main {
   display: block;
 }
 
+.banner.notice {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
 .day-label {
   margin: 1rem 0 0.25rem;
   text-transform: uppercase;
@@ -179,6 +184,145 @@ main {
   margin-top: 2rem;
   text-align: center;
   color: var(--ink-faint);
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.ghost {
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+/* Each item is a row plus its own attachment strip. */
+.item {
+  border-bottom: 1px solid var(--line);
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item .row {
+  border-bottom: none;
+}
+
+.attach-item-btn {
+  flex-shrink: 0;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.item .attach-strip:not(:empty) {
+  padding: 0 0 0.625rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
 }
 
 /* ---------- App-level knobs ---------- */

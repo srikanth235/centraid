@@ -2,28 +2,323 @@
   "manifestVersion": 1,
   "id": "notes",
   "name": "Notes",
-  "description": "A read-only projection of knowledge.note over canonical content: your notes, their notebooks, and their bodies from core.content_item. No actions until the knowledge command pack ships — this app is a window over the vault, not a pen.",
-  "version": "0.1.0",
+  "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing and pinning all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
+  "version": "0.3.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Shows your notes and notebooks.",
+    "why": "Shows and manages your notes and notebooks.",
     "scopes": [
-      { "schema": "knowledge", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" }
+      {
+        "schema": "knowledge",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "knowledge",
+        "table": "create_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "edit_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "move_note",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "create_notebook",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
+      }
     ]
   },
-  "actions": [],
+  "actions": [
+    {
+      "name": "create-note",
+      "description": "Create a note (optionally filed into a notebook) through knowledge.create_note; the body becomes a deduped canonical content item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "type": "string",
+            "enum": ["markdown", "html", "plain"]
+          },
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["title", "body_text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-note",
+      "description": "Edit a note's title, body, format, or pinned flag through knowledge.edit_note — partial update, only the fields sent change.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body_text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "format": {
+            "type": "string",
+            "enum": ["markdown", "html", "plain"]
+          },
+          "pinned": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "move-note",
+      "description": "Refile a note into a notebook (or unfile it by omitting notebook_id) through knowledge.move_note — one notebook per note.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "create-notebook",
+      "description": "Create a notebook through knowledge.create_notebook; the vault assigns sibling order.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent_notebook_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "attach",
+      "description": "Pin a file (image, PDF, any media) to a note through core.attach; bytes are stored as a deduped canonical content item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_uri": {
+            "type": "string",
+            "minLength": 6
+          },
+          "title": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "photo",
+              "manual",
+              "receipt",
+              "warranty",
+              "contract",
+              "embed",
+              "other"
+            ]
+          }
+        },
+        "required": ["subject_id", "data_uri"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "detach",
+      "description": "Remove a file from a note through core.detach; the canonical content item is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["attachment_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    }
+  ],
   "queries": [
     {
       "name": "library",
       "description": "All notes newest first with their notebook names and decoded bodies, plus the notebooks for filtering.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {
-          "notes": { "type": "array" },
-          "notebooks": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "notes": {
+            "type": "array"
+          },
+          "notebooks": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -35,9 +330,18 @@
       "type": "segmented",
       "default": "sans",
       "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
       ]
     },
     {
@@ -46,8 +350,14 @@
       "type": "segmented",
       "default": "narrow",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -56,12 +366,30 @@
       "type": "swatch",
       "default": "#5C8A4E",
       "options": [
-        { "value": "#5C8A4E", "label": "Moss" },
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#E55772", "label": "Rose" },
-        { "value": "#B47B3F", "label": "Ochre" }
+        {
+          "value": "#5C8A4E",
+          "label": "Moss"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
       ]
     }
   ]

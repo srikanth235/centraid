@@ -3,7 +3,7 @@
   "id": "budgets",
   "name": "Budgets",
   "description": "YNAB-style money view as a pure projection of the personal vault: transactions and accounts from core, budget caps from finance. Budgets and progress are projections, never stored here, and amounts are unreachable by construction — every command is classification only. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Categorizes spending and tracks budgets over the vault's canonical transactions.",
@@ -26,6 +26,26 @@
         "schema": "core",
         "table": "concept",
         "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
       }
     ]
   },
@@ -93,7 +113,13 @@
             "minLength": 1
           }
         },
-        "required": ["category_concept_id", "period", "limit_minor", "currency", "starts_on"],
+        "required": [
+          "category_concept_id",
+          "period",
+          "limit_minor",
+          "currency",
+          "starts_on"
+        ],
         "additionalProperties": false
       },
       "writes": []
@@ -121,6 +147,87 @@
         },
         "required": ["txn_id", "reason"],
         "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "attach",
+      "description": "Snap a receipt or file onto a transaction through core.attach; bytes are stored as a deduped canonical content item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_uri": {
+            "type": "string",
+            "minLength": 6
+          },
+          "title": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "photo",
+              "manual",
+              "receipt",
+              "warranty",
+              "contract",
+              "embed",
+              "other"
+            ]
+          }
+        },
+        "required": ["subject_id", "data_uri"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "detach",
+      "description": "Remove a file from a transaction through core.detach; the canonical content item is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["attachment_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "writes": []
     }

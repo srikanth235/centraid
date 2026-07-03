@@ -2,342 +2,16 @@
   "manifestVersion": 1,
   "templates": [
     {
-      "id": "hydrate",
-      "name": "Hydrate",
-      "desc": "Track 8 cups a day.",
-      "colorKey": "indigo",
-      "iconKey": "Water",
-      "version": "0.1.0",
-      "kind": "app",
-      "files": [
-        "actions/set-cups.js",
-        "actions/weekly-encouragement.js",
-        "app.css",
-        "app.js",
-        "app.json",
-        "automations/weekly-encouragement.json",
-        "index.html",
-        "migrations/0001_init.sql",
-        "package.json",
-        "queries/get-today.js",
-        "wall.css"
-      ],
-      "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
-          "key": "appWidth",
-          "label": "Width",
-          "type": "segmented",
-          "default": "narrow",
-          "options": [
-            {
-              "value": "narrow",
-              "label": "Narrow"
-            },
-            {
-              "value": "wide",
-              "label": "Wide"
-            }
-          ]
-        },
-        {
-          "key": "appRadius",
-          "label": "Corners",
-          "type": "segmented",
-          "default": "rounded",
-          "options": [
-            {
-              "value": "sharp",
-              "label": "Sharp"
-            },
-            {
-              "value": "rounded",
-              "label": "Rounded"
-            },
-            {
-              "value": "pill",
-              "label": "Pill"
-            }
-          ]
-        },
-        {
-          "key": "appColor",
-          "label": "Color",
-          "type": "swatch",
-          "default": "#4950F6",
-          "options": [
-            {
-              "value": "#4950F6",
-              "label": "Blue"
-            },
-            {
-              "value": "#7C5BD9",
-              "label": "Violet"
-            },
-            {
-              "value": "#2EA098",
-              "label": "Teal"
-            },
-            {
-              "value": "#B47B3F",
-              "label": "Ochre"
-            },
-            {
-              "value": "#E55772",
-              "label": "Rose"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "todos",
-      "name": "Todos",
-      "desc": "Capture and clear small things.",
-      "colorKey": "violet",
-      "iconKey": "Todo",
-      "version": "0.1.0",
-      "kind": "app",
-      "files": [
-        "actions/add.js",
-        "actions/daily-digest.js",
-        "actions/delete.js",
-        "actions/toggle.js",
-        "app.css",
-        "app.js",
-        "app.json",
-        "automations/daily-digest.json",
-        "index.html",
-        "migrations/0001_init.sql",
-        "package.json",
-        "queries/list.js",
-        "wall.css"
-      ],
-      "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "sans",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
-          "key": "appWidth",
-          "label": "Width",
-          "type": "segmented",
-          "default": "narrow",
-          "options": [
-            {
-              "value": "narrow",
-              "label": "Narrow"
-            },
-            {
-              "value": "wide",
-              "label": "Wide"
-            }
-          ]
-        },
-        {
-          "key": "appRadius",
-          "label": "Corners",
-          "type": "segmented",
-          "default": "rounded",
-          "options": [
-            {
-              "value": "sharp",
-              "label": "Sharp"
-            },
-            {
-              "value": "rounded",
-              "label": "Rounded"
-            },
-            {
-              "value": "pill",
-              "label": "Pill"
-            }
-          ]
-        },
-        {
-          "key": "appColor",
-          "label": "Color",
-          "type": "swatch",
-          "default": "#7C5BD9",
-          "options": [
-            {
-              "value": "#4950F6",
-              "label": "Blue"
-            },
-            {
-              "value": "#7C5BD9",
-              "label": "Violet"
-            },
-            {
-              "value": "#2EA098",
-              "label": "Teal"
-            },
-            {
-              "value": "#B47B3F",
-              "label": "Ochre"
-            },
-            {
-              "value": "#E55772",
-              "label": "Rose"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "journal",
-      "name": "Journal",
-      "desc": "A clean place to write each day.",
-      "colorKey": "amber",
-      "iconKey": "Journal",
-      "version": "0.1.0",
-      "kind": "app",
-      "files": [
-        "actions/delete.js",
-        "actions/save.js",
-        "actions/weekly-recap.js",
-        "app.css",
-        "app.js",
-        "app.json",
-        "automations/weekly-recap.json",
-        "index.html",
-        "migrations/0001_init.sql",
-        "package.json",
-        "queries/get.js",
-        "queries/list-dates.js",
-        "wall.css"
-      ],
-      "appKnobs": [
-        {
-          "key": "appFont",
-          "label": "Font",
-          "type": "segmented",
-          "default": "serif",
-          "options": [
-            {
-              "value": "sans",
-              "label": "Sans"
-            },
-            {
-              "value": "serif",
-              "label": "Serif"
-            },
-            {
-              "value": "mono",
-              "label": "Mono"
-            }
-          ]
-        },
-        {
-          "key": "appWidth",
-          "label": "Width",
-          "type": "segmented",
-          "default": "wide",
-          "options": [
-            {
-              "value": "narrow",
-              "label": "Narrow"
-            },
-            {
-              "value": "wide",
-              "label": "Wide"
-            }
-          ]
-        },
-        {
-          "key": "appRadius",
-          "label": "Corners",
-          "type": "segmented",
-          "default": "rounded",
-          "options": [
-            {
-              "value": "sharp",
-              "label": "Sharp"
-            },
-            {
-              "value": "rounded",
-              "label": "Rounded"
-            },
-            {
-              "value": "pill",
-              "label": "Pill"
-            }
-          ]
-        },
-        {
-          "key": "appColor",
-          "label": "Color",
-          "type": "swatch",
-          "default": "#B47B3F",
-          "options": [
-            {
-              "value": "#4950F6",
-              "label": "Blue"
-            },
-            {
-              "value": "#7C5BD9",
-              "label": "Violet"
-            },
-            {
-              "value": "#2EA098",
-              "label": "Teal"
-            },
-            {
-              "value": "#B47B3F",
-              "label": "Ochre"
-            },
-            {
-              "value": "#E55772",
-              "label": "Rose"
-            }
-          ]
-        }
-      ]
-    },
-    {
       "id": "agenda",
       "name": "Agenda",
       "desc": "Your calendar, projected from the vault.",
       "colorKey": "indigo",
       "iconKey": "Calendar",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/detach.js",
         "actions/propose.js",
         "actions/reschedule.js",
         "actions/rsvp.js",
@@ -422,9 +96,11 @@
       "desc": "Log and follow your vital signs.",
       "colorKey": "rose",
       "iconKey": "Activity",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/detach.js",
         "actions/log.js",
         "actions/trends.js",
         "app.css",
@@ -508,10 +184,12 @@
       "desc": "Categorize spending, keep budgets honest.",
       "colorKey": "amber",
       "iconKey": "Coin",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
         "actions/categorize.js",
+        "actions/detach.js",
         "actions/flag.js",
         "actions/set-budget.js",
         "app.css",
@@ -592,18 +270,23 @@
     {
       "id": "tasks",
       "name": "Tasks",
-      "desc": "Your canonical task list, read-only for now.",
+      "desc": "A Things-style task manager over your vault's canonical tasks.",
       "colorKey": "teal",
       "iconKey": "Check",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/add.js",
+        "actions/attach.js",
+        "actions/detach.js",
+        "actions/edit.js",
+        "actions/set-status.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
         "package.json",
-        "queries/list.js",
+        "queries/board.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -676,12 +359,17 @@
     {
       "id": "people",
       "name": "People",
-      "desc": "Everyone in your life, one identity each.",
+      "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
       "colorKey": "violet",
       "iconKey": "Users",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/detach.js",
+        "actions/draft-message.js",
+        "actions/resolve-identity.js",
+        "actions/send-message.js",
         "actions/update-card.js",
         "app.css",
         "app.js",
@@ -764,9 +452,11 @@
       "desc": "Messages that wait for your say-so to send.",
       "colorKey": "indigo",
       "iconKey": "Send",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/detach.js",
         "actions/draft.js",
         "actions/send.js",
         "app.css",
@@ -848,12 +538,18 @@
     {
       "id": "notes",
       "name": "Notes",
-      "desc": "Your notebooks, projected from the vault.",
+      "desc": "Write, file and pin notes over your vault's canonical content.",
       "colorKey": "forest",
       "iconKey": "Book",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/create-note.js",
+        "actions/create-notebook.js",
+        "actions/detach.js",
+        "actions/edit-note.js",
+        "actions/move-note.js",
         "app.css",
         "app.js",
         "app.json",
@@ -1023,9 +719,11 @@
       "desc": "What you own, where it lives, what covers it.",
       "colorKey": "slate",
       "iconKey": "Home",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "kind": "app",
       "files": [
+        "actions/attach.js",
+        "actions/detach.js",
         "app.css",
         "app.js",
         "app.json",
@@ -1104,12 +802,20 @@
     {
       "id": "studio",
       "name": "Studio",
-      "desc": "Clients, projects, time, and invoices.",
+      "desc": "Run the whole freelance loop: clients, time, invoices, payment.",
       "colorKey": "teal",
       "iconKey": "Clock",
-      "version": "0.1.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/add-client.js",
+        "actions/add-project.js",
+        "actions/attach.js",
+        "actions/create-draft-invoice.js",
+        "actions/detach.js",
+        "actions/log-time.js",
+        "actions/mark-invoice-paid.js",
+        "actions/send-invoice.js",
         "app.css",
         "app.js",
         "app.json",
@@ -1176,6 +882,272 @@
             {
               "value": "#E55772",
               "label": "Rose"
+            },
+            {
+              "value": "#B47B3F",
+              "label": "Ochre"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bookings",
+      "name": "Bookings",
+      "desc": "Take and confirm client bookings against your availability.",
+      "colorKey": "indigo",
+      "iconKey": "Calendar",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/attach.js",
+        "actions/confirm-booking.js",
+        "actions/detach.js",
+        "actions/request-booking.js",
+        "actions/set-availability.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/board.js",
+        "wall.css"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "serif",
+              "label": "Serif"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appWidth",
+          "label": "Width",
+          "type": "segmented",
+          "default": "narrow",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Narrow"
+            },
+            {
+              "value": "wide",
+              "label": "Wide"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#4E68DD",
+          "options": [
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#2EA098",
+              "label": "Teal"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
+            },
+            {
+              "value": "#E55772",
+              "label": "Rose"
+            },
+            {
+              "value": "#B47B3F",
+              "label": "Ochre"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "subscriptions",
+      "name": "Subscriptions",
+      "desc": "Every recurring charge and what it costs you per month.",
+      "colorKey": "ochre",
+      "iconKey": "Coin",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/add-subscription.js",
+        "actions/attach.js",
+        "actions/detach.js",
+        "actions/set-status.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/list.js",
+        "wall.css"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "serif",
+              "label": "Serif"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appWidth",
+          "label": "Width",
+          "type": "segmented",
+          "default": "narrow",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Narrow"
+            },
+            {
+              "value": "wide",
+              "label": "Wide"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#B47B3F",
+          "options": [
+            {
+              "value": "#B47B3F",
+              "label": "Ochre"
+            },
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#2EA098",
+              "label": "Teal"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
+            },
+            {
+              "value": "#E55772",
+              "label": "Rose"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "leads",
+      "name": "Leads",
+      "desc": "A pipeline for your prospects — enrol, advance, note.",
+      "colorKey": "rose",
+      "iconKey": "Users",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/add-lead.js",
+        "actions/attach.js",
+        "actions/detach.js",
+        "actions/save-note.js",
+        "actions/update-client.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/pipeline.js",
+        "wall.css"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "serif",
+              "label": "Serif"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appWidth",
+          "label": "Width",
+          "type": "segmented",
+          "default": "wide",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Narrow"
+            },
+            {
+              "value": "wide",
+              "label": "Wide"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#E55772",
+          "options": [
+            {
+              "value": "#E55772",
+              "label": "Rose"
+            },
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#2EA098",
+              "label": "Teal"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
             },
             {
               "value": "#B47B3F",

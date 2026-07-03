@@ -3,27 +3,146 @@
   "id": "home-inventory",
   "name": "Home inventory",
   "description": "What you own, where it lives, and what it's covered by — a read-only projection of the vault's home domain. The home domain has no typed commands yet, so this app stays read-only until the home command pack ships.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your home inventory, warranties, and upcoming maintenance.",
     "scopes": [
-      { "schema": "home", "verbs": "read" },
-      { "schema": "core", "table": "place", "verbs": "read" }
+      {
+        "schema": "home",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "place",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
+      }
     ]
   },
-  "actions": [],
+  "actions": [
+    {
+      "name": "attach",
+      "description": "Pin a file (photo, warranty, receipt, any media) to an inventory item through core.attach; bytes are stored as a deduped canonical content item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_uri": {
+            "type": "string",
+            "minLength": 6
+          },
+          "title": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "photo",
+              "manual",
+              "receipt",
+              "warranty",
+              "contract",
+              "embed",
+              "other"
+            ]
+          }
+        },
+        "required": ["subject_id", "data_uri"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "detach",
+      "description": "Remove a file from an inventory item through core.detach; the canonical content item is kept.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["attachment_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    }
+  ],
   "queries": [
     {
       "name": "inventory",
       "description": "Owned asset items grouped by place, each with its latest warranty, plus maintenance plans with a projected next-due date.",
-      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
       "output": {
         "type": "object",
         "properties": {
-          "items": { "type": "array" },
-          "maintenance": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "items": {
+            "type": "array"
+          },
+          "maintenance": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -35,9 +154,18 @@
       "type": "segmented",
       "default": "sans",
       "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
       ]
     },
     {
@@ -46,8 +174,14 @@
       "type": "segmented",
       "default": "narrow",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -56,11 +190,26 @@
       "type": "swatch",
       "default": "#5C677D",
       "options": [
-        { "value": "#5C677D", "label": "Slate" },
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#E55772", "label": "Rose" }
+        {
+          "value": "#5C677D",
+          "label": "Slate"
+        },
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        }
       ]
     }
   ]

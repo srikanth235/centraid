@@ -213,6 +213,15 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const invocationId = (parked.result as { invocationId: string }).invocationId;
   const parkedList = (await (await fetch(`${base}/parked`)).json()) as { parked: unknown[] };
   expect(parkedList.parked).toHaveLength(1);
+  // The wire carries WHO and WHAT so the desktop confirmation UI can
+  // render "planner wants schedule.propose_event: …" (issue: consent UX).
+  expect(parkedList.parked[0]).toMatchObject({
+    invocationId,
+    command: 'schedule.propose_event',
+    callerKind: 'app',
+    caller: 'planner',
+    input: { summary: 'Owner check-in' },
+  });
   const confirm = await fetch(`${base}/parked/${invocationId}`, {
     method: 'POST',
     body: JSON.stringify({ approve: true }),

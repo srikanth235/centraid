@@ -9,6 +9,7 @@
   --surface: #ffffff;
   --line: rgba(31, 31, 35, 0.07);
   --danger: #dc2626;
+  --warn: #d97706;
 }
 
 :root[data-theme='dark'] {
@@ -82,6 +83,10 @@ main {
   font-size: 0.8rem;
 }
 
+code {
+  font-size: 0.9em;
+}
+
 /* Consent + outcome banners — the vault's decisions are part of the UI. */
 .banner {
   border: 1px solid var(--line);
@@ -103,18 +108,122 @@ main {
   color: var(--ink-soft);
 }
 
+/* ---------- Quick add ---------- */
+
+#quickAdd {
+  margin-bottom: 1rem;
+}
+
+.quick-add-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.quick-add-row input[type='text'] {
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-add-row input,
+.quick-add-row select,
+.rename {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+}
+
+.quick-add-row input:focus-visible,
+.quick-add-row select:focus-visible,
+.rename:focus-visible {
+  outline: 2px solid var(--app-color, var(--accent));
+  outline-offset: 1px;
+}
+
+.quick-add-row input[type='date'],
+.quick-add-row select {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+#addBtn {
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--app-color, var(--accent));
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  cursor: pointer;
+}
+
+#addBtn:hover {
+  filter: brightness(1.08);
+}
+
+.parent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.3rem 0.2rem 0.625rem;
+  margin-bottom: 0.5rem;
+  max-width: 100%;
+}
+
+.parent-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parent-chip button {
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 0.1rem 0.375rem;
+  cursor: pointer;
+}
+
+.parent-chip button:hover {
+  color: var(--danger);
+}
+
+/* ---------- Sections ---------- */
+
 .section-label {
-  margin: 1rem 0 0.25rem;
+  margin: 1.25rem 0 0.25rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: 0.72rem;
 }
 
+.section-label[data-bucket='overdue'] {
+  color: var(--danger);
+}
+
+.section-label[data-bucket='today'] {
+  color: var(--app-color, var(--accent));
+}
+
+/* ---------- Task rows ---------- */
+
 .row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem 0;
+  gap: 0.625rem;
+  padding: 0.55rem 0;
   border-bottom: 1px solid var(--line);
 }
 
@@ -122,7 +231,17 @@ main {
   border-bottom: none;
 }
 
-/* A static marker (span, not button) — done-ness is read-only here. */
+.row.subtask {
+  padding-left: 2.125rem;
+}
+
+.row.subtask .circle {
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 0.65rem;
+}
+
+/* A real control now: click completes, click again reopens. */
 .circle {
   width: 1.5rem;
   height: 1.5rem;
@@ -136,11 +255,24 @@ main {
   flex-shrink: 0;
   color: #fff;
   font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.circle:hover {
+  border-color: var(--app-color, var(--accent));
 }
 
 .circle[data-on='true'] {
   background: var(--app-color, var(--accent));
   border-color: var(--app-color, var(--accent));
+}
+
+.row[data-status='cancelled'] .circle {
+  background: var(--ink-faint);
+  border-color: var(--ink-faint);
 }
 
 .row-text {
@@ -149,11 +281,52 @@ main {
   font-size: 0.95rem;
   line-height: 1.35;
   word-break: break-word;
+  cursor: text;
 }
 
 .row[data-done='true'] .row-text {
   color: var(--ink-faint);
   text-decoration: line-through;
+  cursor: default;
+}
+
+.rename {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.95rem;
+  padding: 0.25rem 0.4rem;
+}
+
+/* ---------- Badges & chips ---------- */
+
+.badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge.doing {
+  color: var(--app-color, var(--accent));
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.68rem;
+}
+
+.flag {
+  font-size: 0.8rem;
+}
+
+.flag.high {
+  color: var(--danger);
+}
+
+.flag.medium {
+  color: var(--warn);
+}
+
+.flag.low {
+  color: var(--ink-faint);
 }
 
 .row-due {
@@ -163,6 +336,56 @@ main {
 
 .overdue {
   color: var(--danger);
+}
+
+/* ---------- Hover actions ---------- */
+
+.row-actions {
+  display: inline-flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.row:hover .row-actions,
+.row:focus-within .row-actions {
+  opacity: 1;
+}
+
+.ghost {
+  font: inherit;
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 0.375rem;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+.ghost.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---------- Logbook ---------- */
+
+#logbook {
+  margin-top: 1.5rem;
+}
+
+#logbook summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
 }
 
 .empty {
@@ -175,6 +398,108 @@ main {
 .footnote {
   margin-top: 2rem;
   color: var(--ink-faint);
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
+}
+
+/* A row's own attachment strip sits beneath it, indented to clear the circle. */
+.row-attachments {
+  padding: 0 0 0.55rem 2.125rem;
+}
+
+.row-attachments.subtask {
+  padding-left: 4.25rem;
 }
 
 /* ---------- App-level knobs ---------- */

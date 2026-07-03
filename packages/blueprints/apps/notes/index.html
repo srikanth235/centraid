@@ -42,7 +42,7 @@
       <header class="head">
         <div>
           <h1>Notes</h1>
-          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
       </header>
 
@@ -52,22 +52,73 @@
           >Ask the owner to approve this app's requested scopes in vault settings.</span
         >
       </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
 
       <div id="notebookChips" class="chips" role="group" aria-label="Filter by notebook"></div>
+
+      <form id="notebookForm" class="inline-form" autocomplete="off" hidden>
+        <input
+          id="notebookNameInput"
+          type="text"
+          placeholder="Notebook name…"
+          aria-label="Notebook name"
+        />
+        <button type="submit" class="primary small-btn">Create</button>
+        <button type="button" id="cancelNotebook" class="ghost">Cancel</button>
+      </form>
+
+      <form id="quickAdd" autocomplete="off">
+        <input id="titleInput" type="text" placeholder="New note title…" aria-label="Note title" />
+        <div id="quickAddMore" hidden>
+          <textarea
+            id="bodyInput"
+            rows="4"
+            placeholder="Write your note…"
+            aria-label="Note body"
+          ></textarea>
+          <div class="quick-add-actions">
+            <span id="quickAddTarget" class="muted small"></span>
+            <button type="button" id="cancelAdd" class="ghost">Cancel</button>
+            <button type="submit" class="primary small-btn">Add note</button>
+          </div>
+        </div>
+      </form>
 
       <section id="noteList" aria-label="Notes"></section>
 
       <section id="noteView" aria-label="Note" hidden>
-        <button id="backButton" type="button" class="back">← All notes</button>
+        <div class="note-view-bar">
+          <button id="backButton" type="button" class="back">← All notes</button>
+          <span class="note-view-actions">
+            <button id="pinButton" type="button" class="ghost"></button>
+            <select id="moveSelect" aria-label="Notebook"></select>
+            <button id="editButton" type="button" class="ghost">Edit</button>
+          </span>
+        </div>
         <h2 id="noteTitle" class="note-view-title"></h2>
         <p id="noteMeta" class="muted small"></p>
         <div id="noteBody" class="note-body"></div>
+        <div id="attachBlock" class="attach-block">
+          <div id="attachStrip" class="attach-strip"></div>
+          <label class="attach-add">
+            <input id="attachInput" type="file" multiple hidden />
+            <span class="ghost small-btn">＋ Attach file</span>
+          </label>
+        </div>
+        <form id="editForm" autocomplete="off" hidden>
+          <input id="editTitleInput" type="text" aria-label="Note title" />
+          <textarea id="editBodyInput" rows="8" aria-label="Note body"></textarea>
+          <div class="quick-add-actions">
+            <button type="button" id="cancelEdit" class="ghost">Cancel</button>
+            <button type="submit" class="primary small-btn">Save</button>
+          </div>
+        </form>
       </section>
 
-      <p id="empty" class="empty" hidden>No notes yet. Notes arrive through the vault's ingest.</p>
+      <p id="empty" class="empty" hidden>No notes yet. Write the first one above.</p>
 
       <p class="muted small footnote">
-        Read-only for now — editing arrives with the knowledge domain's command pack.
+        Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
     <script type="module" src="app.js"></script>

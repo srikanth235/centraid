@@ -69,7 +69,21 @@
         <button id="trendsButton" type="button">Trends</button>
       </form>
 
+      <section id="sparkPanel" class="spark-panel" aria-label="Trend" hidden>
+        <div class="spark-head">
+          <span id="sparkTitle" class="spark-title"></span>
+          <span id="sparkLatest" class="spark-latest"></span>
+        </div>
+        <div id="sparkChart" class="spark-chart"></div>
+        <div class="spark-foot muted small">
+          <span id="sparkMin"></span>
+          <span id="sparkCount"></span>
+          <span id="sparkMax"></span>
+        </div>
+      </section>
+
       <section id="readingList" aria-label="Vital readings"></section>
+      <input id="attachInput" type="file" multiple hidden aria-hidden="true" />
       <p id="empty" class="empty" hidden>
         No readings yet. Log a vital above — it lands in the vault, not in this app.
       </p>

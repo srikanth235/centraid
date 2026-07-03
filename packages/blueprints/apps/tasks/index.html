@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Tasks</title>
     <script>
-      // Centraid live settings bridge — see the todos blueprint for the
+      // Centraid live settings bridge — see the notes blueprint for the
       // full story: runtime bakes theme server-side; this handles the
       // no-bake preview path and live pref flips over postMessage.
       (function () {
@@ -42,7 +42,7 @@
       <header class="head">
         <div>
           <h1>Tasks</h1>
-          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+          <p id="subtitle" class="muted">Your canonical task list, from the vault.</p>
         </div>
       </header>
 
@@ -54,15 +54,43 @@
       </div>
       <div id="noticeBanner" class="banner notice" hidden></div>
 
-      <section id="taskList" aria-label="Tasks"></section>
+      <form id="quickAdd" autocomplete="off">
+        <div id="parentChip" class="parent-chip" hidden>
+          <span id="parentChipText"></span>
+          <button type="button" id="parentClear" aria-label="Stop adding a subtask">✕</button>
+        </div>
+        <div class="quick-add-row">
+          <input id="titleInput" type="text" placeholder="Add a task…" aria-label="Task title" />
+          <input id="dueInput" type="date" aria-label="Due date" />
+          <select id="prioInput" aria-label="Priority">
+            <option value="0">No priority</option>
+            <option value="1">High</option>
+            <option value="5">Medium</option>
+            <option value="9">Low</option>
+          </select>
+          <button type="submit" id="addBtn">Add</button>
+        </div>
+      </form>
+
+      <!-- One shared file input for the whole board; a row's attach button
+           sets the target task, then triggers this. -->
+      <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a task" />
+
+      <section id="board" aria-label="Open tasks"></section>
       <p id="empty" class="empty" hidden>
-        No tasks in the vault yet. They appear here once something writes them — an import, or an
-        agent working on your behalf.
+        Nothing to do. Add a task above — it lands in your vault as a canonical
+        <code>schedule.task</code> row, receipted like every other write.
       </p>
 
+      <details id="logbook" hidden>
+        <summary>Logbook <span id="logbookCount" class="muted small"></span></summary>
+        <div id="logbookList"></div>
+      </details>
+
       <p class="muted small footnote">
-        Editing arrives with the schedule domain's task command pack — until then this app is a
-        window, not a pen.
+        Every task lives in <code>schedule.task</code> in your vault — this app stores nothing of
+        its own. Adds, completions and edits run the schedule domain's typed commands, each one
+        consent-checked and receipted.
       </p>
     </main>
     <script type="module" src="app.js"></script>

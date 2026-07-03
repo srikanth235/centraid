@@ -29,6 +29,7 @@ export type {
   ReadResult,
   InvokeRequest,
   InvokeOutcome,
+  ParkedSummary,
   ConditionSpec,
   Citation,
   HandlerCtx,
@@ -66,9 +67,15 @@ export {
 } from './host.js';
 
 export { registerScheduleCommands } from './commands/schedule.js';
+export { registerTaskCommands } from './commands/tasks.js';
 export { registerSocialCommands } from './commands/social.js';
 export { registerFinanceCommands } from './commands/finance.js';
 export { registerHealthCommands } from './commands/health.js';
+export { registerKnowledgeCommands } from './commands/knowledge.js';
+export { registerBusinessCommands } from './commands/business.js';
+export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
+export { registerBookingCommands } from './commands/bookings.js';
+export { registerSubscriptionCommands } from './commands/subscriptions.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
 export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';

@@ -196,6 +196,76 @@ button {
   accent-color: var(--app-color, var(--accent));
 }
 
+/* Handle linking — identity work, so it lives inside the card editor. */
+.handle-row {
+  display: flex;
+  gap: 0.5rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.625rem;
+}
+
+.handle-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+select {
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.handle-row select {
+  height: 2.75rem;
+}
+
+/* Compose — draft-then-send; the send step parks for the owner. */
+textarea {
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  width: 100%;
+  resize: vertical;
+  -webkit-appearance: none;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.card-form-actions select {
+  margin-right: auto;
+}
+
+.compose-hint {
+  margin: 0;
+}
+
+.parked-chip {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--app-color, var(--accent));
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+
 .avatar {
   flex-shrink: 0;
   width: 2.25rem;
@@ -246,6 +316,99 @@ button {
   font-size: 0.9rem;
   text-align: center;
   padding: 2rem 0;
+}
+
+/* ---------- Attachments (shared pattern across apps) ---------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.attach-strip:empty {
+  display: none;
+}
+
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--app-color, var(--accent));
+  word-break: break-word;
+  text-decoration: none;
+}
+
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 0.6rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.05rem 0;
+}
+
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.attach-add .ghost {
+  display: inline-block;
 }
 
 /* ---------- App-level knobs ---------- */

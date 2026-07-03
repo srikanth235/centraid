@@ -9,18 +9,56 @@
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
+
+/**
+ * Group the owner's attachments for one subject type into a map keyed by
+ * subject_id, each value a UI-ready list joined to its content item. This is
+ * the shared attachment-projection shape every app copies — polymorphic edges
+ * in core.attachment, bytes in core.content_item.
+ */
+function attachmentsBySubject(subjectType, attachments, contentById) {
+  const bySubject = new Map();
+  for (const a of attachments) {
+    if (a.subject_type !== subjectType) continue;
+    const content = contentById.get(a.content_id);
+    if (!bySubject.has(a.subject_id)) bySubject.set(a.subject_id, []);
+    bySubject.get(a.subject_id).push({
+      attachment_id: a.attachment_id,
+      content_id: a.content_id,
+      role: a.role,
+      is_primary: a.is_primary,
+      media_type: content?.media_type ?? 'application/octet-stream',
+      title: content?.title ?? null,
+      content_uri: content?.content_uri ?? '',
+      byte_size: content?.byte_size ?? 0,
+    });
+  }
+  for (const list of bySubject.values()) {
+    list.sort((x, y) => (y.is_primary ?? 0) - (x.is_primary ?? 0));
+  }
+  return bySubject;
+}
+
 export default async ({ ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
-    const [items, warranties, plans, places] = await Promise.all([
+    const [items, warranties, plans, places, contents, attachments] = await Promise.all([
       ctx.vault.read({ entity: 'home.asset_item', purpose }),
       ctx.vault.read({ entity: 'home.warranty', purpose }),
       ctx.vault.read({ entity: 'home.maintenance_plan', purpose }),
       ctx.vault.read({ entity: 'core.place', purpose }),
+      ctx.vault.read({ entity: 'core.content_item', purpose }),
+      ctx.vault.read({
+        entity: 'core.attachment',
+        where: [{ column: 'subject_type', op: 'eq', value: 'home.asset_item' }],
+        purpose,
+      }),
     ]);
     const today = new Date().toISOString().slice(0, 10);
 
     const placeName = new Map((places.rows ?? []).map((p) => [p.place_id, p.name]));
+    const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+    const attByItem = attachmentsBySubject('home.asset_item', attachments.rows ?? [], contentById);
 
     // Latest warranty per item (an item can accumulate several over time);
     // "active" is computed from home_warranty.ends_on against today.
@@ -43,6 +81,7 @@ export default async ({ ctx }) => {
           warranty: w
             ? { ends_on: w.ends_on, active: String(w.ends_on).slice(0, 10) >= today }
             : null,
+          attachments: attByItem.get(it.item_id) ?? [],
         };
       })
       .toSorted(

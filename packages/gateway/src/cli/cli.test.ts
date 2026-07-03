@@ -84,6 +84,13 @@ test('daemonLayoutFor resolves relative paths to absolute', () => {
   expect(layout.appsDir.endsWith(path.join('relative', 'apps'))).toBeTruthy();
 });
 
+test('daemonLayoutFor mounts the vault plane at <dataDir>/vault', () => {
+  // The daemon is a real host (duaility §12): a missing vaultDir would
+  // leave every projection blueprint dark with "no vault plane mounted".
+  const layout = daemonLayoutFor('./relative');
+  expect(layout.vaultDir.endsWith(path.join('relative', 'vault'))).toBeTruthy();
+});
+
 test('readOrMintToken creates a 64-hex token on first call and re-reads it on the second', async () => {
   const tokenFile = path.join(dataDir, 'token.bin');
   const a = await readOrMintToken(tokenFile);

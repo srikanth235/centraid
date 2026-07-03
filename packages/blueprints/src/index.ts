@@ -10,8 +10,8 @@
  *
  * The gallery half: bundled, pre-built Centraid apps the desktop offers as
  * "clone and deploy" starting points. Each template folder lives under a
- * kind-segment directory — `apps/<id>/` for full UI apps (`apps/hydrate/`,
- * `apps/journal/`, `apps/todos/`, …) and `automations/<id>/` for automation
+ * kind-segment directory — `apps/<id>/` for full UI apps (`apps/agenda/`,
+ * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for automation
  * apps — and is a fully-formed app (HTML/CSS/JS + queries/ + actions/ +
  * migrations/) — identical in shape to an app the user authors themselves.
  * Two layers stack on top of the bundle:

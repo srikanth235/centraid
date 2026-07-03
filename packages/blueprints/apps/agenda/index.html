@@ -64,7 +64,24 @@
         </div>
       </form>
 
-      <section id="dayList" aria-label="Upcoming events"></section>
+      <div class="agenda-bar">
+        <div class="view-toggle" role="group" aria-label="View">
+          <button type="button" id="monthViewBtn" aria-pressed="true">Month</button>
+          <button type="button" id="listViewBtn" aria-pressed="false">List</button>
+        </div>
+        <div id="monthNav" class="month-nav">
+          <button type="button" id="prevMonth" aria-label="Previous month">‹</button>
+          <span id="monthLabel"></span>
+          <button type="button" id="nextMonth" aria-label="Next month">›</button>
+        </div>
+      </div>
+
+      <!-- One shared file input for the list view; a row's attach button sets
+           the target event, then triggers this. -->
+      <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to an event" />
+
+      <section id="monthGrid" class="month-grid" aria-label="Month view"></section>
+      <section id="dayList" aria-label="Upcoming events" hidden></section>
       <p id="empty" class="empty" hidden>
         Nothing scheduled. Propose an event above, or import an .ics through the vault.
       </p>

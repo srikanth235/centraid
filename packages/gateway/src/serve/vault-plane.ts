@@ -29,10 +29,16 @@ import {
   markAppRevoked,
   openVaultDb,
   purposeConceptId,
+  registerAttachmentCommands,
+  registerBookingCommands,
+  registerBusinessCommands,
   registerFinanceCommands,
   registerHealthCommands,
+  registerKnowledgeCommands,
   registerScheduleCommands,
   registerSocialCommands,
+  registerSubscriptionCommands,
+  registerTaskCommands,
   type AppSummary,
   type Credential,
   type Gateway as VaultGateway,
@@ -40,6 +46,7 @@ import {
   type HostBootstrap,
   type InvokeOutcome,
   type InvokeRequest,
+  type ParkedSummary,
   type ReadRequest,
   type RevocationResult,
   type ScopeSpec,
@@ -81,9 +88,15 @@ export class VaultPlane {
     this.boot = ensureVaultBootstrapped(this.db, { ownerName: options.ownerName ?? 'Owner' });
     this.gateway = createGateway(this.db);
     registerScheduleCommands(this.gateway);
+    registerTaskCommands(this.gateway);
     registerSocialCommands(this.gateway);
     registerFinanceCommands(this.gateway);
     registerHealthCommands(this.gateway);
+    registerKnowledgeCommands(this.gateway);
+    registerBusinessCommands(this.gateway);
+    registerAttachmentCommands(this.gateway);
+    registerBookingCommands(this.gateway);
+    registerSubscriptionCommands(this.gateway);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`
@@ -163,7 +176,7 @@ export class VaultPlane {
     return this.gateway.revokeGrant(this.ownerCredential, grantId);
   }
 
-  listParked(): { invocationId: string; command: string; parkedAt: string }[] {
+  listParked(): ParkedSummary[] {
     return this.gateway.listParked();
   }
 

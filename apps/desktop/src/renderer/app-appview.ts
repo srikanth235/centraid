@@ -28,6 +28,7 @@ import {
   sqlString,
   triggersSummary,
 } from './app-format.js';
+import { manifestVaultBlock, renderVaultPane } from './app-vault.js';
 import type { ShellContext } from './app-shell-context.js';
 
 export interface AppViewModule {
@@ -364,22 +365,37 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
     frame.contentWindow?.postMessage({ type: 'centraid:settings', dataAttrs, cssVars }, '*');
   }
 
-  async function fetchAppKnobsManifest(appId: string): Promise<AppKnobsManifest | null> {
+  async function fetchAppManifestRaw(appId: string): Promise<Record<string, unknown> | null> {
     try {
       const live = await appLiveUrl({ id: appId });
       // `appLiveUrl` returns `${gateway}/centraid/<id>/`. The app
-      // manifest sits next to `index.html` inside the same app;
-      // knobs live under its `knobs[]` array (folded in from the old
-      // `app-knobs.json` sidecar).
+      // manifest sits next to `index.html` inside the same app; we fetch
+      // the cloned copy (not the bundled template) so knobs + vault block
+      // match the app's own files. Shared by the Appearance knobs and the
+      // Vault tab so the popover fetches `app.json` once.
       const url = `${live.url.replace(/\/?$/, '/')}app.json`;
       const res = await fetch(url);
       if (!res.ok) return null;
-      const parsed = (await res.json()) as { manifestVersion?: number; knobs?: AppKnob[] };
-      if (!parsed || !Array.isArray(parsed.knobs)) return null;
-      return { version: parsed.manifestVersion ?? 1, knobs: parsed.knobs };
+      const parsed = (await res.json()) as unknown;
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
     } catch {
       return null;
     }
+  }
+
+  // Knobs live under the manifest's `knobs[]` array (folded in from the
+  // old `app-knobs.json` sidecar).
+  function knobsManifestFrom(raw: Record<string, unknown> | null): AppKnobsManifest | null {
+    if (!raw || !Array.isArray(raw.knobs)) return null;
+    const version = typeof raw.manifestVersion === 'number' ? raw.manifestVersion : 1;
+    return { version, knobs: raw.knobs as AppKnob[] };
+  }
+
+  /** Hard-reload the app iframe — vault access just changed under it. */
+  function reloadAppFrame(view: HTMLElement): void {
+    const frame = view.querySelector<HTMLIFrameElement>('iframe[data-centraid-app]');
+    // Cross-origin frame: resetting `src` is the one reload we may do.
+    if (frame) frame.src = frame.src;
   }
 
   function openAppSettings(
@@ -433,12 +449,14 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
     header.append(iconTile, headerText, closeBtn);
     panel.append(header);
 
-    // §E1 — tabbed popover: Appearance · Automations · Manage. Each tab
-    // does one job instead of one flat stack.
-    type AppSettingsTab = 'appearance' | 'automations' | 'manage';
+    // §E1 — tabbed popover: Appearance · Automations · Vault · Manage.
+    // Each tab does one job instead of one flat stack. The Vault tab stays
+    // hidden unless the app's manifest declares a `vault` block.
+    type AppSettingsTab = 'appearance' | 'automations' | 'vault' | 'manage';
     const panes: Record<AppSettingsTab, HTMLElement> = {
       appearance: el('div', { class: 'cd-app-settings-pane' }),
       automations: el('div', { class: 'cd-app-settings-pane' }),
+      vault: el('div', { class: 'cd-app-settings-pane' }),
       manage: el('div', { class: 'cd-app-settings-pane' }),
     };
     const tabBarWrap = el('div', { class: 'cd-app-settings-tabs-wrap' });
@@ -456,12 +474,15 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
         '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 0 0 0 20 2.5 2.5 0 0 0 2-4 2.5 2.5 0 0 1 2-4h2a4 4 0 0 0 4-4 10 10 0 0 0-10-8z"/></svg>',
       automations:
         '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+      vault:
+        '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v5c0 5-3.5 9-8 11-4.5-2-8-6-8-11V6z"/></svg>',
       manage:
         '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1-5.4 5.4l-5.6 5.6a2 2 0 1 0 2.8 2.8l5.6-5.6a4 4 0 0 1 5.4-5.4l-3 3-2.2-2.2 3-3z"/></svg>',
     };
     for (const [id, label] of [
       ['appearance', 'Appearance'],
       ['automations', 'Automations'],
+      ['vault', 'Vault'],
       ['manage', 'Manage'],
     ] as const) {
       const btn = el('button', {
@@ -473,14 +494,17 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
         el('span', { class: 'cd-app-settings-tab-glyph', trustedHtml: tabGlyph[id] }),
         el('span', { class: 'cd-app-settings-tab-label' }, label),
       );
-      if (id === 'automations') {
+      if (id === 'automations' || id === 'vault') {
         btn.append(el('span', { class: 'cd-app-settings-tab-badge', hidden: '' }, '0'));
       }
+      // The Vault tab is for vault-declaring apps only; unhidden when the
+      // manifest resolves with a `vault` block.
+      if (id === 'vault') btn.hidden = true;
       tabButtons.set(id, btn);
       tabBar.append(btn);
     }
     panel.append(tabBarWrap);
-    panel.append(panes.appearance, panes.automations, panes.manage);
+    panel.append(panes.appearance, panes.automations, panes.vault, panes.manage);
 
     // Appearance — per-app knobs (font / width / corners / App color).
     // Only meaningful for centraid-backed apps; an empty host fills in
@@ -490,14 +514,45 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
       el('div', { class: 'cd-app-settings-note' }, 'No appearance options for this app.'),
     );
     panes.appearance.append(prefsHost);
+    const manifestRaw = appId
+      ? fetchAppManifestRaw(appId)
+      : Promise.resolve<Record<string, unknown> | null>(null);
     if (appId) {
-      void Promise.all([fetchAppKnobsManifest(appId), fetchAppKnobValues(appId)]).then(
-        ([manifest, stored]) => {
-          if (!prefsHost || !document.contains(panel)) return;
-          if (!manifest || manifest.knobs.length === 0) return;
-          prefsHost.replaceChildren(renderKnobsSection(manifest.knobs, stored, view, appId, panel));
-        },
-      );
+      void Promise.all([manifestRaw, fetchAppKnobValues(appId)]).then(([raw, stored]) => {
+        const manifest = knobsManifestFrom(raw);
+        if (!prefsHost || !document.contains(panel)) return;
+        if (!manifest || manifest.knobs.length === 0) return;
+        prefsHost.replaceChildren(renderKnobsSection(manifest.knobs, stored, view, appId, panel));
+      });
+    }
+
+    // Vault (duaility §12) — the owner consent surface for this app.
+    // Tab + pane only materialize for manifests that declare a `vault`
+    // block; the pane owns its own refresh after every owner act.
+    const vaultHost = el('div', { class: 'cd-app-settings-section-host' });
+    panes.vault.append(vaultHost);
+    if (appId) {
+      void manifestRaw.then((raw) => {
+        const block = manifestVaultBlock(raw);
+        if (!block || !document.contains(panel)) return;
+        const vaultTabBtn = tabButtons.get('vault');
+        if (vaultTabBtn) vaultTabBtn.hidden = false;
+        void renderVaultPane({
+          el,
+          appId,
+          block,
+          host: vaultHost,
+          onAccessChanged: () => reloadAppFrame(view),
+          onParkedCount: (count) => {
+            const badge = vaultTabBtn?.querySelector('.cd-app-settings-tab-badge');
+            if (badge instanceof HTMLElement) {
+              badge.textContent = String(count);
+              badge.hidden = count === 0;
+            }
+          },
+          showToast,
+        });
+      });
     }
 
     // Automations (issue #91) — reverse lookup: automations are

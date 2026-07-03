@@ -28,6 +28,7 @@
 //   - `analytics.sqlite`          — run summaries (local only)
 //   - `chat-runner-sessions/`     — codex thread state for in-app chat
 //   - `templates-cache/`          — downloaded remote-template tarballs
+//   - `vault/`                    — personal vault pair (vault.db + journal.db)
 
 import { app } from 'electron';
 import path from 'node:path';
@@ -122,6 +123,19 @@ export function gatewayConversationRunnerSessionsDir(id: string): string {
  */
 export function gatewayTemplatesCacheDir(id: string): string {
   return path.join(gatewayDir(id), 'templates-cache');
+}
+
+/**
+ * Personal-vault directory (duaility §12) — `vault.db` + `journal.db`.
+ * Passing this as `GatewayPaths.vaultDir` is what mounts the vault plane:
+ * live apps enroll as `consent.app` rows, handlers reach the vault through
+ * `ctx.vault`, and the owner consent surface serves under
+ * `/centraid/_vault/*`. Per-gateway like everything else — the vault is
+ * the gateway's canon, so `todos` on the local gateway and on a Cloud
+ * account see different vaults.
+ */
+export function gatewayVaultDir(id: string): string {
+  return path.join(gatewayDir(id), 'vault');
 }
 
 /**

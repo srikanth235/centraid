@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Bookings</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Bookings</h1>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
+
+      <div id="live">
+        <div class="section-head">
+          <p class="section-label">When you take work</p>
+        </div>
+        <div id="availabilityChips" class="chips"></div>
+        <form id="availabilityForm" class="panel" autocomplete="off">
+          <div class="day-toggles" id="dayToggles" role="group" aria-label="Days"></div>
+          <div class="field-row">
+            <input id="winStart" type="time" value="09:00" aria-label="Window start" />
+            <span class="muted small">to</span>
+            <input id="winEnd" type="time" value="17:00" aria-label="Window end" />
+            <button type="submit" class="primary small-btn">Add window</button>
+          </div>
+        </form>
+
+        <div class="section-head">
+          <p class="section-label">Take a booking</p>
+        </div>
+        <form id="requestForm" class="panel" autocomplete="off">
+          <div class="field-row">
+            <input id="reqSummary" type="text" placeholder="What's it for?" aria-label="Summary" />
+          </div>
+          <div class="field-row">
+            <select id="reqCalendar" aria-label="Calendar"></select>
+            <select id="reqParty" aria-label="Client"></select>
+          </div>
+          <div class="field-row">
+            <input id="reqDate" type="date" aria-label="Date" />
+            <input id="reqStart" type="time" value="10:00" aria-label="Start" />
+            <span class="muted small">to</span>
+            <input id="reqEnd" type="time" value="11:00" aria-label="End" />
+            <button type="submit" class="primary small-btn">Request</button>
+          </div>
+          <p class="muted small">
+            A request parks for your confirmation before it holds the slot — Bookings never seizes
+            your calendar on its own.
+          </p>
+        </form>
+
+        <div class="section-head">
+          <p class="section-label">Bookings</p>
+        </div>
+        <section id="bookingList" aria-label="Bookings"></section>
+        <p id="empty" class="empty" hidden>
+          No bookings yet. Set your availability, then take a request above.
+        </p>
+      </div>
+
+      <input id="attachInput" type="file" multiple hidden aria-hidden="true" />
+
+      <p class="muted small footnote">
+        Every write is a typed vault command — a booking request waits for your say-so, and
+        confirming it puts it on the books.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

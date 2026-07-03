@@ -1,9 +1,0 @@
-{
-  "name": "centraid-app-todos",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "devDependencies": {
-    "@centraid/openclaw-plugin": "*"
-  }
-}
