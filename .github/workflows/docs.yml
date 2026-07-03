@@ -6,6 +6,7 @@ on:
     paths:
       - docs/**
       - scripts/docs-site/**
+      - scripts/home-site/**
       - .github/workflows/docs.yml
       - wrangler.docs.toml
       - package.json
@@ -14,6 +15,7 @@ on:
     paths:
       - docs/**
       - scripts/docs-site/**
+      - scripts/home-site/**
       - .github/workflows/docs.yml
       - wrangler.docs.toml
       - package.json
