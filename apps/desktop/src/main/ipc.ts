@@ -21,7 +21,7 @@ import { refreshAuthInjector } from './auth-injector.js';
 import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
-import { ensureAppSessionDir, resetAppSessions } from './app-sessions.js';
+import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -299,13 +299,19 @@ export function registerIpcHandlers(): void {
   // `draftPreviewUrl`), so no APPS_PREVIEW_URL handler is needed.
 
   ipcMain.handle(Channel.APPS_OPEN, async (_e, input: { id: string }) => {
-    // Reveal-in-Finder: opens the on-disk session worktree. One of the two
+    // Reveal-in-Finder: opens the app's on-disk code — the live published
+    // dir when available, else its editing-session worktree. One of the two
     // deliberately LOCAL-ONLY handlers (issue #141) — a remote gateway
     // exposes no worktree over the filesystem. The renderer hides this for
-    // remote; `ensureAppSessionDir` (via `assertActiveGatewayLocal`) is
-    // the backstop and throws a clear error if it's ever reached remotely.
-    const dir = await ensureAppSessionDir(input.id);
-    await shell.openPath(dir);
+    // remote; `resolveAppRevealDir` (via `assertActiveGatewayLocal`) is the
+    // backstop and throws a clear error if it's ever reached remotely.
+    const dir = await resolveAppRevealDir(input.id);
+    // `shell.openPath` reports failure by RESOLVING with a non-empty error
+    // string (it doesn't reject), so the previous `await` swallowed every
+    // failure and the handler always claimed success. Surface it instead, so
+    // the renderer's catch shows a real toast.
+    const openErr = await shell.openPath(dir);
+    if (openErr) throw new Error(`Could not open ${dir}: ${openErr}`);
     return { ok: true };
   });
 

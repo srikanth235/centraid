@@ -12,6 +12,7 @@ import {
   cloneTemplate as gwCloneTemplate,
   deleteApp,
   deregisterApp,
+  listApps,
   listTemplates,
   updateAppMeta,
 } from './gateway-client.js';
@@ -540,6 +541,19 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     setTimeout(() => useBtn.focus(), 30);
   }
 
+  // Does the store still list this app id? Used by delete to distinguish a
+  // transient gateway failure (keep the tile, let the user retry) from an app
+  // that's already gone (drop the pin so it can't strand as a ghost tile).
+  // A lookup failure is treated as "gone" so a broken gateway never blocks
+  // removing a pin.
+  async function appStillOnGateway(id: string): Promise<boolean> {
+    try {
+      return (await listApps()).some((p) => p.id === id);
+    } catch {
+      return false;
+    }
+  }
+
   async function handleDeleteApp(app: AppMetaResolvedType): Promise<void> {
     const draft = isDraft(app);
     const ok = await openConfirm({
@@ -565,14 +579,20 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
 
     // Gateway is the source of truth — if deregister fails for anything other
     // than 404 (already gone), keep the tile so the user can retry rather than
-    // silently leaking an orphan registration on the gateway.
+    // silently leaking an orphan registration on the gateway. But only keep it
+    // if the app is GENUINELY still there: a wiped/rebuilt code store makes the
+    // delete error with a non-404 while the app is already gone, and bailing
+    // there would strand the local pin as an unremovable ghost tile. So on a
+    // non-404 error we re-check the store and only abort when it confirms the
+    // app still exists.
     const ua = findUserApp(app.id);
+    const gatewayId = ua?.centraidAppId ?? app.id;
     if (ua?.centraidAppId) {
       try {
         await deregisterApp({ id: ua.centraidAppId });
       } catch (err) {
         const msg = String(err);
-        if (!/404|not_found/i.test(msg)) {
+        if (!/404|not_found/i.test(msg) && (await appStillOnGateway(gatewayId))) {
           showToast(`Could not delete "${app.name}" from gateway: ${msg}`);
           return;
         }

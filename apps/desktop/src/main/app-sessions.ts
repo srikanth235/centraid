@@ -21,9 +21,18 @@
  */
 
 import path from 'node:path';
+import { mkdir, stat } from 'node:fs/promises';
 import { openSession, closeSession } from './apps-store-client.js';
 import { gatewayCodeStoreDir } from './gateway-paths.js';
 import { loadSettings } from './settings.js';
+
+async function dirExists(p: string): Promise<boolean> {
+  try {
+    return (await stat(p)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /** appId → open session id (resolves once the open round-trip lands). */
 const sessions = new Map<string, Promise<string>>();
@@ -140,4 +149,34 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
     'apps',
     appId,
   );
+}
+
+/**
+ * Absolute path to reveal in Finder for an app — a directory guaranteed to
+ * exist. Prefers the live published code at
+ * `<code-store>/active-main/apps/<id>` (stable across launches, always
+ * materialized once the app is published) and only falls back to opening an
+ * editing-session worktree for a draft that isn't on `main` yet. The old
+ * reveal handler jumped straight to the session-worktree path, which is
+ * created lazily by the builder — so for any app the user hadn't edited it
+ * pointed at a non-existent directory and `shell.openPath` silently no-op'd.
+ * Requires a local gateway (remote gateways expose no worktree on disk).
+ */
+export async function resolveAppRevealDir(appId: string): Promise<string> {
+  await assertActiveGatewayLocal(`revealing app "${appId}"`);
+  const settings = await loadSettings();
+  const liveDir = path.join(
+    gatewayCodeStoreDir(settings.activeGatewayId),
+    'active-main',
+    'apps',
+    appId,
+  );
+  if (await dirExists(liveDir)) return liveDir;
+  // Not on `main` (a draft) — materialize/open its editing session and reveal
+  // that. `mkdir` guarantees the folder exists even for a brand-new draft the
+  // builder hasn't written into yet, so reveal opens a real (if empty) folder
+  // instead of failing.
+  const sessionDir = await ensureAppSessionDir(appId);
+  await mkdir(sessionDir, { recursive: true });
+  return sessionDir;
 }

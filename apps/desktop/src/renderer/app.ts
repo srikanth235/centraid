@@ -779,6 +779,21 @@ import { createAppViewModule } from './app-appview.js';
   async function hydrateDrafts(): Promise<void> {
     try {
       const projs = await listApps();
+      // Reconcile home pins against the store's source of truth. A
+      // `userApps` entry is only minted after a successful publish (see
+      // `onAddToHome`), so every pin should correspond to an app on `main`.
+      // If it no longer does — the app was deleted out-of-band, its code
+      // store was wiped, or a UI delete failed to drop the pin — prune the
+      // orphan so ghost tiles can't linger on home. Match on either the tile
+      // id or its `centraidAppId` (they're equal today, but keep both robust).
+      const liveIds = new Set(projs.map((p) => p.id));
+      const reconciled = userApps.filter(
+        (a) => liveIds.has(a.id) || (a.centraidAppId != null && liveIds.has(a.centraidAppId)),
+      );
+      if (reconciled.length !== userApps.length) {
+        userApps = reconciled;
+        persist();
+      }
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
         .filter((p) => p.kind !== 'automation')
