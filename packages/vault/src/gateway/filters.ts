@@ -95,6 +95,27 @@ function toParam(value: unknown): string | number {
 }
 
 /**
+ * Compile a caller's ordering to an ORDER BY fragment ('' when absent).
+ * Same discipline as filters: the column must be a real column of the
+ * table, the direction one of two literals — no caller string reaches SQL.
+ */
+export function compileOrderBy(
+  db: DatabaseSync,
+  physical: string,
+  orderBy: { column: string; dir?: 'asc' | 'desc' } | undefined,
+): string {
+  if (!orderBy) return '';
+  if (!tableColumns(db, physical).has(orderBy.column)) {
+    throw new Error(`unknown order column "${orderBy.column}" on ${physical}`);
+  }
+  const dir = orderBy.dir ?? 'asc';
+  if (dir !== 'asc' && dir !== 'desc') {
+    throw new Error(`unknown order direction "${String(dir)}"`);
+  }
+  return ` ORDER BY "${orderBy.column}" ${dir === 'desc' ? 'DESC' : 'ASC'}`;
+}
+
+/**
  * Column allow-list from consent.grant_scope.field_mask_json — minimization
  * by default (§03). Returns the SELECT list; a mask never widens past real
  * columns, and an empty intersection fails closed.

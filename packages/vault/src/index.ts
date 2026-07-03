@@ -25,6 +25,7 @@ export type {
   Identity,
   Risk,
   FilterClause,
+  OrderBy,
   ReadRequest,
   ReadResult,
   SearchRequest,

@@ -53,11 +53,28 @@ export interface FilterClause {
   value?: unknown;
 }
 
+/**
+ * Deterministic ordering for a read. The column is validated against the
+ * table's real columns (the same allow-list discipline as FilterClause) —
+ * caller strings never become SQL text. PKs are UUIDv7, so ordering by an
+ * id column IS time order on tables that carry no timestamp.
+ */
+export interface OrderBy {
+  column: string;
+  /** Default `asc`. */
+  dir?: 'asc' | 'desc';
+}
+
 export interface ReadRequest {
   /** Logical entity, e.g. `core.event`. */
   entity: string;
   /** Caller-supplied filter, ANDed with the grant's row filter. */
   where?: FilterClause[];
+  /**
+   * With `limit`, this is what makes a bounded window a RECENT window —
+   * an unordered LIMIT picks arbitrary rows.
+   */
+  orderBy?: OrderBy;
   limit?: number;
   /** Declared DPV purpose, e.g. `dpv:ServiceProvision`. */
   purpose: string;

@@ -24,7 +24,7 @@ import {
   runContractAndExecute,
   setInvocationStatus,
 } from './execution.js';
-import { applyFieldMask, compileFilters } from './filters.js';
+import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
 import { authenticate } from './identity.js';
 import { searchEntity } from './search.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
@@ -190,11 +190,14 @@ export class Gateway {
       now,
     );
     const callerFilter = compileFilters(target, ref.physical, request.where ?? [], now);
+    // Ordering is what turns a bounded read into a RECENT window (issue
+    // #262) — validated like a filter column, so it can't widen anything.
+    const order = compileOrderBy(target, ref.physical, request.orderBy);
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
     const rows = target
       .prepare(
-        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where} LIMIT ${limit}`,
+        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${order} LIMIT ${limit}`,
       )
       .all(...grantFilter.params, ...callerFilter.params) as Record<string, unknown>[];
     const receiptId = writeReceipt(this.db.journal, {
