@@ -20,7 +20,7 @@
  * journal feed) are agent-plane ops — automation bridges implement them;
  * app bridges may reject them.
  */
-export type VaultOp = 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+export type VaultOp = 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

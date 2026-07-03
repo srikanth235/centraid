@@ -63,6 +63,7 @@ import {
   type ReadRequest,
   type RevocationResult,
   type ScopeSpec,
+  type SearchRequest,
   type SweepResult,
   type VaultDb,
 } from '@centraid/vault';
@@ -319,6 +320,8 @@ export class VaultPlane {
         switch (call.op) {
           case 'read':
             return this.gateway.read(cred, call.payload as unknown as ReadRequest);
+          case 'search':
+            return this.gateway.search(cred, call.payload as unknown as SearchRequest);
           case 'invoke':
             return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
           case 'query':
@@ -376,6 +379,8 @@ export class VaultPlane {
         switch (call.op) {
           case 'read':
             return this.gateway.read(cred, call.payload as unknown as ReadRequest);
+          case 'search':
+            return this.gateway.search(cred, call.payload as unknown as SearchRequest);
           case 'invoke':
             return this.gateway.invoke(cred, call.payload as unknown as InvokeRequest);
           case 'describe':
