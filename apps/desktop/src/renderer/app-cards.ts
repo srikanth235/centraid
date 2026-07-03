@@ -16,7 +16,7 @@ import {
   listTemplates,
   updateAppMeta,
 } from './gateway-client.js';
-import { colorForIcon, isAutomationTemplate, relativeTime } from './app-format.js';
+import { inferAppVisual, isAutomationTemplate, relativeTime } from './app-format.js';
 import { APP_BADGE_SVG } from './app-glyphs.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
@@ -66,6 +66,7 @@ export interface CardsModule {
     appId: string;
     versionId?: string;
     color?: ColorHexType;
+    colorKey?: ColorKeyType;
     iconKey?: IconNameType;
   }): UserAppMeta;
   syncUserAppMeta(input: { appId: string; name?: string; description?: string }): void;
@@ -922,50 +923,17 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
   }
 
   // ---------- Add to home ----------
-  const ICON_KEYS_POOL: IconNameType[] = [
-    'Todo',
-    'Habit',
-    'Journal',
-    'Pomodoro',
-    'Plant',
-    'Water',
-    'Gift',
-    'Mood',
-  ];
 
+  // Prompt inference moved to app-format.ts (issue #263) so the builder's
+  // create flow stamps the same identity into the scaffolded app.json —
+  // this wrapper keeps the CardsModule surface stable.
   function inferAppMeta(prompt: string): {
     iconKey: IconNameType;
     color: ColorHexType;
     name: string;
   } {
-    const p = prompt.toLowerCase();
-    const map: [IconNameType, RegExp][] = [
-      ['Todo', /\b(todo|to-do|task|grocery|list|shopping)\b/],
-      ['Habit', /\b(habit|streak|daily)\b/],
-      ['Journal', /\b(journal|diary|note|writing|log|read|reading)\b/],
-      ['Pomodoro', /\b(pomodoro|timer|focus|work\s*block)\b/],
-      ['Plant', /\b(plant|water|garden)\b/],
-      ['Water', /\b(hydrate|water|cup|drink)\b/],
-      ['Gift', /\b(gift|present|idea|wish)\b/],
-      ['Mood', /\b(mood|feel|emotion|check[- ]?in)\b/],
-    ];
-    let iconKey: IconNameType =
-      ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo';
-    for (const [k, re] of map) {
-      if (re.test(p)) {
-        iconKey = k;
-        break;
-      }
-    }
-    // Colour is derived from the icon, not random — matches the design's
-    // fixture (Todos always indigo, Habits always rose, etc.). If no prompt
-    // keywords hit, `iconKey` falls back to a random pool entry; that entry
-    // still has a canonical colour via colorForIcon().
-    const color = colorForIcon(iconKey);
-    const cleaned = prompt.replace(/^\s*(a|an)\s+/i, '').trim();
-    const words = cleaned.split(/\s+/).slice(0, 3).join(' ');
-    const name = words.charAt(0).toUpperCase() + words.slice(1);
-    return { color, iconKey, name: name || 'New app' };
+    const { iconKey, color, name } = inferAppVisual(prompt);
+    return { iconKey, color, name };
   }
 
   function addUserApp(input: {
@@ -978,9 +946,10 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     appId: string;
     versionId?: string;
     color?: ColorHexType;
+    colorKey?: ColorKeyType;
     iconKey?: IconNameType;
   }): UserAppMeta {
-    const meta = inferAppMeta(input.prompt || '');
+    const meta = inferAppVisual(input.prompt || '');
     const id = input.appId;
 
     const existing = getUserApps().find((a) => a.id === id);
@@ -999,7 +968,9 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     const stampIso = new Date().toISOString();
     const newApp: UserAppMeta = {
       color: input.color || meta.color,
-      colorKey: 'violet',
+      // The inferred (or caller-provided) hue key — was hardcoded 'violet'
+      // pre-#263, which desynced the stored key from the rendered color.
+      colorKey: input.colorKey || meta.colorKey,
       createdAt: stampIso,
       desc: input.prompt && input.prompt.length <= 60 ? input.prompt : 'Built with Centraid.',
       iconKey: input.iconKey || meta.iconKey,

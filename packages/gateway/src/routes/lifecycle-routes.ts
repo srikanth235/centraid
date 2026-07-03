@@ -13,7 +13,7 @@
 // handlers keep their own routes):
 //
 //   POST   /centraid/_apps                     scaffold a blank app
-//          body {id, name?, version?, publish?}
+//          body {id, name?, version?, iconKey?, colorKey?, publish?}
 //   POST   /centraid/_apps/_clone              clone a bundled template
 //          body {templateId, sessionId?, publish?}
 //   POST   /centraid/_apps/<id>/meta           edit name/description
@@ -51,6 +51,7 @@ import {
   scaffoldAppFiles,
   suggestCloneIdentityFrom,
   updateAppMetaFiles,
+  type ScaffoldAppOpts,
   type ScaffoldFile,
 } from '@centraid/blueprints';
 import { provisionPendingWebhooksInFiles } from '@centraid/automation';
@@ -127,6 +128,13 @@ async function handleCreate(
   if (!id) return sendJson(res, 400, { error: 'bad_request', message: 'create needs { id }' });
   const name = typeof body.name === 'string' ? body.name : undefined;
   const version = typeof body.version === 'string' ? body.version : undefined;
+  // Tile identity (issue #263) — pass-through strings from the renderer's
+  // prompt inference; scaffoldAppFiles defaults to Sparkle/violet when
+  // omitted. Typed as the design-tokens keys downstream, so cast here.
+  const iconKey =
+    typeof body.iconKey === 'string' ? (body.iconKey as ScaffoldAppOpts['iconKey']) : undefined;
+  const colorKey =
+    typeof body.colorKey === 'string' ? (body.colorKey as ScaffoldAppOpts['colorKey']) : undefined;
   const publish = body.publish === true;
   const explicitSession =
     typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
@@ -144,6 +152,8 @@ async function handleCreate(
   const files = scaffoldAppFiles(id, {
     ...(name !== undefined ? { name } : {}),
     ...(version !== undefined ? { version } : {}),
+    ...(iconKey !== undefined ? { iconKey } : {}),
+    ...(colorKey !== undefined ? { colorKey } : {}),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -191,6 +201,11 @@ async function handleClone(
     templateFiles,
     newName,
     newDesc: tmpl.desc,
+    // Catalog tile identity (issue #263) — backfills app.json when the
+    // template's own copy predates the keys; an app.json that already
+    // declares them wins inside cloneTemplateFiles.
+    iconKey: tmpl.iconKey,
+    colorKey: tmpl.colorKey,
   });
 
   // Mint any pending webhook triggers (automation templates ship

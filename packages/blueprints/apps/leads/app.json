@@ -4,6 +4,8 @@
   "name": "Leads",
   "description": "A lightweight CRM as a projection of the personal vault: leads are business.client rows whose lead \u2192 active \u2192 past lifecycle IS the pipeline. Names come from core.party, running notes from social.contact_card, and files (a proposal, a brief) attach per lead. Prospects are enrolled from the vault's existing people or minted on the spot through core.add_party and enrolled in one flow; creating, enrolling, advancing and noting all run through typed vault commands \u2014 consent-checked and receipted. No data of its own \u2014 revoke the grant and the app goes dark.",
   "version": "0.3.0",
+  "iconKey": "Users",
+  "colorKey": "rose",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Shows your prospect pipeline and lets you enrol, advance and note leads.",

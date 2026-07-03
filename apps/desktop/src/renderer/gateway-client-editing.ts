@@ -237,6 +237,10 @@ export async function createApp(input: {
   id: string;
   name?: string;
   version?: string;
+  /** Tile identity stamped into the scaffold's `app.json` (issue #263);
+   *  the gateway defaults to Sparkle/violet when omitted. */
+  iconKey?: string;
+  colorKey?: string;
 }): Promise<{ id: string; name?: string; kind?: 'app' | 'automation' }> {
   const sessionId = await ensureAppSession(input.id);
   const { baseUrl, token } = await auth();

@@ -4,6 +4,8 @@
   "name": "Budgets",
   "description": "YNAB-style money view as a pure projection of the personal vault: transactions and accounts from core, budget caps from finance. Budgets and progress are projections, never stored here, and amounts are unreachable by construction — every command is classification only. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.4.0",
+  "iconKey": "Coin",
+  "colorKey": "amber",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Categorizes spending and tracks budgets over the vault's canonical transactions.",

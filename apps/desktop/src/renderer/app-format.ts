@@ -23,16 +23,88 @@ const CANONICAL_ICON_COLOR_KEY: Record<string, ColorKeyType> = {
   Water: 'teal',
 };
 
+export function colorKeyForIcon(iconKey: IconNameType | string): ColorKeyType {
+  return CANONICAL_ICON_COLOR_KEY[iconKey] ?? 'violet';
+}
+
 export function colorForIcon(iconKey: IconNameType | string): ColorHexType {
-  const key = CANONICAL_ICON_COLOR_KEY[iconKey];
-  if (key) {
-    const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[key];
-    if (c) return c;
+  const c = (ICON_PALETTE as unknown as Record<string, ColorHexType>)[colorKeyForIcon(iconKey)];
+  return c ?? ('#7C5BD9' as ColorHexType);
+}
+
+/**
+ * Resolve a home tile's visual identity from a gateway listing row's
+ * `app.json` keys (issue #263). Raw pass-through strings from the wire —
+ * validate against the Icon registry / palette before trusting them.
+ * Returns `null` when neither key resolves, so callers fall back to the
+ * legacy stored UserAppMeta / inference chain.
+ */
+export function tileVisualFromListing(row: {
+  iconKey?: string;
+  colorKey?: string;
+}): { iconKey: IconNameType; colorKey: ColorKeyType; color: ColorHexType } | null {
+  const iconOk = !!row.iconKey && !!(Icon as Record<string, unknown>)[row.iconKey];
+  const palette = ICON_PALETTE as unknown as Record<string, ColorHexType>;
+  const colorOk = !!row.colorKey && !!palette[row.colorKey];
+  if (!iconOk && !colorOk) return null;
+  const iconKey = (iconOk ? row.iconKey : 'Sparkle') as IconNameType;
+  const colorKey = (colorOk ? row.colorKey : colorKeyForIcon(iconKey)) as ColorKeyType;
+  return { iconKey, colorKey, color: palette[colorKey] ?? colorForIcon(iconKey) };
+}
+
+// Prompt-keyword icon inference for freshly generated apps. The pool is
+// the canonical set above; colour follows the icon (never random) so the
+// same kind of app always lands with the same identity.
+const ICON_KEYS_POOL: IconNameType[] = [
+  'Todo',
+  'Habit',
+  'Journal',
+  'Pomodoro',
+  'Plant',
+  'Water',
+  'Gift',
+  'Mood',
+];
+
+/**
+ * Infer a new app's tile identity + short display name from its build
+ * prompt. Lifted out of the cards module (issue #263) so the builder's
+ * create flow can stamp the same inference into the scaffolded app.json.
+ */
+export function inferAppVisual(prompt: string): {
+  iconKey: IconNameType;
+  colorKey: ColorKeyType;
+  color: ColorHexType;
+  name: string;
+} {
+  const p = prompt.toLowerCase();
+  const map: [IconNameType, RegExp][] = [
+    ['Todo', /\b(todo|to-do|task|grocery|list|shopping)\b/],
+    ['Habit', /\b(habit|streak|daily)\b/],
+    ['Journal', /\b(journal|diary|note|writing|log|read|reading)\b/],
+    ['Pomodoro', /\b(pomodoro|timer|focus|work\s*block)\b/],
+    ['Plant', /\b(plant|water|garden)\b/],
+    ['Water', /\b(hydrate|water|cup|drink)\b/],
+    ['Gift', /\b(gift|present|idea|wish)\b/],
+    ['Mood', /\b(mood|feel|emotion|check[- ]?in)\b/],
+  ];
+  let iconKey: IconNameType =
+    ICON_KEYS_POOL[Math.floor(Math.random() * ICON_KEYS_POOL.length)] ?? 'Todo';
+  for (const [k, re] of map) {
+    if (re.test(p)) {
+      iconKey = k;
+      break;
+    }
   }
-  return (
-    (ICON_PALETTE as unknown as Record<string, ColorHexType>)['violet'] ??
-    ('#7C5BD9' as ColorHexType)
-  );
+  // Colour is derived from the icon, not random — matches the design's
+  // fixture (Todos always indigo, Habits always rose, etc.). If no prompt
+  // keywords hit, `iconKey` falls back to a random pool entry; that entry
+  // still has a canonical colour via colorKeyForIcon().
+  const colorKey = colorKeyForIcon(iconKey);
+  const cleaned = prompt.replace(/^\s*(a|an)\s+/i, '').trim();
+  const words = cleaned.split(/\s+/).slice(0, 3).join(' ');
+  const name = words.charAt(0).toUpperCase() + words.slice(1);
+  return { iconKey, colorKey, color: colorForIcon(iconKey), name: name || 'New app' };
 }
 
 // "X ago" relative-time formatter. Mirrors builder.ts:relativeWhen, but

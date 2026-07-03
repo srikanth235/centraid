@@ -9,6 +9,19 @@
 // and local-date formatting, letter avatars, and small SVG charts. App
 // logic stays in each app.js.
 
+// ---------- Native haptics (feature-detected, best-effort) ----------
+
+// The mobile shell exposes `window.centraid.haptic.*` on its native bridge;
+// the desktop iframe has no such surface. Feature-detect and swallow every
+// failure so the kit behaves identically wherever the app renders.
+function haptic(kind) {
+  try {
+    window.centraid?.haptic?.[kind]?.();
+  } catch {
+    /* bridge absent or refused — visual feedback already covers it */
+  }
+}
+
 // ---------- Toasts (the one feedback channel that follows the user) ----------
 
 let toastHost = null;
@@ -29,6 +42,7 @@ function ensureToastHost() {
  *  - duration: ms before auto-dismiss (default 5000; sticky if 0).
  */
 export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
+  haptic('success');
   const host = ensureToastHost();
   const el = document.createElement('div');
   el.className = 'kit-toast';
@@ -112,6 +126,7 @@ export function armConfirm(btn, { armedLabel = 'Sure?', timeout = 3000 } = {}) {
     btn.textContent = btn.dataset.kitLabel ?? btn.textContent;
     return true;
   }
+  haptic('selection');
   btn.dataset.kitArmed = 'true';
   btn.dataset.kitLabel = btn.textContent;
   btn.textContent = armedLabel;

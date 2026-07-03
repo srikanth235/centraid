@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit renderer HTTP-client hub pending split per-surface (apps, templates, vault, automations) once the thin-client surface stabilizes
 /*
  * Renderer-side HTTP client for the gateway's runtime/data plane.
  *
@@ -119,6 +120,10 @@ export interface AppMetaEntry {
   description?: string;
   kind?: 'app' | 'automation';
   hasIndex: boolean;
+  /** Tile identity from `app.json` (issue #263) — raw strings; validate
+   *  against the design-tokens sets before rendering. */
+  iconKey?: string;
+  colorKey?: string;
 }
 
 /**

@@ -22,12 +22,15 @@
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
-    "@centraid/gateway": "workspace:*"
+    "@centraid/gateway": "workspace:*",
+    "@centraid/tunnel": "workspace:*",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@centraid/tsconfig": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
     "electron": "^37.0.0",
     "typescript": "catalog:"
   }

@@ -40,6 +40,20 @@ describe('scaffoldAppFiles', () => {
   it('rejects an invalid id', () => {
     expect(() => scaffoldAppFiles('_bad')).toThrow(/Invalid app id/);
   });
+
+  it('stamps the default tile identity (Sparkle on violet) into app.json', () => {
+    const files = byPath(scaffoldAppFiles('todos'));
+    const appJson = JSON.parse(files.get('app.json')!) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Sparkle');
+    expect(appJson.colorKey).toBe('violet');
+  });
+
+  it('stamps an explicit tile identity into app.json', () => {
+    const files = byPath(scaffoldAppFiles('todos', { iconKey: 'Todo', colorKey: 'indigo' }));
+    const appJson = JSON.parse(files.get('app.json')!) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Todo');
+    expect(appJson.colorKey).toBe('indigo');
+  });
 });
 
 describe('updateAppMetaFiles', () => {
@@ -141,5 +155,43 @@ describe('cloneTemplateFiles', () => {
   it('seeds an automations brief when the template has none', () => {
     const out = byPath(cloneTemplateFiles({ newAppId: 'hydrate-2', templateFiles: template() }));
     expect(out.has('automations/README.md')).toBeTruthy();
+  });
+
+  it('backfills the catalog tile identity when the template app.json lacks it', () => {
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: 'hydrate-2',
+        templateFiles: template(),
+        iconKey: 'Water',
+        colorKey: 'teal',
+      }),
+    );
+    const appJson = JSON.parse(out.get('app.json')!) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Water');
+    expect(appJson.colorKey).toBe('teal');
+  });
+
+  it('keeps the template app.json tile identity over the catalog entry', () => {
+    const tmpl = template();
+    tmpl[0] = {
+      path: 'app.json',
+      content:
+        JSON.stringify(
+          { id: 'hydrate', name: 'Hydrate', version: '2.0.0', iconKey: 'Water', colorKey: 'teal' },
+          null,
+          2,
+        ) + '\n',
+    };
+    const out = byPath(
+      cloneTemplateFiles({
+        newAppId: 'hydrate-2',
+        templateFiles: tmpl,
+        iconKey: 'Sparkle',
+        colorKey: 'violet',
+      }),
+    );
+    const appJson = JSON.parse(out.get('app.json')!) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Water');
+    expect(appJson.colorKey).toBe('teal');
   });
 });

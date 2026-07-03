@@ -5,6 +5,7 @@
 // drives shell-owned state (prefs, profiles, the live sidebar setter) through
 // the ShellContext accessors.
 import { getAgentsStatus, getUserPrefs, saveUserPrefs } from './gateway-client.js';
+import { renderPhonePage } from './app-phone.js';
 import { renderVaultsPage } from './app-vaults.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
@@ -76,6 +77,7 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       | 'workspace'
       | 'profiles'
       | 'vaults'
+      | 'phone'
       | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
@@ -83,6 +85,7 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       workspace: el('div', { class: 'cd-settings-page' }),
       profiles: el('div', { class: 'cd-settings-page' }),
       vaults: el('div', { class: 'cd-settings-page' }),
+      phone: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
     };
 
@@ -760,6 +763,13 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     const vaultsHost = el('div', { class: 'cd-vaults-page' });
     pageHosts.vaults.append(drawerGroup('Vaults', [vaultsHost]));
 
+    // Phone (issue #263) — the "Connect phone" pairing QR + paired-device
+    // allowlist over the iroh tunnel. Rendered on page SHOW like Vaults:
+    // it fetches status each time, so revocations/pairings made elsewhere
+    // (another window) show up on re-entry.
+    const phoneHost = el('div', { class: 'cd-phone-page' });
+    pageHosts.phone.append(drawerGroup('Phone', [phoneHost]));
+
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
     // label + optional mono hint — sits beside a scrolling content pane
@@ -809,6 +819,14 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
         icon: 'Key',
         subtitle:
           'Your personal vaults on this gateway. Apps and automations act on the active vault — access stays deny-by-default per vault until you grant it.',
+      },
+      {
+        id: 'phone',
+        label: 'Phone',
+        section: 'Account',
+        icon: 'Phone',
+        subtitle:
+          'Use your published apps from your phone — anywhere, over an end-to-end encrypted tunnel. Pair with a one-time QR; revoke a device any time.',
       },
       {
         id: 'providers',
@@ -862,6 +880,7 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       // (renderVaultsPage no-ops on a detached one), and re-showing picks up
       // registry changes made elsewhere (another window, the gateway CLI).
       if (id === 'vaults') void renderVaultsPage({ el, host: vaultsHost, showToast });
+      if (id === 'phone') void renderPhonePage({ el, host: phoneHost, showToast });
     };
     let lastSection = '';
     for (const p of settingsPages) {

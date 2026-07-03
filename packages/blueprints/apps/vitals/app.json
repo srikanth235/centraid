@@ -4,6 +4,8 @@
   "name": "Vitals",
   "description": "Apple Health–style vitals as a projection of the personal vault: every reading IS a core.observation row with a health.vital extension, logged and summarized through consent-checked typed commands. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.3.0",
+  "iconKey": "Activity",
+  "colorKey": "rose",
   "vault": {
     "purpose": "dpv:HealthMonitoring",
     "why": "Logs and charts your vital readings through the vault's typed commands.",

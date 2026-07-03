@@ -4,6 +4,8 @@
   "name": "Threads",
   "description": "Your message history as a projection of the personal vault: threads and messages are canonical social rows, bodies are content items. Sending is the consent model's showcase — a send parks until the owner explicitly confirms it. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.4.0",
+  "iconKey": "Send",
+  "colorKey": "indigo",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Reads your message threads and drafts replies; every send waits for your confirmation.",

@@ -103,18 +103,27 @@ test('cloning a template over HTTP publishes a plain-slug automation app with a 
     newAppId: 'inbound-2',
     templateFiles: templateFiles(),
     newName: 'Inbound 2',
+    // The catalog entry's tile identity backfills app.json (issue #263) —
+    // the template's own copy predates the keys.
+    iconKey: 'Sparkle',
+    colorKey: 'rose',
   });
-  // app.json carries the new id + name + version reset, kind preserved.
+  // app.json carries the new id + name + version reset, kind preserved,
+  // and the catalog tile identity backfilled.
   const appJson = JSON.parse(cloned.find((f) => f.path === 'app.json')!.content) as {
     id: string;
     name: string;
     version: string;
     kind: string;
+    iconKey: string;
+    colorKey: string;
   };
   expect(appJson.id).toBe('inbound-2');
   expect(appJson.name).toBe('Inbound 2');
   expect(appJson.version).toBe('0.1.0');
   expect(appJson.kind).toBe('automation');
+  expect(appJson.iconKey).toBe('Sparkle');
+  expect(appJson.colorKey).toBe('rose');
 
   // 2. Provision the pending webhook (secret minted here; only its hash is
   //    written into the manifest).
@@ -148,12 +157,20 @@ test('cloning a template over HTTP publishes a plain-slug automation app with a 
   });
   expect(pub.status).toBe(201);
 
-  // 4. The cloned app is on `main` with its kind surfaced in the list.
+  // 4. The cloned app is on `main` with its kind + tile identity surfaced
+  //    in the list.
   const listRes = await fetch(`${handle.url}/centraid/_apps`, { headers: auth() });
-  const list = (await listRes.json()) as Array<{ id: string; kind?: string }>;
+  const list = (await listRes.json()) as Array<{
+    id: string;
+    kind?: string;
+    iconKey?: string;
+    colorKey?: string;
+  }>;
   const row = list.find((a) => a.id === 'inbound-2');
   expect(row).toBeTruthy();
   expect(row!.kind).toBe('automation');
+  expect(row!.iconKey).toBe('Sparkle');
+  expect(row!.colorKey).toBe('rose');
 
   // 5. The published manifest carries a provisioned webhook — hashed
   //    secret, no plaintext, no lingering `pending` flag.

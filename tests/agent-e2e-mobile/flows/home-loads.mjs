@@ -12,9 +12,10 @@ await runFlow('home-loads', async (ctx) => {
     clearState: true
 - extendedWaitUntil:
     visible:
-      text: "Open Settings"
+      text: "Pair with your desktop"
     timeout: 30000
 - takeScreenshot: home-fresh
+- assertVisible: "Pair with your desktop"
 - assertVisible: "Open Settings"
 - assertVisible: "Connect to your desktop."
 `,

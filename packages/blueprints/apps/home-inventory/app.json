@@ -4,6 +4,8 @@
   "name": "Home inventory",
   "description": "What you own, where it lives, what it's worth, and what it's covered by — a projection of the vault's home domain. Adding, editing, disposing, covering and marking maintenance done all run through the home domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the inventory stays the owner's.",
   "version": "0.4.0",
+  "iconKey": "Home",
+  "colorKey": "slate",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your home inventory, warranties, and upcoming maintenance.",

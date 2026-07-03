@@ -39,6 +39,7 @@ TARGETS=(
   packages/gateway
   packages/openclaw-plugin
   packages/skills
+  packages/tunnel
   apps/desktop
   apps/mobile
 )

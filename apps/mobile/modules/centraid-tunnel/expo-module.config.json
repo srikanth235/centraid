@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["CentraidTunnelModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.centraidtunnel.CentraidTunnelModule"]
+  }
+}

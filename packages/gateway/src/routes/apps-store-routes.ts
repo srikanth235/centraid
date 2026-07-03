@@ -10,7 +10,7 @@
 // from the legacy upload routes app-engine still owns):
 //
 //   GET    /centraid/_apps                           list apps + metadata
-//          → { apps: [{id, name?, description?, hasIndex}] }
+//          → { apps: [{id, name?, description?, hasIndex, iconKey?, colorKey?}] }
 //   POST   /centraid/_apps/_sessions                 open a session
 //          → { sessionId }
 //   DELETE /centraid/_apps/_sessions/<id>            close a session
@@ -106,8 +106,9 @@ export function makeAppsStoreRouteHandler(
       // ---- collection-level: GET /_apps (list with metadata) ----
       // Shadows app-engine's legacy registry-list route and returns
       // the same flat-array shape, extended with `name`, `description`,
-      // and `hasIndex` so the desktop home shelf doesn't need a
-      // workspaceDir scan to render tiles.
+      // `hasIndex`, and the app.json tile identity (`iconKey`/`colorKey`,
+      // issue #263) so the home shelves render tiles without a
+      // workspaceDir scan or a per-device metadata shim.
       if (segments.length === 1 && method === 'GET') {
         const apps = await store.listAppsWithMeta();
         sendJson(res, 200, apps);

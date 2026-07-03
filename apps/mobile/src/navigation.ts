@@ -7,6 +7,7 @@ export type RootStackParamList = {
   Home: undefined;
   AppDetail: { appId: string };
   Settings: undefined;
+  Approvals: undefined;
   MobileFallback: undefined;
 };
 

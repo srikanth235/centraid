@@ -22,6 +22,12 @@ import { resetConversationHistoryAuthCache } from './conversation-history-client
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
 import { resetAppsStoreAuthCache } from './apps-store-client.js';
 import { resolveAppRevealDir, resetAppSessions } from './app-sessions.js';
+import {
+  beginPhonePairing,
+  cancelPhonePairing,
+  phoneLinkStatus,
+  revokePhoneDevice,
+} from './phone-link.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -78,6 +84,15 @@ export const Channel = {
   // still owns where the token lives (keychain-backed settings); this is
   // the single point where it crosses to the renderer.
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
+
+  // Phone link (issue #263): the iroh tunnel that lets the mobile app reach
+  // this desktop's loopback gateway from anywhere. Pairing is a one-time
+  // QR code; paired devices are EndpointId-keyed and revocable.
+  PHONE_STATUS: 'centraid:phone:status',
+  PHONE_BEGIN_PAIRING: 'centraid:phone:begin-pairing',
+  PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
+  PHONE_REVOKE: 'centraid:phone:revoke',
+  PHONE_PAIRED: 'centraid:phone:paired',
 
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
@@ -353,6 +368,22 @@ export function registerIpcHandlers(): void {
   // pure git-store tag reads + a forward-only rollback POST, no main-side
   // state. APP_LIVE_URL / APP_SCHEMA / APP_TABLE_ROWS / APP_QUERY /
   // APP_LOGS / APPS_DEREGISTER moved there too.
+
+  // ----- Phone link (issue #263) -----
+  // The tunnel endpoint + device allowlist live in main (they hold the
+  // persistent endpoint key and must outlive renderer reloads); the
+  // Settings → Phone panel drives them through these four handlers and the
+  // PHONE_PAIRED broadcast (fired by phone-link.ts when a pairing lands).
+  ipcMain.handle(Channel.PHONE_STATUS, async () => phoneLinkStatus());
+  ipcMain.handle(Channel.PHONE_BEGIN_PAIRING, async () => beginPhonePairing());
+  ipcMain.handle(Channel.PHONE_CANCEL_PAIRING, async () => {
+    cancelPhonePairing();
+    return { ok: true as const };
+  });
+  ipcMain.handle(Channel.PHONE_REVOKE, async (_e, input: { deviceId: string }) => {
+    const removed = revokePhoneDevice(input.deviceId);
+    return { removed: Boolean(removed) };
+  });
 
   // ----- Templates -----
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
