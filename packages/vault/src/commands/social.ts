@@ -198,7 +198,9 @@ function draftMessage(ctx: HandlerCtx): Record<string, unknown> {
       )
       .run(threadId, input.channel ?? 'dm', input.subject ?? null, ctx.now);
     ctx.wrote('social.thread', threadId);
-    for (const partyId of [sender, input.recipient_party_id as string]) {
+    // A self-thread (owner messaging themselves — a note to self) is one
+    // participant, not a UNIQUE(thread_id, party_id) collision.
+    for (const partyId of new Set([sender, input.recipient_party_id as string])) {
       const tpId = ctx.newId();
       ctx.db
         .prepare(

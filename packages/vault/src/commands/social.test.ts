@@ -236,3 +236,28 @@ test('update_card upserts decoration without touching identity', () => {
   };
   expect(cards.n).toBe(1);
 });
+
+test('a self-thread (note to self) drafts with one participant and sends', () => {
+  const outcome = gw.invoke(owner, {
+    command: 'social.draft_message',
+    input: {
+      body_text: 'Buy stamps before Friday.',
+      recipient_party_id: boot.ownerPartyId,
+      channel: 'dm',
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  const output = (outcome as { output: { message_id: string; thread_id: string } }).output;
+  // The owner appears once — not a UNIQUE(thread_id, party_id) collision.
+  const participants = db.vault
+    .prepare('SELECT party_id FROM social_thread_participant WHERE thread_id = ?')
+    .all(output.thread_id) as { party_id: string }[];
+  expect(participants).toEqual([{ party_id: boot.ownerPartyId }]);
+  const sent = gw.invoke(owner, {
+    command: 'social.send_message',
+    input: { message_id: output.message_id },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(sent.status).toBe('executed');
+});

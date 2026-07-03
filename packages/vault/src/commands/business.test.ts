@@ -31,14 +31,25 @@ function invoke(command: string, input: Record<string, unknown>) {
   return gw.invoke(owner, { command, input, purpose: 'dpv:Billing' });
 }
 
-function expectExecuted(command: string, input: Record<string, unknown>): Record<string, any> {
+/** The draft-invoice output shape asserted across the invoice tests. */
+interface InvoiceDraft extends Record<string, unknown> {
+  invoice_id: string;
+  number: string;
+  total_minor: number;
+  line_count: number;
+}
+
+function expectExecuted<T extends Record<string, unknown> = Record<string, unknown>>(
+  command: string,
+  input: Record<string, unknown>,
+): T {
   const outcome = invoke(command, input);
   expect(outcome.status).toBe('executed');
-  return (outcome as { output: Record<string, any> }).output;
+  return (outcome as { output: T }).output;
 }
 
 function addClient(extra: Record<string, unknown> = {}): string {
-  return expectExecuted('business.add_client', {
+  return expectExecuted<{ client_id: string }>('business.add_client', {
     party_id: partyId,
     currency: 'EUR',
     default_rate_minor: 9000, // €90.00/h
@@ -47,11 +58,17 @@ function addClient(extra: Record<string, unknown> = {}): string {
 }
 
 function addProject(clientId: string, name = 'Website relaunch'): string {
-  return expectExecuted('business.add_project', { client_id: clientId, name }).project_id;
+  return expectExecuted<{ project_id: string }>('business.add_project', {
+    client_id: clientId,
+    name,
+  }).project_id;
 }
 
-function logTime(projectId: string, extra: Record<string, unknown> = {}): Record<string, any> {
-  return expectExecuted('business.log_time', {
+function logTime(
+  projectId: string,
+  extra: Record<string, unknown> = {},
+): { entry_id: string; activity_id: string } {
+  return expectExecuted<{ entry_id: string; activity_id: string }>('business.log_time', {
     project_id: projectId,
     started_at: '2026-07-01T09:00:00Z',
     ended_at: '2026-07-01T11:30:00Z', // 2.5h
@@ -80,9 +97,7 @@ function seedCreditTxn(amountMinor: number, currency = 'EUR'): string {
 
 test('add_client enrolls a party once; a second enrollment is refused', () => {
   const clientId = addClient();
-  const row = db.vault
-    .prepare('SELECT * FROM business_client WHERE client_id = ?')
-    .get(clientId);
+  const row = db.vault.prepare('SELECT * FROM business_client WHERE client_id = ?').get(clientId);
   expect(row).toMatchObject({
     party_id: partyId,
     status: 'active',
@@ -148,7 +163,7 @@ test('log_time lands a canonical work activity plus an unbilled entry with the c
 
 test('log_time refuses inactive projects and inverted intervals', () => {
   const clientId = addClient();
-  const proposed = expectExecuted('business.add_project', {
+  const proposed = expectExecuted<{ project_id: string }>('business.add_project', {
     client_id: clientId,
     name: 'Maybe later',
     status: 'proposed',
@@ -179,7 +194,7 @@ test('create_draft_invoice bills unbilled entries, totals reconcile, entries get
     started_at: '2026-07-02T09:00:00Z',
     ended_at: '2026-07-02T10:00:00Z', // 1h × €90 = €90.00
   });
-  const out = expectExecuted('business.create_draft_invoice', {
+  const out = expectExecuted<InvoiceDraft>('business.create_draft_invoice', {
     client_id: clientId,
     entry_ids: [e1.entry_id, e2.entry_id],
     due_on: '2099-08-01',
@@ -223,9 +238,9 @@ test('double-billing a time entry is a receipted refusal that rolls everything b
   expect(again.status).toBe('failed');
   if (again.status === 'failed') expect(again.reason).toContain('already invoiced');
   // The rolled-back attempt left no second invoice behind.
-  const invoices = db.vault
-    .prepare('SELECT count(*) AS n FROM business_invoice')
-    .get() as { n: number };
+  const invoices = db.vault.prepare('SELECT count(*) AS n FROM business_invoice').get() as {
+    n: number;
+  };
   expect(invoices.n).toBe(1);
 });
 
@@ -237,12 +252,12 @@ test('invoice numbers are sequential per year', () => {
     started_at: '2026-07-02T09:00:00Z',
     ended_at: '2026-07-02T10:00:00Z',
   });
-  const first = expectExecuted('business.create_draft_invoice', {
+  const first = expectExecuted<InvoiceDraft>('business.create_draft_invoice', {
     client_id: clientId,
     entry_ids: [e1.entry_id],
     due_on: '2099-08-01',
   });
-  const second = expectExecuted('business.create_draft_invoice', {
+  const second = expectExecuted<InvoiceDraft>('business.create_draft_invoice', {
     client_id: clientId,
     entry_ids: [e2.entry_id],
     due_on: '2099-08-01',
@@ -255,7 +270,7 @@ test('send_invoice moves draft → sent once; a second send is refused', () => {
   const clientId = addClient();
   const projectId = addProject(clientId);
   const e1 = logTime(projectId);
-  const { invoice_id } = expectExecuted('business.create_draft_invoice', {
+  const { invoice_id } = expectExecuted<InvoiceDraft>('business.create_draft_invoice', {
     client_id: clientId,
     entry_ids: [e1.entry_id],
     due_on: '2099-08-01',
@@ -271,11 +286,14 @@ test('mark_invoice_paid links a plausible posted credit and refuses implausible 
   const clientId = addClient();
   const projectId = addProject(clientId);
   const e1 = logTime(projectId); // €225.00
-  const { invoice_id, total_minor } = expectExecuted('business.create_draft_invoice', {
-    client_id: clientId,
-    entry_ids: [e1.entry_id],
-    due_on: '2099-08-01',
-  });
+  const { invoice_id, total_minor } = expectExecuted<InvoiceDraft>(
+    'business.create_draft_invoice',
+    {
+      client_id: clientId,
+      entry_ids: [e1.entry_id],
+      due_on: '2099-08-01',
+    },
+  );
 
   // Paying a draft is refused — only sent/overdue invoices settle.
   const tooEarly = invoke('business.mark_invoice_paid', {

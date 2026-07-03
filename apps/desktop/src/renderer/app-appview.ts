@@ -394,8 +394,10 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
   /** Hard-reload the app iframe — vault access just changed under it. */
   function reloadAppFrame(view: HTMLElement): void {
     const frame = view.querySelector<HTMLIFrameElement>('iframe[data-centraid-app]');
-    // Cross-origin frame: resetting `src` is the one reload we may do.
-    if (frame) frame.src = frame.src;
+    if (!frame) return;
+    // Cross-origin frame: re-setting `src` is the one reload we may do.
+    const src = frame.src;
+    frame.src = src;
   }
 
   function openAppSettings(
