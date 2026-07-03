@@ -17,6 +17,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunStreamEvent,
+  type VaultBridge,
 } from '@centraid/app-engine';
 import * as automation from '@centraid/automation';
 import type { RunnerKind } from '../types.js';
@@ -57,6 +58,11 @@ export interface RunAutomationOptions {
    * each finished run's summary to it (issue #98).
    */
   analytics?: AnalyticsStore;
+  /**
+   * Host-injected `ctx.vault` executor factory keyed by app id (duaility
+   * §12) — forwarded to the fire spine. Absent → `ctx.vault` fails closed.
+   */
+  vaultFor?: (appId: string) => VaultBridge | undefined;
   /** Which CLI to drive. Defaults to codex. */
   runner?: RunnerKind;
   /** Hard timeout. Defaults to 5 minutes. */
@@ -121,6 +127,7 @@ export async function runAutomation(
       appsDir: opts.appsDir,
       ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
       ...(opts.analytics ? { analytics: opts.analytics } : {}),
+      ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.onLog ? { onLog: opts.onLog } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),

@@ -52,6 +52,31 @@ export interface CostEstimate {
   readonly tokensPerFire: number;
 }
 
+/**
+ * One requested vault scope — the same grammar an app's `app.json` vault
+ * block uses. `schema` alone covers the whole domain; `table` narrows to a
+ * single entity or command name.
+ */
+export interface ManifestVaultScope {
+  readonly schema: string;
+  readonly table?: string;
+  readonly verbs: 'read' | 'read+act' | 'act';
+}
+
+/**
+ * The automation's requested vault access (duaility §12). Fires authenticate
+ * as an enrolled `agent.agent`; this block is a *request* the owner approves
+ * into a grant on the agent's party — never a grant by itself. Until
+ * approval every `ctx.vault` call is a receipted deny.
+ */
+export interface ManifestVault {
+  /** DPV purpose notation, e.g. `dpv:ServiceProvision`. */
+  readonly purpose: string;
+  /** Owner-facing one-liner: why this automation needs the access. */
+  readonly why?: string;
+  readonly scopes: readonly ManifestVaultScope[];
+}
+
 export interface GeneratedMeta {
   readonly by: string;
   readonly at: string;
@@ -148,6 +173,8 @@ export interface Manifest {
    */
   readonly triggers: readonly Trigger[];
   readonly requires: ManifestRequires;
+  /** Requested vault access — owner-approved into a grant on the automation's agent. */
+  readonly vault?: ManifestVault;
   /** App ids this automation is associated with. */
   readonly apps?: readonly string[];
   readonly costEstimate?: CostEstimate;
@@ -349,6 +376,54 @@ function validateRequires(raw: unknown): ManifestRequires {
   return requires;
 }
 
+const VAULT_VERBS = new Set(['read', 'read+act', 'act']);
+
+function validateVault(raw: unknown): ManifestVault | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ManifestError('invalid_field', 'manifest.vault must be an object', 'vault');
+  }
+  const v = raw as Record<string, unknown>;
+  const purpose = requireString(v.purpose, 'vault.purpose');
+  let why: string | undefined;
+  if (v.why !== undefined) {
+    if (typeof v.why !== 'string') {
+      throw new ManifestError('invalid_field', 'manifest.vault.why must be a string', 'vault.why');
+    }
+    why = v.why;
+  }
+  if (!Array.isArray(v.scopes) || v.scopes.length === 0) {
+    throw new ManifestError(
+      'invalid_field',
+      'manifest.vault.scopes must be a non-empty array',
+      'vault.scopes',
+    );
+  }
+  const scopes = v.scopes.map((raw, i) => {
+    const field = `vault.scopes[${i}]`;
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new ManifestError('invalid_field', `manifest.${field} must be an object`, field);
+    }
+    const s = raw as Record<string, unknown>;
+    const schema = requireString(s.schema, `${field}.schema`);
+    if (typeof s.verbs !== 'string' || !VAULT_VERBS.has(s.verbs)) {
+      throw new ManifestError(
+        'invalid_field',
+        `manifest.${field}.verbs must be "read" | "read+act" | "act"`,
+        `${field}.verbs`,
+      );
+    }
+    let table: string | undefined;
+    if (s.table !== undefined) table = requireString(s.table, `${field}.table`);
+    return {
+      schema,
+      ...(table !== undefined ? { table } : {}),
+      verbs: s.verbs as ManifestVaultScope['verbs'],
+    } satisfies ManifestVaultScope;
+  });
+  return { purpose, ...(why !== undefined ? { why } : {}), scopes };
+}
+
 function validateCostEstimate(raw: unknown): CostEstimate | undefined {
   if (raw === undefined) return undefined;
   if (raw === null || typeof raw !== 'object') {
@@ -429,6 +504,7 @@ export function validateManifest(raw: unknown): Manifest {
   const prompt = requireString(r.prompt, 'prompt');
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
+  const vault = validateVault(r.vault);
   const apps = optionalStringArray(r.apps, 'apps');
   const costEstimate = validateCostEstimate(r.costEstimate);
   const outputSchema = validateOutputSchema(r.outputSchema);
@@ -453,6 +529,7 @@ export function validateManifest(raw: unknown): Manifest {
     prompt,
     triggers,
     requires,
+    ...(vault ? { vault } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),
     ...(outputSchema ? { outputSchema } : {}),

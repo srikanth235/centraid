@@ -30,6 +30,8 @@ import {
   type AutomationTriggerOrigin,
   type TurnStreamEvent,
   type RunStreamEvent,
+  type VaultBridge,
+  type VaultOp,
 } from '@centraid/app-engine';
 import type { HistoryConfig, OutputSchema } from '../manifest/manifest.js';
 import { validateOutputAgainstSchema } from '../manifest/manifest-output.js';
@@ -45,6 +47,7 @@ import {
   handleAgentMessage,
   handleRunsMessage,
   handleStateMessage,
+  handleVaultMessage,
   type AuditState,
   type ToolCallWire,
 } from './ctx.js';
@@ -120,6 +123,12 @@ export interface RunHandlerOptions {
   /** Per-app conversation-ledger store for audit + ctx.state + ctx.runs. */
   runsStore: ConversationStore;
   /**
+   * Host-injected `ctx.vault` executor, bound to this automation's enrolled
+   * `agent.agent` credential (duaility §12). Absent → every `ctx.vault` call
+   * fails closed with `VAULT_UNAVAILABLE`.
+   */
+  vault?: VaultBridge;
+  /**
    * Live run-stream sink (issue #158). Receives `run.start` / `node.start` /
    * `node.end` / `run.end` as the run unfolds, alongside `onLog`. Wired by
    * the host to its `runId`-keyed bus; omit for a non-streamed fire (the
@@ -162,6 +171,7 @@ type WorkerToParentMessage =
       method: 'last' | 'list';
       filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
     }
+  | { type: 'vault'; id: number; op: VaultOp; payload: Record<string, unknown> }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -339,6 +349,12 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           type: 'runs-reply',
           id: msg.id,
           ...handleRunsMessage(audit, msg.method, msg.filter),
+        });
+        return;
+      }
+      if (msg.type === 'vault') {
+        void handleVaultMessage(audit, opts.vault, msg.op, msg.payload).then((reply) => {
+          send({ type: 'vault-reply', id: msg.id, ...reply });
         });
         return;
       }

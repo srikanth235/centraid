@@ -309,6 +309,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       do {
         reconcileDirty = false;
         const { rows } = await automation.list(schedulerCodeAppsDir());
+        // Every automation app acts through an enrolled agent.agent (duaility
+        // §12) — enroll identities as the desired set settles. Idempotent;
+        // grants stay owner-approved and deny-by-default.
+        if (vaultPlane) {
+          for (const appId of new Set(rows.map((r) => r.ownerApp))) {
+            try {
+              vaultPlane.enrollAutomationAgent(appId);
+            } catch (err) {
+              logger.warn(
+                `vault plane: agent enrollment for "${appId}" failed: ` +
+                  (err instanceof Error ? err.message : String(err)),
+              );
+            }
+          }
+        }
         const diff = await sched.reconcile(rows);
         if (diff.added.length || diff.updated.length || diff.removed.length) {
           logger.info(
@@ -565,6 +580,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               appsDir: paths.appsDir,
               codeAppsDir: codeAppsDir(),
               analytics: analyticsStore,
+              // Each fire's ctx.vault rides the automation's enrolled
+              // agent.agent credential, resolved per app id (duaility §12).
+              ...(vaultPlane
+                ? { vaultFor: (appId: string) => vaultPlane.agentBridgeFor(appId) }
+                : {}),
               runner: prefs?.kind ?? 'codex',
               triggerKind: opts.triggerKind,
               triggerOrigin: opts.triggerOrigin,

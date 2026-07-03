@@ -59,11 +59,18 @@ export {
   listActiveGrants,
   listEnrolledApps,
   markAppRevoked,
+  lookupAgentByName,
+  ensureAgentEnrolled,
+  listActiveAgentGrants,
+  listEnrolledAgents,
+  markAgentRevoked,
   purposeConceptId,
   type HostBootstrap,
   type EnrolledApp,
+  type EnrolledAgent,
   type GrantSummary,
   type AppSummary,
+  type AgentSummary,
 } from './host.js';
 
 export { registerScheduleCommands } from './commands/schedule.js';

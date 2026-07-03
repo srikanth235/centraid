@@ -27,6 +27,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunStreamEvent,
+  type VaultBridge,
 } from '@centraid/app-engine';
 import { parseRef } from '../manifest/ref.js';
 import { handlerPath, readAppOwned } from '../scaffold/app.js';
@@ -91,6 +92,15 @@ export interface RunFireOptions {
    * each finished run's summary to it (issue #98).
    */
   analytics?: AnalyticsStore;
+  /**
+   * Host-injected `ctx.vault` executor factory, keyed by the automation's
+   * app id: each fire gets a bridge bound to *that* app's enrolled
+   * `agent.agent` credential (duaility §12), so a cross-app `onFailure`
+   * cascade acts as its own agent, never the parent's. The package stays
+   * vault-free — the gateway builds this off its vault plane. Absent (or
+   * returning undefined) → `ctx.vault` fails closed with `VAULT_UNAVAILABLE`.
+   */
+  vaultFor?: (appId: string) => VaultBridge | undefined;
   /** Hard timeout. Defaults to the handler runner's default. */
   timeoutMs?: number;
   /** Optional logger. */
@@ -170,6 +180,7 @@ export async function runFire(
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
+  const vaultBridge = opts.vaultFor?.(parsed.appId);
 
   const dispatch = await deps.openDispatch({
     workdir: row.dir,
@@ -190,6 +201,7 @@ export async function runFire(
       toolDispatcher: dispatch.toolDispatcher,
       agentDispatcher: dispatch.agentDispatcher,
       runsStore,
+      ...(vaultBridge ? { vault: vaultBridge } : {}),
       ...(opts.onRunEvent ? { onRunEvent: opts.onRunEvent } : {}),
       triggerKind: opts.triggerKind ?? 'scheduled',
       triggerOrigin: opts.triggerOrigin ?? 'cron',
@@ -224,6 +236,7 @@ export async function runFire(
               appsDir: opts.appsDir,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.analytics ? { analytics: opts.analytics } : {}),
+              ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
               ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
               onLog,
               triggerKind: 'on_failure',

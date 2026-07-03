@@ -6,12 +6,18 @@ import { openVaultDb, type VaultDb } from './db.js';
 import { createGateway } from './gateway/gateway.js';
 import { createGrant } from './bootstrap.js';
 import {
+  ensureAgentEnrolled,
   ensureAppEnrolled,
   ensureVaultBootstrapped,
+  listActiveAgentGrants,
   listActiveGrants,
+  listEnrolledAgents,
+  lookupAgentByName,
   lookupAppByName,
+  markAgentRevoked,
   purposeConceptId,
 } from './host.js';
+import { registerTaskCommands } from './commands/tasks.js';
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -85,4 +91,60 @@ test('listActiveGrants surfaces purpose notation and scopes', () => {
     { schema: 'schedule', table: null, verbs: 'read+act' },
     { schema: 'core', table: 'event', verbs: 'read' },
   ]);
+});
+
+test('ensureAgentEnrolled is idempotent per host-side name; grants match on the agent party', () => {
+  const db = openVaultDb();
+  cleanups.push(() => db.close());
+  const boot = ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+  const gw = createGateway(db);
+  registerTaskCommands(gw);
+
+  const first = ensureAgentEnrolled(db, 'briefing');
+  expect(first.created).toBe(true);
+  const again = ensureAgentEnrolled(db, 'briefing');
+  expect(again.created).toBe(false);
+  expect(again.agentId).toBe(first.agentId);
+  expect(again.partyId).toBe(first.partyId);
+  expect(lookupAgentByName(db, 'briefing')?.agentId).toBe(first.agentId);
+  expect(lookupAgentByName(db, 'never-enrolled')).toBeUndefined();
+
+  // Deny-by-default: the enrolled agent reads nothing until a grant lands.
+  const cred = {
+    kind: 'agent',
+    agentId: first.agentId,
+    deviceId: boot.deviceId,
+    deviceKey: boot.deviceKey,
+  } as const;
+  expect(() =>
+    gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
+  ).toThrow(/deny/);
+
+  createGrant(db, {
+    granteePartyId: first.partyId,
+    purposeConceptId: purposeConceptId(db, 'dpv:ServiceProvision') as string,
+    grantedByPartyId: boot.ownerPartyId,
+    scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+  });
+  const grants = listActiveAgentGrants(db, first.partyId);
+  expect(grants).toHaveLength(1);
+  expect(grants[0]).toMatchObject({ purpose: 'dpv:ServiceProvision' });
+
+  // The grant covers reads AND typed commands under the schedule schema.
+  const read = gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' });
+  expect(read.rows).toEqual([]);
+  const outcome = gw.invoke(cred, {
+    command: 'schedule.add_task',
+    input: { title: 'water the plants' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+
+  // Retiring the enrollment drops authentication entirely.
+  markAgentRevoked(db, first.agentId);
+  expect(lookupAgentByName(db, 'briefing')).toBeUndefined();
+  expect(() =>
+    gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
+  ).toThrow(/unknown caller/);
+  expect(listEnrolledAgents(db).find((a) => a.agentId === first.agentId)).toBeUndefined();
 });

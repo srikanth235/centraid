@@ -8,6 +8,8 @@
  *   GET    /centraid/_vault/status                     — plane presence + identity
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
+ *   GET    /centraid/_vault/agents                     — enrolled automation agents + grants
+ *   POST   /centraid/_vault/agents/<appId>/grants      — approve an automation's agent grant
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
@@ -57,6 +59,31 @@ export function makeVaultRouteHandler(plane: VaultPlane): RouteHandler {
         }
         try {
           const grantId = plane.approveGrant(appId, request);
+          return sendJson(res, 200, { grantId });
+        } catch (err) {
+          return sendJson(res, 400, {
+            error: 'grant_refused',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      if (method === 'GET' && segments[0] === 'agents' && segments.length === 1) {
+        return sendJson(res, 200, { agents: plane.listAgents() });
+      }
+
+      if (method === 'POST' && segments[0] === 'agents' && segments[2] === 'grants') {
+        const appId = segments[1] ?? '';
+        const body = await readJson(req);
+        const request = parseGrantRequest(body);
+        if (!request) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'grant body needs {purpose: string, scopes: [{schema, verbs, table?}]}',
+          });
+        }
+        try {
+          const grantId = plane.approveAgentGrant(appId, request);
           return sendJson(res, 200, { grantId });
         } catch (err) {
           return sendJson(res, 400, {

@@ -55,6 +55,7 @@ type ParentMessage =
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  | { type: 'vault-reply'; id: number; ok: boolean; result?: unknown; error?: string; code?: string }
   | { type: 'abort'; reason?: string };
 
 type WorkerMessage =
@@ -66,6 +67,12 @@ type WorkerMessage =
       id: number;
       method: 'last' | 'list';
       filter: { automationId?: string; status?: 'ok' | 'error'; since?: number; limit?: number };
+    }
+  | {
+      type: 'vault';
+      id: number;
+      op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+      payload: Record<string, unknown>;
     }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
@@ -86,6 +93,10 @@ const pendingState = new Map<
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
 const pendingRuns = new Map<
+  number,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void }
+>();
+const pendingVault = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
 >();
@@ -128,6 +139,8 @@ function rejectAllPending(reason: string): void {
   pendingState.clear();
   for (const [, p] of pendingRuns) p.reject(err);
   pendingRuns.clear();
+  for (const [, p] of pendingVault) p.reject(err);
+  pendingVault.clear();
   for (const call of pendingToolBatch) call.reject(err);
   pendingToolBatch = [];
   for (const [, batch] of pendingToolBatchById) {
@@ -175,6 +188,18 @@ port.on('message', (msg: ParentMessage) => {
     pendingRuns.delete(msg.id);
     if (msg.ok) p.resolve(msg.result);
     else p.reject(new Error(msg.error ?? 'runs query failed'));
+    return;
+  }
+  if (msg.type === 'vault-reply') {
+    const p = pendingVault.get(msg.id);
+    if (!p) return;
+    pendingVault.delete(msg.id);
+    if (msg.ok) p.resolve(msg.result);
+    else {
+      const err = new Error(msg.error ?? 'vault call failed') as Error & { code?: string };
+      if (msg.code) err.code = msg.code;
+      p.reject(err);
+    }
     return;
   }
   if (msg.type === 'abort') {
@@ -249,6 +274,45 @@ const runs = {
   },
 };
 
+// ctx.vault — a second RPC channel aimed at the owner's personal vault
+// (duaility §12). The parent resolves this automation to its enrolled
+// `agent.agent` credential host-side; the worker carries capability, never
+// a key. Same surface an app handler's `ctx.vault` exposes, plus `parked`
+// (this agent's invocations awaiting owner confirmation) and `changes`
+// (the consented journal feed data triggers ride).
+function vaultCall(
+  op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes',
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  flushPendingToolBatchIfAny();
+  return new Promise((resolve, reject) => {
+    const id = nextCallId++;
+    pendingVault.set(id, { resolve, reject });
+    port.postMessage({ type: 'vault', id, op, payload } satisfies WorkerMessage);
+  });
+}
+
+const vault = {
+  read(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('read', request);
+  },
+  invoke(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('invoke', request);
+  },
+  query(view: string, purpose: string): Promise<unknown> {
+    return vaultCall('query', { view, purpose });
+  },
+  describe(): Promise<unknown> {
+    return vaultCall('describe', {});
+  },
+  parked(): Promise<unknown> {
+    return vaultCall('parked', {});
+  },
+  changes(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('changes', request);
+  },
+};
+
 const ctx = {
   tool(name: string, args: unknown): Promise<unknown> {
     return new Promise<unknown>((resolve, reject) => {
@@ -272,6 +336,7 @@ const ctx = {
   },
   state,
   runs,
+  vault,
   input: req.input,
   abortSignal: abortController.signal,
 };

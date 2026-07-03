@@ -14,8 +14,13 @@
  * a clear error, not a hang.
  */
 
-/** Operations `ctx.vault` exposes to handlers. */
-export type VaultOp = 'read' | 'invoke' | 'query' | 'describe';
+/**
+ * Operations `ctx.vault` exposes to handlers. `parked` (the caller's
+ * invocations awaiting owner confirmation) and `changes` (the consented
+ * journal feed) are agent-plane ops — automation bridges implement them;
+ * app bridges may reject them.
+ */
+export type VaultOp = 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

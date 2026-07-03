@@ -176,3 +176,50 @@ describe('parseManifest', () => {
     expect(() => parseManifest('{not json')).toThrow(ManifestError);
   });
 });
+
+describe('manifest vault block', () => {
+  const base = {
+    name: 'Briefing',
+    prompt: 'summarize the day',
+    generated: { by: 'test', at: '2026-07-03' },
+  };
+
+  it('accepts a purpose + scopes request and round-trips it', () => {
+    const m = validateManifest({
+      ...base,
+      vault: {
+        purpose: 'dpv:ServiceProvision',
+        why: 'reads your agenda',
+        scopes: [
+          { schema: 'schedule', verbs: 'read' },
+          { schema: 'schedule', table: 'add_task', verbs: 'act' },
+        ],
+      },
+    });
+    expect(m.vault).toEqual({
+      purpose: 'dpv:ServiceProvision',
+      why: 'reads your agenda',
+      scopes: [
+        { schema: 'schedule', verbs: 'read' },
+        { schema: 'schedule', table: 'add_task', verbs: 'act' },
+      ],
+    });
+  });
+
+  it('is optional — a manifest without it has no vault surface request', () => {
+    expect(validateManifest(base).vault).toBeUndefined();
+  });
+
+  it('rejects a vault block missing purpose or scopes', () => {
+    expect(() => validateManifest({ ...base, vault: { scopes: [] } })).toThrow(/vault\.purpose/);
+    expect(() =>
+      validateManifest({ ...base, vault: { purpose: 'dpv:Billing', scopes: [] } }),
+    ).toThrow(/vault\.scopes/);
+    expect(() =>
+      validateManifest({
+        ...base,
+        vault: { purpose: 'dpv:Billing', scopes: [{ schema: 'finance', verbs: 'write' }] },
+      }),
+    ).toThrow(/verbs/);
+  });
+});

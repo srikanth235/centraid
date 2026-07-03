@@ -8,7 +8,7 @@
  */
 
 import type { AgentDispatcher, DispatchContext, ToolDispatcher, ToolResult } from './runner.js';
-import type { ConversationStore, TurnStreamEvent } from '@centraid/app-engine';
+import type { ConversationStore, TurnStreamEvent, VaultBridge, VaultOp } from '@centraid/app-engine';
 import {
   closeRunNode,
   openRunNode,
@@ -198,6 +198,78 @@ export async function handleAgentMessage(
       ...usageCloseFields(lastUsage),
     });
     return { ok: false, error };
+  }
+}
+
+/**
+ * Service one `ctx.vault` call: open a `tool` run node named `vault.<op>`,
+ * proxy through the host-injected bridge (the automation's enrolled
+ * `agent.agent` credential lives host-side), and settle the node.
+ *
+ * Replay safety: an `invoke` without a caller-supplied `invocationId` gets a
+ * deterministic one derived from the run id + the node's ordinal. Re-firing
+ * the same runId replays the recorded outcome inside the vault instead of
+ * double-executing — the handler lint already guarantees the call sequence
+ * is deterministic.
+ *
+ * Without a bridge every call fails closed with `VAULT_UNAVAILABLE`,
+ * mirroring app handlers on gateways that mount no vault plane.
+ */
+export async function handleVaultMessage(
+  audit: AuditState,
+  vault: VaultBridge | undefined,
+  op: VaultOp,
+  payload: Record<string, unknown>,
+): Promise<CtxReply & { code?: string }> {
+  const ordinal = nextOrdinal(audit);
+  const started = Date.now();
+  let effective = payload;
+  if (op === 'invoke' && typeof effective.invocationId !== 'string') {
+    effective = { ...effective, invocationId: `${audit.runId}:v${ordinal}` };
+  }
+  const nodeId = openRunNode({
+    store: audit.store,
+    emit: audit.emit,
+    runId: audit.runId,
+    ordinal,
+    kind: 'tool',
+    name: `vault.${op}`,
+    args: effective,
+    started,
+  });
+  const settle = (reply: CtxReply & { code?: string }): CtxReply & { code?: string } => {
+    closeRunNode({
+      store: audit.store,
+      emit: audit.emit,
+      nodeId,
+      ordinal,
+      ok: reply.ok,
+      ...(reply.result !== undefined ? { result: reply.result } : {}),
+      ...(reply.error !== undefined ? { error: reply.error } : {}),
+      started,
+      ended: Date.now(),
+    });
+    return reply;
+  };
+  if (!vault) {
+    return settle({
+      ok: false,
+      code: 'VAULT_UNAVAILABLE',
+      error: 'this automation has no vault surface — the host mounted no vault plane',
+    });
+  }
+  try {
+    const result = await vault({ op, payload: effective });
+    if (!result.ok) {
+      return settle({
+        ok: false,
+        ...(result.code ? { code: result.code } : {}),
+        error: result.error ?? 'vault call failed',
+      });
+    }
+    return settle({ ok: true, result: result.result });
+  } catch (err) {
+    return settle({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 }
 

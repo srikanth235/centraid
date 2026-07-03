@@ -20,6 +20,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/upcoming.js",
         "wall.css"
@@ -104,10 +106,13 @@
         "actions/detach.js",
         "actions/log.js",
         "actions/trends.js",
+        "actions/void.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/readings.js",
         "wall.css"
@@ -192,11 +197,14 @@
         "actions/categorize.js",
         "actions/detach.js",
         "actions/flag.js",
+        "actions/remove-budget.js",
         "actions/set-budget.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/overview.js",
         "wall.css"
@@ -286,6 +294,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/board.js",
         "wall.css"
@@ -378,6 +388,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/directory.js",
         "wall.css"
@@ -461,11 +473,14 @@
         "actions/attach.js",
         "actions/detach.js",
         "actions/draft.js",
+        "actions/mark-read.js",
         "actions/send.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/inbox.js",
         "queries/thread.js",
@@ -551,13 +566,17 @@
         "actions/create-note.js",
         "actions/create-notebook.js",
         "actions/delete-note.js",
+        "actions/delete-notebook.js",
         "actions/detach.js",
         "actions/edit-note.js",
         "actions/move-note.js",
+        "actions/rename-notebook.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/library.js",
         "wall.css"
@@ -648,12 +667,15 @@
         "actions/delete-asset.js",
         "actions/remove-from-album.js",
         "actions/rename-album.js",
+        "actions/restore.js",
         "actions/update-asset.js",
         "actions/upload.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/library.js",
         "wall.css"
@@ -746,6 +768,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/drive.js",
         "wall.css"
@@ -833,6 +857,7 @@
         "actions/add-item.js",
         "actions/add-warranty.js",
         "actions/attach.js",
+        "actions/complete-maintenance.js",
         "actions/detach.js",
         "actions/dispose-item.js",
         "actions/update-item.js",
@@ -840,6 +865,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/inventory.js",
         "wall.css"
@@ -932,6 +959,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/studio.js",
         "wall.css"
@@ -1013,14 +1042,19 @@
       "kind": "app",
       "files": [
         "actions/attach.js",
+        "actions/cancel-booking.js",
         "actions/confirm-booking.js",
         "actions/detach.js",
+        "actions/remove-availability.js",
         "actions/request-booking.js",
+        "actions/reschedule-booking.js",
         "actions/set-availability.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/board.js",
         "wall.css"
@@ -1105,10 +1139,13 @@
         "actions/attach.js",
         "actions/detach.js",
         "actions/set-status.js",
+        "actions/update-subscription.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/list.js",
         "wall.css"
@@ -1199,6 +1236,8 @@
         "app.js",
         "app.json",
         "index.html",
+        "kit.css",
+        "kit.js",
         "package.json",
         "queries/pipeline.js",
         "wall.css"
@@ -1282,7 +1321,11 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 6:00 PM",
-      "integrations": ["Google Calendar", "Gmail", "Slack"],
+      "integrations": [
+        "Google Calendar",
+        "Gmail",
+        "Slack"
+      ],
       "files": [
         "app.json",
         "automations/briefing/automation.json",
@@ -1301,7 +1344,10 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 9:00 PM",
-      "integrations": ["Linear", "Notion"],
+      "integrations": [
+        "Linear",
+        "Notion"
+      ],
       "files": [
         "app.json",
         "automations/evening-wrap-up/automation.json",
@@ -1320,7 +1366,9 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:30 AM",
-      "integrations": ["Gmail"],
+      "integrations": [
+        "Gmail"
+      ],
       "files": [
         "app.json",
         "automations/email-triage/automation.json",
@@ -1339,7 +1387,10 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:45 AM",
-      "integrations": ["Google Calendar", "Notion"],
+      "integrations": [
+        "Google Calendar",
+        "Notion"
+      ],
       "files": [
         "app.json",
         "automations/meeting-prep/automation.json",
@@ -1358,7 +1409,9 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 11:30 PM",
-      "integrations": ["GitHub"],
+      "integrations": [
+        "GitHub"
+      ],
       "files": [
         "app.json",
         "automations/pr-review-digest/automation.json",
@@ -1377,7 +1430,9 @@
       "category": "Engineering",
       "triggerKind": "webhook",
       "triggerLabel": "On merge to main",
-      "integrations": ["GitHub"],
+      "integrations": [
+        "GitHub"
+      ],
       "files": [
         "app.json",
         "automations/release-notes-drafter/automation.json",
@@ -1396,7 +1451,10 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Tuesdays · 12:00 AM",
-      "integrations": ["npm", "GitHub"],
+      "integrations": [
+        "npm",
+        "GitHub"
+      ],
       "files": [
         "app.json",
         "automations/dependency-update-check/automation.json",
@@ -1415,7 +1473,11 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 5:30 PM",
-      "integrations": ["PagerDuty", "Datadog", "Sentry"],
+      "integrations": [
+        "PagerDuty",
+        "Datadog",
+        "Sentry"
+      ],
       "files": [
         "app.json",
         "automations/system-health-check/automation.json",
@@ -1434,7 +1496,9 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 9:00 AM",
-      "integrations": ["Linear"],
+      "integrations": [
+        "Linear"
+      ],
       "files": [
         "app.json",
         "automations/issue-triage/automation.json",
@@ -1453,7 +1517,9 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Mondays · 9:30 AM",
-      "integrations": ["GitHub"],
+      "integrations": [
+        "GitHub"
+      ],
       "files": [
         "app.json",
         "automations/flaky-test-tracker/automation.json",

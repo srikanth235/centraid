@@ -20,12 +20,17 @@
 import {
   createGateway,
   createGrant,
+  ensureAgentEnrolled,
   ensureAppEnrolled,
   ensureVaultBootstrapped,
   GatewayError,
+  listActiveAgentGrants,
   listActiveGrants,
+  listEnrolledAgents,
   listEnrolledApps,
+  lookupAgentByName,
   lookupAppByName,
+  markAgentRevoked,
   markAppRevoked,
   openVaultDb,
   purposeConceptId,
@@ -43,6 +48,7 @@ import {
   registerSocialCommands,
   registerSubscriptionCommands,
   registerTaskCommands,
+  type AgentSummary,
   type AppSummary,
   type Credential,
   type Gateway as VaultGateway,
@@ -128,27 +134,49 @@ export class VaultPlane {
   }
 
   /**
+   * Enroll an automation app's acting identity as an `agent.agent` row,
+   * once (duaility §12: automation fires ride an enrolled agent, not an
+   * app credential). Keyed by the Centraid app id, like `enrollApp`.
+   * Identity only — authority still requires an owner-approved agent grant.
+   */
+  enrollAutomationAgent(appId: string): void {
+    const enrolled = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+    if (enrolled.created) this.logger.info(`vault plane: enrolled automation agent "${appId}"`);
+  }
+
+  /**
    * Uninstall cascade: revoke every active grant (views invalidated, parked
    * invocations dropped, appext file deleted on the last one), then retire
-   * the enrollment row. Model rows and receipts remain — §11's success test.
+   * the enrollment row. Covers both planes of the app's identity — its
+   * `consent.app` row and, for automation apps, its `agent.agent` row.
+   * Model rows and receipts remain — §11's success test.
    */
   revokeApp(appId: string): { grantsRevoked: number } {
-    const app = lookupAppByName(this.db, appId);
-    if (!app) return { grantsRevoked: 0 };
-    const grants = listActiveGrants(this.db, app.appId);
     let revoked = 0;
-    for (const grant of grants) {
-      const result: RevocationResult = this.gateway.revokeGrant(
-        this.ownerCredential,
-        grant.grantId,
-      );
-      revoked += 1;
-      this.logger.info(
-        `vault plane: revoked grant ${grant.grantId} for "${appId}" ` +
-          `(views ${result.viewsRevoked}, parked ${result.parkedDropped})`,
-      );
+    const app = lookupAppByName(this.db, appId);
+    if (app) {
+      for (const grant of listActiveGrants(this.db, app.appId)) {
+        const result: RevocationResult = this.gateway.revokeGrant(
+          this.ownerCredential,
+          grant.grantId,
+        );
+        revoked += 1;
+        this.logger.info(
+          `vault plane: revoked grant ${grant.grantId} for "${appId}" ` +
+            `(views ${result.viewsRevoked}, parked ${result.parkedDropped})`,
+        );
+      }
+      markAppRevoked(this.db, app.appId);
     }
-    markAppRevoked(this.db, app.appId);
+    const agent = lookupAgentByName(this.db, appId);
+    if (agent) {
+      for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
+        this.gateway.revokeGrant(this.ownerCredential, grant.grantId);
+        revoked += 1;
+        this.logger.info(`vault plane: revoked agent grant ${grant.grantId} for "${appId}"`);
+      }
+      markAgentRevoked(this.db, agent.agentId);
+    }
     return { grantsRevoked: revoked };
   }
 
@@ -171,11 +199,38 @@ export class VaultPlane {
     });
   }
 
+  /**
+   * Owner approval of an automation's requested grant — the agent-plane
+   * mirror of `approveGrant`. The grantee is the agent's party, so the
+   * grant matches on `grantee_party_id` in consent evaluation.
+   */
+  approveAgentGrant(appId: string, request: GrantRequest): string {
+    const agent = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+    const purpose = purposeConceptId(this.db, request.purpose);
+    if (!purpose) throw new Error(`unknown purpose notation "${request.purpose}"`);
+    if (request.scopes.length === 0) throw new Error('a grant needs at least one scope');
+    return createGrant(this.db, {
+      granteePartyId: agent.partyId,
+      purposeConceptId: purpose,
+      grantedByPartyId: this.boot.ownerPartyId,
+      scopes: request.scopes,
+      ...(request.expiresAt ? { expiresAt: request.expiresAt } : {}),
+    });
+  }
+
   /** Enrolled apps with their active grants — the owner consent surface. */
   listApps(): Array<AppSummary & { grants: GrantSummary[] }> {
     return listEnrolledApps(this.db).map((app) => ({
       ...app,
       grants: listActiveGrants(this.db, app.appId),
+    }));
+  }
+
+  /** Enrolled automation agents with their active grants. */
+  listAgents(): Array<AgentSummary & { grants: GrantSummary[] }> {
+    return listEnrolledAgents(this.db).map((agent) => ({
+      ...agent,
+      grants: listActiveAgentGrants(this.db, agent.partyId),
     }));
   }
 
@@ -238,6 +293,75 @@ export class VaultPlane {
             return { ok: true, result: this.gateway.discover(cred) };
           default:
             return { ok: false, code: 'VAULT_ERROR', error: `unknown vault op` };
+        }
+      } catch (err) {
+        if (err instanceof GatewayError) {
+          return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
+        }
+        return {
+          ok: false,
+          code: 'VAULT_ERROR',
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    };
+  }
+
+  /**
+   * The per-automation `ctx.vault` executor — the agent-plane mirror of
+   * `bridgeFor`. Fires authenticate as the automation's enrolled
+   * `agent.agent` riding the host's owner device (session binding, §12);
+   * risk ceiling is structurally `medium`, so `high` commands park for
+   * owner confirmation. Credential resolution happens per call so a
+   * revocation lands immediately.
+   */
+  agentBridgeFor(appId: string): VaultBridge {
+    return async (call): Promise<VaultCallResult> => {
+      const agent = lookupAgentByName(this.db, appId);
+      if (!agent) {
+        return {
+          ok: false,
+          code: 'VAULT_NOT_ENROLLED',
+          error: `automation "${appId}" has no enrolled vault agent`,
+        };
+      }
+      const cred: Credential = {
+        kind: 'agent',
+        agentId: agent.agentId,
+        deviceId: this.boot.deviceId,
+        deviceKey: this.boot.deviceKey,
+      };
+      try {
+        switch (call.op) {
+          case 'read':
+            return {
+              ok: true,
+              result: this.gateway.read(cred, call.payload as unknown as ReadRequest),
+            };
+          case 'invoke':
+            return {
+              ok: true,
+              result: this.gateway.invoke(cred, call.payload as unknown as InvokeRequest),
+            };
+          case 'describe':
+            return { ok: true, result: this.gateway.discover(cred) };
+          case 'parked':
+            // This agent's own invocations awaiting the owner — the handler
+            // sees WHAT is pending, never another caller's business.
+            return {
+              ok: true,
+              result: this.gateway
+                .listParked()
+                .filter((p) => p.callerKind === 'agent' && p.caller === appId),
+            };
+          case 'query':
+            return {
+              ok: false,
+              code: 'VAULT_CONSENT',
+              error: 'registered views belong to apps — automations read entities directly',
+            };
+          default:
+            return { ok: false, code: 'VAULT_ERROR', error: `unsupported vault op ${call.op}` };
         }
       } catch (err) {
         if (err instanceof GatewayError) {

@@ -344,3 +344,101 @@ test('sweep clock: expired grants lapse on the interval', async () => {
   expect(result.grantsExpired).toBe(1);
   expect(plane.listApps()[0]?.grants).toHaveLength(0);
 });
+
+test('agent plane: deny-by-default → agent grant → allowed; high risk parks; uninstall goes dark', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  plane.enrollAutomationAgent('briefing');
+  // Idempotent — the reconcile loop calls this on every settle.
+  plane.enrollAutomationAgent('briefing');
+  expect(plane.listAgents().filter((a) => a.name === 'briefing')).toHaveLength(1);
+
+  const bridge = plane.agentBridgeFor('briefing');
+
+  // Enrolled but ungranted: a receipted consent deny.
+  const denied = await bridge({
+    op: 'read',
+    payload: { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(denied.ok).toBe(false);
+  expect(denied.code).toBe('VAULT_CONSENT');
+
+  plane.approveAgentGrant('briefing', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'schedule', verbs: 'read+act' },
+      { schema: 'social', verbs: 'read+act' },
+      { schema: 'core', table: 'party', verbs: 'read' },
+    ],
+  });
+  expect(plane.listAgents().find((a) => a.name === 'briefing')?.grants).toHaveLength(1);
+
+  const read = await bridge({
+    op: 'read',
+    payload: { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(read.ok).toBe(true);
+
+  // A typed command executes under the agent identity (risk low).
+  const invoked = await bridge({
+    op: 'invoke',
+    payload: {
+      command: 'schedule.add_task',
+      input: { title: 'follow up with the plumber' },
+      purpose: 'dpv:ServiceProvision',
+      invocationId: 'run-1:v0',
+    },
+  });
+  expect(invoked.ok).toBe(true);
+  expect(invoked.result).toMatchObject({ status: 'executed', invocationId: 'run-1:v0' });
+
+  // Replay: the same invocationId returns the recorded outcome, no double write.
+  const replayed = await bridge({
+    op: 'invoke',
+    payload: {
+      command: 'schedule.add_task',
+      input: { title: 'follow up with the plumber' },
+      purpose: 'dpv:ServiceProvision',
+      invocationId: 'run-1:v0',
+    },
+  });
+  expect(replayed.ok).toBe(true);
+  expect(replayed.result).toMatchObject({ status: 'replayed' });
+
+  // Risk high > agent ceiling (medium): parks for the owner; the agent's own
+  // parked surface lists it.
+  const ownerParty = plane.boot.ownerPartyId;
+  const draft = await bridge({
+    op: 'invoke',
+    payload: {
+      command: 'social.draft_message',
+      input: { recipient_party_id: ownerParty, body_text: 'your day, summarized' },
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  expect(draft.ok).toBe(true);
+  const messageId = (draft.result as { output: { message_id: string } }).output.message_id;
+  const send = await bridge({
+    op: 'invoke',
+    payload: {
+      command: 'social.send_message',
+      input: { message_id: messageId },
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  expect(send.ok).toBe(true);
+  expect(send.result).toMatchObject({ status: 'parked' });
+  const parked = await bridge({ op: 'parked', payload: {} });
+  expect(parked.ok).toBe(true);
+  expect(parked.result).toMatchObject([{ command: 'social.send_message', caller: 'briefing' }]);
+
+  // Uninstall cascade covers the agent plane too.
+  const revoked = plane.revokeApp('briefing');
+  expect(revoked.grantsRevoked).toBeGreaterThan(0);
+  const dark = await bridge({
+    op: 'read',
+    payload: { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(dark.ok).toBe(false);
+  expect(dark.code).toBe('VAULT_NOT_ENROLLED');
+});
