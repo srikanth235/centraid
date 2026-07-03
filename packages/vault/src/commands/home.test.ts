@@ -93,3 +93,68 @@ test('add_warranty decorates an item and refuses an inverted term', () => {
   expect(inverted.status).toBe('failed');
   if (inverted.status === 'failed') expect(inverted.predicate).toContain('ends_not_before_starts');
 });
+
+test('add_item and update_item carry room and value; place must exist, price names a currency', () => {
+  const placeId = 'place-kitchen';
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_place (place_id, name, kind, created_at) VALUES (?, 'Kitchen', 'venue', ?)`,
+    )
+    .run(placeId, now);
+
+  const itemId = addItem({
+    name: 'Espresso machine',
+    place_id: placeId,
+    purchase_price_minor: 64900,
+    purchase_currency: 'EUR',
+  });
+  const item = db.vault
+    .prepare(
+      'SELECT place_id, purchase_price_minor, purchase_currency FROM home_asset_item WHERE item_id = ?',
+    )
+    .get(itemId);
+  expect(item).toMatchObject({
+    place_id: placeId,
+    purchase_price_minor: 64900,
+    purchase_currency: 'EUR',
+  });
+
+  // Moving rooms and revaluing later both work through update_item.
+  const bare = addItem({ name: 'Bookshelf' });
+  const moved = invoke('home.update_item', {
+    item_id: bare,
+    place_id: placeId,
+    purchase_price_minor: 12000,
+    purchase_currency: 'EUR',
+  });
+  expect(moved.status).toBe('executed');
+
+  // A phantom room is refused, receipted.
+  const ghost = invoke('home.update_item', { item_id: bare, place_id: 'nowhere' });
+  expect(ghost.status).toBe('failed');
+
+  // A price with no currency anywhere is refused.
+  const naked = invoke('home.add_item', { name: 'TV', purchase_price_minor: 50000 });
+  expect(naked.status).toBe('failed');
+});
+
+test('complete_maintenance stamps last_done_on; a missing plan is refused', () => {
+  const itemId = addItem({ name: 'Boiler' });
+  const planId = 'plan-descale';
+  db.vault
+    .prepare(
+      `INSERT INTO home_maintenance_plan (plan_id, item_id, name, rrule, last_done_on, instructions_content_id, current_task_id)
+       VALUES (?, ?, 'Descale', 'FREQ=MONTHLY', NULL, NULL, NULL)`,
+    )
+    .run(planId, itemId);
+  const outcome = invoke('home.complete_maintenance', { plan_id: planId, done_on: '2026-07-03' });
+  expect(outcome.status).toBe('executed');
+  const plan = db.vault
+    .prepare('SELECT last_done_on FROM home_maintenance_plan WHERE plan_id = ?')
+    .get(planId) as { last_done_on: string };
+  expect(plan.last_done_on).toBe('2026-07-03');
+  expect(
+    invoke('home.complete_maintenance', { plan_id: 'ghost', done_on: '2026-07-03' }).status,
+  ).toBe('failed');
+});

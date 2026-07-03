@@ -131,6 +131,75 @@ function logVital(ctx: HandlerCtx): Record<string, unknown> {
   return { observation_id: observationId, vital_id: vitalId };
 }
 
+const VOID_VITAL: CommandDefinition = {
+  name: 'health.void_vital',
+  ownerSchema: 'health',
+  inputSchema: {
+    type: 'object',
+    required: ['observation_id'],
+    additionalProperties: false,
+    properties: {
+      observation_id: { type: 'string', minLength: 1 },
+      reason: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['observation_id', 'status'],
+    properties: { observation_id: { type: 'string' }, status: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'observation_exists',
+      sql: 'SELECT count(*) AS n FROM core_observation WHERE observation_id = :observation_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // Double-voids fail loudly: entered-in-error is terminal (FHIR), so a
+      // second void means someone is correcting a record they mis-read.
+      name: 'not_already_voided',
+      sql: `SELECT count(*) AS n FROM core_observation
+             WHERE observation_id = :observation_id AND status = 'entered-in-error'`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'observation_entered_in_error',
+      sql: `SELECT count(*) AS n FROM core_observation
+             WHERE observation_id = :observation_id AND status = 'entered-in-error'`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'once',
+  // Medium like adjust_course: both are data-correcting writes that change
+  // what every downstream query sees; parking for the owner is the right UX.
+  risk: 'medium',
+  handler: voidVital,
+};
+
+function voidVital(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { observation_id: string; reason?: string };
+  ctx.db
+    .prepare(`UPDATE core_observation SET status = 'entered-in-error' WHERE observation_id = ?`)
+    .run(input.observation_id);
+  ctx.wrote('core.observation', input.observation_id);
+  // The reason lives in the journal, not the row (no note column on
+  // core.observation): explanation is citation (§04 P4), same as flag_anomaly.
+  ctx.cite({
+    claim: `observation voided as entered-in-error${input.reason ? `: ${input.reason}` : ''} — readings queries exclude it, the row remains as provenance`,
+    entityType: 'core.observation',
+    entityId: input.observation_id,
+  });
+  return { observation_id: input.observation_id, status: 'entered-in-error' };
+}
+
 const IMPORT_WORKOUT: CommandDefinition = {
   name: 'health.import_workout',
   ownerSchema: 'health',
@@ -454,6 +523,7 @@ function summarizeTrends(ctx: HandlerCtx): Record<string, unknown> {
 /** Register the health domain's commands on a gateway. */
 export function registerHealthCommands(gateway: Gateway): void {
   gateway.registerCommand(LOG_VITAL);
+  gateway.registerCommand(VOID_VITAL);
   gateway.registerCommand(IMPORT_WORKOUT);
   gateway.registerCommand(ADJUST_COURSE);
   gateway.registerCommand(SUMMARIZE_TRENDS);

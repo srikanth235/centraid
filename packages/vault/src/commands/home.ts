@@ -28,6 +28,9 @@ const ADD_ITEM: CommandDefinition = {
       name: { type: 'string', minLength: 1 },
       acquired_on: { type: 'string' },
       serial_no: { type: 'string' },
+      place_id: { type: 'string', minLength: 1 },
+      purchase_price_minor: { type: 'integer', minimum: 0 },
+      purchase_currency: { type: 'string', minLength: 3, maxLength: 3 },
     },
   },
   outputSchema: {
@@ -35,7 +38,25 @@ const ADD_ITEM: CommandDefinition = {
     required: ['item_id'],
     properties: { item_id: { type: 'string' } },
   },
-  preconditions: [],
+  preconditions: [
+    {
+      name: 'place_exists_if_given',
+      sql: `SELECT CASE WHEN :place_id IS NULL THEN 1
+                 ELSE (SELECT count(*) FROM core_place WHERE place_id = :place_id)
+            END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // A price is money — money always names its currency.
+      name: 'price_names_its_currency',
+      sql: 'SELECT (:purchase_price_minor IS NULL OR :purchase_currency IS NOT NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
   postconditions: [
     {
       name: 'item_created',
@@ -51,14 +72,30 @@ const ADD_ITEM: CommandDefinition = {
 };
 
 function addItem(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { name: string; acquired_on?: string; serial_no?: string };
+  const input = ctx.input as {
+    name: string;
+    acquired_on?: string;
+    serial_no?: string;
+    place_id?: string;
+    purchase_price_minor?: number;
+    purchase_currency?: string;
+  };
   const itemId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO home_asset_item (item_id, owner_party_id, name, category_concept_id, place_id, acquired_txn_id, acquired_on, serial_no, photo_asset_id, disposed_on)
-       VALUES (?, ?, ?, NULL, NULL, NULL, ?, ?, NULL, NULL)`,
+      `INSERT INTO home_asset_item (item_id, owner_party_id, name, category_concept_id, place_id, acquired_txn_id, acquired_on, serial_no, purchase_price_minor, purchase_currency, photo_asset_id, disposed_on)
+       VALUES (?, ?, ?, NULL, ?, NULL, ?, ?, ?, ?, NULL, NULL)`,
     )
-    .run(itemId, actorPartyId(ctx), input.name, input.acquired_on ?? null, input.serial_no ?? null);
+    .run(
+      itemId,
+      actorPartyId(ctx),
+      input.name,
+      input.place_id ?? null,
+      input.acquired_on ?? null,
+      input.serial_no ?? null,
+      input.purchase_price_minor ?? null,
+      input.purchase_currency ?? null,
+    );
   ctx.wrote('home.asset_item', itemId);
   return { item_id: itemId };
 }
@@ -75,6 +112,9 @@ const UPDATE_ITEM: CommandDefinition = {
       name: { type: 'string', minLength: 1 },
       acquired_on: { type: 'string' },
       serial_no: { type: 'string' },
+      place_id: { type: 'string', minLength: 1 },
+      purchase_price_minor: { type: 'integer', minimum: 0 },
+      purchase_currency: { type: 'string', minLength: 3, maxLength: 3 },
     },
   },
   outputSchema: {
@@ -90,6 +130,26 @@ const UPDATE_ITEM: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      name: 'place_exists_if_given',
+      sql: `SELECT CASE WHEN :place_id IS NULL THEN 1
+                 ELSE (SELECT count(*) FROM core_place WHERE place_id = :place_id)
+            END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // A price set without a currency is refused unless the row already
+      // names one — money always knows its unit.
+      name: 'price_names_its_currency',
+      sql: `SELECT (:purchase_price_minor IS NULL OR :purchase_currency IS NOT NULL
+                    OR EXISTS(SELECT 1 FROM home_asset_item
+                               WHERE item_id = :item_id AND purchase_currency IS NOT NULL)) AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -99,6 +159,10 @@ const UPDATE_ITEM: CommandDefinition = {
                            ELSE EXISTS(SELECT 1 FROM home_asset_item WHERE item_id = :item_id AND name = :name) END)
               AND (SELECT CASE WHEN :serial_no IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM home_asset_item WHERE item_id = :item_id AND serial_no = :serial_no) END)
+              AND (SELECT CASE WHEN :place_id IS NULL THEN 1
+                           ELSE EXISTS(SELECT 1 FROM home_asset_item WHERE item_id = :item_id AND place_id = :place_id) END)
+              AND (SELECT CASE WHEN :purchase_price_minor IS NULL THEN 1
+                           ELSE EXISTS(SELECT 1 FROM home_asset_item WHERE item_id = :item_id AND purchase_price_minor = :purchase_price_minor) END)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -116,9 +180,12 @@ function updateItem(ctx: HandlerCtx): Record<string, unknown> {
     name?: string;
     acquired_on?: string;
     serial_no?: string;
+    place_id?: string;
+    purchase_price_minor?: number;
+    purchase_currency?: string;
   };
   const sets: string[] = [];
-  const values: string[] = [];
+  const values: (string | number)[] = [];
   if (input.name !== undefined) {
     sets.push('name = ?');
     values.push(input.name);
@@ -130,6 +197,18 @@ function updateItem(ctx: HandlerCtx): Record<string, unknown> {
   if (input.serial_no !== undefined) {
     sets.push('serial_no = ?');
     values.push(input.serial_no);
+  }
+  if (input.place_id !== undefined) {
+    sets.push('place_id = ?');
+    values.push(input.place_id);
+  }
+  if (input.purchase_price_minor !== undefined) {
+    sets.push('purchase_price_minor = ?');
+    values.push(input.purchase_price_minor);
+  }
+  if (input.purchase_currency !== undefined) {
+    sets.push('purchase_currency = ?');
+    values.push(input.purchase_currency);
   }
   if (sets.length > 0) {
     ctx.db
@@ -281,9 +360,62 @@ function addWarranty(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /** Register the home domain's commands on a gateway. */
+const COMPLETE_MAINTENANCE: CommandDefinition = {
+  name: 'home.complete_maintenance',
+  ownerSchema: 'home',
+  inputSchema: {
+    type: 'object',
+    required: ['plan_id', 'done_on'],
+    additionalProperties: false,
+    properties: {
+      plan_id: { type: 'string', minLength: 1 },
+      done_on: { type: 'string', minLength: 10 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['plan_id'],
+    properties: { plan_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'plan_exists',
+      sql: 'SELECT count(*) AS n FROM home_maintenance_plan WHERE plan_id = :plan_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'last_done_stamped',
+      sql: `SELECT count(*) AS n FROM home_maintenance_plan
+             WHERE plan_id = :plan_id AND last_done_on = :done_on`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  // Repeating chores are stamped each time they are done — later stamps
+  // simply move last_done_on forward, so re-runs are legitimate.
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: completeMaintenance,
+};
+
+function completeMaintenance(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { plan_id: string; done_on: string };
+  ctx.db
+    .prepare('UPDATE home_maintenance_plan SET last_done_on = ? WHERE plan_id = ?')
+    .run(input.done_on, input.plan_id);
+  ctx.wrote('home.maintenance_plan', input.plan_id);
+  return { plan_id: input.plan_id };
+}
+
 export function registerHomeCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ITEM);
   gateway.registerCommand(UPDATE_ITEM);
   gateway.registerCommand(DISPOSE_ITEM);
   gateway.registerCommand(ADD_WARRANTY);
+  gateway.registerCommand(COMPLETE_MAINTENANCE);
 }

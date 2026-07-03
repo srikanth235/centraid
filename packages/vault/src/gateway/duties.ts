@@ -144,6 +144,20 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .all(now) as { content_id: string }[];
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
+    // A trashed media asset over these bytes goes with them — the asset row
+    // references the content (NOT NULL), so purging one must purge both.
+    const asset = db.vault
+      .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
+      .get(row.content_id) as { asset_id: string } | undefined;
+    if (asset) {
+      writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
+      db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
+      db.vault.prepare('DELETE FROM media_album_entry WHERE asset_id = ?').run(asset.asset_id);
+      db.vault
+        .prepare('UPDATE media_album SET cover_asset_id = NULL WHERE cover_asset_id = ?')
+        .run(asset.asset_id);
+      db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
+    }
     writeProvenance(db.journal, owner, 'core.content_item', row.content_id, 'sweep.purge');
     db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
   }

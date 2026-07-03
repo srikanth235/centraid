@@ -399,10 +399,84 @@ function updateCard(ctx: HandlerCtx): Record<string, unknown> {
   return { card_id: cardId };
 }
 
+const MARK_THREAD_READ: CommandDefinition = {
+  name: 'social.mark_thread_read',
+  ownerSchema: 'social',
+  inputSchema: {
+    type: 'object',
+    required: ['thread_id', 'read_at'],
+    additionalProperties: false,
+    properties: {
+      thread_id: { type: 'string', minLength: 1 },
+      read_at: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['thread_id'],
+    properties: { thread_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'thread_exists',
+      sql: 'SELECT count(*) AS n FROM social_thread WHERE thread_id = :thread_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'owner_cursor_stamped',
+      sql: `SELECT count(*) AS n FROM social_thread_participant tp
+             WHERE tp.thread_id = :thread_id AND tp.last_read_at = :read_at
+               AND tp.party_id = (SELECT owner_party_id FROM core_vault LIMIT 1)`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  // Opening a thread re-stamps the cursor with a newer instant every time —
+  // repeated marks are the normal case, not a replay to refuse.
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: markThreadRead,
+};
+
+function markThreadRead(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { thread_id: string; read_at: string };
+  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as {
+    owner_party_id: string;
+  };
+  // The owner reads their own inbox: a missing participant row means the
+  // owner simply hasn't spoken in this thread yet — joining as a silent
+  // participant keeps the projection true (drafting later reuses the row).
+  const existing = ctx.db
+    .prepare('SELECT tp_id FROM social_thread_participant WHERE thread_id = ? AND party_id = ?')
+    .get(input.thread_id, owner.owner_party_id) as { tp_id: string } | undefined;
+  if (existing) {
+    ctx.db
+      .prepare('UPDATE social_thread_participant SET last_read_at = ? WHERE tp_id = ?')
+      .run(input.read_at, existing.tp_id);
+    ctx.wrote('social.thread_participant', existing.tp_id);
+  } else {
+    const tpId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO social_thread_participant (tp_id, thread_id, party_id, handle, joined_at, muted, last_read_at)
+         VALUES (?, ?, ?, NULL, ?, 0, ?)`,
+      )
+      .run(tpId, input.thread_id, owner.owner_party_id, ctx.now, input.read_at);
+    ctx.wrote('social.thread_participant', tpId);
+  }
+  return { thread_id: input.thread_id };
+}
+
 /** Register the social domain's commands on a gateway. */
 export function registerSocialCommands(gateway: Gateway): void {
   gateway.registerCommand(RESOLVE_IDENTITY);
   gateway.registerCommand(DRAFT_MESSAGE);
   gateway.registerCommand(SEND_MESSAGE);
   gateway.registerCommand(UPDATE_CARD);
+  gateway.registerCommand(MARK_THREAD_READ);
 }

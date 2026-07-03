@@ -261,3 +261,40 @@ test('a self-thread (note to self) drafts with one participant and sends', () =>
   });
   expect(sent.status).toBe('executed');
 });
+
+test('mark_thread_read stamps only the owner cursor and moves it forward', () => {
+  const { threadId } = draft();
+  const first = gw.invoke(owner, {
+    command: 'social.mark_thread_read',
+    input: { thread_id: threadId, read_at: '2026-07-03T10:00:00Z' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(first.status).toBe('executed');
+  const rows = db.vault
+    .prepare('SELECT party_id, last_read_at FROM social_thread_participant WHERE thread_id = ?')
+    .all(threadId) as { party_id: string; last_read_at: string | null }[];
+  const ravi = rows.find((r) => r.party_id === raviId);
+  expect(ravi?.last_read_at ?? null).toBeNull(); // only the owner reads their inbox
+  const mine = rows.find((r) => r.party_id !== raviId);
+  expect(mine?.last_read_at).toBe('2026-07-03T10:00:00Z');
+
+  const again = gw.invoke(owner, {
+    command: 'social.mark_thread_read',
+    input: { thread_id: threadId, read_at: '2026-07-03T11:30:00Z' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(again.status).toBe('executed');
+  const later = db.vault
+    .prepare(
+      'SELECT last_read_at FROM social_thread_participant WHERE thread_id = ? AND party_id = ?',
+    )
+    .get(threadId, mine?.party_id ?? '') as { last_read_at: string };
+  expect(later.last_read_at).toBe('2026-07-03T11:30:00Z');
+
+  const ghost = gw.invoke(owner, {
+    command: 'social.mark_thread_read',
+    input: { thread_id: 'no-such-thread', read_at: '2026-07-03T10:00:00Z' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(ghost.status).toBe('failed');
+});

@@ -87,6 +87,52 @@ function setAvailability(ctx: HandlerCtx): Record<string, unknown> {
   return { rule_id: ruleId };
 }
 
+const REMOVE_AVAILABILITY: CommandDefinition = {
+  name: 'schedule.remove_availability',
+  ownerSchema: 'schedule',
+  inputSchema: {
+    type: 'object',
+    required: ['rule_id'],
+    additionalProperties: false,
+    properties: { rule_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['rule_id'],
+    properties: { rule_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'rule_exists',
+      sql: 'SELECT count(*) AS n FROM schedule_availability_rule WHERE rule_id = :rule_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'rule_removed',
+      sql: 'SELECT count(*) AS n FROM schedule_availability_rule WHERE rule_id = :rule_id',
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'once',
+  // Like set_availability: shapes what can be *requested* going forward, but
+  // destroys no existing booking — the owner pruning their own calendar rules.
+  risk: 'low',
+  handler: removeAvailability,
+};
+
+function removeAvailability(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { rule_id: string };
+  ctx.db.prepare('DELETE FROM schedule_availability_rule WHERE rule_id = ?').run(input.rule_id);
+  ctx.wrote('schedule.availability_rule', input.rule_id);
+  return { rule_id: input.rule_id };
+}
+
 /** 'HH:MM' from an ISO datetime; the window comparison is wall-clock in v1. */
 function wallClock(iso: string): string {
   const t = iso.indexOf('T');
@@ -292,6 +338,7 @@ function confirmBooking(ctx: HandlerCtx): Record<string, unknown> {
 /** Register the booking commands on a gateway. */
 export function registerBookingCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_AVAILABILITY);
+  gateway.registerCommand(REMOVE_AVAILABILITY);
   gateway.registerCommand(REQUEST_BOOKING);
   gateway.registerCommand(CONFIRM_BOOKING);
 }

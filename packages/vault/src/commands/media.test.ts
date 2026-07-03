@@ -118,7 +118,7 @@ test('rename_album and delete_album curate without touching assets', () => {
   expect(assets.n).toBe(1);
 });
 
-test('delete_asset removes the meaning rows and soft-deletes unreferenced bytes', () => {
+test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenced bytes', () => {
   const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
   const albumId = createAlbum('Trip');
   invoke('media.add_to_album', { album_id: albumId, asset_id });
@@ -133,11 +133,55 @@ test('delete_asset removes the meaning rows and soft-deletes unreferenced bytes'
     .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
     .get(albumId) as { cover_asset_id: string | null };
   expect(album.cover_asset_id).toBeNull();
+  // The asset row survives in the trash — restore can bring it back whole.
+  const asset = db.vault
+    .prepare('SELECT deleted_at FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { deleted_at: string | null };
+  expect(asset.deleted_at).not.toBeNull();
   const content = db.vault
     .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
     .get(content_id) as { deleted_at: string | null; purge_at: string | null };
   expect(content.deleted_at).not.toBeNull();
   expect(content.purge_at).not.toBeNull();
+  // Trash is one-way per asset: a second delete fails its precondition.
+  const again = invoke('media.delete_asset', { asset_id });
+  expect(again.status).toBe('failed');
+});
+
+test('update_asset toggles favorite on and off', () => {
+  const { asset_id } = addAsset({ data_uri: PIXEL });
+  expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
+  let row = db.vault
+    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { favorite: number };
+  expect(row.favorite).toBe(1);
+  expect(invoke('media.update_asset', { asset_id, favorite: 0 }).status).toBe('executed');
+  row = db.vault
+    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { favorite: number };
+  expect(row.favorite).toBe(0);
+});
+
+test('restore_asset brings a trashed asset and its bytes back; restoring live fails', () => {
+  const { asset_id, content_id } = addAsset({
+    data_uri: PIXEL,
+    captured_at: '2026-01-01T00:00:00Z',
+  });
+  // Restoring a live asset is a receipted refusal.
+  expect(invoke('media.restore_asset', { asset_id }).status).toBe('failed');
+  invoke('media.delete_asset', { asset_id });
+  const outcome = invoke('media.restore_asset', { asset_id });
+  expect(outcome.status).toBe('executed');
+  const asset = db.vault
+    .prepare('SELECT deleted_at, captured_at FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { deleted_at: string | null; captured_at: string };
+  expect(asset.deleted_at).toBeNull();
+  expect(asset.captured_at).toBe('2026-01-01T00:00:00Z'); // metadata survives the round trip
+  const content = db.vault
+    .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
+    .get(content_id) as { deleted_at: string | null; purge_at: string | null };
+  expect(content.deleted_at).toBeNull();
+  expect(content.purge_at).toBeNull();
 });
 
 test('delete_asset keeps bytes another canonical row still rents', () => {

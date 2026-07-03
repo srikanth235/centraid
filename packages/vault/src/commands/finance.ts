@@ -249,6 +249,54 @@ function setBudget(ctx: HandlerCtx): Record<string, unknown> {
   return { budget_id: budgetId };
 }
 
+const REMOVE_BUDGET: CommandDefinition = {
+  name: 'finance.remove_budget',
+  ownerSchema: 'finance',
+  inputSchema: {
+    type: 'object',
+    required: ['budget_id'],
+    additionalProperties: false,
+    properties: {
+      budget_id: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['budget_id'],
+    properties: { budget_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'budget_exists',
+      sql: 'SELECT count(*) AS n FROM finance_budget WHERE budget_id = :budget_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      // The cap is gone; the ledger is untouched — a budget is a limit over
+      // spending, never spending itself.
+      name: 'budget_removed',
+      sql: 'SELECT count(*) AS n FROM finance_budget WHERE budget_id = :budget_id',
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'once',
+  risk: 'low',
+  handler: removeBudget,
+};
+
+function removeBudget(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { budget_id: string };
+  ctx.db.prepare('DELETE FROM finance_budget WHERE budget_id = ?').run(input.budget_id);
+  ctx.wrote('finance.budget', input.budget_id);
+  return { budget_id: input.budget_id };
+}
+
 const FLAG_ANOMALY: CommandDefinition = {
   name: 'finance.flag_anomaly',
   ownerSchema: 'finance',
@@ -335,5 +383,6 @@ export function registerFinanceCommands(gateway: Gateway): void {
   gateway.registerCommand(CATEGORIZE_TXN);
   gateway.registerCommand(SPLIT_TXN);
   gateway.registerCommand(SET_BUDGET);
+  gateway.registerCommand(REMOVE_BUDGET);
   gateway.registerCommand(FLAG_ANOMALY);
 }

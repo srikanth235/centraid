@@ -45,6 +45,7 @@ CREATE TABLE social_thread_participant (
   handle    TEXT,
   joined_at TEXT,
   muted     INTEGER NOT NULL CHECK (muted IN (0,1)),
+  last_read_at TEXT,
   UNIQUE (thread_id, party_id),
   CHECK (party_id IS NOT NULL OR handle IS NOT NULL)
 ) STRICT;
@@ -113,7 +114,9 @@ CREATE TABLE media_media_asset (
   width            INTEGER CHECK (width > 0),
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
-  exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json))
+  exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
+  favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0,1)),
+  deleted_at       TEXT
 ) STRICT;
 
 CREATE TABLE media_album (

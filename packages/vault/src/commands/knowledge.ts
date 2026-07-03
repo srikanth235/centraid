@@ -370,6 +370,147 @@ function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   return { notebook_id: notebookId };
 }
 
+const RENAME_NOTEBOOK: CommandDefinition = {
+  name: 'knowledge.rename_notebook',
+  ownerSchema: 'knowledge',
+  inputSchema: {
+    type: 'object',
+    required: ['notebook_id', 'name'],
+    additionalProperties: false,
+    properties: {
+      notebook_id: { type: 'string', minLength: 1 },
+      name: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['notebook_id'],
+    properties: { notebook_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'notebook_exists',
+      sql: 'SELECT count(*) AS n FROM knowledge_notebook WHERE notebook_id = :notebook_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // The schema has no UNIQUE on name, but two notebooks with the same
+      // name are indistinguishable in every filing UI — refuse the collision
+      // here. Scoped to the same owner, and excluding the notebook itself so
+      // a rename to its current name is an idempotent no-op.
+      name: 'name_unused_by_owner',
+      sql: `SELECT count(*) AS n FROM knowledge_notebook
+             WHERE name = :name AND notebook_id <> :notebook_id
+               AND owner_party_id = (SELECT owner_party_id FROM knowledge_notebook
+                                      WHERE notebook_id = :notebook_id)`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'name_updated',
+      sql: `SELECT count(*) AS n FROM knowledge_notebook
+             WHERE notebook_id = :notebook_id AND name = :name`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: renameNotebook,
+};
+
+function renameNotebook(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { notebook_id: string; name: string };
+  ctx.db
+    .prepare('UPDATE knowledge_notebook SET name = ? WHERE notebook_id = ?')
+    .run(input.name, input.notebook_id);
+  ctx.wrote('knowledge.notebook', input.notebook_id);
+  return { notebook_id: input.notebook_id };
+}
+
+const DELETE_NOTEBOOK: CommandDefinition = {
+  name: 'knowledge.delete_notebook',
+  ownerSchema: 'knowledge',
+  inputSchema: {
+    type: 'object',
+    required: ['notebook_id'],
+    additionalProperties: false,
+    properties: { notebook_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['notebook_id', 'notes_unfiled'],
+    properties: {
+      notebook_id: { type: 'string' },
+      notes_unfiled: { type: 'integer' },
+    },
+  },
+  preconditions: [
+    {
+      name: 'notebook_exists',
+      sql: 'SELECT count(*) AS n FROM knowledge_notebook WHERE notebook_id = :notebook_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // Hierarchy never dangles: children must be deleted (or re-parented
+      // by hand) first, mirroring how create_notebook refuses a missing
+      // parent on the way in.
+      name: 'notebook_has_no_children',
+      sql: `SELECT count(*) AS n FROM knowledge_notebook
+             WHERE parent_notebook_id = :notebook_id`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  postconditions: [
+    {
+      // The notebook and every placement onto it are gone together; member
+      // notes survive as unfiled rows (placements are the only edge).
+      name: 'notebook_and_placements_removed',
+      sql: `SELECT (
+              (SELECT count(*) FROM knowledge_notebook WHERE notebook_id = :notebook_id)
+              + (SELECT count(*) FROM knowledge_note_placement WHERE notebook_id = :notebook_id)
+            ) AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'idempotent',
+  // Unfile, don't destroy: the notebook is pure structure — deleting it
+  // orphans no content and every member note survives, so this sits at
+  // low alongside delete_note (which destroys strictly more).
+  risk: 'low',
+  handler: deleteNotebook,
+};
+
+function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { notebook_id: string };
+  const filed = ctx.db
+    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE notebook_id = ?')
+    .get(input.notebook_id) as { n: number };
+  ctx.db
+    .prepare('DELETE FROM knowledge_note_placement WHERE notebook_id = ?')
+    .run(input.notebook_id);
+  ctx.db.prepare('DELETE FROM knowledge_notebook WHERE notebook_id = ?').run(input.notebook_id);
+  ctx.wrote('knowledge.notebook', input.notebook_id);
+  ctx.cite({
+    claim: `notebook ${input.notebook_id} deleted; ${filed.n} member notes unfiled, none destroyed`,
+    entityType: 'knowledge.notebook',
+    entityId: input.notebook_id,
+  });
+  return { notebook_id: input.notebook_id, notes_unfiled: filed.n };
+}
+
 const DELETE_NOTE: CommandDefinition = {
   name: 'knowledge.delete_note',
   ownerSchema: 'knowledge',
@@ -449,5 +590,7 @@ export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(EDIT_NOTE);
   gateway.registerCommand(MOVE_NOTE);
   gateway.registerCommand(CREATE_NOTEBOOK);
+  gateway.registerCommand(RENAME_NOTEBOOK);
+  gateway.registerCommand(DELETE_NOTEBOOK);
   gateway.registerCommand(DELETE_NOTE);
 }

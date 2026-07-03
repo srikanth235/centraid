@@ -120,6 +120,42 @@ test('a slot overlapping an existing busy hold is refused', () => {
   if (overlap.status === 'failed') expect(overlap.predicate).toContain('no_busy_conflict');
 });
 
+test('remove_availability deletes a rule and leaves the others standing', () => {
+  setAllDayAvailability();
+  const weekend = invoke('schedule.set_availability', {
+    weekday_mask: 96, // Saturday + Sunday
+    window_start: '10:00',
+    window_end: '14:00',
+    tz: 'Europe/Berlin',
+  });
+  expect(weekend.status).toBe('executed');
+  const weekendRuleId = (weekend as { output: { rule_id: string } }).output.rule_id;
+
+  const removed = invoke('schedule.remove_availability', { rule_id: weekendRuleId });
+  expect(removed.status).toBe('executed');
+  expect((removed as { output: { rule_id: string } }).output.rule_id).toBe(weekendRuleId);
+
+  const gone = db.vault
+    .prepare('SELECT count(*) AS n FROM schedule_availability_rule WHERE rule_id = ?')
+    .get(weekendRuleId) as { n: number };
+  expect(gone.n).toBe(0);
+  const survivors = db.vault
+    .prepare('SELECT weekday_mask FROM schedule_availability_rule')
+    .all() as Array<{ weekday_mask: number }>;
+  expect(survivors).toEqual([{ weekday_mask: 127 }]);
+});
+
+test('remove_availability refuses a rule that does not exist', () => {
+  setAllDayAvailability();
+  const ghost = invoke('schedule.remove_availability', { rule_id: 'no-such-rule' });
+  expect(ghost.status).toBe('failed');
+  if (ghost.status === 'failed') expect(ghost.predicate).toContain('rule_exists');
+  const untouched = db.vault
+    .prepare('SELECT count(*) AS n FROM schedule_availability_rule')
+    .get() as { n: number };
+  expect(untouched.n).toBe(1);
+});
+
 test('confirm_booking only promotes a tentative hold', () => {
   const ghost = invoke('schedule.confirm_booking', { event_id: 'no-such-event' });
   expect(ghost.status).toBe('failed');

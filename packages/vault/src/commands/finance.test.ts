@@ -157,6 +157,83 @@ test('set_budget upserts on (owner, category, period, starts_on)', () => {
   expect(budgets).toEqual([{ limit_minor: 1200000 }]);
 });
 
+test('remove_budget deletes the cap; the ledger is untouched', () => {
+  const groceries = boot.concepts['groceries'] as string;
+  const set = gw.invoke(owner, {
+    command: 'finance.set_budget',
+    input: {
+      category_concept_id: groceries,
+      period: 'month',
+      limit_minor: 1500000,
+      currency: 'INR',
+      starts_on: '2026-07-01',
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(set.status).toBe('executed');
+  const budgetId = (set as { output: { budget_id: string } }).output.budget_id;
+  const outcome = gw.invoke(owner, {
+    command: 'finance.remove_budget',
+    input: { budget_id: budgetId },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  const budgets = db.vault.prepare('SELECT count(*) AS n FROM finance_budget').get() as {
+    n: number;
+  };
+  expect(budgets.n).toBe(0);
+  // The transaction it capped is still there — a budget is not ledger data.
+  const txns = db.vault.prepare('SELECT count(*) AS n FROM core_transaction').get() as {
+    n: number;
+  };
+  expect(txns.n).toBe(1);
+});
+
+test('remove_budget refuses a budget that does not exist', () => {
+  const outcome = gw.invoke(owner, {
+    command: 'finance.remove_budget',
+    input: { budget_id: uuidv7() },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('failed');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('budget_exists');
+});
+
+test('a removed budget can be set again (upsert inserts a fresh row)', () => {
+  const groceries = boot.concepts['groceries'] as string;
+  const input = {
+    category_concept_id: groceries,
+    period: 'month',
+    limit_minor: 1500000,
+    currency: 'INR',
+    starts_on: '2026-07-01',
+  };
+  const first = gw.invoke(owner, {
+    command: 'finance.set_budget',
+    input,
+    purpose: 'dpv:ServiceProvision',
+  });
+  const firstId = (first as { output: { budget_id: string } }).output.budget_id;
+  gw.invoke(owner, {
+    command: 'finance.remove_budget',
+    input: { budget_id: firstId },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const second = gw.invoke(owner, {
+    command: 'finance.set_budget',
+    input: { ...input, limit_minor: 1000000 },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(second.status).toBe('executed');
+  const budgets = db.vault.prepare('SELECT budget_id, limit_minor FROM finance_budget').all() as {
+    budget_id: string;
+    limit_minor: number;
+  }[];
+  expect(budgets).toHaveLength(1);
+  expect(budgets[0]?.limit_minor).toBe(1000000);
+  expect(budgets[0]?.budget_id).not.toBe(firstId);
+});
+
 test('flag_anomaly tags the transaction once; a second flag is refused', () => {
   const outcome = gw.invoke(owner, {
     command: 'finance.flag_anomaly',

@@ -21,6 +21,8 @@ const ADD_SUBSCRIPTION: CommandDefinition = {
       account_id: { type: 'string', minLength: 1 },
       expected_minor: { type: 'integer', minimum: 1 },
       rrule: { type: 'string', minLength: 1 },
+      // First/next-charge date the rrule counts from (ISO date).
+      anchor_on: { type: 'string', minLength: 1 },
       counterparty_party_id: { type: 'string', minLength: 1 },
       tolerance_pct: { type: 'integer', minimum: 0, maximum: 100 },
     },
@@ -67,6 +69,7 @@ function addSubscription(ctx: HandlerCtx): Record<string, unknown> {
     account_id: string;
     expected_minor: number;
     rrule: string;
+    anchor_on?: string;
     counterparty_party_id?: string;
     tolerance_pct?: number;
   };
@@ -74,19 +77,118 @@ function addSubscription(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO finance_recurring_series
-         (series_id, account_id, counterparty_party_id, rrule, expected_minor, tolerance_pct, last_txn_id, status)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, 'active')`,
+         (series_id, account_id, counterparty_party_id, rrule, anchor_on, expected_minor, tolerance_pct, last_txn_id, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'active')`,
     )
     .run(
       seriesId,
       input.account_id,
       input.counterparty_party_id ?? null,
       input.rrule,
+      input.anchor_on ?? null,
       input.expected_minor,
       input.tolerance_pct ?? 10,
     );
   ctx.wrote('finance.recurring_series', seriesId);
   return { series_id: seriesId };
+}
+
+const UPDATE_SUBSCRIPTION: CommandDefinition = {
+  name: 'finance.update_subscription',
+  ownerSchema: 'finance',
+  inputSchema: {
+    type: 'object',
+    required: ['series_id'],
+    additionalProperties: false,
+    properties: {
+      series_id: { type: 'string', minLength: 1 },
+      expected_minor: { type: 'integer', minimum: 1 },
+      rrule: { type: 'string', minLength: 1 },
+      anchor_on: { type: 'string', minLength: 1 },
+      counterparty_party_id: { type: 'string', minLength: 1 },
+      tolerance_pct: { type: 'number', minimum: 0, maximum: 100 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['series_id'],
+    properties: { series_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'series_exists',
+      sql: 'SELECT count(*) AS n FROM finance_recurring_series WHERE series_id = :series_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'counterparty_exists_if_given',
+      sql: `SELECT CASE WHEN :counterparty_party_id IS NULL THEN 1
+                 ELSE (SELECT count(*) FROM core_party WHERE party_id = :counterparty_party_id)
+            END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'series_still_exists',
+      sql: 'SELECT count(*) AS n FROM finance_recurring_series WHERE series_id = :series_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: updateSubscription,
+};
+
+function updateSubscription(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as {
+    series_id: string;
+    expected_minor?: number;
+    rrule?: string;
+    anchor_on?: string;
+    counterparty_party_id?: string;
+    tolerance_pct?: number;
+  };
+  const sets: string[] = [];
+  const values: (string | number)[] = [];
+  if (input.expected_minor !== undefined) {
+    sets.push('expected_minor = ?');
+    values.push(input.expected_minor);
+  }
+  if (input.rrule !== undefined) {
+    sets.push('rrule = ?');
+    values.push(input.rrule);
+  }
+  if (input.anchor_on !== undefined) {
+    sets.push('anchor_on = ?');
+    values.push(input.anchor_on);
+  }
+  if (input.counterparty_party_id !== undefined) {
+    sets.push('counterparty_party_id = ?');
+    values.push(input.counterparty_party_id);
+  }
+  if (input.tolerance_pct !== undefined) {
+    sets.push('tolerance_pct = ?');
+    values.push(input.tolerance_pct);
+  }
+  if (sets.length > 0) {
+    ctx.db
+      .prepare(`UPDATE finance_recurring_series SET ${sets.join(', ')} WHERE series_id = ?`)
+      .run(...values, input.series_id);
+  }
+  ctx.wrote('finance.recurring_series', input.series_id);
+  ctx.cite({
+    claim: `subscription ${input.series_id} updated`,
+    entityType: 'finance.recurring_series',
+    entityId: input.series_id,
+  });
+  return { series_id: input.series_id };
 }
 
 const SET_SUBSCRIPTION_STATUS: CommandDefinition = {
@@ -147,5 +249,6 @@ function setSubscriptionStatus(ctx: HandlerCtx): Record<string, unknown> {
 /** Register the subscription commands on a gateway. */
 export function registerSubscriptionCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_SUBSCRIPTION);
+  gateway.registerCommand(UPDATE_SUBSCRIPTION);
   gateway.registerCommand(SET_SUBSCRIPTION_STATUS);
 }

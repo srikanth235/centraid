@@ -17,6 +17,7 @@ const ADD_TASK: CommandDefinition = {
     additionalProperties: false,
     properties: {
       title: { type: 'string', minLength: 1 },
+      description: { type: 'string', minLength: 1 },
       due_at: { type: 'string', minLength: 1 },
       priority: { type: 'integer', minimum: 0, maximum: 9 },
       effort_min: { type: 'integer', minimum: 1 },
@@ -64,6 +65,7 @@ const ADD_TASK: CommandDefinition = {
 function addTask(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     title: string;
+    description?: string;
     due_at?: string;
     priority?: number;
     effort_min?: number;
@@ -78,13 +80,14 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO schedule_task
-         (task_id, owner_party_id, title, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule)
-       VALUES (?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?)`,
+         (task_id, owner_party_id, title, description, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule)
+       VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?)`,
     )
     .run(
       taskId,
       owner.owner_party_id,
       input.title,
+      input.description ?? null,
       input.priority ?? 0,
       input.due_at ?? null,
       input.effort_min ?? null,
@@ -172,6 +175,10 @@ const EDIT_TASK: CommandDefinition = {
     properties: {
       task_id: { type: 'string', minLength: 1 },
       title: { type: 'string', minLength: 1 },
+      description: { type: 'string', minLength: 1 },
+      // Clearing a note is an explicit intent, not a magic empty string —
+      // description sets, clear_description removes; sending both is refused.
+      clear_description: { type: 'boolean', const: true },
       due_at: { type: 'string', minLength: 1 },
       // Clearing a due date is an explicit intent, not a magic empty
       // string — due_at sets, clear_due removes; sending both is refused.
@@ -200,6 +207,13 @@ const EDIT_TASK: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      name: 'description_set_and_clear_are_exclusive',
+      sql: 'SELECT (:description IS NULL OR :clear_description IS NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   postconditions: [
     {
@@ -209,6 +223,8 @@ const EDIT_TASK: CommandDefinition = {
       sql: `SELECT (
               (SELECT CASE WHEN :title IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM schedule_task WHERE task_id = :task_id AND title = :title) END)
+              AND (SELECT CASE WHEN :description IS NULL THEN 1
+                           ELSE EXISTS(SELECT 1 FROM schedule_task WHERE task_id = :task_id AND description = :description) END)
               AND (SELECT CASE WHEN :due_at IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM schedule_task WHERE task_id = :task_id AND due_at = :due_at) END)
               AND (SELECT CASE WHEN :priority IS NULL THEN 1
@@ -228,6 +244,8 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     task_id: string;
     title?: string;
+    description?: string;
+    clear_description?: boolean;
     due_at?: string;
     clear_due?: boolean;
     priority?: number;
@@ -238,6 +256,14 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
   if (input.title !== undefined) {
     sets.push('title = ?');
     values.push(input.title);
+  }
+  if (input.description !== undefined) {
+    sets.push('description = ?');
+    values.push(input.description);
+  }
+  if (input.clear_description) {
+    sets.push('description = ?');
+    values.push(null);
   }
   if (input.due_at !== undefined) {
     sets.push('due_at = ?');

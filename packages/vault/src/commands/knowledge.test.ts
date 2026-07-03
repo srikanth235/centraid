@@ -205,3 +205,48 @@ test('delete_note keeps a body another note still rents (sha256 dedup)', () => {
     .get(first.body_content_id) as { deleted_at: string | null };
   expect(body.deleted_at).toBeNull();
 });
+
+test('rename_notebook updates the name and refuses a collision with a sibling', () => {
+  const a = createNotebook('Recipes');
+  createNotebook('Travel');
+  expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Cooking' }).status).toBe(
+    'executed',
+  );
+  const row = db.vault
+    .prepare('SELECT name FROM knowledge_notebook WHERE notebook_id = ?')
+    .get(a) as { name: string };
+  expect(row.name).toBe('Cooking');
+  // Renaming onto another notebook's name is a receipted refusal.
+  expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Travel' }).status).toBe(
+    'failed',
+  );
+  // Renaming to its own current name is an idempotent no-op.
+  expect(invoke('knowledge.rename_notebook', { notebook_id: a, name: 'Cooking' }).status).toBe(
+    'executed',
+  );
+});
+
+test('delete_notebook unfiles member notes without destroying them; children block it', () => {
+  const parent = createNotebook('Projects');
+  const child = createNotebook('Archive', parent);
+  const { note_id } = createNote({ title: 'Plan', body_text: 'v1', notebook_id: child });
+
+  // A notebook with children is refused until they go first.
+  expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
+
+  const outcome = invoke('knowledge.delete_notebook', { notebook_id: child });
+  expect(outcome.status).toBe('executed');
+  expect((outcome as { output: { notes_unfiled: number } }).output.notes_unfiled).toBe(1);
+  // The note survives, unfiled; the notebook and its placements are gone.
+  const note = db.vault
+    .prepare('SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?')
+    .get(note_id) as { n: number };
+  expect(note.n).toBe(1);
+  const placements = db.vault
+    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE note_id = ?')
+    .get(note_id) as { n: number };
+  expect(placements.n).toBe(0);
+  // Now childless, the parent deletes cleanly; a re-delete is refused.
+  expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('executed');
+  expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
+});

@@ -58,7 +58,7 @@ function purgeAt(now: string): string {
  * Every canonical table that can rent a content item besides the media
  * asset itself. The last reference decides whether bytes soft-delete.
  */
-const CONTENT_REFERENCES: { table: string; column: string }[] = [
+const CONTENT_REFERENCES: { table: string; column: string; onlyLive?: string }[] = [
   { table: 'core_attachment', column: 'content_id' },
   { table: 'core_party', column: 'avatar_content_id' },
   { table: 'knowledge_note', column: 'body_content_id' },
@@ -66,14 +66,17 @@ const CONTENT_REFERENCES: { table: string; column: string }[] = [
   { table: 'business_invoice', column: 'pdf_content_id' },
   { table: 'home_warranty', column: 'terms_content_id' },
   { table: 'home_maintenance_plan', column: 'instructions_content_id' },
-  { table: 'media_media_asset', column: 'content_id' },
+  // A trashed asset is not a rental — it must not keep its bytes alive, or
+  // trash could never release anything.
+  { table: 'media_media_asset', column: 'content_id', onlyLive: 'deleted_at IS NULL' },
 ];
 
 /** True when no canonical row still points at this content item. */
 export function contentUnreferenced(ctx: HandlerCtx, contentId: string): boolean {
   for (const ref of CONTENT_REFERENCES) {
+    const live = ref.onlyLive ? ` AND ${ref.onlyLive}` : '';
     const row = ctx.db
-      .prepare(`SELECT count(*) AS n FROM ${ref.table} WHERE ${ref.column} = ?`)
+      .prepare(`SELECT count(*) AS n FROM ${ref.table} WHERE ${ref.column} = ?${live}`)
       .get(contentId) as { n: number };
     if (row.n > 0) return false;
   }
@@ -196,17 +199,24 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     ctx.wrote('core.content_item', contentId);
   }
   // media_media_asset.content_id is UNIQUE — the same bytes are one asset.
+  // A trashed asset over these bytes comes back to life: re-upload = restore.
   const existingAsset = ctx.db
-    .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
-    .get(contentId) as { asset_id: string } | undefined;
+    .prepare('SELECT asset_id, deleted_at FROM media_media_asset WHERE content_id = ?')
+    .get(contentId) as { asset_id: string; deleted_at: string | null } | undefined;
   if (existingAsset) {
+    if (existingAsset.deleted_at !== null) {
+      ctx.db
+        .prepare('UPDATE media_media_asset SET deleted_at = NULL WHERE asset_id = ?')
+        .run(existingAsset.asset_id);
+      ctx.wrote('media.media_asset', existingAsset.asset_id);
+    }
     return { asset_id: existingAsset.asset_id, content_id: contentId, deduped: 1 };
   }
   const assetId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL)`,
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, favorite, deleted_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, 0, NULL)`,
     )
     .run(
       assetId,
@@ -238,6 +248,7 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: 'string' },
       // The caption lives on the canonical content item as its title.
       title: { type: 'string' },
+      favorite: { type: 'integer', enum: [0, 1] },
     },
   },
   outputSchema: {
@@ -263,6 +274,8 @@ const UPDATE_ASSET: CommandDefinition = {
               AND (SELECT CASE WHEN :title IS NULL THEN 1
                            ELSE EXISTS(SELECT 1 FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
                                         WHERE a.asset_id = :asset_id AND c.title = :title) END)
+              AND (SELECT CASE WHEN :favorite IS NULL THEN 1
+                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -275,11 +288,21 @@ const UPDATE_ASSET: CommandDefinition = {
 };
 
 function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { asset_id: string; captured_at?: string; title?: string };
+  const input = ctx.input as {
+    asset_id: string;
+    captured_at?: string;
+    title?: string;
+    favorite?: number;
+  };
   if (input.captured_at !== undefined) {
     ctx.db
       .prepare('UPDATE media_media_asset SET captured_at = ? WHERE asset_id = ?')
       .run(input.captured_at, input.asset_id);
+  }
+  if (input.favorite !== undefined) {
+    ctx.db
+      .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
+      .run(input.favorite, input.asset_id);
   }
   if (input.title !== undefined) {
     ctx.db
@@ -312,8 +335,11 @@ const DELETE_ASSET: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'asset_exists',
-      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id',
+      // Only a live asset can be trashed — a double-delete fails loudly
+      // instead of silently re-stamping the trash date.
+      name: 'asset_exists_live',
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id AND deleted_at IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -321,14 +347,15 @@ const DELETE_ASSET: CommandDefinition = {
   ],
   postconditions: [
     {
-      name: 'asset_removed',
-      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id',
+      name: 'asset_trashed',
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
       column: 'n',
       op: 'eq',
-      value: 0,
+      value: 1,
     },
   ],
-  idempotency: 'idempotent',
+  idempotency: 'once',
   risk: 'low',
   handler: deleteAsset,
 };
@@ -355,16 +382,88 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(next?.asset_id ?? null, album.album_id);
     ctx.wrote('media.album', album.album_id);
   }
-  ctx.db.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(input.asset_id);
-  ctx.db.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(input.asset_id);
+  // The asset row itself only trashes — restore_asset (or re-uploading the
+  // same bytes) brings it back with its metadata; the lifecycle sweep purges
+  // it alongside its content once the purge date passes.
+  ctx.db
+    .prepare('UPDATE media_media_asset SET deleted_at = ? WHERE asset_id = ?')
+    .run(ctx.now, input.asset_id);
   ctx.wrote('media.media_asset', input.asset_id);
   const released = releaseContentIfUnreferenced(ctx, asset.content_id);
   ctx.cite({
-    claim: `asset ${input.asset_id} left the library; bytes ${released ? 'soft-deleted' : 'still rented elsewhere'}`,
+    claim: `asset ${input.asset_id} moved to trash; bytes ${released ? 'soft-deleted' : 'still rented elsewhere'}`,
     entityType: 'media.media_asset',
     entityId: input.asset_id,
   });
   return { asset_id: input.asset_id, content_released: released ? 1 : 0 };
+}
+
+const RESTORE_ASSET: CommandDefinition = {
+  name: 'media.restore_asset',
+  ownerSchema: 'media',
+  inputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    additionalProperties: false,
+    properties: { asset_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    properties: { asset_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      // Restoring a live asset fails loudly — trash is the only source.
+      name: 'asset_is_trashed',
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'asset_live_with_live_content',
+      sql: `SELECT count(*) AS n FROM media_media_asset a
+             JOIN core_content_item c ON c.content_id = a.content_id
+            WHERE a.asset_id = :asset_id AND a.deleted_at IS NULL AND c.deleted_at IS NULL`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'once',
+  risk: 'low',
+  handler: restoreAsset,
+};
+
+function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string };
+  const asset = ctx.db
+    .prepare('SELECT content_id FROM media_media_asset WHERE asset_id = ?')
+    .get(input.asset_id) as { content_id: string } | undefined;
+  if (!asset) throw new Error('asset vanished between check and execute');
+  ctx.db
+    .prepare('UPDATE media_media_asset SET deleted_at = NULL WHERE asset_id = ?')
+    .run(input.asset_id);
+  ctx.wrote('media.media_asset', input.asset_id);
+  // Un-soft-delete the bytes too — same path the re-upload restore takes.
+  // Album membership is not restored, matching the benchmark's trash model.
+  ctx.db
+    .prepare(
+      `UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL
+        WHERE content_id = ? AND deleted_at IS NOT NULL`,
+    )
+    .run(asset.content_id);
+  ctx.wrote('core.content_item', asset.content_id);
+  ctx.cite({
+    claim: `asset ${input.asset_id} restored from trash with its bytes`,
+    entityType: 'media.media_asset',
+    entityId: input.asset_id,
+  });
+  return { asset_id: input.asset_id };
 }
 
 const CREATE_ALBUM: CommandDefinition = {
@@ -657,6 +756,7 @@ export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);
   gateway.registerCommand(DELETE_ASSET);
+  gateway.registerCommand(RESTORE_ASSET);
   gateway.registerCommand(CREATE_ALBUM);
   gateway.registerCommand(RENAME_ALBUM);
   gateway.registerCommand(DELETE_ALBUM);

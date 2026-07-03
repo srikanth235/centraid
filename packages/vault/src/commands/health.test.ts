@@ -19,7 +19,7 @@ beforeEach(() => {
   owner = { kind: 'device', deviceId: boot.deviceId, deviceKey: boot.deviceKey };
 });
 
-function logVital(value: number, observedAt?: string): void {
+function logVital(value: number, observedAt?: string): string {
   const outcome = gw.invoke(owner, {
     command: 'health.log_vital',
     input: {
@@ -31,6 +31,7 @@ function logVital(value: number, observedAt?: string): void {
   });
   if (outcome.status !== 'executed')
     throw new Error(`log_vital failed: ${JSON.stringify(outcome)}`);
+  return (outcome.output as { observation_id: string }).observation_id;
 }
 
 test('log_vital: the reading IS an observation, plus clinical columns (R02)', () => {
@@ -75,6 +76,54 @@ test('log_vital refuses non-positive values at the contract', () => {
   });
   expect(outcome.status).toBe('failed');
   if (outcome.status === 'failed') expect(outcome.predicate).toContain('value_is_positive');
+});
+
+test("void_vital: a typo'd reading flips to entered-in-error; other rows stay final", () => {
+  const typoId = logVital(720, '2026-07-01T07:00:00Z'); // fat-fingered 72
+  const realId = logVital(72, '2026-07-01T07:01:00Z');
+  const outcome = gw.invoke(owner, {
+    command: 'health.void_vital',
+    input: { observation_id: typoId, reason: '720 bpm is a typo for 72' },
+    purpose: 'dpv:HealthMonitoring',
+  });
+  expect(outcome.status).toBe('executed');
+  if (outcome.status !== 'executed') return;
+  expect(outcome.output).toMatchObject({ observation_id: typoId, status: 'entered-in-error' });
+  const statusOf = db.vault.prepare('SELECT status FROM core_observation WHERE observation_id = ?');
+  expect(statusOf.get(typoId)).toMatchObject({ status: 'entered-in-error' });
+  expect(statusOf.get(realId)).toMatchObject({ status: 'final' });
+  // The reason is persisted as journal evidence (§04 P4), not lost.
+  const evidence = db.journal
+    .prepare('SELECT claim FROM agent_evidence WHERE invocation_id = ?')
+    .get(outcome.invocationId) as { claim: string };
+  expect(evidence.claim).toContain('720 bpm is a typo for 72');
+});
+
+test('void_vital: a second void fails loudly — entered-in-error is terminal', () => {
+  const observationId = logVital(720);
+  const first = gw.invoke(owner, {
+    command: 'health.void_vital',
+    input: { observation_id: observationId },
+    purpose: 'dpv:HealthMonitoring',
+  });
+  expect(first.status).toBe('executed');
+  const again = gw.invoke(owner, {
+    command: 'health.void_vital',
+    input: { observation_id: observationId, reason: 'voiding twice by mistake' },
+    purpose: 'dpv:HealthMonitoring',
+  });
+  expect(again.status).toBe('failed');
+  if (again.status === 'failed') expect(again.predicate).toContain('not_already_voided');
+});
+
+test('void_vital refuses an observation that does not exist', () => {
+  const outcome = gw.invoke(owner, {
+    command: 'health.void_vital',
+    input: { observation_id: uuidv7() },
+    purpose: 'dpv:HealthMonitoring',
+  });
+  expect(outcome.status).toBe('failed');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('observation_exists');
 });
 
 test('import_workout: one span, two lenses — activity in core, load in health', () => {

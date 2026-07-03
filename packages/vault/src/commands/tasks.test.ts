@@ -156,3 +156,49 @@ test('edit_task clear_due removes the date; sending due_at with clear_due is ref
   expect(both.status).toBe('failed');
   if (both.status === 'failed') expect(both.predicate).toContain('due_set_and_clear_are_exclusive');
 });
+
+test('description rides add_task, edit_task sets it, clear_description removes it', () => {
+  const taskId = addTask({ title: 'Book flights', description: 'Window seat if possible' });
+  let row = db.vault
+    .prepare('SELECT description FROM schedule_task WHERE task_id = ?')
+    .get(taskId) as { description: string | null };
+  expect(row.description).toBe('Window seat if possible');
+
+  const edited = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, description: 'Aisle seat, actually' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(edited.status).toBe('executed');
+
+  // Editing an unrelated field leaves the note alone.
+  const titled = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, title: 'Book flights to Goa' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(titled.status).toBe('executed');
+  row = db.vault.prepare('SELECT description FROM schedule_task WHERE task_id = ?').get(taskId) as {
+    description: string | null;
+  };
+  expect(row.description).toBe('Aisle seat, actually');
+
+  const cleared = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, clear_description: true },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(cleared.status).toBe('executed');
+  row = db.vault.prepare('SELECT description FROM schedule_task WHERE task_id = ?').get(taskId) as {
+    description: string | null;
+  };
+  expect(row.description).toBeNull();
+
+  // Set and clear together is a contradiction, refused.
+  const both = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, description: 'x', clear_description: true },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(both.status).toBe('failed');
+});
