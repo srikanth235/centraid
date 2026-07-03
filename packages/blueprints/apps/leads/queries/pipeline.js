@@ -51,7 +51,11 @@ export default async ({ ctx }) => {
     const partyName = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
     const noteByParty = new Map((cards.rows ?? []).map((c) => [c.party_id, c.note]));
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const attByClient = attachmentsBySubject('business.client', attachments.rows ?? [], contentById);
+    const attByClient = attachmentsBySubject(
+      'business.client',
+      attachments.rows ?? [],
+      contentById,
+    );
 
     const clientRows = clients.rows ?? [];
     const leads = clientRows

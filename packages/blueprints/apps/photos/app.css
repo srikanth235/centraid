@@ -62,6 +62,10 @@ main {
 }
 
 .head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 1rem;
 }
 
@@ -98,9 +102,82 @@ main {
   display: block;
 }
 
+.banner.notice {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
+/* ---------- Write affordances (shared pattern across apps) ---------- */
+
 button {
   font: inherit;
   cursor: pointer;
+}
+
+button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--app-color, var(--accent));
+  outline-offset: 2px;
+}
+
+input {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  -webkit-appearance: none;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.primary {
+  border-radius: 0.5rem;
+  border: none;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  flex: none;
+}
+
+.ghost {
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.55rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.ghost.danger {
+  color: var(--danger);
+}
+
+.ghost.danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* Album filter chips */
@@ -121,10 +198,46 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.chip:hover {
+  border-color: var(--ink-faint);
+}
+
 .chip[data-active='true'] {
   border-color: var(--app-color, var(--accent));
   color: var(--app-color, var(--accent));
   font-weight: 600;
+}
+
+.chip-new {
+  border-style: dashed;
+  color: var(--ink-faint);
+}
+
+.chip-new:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+/* A chip that turned into a text field (new album, rename). */
+.chip-input {
+  border-radius: 999px;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.75rem;
+  width: 10rem;
+}
+
+/* Tools for the selected album — sits right under the chips. */
+.album-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: -0.5rem 0 1rem;
+}
+
+.album-tools-label {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  margin-right: auto;
 }
 
 /* Photo grid — day labels span the full row; tiles are square. */
@@ -142,8 +255,14 @@ button {
   font-size: 0.72rem;
 }
 
-.tile {
+.tile-wrap {
+  position: relative;
   aspect-ratio: 1;
+}
+
+.tile {
+  width: 100%;
+  height: 100%;
   padding: 0;
   border: none;
   border-radius: 0;
@@ -152,11 +271,50 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.tile:focus-visible {
+  outline-offset: -2px;
+}
+
 .tile img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.18s ease;
+}
+
+.tile:hover img,
+.tile:focus-visible img {
+  transform: scale(1.04);
+}
+
+/* Inside an album, each tile offers one contextual edit: leave it. */
+.tile-remove {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (hover: hover) {
+  .tile-remove {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .tile-wrap:hover .tile-remove,
+  .tile-remove:focus-visible {
+    opacity: 1;
+  }
 }
 
 .tile.placeholder {
@@ -185,7 +343,8 @@ button {
   -webkit-box-orient: vertical;
 }
 
-/* Lightbox — tap anywhere or press Escape to dismiss. */
+/* Lightbox — tap the backdrop or press Escape to dismiss; ←/→ steps
+   through whatever the grid is showing. */
 .lightbox {
   position: fixed;
   inset: 0;
@@ -200,11 +359,104 @@ button {
   cursor: pointer;
 }
 
+.lightbox-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  min-height: 0;
+  cursor: default;
+}
+
 .lightbox img {
   max-width: 100%;
-  max-height: 80vh;
+  max-height: 58vh;
   object-fit: contain;
   border-radius: 0.375rem;
+}
+
+.lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.lightbox-nav[disabled] {
+  opacity: 0.25;
+}
+
+.lightbox-nav.prev {
+  left: 0.75rem;
+}
+
+.lightbox-nav.next {
+  right: 0.75rem;
+}
+
+/* The edit panel under the photo: caption, capture time, albums, delete. */
+.lightbox-panel {
+  width: min(30rem, 100%);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.75rem 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  cursor: default;
+}
+
+.lightbox-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.lightbox-title {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.lightbox-when {
+  flex: none;
+}
+
+.lightbox-albums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.lightbox-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.lightbox-note {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.lightbox-note:empty {
+  display: none;
 }
 
 .lightbox-placeholder {
@@ -221,18 +473,23 @@ button {
   padding: 1rem;
 }
 
-.lightbox-caption {
-  color: #fff;
-  font-size: 0.85rem;
-  margin: 0;
-  text-align: center;
-}
-
 .empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
   color: var(--ink-soft);
   font-size: 0.9rem;
   text-align: center;
   padding: 2rem 0;
+}
+
+.empty[hidden] {
+  display: none;
+}
+
+.empty p {
+  margin: 0;
 }
 
 .footnote {

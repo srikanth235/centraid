@@ -7,7 +7,7 @@
       "desc": "Your calendar, projected from the vault.",
       "colorKey": "indigo",
       "iconKey": "Calendar",
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     {
       "id": "vitals",
@@ -39,7 +39,7 @@
       "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
       "colorKey": "violet",
       "iconKey": "Users",
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     {
       "id": "threads",
@@ -55,7 +55,7 @@
       "desc": "Write, file and pin notes over your vault's canonical content.",
       "colorKey": "forest",
       "iconKey": "Book",
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     {
       "id": "photos",
@@ -63,6 +63,14 @@
       "desc": "The library you own, wherever the bytes live.",
       "colorKey": "ochre",
       "iconKey": "Camera",
+      "version": "0.2.0"
+    },
+    {
+      "id": "docs",
+      "name": "Docs",
+      "desc": "A drive for your important documents — filed, downloadable, restorable.",
+      "colorKey": "slate",
+      "iconKey": "Folder",
       "version": "0.1.0"
     },
     {
@@ -71,7 +79,7 @@
       "desc": "What you own, where it lives, what covers it.",
       "colorKey": "slate",
       "iconKey": "Home",
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     {
       "id": "studio",
@@ -103,7 +111,7 @@
       "desc": "A pipeline for your prospects — enrol, advance, note.",
       "colorKey": "rose",
       "iconKey": "Users",
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     {
       "id": "briefing",

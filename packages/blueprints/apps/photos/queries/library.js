@@ -2,8 +2,8 @@
  * The library projection: every media asset joined to its content item
  * (content_uri + media_type — the bytes are rented, the meaning is here)
  * and to the albums it belongs to. Everything comes from the vault —
- * this app holds no rows of its own, and until the media domain grows a
- * command pack it writes nothing either.
+ * this app holds no rows of its own; every write goes back through the
+ * media domain's typed commands.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -28,21 +28,25 @@ export default async ({ ctx }) => {
       albumIdsByAsset.get(entry.asset_id).push(entry.album_id);
     }
 
-    const joined = (assets.rows ?? []).map((asset) => {
-      const content = contentById.get(asset.content_id);
-      return {
-        ...asset,
-        content_uri: content?.content_uri ?? null,
-        media_type: content?.media_type ?? null,
-        title: content?.title ?? null,
-        // The real timestamp: capture time when the camera recorded one,
-        // otherwise the content item's creation time in the vault.
-        taken_at: asset.captured_at ?? content?.created_at ?? null,
-        album_titles: (albumIdsByAsset.get(asset.asset_id) ?? [])
-          .map((id) => albumsById.get(id)?.title)
-          .filter((t) => t != null),
-      };
-    });
+    const joined = (assets.rows ?? [])
+      // Soft-deleted content is released bytes: an asset whose content
+      // item carries deleted_at has left the library and never renders.
+      .filter((asset) => contentById.get(asset.content_id)?.deleted_at == null)
+      .map((asset) => {
+        const content = contentById.get(asset.content_id);
+        const albumIds = albumIdsByAsset.get(asset.asset_id) ?? [];
+        return {
+          ...asset,
+          content_uri: content?.content_uri ?? null,
+          media_type: content?.media_type ?? null,
+          title: content?.title ?? null,
+          // The real timestamp: capture time when the camera recorded one,
+          // otherwise the content item's creation time in the vault.
+          taken_at: asset.captured_at ?? content?.created_at ?? null,
+          album_ids: albumIds,
+          album_titles: albumIds.map((id) => albumsById.get(id)?.title).filter((t) => t != null),
+        };
+      });
     joined.sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')));
 
     return {

@@ -2,17 +2,213 @@
   "manifestVersion": 1,
   "id": "photos",
   "name": "Photos",
-  "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Read-only until the media domain's command pack ships; revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
+  "version": "0.2.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Shows your photo library and albums.",
+    "why": "Shows your photo library and albums, and lets you upload, caption and organize.",
     "scopes": [
       { "schema": "media", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" }
+      { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "media", "table": "add_asset", "verbs": "act" },
+      { "schema": "media", "table": "update_asset", "verbs": "act" },
+      { "schema": "media", "table": "delete_asset", "verbs": "act" },
+      { "schema": "media", "table": "create_album", "verbs": "act" },
+      { "schema": "media", "table": "rename_album", "verbs": "act" },
+      { "schema": "media", "table": "delete_album", "verbs": "act" },
+      { "schema": "media", "table": "add_to_album", "verbs": "act" },
+      { "schema": "media", "table": "remove_from_album", "verbs": "act" }
     ]
   },
-  "actions": [],
+  "actions": [
+    {
+      "name": "upload",
+      "description": "Ingest one file into the library through media.add_asset; identical bytes dedupe onto one asset, and re-uploading a deleted photo restores it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "data_uri": { "type": "string", "minLength": 6 },
+          "kind": { "type": "string", "enum": ["photo", "video", "audio", "scan"] },
+          "captured_at": { "type": "string" },
+          "title": { "type": "string" },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "duration_s": { "type": "number", "minimum": 0 }
+        },
+        "required": ["data_uri"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "update-asset",
+      "description": "Recaption a photo or fix its capture time through media.update_asset (the title lives on the content item).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "captured_at": { "type": "string" },
+          "title": { "type": "string" }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-asset",
+      "description": "Remove a photo from the library through media.delete_asset; album entries and face regions go with it, covers hand off, and the bytes soft-delete only when nothing else references them.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "create-album",
+      "description": "Start a new album through media.create_album.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string", "minLength": 1 }
+        },
+        "required": ["title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "rename-album",
+      "description": "Retitle an album through media.rename_album.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-album",
+      "description": "Delete an album through media.delete_album; its photos stay in the library.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-to-album",
+      "description": "Put a photo in an album through media.add_to_album; fails when it is already there.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id", "asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-from-album",
+      "description": "Take a photo out of an album through media.remove_from_album; the photo stays in the library.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "album_id": { "type": "string", "minLength": 1 },
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["album_id", "asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    }
+  ],
   "queries": [
     {
       "name": "library",

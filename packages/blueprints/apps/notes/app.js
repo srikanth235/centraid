@@ -2,9 +2,9 @@
 // lives in knowledge.note; bodies are canonical core.content_item rows
 // decoded gateway-side by the library query. Writes go through the
 // knowledge domain's typed commands (create_note, edit_note, move_note,
-// create_notebook) routed via this app's action handlers — consent-checked
-// per command and receipted. Revoke the grant and this page goes dark
-// while the model, history and receipts remain the owner's.
+// create_notebook, delete_note) routed via this app's action handlers —
+// consent-checked per command and receipted. Revoke the grant and this
+// page goes dark while the model, history and receipts remain the owner's.
 
 const $ = (id) => document.getElementById(id);
 
@@ -112,7 +112,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -250,6 +254,7 @@ function openNote(note) {
     .join(' — ');
   $('noteBody').textContent = note.body ?? '';
   $('pinButton').textContent = note.pinned === 1 ? 'Unpin' : 'Pin';
+  disarmDelete();
   renderMoveSelect(note);
   renderAttachments($('attachStrip'), note.attachments, removeAttachment);
   closeEdit();
@@ -381,6 +386,32 @@ $('editButton').addEventListener('click', () => {
 });
 
 $('cancelEdit').addEventListener('click', closeEdit);
+
+// Deletion confirms with a second click on the same control, not a modal.
+// The command drops the note plus its placements, annotations and
+// attachment edges; the deduped body is only released when nothing else
+// shares it.
+function disarmDelete() {
+  const btn = $('deleteButton');
+  delete btn.dataset.armed;
+  btn.textContent = 'Delete';
+}
+
+$('deleteButton').addEventListener('click', async () => {
+  if (!viewing) return;
+  const btn = $('deleteButton');
+  if (!btn.dataset.armed) {
+    btn.dataset.armed = 'true';
+    btn.textContent = 'Really delete?';
+    return;
+  }
+  const outcome = await act('delete-note', { note_id: viewing.note_id });
+  disarmDelete();
+  if (narrate(outcome, refresh)) {
+    closeNote();
+    await refresh();
+  }
+});
 
 $('editForm').addEventListener('submit', async (e) => {
   e.preventDefault();

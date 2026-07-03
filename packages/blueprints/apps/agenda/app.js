@@ -145,7 +145,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -340,7 +344,28 @@ function renderRow(ev) {
     attachTarget = ev.event_id;
     $('attachInput').click();
   });
-  row.append(time, text, badge, attach);
+  // Cancelling is medium-risk, so the vault parks it for the owner — the
+  // affordance is an ask, confirmed with a second click on the same control.
+  // The event stays on the agenda until the owner approves; once cancelled,
+  // the upcoming query excludes it.
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'attach-btn cancel-btn';
+  cancel.textContent = '✕';
+  cancel.title = 'Ask to cancel — the owner approves it';
+  cancel.setAttribute('aria-label', 'Ask to cancel this event');
+  cancel.addEventListener('click', async () => {
+    if (!cancel.dataset.armed) {
+      cancel.dataset.armed = 'true';
+      cancel.textContent = 'Ask to cancel?';
+      return;
+    }
+    delete cancel.dataset.armed;
+    cancel.textContent = '✕';
+    const outcome = await act('cancel-event', { event_id: ev.event_id });
+    if (narrate(outcome)) await refresh();
+  });
+  row.append(time, text, badge, cancel, attach);
 
   // Any attachments render as a strip beneath the row; the row and its strip
   // travel together in a fragment so the list's append logic stays flat.

@@ -118,7 +118,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -166,13 +170,16 @@ async function refresh() {
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     $('searchInput').hidden = true;
+    $('addPersonBtn').hidden = true;
     closeForm();
     closeCompose();
+    closeAddPerson();
     $('peopleList').innerHTML = '';
     $('empty').hidden = true;
     return;
   }
   $('searchInput').hidden = false;
+  $('addPersonBtn').hidden = false;
   people = data?.people ?? [];
   // Keep the open card's attachment strip fresh across change-feed refreshes.
   if (editing) {
@@ -232,8 +239,10 @@ function renderRow(person) {
 
 function openForm(person) {
   closeCompose();
+  closeAddPerson();
   editing = person;
   $('cardFormTitle').textContent = `Card for ${person.display_name}`;
+  $('displayNameInput').value = person.display_name ?? '';
   $('nicknameInput').value = person.card?.nickname ?? '';
   $('noteInput').value = person.card?.note ?? '';
   $('favoriteInput').checked = person.card?.favorite === 1;
@@ -253,8 +262,20 @@ function closeForm() {
   $('cardForm').hidden = true;
 }
 
+function openAddPerson() {
+  closeForm();
+  closeCompose();
+  $('personForm').hidden = false;
+  $('personNameInput').focus();
+}
+
+function closeAddPerson() {
+  $('personForm').hidden = true;
+}
+
 function openCompose(person) {
   closeForm();
+  closeAddPerson();
   composing = person;
   $('composeTitle').textContent = `Message ${person.display_name}`;
   $('composeBody').value = '';
@@ -266,6 +287,38 @@ function closeCompose() {
   composing = null;
   $('composeForm').hidden = true;
 }
+
+// Mint a brand-new party through core.add_party — the one write that grows
+// the directory itself. Optional handles bind in the same stroke; the vault
+// refuses when a handle already identifies someone else.
+$('personForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const display_name = $('personNameInput').value.trim();
+  if (!display_name) {
+    notice('A person needs a name.');
+    return;
+  }
+  const email = $('personEmailInput').value.trim();
+  const tel = $('personTelInput').value.trim();
+  const handle = $('personHandleInput').value.trim();
+  const outcome = await act('add-person', {
+    display_name,
+    ...(email ? { email } : {}),
+    ...(tel ? { tel } : {}),
+    ...(handle ? { handle } : {}),
+  });
+  if (narrate(outcome, refresh)) {
+    $('personNameInput').value = '';
+    $('personEmailInput').value = '';
+    $('personTelInput').value = '';
+    $('personHandleInput').value = '';
+    closeAddPerson();
+    await refresh();
+  }
+});
+
+$('addPersonBtn').addEventListener('click', openAddPerson);
+$('cancelPerson').addEventListener('click', closeAddPerson);
 
 $('cardForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -300,6 +353,19 @@ $('cardForm').addEventListener('submit', async (e) => {
 });
 
 $('cancelCard').addEventListener('click', closeForm);
+
+// Rename the party itself through core.update_party — identity lives on the
+// party row, so this is a separate command from the card's enrichment.
+$('renamePartyBtn').addEventListener('click', async () => {
+  if (!editing) return;
+  const display_name = $('displayNameInput').value.trim();
+  if (!display_name || display_name === editing.display_name) return;
+  const outcome = await act('edit-person', { party_id: editing.party_id, display_name });
+  if (narrate(outcome, refresh)) {
+    $('cardFormTitle').textContent = `Card for ${display_name}`;
+    await refresh();
+  }
+});
 
 // Bind a raw handle to the party being edited — resolution is retroactive,
 // so unresolved threads and messages pick up the identity too.

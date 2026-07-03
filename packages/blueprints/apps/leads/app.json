@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "leads",
   "name": "Leads",
-  "description": "A lightweight CRM as a projection of the personal vault: leads are business.client rows whose lead → active → past lifecycle IS the pipeline. Names come from core.party, running notes from social.contact_card, and files (a proposal, a brief) attach per lead. Enrolling, advancing and noting all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "description": "A lightweight CRM as a projection of the personal vault: leads are business.client rows whose lead → active → past lifecycle IS the pipeline. Names come from core.party, running notes from social.contact_card, and files (a proposal, a brief) attach per lead. Prospects are enrolled from the vault's existing people or minted on the spot through core.add_party and enrolled in one flow; creating, enrolling, advancing and noting all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.2.0",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Shows your prospect pipeline and lets you enrol, advance and note leads.",
@@ -13,6 +13,7 @@
       { "schema": "social", "table": "contact_card", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
       { "schema": "core", "table": "attachment", "verbs": "read" },
+      { "schema": "core", "table": "add_party", "verbs": "act" },
       { "schema": "business", "table": "add_client", "verbs": "act" },
       { "schema": "business", "table": "update_client", "verbs": "act" },
       { "schema": "social", "table": "update_card", "verbs": "act" },
@@ -41,6 +42,33 @@
           "status": { "type": "string" },
           "output": { "type": "object" },
           "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-contact",
+      "description": "Create a brand-new contact through core.add_party (with optional email/tel identifiers) and enrol them as a lead through business.add_client in one flow.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "display_name": { "type": "string", "minLength": 1 },
+          "email": { "type": "string" },
+          "tel": { "type": "string" },
+          "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
+          "default_rate_minor": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["display_name", "currency"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" },
+          "party_id": { "type": "string" }
         }
       },
       "writes": []
@@ -104,15 +132,7 @@
           "title": { "type": "string" },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

@@ -1,8 +1,9 @@
 /**
  * The home-inventory projection: owned asset items joined to their place
- * name and latest warranty, plus maintenance plans with a projected
- * next-due date. Everything comes from the vault — this app holds no rows
- * of its own, and (until the home command pack ships) writes nothing back.
+ * name and warranty history, plus disposed items (disposal keeps the row)
+ * and maintenance plans with a projected next-due date. Everything comes
+ * from the vault — this app holds no rows of its own; writes go back
+ * through the home domain's typed commands.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -60,27 +61,37 @@ export default async ({ ctx }) => {
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByItem = attachmentsBySubject('home.asset_item', attachments.rows ?? [], contentById);
 
-    // Latest warranty per item (an item can accumulate several over time);
-    // "active" is computed from home_warranty.ends_on against today.
-    const warrantyByItem = new Map();
+    // Full warranty history per item, newest coverage first (an item can
+    // accumulate several over time); "active" is computed from
+    // home_warranty.ends_on against today.
+    const warrantiesByItem = new Map();
     for (const w of warranties.rows ?? []) {
-      const prev = warrantyByItem.get(w.item_id);
-      if (!prev || String(w.ends_on) > String(prev.ends_on)) warrantyByItem.set(w.item_id, w);
+      if (!warrantiesByItem.has(w.item_id)) warrantiesByItem.set(w.item_id, []);
+      warrantiesByItem.get(w.item_id).push({
+        warranty_id: w.warranty_id,
+        starts_on: w.starts_on,
+        ends_on: w.ends_on,
+        claim_uri: w.claim_uri ?? null,
+        active: String(w.ends_on).slice(0, 10) >= today,
+      });
+    }
+    for (const list of warrantiesByItem.values()) {
+      list.sort((x, y) => String(y.ends_on).localeCompare(String(x.ends_on)));
     }
 
     const owned = (items.rows ?? []).filter((it) => it.disposed_on == null);
     const joined = owned
       .map((it) => {
-        const w = warrantyByItem.get(it.item_id);
+        const itemWarranties = warrantiesByItem.get(it.item_id) ?? [];
+        const latest = itemWarranties[0];
         return {
           item_id: it.item_id,
           name: it.name,
           serial_no: it.serial_no ?? null,
           acquired_on: it.acquired_on ?? null,
           place_name: (it.place_id != null && placeName.get(it.place_id)) || null,
-          warranty: w
-            ? { ends_on: w.ends_on, active: String(w.ends_on).slice(0, 10) >= today }
-            : null,
+          warranty: latest ? { ends_on: latest.ends_on, active: latest.active } : null,
+          warranties: itemWarranties,
           attachments: attByItem.get(it.item_id) ?? [],
         };
       })
@@ -89,6 +100,19 @@ export default async ({ ctx }) => {
           String(a.place_name ?? '￿').localeCompare(String(b.place_name ?? '￿')) ||
           String(a.name).localeCompare(String(b.name)),
       );
+
+    // Disposal keeps the row — disposed items stay visible as history,
+    // newest disposal first.
+    const disposed = (items.rows ?? [])
+      .filter((it) => it.disposed_on != null)
+      .map((it) => ({
+        item_id: it.item_id,
+        name: it.name,
+        serial_no: it.serial_no ?? null,
+        disposed_on: it.disposed_on,
+        place_name: (it.place_id != null && placeName.get(it.place_id)) || null,
+      }))
+      .toSorted((a, b) => String(b.disposed_on).localeCompare(String(a.disposed_on)));
 
     const itemName = new Map(owned.map((it) => [it.item_id, it.name]));
     const maintenance = (plans.rows ?? [])
@@ -103,9 +127,14 @@ export default async ({ ctx }) => {
       }))
       .toSorted((a, b) => String(a.next_due_on ?? '￿').localeCompare(String(b.next_due_on ?? '￿')));
 
-    return { items: joined, maintenance };
+    return { items: joined, disposed, maintenance };
   } catch (err) {
-    return { items: [], maintenance: [], vaultDenied: { code: err.code, message: err.message } };
+    return {
+      items: [],
+      disposed: [],
+      maintenance: [],
+      vaultDenied: { code: err.code, message: err.message },
+    };
   }
 };
 

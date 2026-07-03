@@ -58,18 +58,48 @@
         <form id="addForm" class="panel" autocomplete="off">
           <div class="field-row">
             <select id="candidateSelect" aria-label="Party"></select>
-            <input id="currencyInput" type="text" value="EUR" maxlength="3" aria-label="Currency" class="currency" />
+            <input
+              id="nameInput"
+              type="text"
+              placeholder="Name"
+              aria-label="Name"
+              class="grow"
+              hidden
+            />
+            <input
+              id="currencyInput"
+              type="text"
+              value="EUR"
+              maxlength="3"
+              aria-label="Currency"
+              class="currency"
+            />
             <button type="submit" class="primary small-btn">Add lead</button>
           </div>
+          <div id="contactRow" class="field-row" hidden>
+            <input
+              id="emailInput"
+              type="email"
+              placeholder="Email (optional)"
+              aria-label="Email"
+              class="grow"
+            />
+            <input
+              id="telInput"
+              type="tel"
+              placeholder="Phone (optional)"
+              aria-label="Phone"
+              class="grow"
+            />
+          </div>
           <p class="muted small">
-            Leads are people from your vault — add them in People first if they aren't listed.
+            <span id="modeHint">Leads are people from your vault.</span>
+            <button type="button" id="modeToggle" class="link-btn">New contact instead</button>
           </p>
         </form>
 
         <div id="board" class="board"></div>
-        <p id="empty" class="empty" hidden>
-          No leads yet. Add your first prospect above.
-        </p>
+        <p id="empty" class="empty" hidden>No leads yet. Add your first prospect above.</p>
       </div>
 
       <input id="attachInput" type="file" multiple hidden aria-hidden="true" />

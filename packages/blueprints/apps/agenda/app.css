@@ -500,6 +500,14 @@ button {
   border-color: currentColor;
 }
 
+/* Cancellation is an ask the owner approves; hovered or armed it takes the
+   danger tint instead of the accent. */
+.cancel-btn:hover,
+.cancel-btn[data-armed] {
+  color: var(--danger);
+  border-color: currentColor;
+}
+
 /* A row's own attachment strip sits beneath it, aligned past the time column. */
 .row-attachments {
   padding: 0 0 0.625rem 9.25rem;

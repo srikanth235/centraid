@@ -42,7 +42,7 @@
       <header class="head">
         <div>
           <h1>Home inventory</h1>
-          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
       </header>
 
@@ -54,6 +54,20 @@
       </div>
       <div id="noticeBanner" class="banner notice" hidden></div>
 
+      <form id="addForm" class="add-form" autocomplete="off" hidden>
+        <input id="addNameInput" type="text" placeholder="Add an item…" aria-label="Item name" />
+        <div class="add-more">
+          <input id="addAcquiredInput" type="date" aria-label="Acquired on" />
+          <input
+            id="addSerialInput"
+            type="text"
+            placeholder="Serial no."
+            aria-label="Serial number"
+          />
+          <button type="submit" class="primary small-btn">Add</button>
+        </div>
+      </form>
+
       <!-- One shared file picker; each item's attach button targets its own row. -->
       <input id="attachInput" type="file" multiple hidden />
 
@@ -64,11 +78,17 @@
 
       <section id="itemList" aria-label="Items by place"></section>
       <p id="empty" class="empty" hidden>
-        Nothing here yet — the inventory fills in as assets are recorded in the vault.
+        Nothing here yet — add the first item above, or record assets in the vault.
       </p>
 
+      <!-- Disposal keeps the row; the history stays, collapsed out of the way. -->
+      <details id="disposedSection" hidden>
+        <summary class="day-label muted small">Disposed</summary>
+        <div id="disposedRows"></div>
+      </details>
+
       <p class="footnote muted small">
-        Read-only for now — editing arrives with the home domain's command pack.
+        Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
     <script type="module" src="app.js"></script>

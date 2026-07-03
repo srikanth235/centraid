@@ -171,6 +171,13 @@ select {
   color: var(--app-color, var(--accent));
 }
 
+/* Deletion is destructive; hovered or armed it takes the danger tint. */
+.ghost.danger:hover,
+.ghost.danger[data-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 #quickAdd {
   display: flex;
   flex-direction: column;
@@ -354,7 +361,6 @@ select {
   text-align: center;
   color: var(--ink-faint);
 }
-
 
 /* ---------- Attachments (shared pattern across apps) ---------- */
 

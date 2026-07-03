@@ -1,0 +1,532 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --accent: #5c677d;
+  --ink: #0f172a;
+  --ink-soft: #475569;
+  --ink-faint: #94a3b8;
+  --bg: #fcfcfc;
+  --surface: #ffffff;
+  --line: rgba(31, 31, 35, 0.07);
+  --danger: #dc2626;
+}
+
+:root[data-theme='dark'] {
+  --bg-l: 10%;
+  --ink: hsl(220 12% 95%);
+  --ink-soft: hsl(220 8% 62%);
+  --ink-faint: hsl(220 6% 42%);
+  --bg: var(--bg-wall);
+  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
+  --line: hsla(220 25% 70% / 0.07);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-l: 10%;
+    --ink: hsl(220 12% 95%);
+    --ink-soft: hsl(220 8% 62%);
+    --ink-faint: hsl(220 6% 42%);
+    --bg: var(--bg-wall);
+    --surface: hsl(225 11% 14.5%);
+    --line: hsla(220 25% 70% / 0.07);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+main {
+  max-width: 36rem;
+  margin: 0 auto;
+  padding: 0.5rem 0 2rem;
+}
+
+@media (min-width: 720px) {
+  body {
+    padding: 1.5rem 2rem;
+  }
+  main {
+    max-width: 56rem;
+  }
+}
+
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.head h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.1rem;
+}
+
+.head-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+/* Consent banner — the vault's decisions are part of the UI. */
+.banner {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--app-color, var(--accent));
+  background: var(--surface);
+  border-radius: 0.625rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+  line-height: 1.45;
+}
+
+.banner strong {
+  display: block;
+}
+
+.banner.notice {
+  border-left-color: var(--ink-faint);
+  color: var(--ink-soft);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+input[type='text'],
+select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  -webkit-appearance: none;
+}
+
+input[type='text']:focus,
+select:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+select {
+  width: auto;
+  font-size: 0.8125rem;
+  color: var(--ink-soft);
+  padding: 0.3rem 0.5rem;
+}
+
+.primary {
+  border-radius: 0.625rem;
+  border: none;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+}
+
+.ghost {
+  border-radius: 0.625rem;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ghost:hover,
+.ghost:focus-visible {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+.ghost.danger:hover,
+.ghost.danger:focus-visible,
+.ghost[data-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- Drive layout: sidebar + pane ---------- */
+
+.drive {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 720px) {
+  .drive {
+    grid-template-columns: 14rem minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+  :root[data-app-width='narrow'] .drive {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.sidebar {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+}
+
+.folder-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+/* One row per folder: navigate button + hover/focus affordances. */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 0.5rem;
+}
+
+.tree-row:hover,
+.tree-row:focus-within {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 7%, transparent);
+}
+
+.tree-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  text-align: left;
+  font-size: 0.875rem;
+  padding: 0.45rem 0.5rem;
+  border-radius: 0.5rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tree-item:focus-visible {
+  outline: 2px solid var(--app-color, var(--accent));
+  outline-offset: -2px;
+}
+
+.tree-item[aria-current='true'] {
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+}
+
+.tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-count {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--ink-faint);
+}
+
+.tree-count:empty {
+  display: none;
+}
+
+/* Rename/delete only surface on hover or keyboard focus within the row. */
+.tree-tools {
+  display: none;
+  gap: 0.15rem;
+  padding-right: 0.25rem;
+}
+
+.tree-row:hover .tree-tools,
+.tree-row:focus-within .tree-tools {
+  display: inline-flex;
+}
+
+.tool-btn {
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.3rem;
+  border-radius: 0.4rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tool-btn:hover,
+.tool-btn:focus-visible {
+  color: var(--app-color, var(--accent));
+}
+
+.tool-btn.danger:hover,
+.tool-btn.danger:focus-visible,
+.tool-btn[data-armed] {
+  color: var(--danger);
+}
+
+.tree-edit {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem 0.25rem;
+}
+
+.tree-edit input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+}
+
+.trash-item {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+.folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0.25rem 0.25rem;
+  border-top: 1px solid var(--line);
+  margin-top: 0.5rem;
+}
+
+.folder-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.folder-form-actions span {
+  margin-right: auto;
+}
+
+/* ---------- Breadcrumb ---------- */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  margin-bottom: 0.5rem;
+  min-height: 1.8rem;
+}
+
+.crumb {
+  border: none;
+  background: none;
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.4rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.crumb:hover,
+.crumb:focus-visible {
+  color: var(--app-color, var(--accent));
+}
+
+.crumb[aria-current='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+
+/* ---------- Document rows ---------- */
+
+.doc-list {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.doc-list:empty {
+  display: none;
+}
+
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.doc-row:last-child {
+  border-bottom: none;
+}
+
+.doc-row:hover,
+.doc-row:focus-within {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 4%, transparent);
+}
+
+.doc-icon {
+  flex-shrink: 0;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.doc-icon.pdf {
+  color: #c2410c;
+  background: rgba(234, 88, 12, 0.12);
+}
+
+.doc-icon.image {
+  color: #0e7490;
+  background: rgba(6, 182, 212, 0.12);
+}
+
+.doc-icon.generic {
+  color: var(--ink-soft);
+  background: color-mix(in srgb, var(--ink-faint) 16%, transparent);
+}
+
+.doc-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.doc-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-meta {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+
+.doc-meta .purge {
+  color: var(--danger);
+}
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.doc-actions a.ghost {
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* Inline rename editor swaps in for the row's title. */
+.doc-edit {
+  display: flex;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-edit input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.875rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.empty {
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.empty p {
+  margin: 0 0 0.5rem;
+}
+
+.empty .primary {
+  margin-top: 0.5rem;
+}
+
+.footnote {
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--ink-faint);
+}
+
+/* ---------- App-level knobs ---------- */
+
+:root[data-app-font='sans'] {
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+:root[data-app-width='narrow'] main {
+  max-width: 36rem;
+}
+@media (min-width: 720px) {
+  :root[data-app-width='narrow'] main {
+    max-width: 42rem;
+  }
+}

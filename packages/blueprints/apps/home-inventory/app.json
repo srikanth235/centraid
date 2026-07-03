@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "home-inventory",
   "name": "Home inventory",
-  "description": "What you own, where it lives, and what it's covered by — a read-only projection of the vault's home domain. The home domain has no typed commands yet, so this app stays read-only until the home command pack ships.",
-  "version": "0.2.0",
+  "description": "What you own, where it lives, and what it's covered by — a projection of the vault's home domain. Adding, editing, disposing and covering items all run through the home domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the inventory stays the owner's.",
+  "version": "0.3.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your home inventory, warranties, and upcoming maintenance.",
@@ -11,6 +11,26 @@
       {
         "schema": "home",
         "verbs": "read"
+      },
+      {
+        "schema": "home",
+        "table": "add_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "home",
+        "table": "update_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "home",
+        "table": "dispose_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "home",
+        "table": "add_warranty",
+        "verbs": "act"
       },
       {
         "schema": "core",
@@ -41,6 +61,170 @@
   },
   "actions": [
     {
+      "name": "add-item",
+      "description": "Add an owned item through home.add_item; the vault assigns the id.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acquired_on": {
+            "type": "string",
+            "minLength": 1
+          },
+          "serial_no": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "update-item",
+      "description": "Edit an item's name, acquired date, or serial through home.update_item — partial update, only the fields sent change.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acquired_on": {
+            "type": "string",
+            "minLength": 1
+          },
+          "serial_no": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "dispose-item",
+      "description": "Dispose an item through home.dispose_item — disposed_on defaults to today, the row is kept so history stays, and a second disposal is refused.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "disposed_on": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-warranty",
+      "description": "Record warranty coverage on an item through home.add_warranty (ends_on must be on or after starts_on; claim_uri optional).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "starts_on": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ends_on": {
+            "type": "string",
+            "minLength": 1
+          },
+          "provider_party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim_uri": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["item_id", "starts_on", "ends_on"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (photo, warranty, receipt, any media) to an inventory item through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -60,15 +244,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],
@@ -125,7 +301,7 @@
   "queries": [
     {
       "name": "inventory",
-      "description": "Owned asset items grouped by place, each with its latest warranty, plus maintenance plans with a projected next-due date.",
+      "description": "Owned asset items grouped by place, each with its warranty history, plus disposed items and maintenance plans with a projected next-due date.",
       "input": {
         "type": "object",
         "properties": {},
@@ -135,6 +311,9 @@
         "type": "object",
         "properties": {
           "items": {
+            "type": "array"
+          },
+          "disposed": {
             "type": "array"
           },
           "maintenance": {

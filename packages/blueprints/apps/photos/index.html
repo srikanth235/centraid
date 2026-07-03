@@ -42,8 +42,9 @@
       <header class="head">
         <div>
           <h1>Photos</h1>
-          <p id="subtitle" class="muted">A read-only projection of your vault.</p>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
         </div>
+        <button id="uploadBtn" type="button" class="primary small-btn">＋ Add photos</button>
       </header>
 
       <div id="consentBanner" class="banner" hidden>
@@ -52,15 +53,30 @@
           >Ask the owner to approve this app's requested scopes in vault settings.</span
         >
       </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
 
-      <nav id="albumChips" class="chips" aria-label="Albums" hidden></nav>
+      <div id="live">
+        <nav id="albumChips" class="chips" aria-label="Albums" hidden></nav>
+        <div id="albumTools" class="album-tools" hidden></div>
 
-      <section id="grid" class="grid" aria-label="Photo library"></section>
-      <p id="empty" class="empty" hidden>
-        No photos yet. They will appear here once media is ingested into the vault.
-      </p>
+        <section id="grid" class="grid" aria-label="Photo library"></section>
+        <div id="empty" class="empty" hidden>
+          <p id="emptyText">No photos yet — your library starts with the first upload.</p>
+          <button id="emptyUpload" type="button" class="primary small-btn">＋ Add photos</button>
+        </div>
+      </div>
+
+      <input
+        id="fileInput"
+        type="file"
+        accept="image/*,video/*"
+        multiple
+        hidden
+        aria-hidden="true"
+      />
+
       <p class="muted small footnote">
-        Organizing — new albums, edits, deletions — arrives with the media domain's command pack.
+        Every change is a typed media command — consent-checked and receipted.
       </p>
 
       <div id="lightbox" class="lightbox" hidden></div>

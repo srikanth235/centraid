@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "agenda",
   "name": "Agenda",
-  "description": "Your calendar as a projection of the personal vault: upcoming events from core.event, proposals and RSVPs through consent-checked typed commands. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.3.0",
+  "description": "Your calendar as a projection of the personal vault: upcoming events from core.event, proposals, RSVPs and cancellation asks through consent-checked typed commands (cancelling is medium-risk, so it parks for the owner's confirmation). No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.4.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your upcoming schedule and lets you propose, move, and respond to events.",
@@ -11,6 +11,11 @@
       {
         "schema": "schedule",
         "verbs": "read+act"
+      },
+      {
+        "schema": "schedule",
+        "table": "cancel_event",
+        "verbs": "act"
       },
       {
         "schema": "core",
@@ -142,6 +147,37 @@
       "writes": []
     },
     {
+      "name": "cancel-event",
+      "description": "Ask to cancel an event (status → cancelled, SEQUENCE bumped). Cancelling is medium-risk, so the vault parks it for the owner's confirmation instead of executing directly.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["event_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (agenda, invite, any media) to an event through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -161,15 +197,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

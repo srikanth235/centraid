@@ -1,9 +1,11 @@
-// Home inventory — a pure read-only projection over the personal vault.
-// Every row rendered here lives in home.asset_item / home.warranty /
+// Home inventory — a projection over the personal vault. Every row
+// rendered here lives in home.asset_item / home.warranty /
 // home.maintenance_plan (place names from core.place); the app's own
-// data.sqlite stays empty by design. The home domain has no typed
-// commands yet, so there are no write paths at all: revoke the grant and
-// this page goes dark while the data stays the owner's.
+// data.sqlite stays empty by design. Writes go through the home domain's
+// typed commands (add_item, update_item, dispose_item, add_warranty)
+// routed via this app's action handlers — consent-checked per command and
+// receipted. Revoke the grant and this page goes dark while the data
+// stays the owner's.
 
 const $ = (id) => document.getElementById(id);
 
@@ -111,7 +113,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -159,15 +165,18 @@ async function refresh() {
   }
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
+  $('addForm').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     $('maintenanceDue').hidden = true;
     $('itemList').innerHTML = '';
+    $('disposedSection').hidden = true;
     $('empty').hidden = true;
     return;
   }
   renderMaintenance(data?.maintenance ?? []);
   renderItems(data?.items ?? []);
+  renderDisposed(data?.disposed ?? []);
 }
 
 function renderMaintenance(plans) {
@@ -241,6 +250,53 @@ function renderRow(it) {
     badge.title = `Warranty ends ${fmtDate(String(it.warranty.ends_on).slice(0, 10))}`;
     row.appendChild(badge);
   }
+
+  // The item's inline forms (edit, warranty) live beneath the row; each
+  // control toggles its own and closes the other.
+  const editForm = renderEditForm(it);
+  const warrantyForm = renderWarrantyForm(it);
+
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'ghost small-btn';
+  edit.textContent = 'Edit';
+  edit.addEventListener('click', () => {
+    warrantyForm.hidden = true;
+    editForm.hidden = !editForm.hidden;
+  });
+  row.appendChild(edit);
+
+  const warranty = document.createElement('button');
+  warranty.type = 'button';
+  warranty.className = 'ghost small-btn';
+  warranty.textContent = '＋ Warranty';
+  warranty.addEventListener('click', () => {
+    editForm.hidden = true;
+    warrantyForm.hidden = !warrantyForm.hidden;
+  });
+  row.appendChild(warranty);
+
+  // Disposal keeps the row as history, so the confirm is a second click on
+  // the same control, not a modal.
+  const dispose = document.createElement('button');
+  dispose.type = 'button';
+  dispose.className = 'ghost small-btn danger';
+  dispose.textContent = 'Dispose';
+  dispose.addEventListener('click', async () => {
+    if (!dispose.dataset.armed) {
+      dispose.dataset.armed = 'true';
+      dispose.textContent = 'Really dispose?';
+      return;
+    }
+    const outcome = await act('dispose-item', { item_id: it.item_id });
+    if (narrate(outcome, refresh)) await refresh();
+    else {
+      delete dispose.dataset.armed;
+      dispose.textContent = 'Dispose';
+    }
+  });
+  row.appendChild(dispose);
+
   // An owned item wants photos, a warranty PDF, a receipt — the attach
   // control opens the shared picker with this item as its target.
   const attach = document.createElement('button');
@@ -254,6 +310,30 @@ function renderRow(it) {
   row.appendChild(attach);
   wrap.appendChild(row);
 
+  wrap.appendChild(editForm);
+  wrap.appendChild(warrantyForm);
+
+  // Warranty history: every coverage window the item has accumulated.
+  if (it.warranties?.length) {
+    const list = document.createElement('div');
+    list.className = 'warranty-list muted small';
+    for (const w of it.warranties) {
+      const line = document.createElement('div');
+      line.className = 'warranty-line';
+      line.textContent = `Warranty ${fmtDate(String(w.starts_on).slice(0, 10))} – ${fmtDate(String(w.ends_on).slice(0, 10))}${w.active ? '' : ' (expired)'}`;
+      if (w.claim_uri) {
+        const link = document.createElement('a');
+        link.href = w.claim_uri;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = 'claim';
+        line.append(' · ', link);
+      }
+      list.appendChild(line);
+    }
+    wrap.appendChild(list);
+  }
+
   const strip = document.createElement('div');
   strip.className = 'attach-strip';
   renderAttachments(strip, it.attachments, removeAttachment);
@@ -261,6 +341,157 @@ function renderRow(it) {
 
   return wrap;
 }
+
+// Inline edit form: name / acquired date / serial. Partial update — only the
+// fields that changed travel to home.update_item.
+function renderEditForm(it) {
+  const form = document.createElement('form');
+  form.className = 'row-form';
+  form.autocomplete = 'off';
+  form.hidden = true;
+
+  const name = document.createElement('input');
+  name.type = 'text';
+  name.value = it.name;
+  name.setAttribute('aria-label', 'Item name');
+
+  const acquired = document.createElement('input');
+  acquired.type = 'date';
+  acquired.value = it.acquired_on ? String(it.acquired_on).slice(0, 10) : '';
+  acquired.setAttribute('aria-label', 'Acquired on');
+
+  const serial = document.createElement('input');
+  serial.type = 'text';
+  serial.value = it.serial_no ?? '';
+  serial.placeholder = 'Serial no.';
+  serial.setAttribute('aria-label', 'Serial number');
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'primary small-btn';
+  save.textContent = 'Save';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    form.hidden = true;
+  });
+
+  form.append(name, acquired, serial, save, cancel);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = { item_id: it.item_id };
+    const newName = name.value.trim();
+    if (newName && newName !== it.name) input.name = newName;
+    if (acquired.value && acquired.value !== String(it.acquired_on ?? '').slice(0, 10)) {
+      input.acquired_on = acquired.value;
+    }
+    const newSerial = serial.value.trim();
+    if (newSerial && newSerial !== (it.serial_no ?? '')) input.serial_no = newSerial;
+    if (Object.keys(input).length === 1) {
+      form.hidden = true;
+      return;
+    }
+    const outcome = await act('update-item', input);
+    if (narrate(outcome, refresh)) await refresh();
+  });
+  return form;
+}
+
+// Inline warranty form: coverage window plus an optional claim URL.
+function renderWarrantyForm(it) {
+  const form = document.createElement('form');
+  form.className = 'row-form';
+  form.autocomplete = 'off';
+  form.hidden = true;
+
+  const starts = document.createElement('input');
+  starts.type = 'date';
+  starts.setAttribute('aria-label', 'Warranty starts');
+
+  const ends = document.createElement('input');
+  ends.type = 'date';
+  ends.setAttribute('aria-label', 'Warranty ends');
+
+  const claim = document.createElement('input');
+  claim.type = 'url';
+  claim.placeholder = 'Claim URL (optional)';
+  claim.setAttribute('aria-label', 'Claim URL');
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'primary small-btn';
+  save.textContent = 'Add warranty';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    form.hidden = true;
+  });
+
+  form.append(starts, ends, claim, save, cancel);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!starts.value || !ends.value) return;
+    const outcome = await act('add-warranty', {
+      item_id: it.item_id,
+      starts_on: starts.value,
+      ends_on: ends.value,
+      ...(claim.value.trim() ? { claim_uri: claim.value.trim() } : {}),
+    });
+    if (narrate(outcome, refresh)) await refresh();
+  });
+  return form;
+}
+
+// Disposed items stay as history — muted rows in a collapsed section.
+function renderDisposed(items) {
+  const section = $('disposedSection');
+  const rows = $('disposedRows');
+  rows.innerHTML = '';
+  section.hidden = items.length === 0;
+  for (const it of items) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.dataset.disposed = 'true';
+    const time = document.createElement('span');
+    time.className = 'row-time';
+    time.textContent = fmtDate(String(it.disposed_on).slice(0, 10));
+    const text = document.createElement('span');
+    text.className = 'row-text';
+    text.textContent = it.name;
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.textContent = 'disposed';
+    row.append(time, text, badge);
+    rows.appendChild(row);
+  }
+}
+
+// ---------- Add item ----------
+
+$('addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('addNameInput').value.trim();
+  if (!name) return;
+  const acquired = $('addAcquiredInput').value;
+  const serial = $('addSerialInput').value.trim();
+  const outcome = await act('add-item', {
+    name,
+    ...(acquired ? { acquired_on: acquired } : {}),
+    ...(serial ? { serial_no: serial } : {}),
+  });
+  if (narrate(outcome, refresh)) {
+    $('addNameInput').value = '';
+    $('addAcquiredInput').value = '';
+    $('addSerialInput').value = '';
+    await refresh();
+  }
+});
 
 window.addEventListener('focus', refresh);
 refresh();

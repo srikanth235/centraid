@@ -201,6 +201,26 @@ select {
   text-transform: uppercase;
 }
 
+.field-row .grow {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.link-btn:hover {
+  color: var(--app-color, var(--accent));
+}
+
 /* ---------- Pipeline board ---------- */
 
 .board {

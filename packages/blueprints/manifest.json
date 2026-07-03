@@ -7,10 +7,11 @@
       "desc": "Your calendar, projected from the vault.",
       "colorKey": "indigo",
       "iconKey": "Calendar",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "kind": "app",
       "files": [
         "actions/attach.js",
+        "actions/cancel-event.js",
         "actions/detach.js",
         "actions/propose.js",
         "actions/reschedule.js",
@@ -362,12 +363,14 @@
       "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
       "colorKey": "violet",
       "iconKey": "Users",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "kind": "app",
       "files": [
+        "actions/add-person.js",
         "actions/attach.js",
         "actions/detach.js",
         "actions/draft-message.js",
+        "actions/edit-person.js",
         "actions/resolve-identity.js",
         "actions/send-message.js",
         "actions/update-card.js",
@@ -541,12 +544,13 @@
       "desc": "Write, file and pin notes over your vault's canonical content.",
       "colorKey": "forest",
       "iconKey": "Book",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "kind": "app",
       "files": [
         "actions/attach.js",
         "actions/create-note.js",
         "actions/create-notebook.js",
+        "actions/delete-note.js",
         "actions/detach.js",
         "actions/edit-note.js",
         "actions/move-note.js",
@@ -635,9 +639,17 @@
       "desc": "The library you own, wherever the bytes live.",
       "colorKey": "ochre",
       "iconKey": "Camera",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "kind": "app",
       "files": [
+        "actions/add-to-album.js",
+        "actions/create-album.js",
+        "actions/delete-album.js",
+        "actions/delete-asset.js",
+        "actions/remove-from-album.js",
+        "actions/rename-album.js",
+        "actions/update-asset.js",
+        "actions/upload.js",
         "app.css",
         "app.js",
         "app.json",
@@ -714,16 +726,116 @@
       ]
     },
     {
+      "id": "docs",
+      "name": "Docs",
+      "desc": "A drive for your important documents — filed, downloadable, restorable.",
+      "colorKey": "slate",
+      "iconKey": "Folder",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/create-folder.js",
+        "actions/delete-folder.js",
+        "actions/move.js",
+        "actions/rename-folder.js",
+        "actions/rename.js",
+        "actions/restore.js",
+        "actions/trash.js",
+        "actions/upload.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/drive.js",
+        "wall.css"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "serif",
+              "label": "Serif"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appWidth",
+          "label": "Width",
+          "type": "segmented",
+          "default": "wide",
+          "options": [
+            {
+              "value": "narrow",
+              "label": "Narrow"
+            },
+            {
+              "value": "wide",
+              "label": "Wide"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#5C677D",
+          "options": [
+            {
+              "value": "#5C677D",
+              "label": "Slate"
+            },
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#2EA098",
+              "label": "Teal"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
+            },
+            {
+              "value": "#E55772",
+              "label": "Rose"
+            },
+            {
+              "value": "#B47B3F",
+              "label": "Ochre"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "home-inventory",
       "name": "Home inventory",
       "desc": "What you own, where it lives, what covers it.",
       "colorKey": "slate",
       "iconKey": "Home",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/add-item.js",
+        "actions/add-warranty.js",
         "actions/attach.js",
         "actions/detach.js",
+        "actions/dispose-item.js",
+        "actions/update-item.js",
         "app.css",
         "app.js",
         "app.json",
@@ -1074,9 +1186,10 @@
       "desc": "A pipeline for your prospects — enrol, advance, note.",
       "colorKey": "rose",
       "iconKey": "Users",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "kind": "app",
       "files": [
+        "actions/add-contact.js",
         "actions/add-lead.js",
         "actions/attach.js",
         "actions/detach.js",
@@ -1169,11 +1282,7 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 6:00 PM",
-      "integrations": [
-        "Google Calendar",
-        "Gmail",
-        "Slack"
-      ],
+      "integrations": ["Google Calendar", "Gmail", "Slack"],
       "files": [
         "app.json",
         "automations/briefing/automation.json",
@@ -1192,10 +1301,7 @@
       "category": "Daily rhythm",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 9:00 PM",
-      "integrations": [
-        "Linear",
-        "Notion"
-      ],
+      "integrations": ["Linear", "Notion"],
       "files": [
         "app.json",
         "automations/evening-wrap-up/automation.json",
@@ -1214,9 +1320,7 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:30 AM",
-      "integrations": [
-        "Gmail"
-      ],
+      "integrations": ["Gmail"],
       "files": [
         "app.json",
         "automations/email-triage/automation.json",
@@ -1235,10 +1339,7 @@
       "category": "Inbox & comms",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 8:45 AM",
-      "integrations": [
-        "Google Calendar",
-        "Notion"
-      ],
+      "integrations": ["Google Calendar", "Notion"],
       "files": [
         "app.json",
         "automations/meeting-prep/automation.json",
@@ -1257,9 +1358,7 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 11:30 PM",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/pr-review-digest/automation.json",
@@ -1278,9 +1377,7 @@
       "category": "Engineering",
       "triggerKind": "webhook",
       "triggerLabel": "On merge to main",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/release-notes-drafter/automation.json",
@@ -1299,10 +1396,7 @@
       "category": "Engineering",
       "triggerKind": "cron",
       "triggerLabel": "Tuesdays · 12:00 AM",
-      "integrations": [
-        "npm",
-        "GitHub"
-      ],
+      "integrations": ["npm", "GitHub"],
       "files": [
         "app.json",
         "automations/dependency-update-check/automation.json",
@@ -1321,11 +1415,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Daily · 5:30 PM",
-      "integrations": [
-        "PagerDuty",
-        "Datadog",
-        "Sentry"
-      ],
+      "integrations": ["PagerDuty", "Datadog", "Sentry"],
       "files": [
         "app.json",
         "automations/system-health-check/automation.json",
@@ -1344,9 +1434,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Weekdays · 9:00 AM",
-      "integrations": [
-        "Linear"
-      ],
+      "integrations": ["Linear"],
       "files": [
         "app.json",
         "automations/issue-triage/automation.json",
@@ -1365,9 +1453,7 @@
       "category": "Reliability",
       "triggerKind": "cron",
       "triggerLabel": "Mondays · 9:30 AM",
-      "integrations": [
-        "GitHub"
-      ],
+      "integrations": ["GitHub"],
       "files": [
         "app.json",
         "automations/flaky-test-tracker/automation.json",

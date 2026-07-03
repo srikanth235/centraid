@@ -180,6 +180,90 @@ main {
   padding: 2rem 0;
 }
 
+/* ---------- Forms (add item, inline edit / warranty) ---------- */
+
+input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  padding: 0.55rem 0.75rem;
+  min-width: 0;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--app-color, var(--accent));
+}
+
+.primary {
+  border-radius: 0.625rem;
+  border: none;
+  background: var(--app-color, var(--accent));
+  color: #fff;
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.add-form .add-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.add-form .add-more input[type='text'] {
+  flex: 1;
+  min-width: 8rem;
+}
+
+/* An item's inline forms sit beneath its row. */
+.row-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.row-form input[type='text'],
+.row-form input[type='url'] {
+  flex: 1;
+  min-width: 8rem;
+}
+
+/* Disposal is destructive-ish; armed it takes the danger tint. */
+.ghost.danger:hover,
+.ghost.danger[data-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* Warranty history lines beneath an item row. */
+.warranty-list {
+  padding: 0 0 0.625rem;
+}
+
+.warranty-line a {
+  color: var(--app-color, var(--accent));
+}
+
+/* Disposed items: kept as muted history in a collapsed section. */
+#disposedSection summary {
+  cursor: pointer;
+}
+
+.row[data-disposed] .row-text {
+  color: var(--ink-faint);
+}
+
 .footnote {
   margin-top: 2rem;
   text-align: center;

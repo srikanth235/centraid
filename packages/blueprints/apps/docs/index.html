@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Docs</title>
+    <script>
+      // Centraid live settings bridge — see the todos blueprint for the
+      // full story: runtime bakes theme server-side; this handles the
+      // no-bake preview path and live pref flips over postMessage.
+      (function () {
+        var h = document.documentElement;
+        function applyTheme(t, b) {
+          if (t === 'dark' || t === 'light') h.dataset.theme = t;
+          if (b != null && b !== '') h.style.setProperty('--bg-l', b + '%');
+        }
+        function applySettings(s) {
+          if (s.dataAttrs) {
+            for (var k in s.dataAttrs) h.setAttribute('data-' + k, s.dataAttrs[k]);
+          }
+          if (s.cssVars) {
+            for (var k in s.cssVars) h.style.setProperty('--' + k, s.cssVars[k]);
+          }
+        }
+        try {
+          var p = new URLSearchParams((location.hash || '').slice(1));
+          applyTheme(p.get('theme'), p.get('bgL'));
+        } catch (_) {}
+        addEventListener('message', function (e) {
+          var d = e && e.data;
+          if (!d) return;
+          if (d.type === 'centraid:settings') applySettings(d);
+          else if (d.type === 'centraid:theme') applyTheme(d.theme, d.bgL);
+        });
+      })();
+    </script>
+    <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <main>
+      <header class="head">
+        <div>
+          <h1>Docs</h1>
+          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+        </div>
+        <div class="head-actions">
+          <button id="newFolderButton" type="button" class="ghost">New folder</button>
+          <button id="uploadButton" type="button" class="primary small-btn">Upload</button>
+        </div>
+      </header>
+
+      <div id="consentBanner" class="banner" hidden>
+        <strong>No vault access yet.</strong>
+        <span id="consentDetail"
+          >Ask the owner to approve this app's requested scopes in vault settings.</span
+        >
+      </div>
+      <div id="noticeBanner" class="banner notice" hidden></div>
+
+      <div id="live" class="drive">
+        <nav id="sidebar" class="sidebar" aria-label="Folders">
+          <div id="folderTree" class="folder-tree"></div>
+          <form id="folderForm" class="folder-form" autocomplete="off" hidden>
+            <input
+              id="folderNameInput"
+              type="text"
+              placeholder="Folder name…"
+              aria-label="Folder name"
+            />
+            <div class="folder-form-actions">
+              <span id="folderFormTarget" class="muted small"></span>
+              <button type="button" id="cancelFolder" class="ghost">Cancel</button>
+              <button type="submit" class="primary small-btn">Create</button>
+            </div>
+          </form>
+          <button id="trashButton" type="button" class="tree-item trash-item">
+            <span class="tree-label">Trash</span>
+            <span id="trashCount" class="tree-count"></span>
+          </button>
+        </nav>
+
+        <section class="pane" aria-label="Documents">
+          <div id="breadcrumb" class="breadcrumb"></div>
+          <div id="docList" class="doc-list"></div>
+          <div id="emptyDrive" class="empty" hidden>
+            <p>No documents yet.</p>
+            <p class="muted small">
+              Leases, IDs, warranties, tax forms — file the important stuff here.
+            </p>
+            <button id="emptyUploadButton" type="button" class="primary small-btn">
+              Upload your first document
+            </button>
+          </div>
+          <p id="emptyFolder" class="empty" hidden>Nothing in this folder yet.</p>
+          <p id="emptyTrash" class="empty" hidden>
+            The trash is empty. Trashed documents purge after about 30 days.
+          </p>
+        </section>
+      </div>
+
+      <input id="uploadInput" type="file" multiple hidden aria-hidden="true" />
+
+      <p class="muted small footnote">
+        Every write is a typed vault command — consent-checked and receipted.
+      </p>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

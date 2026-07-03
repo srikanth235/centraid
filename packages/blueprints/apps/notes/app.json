@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "notes",
   "name": "Notes",
-  "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing and pinning all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
-  "version": "0.3.0",
+  "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
+  "version": "0.4.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
@@ -40,6 +40,11 @@
       {
         "schema": "knowledge",
         "table": "create_notebook",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "delete_note",
         "verbs": "act"
       },
       {
@@ -217,6 +222,37 @@
       "writes": []
     },
     {
+      "name": "delete-note",
+      "description": "Delete a note through knowledge.delete_note — removes the note with its placements, annotations and attachment edges; the deduped body is released only when nothing else shares it.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (image, PDF, any media) to a note through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -236,15 +272,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

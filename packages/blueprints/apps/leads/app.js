@@ -109,7 +109,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';
@@ -246,7 +250,10 @@ function renderCard(lead) {
     btn.className = 'ghost';
     btn.textContent = move.label;
     btn.addEventListener('click', async () => {
-      const outcome = await act('update-client', { client_id: lead.client_id, status: move.status });
+      const outcome = await act('update-client', {
+        client_id: lead.client_id,
+        status: move.status,
+      });
       if (narrate(outcome)) await refresh();
     });
     actions.appendChild(btn);
@@ -308,10 +315,53 @@ function openNoteEditor(card, lead) {
 
 // ---------- Add lead ----------
 
+// Two ways in: enrol someone the vault already knows, or mint a brand-new
+// contact through core.add_party and enrol them in one stroke.
+let addMode = 'existing'; // 'existing' | 'contact'
+
+function applyAddMode() {
+  const contact = addMode === 'contact';
+  $('candidateSelect').hidden = contact;
+  $('nameInput').hidden = !contact;
+  $('contactRow').hidden = !contact;
+  $('modeHint').textContent = contact
+    ? 'A new person lands in your vault and the pipeline together.'
+    : 'Leads are people from your vault.';
+  $('modeToggle').textContent = contact ? 'Pick an existing person instead' : 'New contact instead';
+}
+
+$('modeToggle').addEventListener('click', () => {
+  addMode = addMode === 'contact' ? 'existing' : 'contact';
+  applyAddMode();
+  (addMode === 'contact' ? $('nameInput') : $('candidateSelect')).focus();
+});
+
 $('addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const party_id = $('candidateSelect').value;
   const currency = $('currencyInput').value.trim().toUpperCase();
+  if (addMode === 'contact') {
+    const display_name = $('nameInput').value.trim();
+    if (!display_name || currency.length !== 3) {
+      notice('Name the new contact and give a 3-letter currency.');
+      return;
+    }
+    const email = $('emailInput').value.trim();
+    const tel = $('telInput').value.trim();
+    const outcome = await act('add-contact', {
+      display_name,
+      ...(email ? { email } : {}),
+      ...(tel ? { tel } : {}),
+      currency,
+    });
+    if (narrate(outcome)) {
+      $('nameInput').value = '';
+      $('emailInput').value = '';
+      $('telInput').value = '';
+      await refresh();
+    }
+    return;
+  }
+  const party_id = $('candidateSelect').value;
   if (!party_id || currency.length !== 3) {
     notice('Pick a person and a 3-letter currency.');
     return;
@@ -319,6 +369,8 @@ $('addForm').addEventListener('submit', async (e) => {
   const outcome = await act('add-lead', { party_id, currency });
   if (narrate(outcome)) await refresh();
 });
+
+applyAddMode();
 
 window.addEventListener('focus', refresh);
 refresh();

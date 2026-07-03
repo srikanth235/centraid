@@ -54,10 +54,49 @@
       </div>
       <div id="noticeBanner" class="banner notice" hidden></div>
 
-      <input id="searchInput" type="text" placeholder="Search people…" aria-label="Search people" />
+      <div class="toolbar">
+        <input
+          id="searchInput"
+          type="text"
+          placeholder="Search people…"
+          aria-label="Search people"
+        />
+        <button type="button" id="addPersonBtn" class="ghost">＋ Add person</button>
+      </div>
+
+      <form id="personForm" class="card-form" autocomplete="off" hidden>
+        <p class="muted small">New person — lands in the vault as a core.party.</p>
+        <input id="personNameInput" type="text" placeholder="Name" aria-label="Name" />
+        <input
+          id="personEmailInput"
+          type="email"
+          placeholder="Email (optional)"
+          aria-label="Email"
+        />
+        <input id="personTelInput" type="tel" placeholder="Phone (optional)" aria-label="Phone" />
+        <input
+          id="personHandleInput"
+          type="text"
+          placeholder="Handle (optional)"
+          aria-label="Handle"
+        />
+        <div class="card-form-actions">
+          <button type="button" id="cancelPerson" class="ghost">Cancel</button>
+          <button type="submit" class="primary">Add person</button>
+        </div>
+      </form>
 
       <form id="cardForm" class="card-form" autocomplete="off" hidden>
         <p id="cardFormTitle" class="muted small"></p>
+        <div class="identity-row">
+          <input
+            id="displayNameInput"
+            type="text"
+            placeholder="Display name"
+            aria-label="Display name"
+          />
+          <button type="button" id="renamePartyBtn" class="ghost">Rename</button>
+        </div>
         <input id="nicknameInput" type="text" placeholder="Nickname" aria-label="Nickname" />
         <input id="noteInput" type="text" placeholder="Note" aria-label="Note" />
         <div class="card-form-actions">
@@ -73,7 +112,12 @@
             <option value="tel">Phone</option>
             <option value="handle">Handle</option>
           </select>
-          <input id="handleValueInput" type="text" placeholder="Link a handle…" aria-label="Handle value" />
+          <input
+            id="handleValueInput"
+            type="text"
+            placeholder="Link a handle…"
+            aria-label="Handle value"
+          />
           <button type="button" id="linkHandleBtn" class="ghost">Link</button>
         </div>
         <div id="attachBlock" class="attach-block">
@@ -104,15 +148,15 @@
           <button type="submit" class="primary">Send</button>
         </div>
         <p class="muted small compose-hint">
-          Sending is high-risk in the vault: it waits for the owner's confirmation before the
-          draft is released.
+          Sending is high-risk in the vault: it waits for the owner's confirmation before the draft
+          is released.
         </p>
       </form>
 
       <section id="peopleList" aria-label="People"></section>
       <p id="empty" class="empty" hidden>
-        No people yet. Parties arrive through the vault — resolve a handle or import contacts
-        through the vault's ingest.
+        No people yet. Add someone above, resolve a handle, or import contacts through the vault's
+        ingest.
       </p>
     </main>
     <script type="module" src="app.js"></script>

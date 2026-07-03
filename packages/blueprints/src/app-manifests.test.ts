@@ -64,12 +64,16 @@ describe('bundled blueprint manifests', () => {
     expect(projections).toEqual(
       [
         'agenda',
+        'bookings',
         'budgets',
+        'docs',
         'home-inventory',
+        'leads',
         'notes',
         'people',
         'photos',
         'studio',
+        'subscriptions',
         'tasks',
         'threads',
         'vitals',

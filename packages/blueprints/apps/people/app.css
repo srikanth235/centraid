@@ -103,7 +103,9 @@ main {
   color: var(--ink-soft);
 }
 
-input[type='text'] {
+input[type='text'],
+input[type='email'],
+input[type='tel'] {
   height: 2.75rem;
   padding: 0 0.875rem;
   border: 1px solid var(--line);
@@ -121,8 +123,23 @@ input:focus {
   border-color: var(--app-color, var(--accent));
 }
 
-#searchInput {
+/* Search + add-person entry point in one row. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin-bottom: 1rem;
+}
+
+.toolbar input {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar .ghost {
+  height: 2.75rem;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 button {
@@ -194,6 +211,24 @@ button {
 
 .favorite-label input {
   accent-color: var(--app-color, var(--accent));
+}
+
+/* Renaming — identity edits on the party row, beside the card's enrichment. */
+.identity-row {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.625rem;
+}
+
+.identity-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.identity-row .ghost {
+  height: 2.75rem;
+  flex-shrink: 0;
 }
 
 /* Handle linking — identity work, so it lives inside the card editor. */
