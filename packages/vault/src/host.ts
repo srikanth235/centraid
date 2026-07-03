@@ -23,7 +23,10 @@ export interface HostBootstrap extends BootstrapResult {
  * Recovery re-derives the owner credential from the oldest full-trust
  * owner device and rebuilds the seeded-concept map from the model.
  */
-export function ensureVaultBootstrapped(db: VaultDb, options: BootstrapVaultOptions): HostBootstrap {
+export function ensureVaultBootstrapped(
+  db: VaultDb,
+  options: BootstrapVaultOptions,
+): HostBootstrap {
   const vaultRow = db.vault
     .prepare('SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1')
     .get() as { vault_id: string; owner_party_id: string; display_name: string } | undefined;
@@ -196,7 +199,12 @@ export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | un
     | { agent_id: string; party_id: string; display_name: string; status: string }
     | undefined;
   if (!row) return undefined;
-  return { agentId: row.agent_id, partyId: row.party_id, name: row.display_name, status: row.status };
+  return {
+    agentId: row.agent_id,
+    partyId: row.party_id,
+    name: row.display_name,
+    status: row.status,
+  };
 }
 
 /**

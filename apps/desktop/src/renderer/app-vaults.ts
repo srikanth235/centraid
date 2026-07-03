@@ -49,7 +49,11 @@ export async function renderVaultsPage(input: VaultsPageInput): Promise<void> {
 }
 
 /** One vault: name (click-to-rename), active badge or Switch, Delete. */
-function vaultRow(input: VaultsPageInput, vault: VaultListEntry, rerender: () => void): HTMLElement {
+function vaultRow(
+  input: VaultsPageInput,
+  vault: VaultListEntry,
+  rerender: () => void,
+): HTMLElement {
   const { el } = input;
   const row = el('div', { class: 'cd-vaults-row', 'data-active': String(vault.active) });
 
@@ -99,7 +103,11 @@ function vaultRow(input: VaultsPageInput, vault: VaultListEntry, rerender: () =>
   if (vault.active) {
     actions.append(el('span', { class: 'cd-vaults-active-badge' }, 'Active'));
   } else {
-    const switchBtn = el('button', { class: 'cd-vaults-switch-btn', type: 'button' }, 'Make active');
+    const switchBtn = el(
+      'button',
+      { class: 'cd-vaults-switch-btn', type: 'button' },
+      'Make active',
+    );
     switchBtn.addEventListener('click', () => {
       (switchBtn as HTMLButtonElement).disabled = true;
       updateVault({ vaultId: vault.vaultId, active: true })

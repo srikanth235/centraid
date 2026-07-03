@@ -222,8 +222,7 @@ function requirePlane(vaults: VaultRegistry, vaultId: string): VaultPlane {
 
 function sendRegistryError(res: ServerResponse, err: unknown): boolean {
   if (err instanceof VaultRegistryError) {
-    const status =
-      err.code === 'vault_not_found' ? 404 : err.code === 'vault_active' ? 409 : 400;
+    const status = err.code === 'vault_not_found' ? 404 : err.code === 'vault_active' ? 409 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendJson(res, 500, {

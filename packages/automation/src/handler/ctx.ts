@@ -8,7 +8,12 @@
  */
 
 import type { AgentDispatcher, DispatchContext, ToolDispatcher, ToolResult } from './runner.js';
-import type { ConversationStore, TurnStreamEvent, VaultBridge, VaultOp } from '@centraid/app-engine';
+import type {
+  ConversationStore,
+  TurnStreamEvent,
+  VaultBridge,
+  VaultOp,
+} from '@centraid/app-engine';
 import {
   closeRunNode,
   openRunNode,

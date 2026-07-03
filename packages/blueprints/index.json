@@ -1,369 +1,327 @@
 {
- "manifestVersion": 1,
- "templates": [
-  {
-   "id": "agenda",
-   "name": "Agenda",
-   "desc": "Your calendar, projected from the vault.",
-   "colorKey": "indigo",
-   "iconKey": "Calendar",
-   "version": "0.4.0"
-  },
-  {
-   "id": "vitals",
-   "name": "Vitals",
-   "desc": "Log and follow your vital signs.",
-   "colorKey": "rose",
-   "iconKey": "Activity",
-   "version": "0.3.0"
-  },
-  {
-   "id": "budgets",
-   "name": "Budgets",
-   "desc": "Categorize spending, keep budgets honest.",
-   "colorKey": "amber",
-   "iconKey": "Coin",
-   "version": "0.3.0"
-  },
-  {
-   "id": "tasks",
-   "name": "Tasks",
-   "desc": "A Things-style task manager over your vault's canonical tasks.",
-   "colorKey": "teal",
-   "iconKey": "Check",
-   "version": "0.3.0"
-  },
-  {
-   "id": "people",
-   "name": "People",
-   "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
-   "colorKey": "violet",
-   "iconKey": "Users",
-   "version": "0.4.0"
-  },
-  {
-   "id": "threads",
-   "name": "Threads",
-   "desc": "Messages that wait for your say-so to send.",
-   "colorKey": "indigo",
-   "iconKey": "Send",
-   "version": "0.3.0"
-  },
-  {
-   "id": "notes",
-   "name": "Notes",
-   "desc": "Write, file and pin notes over your vault's canonical content.",
-   "colorKey": "forest",
-   "iconKey": "Book",
-   "version": "0.4.0"
-  },
-  {
-   "id": "photos",
-   "name": "Photos",
-   "desc": "The library you own, wherever the bytes live.",
-   "colorKey": "ochre",
-   "iconKey": "Camera",
-   "version": "0.2.0"
-  },
-  {
-   "id": "docs",
-   "name": "Docs",
-   "desc": "A drive for your important documents — filed, downloadable, restorable.",
-   "colorKey": "slate",
-   "iconKey": "Folder",
-   "version": "0.1.0"
-  },
-  {
-   "id": "home-inventory",
-   "name": "Home inventory",
-   "desc": "What you own, where it lives, what covers it.",
-   "colorKey": "slate",
-   "iconKey": "Home",
-   "version": "0.3.0"
-  },
-  {
-   "id": "studio",
-   "name": "Studio",
-   "desc": "Run the whole freelance loop: clients, time, invoices, payment.",
-   "colorKey": "teal",
-   "iconKey": "Clock",
-   "version": "0.3.0"
-  },
-  {
-   "id": "bookings",
-   "name": "Bookings",
-   "desc": "Take and confirm client bookings against your availability.",
-   "colorKey": "indigo",
-   "iconKey": "Calendar",
-   "version": "0.1.0"
-  },
-  {
-   "id": "subscriptions",
-   "name": "Subscriptions",
-   "desc": "Every recurring charge and what it costs you per month.",
-   "colorKey": "ochre",
-   "iconKey": "Coin",
-   "version": "0.1.0"
-  },
-  {
-   "id": "leads",
-   "name": "Leads",
-   "desc": "A pipeline for your prospects — enrol, advance, note.",
-   "colorKey": "rose",
-   "iconKey": "Users",
-   "version": "0.2.0"
-  },
-  {
-   "id": "briefing",
-   "name": "Briefing",
-   "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",
-   "colorKey": "rose",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🌤",
-   "category": "Daily rhythm",
-   "triggerKind": "cron",
-   "triggerLabel": "Weekdays · 6:00 PM",
-   "integrations": [
-    "Google Calendar",
-    "Gmail",
-    "Slack"
-   ]
-  },
-  {
-   "id": "evening-wrap-up",
-   "name": "Evening wrap-up",
-   "desc": "Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.",
-   "colorKey": "indigo",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🌙",
-   "category": "Daily rhythm",
-   "triggerKind": "cron",
-   "triggerLabel": "Daily · 9:00 PM",
-   "integrations": [
-    "Linear",
-    "Notion"
-   ]
-  },
-  {
-   "id": "email-triage",
-   "name": "Email triage",
-   "desc": "Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.",
-   "colorKey": "rose",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "📨",
-   "category": "Inbox & comms",
-   "triggerKind": "cron",
-   "triggerLabel": "Weekdays · 8:30 AM",
-   "integrations": [
-    "Gmail"
-   ]
-  },
-  {
-   "id": "meeting-prep",
-   "name": "Meeting prep",
-   "desc": "Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.",
-   "colorKey": "indigo",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "📋",
-   "category": "Inbox & comms",
-   "triggerKind": "cron",
-   "triggerLabel": "Weekdays · 8:45 AM",
-   "integrations": [
-    "Google Calendar",
-    "Notion"
-   ]
-  },
-  {
-   "id": "pr-review-digest",
-   "name": "PR review digest",
-   "desc": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
-   "colorKey": "slate",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🔍",
-   "category": "Engineering",
-   "triggerKind": "cron",
-   "triggerLabel": "Weekdays · 11:30 PM",
-   "integrations": [
-    "GitHub"
-   ]
-  },
-  {
-   "id": "release-notes-drafter",
-   "name": "Release notes drafter",
-   "desc": "Drafts user-facing release notes the moment a pull request merges into main.",
-   "colorKey": "slate",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "📝",
-   "category": "Engineering",
-   "triggerKind": "webhook",
-   "triggerLabel": "On merge to main",
-   "integrations": [
-    "GitHub"
-   ]
-  },
-  {
-   "id": "dependency-update-check",
-   "name": "Dependency update check",
-   "desc": "Scans for outdated packages, security patches, and breaking changes before they bite.",
-   "colorKey": "ochre",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "📦",
-   "category": "Engineering",
-   "triggerKind": "cron",
-   "triggerLabel": "Tuesdays · 12:00 AM",
-   "integrations": [
-    "npm",
-    "GitHub"
-   ]
-  },
-  {
-   "id": "system-health-check",
-   "name": "System health check",
-   "desc": "Watches infrastructure and services for errors, outages, and creeping performance issues.",
-   "colorKey": "forest",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🩺",
-   "category": "Reliability",
-   "triggerKind": "cron",
-   "triggerLabel": "Daily · 5:30 PM",
-   "integrations": [
-    "PagerDuty",
-    "Datadog",
-    "Sentry"
-   ]
-  },
-  {
-   "id": "issue-triage",
-   "name": "Issue triage",
-   "desc": "Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.",
-   "colorKey": "indigo",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🎫",
-   "category": "Reliability",
-   "triggerKind": "cron",
-   "triggerLabel": "Weekdays · 9:00 AM",
-   "integrations": [
-    "Linear"
-   ]
-  },
-  {
-   "id": "flaky-test-tracker",
-   "name": "Flaky test tracker",
-   "desc": "Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.",
-   "colorKey": "slate",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🎲",
-   "category": "Reliability",
-   "triggerKind": "cron",
-   "triggerLabel": "Mondays · 9:30 AM",
-   "integrations": [
-    "GitHub"
-   ]
-  },
-  {
-   "id": "booking-prep",
-   "name": "Booking prep",
-   "desc": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
-   "colorKey": "teal",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "📆",
-   "category": "Life admin",
-   "triggerKind": "condition",
-   "triggerLabel": "When a booking nears",
-   "integrations": [
-    "Bookings",
-    "Tasks"
-   ]
-  },
-  {
-   "id": "lead-follow-up",
-   "name": "Lead follow-up",
-   "desc": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
-   "colorKey": "amber",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🤝",
-   "category": "Life admin",
-   "triggerKind": "data",
-   "triggerLabel": "When a lead lands",
-   "integrations": [
-    "Leads",
-    "Tasks"
-   ]
-  },
-  {
-   "id": "invoice-chaser",
-   "name": "Invoice chaser",
-   "desc": "Sent invoices coming due within three days get a polite reminder drafted to the client — you review and send.",
-   "colorKey": "indigo",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🧾",
-   "category": "Life admin",
-   "triggerKind": "condition",
-   "triggerLabel": "When an invoice nears due",
-   "integrations": [
-    "Studio",
-    "Threads"
-   ]
-  },
-  {
-   "id": "renewals-digest",
-   "name": "Renewals digest",
-   "desc": "A Monday-morning note listing every active subscription and what it's expected to charge — surprises stay off your statement.",
-   "colorKey": "rose",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🔁",
-   "category": "Life admin",
-   "triggerKind": "cron",
-   "triggerLabel": "Mondays · 9:00 AM",
-   "integrations": [
-    "Subscriptions",
-    "Notes"
-   ]
-  },
-  {
-   "id": "vitals-nudge",
-   "name": "Vitals nudge",
-   "desc": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
-   "colorKey": "emerald",
-   "iconKey": "Sparkle",
-   "version": "0.1.0",
-   "kind": "automation",
-   "emoji": "🩺",
-   "category": "Life admin",
-   "triggerKind": "cron",
-   "triggerLabel": "Daily · 8:00 PM",
-   "integrations": [
-    "Vitals",
-    "Tasks"
-   ]
-  }
- ]
+  "manifestVersion": 1,
+  "templates": [
+    {
+      "id": "agenda",
+      "name": "Agenda",
+      "desc": "Your calendar, projected from the vault.",
+      "colorKey": "indigo",
+      "iconKey": "Calendar",
+      "version": "0.4.0"
+    },
+    {
+      "id": "vitals",
+      "name": "Vitals",
+      "desc": "Log and follow your vital signs.",
+      "colorKey": "rose",
+      "iconKey": "Activity",
+      "version": "0.3.0"
+    },
+    {
+      "id": "budgets",
+      "name": "Budgets",
+      "desc": "Categorize spending, keep budgets honest.",
+      "colorKey": "amber",
+      "iconKey": "Coin",
+      "version": "0.3.0"
+    },
+    {
+      "id": "tasks",
+      "name": "Tasks",
+      "desc": "A Things-style task manager over your vault's canonical tasks.",
+      "colorKey": "teal",
+      "iconKey": "Check",
+      "version": "0.3.0"
+    },
+    {
+      "id": "people",
+      "name": "People",
+      "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
+      "colorKey": "violet",
+      "iconKey": "Users",
+      "version": "0.4.0"
+    },
+    {
+      "id": "threads",
+      "name": "Threads",
+      "desc": "Messages that wait for your say-so to send.",
+      "colorKey": "indigo",
+      "iconKey": "Send",
+      "version": "0.3.0"
+    },
+    {
+      "id": "notes",
+      "name": "Notes",
+      "desc": "Write, file and pin notes over your vault's canonical content.",
+      "colorKey": "forest",
+      "iconKey": "Book",
+      "version": "0.4.0"
+    },
+    {
+      "id": "photos",
+      "name": "Photos",
+      "desc": "The library you own, wherever the bytes live.",
+      "colorKey": "ochre",
+      "iconKey": "Camera",
+      "version": "0.2.0"
+    },
+    {
+      "id": "docs",
+      "name": "Docs",
+      "desc": "A drive for your important documents — filed, downloadable, restorable.",
+      "colorKey": "slate",
+      "iconKey": "Folder",
+      "version": "0.1.0"
+    },
+    {
+      "id": "home-inventory",
+      "name": "Home inventory",
+      "desc": "What you own, where it lives, what covers it.",
+      "colorKey": "slate",
+      "iconKey": "Home",
+      "version": "0.3.0"
+    },
+    {
+      "id": "studio",
+      "name": "Studio",
+      "desc": "Run the whole freelance loop: clients, time, invoices, payment.",
+      "colorKey": "teal",
+      "iconKey": "Clock",
+      "version": "0.3.0"
+    },
+    {
+      "id": "bookings",
+      "name": "Bookings",
+      "desc": "Take and confirm client bookings against your availability.",
+      "colorKey": "indigo",
+      "iconKey": "Calendar",
+      "version": "0.1.0"
+    },
+    {
+      "id": "subscriptions",
+      "name": "Subscriptions",
+      "desc": "Every recurring charge and what it costs you per month.",
+      "colorKey": "ochre",
+      "iconKey": "Coin",
+      "version": "0.1.0"
+    },
+    {
+      "id": "leads",
+      "name": "Leads",
+      "desc": "A pipeline for your prospects — enrol, advance, note.",
+      "colorKey": "rose",
+      "iconKey": "Users",
+      "version": "0.2.0"
+    },
+    {
+      "id": "briefing",
+      "name": "Briefing",
+      "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🌤",
+      "category": "Daily rhythm",
+      "triggerKind": "cron",
+      "triggerLabel": "Weekdays · 6:00 PM",
+      "integrations": ["Google Calendar", "Gmail", "Slack"]
+    },
+    {
+      "id": "evening-wrap-up",
+      "name": "Evening wrap-up",
+      "desc": "Reflects on what got done today and stages tomorrow’s top three so mornings start sharp.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🌙",
+      "category": "Daily rhythm",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 9:00 PM",
+      "integrations": ["Linear", "Notion"]
+    },
+    {
+      "id": "email-triage",
+      "name": "Email triage",
+      "desc": "Sorts your inbox by urgency and drafts replies for anything that genuinely needs one.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📨",
+      "category": "Inbox & comms",
+      "triggerKind": "cron",
+      "triggerLabel": "Weekdays · 8:30 AM",
+      "integrations": ["Gmail"]
+    },
+    {
+      "id": "meeting-prep",
+      "name": "Meeting prep",
+      "desc": "Each weekday morning, gathers context, recent threads, and open questions for the day’s meetings.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📋",
+      "category": "Inbox & comms",
+      "triggerKind": "cron",
+      "triggerLabel": "Weekdays · 8:45 AM",
+      "integrations": ["Google Calendar", "Notion"]
+    },
+    {
+      "id": "pr-review-digest",
+      "name": "PR review digest",
+      "desc": "Surfaces open pull requests, who is blocked on whom, and what is ready to merge.",
+      "colorKey": "slate",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔍",
+      "category": "Engineering",
+      "triggerKind": "cron",
+      "triggerLabel": "Weekdays · 11:30 PM",
+      "integrations": ["GitHub"]
+    },
+    {
+      "id": "release-notes-drafter",
+      "name": "Release notes drafter",
+      "desc": "Drafts user-facing release notes the moment a pull request merges into main.",
+      "colorKey": "slate",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📝",
+      "category": "Engineering",
+      "triggerKind": "webhook",
+      "triggerLabel": "On merge to main",
+      "integrations": ["GitHub"]
+    },
+    {
+      "id": "dependency-update-check",
+      "name": "Dependency update check",
+      "desc": "Scans for outdated packages, security patches, and breaking changes before they bite.",
+      "colorKey": "ochre",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📦",
+      "category": "Engineering",
+      "triggerKind": "cron",
+      "triggerLabel": "Tuesdays · 12:00 AM",
+      "integrations": ["npm", "GitHub"]
+    },
+    {
+      "id": "system-health-check",
+      "name": "System health check",
+      "desc": "Watches infrastructure and services for errors, outages, and creeping performance issues.",
+      "colorKey": "forest",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🩺",
+      "category": "Reliability",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 5:30 PM",
+      "integrations": ["PagerDuty", "Datadog", "Sentry"]
+    },
+    {
+      "id": "issue-triage",
+      "name": "Issue triage",
+      "desc": "Reviews incoming bugs and feature requests, labels them, and routes the urgent ones.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🎫",
+      "category": "Reliability",
+      "triggerKind": "cron",
+      "triggerLabel": "Weekdays · 9:00 AM",
+      "integrations": ["Linear"]
+    },
+    {
+      "id": "flaky-test-tracker",
+      "name": "Flaky test tracker",
+      "desc": "Finds tests that pass and fail intermittently across recent CI runs and ranks the worst.",
+      "colorKey": "slate",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🎲",
+      "category": "Reliability",
+      "triggerKind": "cron",
+      "triggerLabel": "Mondays · 9:30 AM",
+      "integrations": ["GitHub"]
+    },
+    {
+      "id": "booking-prep",
+      "name": "Booking prep",
+      "desc": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
+      "colorKey": "teal",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📆",
+      "category": "Life admin",
+      "triggerKind": "condition",
+      "triggerLabel": "When a booking nears",
+      "integrations": ["Bookings", "Tasks"]
+    },
+    {
+      "id": "lead-follow-up",
+      "name": "Lead follow-up",
+      "desc": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
+      "colorKey": "amber",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🤝",
+      "category": "Life admin",
+      "triggerKind": "data",
+      "triggerLabel": "When a lead lands",
+      "integrations": ["Leads", "Tasks"]
+    },
+    {
+      "id": "invoice-chaser",
+      "name": "Invoice chaser",
+      "desc": "Sent invoices coming due within three days get a polite reminder drafted to the client — you review and send.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🧾",
+      "category": "Life admin",
+      "triggerKind": "condition",
+      "triggerLabel": "When an invoice nears due",
+      "integrations": ["Studio", "Threads"]
+    },
+    {
+      "id": "renewals-digest",
+      "name": "Renewals digest",
+      "desc": "A Monday-morning note listing every active subscription and what it's expected to charge — surprises stay off your statement.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔁",
+      "category": "Life admin",
+      "triggerKind": "cron",
+      "triggerLabel": "Mondays · 9:00 AM",
+      "integrations": ["Subscriptions", "Notes"]
+    },
+    {
+      "id": "vitals-nudge",
+      "name": "Vitals nudge",
+      "desc": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
+      "colorKey": "emerald",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🩺",
+      "category": "Life admin",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 8:00 PM",
+      "integrations": ["Vitals", "Tasks"]
+    }
+  ]
 }

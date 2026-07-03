@@ -116,9 +116,9 @@ test('ensureAgentEnrolled is idempotent per host-side name; grants match on the 
     deviceId: boot.deviceId,
     deviceKey: boot.deviceKey,
   } as const;
-  expect(() =>
-    gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
-  ).toThrow(/deny/);
+  expect(() => gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' })).toThrow(
+    /deny/,
+  );
 
   createGrant(db, {
     granteePartyId: first.partyId,
@@ -143,8 +143,8 @@ test('ensureAgentEnrolled is idempotent per host-side name; grants match on the 
   // Retiring the enrollment drops authentication entirely.
   markAgentRevoked(db, first.agentId);
   expect(lookupAgentByName(db, 'briefing')).toBeUndefined();
-  expect(() =>
-    gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' }),
-  ).toThrow(/unknown caller/);
+  expect(() => gw.read(cred, { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' })).toThrow(
+    /unknown caller/,
+  );
   expect(listEnrolledAgents(db).find((a) => a.agentId === first.agentId)).toBeUndefined();
 });

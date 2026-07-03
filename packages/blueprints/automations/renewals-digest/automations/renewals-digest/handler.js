@@ -37,8 +37,7 @@ export default async ({ ctx, log }) => {
         log.warn(`could not resolve counterparty for series ${s.series_id}: ${err.message}`);
       }
     }
-    const amount =
-      typeof s.expected_minor === 'number' ? (s.expected_minor / 100).toFixed(2) : '—';
+    const amount = typeof s.expected_minor === 'number' ? (s.expected_minor / 100).toFixed(2) : '—';
     lines.push(`- **${who}** — expected ${amount} (${s.rrule || 'no rule'})`);
   }
   const body = `# Upcoming renewals\n\n${rows.length} active recurring charge(s):\n\n${lines.join('\n')}\n`;

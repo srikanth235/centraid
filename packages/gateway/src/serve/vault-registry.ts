@@ -185,7 +185,8 @@ export class VaultRegistry {
   rename(vaultId: string, name: string): VaultInfo {
     const plane = this.require(vaultId);
     const trimmed = name.trim();
-    if (trimmed.length === 0) throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
+    if (trimmed.length === 0)
+      throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
     plane.rename(trimmed);
     return this.info(plane);
   }

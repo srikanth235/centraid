@@ -470,7 +470,10 @@ describe('changes feed (data-trigger outbox)', () => {
       granteePartyId: agent.partyId,
       purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
       grantedByPartyId: boot.ownerPartyId,
-      scopes: [{ schema: 'schedule', verbs: 'read+act' }, { schema: 'core', table: 'event', verbs: 'read' }],
+      scopes: [
+        { schema: 'schedule', verbs: 'read+act' },
+        { schema: 'core', table: 'event', verbs: 'read' },
+      ],
     });
 
     // Bootstrap: no rows, a watermark to persist.

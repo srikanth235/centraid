@@ -85,6 +85,4 @@ describe('automation-app', () => {
     expect(res.errors.length).toBe(1);
     expect(res.errors[0]!.id).toBe('ui-app/broken');
   });
-
-
 });

@@ -44,9 +44,7 @@ describe('evaluateConditionTrigger', () => {
     await fs.rm(appsDir, { recursive: true, force: true });
   });
 
-  const evaluate = (
-    bridge: VaultBridge,
-  ): ReturnType<typeof evaluateConditionTrigger> =>
+  const evaluate = (bridge: VaultBridge): ReturnType<typeof evaluateConditionTrigger> =>
     evaluateConditionTrigger({
       automationRef: 'studio/invoice-chaser',
       trigger: TRIGGER,

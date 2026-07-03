@@ -323,9 +323,9 @@ describe('data triggers', () => {
         triggers: [{ kind: 'data', entities: ['core.transaction'] }],
       }),
     ).toThrow(/vault block/);
-    expect(() =>
-      validateManifest({ ...base, triggers: [{ kind: 'data', entities: [] }] }),
-    ).toThrow(/entities/);
+    expect(() => validateManifest({ ...base, triggers: [{ kind: 'data', entities: [] }] })).toThrow(
+      /entities/,
+    );
     expect(() =>
       validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['transactions'] }] }),
     ).toThrow(/entity name/);

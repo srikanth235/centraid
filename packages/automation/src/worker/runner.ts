@@ -55,7 +55,14 @@ type ParentMessage =
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
-  | { type: 'vault-reply'; id: number; ok: boolean; result?: unknown; error?: string; code?: string }
+  | {
+      type: 'vault-reply';
+      id: number;
+      ok: boolean;
+      result?: unknown;
+      error?: string;
+      code?: string;
+    }
   | { type: 'abort'; reason?: string };
 
 type WorkerMessage =
@@ -180,7 +187,9 @@ port.on('message', (msg: ParentMessage) => {
     pendingCalls.delete(msg.id);
     if (msg.ok) p.resolve(msg.result);
     else {
-      const err = new Error(msg.error ?? `${msg.type.replace('-reply', '')} call failed`) as Error & {
+      const err = new Error(
+        msg.error ?? `${msg.type.replace('-reply', '')} call failed`,
+      ) as Error & {
         code?: string;
       };
       if ('code' in msg && msg.code) err.code = msg.code;

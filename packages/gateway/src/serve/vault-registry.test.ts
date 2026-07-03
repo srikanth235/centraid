@@ -153,9 +153,9 @@ test('owner routes: vault list / create / update / delete + per-vault selection'
   registry.get(created.vaultId)!.enrollApp('planner');
   const activeApps = (await (await fetch(`${base}/apps`)).json()) as { apps: unknown[] };
   expect(activeApps.apps).toHaveLength(0);
-  const familyApps = (await (
-    await fetch(`${base}/apps?vault=${created.vaultId}`)
-  ).json()) as { apps: Array<{ name: string }> };
+  const familyApps = (await (await fetch(`${base}/apps?vault=${created.vaultId}`)).json()) as {
+    apps: Array<{ name: string }>;
+  };
   expect(familyApps.apps).toMatchObject([{ name: 'planner' }]);
   const unknown = await fetch(`${base}/apps?vault=nope`);
   expect(unknown.status).toBe(404);

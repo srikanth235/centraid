@@ -22,11 +22,7 @@
 
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import {
-  ConversationStore,
-  makeRuntimeDbProvider,
-  type VaultBridge,
-} from '@centraid/app-engine';
+import { ConversationStore, makeRuntimeDbProvider, type VaultBridge } from '@centraid/app-engine';
 import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
 import { parseRef } from '../manifest/ref.js';
 
