@@ -8,6 +8,7 @@
 // ledger, history and receipts remain the owner's.
 
 import {
+  armConfirm,
   barChart,
   barSpan,
   debounce,
@@ -358,6 +359,16 @@ function renderBudgets(txns) {
       e.stopPropagation();
       startBudgetEdit(b);
     });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'icon-btn budget-remove';
+    remove.textContent = '✕';
+    remove.title = 'Remove this budget';
+    remove.setAttribute('aria-label', `Remove the ${categoryLabel(b.category_concept_id)} budget`);
+    remove.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (armConfirm(remove, { armedLabel: 'Remove?' })) removeBudget(b);
+    });
     const drill = () => setCategoryFilter(b.category_concept_id, { scroll: true });
     row.addEventListener('click', drill);
     row.addEventListener('keydown', (e) => {
@@ -366,7 +377,7 @@ function renderBudgets(txns) {
         drill();
       }
     });
-    row.append(ring, text, amount);
+    row.append(ring, text, amount, remove);
     list.appendChild(row);
   }
 }
@@ -803,6 +814,34 @@ function startBudgetEdit(b) {
     block: 'center',
   });
   $('amountInput').focus();
+}
+
+/**
+ * Delete a cap through finance.remove_budget (the ledger is untouched) and
+ * offer Undo — which is just set-budget again with the row we still hold:
+ * same category, limit, period and starts_on.
+ */
+async function removeBudget(b) {
+  const outcome = await act('remove-budget', { budget_id: b.budget_id });
+  if (narrateOutcome(outcome)) {
+    toast('Budget removed', {
+      undoLabel: 'Undo',
+      onUndo: async () => {
+        const redo = await act('set-budget', {
+          category_concept_id: b.category_concept_id,
+          period: b.period,
+          limit_minor: Number(b.limit_minor ?? 0),
+          currency: b.currency,
+          starts_on: b.starts_on,
+        });
+        if (narrateOutcome(redo)) toast('Budget restored.');
+        await refresh();
+      },
+    });
+    await refresh();
+  } else if (outcome?.status === 'denied') {
+    await refresh();
+  }
 }
 
 $('categorySelect').addEventListener('change', syncBudgetSubmitLabel);

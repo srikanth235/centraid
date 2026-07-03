@@ -83,6 +83,15 @@ main {
   margin: 0;
 }
 
+/* The insurance number: the whole inventory summed per currency. */
+.total-value {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-color, var(--accent));
+}
+
 .small {
   font-size: 0.8rem;
 }
@@ -168,6 +177,12 @@ main {
   border-color: var(--line);
 }
 
+/* Mark-done sits at the end of a due row without stretching it. */
+.done-btn {
+  flex: none;
+  align-self: center;
+}
+
 /* Overdue maintenance takes the danger tint. */
 .row[data-due='overdue'] .row-time,
 .row[data-due='overdue'] .badge {
@@ -187,7 +202,8 @@ main {
 
 /* ---------- Forms (add item, inline edit / warranty) ---------- */
 
-input {
+input,
+select {
   font: inherit;
   color: var(--ink);
   background: var(--surface);
@@ -197,9 +213,22 @@ input {
   min-width: 0;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: none;
   border-color: var(--app-color, var(--accent));
+}
+
+/* Value + currency: a short amount box and a 3-letter code beside it. */
+.value-input {
+  flex: none;
+  width: 7rem;
+}
+
+.currency-input {
+  flex: none;
+  width: 4.75rem;
+  text-transform: uppercase;
 }
 
 .primary {

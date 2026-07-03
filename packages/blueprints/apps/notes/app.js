@@ -3,7 +3,8 @@
 // lives in knowledge.note; bodies are canonical core.content_item rows
 // decoded gateway-side by the library query. Writes go through the
 // knowledge domain's typed commands (create_note, edit_note, move_note,
-// create_notebook, delete_note) routed via this app's action handlers —
+// create_notebook, rename_notebook, delete_notebook, delete_note) routed
+// via this app's action handlers —
 // consent-checked per command and receipted. Revoke the grant and this
 // page goes dark while the model, history and receipts remain the owner's.
 
@@ -14,6 +15,7 @@ const $ = (id) => document.getElementById(id);
 let notes = [];
 let notebooks = [];
 let activeNotebook = 'all';
+let renamingNotebookId = null; // chip currently swapped for its rename input
 let searchTerm = '';
 let firstLoad = true;
 let readErrorShown = false;
@@ -40,7 +42,9 @@ function notice(text) {
 }
 
 // One narration for every action outcome; returns true when it executed.
-function narrate(outcome, onDenied) {
+// `friendly` maps a refused predicate name to a human sentence, so the
+// banner can explain the vault's contract instead of quoting it.
+function narrate(outcome, onDenied, friendly) {
   if (outcome?.status === 'executed') {
     notice('');
     return true;
@@ -48,7 +52,13 @@ function narrate(outcome, onDenied) {
   if (outcome?.status === 'parked') {
     notice('Sent to the owner for confirmation — it lands once approved.');
   } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
+    const predicate = String(outcome.predicate ?? '');
+    const known = friendly ? Object.keys(friendly).find((k) => predicate.includes(k)) : undefined;
+    notice(
+      known
+        ? friendly[known]
+        : `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
+    );
   } else if (outcome?.status === 'denied') {
     notice(`Denied by consent: ${outcome.reason ?? ''}`);
     if (onDenied) onDenied();
@@ -387,6 +397,9 @@ async function refresh() {
   if (activeNotebook !== 'all' && !notebooks.some((nb) => nb.notebook_id === activeNotebook)) {
     activeNotebook = 'all';
   }
+  if (renamingNotebookId && !notebooks.some((nb) => nb.notebook_id === renamingNotebookId)) {
+    renamingNotebookId = null; // renamed-away target deleted elsewhere
+  }
   if (viewingId) {
     const fresh = currentNote();
     if (!fresh) {
@@ -408,6 +421,10 @@ function renderChips() {
   row.innerHTML = '';
   const all = [{ notebook_id: 'all', name: 'All' }, ...notebooks];
   for (const nb of all) {
+    if (nb.notebook_id !== 'all' && nb.notebook_id === renamingNotebookId) {
+      row.appendChild(renameChipInput(nb));
+      continue;
+    }
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'chip';
@@ -415,11 +432,17 @@ function renderChips() {
     chip.setAttribute('aria-pressed', String(nb.notebook_id === activeNotebook));
     chip.addEventListener('click', async () => {
       activeNotebook = nb.notebook_id;
+      renamingNotebookId = null;
       if (viewingId) await goBack();
       renderChips();
       renderNotes();
     });
     row.appendChild(chip);
+    // The selected notebook is manageable in place: rename and delete ride
+    // beside its chip — a typo'd notebook is no longer forever.
+    if (nb.notebook_id !== 'all' && nb.notebook_id === activeNotebook) {
+      row.append(renameChipButton(nb), deleteChipButton(nb));
+    }
   }
   const add = document.createElement('button');
   add.type = 'button';
@@ -430,6 +453,103 @@ function renderChips() {
     $('notebookNameInput').focus();
   });
   row.appendChild(add);
+}
+
+// ---------- Notebook management (rename / delete beside the active chip) ----------
+
+// The vault's predicates, translated. Rename refuses a name already used by
+// another of the owner's notebooks; delete refuses while children exist.
+const RENAME_NOTEBOOK_FRIENDLY = {
+  name_unused_by_owner: 'You already have a notebook with that name.',
+};
+const DELETE_NOTEBOOK_FRIENDLY = {
+  notebook_has_no_children:
+    'This notebook still has notebooks inside it — delete or move those first.',
+};
+
+function renameChipButton(nb) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip-tool';
+  btn.textContent = '✎';
+  btn.title = 'Rename notebook';
+  btn.setAttribute('aria-label', `Rename notebook ${nb.name ?? ''}`);
+  btn.addEventListener('click', () => {
+    renamingNotebookId = nb.notebook_id;
+    renderChips();
+    const input = $('notebookChips').querySelector('.chip-rename-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  });
+  return btn;
+}
+
+function deleteChipButton(nb) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'chip-tool danger';
+  btn.textContent = '×';
+  btn.title = 'Delete notebook';
+  btn.setAttribute('aria-label', `Delete notebook ${nb.name ?? ''}`);
+  btn.addEventListener('click', async () => {
+    if (!armConfirm(btn, { armedLabel: 'Delete?' })) return;
+    const outcome = await act('delete-notebook', { notebook_id: nb.notebook_id });
+    if (narrate(outcome, refresh, DELETE_NOTEBOOK_FRIENDLY)) {
+      // The notebook was pure structure: its notes survive as unfiled rows.
+      const unfiled = Number(outcome.output?.notes_unfiled ?? 0);
+      activeNotebook = 'all';
+      renamingNotebookId = null;
+      toast(`Notebook deleted — ${unfiled} ${unfiled === 1 ? 'note' : 'notes'} unfiled`);
+      await refresh();
+    }
+  });
+  return btn;
+}
+
+// The chip swapped for an inline rename input: Enter saves, Esc (or clicking
+// away) cancels. A refused rename keeps the input open with the banner
+// explaining why, so the user can fix the name in place.
+function renameChipInput(nb) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'chip-rename-input';
+  input.value = nb.name ?? '';
+  input.setAttribute('aria-label', `New name for notebook ${nb.name ?? ''}`);
+  let settled = false;
+  const close = () => {
+    if (settled) return;
+    settled = true;
+    renamingNotebookId = null;
+    renderChips();
+  };
+  input.addEventListener('keydown', async (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation(); // the document-level Escape must not double-handle
+      close();
+      return;
+    }
+    if (e.key !== 'Enter' || settled) return;
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name || name === nb.name) {
+      // Nothing to send — the vault treats a rename to its own name as a
+      // no-op anyway, so skip the round-trip entirely.
+      close();
+      return;
+    }
+    const outcome = await act('rename-notebook', { notebook_id: nb.notebook_id, name });
+    if (narrate(outcome, refresh, RENAME_NOTEBOOK_FRIENDLY)) {
+      settled = true;
+      renamingNotebookId = null;
+      await refresh();
+    } else if (!settled) {
+      input.focus();
+    }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 120));
+  return input;
 }
 
 function visibleNotes() {

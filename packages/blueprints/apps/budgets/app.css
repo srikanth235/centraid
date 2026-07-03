@@ -737,6 +737,18 @@ body.has-bulk main {
   color: var(--danger);
 }
 
+/* The quiet per-row remove: a small ✕ that arms to "Remove?" before acting. */
+.budget-remove {
+  min-width: 2.5rem;
+}
+
+.budget-remove:hover,
+.budget-remove:focus-visible,
+.budget-remove[data-kit-armed='true'] {
+  color: var(--danger);
+  border-color: currentColor;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition-duration: 0.01ms !important;

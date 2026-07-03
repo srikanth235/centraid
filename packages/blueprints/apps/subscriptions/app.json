@@ -2,7 +2,7 @@
   "manifestVersion": 1,
   "id": "subscriptions",
   "name": "Subscriptions",
-  "description": "Every recurring charge as a projection of the personal vault: subscriptions are finance.recurring_series over your accounts, each normalized to a monthly figure so the running total is honest. Distinct from Budgets — this answers what renews and what you're bleeding monthly. Add, pause and cancel run through typed finance commands; files (a receipt, a contract) attach per subscription. No data of its own — revoke the grant and the app goes dark.",
+  "description": "Every recurring charge as a projection of the personal vault: subscriptions are finance.recurring_series over your accounts, each normalized to a monthly figure so the running total is honest, and each cadence rolled forward from its anchor date so you see what renews next and what the next 30 days cost. Distinct from Budgets — this answers what renews and what you're bleeding monthly. Add, edit, pause and cancel run through typed finance commands; files (a receipt, a contract) attach per subscription. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.0",
   "vault": {
     "purpose": "dpv:Billing",
@@ -14,6 +14,7 @@
       { "schema": "core", "table": "content_item", "verbs": "read" },
       { "schema": "core", "table": "attachment", "verbs": "read" },
       { "schema": "finance", "table": "add_subscription", "verbs": "act" },
+      { "schema": "finance", "table": "update_subscription", "verbs": "act" },
       {
         "schema": "finance",
         "table": "set_subscription_status",
@@ -26,7 +27,7 @@
   "actions": [
     {
       "name": "add-subscription",
-      "description": "Record a recurring charge through finance.add_subscription (account, amount, cadence).",
+      "description": "Record a recurring charge through finance.add_subscription (account, amount, cadence, optional first/next charge date).",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -34,10 +35,38 @@
           "account_id": { "type": "string", "minLength": 1 },
           "expected_minor": { "type": "integer", "minimum": 1 },
           "rrule": { "type": "string", "minLength": 1 },
+          "anchor_on": { "type": "string", "minLength": 1 },
           "counterparty_party_id": { "type": "string", "minLength": 1 },
           "tolerance_pct": { "type": "integer", "minimum": 0, "maximum": 100 }
         },
         "required": ["account_id", "expected_minor", "rrule"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "update-subscription",
+      "description": "Edit a subscription in place through finance.update_subscription — price, cadence, next charge date, payee, tolerance; a partial update, only the fields sent change.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "series_id": { "type": "string", "minLength": 1 },
+          "expected_minor": { "type": "integer", "minimum": 1 },
+          "rrule": { "type": "string", "minLength": 1 },
+          "anchor_on": { "type": "string", "minLength": 1 },
+          "counterparty_party_id": { "type": "string", "minLength": 1 },
+          "tolerance_pct": { "type": "number", "minimum": 0, "maximum": 100 }
+        },
+        "required": ["series_id"],
         "additionalProperties": false
       },
       "output": {
@@ -127,7 +156,7 @@
   "queries": [
     {
       "name": "list",
-      "description": "Every recurring series joined to its account and counterparty, each amount normalized to a monthly figure, with the active monthly total and attachments; plus accounts and parties for the add form.",
+      "description": "Every recurring series joined to its account and counterparty, each amount normalized to a monthly figure, with the active monthly total, attachments, and — for active series with an anchor date — the next renewal date plus a 30-day upcoming-renewals window; plus accounts and parties for the add form.",
       "input": {
         "type": "object",
         "properties": {},
@@ -138,6 +167,7 @@
         "properties": {
           "subscriptions": { "type": "array" },
           "monthly_active_minor": { "type": "integer" },
+          "upcoming": { "type": "array" },
           "accounts": { "type": "array" },
           "parties": { "type": "array" },
           "vaultDenied": { "type": "object" }

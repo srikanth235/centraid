@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "home-inventory",
   "name": "Home inventory",
-  "description": "What you own, where it lives, and what it's covered by — a projection of the vault's home domain. Adding, editing, disposing and covering items all run through the home domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the inventory stays the owner's.",
-  "version": "0.3.0",
+  "description": "What you own, where it lives, what it's worth, and what it's covered by — a projection of the vault's home domain. Adding, editing, disposing, covering and marking maintenance done all run through the home domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the inventory stays the owner's.",
+  "version": "0.4.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your home inventory, warranties, and upcoming maintenance.",
@@ -30,6 +30,11 @@
       {
         "schema": "home",
         "table": "add_warranty",
+        "verbs": "act"
+      },
+      {
+        "schema": "home",
+        "table": "complete_maintenance",
         "verbs": "act"
       },
       {
@@ -62,7 +67,7 @@
   "actions": [
     {
       "name": "add-item",
-      "description": "Add an owned item through home.add_item; the vault assigns the id.",
+      "description": "Add an owned item through home.add_item; the vault assigns the id. place_id must reference an existing core.place; a purchase price travels in minor units and must name its 3-letter currency.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -78,6 +83,19 @@
           "serial_no": {
             "type": "string",
             "minLength": 1
+          },
+          "place_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purchase_price_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purchase_currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
           }
         },
         "required": ["name"],
@@ -101,7 +119,7 @@
     },
     {
       "name": "update-item",
-      "description": "Edit an item's name, acquired date, or serial through home.update_item — partial update, only the fields sent change.",
+      "description": "Edit an item's name, acquired date, serial, room, or purchase value through home.update_item — partial update, only the fields sent change. place_id must reference an existing core.place; a price set on an item with no recorded currency must name its 3-letter currency.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -121,6 +139,19 @@
           "serial_no": {
             "type": "string",
             "minLength": 1
+          },
+          "place_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "purchase_price_minor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "purchase_currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3
           }
         },
         "required": ["item_id"],
@@ -225,6 +256,41 @@
       "writes": []
     },
     {
+      "name": "complete-maintenance",
+      "description": "Mark a maintenance plan done through home.complete_maintenance — last_done_on is stamped with done_on and the projected next-due date rolls forward from the plan's rrule. Re-stamping is legitimate: repeating chores are done again and again.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "done_on": {
+            "type": "string",
+            "minLength": 10
+          }
+        },
+        "required": ["plan_id", "done_on"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Pin a file (photo, warranty, receipt, any media) to an inventory item through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -301,7 +367,7 @@
   "queries": [
     {
       "name": "inventory",
-      "description": "Owned asset items grouped by place, each with its warranty history, plus disposed items and maintenance plans with a projected next-due date.",
+      "description": "Owned asset items grouped by place, each with its room, purchase value and warranty history, plus disposed items, maintenance plans with a projected next-due date, and the owner's places for the room picker.",
       "input": {
         "type": "object",
         "properties": {},
@@ -317,6 +383,9 @@
             "type": "array"
           },
           "maintenance": {
+            "type": "array"
+          },
+          "places": {
             "type": "array"
           },
           "vaultDenied": {

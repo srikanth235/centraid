@@ -3,7 +3,7 @@
   "id": "notes",
   "name": "Notes",
   "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
@@ -40,6 +40,16 @@
       {
         "schema": "knowledge",
         "table": "create_notebook",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "rename_notebook",
+        "verbs": "act"
+      },
+      {
+        "schema": "knowledge",
+        "table": "delete_notebook",
         "verbs": "act"
       },
       {
@@ -203,6 +213,72 @@
           }
         },
         "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "rename-notebook",
+      "description": "Rename a notebook through knowledge.rename_notebook — refuses a name already used by another of your notebooks; renaming a notebook to its own name is a no-op.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["notebook_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-notebook",
+      "description": "Delete a notebook through knowledge.delete_notebook — member notes are unfiled, never destroyed (the outcome reports notes_unfiled); refuses while child notebooks exist.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "notebook_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["notebook_id"],
         "additionalProperties": false
       },
       "output": {

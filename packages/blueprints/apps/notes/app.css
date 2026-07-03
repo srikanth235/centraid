@@ -314,6 +314,43 @@ select {
   color: #fff;
 }
 
+/* Rename/delete ride beside the selected chip — always visible (touch has
+   no hover), pill-shaped so the armed "Delete?" label still fits, and never
+   under 2.5rem (40px) a side. */
+.chip-tool {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chip-tool:hover {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
+}
+
+/* Deleting a notebook is destructive-ish (notes survive, filing doesn't):
+   hovered or armed, the tool takes the danger tint like the note delete. */
+.chip-tool.danger:hover,
+.chip-tool.danger[data-kit-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* The chip swapped for its rename input — chip-shaped, chip-sized. */
+input.chip-rename-input {
+  width: 11rem;
+  min-height: 2.5rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
 /* ---------- Note list: Pinned/Others sections, cards at wide widths ---------- */
 
 .section-head {

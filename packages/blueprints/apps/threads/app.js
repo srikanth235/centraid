@@ -34,6 +34,30 @@ const pendingSend = new Set();
 let optimisticBody = null; // bubble shown while a write round-trips
 let selectedRecipient = null; // {party_id, display_name} in the New form
 let newMsgChannel = 'dm';
+const SUBTITLE_DEFAULT = 'A projection of your vault — nothing stored here.';
+
+// ---------- Read cursors (unread indicators) ----------
+// Opening a thread stamps social.mark_thread_read with "now" — fire-and-
+// forget, never blocking a render, never toasting: a read cursor is silent
+// bookkeeping and the command is idempotent (re-marking with a newer
+// instant is the normal case). `markedAt` remembers this session's marks so
+// the inbox reads as caught-up even when a refresh outraces the write.
+const markedAt = new Map(); // thread_id -> ISO instant of our newest mark
+
+function markThreadRead(threadId) {
+  const read_at = new Date().toISOString();
+  markedAt.set(threadId, read_at);
+  window.centraid.write({ action: 'mark-read', input: { thread_id: threadId, read_at } }).catch(
+    () => {}, // silent by design — the next open re-marks anyway
+  );
+}
+
+// The query's `unread` fact, overridden by any newer mark of our own.
+function isUnread(t) {
+  if (!t.unread) return false;
+  const marked = markedAt.get(t.thread_id);
+  return !marked || String(t.last_inbound_at ?? '').localeCompare(marked) > 0;
+}
 
 function fmtClock(iso) {
   try {
@@ -187,6 +211,7 @@ function showInbox() {
 async function openThread(t) {
   currentThread = t;
   optimisticBody = null;
+  markThreadRead(t.thread_id); // fire-and-forget; rendering never waits
   $('composeInput').value = '';
   autosizeCompose();
   document.body.classList.add('thread-open');
@@ -228,6 +253,7 @@ async function loadInbox() {
   $('consentBanner').hidden = !denied;
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
+    $('subtitle').textContent = SUBTITLE_DEFAULT; // no stale "N unread"
     $('threadList').innerHTML = '';
     $('emptyInbox').hidden = true;
     return;
@@ -249,6 +275,9 @@ function inboxMatches(t) {
 function renderInbox() {
   const list = $('threadList');
   list.innerHTML = '';
+  // The header counts every unread thread, not just the filtered view.
+  const unreadCount = inboxThreads.filter(isUnread).length;
+  $('subtitle').textContent = unreadCount > 0 ? `${unreadCount} unread` : SUBTITLE_DEFAULT;
   const rows = inboxThreads.filter(inboxMatches);
   const empty = $('emptyInbox');
   empty.hidden = rows.length > 0;
@@ -259,9 +288,11 @@ function renderInbox() {
         : 'No conversations yet. Start one with ＋ New message, or import history through the vault’s ingest.';
   }
   for (const t of rows) {
+    const unread = isUnread(t);
     const row = document.createElement('button');
     row.type = 'button';
     row.className = 'thread-row';
+    if (unread) row.dataset.unread = 'true';
     row.appendChild(letterAvatar(t.others?.[0] ?? threadTitle(t)));
     const main = document.createElement('span');
     main.className = 'row-main';
@@ -287,6 +318,14 @@ function renderInbox() {
     badge.className = 'badge';
     badge.textContent = t.channel;
     side.append(time, badge);
+    if (unread) {
+      const dot = document.createElement('span');
+      dot.className = 'unread-dot';
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', 'Unread');
+      dot.title = 'Unread';
+      side.appendChild(dot);
+    }
     row.append(main, side);
     row.addEventListener('click', () => openThread(t));
     list.appendChild(row);
@@ -320,10 +359,23 @@ async function loadThread({ forceScroll = false } = {}) {
     return;
   }
   optimisticBody = null; // the read is now the truth; reconcile
-  renderMessages(data?.messages ?? []);
-  renderParticipants(data?.messages ?? []);
+  const messages = data?.messages ?? [];
+  renderMessages(messages);
+  renderParticipants(messages);
   renderAttachments($('attachStrip'), data?.attachments ?? [], removeAttachment);
   if (forceScroll || nearBottom) scrollToNewest(list, forceScroll ? 'auto' : 'smooth');
+  // New inbound while the thread is open and the reader is at the bottom:
+  // they saw it, so re-mark. Own sends are `mine` and never count; scrolled
+  // -up readers keep their cursor until they come back down (next refresh).
+  const newestInbound = messages.reduce(
+    (acc, m) =>
+      !m.mine && String(m.sent_at ?? '').localeCompare(acc) > 0 ? String(m.sent_at) : acc,
+    '',
+  );
+  const marked = markedAt.get(currentThread.thread_id) ?? '';
+  if (newestInbound && newestInbound.localeCompare(marked) > 0 && (forceScroll || nearBottom)) {
+    markThreadRead(currentThread.thread_id);
+  }
 }
 
 // Opening jumps straight to the newest message; refreshes glide (unless the

@@ -1,14 +1,23 @@
 // governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Home inventory is a finished product — search, photo grid, detail cards, warranty presets, CSV export — and splitting it would break that "one file" contract.
 // Home inventory — a projection over the personal vault. Every row
 // rendered here lives in home.asset_item / home.warranty /
-// home.maintenance_plan (place names from core.place); the app's own
+// home.maintenance_plan (rooms are core.place rows); the app's own
 // data.sqlite stays empty by design. Writes go through the home domain's
-// typed commands (add_item, update_item, dispose_item, add_warranty)
-// routed via this app's action handlers — consent-checked per command and
-// receipted. Revoke the grant and this page goes dark while the data
-// stays the owner's.
+// typed commands (add_item, update_item, dispose_item, add_warranty,
+// complete_maintenance) routed via this app's action handlers —
+// consent-checked per command and receipted. Revoke the grant and this
+// page goes dark while the data stays the owner's.
 
-import { armConfirm, debounce, letterAvatar, readFailed, showSkeleton } from './kit.js';
+import {
+  armConfirm,
+  debounce,
+  fmtMoney,
+  letterAvatar,
+  localDayKey,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -29,6 +38,9 @@ let openItemId = null;
 let activeEditor = null;
 let renderPending = false;
 let lastData = null;
+// The currency last typed into a value field — the fallback default when
+// the inventory itself doesn't suggest one yet.
+let lastCurrency = '';
 
 function notice(text) {
   const el = $('noticeBanner');
@@ -94,6 +106,82 @@ function fmtDate(key) {
 
 function dayKeyOf(value) {
   return String(value ?? '').slice(0, 10);
+}
+
+// ---------- Money (purchase values — the insurance numbers) ----------
+
+// A typed major-units amount → integer minor units, or null when unusable.
+function parseMinor(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
+}
+
+// "eur" / " EUR " → "EUR"; anything that isn't three letters → null.
+function currencyOf(raw) {
+  const c = String(raw ?? '')
+    .trim()
+    .toUpperCase();
+  return /^[A-Z]{3}$/.test(c) ? c : null;
+}
+
+// The currency a new value probably wants: the most common one across the
+// inventory, else whatever the user typed last.
+function defaultCurrency() {
+  const counts = new Map();
+  for (const it of lastData?.items ?? []) {
+    if (!it.purchase_currency) continue;
+    counts.set(it.purchase_currency, (counts.get(it.purchase_currency) ?? 0) + 1);
+  }
+  let best = '';
+  let bestN = 0;
+  for (const [cur, n] of counts) {
+    if (n > bestN) {
+      best = cur;
+      bestN = n;
+    }
+  }
+  return best || lastCurrency;
+}
+
+// Sum purchase values per currency — minor units across currencies don't add.
+function currencyTotals(items) {
+  const map = new Map();
+  for (const it of items) {
+    if (it.purchase_price_minor == null || !it.purchase_currency) continue;
+    map.set(
+      it.purchase_currency,
+      (map.get(it.purchase_currency) ?? 0) + Number(it.purchase_price_minor),
+    );
+  }
+  return map;
+}
+
+// "€3,450 + $200" — biggest pile first.
+function joinMoney(totals) {
+  return [...totals.entries()]
+    .toSorted((a, b) => b[1] - a[1])
+    .map(([cur, minor]) => fmtMoney(minor, cur))
+    .join(' + ');
+}
+
+// ---------- Rooms (core.place options) ----------
+
+// Fill a room select: "No room" first, then the owner's places by name.
+function fillPlaceSelect(select, selectedId) {
+  select.innerHTML = '';
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = 'No room';
+  select.appendChild(none);
+  for (const p of lastData?.places ?? []) {
+    const opt = document.createElement('option');
+    opt.value = p.place_id;
+    opt.textContent = p.name;
+    select.appendChild(opt);
+  }
+  select.value = selectedId ?? '';
+  if (select.value !== (selectedId ?? '')) select.value = '';
 }
 
 // ---------- Attachments (shared pattern across apps) ----------
@@ -237,6 +325,8 @@ async function refresh() {
     return;
   }
   lastData = data;
+  refreshAddFormPickers();
+  renderTotalValue(data?.items ?? []);
   renderMaintenance(data?.maintenance ?? []);
   renderExpiring(data?.items ?? []);
   renderDisposed(data?.disposed ?? []);
@@ -246,6 +336,25 @@ async function refresh() {
     return;
   }
   renderItems();
+}
+
+// Keep the add form's room options current without stomping what the user
+// already picked or typed.
+function refreshAddFormPickers() {
+  const select = $('addPlaceSelect');
+  fillPlaceSelect(select, select.value);
+  const currency = $('addCurrencyInput');
+  if (!currency.value && document.activeElement !== currency) {
+    currency.value = defaultCurrency();
+  }
+}
+
+// The grand total in the header — the number an insurer asks for.
+function renderTotalValue(items) {
+  const el = $('totalValue');
+  const totals = currencyTotals(items);
+  el.hidden = totals.size === 0;
+  el.textContent = totals.size > 0 ? `Total value ${joinMoney(totals)}` : '';
 }
 
 function editorClosed() {
@@ -278,9 +387,43 @@ function renderMaintenance(plans) {
     const badge = document.createElement('span');
     badge.className = 'badge';
     badge.textContent = overdue ? 'overdue' : 'due';
-    row.append(time, text, badge);
+    // Done stamps last_done_on with today's local date; on refresh the
+    // rrule math rolls the next due date forward and this row clears.
+    const done = document.createElement('button');
+    done.type = 'button';
+    done.className = 'ghost done-btn';
+    done.textContent = 'Done';
+    done.addEventListener('click', async () => {
+      done.disabled = true;
+      const doneOn = localDayKey(new Date());
+      const outcome = await act('complete-maintenance', { plan_id: p.plan_id, done_on: doneOn });
+      if (narrate(outcome, refresh)) {
+        const next = nextDueFrom(p.rrule, doneOn);
+        toast(next ? `Marked done — next due ${fmtDate(next)}` : 'Marked done');
+        await refresh();
+      } else {
+        done.disabled = false;
+      }
+    });
+    row.append(time, text, badge, done);
     rows.appendChild(row);
   }
+}
+
+// The same FREQ/INTERVAL projection the inventory query applies to
+// last_done_on — computed here so the toast can name the new due date
+// before the refresh lands. An rrule we can't read yields null.
+function nextDueFrom(rrule, doneOn) {
+  const freq = /FREQ=(DAILY|WEEKLY|MONTHLY|YEARLY)/i.exec(rrule ?? '')?.[1]?.toUpperCase();
+  if (!freq) return null;
+  const interval = Math.max(1, Number(/INTERVAL=(\d+)/i.exec(rrule ?? '')?.[1] ?? 1));
+  const d = new Date(`${doneOn}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  if (freq === 'DAILY') d.setUTCDate(d.getUTCDate() + interval);
+  else if (freq === 'WEEKLY') d.setUTCDate(d.getUTCDate() + 7 * interval);
+  else if (freq === 'MONTHLY') d.setUTCMonth(d.getUTCMonth() + interval);
+  else d.setUTCFullYear(d.getUTCFullYear() + interval);
+  return d.toISOString().slice(0, 10);
 }
 
 // Warranties ending within 60 days — surfaced beside Maintenance due so
@@ -353,7 +496,13 @@ function renderItems() {
   list.innerHTML = '';
 
   const totals = new Map();
-  for (const it of all) totals.set(placeKeyOf(it), (totals.get(placeKeyOf(it)) ?? 0) + 1);
+  const allByPlace = new Map();
+  for (const it of all) {
+    const key = placeKeyOf(it);
+    totals.set(key, (totals.get(key) ?? 0) + 1);
+    if (!allByPlace.has(key)) allByPlace.set(key, []);
+    allByPlace.get(key).push(it);
+  }
 
   const byPlace = new Map();
   for (const it of shown) {
@@ -365,8 +514,14 @@ function renderItems() {
   for (const [place, placeItems] of byPlace) {
     const h = document.createElement('p');
     h.className = 'day-label muted small';
-    const count = term ? `${placeItems.length} of ${totals.get(place)}` : `${placeItems.length}`;
-    h.textContent = `${place} · ${count}`;
+    const total = totals.get(place);
+    const count = term ? `${placeItems.length} of ${total}` : `${total}`;
+    // "Kitchen · 12 items · €3,450" — the room's value subtotal (per
+    // currency, from the room's full contents even mid-search).
+    const bits = [place, `${count} item${total === 1 ? '' : 's'}`];
+    const roomTotals = currencyTotals(allByPlace.get(place) ?? []);
+    if (roomTotals.size > 0) bits.push(joinMoney(roomTotals));
+    h.textContent = bits.join(' · ');
     list.appendChild(h);
 
     if (viewMode === 'grid') {
@@ -542,6 +697,9 @@ function renderDetail(it) {
   const bits = [placeKeyOf(it)];
   if (it.serial_no) bits.push(`Serial ${it.serial_no}`);
   if (it.acquired_on) bits.push(`Acquired ${fmtDate(dayKeyOf(it.acquired_on))}`);
+  if (it.purchase_price_minor != null && it.purchase_currency) {
+    bits.push(`Worth ${fmtMoney(it.purchase_price_minor, it.purchase_currency)}`);
+  }
   meta.textContent = bits.join(' · ');
   headText.appendChild(meta);
   // Coverage as visible text — never only a hover tooltip.
@@ -719,8 +877,8 @@ function renderRolePrompt() {
   return wrap;
 }
 
-// Inline edit form: name / acquired date / serial. Partial update — only the
-// fields that changed travel to home.update_item.
+// Inline edit form: name / acquired date / serial / room / value. Partial
+// update — only the fields that changed travel to home.update_item.
 function renderEditForm(it) {
   const form = document.createElement('form');
   form.className = 'row-form';
@@ -743,6 +901,27 @@ function renderEditForm(it) {
   serial.placeholder = 'Serial no.';
   serial.setAttribute('aria-label', 'Serial number');
 
+  const place = document.createElement('select');
+  place.setAttribute('aria-label', 'Room');
+  fillPlaceSelect(place, it.place_id ?? '');
+
+  const value = document.createElement('input');
+  value.type = 'number';
+  value.min = '0';
+  value.step = '0.01';
+  value.className = 'value-input';
+  value.placeholder = 'Value';
+  value.setAttribute('aria-label', 'Purchase value');
+  if (it.purchase_price_minor != null) value.value = (it.purchase_price_minor / 100).toFixed(2);
+
+  const currency = document.createElement('input');
+  currency.type = 'text';
+  currency.maxLength = 3;
+  currency.className = 'currency-input';
+  currency.placeholder = 'EUR';
+  currency.setAttribute('aria-label', 'Currency (3 letters)');
+  currency.value = it.purchase_currency ?? defaultCurrency();
+
   const save = document.createElement('button');
   save.type = 'submit';
   save.className = 'primary small-btn';
@@ -758,7 +937,7 @@ function renderEditForm(it) {
     focusItemTrigger(it.item_id);
   });
 
-  form.append(name, acquired, serial, save, cancel);
+  form.append(name, acquired, serial, place, value, currency, save, cancel);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const input = { item_id: it.item_id };
@@ -769,6 +948,29 @@ function renderEditForm(it) {
     }
     const newSerial = serial.value.trim();
     if (newSerial && newSerial !== (it.serial_no ?? '')) input.serial_no = newSerial;
+    // home.update_item can move an item between rooms but has no way to
+    // clear one (place_id refuses the empty string) — be honest about it.
+    if (!place.value && it.place_id) {
+      notice('The vault can move an item to another room, but not clear the room yet.');
+      return;
+    }
+    if (place.value && place.value !== (it.place_id ?? '')) input.place_id = place.value;
+    const rawValue = value.value.trim();
+    if (rawValue !== '') {
+      const minor = parseMinor(rawValue);
+      if (minor == null) {
+        notice('Value must be a non-negative amount.');
+        return;
+      }
+      const cur = currencyOf(currency.value);
+      if (!cur) {
+        notice('A value needs its 3-letter currency, e.g. EUR.');
+        return;
+      }
+      if (minor !== (it.purchase_price_minor ?? null)) input.purchase_price_minor = minor;
+      if (cur !== (it.purchase_currency ?? '')) input.purchase_currency = cur;
+      lastCurrency = cur;
+    }
     if (Object.keys(input).length === 1) {
       form.hidden = true;
       editorClosed();
@@ -908,7 +1110,16 @@ function csvField(value) {
 function exportCsv() {
   const items = lastData?.items ?? [];
   const lines = [
-    ['Name', 'Place', 'Serial', 'Acquired on', 'Warranty ends', 'Attachments'].join(','),
+    [
+      'Name',
+      'Place',
+      'Serial',
+      'Acquired on',
+      'Value',
+      'Currency',
+      'Warranty ends',
+      'Attachments',
+    ].join(','),
   ];
   for (const it of items) {
     lines.push(
@@ -917,6 +1128,9 @@ function exportCsv() {
         csvField(it.place_name ?? ''),
         csvField(it.serial_no ?? ''),
         csvField(it.acquired_on ? dayKeyOf(it.acquired_on) : ''),
+        // Major units — the number an insurer or spreadsheet expects.
+        csvField(it.purchase_price_minor != null ? (it.purchase_price_minor / 100).toFixed(2) : ''),
+        csvField(it.purchase_currency ?? ''),
         csvField(it.warranty ? dayKeyOf(it.warranty.ends_on) : ''),
         csvField(it.attachments?.length ?? 0),
       ].join(','),
@@ -938,15 +1152,38 @@ $('addForm').addEventListener('submit', async (e) => {
   if (!name) return;
   const acquired = $('addAcquiredInput').value;
   const serial = $('addSerialInput').value.trim();
+  const placeId = $('addPlaceSelect').value;
+  // A value travels as minor units plus its currency — the vault refuses
+  // one without the other, so the form does too.
+  const rawValue = $('addValueInput').value.trim();
+  let priceFields = {};
+  if (rawValue !== '') {
+    const minor = parseMinor(rawValue);
+    if (minor == null) {
+      notice('Value must be a non-negative amount.');
+      return;
+    }
+    const cur = currencyOf($('addCurrencyInput').value);
+    if (!cur) {
+      notice('A value needs its 3-letter currency, e.g. EUR.');
+      return;
+    }
+    priceFields = { purchase_price_minor: minor, purchase_currency: cur };
+    lastCurrency = cur;
+  }
   const outcome = await act('add-item', {
     name,
     ...(acquired ? { acquired_on: acquired } : {}),
     ...(serial ? { serial_no: serial } : {}),
+    ...(placeId ? { place_id: placeId } : {}),
+    ...priceFields,
   });
   if (narrate(outcome, refresh)) {
     $('addNameInput').value = '';
     $('addAcquiredInput').value = '';
     $('addSerialInput').value = '';
+    $('addValueInput').value = '';
+    $('addCurrencyInput').value = defaultCurrency();
     await refresh();
   }
 });

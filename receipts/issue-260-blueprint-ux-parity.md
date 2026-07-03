@@ -12,10 +12,18 @@ its own look and feel, modeled on its popular benchmark.
 ## Checklist
 
 - [x] Commit 1 — Wave 0: correctness fixes (timezones, currency totals, video, silent no-ops)
-- [ ] Wave 1 — shared blueprint kit (toast/aria-live, skeletons, arm-confirm, parked rows, search, lightbox, charts, avatars)
-- [ ] Wave 2 — UI-only P0 sweep per app, benchmark look and feel
-- [ ] Wave 3 — query/action-layer gaps (no vault changes)
-- [ ] Wave 4 — vault schema/command batch
+- [x] Commit 2 — Wave 1: shared blueprint kit (toast/aria-live, skeletons, arm-confirm, parked rows, charts, avatars), linked by all 14 apps
+- [x] Commit 3 — Wave 2: benchmark-parity UI wave across all 14 apps (one agent per app; per-app details in the commit message)
+- [x] Commit 4 — Wave 3: bookings decline/cancel/reschedule scopes + leads contact info scope
+- [x] Commit 5 — Wave 4a: vault command batch (new columns + 13 new/extended commands, 155 vault tests green)
+- [x] Commit 6 — Wave 4b: the nine apps surface the new commands (renewal dates, delete reading, rooms/values, favorites/trash, notebook management, unread, task notes, availability/budget removal)
+
+## Deferred to future issues
+
+- `core.archive_party` / merge-duplicates (referential integrity across all domains — needs its own design)
+- Circles CRUD (labels/groups for People), message reply-to, rrule-respawning tasks, all-day events, `core.purge_document` / `move_folder`, business timer + time-entry editing
+- `home.update_item` cannot CLEAR a place_id once set (minLength 1, no null path) — flagged by the Wave 4b agent
+- Platform seam: a "my parked invocations" read surface (all seven audit tracks asked for it; apps fake pending state session-locally today)
 
 ## Wave 0 — what changed
 

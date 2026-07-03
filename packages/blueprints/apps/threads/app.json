@@ -3,7 +3,7 @@
   "id": "threads",
   "name": "Threads",
   "description": "Your message history as a projection of the personal vault: threads and messages are canonical social rows, bodies are content items. Sending is the consent model's showcase — a send parks until the owner explicitly confirms it. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Reads your message threads and drafts replies; every send waits for your confirmation.",
@@ -11,6 +11,11 @@
       {
         "schema": "social",
         "verbs": "read+act"
+      },
+      {
+        "schema": "social",
+        "table": "mark_thread_read",
+        "verbs": "act"
       },
       {
         "schema": "core",
@@ -123,6 +128,41 @@
       "writes": []
     },
     {
+      "name": "mark-read",
+      "description": "Stamp the owner's read cursor on a thread (social.mark_thread_read). Silent and idempotent — opening a thread re-marks with a newer instant; the vault inserts a silent owner participant row if the owner never spoke in the thread.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "read_at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["thread_id", "read_at"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "attach",
       "description": "Share a file (image, PDF, any media) into a thread through core.attach; bytes are stored as a deduped canonical content item.",
       "confirmation": "none",
@@ -199,7 +239,7 @@
   "queries": [
     {
       "name": "inbox",
-      "description": "Every thread, most recent activity first, with its participants' display names, a last-message snippet, a draft flag, and the party directory for starting new conversations.",
+      "description": "Every thread, most recent activity first, with its participants' display names, a last-message snippet, a draft flag, an unread flag (owner's read cursor vs the newest inbound message), and the party directory for starting new conversations.",
       "input": {
         "type": "object",
         "properties": {},

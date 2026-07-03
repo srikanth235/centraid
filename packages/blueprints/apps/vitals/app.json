@@ -13,6 +13,11 @@
         "verbs": "read+act"
       },
       {
+        "schema": "health",
+        "table": "void_vital",
+        "verbs": "act"
+      },
+      {
         "schema": "core",
         "table": "observation",
         "verbs": "read"
@@ -120,6 +125,41 @@
           }
         },
         "required": ["vital_type", "days"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "void",
+      "description": "Mark a reading entered-in-error through health.void_vital (risk medium — the vault parks it for the owner's approval; the readings query already hides voided rows). The observation row stays as provenance.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "observation_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["observation_id"],
         "additionalProperties": false
       },
       "output": {

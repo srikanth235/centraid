@@ -39,6 +39,11 @@
       },
       {
         "schema": "schedule",
+        "table": "remove_availability",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
         "table": "request_booking",
         "verbs": "act"
       },
@@ -100,6 +105,37 @@
           }
         },
         "required": ["weekday_mask", "window_start", "window_end", "tz"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-availability",
+      "description": "Delete one weekly availability window through schedule.remove_availability. Risk low: it shapes what can be requested going forward but destroys no existing booking.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["rule_id"],
         "additionalProperties": false
       },
       "output": {

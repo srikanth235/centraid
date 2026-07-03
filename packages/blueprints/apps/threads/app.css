@@ -380,6 +380,31 @@ button {
   font-weight: 600;
 }
 
+/* Unread: bold title + snippet, accent time, and an accent dot badge in the
+   side column — the read cursor lives in the vault (social.mark_thread_read),
+   so this state survives reloads and other projections agree with it. */
+.thread-row[data-unread='true'] .row-text {
+  font-weight: 700;
+}
+
+.thread-row[data-unread='true'] .row-snippet {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.thread-row[data-unread='true'] .row-when {
+  color: var(--app-color, var(--accent));
+  font-weight: 600;
+}
+
+.unread-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+}
+
 .row-side {
   flex-shrink: 0;
   display: flex;

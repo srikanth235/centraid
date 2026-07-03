@@ -1,7 +1,7 @@
 /**
- * Recaption a photo or fix its capture time through media.update_asset.
- * The title is the caption, stored on the content item; captured_at lives
- * on the asset. Risk low.
+ * Recaption a photo, fix its capture time, or toggle its favorite heart
+ * through media.update_asset. The title is the caption, stored on the
+ * content item; captured_at and favorite live on the asset. Risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
@@ -14,6 +14,7 @@ export default async ({ body, ctx }) => {
         asset_id: String(input.asset_id ?? ''),
         ...(input.captured_at != null ? { captured_at: String(input.captured_at) } : {}),
         ...(input.title != null ? { title: String(input.title) } : {}),
+        ...(input.favorite != null ? { favorite: Number(input.favorite) } : {}),
       },
       purpose: 'dpv:ServiceProvision',
     });

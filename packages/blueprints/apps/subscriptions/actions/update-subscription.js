@@ -1,9 +1,8 @@
 /**
- * Record a recurring charge through finance.add_subscription. The account,
- * cadence (rrule) and first/next charge date (anchor_on) come from the form;
- * the vault stores the series active with a tolerance band the reconciler
- * later matches transactions against. Risk low — declaring a subscription
- * touches no outward party and no ledger row.
+ * Edit a subscription in place through finance.update_subscription — a
+ * partial update: only the fields sent change. Price, cadence (rrule), the
+ * anchor date the cadence counts from, payee and tolerance all travel the
+ * same typed command. Risk low — reshapes the series, no ledger effect.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
@@ -11,11 +10,11 @@ export default async ({ body, ctx }) => {
   const input = body ?? {};
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'finance.add_subscription',
+      command: 'finance.update_subscription',
       input: {
-        account_id: String(input.account_id ?? ''),
-        expected_minor: Number(input.expected_minor ?? 0),
-        rrule: String(input.rrule ?? ''),
+        series_id: String(input.series_id ?? ''),
+        ...(input.expected_minor != null ? { expected_minor: Number(input.expected_minor) } : {}),
+        ...(input.rrule != null ? { rrule: String(input.rrule) } : {}),
         ...(input.anchor_on != null ? { anchor_on: String(input.anchor_on) } : {}),
         ...(input.counterparty_party_id != null
           ? { counterparty_party_id: String(input.counterparty_party_id) }

@@ -42,6 +42,8 @@ const PREDICATE_TEXT = {
   calendar_exists: 'that calendar no longer exists',
   requester_exists: 'that client no longer exists',
   rule_created: 'the window was not saved',
+  rule_exists: 'that window is already gone',
+  rule_removed: 'the window was not removed',
   booking_held_tentative: 'the hold was not saved',
 };
 
@@ -242,7 +244,44 @@ function renderAvailability() {
     const prefix = kind !== 'work' ? `${kind} · ` : '';
     // Windows are wall-clock in the rule's tz — flag it when it isn't yours.
     const tzNote = a.tz && a.tz !== TZ ? ` · ${a.tz}` : '';
-    chip.textContent = `${prefix}${a.days.join(' ')} · ${a.window_start}–${a.window_end}${tzNote}`;
+    const text = `${prefix}${a.days.join(' ')} · ${a.window_start}–${a.window_end}${tzNote}`;
+    const label = document.createElement('span');
+    label.textContent = text;
+    chip.appendChild(label);
+
+    // Availability is no longer append-only: × prunes the rule. Undo on the
+    // toast re-creates it via set-availability with the identical shape.
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'chip-remove';
+    rm.textContent = '×';
+    rm.title = 'Remove window';
+    rm.setAttribute('aria-label', `Remove ${text}`);
+    rm.addEventListener('click', async () => {
+      if (!armConfirm(rm, { armedLabel: 'Remove?' })) return;
+      rm.disabled = true;
+      const outcome = await act('remove-availability', { rule_id: a.rule_id });
+      rm.disabled = false;
+      if (!narrate(outcome)) return;
+      toast('Window removed', {
+        undoLabel: 'Undo',
+        onUndo: async () => {
+          const undone = await act('set-availability', {
+            weekday_mask: a.weekday_mask,
+            window_start: a.window_start,
+            window_end: a.window_end,
+            kind,
+            tz: a.tz,
+          });
+          if (narrate(undone)) {
+            toast('Window restored');
+            await refresh();
+          }
+        },
+      });
+      await refresh();
+    });
+    chip.appendChild(rm);
     row.appendChild(chip);
   }
 }

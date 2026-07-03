@@ -64,6 +64,14 @@
           <span id="totalYear" class="total-year"></span>
         </div>
 
+        <section id="upNext" class="panel upnext" aria-label="Upcoming renewals" hidden>
+          <div class="upnext-head">
+            <span class="total-label muted small">Up next — 30 days</span>
+            <span id="upNextTotal" class="muted small"></span>
+          </div>
+          <div id="upNextList"></div>
+        </section>
+
         <form id="addForm" class="panel" autocomplete="off" hidden>
           <div class="field">
             <label class="field-label" for="payeeSelect">What service?</label>
@@ -116,6 +124,10 @@
             </div>
           </div>
           <div class="field-row form-foot">
+            <div class="field anchor-field">
+              <label class="field-label" for="anchorInput">First/next charge date</label>
+              <input id="anchorInput" type="date" />
+            </div>
             <div class="field">
               <label class="field-label" for="accountSelect">Charged to</label>
               <select id="accountSelect"></select>
@@ -135,6 +147,7 @@
             <button type="button" class="pill" data-filter="all" aria-pressed="false">All</button>
           </div>
           <select id="sortSelect" aria-label="Sort subscriptions">
+            <option value="next" selected>Sort: Renewal</option>
             <option value="cost">Sort: Cost</option>
             <option value="name">Sort: Name</option>
           </select>

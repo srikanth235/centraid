@@ -1,22 +1,23 @@
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Subscriptions is a finished product — monthly total, renewal dates, a 30-day runway, inline editing, pause/cancel, attachments — and splitting it would break that "one file" contract.
 // Subscriptions — money that repeats, as a projection over the personal
 // vault. Each row is a finance.recurring_series charging one of your
 // accounts; the app normalizes every cadence to a monthly figure so the
 // running total is honest, and frames the yearly cost beside it because
-// that's the number that makes people cancel. Adding, pausing, cancelling
-// and reactivating run through typed finance commands (all risk low); files
+// that's the number that makes people cancel. Renewal dates project from
+// each series' anchor_on rolled forward by its cadence (the query owns that
+// math); rows sort by what renews next, Bobby-style, and the next 30 days
+// stack up in "Up next". Adding, editing, pausing, cancelling and
+// reactivating run through typed finance commands (all risk low); files
 // attach per subscription. The app stores nothing — revoke the grant and
 // this page goes dark while the series, history and receipts remain the
 // owner's.
-//
-// Deliberately skipped: renewal dates ("renews in N days", an upcoming
-// view). finance.recurring_series stores a cadence but no anchor date, so
-// there is nothing truthful to project until the vault schema grows one.
 
 import {
   armConfirm,
   barSpan,
   fmtMoney,
   letterAvatar,
+  localDayKey,
   outcomeMessage,
   readFailed,
   showSkeleton,
@@ -25,13 +26,50 @@ import {
 
 const $ = (id) => document.getElementById(id);
 
-let data = { subscriptions: [], monthly_active_minor: 0, accounts: [], parties: [] };
+let data = { subscriptions: [], monthly_active_minor: 0, upcoming: [], accounts: [], parties: [] };
 let attachTarget = null; // series_id the shared file input attaches to
-const ui = { filter: 'active', sort: 'cost', showEnded: false };
+const ui = { filter: 'active', sort: 'next', showEnded: false };
+
+// While an inline edit form is open, refreshes park here instead of wiping
+// the user's typing; applied when the form closes (home-inventory pattern).
+let activeEditor = null;
+let renderPending = false;
 
 // A row without a payee party falls back to the charging account's name —
 // useful, but "Checking" must never masquerade as a service.
 const displayName = (s) => s.counterparty ?? s.account;
+
+// ---------- Renewal dates (next_on comes precomputed from the query) ----------
+
+/** Whole days from the viewer's local today to a YYYY-MM-DD key. */
+function daysUntil(key) {
+  const [y1, m1, d1] = localDayKey(new Date()).split('-').map(Number);
+  const [y2, m2, d2] = String(key).split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86400000);
+}
+
+/** "Mar 14" — a day key in the viewer's locale. */
+function fmtDay(key) {
+  const [y, m, d] = String(key).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** "renews Mar 14 · in 6 days" — the row's one-line renewal story. */
+function renewCopy(nextOn) {
+  const days = daysUntil(nextOn);
+  if (days <= 0) return 'renews today';
+  if (days === 1) return 'renews tomorrow';
+  return `renews ${fmtDay(nextOn)} · in ${days} days`;
+}
+
+function editorClosed() {
+  activeEditor = null;
+  if (renderPending) {
+    renderPending = false;
+    renderUpNext();
+    renderList();
+  }
+}
 
 function notice(text) {
   const el = $('noticeBanner');
@@ -168,6 +206,12 @@ async function refresh() {
   renderTotal();
   renderAddForm();
   renderToolbar();
+  if (activeEditor) {
+    // Someone is typing in an inline edit form — don't wipe it.
+    renderPending = true;
+    return;
+  }
+  renderUpNext();
   renderList();
 }
 
@@ -196,6 +240,39 @@ function renderTotal() {
   $('totalYear').textContent = `≈ ${entries
     .map(([currency, minor]) => fmtMoney(minor * 12, currency))
     .join(' + ')} a year`;
+}
+
+// "Up next": every charge the query projects inside the next 30 days, with
+// a window total per currency — the runway view that makes renewals real.
+function renderUpNext() {
+  const upcoming = data.upcoming ?? [];
+  $('upNext').hidden = upcoming.length === 0;
+  if (upcoming.length === 0) return;
+  const bySeries = new Map(data.subscriptions.map((s) => [s.series_id, s]));
+  const totals = new Map();
+  const list = $('upNextList');
+  list.innerHTML = '';
+  for (const u of upcoming) {
+    const currency = u.currency || data.accounts[0]?.currency || 'USD';
+    totals.set(currency, (totals.get(currency) ?? 0) + Number(u.expected_minor ?? 0));
+    const row = document.createElement('div');
+    row.className = 'upnext-row';
+    const date = document.createElement('span');
+    date.className = 'upnext-date';
+    date.textContent = daysUntil(u.on) <= 0 ? 'Today' : fmtDay(u.on);
+    const name = document.createElement('span');
+    name.className = 'upnext-name';
+    const sub = bySeries.get(u.series_id);
+    name.textContent = sub ? displayName(sub) : '—';
+    const amt = document.createElement('span');
+    amt.className = 'upnext-amt';
+    amt.textContent = fmtMoney(u.expected_minor, currency);
+    row.append(date, name, amt);
+    list.appendChild(row);
+  }
+  $('upNextTotal').textContent = [...totals.entries()]
+    .map(([currency, minor]) => fmtMoney(minor, currency))
+    .join(' + ');
 }
 
 function fillSelect(select, options, placeholder) {
@@ -245,6 +322,7 @@ function renderToolbar() {
 
 for (const pill of document.querySelectorAll('.pill')) {
   pill.addEventListener('click', () => {
+    editorClosed(); // re-rendering rebuilds rows; never strand an open form
     ui.filter = pill.dataset.filter;
     renderToolbar();
     renderList();
@@ -252,11 +330,13 @@ for (const pill of document.querySelectorAll('.pill')) {
 }
 
 $('sortSelect').addEventListener('change', () => {
+  editorClosed();
   ui.sort = $('sortSelect').value;
   renderList();
 });
 
 $('endedToggle').addEventListener('click', () => {
+  editorClosed();
   ui.showEnded = !ui.showEnded;
   renderList();
 });
@@ -264,9 +344,19 @@ $('endedToggle').addEventListener('click', () => {
 // ---------- List ----------
 
 function sortSubs(list) {
-  return ui.sort === 'name'
-    ? list.toSorted((a, b) => displayName(a).localeCompare(displayName(b)))
-    : list.toSorted((a, b) => b.monthly_minor - a.monthly_minor);
+  if (ui.sort === 'name') {
+    return list.toSorted((a, b) => displayName(a).localeCompare(displayName(b)));
+  }
+  if (ui.sort === 'next') {
+    // What renews soonest first (Bobby's order); rows without an anchor sink
+    // to the bottom, ranked by cost so the expensive ones still surface.
+    return list.toSorted(
+      (a, b) =>
+        String(a.next_on ?? '9999-12-31').localeCompare(String(b.next_on ?? '9999-12-31')) ||
+        b.monthly_minor - a.monthly_minor,
+    );
+  }
+  return list.toSorted((a, b) => b.monthly_minor - a.monthly_minor);
 }
 
 function renderList() {
@@ -340,6 +430,27 @@ function renderSub(s, maxMonthly) {
     `${fmtMoney(s.expected_minor, s.currency)} ${s.cadence_label.toLowerCase()} · ` +
     `from ${s.account} · ≈ ${fmtMoney(s.monthly_minor * 12, s.currency)}/yr`;
   main.append(nameLine, sub);
+  const editForm = s.status === 'ended' ? null : renderEditForm(s);
+  if (s.status === 'active' && s.next_on) {
+    const renew = document.createElement('span');
+    renew.className = 'sub-renew';
+    renew.textContent = renewCopy(s.next_on);
+    main.appendChild(renew);
+  } else if (editForm && !s.anchor_on) {
+    // No anchor, no renewal date — nudge toward the editor instead of
+    // pretending the cadence alone can tell you when the charge lands.
+    const nudge = document.createElement('button');
+    nudge.type = 'button';
+    nudge.className = 'unnamed-chip';
+    nudge.textContent = 'set renewal date';
+    nudge.title = 'Tell the vault when this next charges';
+    nudge.addEventListener('click', () => {
+      editForm.hidden = false;
+      activeEditor = s.series_id;
+      editForm.querySelector('input[type="date"]')?.focus();
+    });
+    main.appendChild(nudge);
+  }
   row.appendChild(main);
 
   const amt = document.createElement('div');
@@ -362,6 +473,23 @@ function renderSub(s, maxMonthly) {
 
   const actions = document.createElement('span');
   actions.className = 'sub-actions';
+  if (editForm) {
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'ghost';
+    edit.textContent = 'Edit';
+    edit.addEventListener('click', () => {
+      editForm.hidden = !editForm.hidden;
+      if (!editForm.hidden) {
+        activeEditor = s.series_id;
+        editForm.querySelector('input')?.focus();
+      } else {
+        editorClosed();
+        edit.focus();
+      }
+    });
+    actions.appendChild(edit);
+  }
   if (s.status === 'active') {
     actions.appendChild(statusBtn(s, 'paused', 'Pause'));
     actions.appendChild(cancelBtn(s));
@@ -386,7 +514,157 @@ function renderSub(s, maxMonthly) {
   strip.className = 'attach-strip';
   renderAttachments(strip, s.attachments, removeAttachment);
   row.appendChild(strip);
+  if (editForm) row.appendChild(editForm);
   return row;
+}
+
+// ---------- Inline row editor (price / cadence / anchor date) ----------
+
+// Prefill helper: an rrule the form can express round-trips into the cadence
+// controls; anything exotic keeps a "leave as is" first option so a partial
+// update never mangles a cadence the UI can't spell.
+function cadenceControls(s) {
+  const select = document.createElement('select');
+  select.setAttribute('aria-label', 'Cadence');
+  const custom = document.createElement('span');
+  custom.className = 'row-form-interval';
+  const n = document.createElement('input');
+  n.type = 'number';
+  n.min = '1';
+  n.max = '99';
+  n.step = '1';
+  n.value = '3';
+  n.className = 'interval-in';
+  n.setAttribute('aria-label', 'Number of weeks or months between charges');
+  const unit = document.createElement('select');
+  unit.setAttribute('aria-label', 'Weeks or months');
+  for (const [value, label] of [
+    ['FREQ=WEEKLY', 'weeks'],
+    ['FREQ=MONTHLY', 'months'],
+  ]) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    unit.appendChild(opt);
+  }
+  unit.value = 'FREQ=MONTHLY';
+  custom.append(n, unit);
+
+  const parsed = /^FREQ=(WEEKLY|MONTHLY|YEARLY)(?:;INTERVAL=(\d+))?$/.exec(String(s.rrule ?? ''));
+  const interval = Number(parsed?.[2] ?? 1);
+  const options = [];
+  if (!parsed) options.push(['', `Keep: ${s.cadence_label.toLowerCase()}`]);
+  options.push(
+    ['FREQ=MONTHLY', 'Monthly'],
+    ['FREQ=WEEKLY', 'Weekly'],
+    ['FREQ=YEARLY', 'Yearly'],
+    ['custom', 'Every N weeks / months…'],
+  );
+  for (const [value, label] of options) {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    select.appendChild(opt);
+  }
+  if (!parsed) {
+    select.value = '';
+  } else if (interval > 1 && parsed[1] !== 'YEARLY') {
+    select.value = 'custom';
+    n.value = String(interval);
+    unit.value = `FREQ=${parsed[1]}`;
+  } else {
+    select.value = `FREQ=${parsed[1]}`;
+  }
+  custom.hidden = select.value !== 'custom';
+  select.addEventListener('change', () => {
+    custom.hidden = select.value !== 'custom';
+  });
+
+  return {
+    select,
+    custom,
+    /** The chosen rrule; null while the custom interval is invalid, '' for keep. */
+    value() {
+      if (select.value !== 'custom') return select.value;
+      const count = Math.round(Number(n.value));
+      if (!Number.isFinite(count) || count < 1) return null;
+      return count === 1 ? unit.value : `${unit.value};INTERVAL=${count}`;
+    },
+  };
+}
+
+// The row's inline editor — same partial-update contract as the vault
+// command: only the fields that changed travel. Non-destructive, so no
+// armed confirm; a toast closes the loop.
+function renderEditForm(s) {
+  const form = document.createElement('form');
+  form.className = 'row-form';
+  form.autocomplete = 'off';
+  form.hidden = true;
+
+  const amount = document.createElement('input');
+  amount.type = 'number';
+  amount.min = '0';
+  amount.step = '0.01';
+  amount.inputMode = 'decimal';
+  amount.value = (Number(s.expected_minor ?? 0) / 100).toFixed(2);
+  amount.className = 'amount-in';
+  amount.setAttribute('aria-label', 'Amount per charge');
+
+  const cadence = cadenceControls(s);
+
+  const anchor = document.createElement('input');
+  anchor.type = 'date';
+  anchor.value = s.anchor_on ?? '';
+  anchor.setAttribute('aria-label', 'Next charge date');
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'primary small-btn';
+  save.textContent = 'Save';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => {
+    form.hidden = true;
+    editorClosed();
+  });
+
+  form.append(amount, cadence.select, cadence.custom, anchor, save, cancel);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = { series_id: s.series_id };
+    if (amount.value.trim() !== '') {
+      const value = parseFloat(amount.value);
+      if (!Number.isFinite(value) || value <= 0) {
+        notice('Enter an amount above zero.');
+        return;
+      }
+      const minor = Math.round(value * 100);
+      if (minor !== s.expected_minor) input.expected_minor = minor;
+    }
+    const rrule = cadence.value();
+    if (rrule === null) {
+      notice('Enter how many weeks or months between charges.');
+      return;
+    }
+    if (rrule && rrule !== s.rrule) input.rrule = rrule;
+    if (anchor.value && anchor.value !== (s.anchor_on ?? '')) input.anchor_on = anchor.value;
+    if (Object.keys(input).length === 1) {
+      form.hidden = true;
+      editorClosed();
+      return;
+    }
+    activeEditor = null;
+    const outcome = await act('update-subscription', input);
+    if (narrate(outcome)) {
+      toast(`Updated ${displayName(s)}`);
+      await refresh();
+    }
+  });
+  return form;
 }
 
 function statusBtn(s, status, label) {
@@ -446,6 +724,7 @@ $('addForm').addEventListener('submit', async (e) => {
   const account_id = $('accountSelect').value;
   const amount = parseFloat($('amountInput').value);
   const payee = $('payeeSelect').value;
+  const anchor = $('anchorInput').value;
   const rrule = chosenRrule();
   if (!account_id || !Number.isFinite(amount) || amount <= 0) {
     notice('Pick an account and enter an amount.');
@@ -459,15 +738,20 @@ $('addForm').addEventListener('submit', async (e) => {
     account_id,
     expected_minor: Math.round(amount * 100),
     rrule,
+    ...(anchor ? { anchor_on: anchor } : {}),
     ...(payee ? { counterparty_party_id: payee } : {}),
   });
   if (narrate(outcome)) {
     $('amountInput').value = '';
+    $('anchorInput').value = localDayKey(new Date());
     toast('Subscription added');
     await refresh();
   }
 });
 
+// The first/next charge date defaults to today — the honest guess for a
+// charge you're adding the day you notice it; edit it for anything else.
+$('anchorInput').value = localDayKey(new Date());
 window.addEventListener('focus', refresh);
 showSkeleton($('subList'), 4);
 refresh();

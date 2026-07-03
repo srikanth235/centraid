@@ -13,6 +13,7 @@
       { "schema": "media", "table": "add_asset", "verbs": "act" },
       { "schema": "media", "table": "update_asset", "verbs": "act" },
       { "schema": "media", "table": "delete_asset", "verbs": "act" },
+      { "schema": "media", "table": "restore_asset", "verbs": "act" },
       { "schema": "media", "table": "create_album", "verbs": "act" },
       { "schema": "media", "table": "rename_album", "verbs": "act" },
       { "schema": "media", "table": "delete_album", "verbs": "act" },
@@ -51,14 +52,15 @@
     },
     {
       "name": "update-asset",
-      "description": "Recaption a photo or fix its capture time through media.update_asset (the title lives on the content item).",
+      "description": "Recaption a photo, fix its capture time, or toggle its favorite heart through media.update_asset (the title lives on the content item; favorite lives on the asset).",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "asset_id": { "type": "string", "minLength": 1 },
           "captured_at": { "type": "string" },
-          "title": { "type": "string" }
+          "title": { "type": "string" },
+          "favorite": { "type": "integer", "enum": [0, 1] }
         },
         "required": ["asset_id"],
         "additionalProperties": false
@@ -75,7 +77,29 @@
     },
     {
       "name": "delete-asset",
-      "description": "Remove a photo from the library through media.delete_asset; album entries and face regions go with it, covers hand off, and the bytes soft-delete only when nothing else references them.",
+      "description": "Move a photo to the trash through media.delete_asset; album entries drop, covers hand off, the bytes soft-delete only when nothing else references them, and the trash purges after about 30 days.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore",
+      "description": "Bring a trashed photo (and its bytes) back through media.restore_asset; metadata survives intact, album membership does not. Restoring a live photo fails.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -212,7 +236,7 @@
   "queries": [
     {
       "name": "library",
-      "description": "Every media asset with its content item's content_uri and media_type, plus the albums it belongs to, newest first.",
+      "description": "Every live media asset with its content item's content_uri and media_type, plus the albums it belongs to, newest first; trashed assets ride separately with their days-until-purge.",
       "input": {
         "type": "object",
         "properties": {},
@@ -223,6 +247,7 @@
         "properties": {
           "assets": { "type": "array" },
           "albums": { "type": "array" },
+          "trash": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

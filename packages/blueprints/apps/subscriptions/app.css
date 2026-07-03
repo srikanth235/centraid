@@ -284,6 +284,48 @@ select {
   flex-shrink: 0;
 }
 
+/* ---------- Up next: the 30-day renewal runway ---------- */
+
+.upnext {
+  gap: 0.4rem;
+}
+
+.upnext-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.upnext-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  padding: 0.15rem 0;
+}
+
+.upnext-date {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.6rem;
+  flex-shrink: 0;
+}
+
+.upnext-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upnext-amt {
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Toolbar: filter pills + sort ---------- */
 
 .toolbar {
@@ -395,6 +437,43 @@ select {
   color: var(--ink-soft);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
+}
+
+/* The renewal line — the date is the point of the row, so it takes the tint. */
+.sub-renew {
+  color: var(--app-color, var(--accent));
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline row editor (shared row-form pattern; [hidden] still wins). */
+.sub .row-form {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.35rem;
+}
+
+.row-form .amount-in {
+  width: 6.5rem;
+  flex: none;
+}
+
+.row-form-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.row-form .interval-in {
+  width: 4rem;
+  flex: none;
+}
+
+.row-form input[type='date'] {
+  flex: none;
 }
 
 .sub-amount {

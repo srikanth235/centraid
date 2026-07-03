@@ -391,6 +391,22 @@ code {
   border-color: var(--ink-faint);
 }
 
+/* The title column: title line on top, the note's first line beneath. */
+.row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
 .row-text {
   flex: 1;
   min-width: 0;
@@ -398,6 +414,49 @@ code {
   line-height: 1.35;
   word-break: break-word;
   cursor: text;
+}
+
+/* A quiet marker on rows that carry a note; clicking opens the details
+   popover. Inline SVG strokes inherit currentColor. */
+.note-glyph {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-faint);
+  background: transparent;
+  border: none;
+  border-radius: 0.25rem;
+  padding: 0.1rem;
+  cursor: pointer;
+}
+
+span.note-glyph {
+  cursor: default;
+}
+
+.note-glyph svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.note-glyph:hover,
+.note-glyph:focus-visible {
+  color: var(--app-color, var(--accent));
+}
+
+/* The note's first line, muted and truncated, under the title. */
+.row-note {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+
+.row[data-done='true'] .row-note {
+  text-decoration: line-through;
 }
 
 .row[data-done='true'] .row-text {
@@ -491,7 +550,7 @@ code {
   opacity: 1;
 }
 
-/* ---------- Popovers (reschedule, priority & effort) ---------- */
+/* ---------- Popovers (reschedule, priority, effort & notes) ---------- */
 
 .popover {
   position: absolute;
@@ -521,7 +580,8 @@ code {
 }
 
 .popover input,
-.popover select {
+.popover select,
+.popover textarea {
   font: inherit;
   font-size: 0.85rem;
   color: var(--ink);
@@ -533,9 +593,24 @@ code {
 }
 
 .popover input:focus-visible,
-.popover select:focus-visible {
+.popover select:focus-visible,
+.popover textarea:focus-visible {
   outline: 2px solid var(--app-color, var(--accent));
   outline-offset: 1px;
+}
+
+/* The Notes textarea wants room to breathe; ⌘/Ctrl+Enter saves, Esc closes.
+   The label host is uppercase + letter-spaced — the note text is not. */
+.popover textarea {
+  display: block;
+  width: 16rem;
+  max-width: 72vw;
+  min-height: 4rem;
+  resize: vertical;
+  line-height: 1.4;
+  margin-top: 0.25rem;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .popover .ghost {

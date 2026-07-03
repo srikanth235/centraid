@@ -2,11 +2,12 @@
 // Photos — a pure projection over the personal vault. Every tile rendered
 // here is a media.media_asset joined to its core.content_item; the bytes
 // themselves are rented, addressed by content_uri, never copied into the
-// app. Every write is a typed media command — add_asset, update_asset,
-// delete_asset and the album set — all risk low, consent-checked and
-// receipted, with identical bytes deduping onto one asset. The app stores
-// nothing: revoke the grant and this page goes dark while the library
-// remains the owner's.
+// app. Every write is a typed media command — add_asset, update_asset
+// (captions, capture times, favorites), delete_asset (a trash with a
+// ~30-day purge), restore_asset and the album set — all risk low,
+// consent-checked and receipted, with identical bytes deduping onto one
+// asset. The app stores nothing: revoke the grant and this page goes dark
+// while the library remains the owner's.
 
 import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
 
@@ -20,9 +21,15 @@ const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 // once to this longest edge and cached; the lightbox keeps the original.
 const THUMB_EDGE = 360;
 
+// Built-in shelves share the album strip without being albums. The prefix
+// can never collide with a vault id — ids are opaque tokens, not colons.
+const FAVORITES = 'built-in:favorites';
+const TRASH = 'built-in:trash';
+
 let assets = [];
 let albums = [];
-let selectedAlbum = null; // null = All
+let trash = [];
+let selectedAlbum = null; // null = All; an album_id; or FAVORITES / TRASH
 let lightboxAssetId = null; // non-null while the lightbox is open
 let uploading = false;
 let readErrorShown = false;
@@ -221,7 +228,15 @@ async function refresh() {
   }
   assets = data?.assets ?? [];
   albums = data?.albums ?? [];
-  if (selectedAlbum && !albums.some((a) => a.album_id === selectedAlbum)) {
+  trash = data?.trash ?? [];
+  // The trash shelf folds away when it empties; Favorites is always a place.
+  if (selectedAlbum === TRASH && trash.length === 0) selectedAlbum = null;
+  if (
+    selectedAlbum &&
+    selectedAlbum !== FAVORITES &&
+    selectedAlbum !== TRASH &&
+    !albums.some((a) => a.album_id === selectedAlbum)
+  ) {
     selectedAlbum = null;
   }
   for (const id of [...selectedIds]) {
@@ -235,6 +250,8 @@ async function refresh() {
 
 function albumAssets() {
   if (!selectedAlbum) return assets;
+  if (selectedAlbum === FAVORITES) return assets.filter((a) => a.favorite);
+  if (selectedAlbum === TRASH) return trash;
   return assets.filter((a) => a.album_ids?.includes(selectedAlbum));
 }
 
@@ -314,20 +331,13 @@ function inlineInput({ value = '', placeholder, label, onSubmit, onCancel }) {
   return input;
 }
 
-// "Deleted 3 items · 1 awaiting approval · 2 failed"
-function batchSummary(verb, ok, parked, failed) {
-  const parts = [];
-  if (ok > 0) parts.push(`${verb} ${ok} ${ok === 1 ? 'item' : 'items'}`);
-  if (parked > 0) parts.push(`${parked} awaiting approval`);
-  if (failed > 0) parts.push(`${failed} failed`);
-  return parts.join(' · ') || 'Nothing to do';
-}
-
 // ---------- Albums toolbar ----------
 
 function renderToolbar() {
   renderChips();
   renderAlbumTools();
+  // Trash tiles offer exactly one action — selection has nothing to select.
+  $('selectBtn').hidden = selectedAlbum === TRASH;
 }
 
 function renderChips() {
@@ -341,6 +351,7 @@ function renderChips() {
     renderGrid();
   };
   nav.appendChild(chip('All', selectedAlbum === null, pick(null)));
+  nav.appendChild(chip('♥ Favorites', selectedAlbum === FAVORITES, pick(FAVORITES)));
   for (const album of albums) {
     nav.appendChild(
       chip(album.title ?? 'Album', selectedAlbum === album.album_id, pick(album.album_id)),
@@ -370,6 +381,12 @@ function renderChips() {
     input.focus();
   });
   nav.appendChild(add);
+  // The trash shelf only earns a chip while something is in it.
+  if (trash.length > 0) {
+    const t = chip(`Trash (${trash.length})`, selectedAlbum === TRASH, pick(TRASH));
+    t.classList.add('chip-trash');
+    nav.appendChild(t);
+  }
 }
 
 function renderAlbumTools() {
@@ -433,10 +450,19 @@ function renderGrid() {
     const searching = searchQuery !== '';
     $('emptyText').textContent = searching
       ? `No matches for “${searchQuery}”.`
-      : selectedAlbum
-        ? 'Nothing in this album yet.'
-        : 'No photos yet — your library starts with the first upload.';
-    $('emptyUpload').hidden = searching;
+      : selectedAlbum === FAVORITES
+        ? 'No favorites yet — tap the heart on any photo.'
+        : selectedAlbum === TRASH
+          ? 'Trash is empty.'
+          : selectedAlbum
+            ? 'Nothing in this album yet.'
+            : 'No photos yet — your library starts with the first upload.';
+    $('emptyUpload').hidden = searching || selectedAlbum === FAVORITES || selectedAlbum === TRASH;
+  }
+  // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
+  if (selectedAlbum === TRASH) {
+    for (const asset of shown) grid.appendChild(renderTrashTile(asset));
+    return;
   }
   // Google-Photos-style timeline: sticky month headers, day labels inside.
   const months = new Map(); // month key -> Map(day key -> assets)
@@ -527,8 +553,26 @@ function renderTile(asset) {
   });
   wrap.appendChild(check);
 
+  // The favorite heart: hover reveal on desktop, always on for touch and
+  // for photos already favorited; the toggle rides update-asset.
+  if (asset.favorite) wrap.classList.add('faved');
+  const heart = document.createElement('button');
+  heart.type = 'button';
+  heart.className = 'tile-heart';
+  heart.setAttribute('aria-pressed', asset.favorite ? 'true' : 'false');
+  heart.setAttribute('aria-label', asset.favorite ? 'Remove from favorites' : 'Add to favorites');
+  const heartGlyph = document.createElement('span');
+  heartGlyph.textContent = asset.favorite ? '♥' : '♡';
+  heartGlyph.setAttribute('aria-hidden', 'true');
+  heart.appendChild(heartGlyph);
+  heart.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleFavorite(asset);
+  });
+  wrap.appendChild(heart);
+
   // Inside an album, each tile offers the one contextual edit: leave it.
-  if (selectedAlbum) {
+  if (albums.some((a) => a.album_id === selectedAlbum)) {
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.className = 'tile-remove';
@@ -547,6 +591,58 @@ function renderTile(asset) {
     });
     wrap.appendChild(rm);
   }
+  return wrap;
+}
+
+async function toggleFavorite(asset, noteEl) {
+  const outcome = await act('update-asset', {
+    asset_id: asset.asset_id,
+    favorite: asset.favorite ? 0 : 1,
+  });
+  if (narrate(outcome, noteEl)) await refresh();
+}
+
+// Restore one trashed asset; shared by the trash tile, the delete-toast
+// Undo, and the batch Undo-all. Album membership does not come back.
+async function restoreAsset(assetId, { quiet = false } = {}) {
+  const outcome = await act('restore', { asset_id: assetId });
+  if (!narrate(outcome)) return false;
+  if (!quiet) toast('Photo restored to your library.');
+  await refresh();
+  return true;
+}
+
+// A trash tile: the photo, a purge countdown when one is derivable, and
+// Restore — nothing else. No lightbox, no selection, no albums, no hearts.
+function renderTrashTile(asset) {
+  const wrap = document.createElement('div');
+  wrap.className = 'tile-wrap trash';
+  wrap.dataset.assetId = asset.asset_id;
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+  fillTileMedia(tile, asset);
+  wrap.appendChild(tile);
+
+  if (asset.purge_in_days != null) {
+    const label = document.createElement('span');
+    label.className = 'tile-purge';
+    label.textContent =
+      asset.purge_in_days === 0
+        ? 'purges today'
+        : `purges in ${asset.purge_in_days} ${asset.purge_in_days === 1 ? 'day' : 'days'}`;
+    wrap.appendChild(label);
+  }
+
+  const restore = document.createElement('button');
+  restore.type = 'button';
+  restore.className = 'tile-restore';
+  restore.textContent = 'Restore';
+  restore.setAttribute('aria-label', `Restore ${asset.title ?? 'photo'}`);
+  restore.addEventListener('click', async () => {
+    restore.disabled = true;
+    if (!(await restoreAsset(asset.asset_id))) restore.disabled = false;
+  });
+  wrap.appendChild(restore);
   return wrap;
 }
 
@@ -695,14 +791,14 @@ function setBarBusy(on) {
 
 async function batchDelete(ids, progressEl) {
   setBarBusy(true);
-  let ok = 0;
   let parked = 0;
   let failed = 0;
   let lastBad = null;
+  const trashedIds = []; // what actually landed in the trash — Undo's manifest
   for (let i = 0; i < ids.length; i += 1) {
     progressEl.textContent = `Deleting ${i + 1} of ${ids.length}…`;
     const outcome = await act('delete-asset', { asset_id: ids[i] });
-    if (outcome?.status === 'executed') ok += 1;
+    if (outcome?.status === 'executed') trashedIds.push(ids[i]);
     else if (outcome?.status === 'parked') parked += 1;
     else {
       failed += 1;
@@ -712,7 +808,34 @@ async function batchDelete(ids, progressEl) {
   setBarBusy(false);
   exitSelectMode();
   await refresh();
-  toast(batchSummary('Deleted', ok, parked, failed));
+  const ok = trashedIds.length;
+  const parts = [];
+  if (ok > 0) parts.push(`Moved ${ok} ${ok === 1 ? 'item' : 'items'} to trash`);
+  if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (failed > 0) parts.push(`${failed} failed`);
+  const summary = parts.join(' · ') || 'Nothing to do';
+  if (ok > 0) toast(summary, { undoLabel: 'Undo', onUndo: () => batchRestore(trashedIds) });
+  else toast(summary);
+  if (lastBad) narrate(lastBad);
+}
+
+async function batchRestore(ids) {
+  let ok = 0;
+  let bad = 0;
+  let lastBad = null;
+  for (const id of ids) {
+    const outcome = await act('restore', { asset_id: id });
+    if (outcome?.status === 'executed') ok += 1;
+    else {
+      bad += 1;
+      lastBad = outcome;
+    }
+  }
+  await refresh();
+  const parts = [];
+  if (ok > 0) parts.push(`Restored ${ok} ${ok === 1 ? 'item' : 'items'}`);
+  if (bad > 0) parts.push(`${bad} not restored`);
+  toast(parts.join(' · ') || 'Nothing to restore');
   if (lastBad) narrate(lastBad);
 }
 
@@ -948,6 +1071,13 @@ function renderLightbox() {
 
   const actions = document.createElement('div');
   actions.className = 'lightbox-actions';
+  const fav = ghostBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
+    await toggleFavorite(asset, note); // refresh re-renders this lightbox
+  });
+  fav.classList.add('lightbox-fav');
+  if (asset.favorite) fav.classList.add('faved');
+  fav.setAttribute('aria-pressed', asset.favorite ? 'true' : 'false');
+  actions.appendChild(fav);
   if (isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')) {
     const dl = document.createElement('a');
     dl.className = 'ghost lightbox-download';
@@ -961,7 +1091,10 @@ function renderLightbox() {
     const outcome = await act('delete-asset', { asset_id: asset.asset_id });
     if (narrate(outcome, note)) {
       closeLightbox();
-      toast('Photo deleted — it leaves every album it was in.');
+      toast('Moved to trash — it leaves every album it was in.', {
+        undoLabel: 'Undo',
+        onUndo: () => restoreAsset(asset.asset_id),
+      });
       await refresh();
     }
   });
@@ -1234,8 +1367,8 @@ async function uploadFiles(files) {
 
 $('uploadBtn').addEventListener('click', () => $('fileInput').click());
 $('emptyUpload').addEventListener('click', () => {
-  // Inside an album the natural "add" is from the library, not from disk.
-  if (selectedAlbum) openPicker();
+  // Inside a real album the natural "add" is from the library, not disk.
+  if (albums.some((a) => a.album_id === selectedAlbum)) openPicker();
   else $('fileInput').click();
 });
 

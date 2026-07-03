@@ -388,7 +388,7 @@ function renderLogbook(logbook) {
   }
 }
 
-// ---------- Popovers (one shared host: reschedule, priority & effort) ----------
+// ---------- Popovers (one shared host: reschedule, priority, effort & notes) ----------
 
 let popoverEl = null;
 
@@ -462,7 +462,10 @@ function openDuePopover(anchor, task) {
   });
 }
 
-// The details popover: change priority and estimated effort after creation.
+// The details popover: change priority, estimated effort and notes after
+// creation. Notes stay out of the quick-add bar (Things-style) — this is
+// where they live; an emptied textarea becomes the explicit
+// clear_description intent.
 function openEditPopover(anchor, task) {
   openPopover(anchor, (pop) => {
     const prioLabel = document.createElement('label');
@@ -497,17 +500,45 @@ function openEditPopover(anchor, task) {
     effortLabel.appendChild(eff);
     pop.appendChild(effortLabel);
 
+    const notesLabel = document.createElement('label');
+    notesLabel.className = 'pop-label';
+    notesLabel.textContent = 'Notes';
+    const notes = document.createElement('textarea');
+    notes.rows = 3;
+    notes.placeholder = 'Add a note… (⌘↵ saves)';
+    notes.setAttribute('aria-label', 'Notes');
+    if (task.description) notes.value = String(task.description);
+    notesLabel.appendChild(notes);
+    pop.appendChild(notesLabel);
+
+    const doSave = () => {
+      const input = { task_id: task.task_id, priority: Number(sel.value) };
+      const minutes = Number(eff.value);
+      if (minutes > 0) input.effort_min = Math.round(minutes);
+      // Notes: send only what changed — a new text sets, an emptied
+      // textarea clears; untouched notes stay out of the command.
+      const note = notes.value.trim();
+      const prev = String(task.description ?? '');
+      if (note && note !== prev) input.description = note;
+      if (!note && prev) input.clear_description = true;
+      closePopover();
+      write('edit', input);
+    };
+
+    // Keyboard flow inside the textarea: Cmd/Ctrl+Enter saves (Escape
+    // already closes via the popover's own handler).
+    notes.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        doSave();
+      }
+    });
+
     const save = document.createElement('button');
     save.type = 'button';
     save.className = 'pop-save';
     save.textContent = 'Save';
-    save.addEventListener('click', () => {
-      const input = { task_id: task.task_id, priority: Number(sel.value) };
-      const minutes = Number(eff.value);
-      if (minutes > 0) input.effort_min = Math.round(minutes);
-      closePopover();
-      write('edit', input);
-    });
+    save.addEventListener('click', doSave);
     pop.appendChild(save);
   });
 }
@@ -545,6 +576,12 @@ async function cancelTask(task) {
 
 // ---------- One task row ----------
 
+// A clean inline-SVG "text lines" marker for rows that carry a note — no
+// emoji, inherits currentColor so themes and hover states just work.
+const NOTE_GLYPH_SVG =
+  '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+  'stroke-linecap="round" aria-hidden="true"><path d="M1.5 2.5h9M1.5 6h9M1.5 9.5h5.5"/></svg>';
+
 function renderRow(task, { subtask = false, closed = false } = {}) {
   const row = document.createElement('div');
   row.className = subtask ? 'row subtask' : 'row';
@@ -576,7 +613,36 @@ function renderRow(task, { subtask = false, closed = false } = {}) {
     text.addEventListener('click', () => beginRename(row, text, task));
   }
 
-  row.append(circle, text);
+  // The title column: the title line (title + note glyph when the task
+  // carries one), with the note's first line beneath it, muted and truncated.
+  const main = document.createElement('span');
+  main.className = 'row-main';
+  const titleLine = document.createElement('span');
+  titleLine.className = 'row-title-line';
+  titleLine.appendChild(text);
+  main.appendChild(titleLine);
+  const note = String(task.description ?? '').trim();
+  if (note) {
+    let glyph;
+    if (closed) {
+      glyph = document.createElement('span');
+    } else {
+      glyph = document.createElement('button');
+      glyph.type = 'button';
+      glyph.title = 'Notes';
+      glyph.setAttribute('aria-label', `Notes for “${task.title}”`);
+      glyph.addEventListener('click', () => openEditPopover(glyph, task));
+    }
+    glyph.className = 'note-glyph';
+    glyph.innerHTML = NOTE_GLYPH_SVG;
+    titleLine.appendChild(glyph);
+    const noteLine = document.createElement('span');
+    noteLine.className = 'row-note';
+    noteLine.textContent = note.split('\n')[0];
+    main.appendChild(noteLine);
+  }
+
+  row.append(circle, main);
 
   if (task.status === 'in-process') row.appendChild(chip('badge doing', 'in progress'));
   if (task.priority >= 1) {
@@ -693,8 +759,8 @@ function rowActions(task, subtask) {
   info.type = 'button';
   info.className = 'ghost';
   info.textContent = 'ⓘ';
-  info.title = 'Edit priority and effort';
-  info.setAttribute('aria-label', 'Edit priority and effort');
+  info.title = 'Edit priority, effort and notes';
+  info.setAttribute('aria-label', 'Edit priority, effort and notes');
   info.addEventListener('click', () => openEditPopover(info, task));
   wrap.appendChild(info);
 

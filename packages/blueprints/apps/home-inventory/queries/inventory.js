@@ -1,9 +1,10 @@
 /**
  * The home-inventory projection: owned asset items joined to their place
- * name and warranty history, plus disposed items (disposal keeps the row)
- * and maintenance plans with a projected next-due date. Everything comes
- * from the vault — this app holds no rows of its own; writes go back
- * through the home domain's typed commands.
+ * name, purchase value and warranty history, plus disposed items (disposal
+ * keeps the row), maintenance plans with a projected next-due date, and the
+ * owner's places (the room picker's options). Everything comes from the
+ * vault — this app holds no rows of its own; writes go back through the
+ * home domain's typed commands.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -103,7 +104,10 @@ export default async ({ ctx }) => {
           name: it.name,
           serial_no: it.serial_no ?? null,
           acquired_on: it.acquired_on ?? null,
+          place_id: it.place_id ?? null,
           place_name: (it.place_id != null && placeName.get(it.place_id)) || null,
+          purchase_price_minor: it.purchase_price_minor ?? null,
+          purchase_currency: it.purchase_currency ?? null,
           warranty: latest ? { ends_on: latest.ends_on, active: latest.active } : null,
           warranties: itemWarranties,
           attachments: attByItem.get(it.item_id) ?? [],
@@ -141,12 +145,18 @@ export default async ({ ctx }) => {
       }))
       .toSorted((a, b) => String(a.next_due_on ?? '￿').localeCompare(String(b.next_due_on ?? '￿')));
 
-    return { items: joined, disposed, maintenance };
+    // The owner's places, name-sorted — the room picker's option list.
+    const placeList = (places.rows ?? [])
+      .map((p) => ({ place_id: p.place_id, name: p.name }))
+      .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    return { items: joined, disposed, maintenance, places: placeList };
   } catch (err) {
     return {
       items: [],
       disposed: [],
       maintenance: [],
+      places: [],
       vaultDenied: { code: err.code, message: err.message },
     };
   }

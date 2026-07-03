@@ -293,6 +293,57 @@ select {
   font-style: italic;
 }
 
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* The × prunes a rule. The glyph stays chip-scale; a centered pseudo-element
+   pads the tap area out to the 40px touch target. */
+.chip-remove {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  margin-right: -0.35rem;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  font-style: normal;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chip-remove::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40px;
+  height: 40px;
+  transform: translate(-50%, -50%);
+}
+
+.chip-remove:hover,
+.chip-remove:focus-visible {
+  color: var(--danger);
+}
+
+.chip-remove[data-kit-armed] {
+  min-width: auto;
+  padding: 0 0.4rem;
+  font-size: 0.7rem;
+  color: #fff;
+  background: var(--danger);
+}
+
 /* ---------- Week strip (read-only 7-day glance) ---------- */
 
 .week-strip {

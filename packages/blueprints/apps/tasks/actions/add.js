@@ -10,6 +10,7 @@
 export default async ({ body, ctx }) => {
   const raw = body ?? {};
   const input = { title: String(raw.title ?? '') };
+  if (raw.description) input.description = String(raw.description);
   if (raw.due_at) input.due_at = String(raw.due_at);
   if (raw.priority) input.priority = Number(raw.priority);
   if (raw.effort_min) input.effort_min = Number(raw.effort_min);

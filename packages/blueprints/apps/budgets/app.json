@@ -13,6 +13,11 @@
         "verbs": "read+act"
       },
       {
+        "schema": "finance",
+        "table": "remove_budget",
+        "verbs": "act"
+      },
+      {
         "schema": "core",
         "table": "transaction",
         "verbs": "read"
@@ -115,6 +120,37 @@
         },
         "required": ["category_concept_id", "period", "limit_minor", "currency", "starts_on"],
         "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-budget",
+      "description": "Delete a spending cap through finance.remove_budget — the cap goes, the ledger is untouched (a budget is a limit over spending, never spending itself).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "budget_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["budget_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "writes": []
     },

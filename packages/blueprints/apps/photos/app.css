@@ -514,6 +514,95 @@ input:focus {
   }
 }
 
+/* The favorite heart — bottom-right sibling of the selection dot. Touch
+   keeps it always on; pointers get it on hover/focus, and a favorited
+   photo wears its filled heart permanently. */
+.tile-heart {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tile-heart span {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 1.1rem;
+  line-height: 1;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.6);
+}
+
+.grid.selecting .tile-heart {
+  display: none;
+}
+
+@media (hover: hover) {
+  .tile-heart {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .tile-wrap:hover .tile-heart,
+  .tile-heart:focus-visible,
+  .tile-wrap.faved .tile-heart {
+    opacity: 1;
+  }
+}
+
+/* ---------- Trash tiles (restore is the only action) ---------- */
+
+.tile-wrap.trash .tile {
+  cursor: default;
+}
+
+.tile-wrap.trash .tile img,
+.tile-wrap.trash .tile video {
+  filter: grayscale(0.35);
+  opacity: 0.85;
+  transform: none;
+}
+
+.tile-purge {
+  position: absolute;
+  top: 0.35rem;
+  left: 0.4rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.68rem;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tile-restore {
+  position: absolute;
+  left: 50%;
+  bottom: 0.45rem;
+  transform: translateX(-50%);
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.8rem;
+  min-height: 2rem;
+  z-index: 2;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tile-restore:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
 .tile.placeholder {
   display: flex;
   flex-direction: column;
@@ -651,6 +740,15 @@ input:focus {
   display: flex;
   justify-content: flex-end;
   gap: 0.35rem;
+}
+
+.lightbox-fav {
+  margin-right: auto;
+}
+
+.lightbox-fav.faved {
+  border-color: var(--app-color, var(--accent));
+  color: var(--app-color, var(--accent));
 }
 
 /* Double-click zooms; while zoomed the image pans on drag. */

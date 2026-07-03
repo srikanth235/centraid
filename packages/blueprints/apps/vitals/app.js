@@ -7,6 +7,7 @@
 // and receipts remain the owner's.
 
 import {
+  armConfirm,
   lineChart,
   localDayKey,
   outcomeMessage,
@@ -58,6 +59,10 @@ let selectedRange = 'M';
 let selectedContext = null;
 let loaded = false;
 let readFailedShown = false;
+// Session-local observation_ids whose removal the vault parked — the rows
+// stay visible (dimmed, chipped) until the owner approves in vault settings,
+// at which point the readings query stops returning them.
+const pendingVoids = new Set();
 
 // ---------- Formatting ----------
 
@@ -659,6 +664,50 @@ async function removeAttachment(attachmentId) {
   if (narrate(outcome, refresh)) await refresh();
 }
 
+// ---------- Removal (health.void_vital) ----------
+
+// The one fix for a typo'd reading: mark its observation entered-in-error.
+// health.void_vital is risk medium and this app runs at a low ceiling, so the
+// invoke normally parks — the row stays put, dimmed, until the owner approves.
+const VOID_REASON = 'Removed from the Vitals app';
+
+// A paired BP row voids both halves — one gesture in, one gesture out, same
+// contract as logging. Each half is its own observation, hence two invokes.
+async function removeReading(observationIds) {
+  let executed = 0;
+  let parkedMessage = null;
+  for (const id of observationIds) {
+    const outcome = await act('void', { observation_id: id, reason: VOID_REASON });
+    if (outcome === undefined) return; // act() already surfaced the error
+    if (outcome.status === 'executed') {
+      executed += 1;
+    } else if (outcome.status === 'parked') {
+      pendingVoids.add(id);
+      parkedMessage = outcomeMessage(outcome) ?? 'Waiting for your approval in vault settings.';
+    } else {
+      narrate(outcome, refresh);
+      break; // denied/failed — leave the sibling half untouched
+    }
+  }
+  if (parkedMessage) toast(parkedMessage);
+  else if (executed === observationIds.length && executed > 0) toast('Reading removed');
+  await refresh();
+}
+
+function removeButton(observationIds) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'remove-btn';
+  btn.textContent = '✕';
+  btn.title = 'Remove this reading';
+  btn.setAttribute('aria-label', 'Remove this reading');
+  btn.addEventListener('click', () => {
+    if (!armConfirm(btn, { armedLabel: 'Remove?' })) return;
+    removeReading(observationIds);
+  });
+  return btn;
+}
+
 // ---------- History (selected metric, day-grouped) ----------
 
 const CONTEXT_LABELS = {
@@ -689,7 +738,7 @@ function attachButton(vitalId, count) {
   return attach;
 }
 
-function historyRow({ time, valueHtmlParts, modality, context, attachTo, attachments }) {
+function historyRow({ time, valueHtmlParts, modality, context, attachTo, attachments, voidIds }) {
   const row = document.createElement('div');
   row.className = 'row';
   row.dataset.modality = modality ?? 'self_reported';
@@ -705,7 +754,18 @@ function historyRow({ time, valueHtmlParts, modality, context, attachTo, attachm
   badge.textContent = modality ?? 'self_reported';
   row.append(timeEl, text);
   if (chip) row.appendChild(chip);
-  row.append(badge, attachButton(attachTo, attachments.length));
+  row.appendChild(badge);
+  // A removal the vault parked: the row dims and carries the chip until the
+  // owner approves; no second delete (or attach) while it waits.
+  if (voidIds.some((id) => pendingVoids.has(id))) {
+    row.classList.add('kit-pending');
+    const pendingChip = document.createElement('span');
+    pendingChip.className = 'kit-pending-chip';
+    pendingChip.textContent = 'removal awaiting your approval';
+    row.appendChild(pendingChip);
+    return row;
+  }
+  row.append(attachButton(attachTo, attachments.length), removeButton(voidIds));
 
   if (attachments.length) {
     const strip = document.createElement('div');
@@ -744,6 +804,7 @@ function historyEntries(familyKey) {
         context: r.context,
         attachTo: r.vital_id,
         attachments: r.attachments ?? [],
+        voidIds: [r.observation_id],
       }),
     }));
   }
@@ -763,6 +824,9 @@ function historyEntries(familyKey) {
         context: p.sys?.context ?? p.dia?.context,
         attachTo: main.vital_id,
         attachments: [...(p.sys?.attachments ?? []), ...(p.dia?.attachments ?? [])],
+        // The pair row is one measurement, so its ✕ voids both observations
+        // (an unpaired half honestly voids just itself).
+        voidIds: [p.sys?.observation_id, p.dia?.observation_id].filter(Boolean),
       }),
     };
   });
@@ -997,6 +1061,12 @@ async function refresh() {
   if (setConsentState(data?.vaultDenied)) return;
   readings = data?.readings ?? [];
   queryMeta = { total: data?.total ?? readings.length, truncated: Boolean(data?.truncated) };
+  // Once an approved void lands, the readings query stops returning the row —
+  // drop its session-local pending mark along with it.
+  const present = new Set(readings.map((r) => r.observation_id));
+  for (const id of [...pendingVoids]) {
+    if (!present.has(id)) pendingVoids.delete(id);
+  }
   if (!FAMILIES[selectedFamily]) {
     let remembered = null;
     try {

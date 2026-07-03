@@ -773,6 +773,28 @@ kbd {
   color: var(--app-color, var(--accent));
 }
 
+/* Per-row remove affordance: same footprint as the attach button so it is
+   touch-visible, tinting toward danger on hover and while armed ("Remove?"). */
+.remove-btn {
+  flex-shrink: 0;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.625rem;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.remove-btn:hover,
+.remove-btn:focus-visible,
+.remove-btn[data-kit-armed='true'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
 .row-with-attachments {
   border-bottom: 1px solid var(--line);
 }

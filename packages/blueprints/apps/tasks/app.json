@@ -53,12 +53,16 @@
   "actions": [
     {
       "name": "add",
-      "description": "Add a task (optionally dated, prioritized, estimated, or as a subtask of a top-level task) through schedule.add_task.",
+      "description": "Add a task (optionally with a note, dated, prioritized, estimated, or as a subtask of a top-level task) through schedule.add_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
           "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
             "type": "string",
             "minLength": 1
           },
@@ -136,7 +140,7 @@
     },
     {
       "name": "edit",
-      "description": "Edit a task's title, due date (set or clear), priority or effort through schedule.edit_task.",
+      "description": "Edit a task's title, note (set or clear), due date (set or clear), priority or effort through schedule.edit_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -148,6 +152,13 @@
           "title": {
             "type": "string",
             "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clear_description": {
+            "type": "boolean"
           },
           "due_at": {
             "type": "string",

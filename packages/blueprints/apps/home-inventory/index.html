@@ -44,6 +44,8 @@
         <div>
           <h1>Home inventory</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+          <!-- The insurance number: everything you own, summed per currency. -->
+          <p id="totalValue" class="total-value" hidden></p>
         </div>
       </header>
 
@@ -64,6 +66,24 @@
             type="text"
             placeholder="Serial no."
             aria-label="Serial number"
+          />
+          <select id="addPlaceSelect" aria-label="Room"></select>
+          <input
+            id="addValueInput"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Value"
+            aria-label="Purchase value"
+            class="value-input"
+          />
+          <input
+            id="addCurrencyInput"
+            type="text"
+            maxlength="3"
+            placeholder="EUR"
+            aria-label="Currency (3 letters)"
+            class="currency-input"
           />
           <button type="submit" class="primary small-btn">Add</button>
         </div>
@@ -99,7 +119,7 @@
           <p class="day-label muted small">Maintenance due</p>
           <div id="maintenanceRows"></div>
           <p class="muted small section-hint">
-            From your maintenance plans — mark done coming soon.
+            From your maintenance plans — Done stamps the plan and the next due date rolls forward.
           </p>
         </section>
       </div>
