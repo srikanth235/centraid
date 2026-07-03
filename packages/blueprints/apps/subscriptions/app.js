@@ -166,8 +166,15 @@ function renderTotal() {
   const card = $('totalCard');
   card.hidden = active.length === 0;
   if (active.length === 0) return;
-  const currency = active[0].currency || data.accounts[0]?.currency || 'USD';
-  $('totalValue').textContent = fmtMoney(data.monthly_active_minor, currency);
+  // Minor units in different currencies don't add — total per currency.
+  const byCurrency = new Map();
+  for (const s of active) {
+    const currency = s.currency || data.accounts[0]?.currency || 'USD';
+    byCurrency.set(currency, (byCurrency.get(currency) ?? 0) + Number(s.monthly_minor ?? 0));
+  }
+  $('totalValue').textContent = [...byCurrency.entries()]
+    .map(([currency, minor]) => fmtMoney(minor, currency))
+    .join(' + ');
 }
 
 function fillSelect(select, options, placeholder) {

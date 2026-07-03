@@ -178,15 +178,26 @@ async function refresh() {
   renderTransactions(transactions);
 }
 
+// Months are the viewer's local months — a Jan 31 11pm purchase belongs to
+// January, not to the UTC February its ISO string may start with.
+function localMonthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthKeyOf(iso) {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso).slice(0, 7) : localMonthKey(d);
+}
+
 // Spent this month per category: posted/pending debits only — the ring
 // compares like with like (a month budget against the month's outflow).
 function spentThisMonth(categoryConceptId) {
-  const month = new Date().toISOString().slice(0, 7);
+  const month = localMonthKey(new Date());
   let sum = 0;
   for (const t of transactions) {
     if (t.category_concept_id !== categoryConceptId) continue;
     if (t.direction !== 'debit' || t.status === 'void') continue;
-    if (String(t.posted_at).slice(0, 7) !== month) continue;
+    if (monthKeyOf(t.posted_at) !== month) continue;
     sum += Number(t.amount_minor ?? 0);
   }
   return sum;
@@ -364,7 +375,7 @@ $('budgetForm').addEventListener('submit', async (e) => {
   const category_concept_id = $('categorySelect').value;
   const amount = Number($('amountInput').value);
   if (!category_concept_id || !Number.isFinite(amount) || amount < 0) return;
-  const starts_on = `${new Date().toISOString().slice(0, 7)}-01`;
+  const starts_on = `${localMonthKey(new Date())}-01`;
   let outcome;
   try {
     outcome = await window.centraid.write({

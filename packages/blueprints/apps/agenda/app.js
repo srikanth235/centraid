@@ -26,12 +26,20 @@ function fmtTime(iso) {
   }
 }
 
+// Day keys are the viewer's local date — a 7pm PST event belongs to that
+// evening, not to the UTC tomorrow its ISO string starts with.
+function localDayKey(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function dayKey(iso) {
-  return String(iso).slice(0, 10);
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? String(iso).slice(0, 10) : localDayKey(d);
 }
 
 function fmtDay(key) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDayKey(new Date());
   if (key === today) return 'Today';
   try {
     return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
@@ -239,10 +247,10 @@ function renderMonth() {
   // 6 weeks × 7 days from the Monday on or before the 1st.
   const first = new Date(year, month, 1);
   const lead = (first.getDay() + 6) % 7; // days since Monday
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDayKey(new Date());
   for (let i = 0; i < 42; i += 1) {
     const date = new Date(year, month, 1 - lead + i);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const key = localDayKey(date);
     const cell = document.createElement('div');
     cell.className = 'cell';
     if (date.getMonth() !== month) cell.dataset.outside = 'true';
@@ -289,12 +297,16 @@ $('nextMonth').addEventListener('click', () => {
 
 function renderCalendars() {
   const select = $('calendarSelect');
+  const previous = select.value; // keep a mid-form choice across focus refreshes
   select.innerHTML = '';
   for (const c of calendars) {
     const opt = document.createElement('option');
     opt.value = c.calendar_id;
     opt.textContent = c.name ?? 'Calendar';
     select.appendChild(opt);
+  }
+  if (previous && calendars.some((c) => c.calendar_id === previous)) {
+    select.value = previous;
   }
   $('proposeForm').hidden = calendars.length === 0;
   $('noCalendars').hidden = calendars.length > 0;

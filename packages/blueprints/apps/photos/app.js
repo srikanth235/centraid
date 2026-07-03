@@ -89,10 +89,19 @@ function toLocalInputValue(iso) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function isVideoAsset(asset) {
+  const uri = asset.content_uri;
+  if (typeof uri === 'string' && uri.startsWith('data:video')) return true;
+  return asset.kind === 'video' || String(asset.media_type ?? '').startsWith('video/');
+}
+
 function isRenderableUri(uri) {
   return (
     typeof uri === 'string' &&
-    (uri.startsWith('http:') || uri.startsWith('https:') || uri.startsWith('data:image'))
+    (uri.startsWith('http:') ||
+      uri.startsWith('https:') ||
+      uri.startsWith('data:image') ||
+      uri.startsWith('data:video'))
   );
 }
 
@@ -314,7 +323,20 @@ function renderTile(asset) {
   const tile = document.createElement('button');
   tile.type = 'button';
   tile.className = 'tile';
-  if (isRenderableUri(asset.content_uri)) {
+  if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
+    const vid = document.createElement('video');
+    vid.src = asset.content_uri;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.preload = 'metadata';
+    vid.setAttribute('aria-label', asset.title ?? 'Video');
+    tile.appendChild(vid);
+    const badge = document.createElement('span');
+    badge.className = 'tile-video-badge';
+    badge.textContent = '▶';
+    badge.setAttribute('aria-hidden', 'true');
+    tile.appendChild(badge);
+  } else if (isRenderableUri(asset.content_uri)) {
     const img = document.createElement('img');
     img.loading = 'lazy';
     img.src = asset.content_uri;
@@ -388,7 +410,14 @@ function renderLightbox() {
   const stage = document.createElement('div');
   stage.className = 'lightbox-stage';
   swallow(stage);
-  if (isRenderableUri(asset.content_uri)) {
+  if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
+    const vid = document.createElement('video');
+    vid.src = asset.content_uri;
+    vid.controls = true;
+    vid.playsInline = true;
+    vid.setAttribute('aria-label', asset.title ?? 'Video');
+    stage.appendChild(vid);
+  } else if (isRenderableUri(asset.content_uri)) {
     const img = document.createElement('img');
     img.src = asset.content_uri;
     img.alt = asset.title ?? asset.kind ?? 'Photo';
@@ -571,8 +600,14 @@ $('fileInput').addEventListener('change', async () => {
       parts.push(`Could not read "${file.name}".`);
       continue;
     }
+    const kind = file.type.startsWith('video/')
+      ? 'video'
+      : file.type.startsWith('audio/')
+        ? 'audio'
+        : 'photo';
     const outcome = await act('upload', {
       data_uri: dataUri,
+      kind,
       captured_at: new Date(file.lastModified).toISOString(),
       title: file.name,
     });

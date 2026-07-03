@@ -234,10 +234,11 @@ $('timeForm').addEventListener('submit', async (e) => {
   const end = $('timeEnd').value;
   if (!projectId || !date || !start || !end) return;
   const note = $('timeNote').value.trim();
+  // datetime pieces are the viewer's wall clock — convert, don't relabel as UTC.
   const outcome = await act('log-time', {
     project_id: projectId,
-    started_at: `${date}T${start}:00Z`,
-    ended_at: `${date}T${end}:00Z`,
+    started_at: new Date(`${date}T${start}`).toISOString(),
+    ended_at: new Date(`${date}T${end}`).toISOString(),
     ...(note ? { note } : {}),
   });
   if (narrate(outcome)) {

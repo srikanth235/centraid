@@ -347,12 +347,13 @@ $('requestForm').addEventListener('submit', async (e) => {
     notice('Fill in the client, summary, date and times.');
     return;
   }
+  // date/time inputs are the owner's wall clock — convert, don't relabel as UTC.
   const outcome = await act('request-booking', {
     calendar_id,
     requester_party_id,
     summary,
-    dtstart: `${date}T${start}:00Z`,
-    dtend: `${date}T${end}:00Z`,
+    dtstart: new Date(`${date}T${start}`).toISOString(),
+    dtend: new Date(`${date}T${end}`).toISOString(),
   });
   if (
     narrate(outcome, 'Booking request parked — confirm it in vault settings and it holds the slot.')

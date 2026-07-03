@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Docs is a finished drive — tree, filing, trash, restore — and splitting it would break that "one file" contract.
 // Docs — a small drive as a projection over the personal vault. Every row
 // is a core.content_item whose bytes are sha256-deduped; folders are SKOS
 // concepts in the owner's folders scheme and filing is one tag per document.

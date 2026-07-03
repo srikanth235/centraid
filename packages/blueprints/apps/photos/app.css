@@ -275,17 +275,31 @@ input:focus {
   outline-offset: -2px;
 }
 
-.tile img {
+.tile img,
+.tile video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
   transition: transform 0.18s ease;
+  pointer-events: none; /* the tile button owns the click */
 }
 
 .tile:hover img,
 .tile:focus-visible img {
   transform: scale(1.04);
+}
+
+.tile-video-badge {
+  position: absolute;
+  bottom: 0.35rem;
+  left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.7rem;
+  pointer-events: none;
 }
 
 /* Inside an album, each tile offers one contextual edit: leave it. */
@@ -368,7 +382,8 @@ input:focus {
   cursor: default;
 }
 
-.lightbox img {
+.lightbox img,
+.lightbox video {
   max-width: 100%;
   max-height: 58vh;
   object-fit: contain;

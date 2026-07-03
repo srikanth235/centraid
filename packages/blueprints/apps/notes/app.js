@@ -312,12 +312,17 @@ $('cancelAdd').addEventListener('click', () => {
 
 $('quickAdd').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const title = $('titleInput').value.trim();
+  const typedTitle = $('titleInput').value.trim();
   const bodyText = $('bodyInput').value.trim();
-  if (!title || !bodyText) return;
+  if (!typedTitle && !bodyText) {
+    notice('Write something first — a title or a first line is enough.');
+    return;
+  }
+  // No title? The first line of the body is the title, like every notes app.
+  const title = typedTitle || bodyText.split('\n')[0].slice(0, 80);
   const outcome = await act('create-note', {
     title,
-    body_text: bodyText,
+    body_text: bodyText || typedTitle,
     ...(activeNotebook !== 'all' ? { notebook_id: activeNotebook } : {}),
   });
   if (narrate(outcome, refresh)) {
@@ -418,7 +423,10 @@ $('editForm').addEventListener('submit', async (e) => {
   if (!viewing) return;
   const title = $('editTitleInput').value.trim();
   const bodyText = $('editBodyInput').value.trim();
-  if (!title || !bodyText) return;
+  if (!title || !bodyText) {
+    notice('A note needs a title and a body — clear either and there is nothing to save.');
+    return;
+  }
   const input = { note_id: viewing.note_id };
   if (title !== viewing.title) input.title = title;
   if (bodyText !== (viewing.body ?? '')) input.body_text = bodyText;
