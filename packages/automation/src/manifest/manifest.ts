@@ -158,7 +158,33 @@ export type ConditionTrigger = {
   readonly every?: string;
 };
 
-export type Trigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger | ConditionTrigger;
+/** Cron gate a data trigger polls the change feed on when `every` is omitted. */
+export const DATA_DEFAULT_EVERY = '* * * * *';
+
+/**
+ * A data-change trigger: the host pulls the vault's consented provenance
+ * feed (`ctx.vault.changes`) for the watched entities on the `every` gate
+ * and fires with the new change entries as input. The cursor is a strictly
+ * time-ordered journal id persisted across evaluations, bootstrapped at the
+ * current watermark — a fresh watcher reacts to what happens next, never to
+ * history. This is how "a credit posted → reconcile the invoice" and
+ * "my parked send was confirmed → resume" become fires. Requires a manifest
+ * `vault` block whose grant covers reading every watched entity.
+ */
+export type DataTrigger = {
+  readonly kind: 'data';
+  /** Logical vault entities to watch, e.g. `['core.transaction']`. */
+  readonly entities: readonly string[];
+  /** 5-field cron gate for polling. Default: every minute. */
+  readonly every?: string;
+};
+
+export type Trigger =
+  | CronTrigger
+  | WebhookTrigger
+  | PendingWebhookTrigger
+  | ConditionTrigger
+  | DataTrigger;
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
@@ -197,6 +223,25 @@ export function conditionTriggersOf(
   return triggers.flatMap((t, index) =>
     t.kind === 'condition' ? [{ trigger: t, index }] : [],
   );
+}
+
+/**
+ * The host-evaluated "watch" triggers (condition + data) with their gate
+ * cadence and original index — what a scheduler registers evaluation
+ * callbacks for.
+ */
+export function watchTriggersOf(
+  triggers: readonly Trigger[],
+): readonly { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] {
+  const watches: { trigger: ConditionTrigger | DataTrigger; expr: string; index: number }[] = [];
+  triggers.forEach((t, index) => {
+    if (t.kind === 'condition') {
+      watches.push({ trigger: t, expr: t.every ?? CONDITION_DEFAULT_EVERY, index });
+    } else if (t.kind === 'data') {
+      watches.push({ trigger: t, expr: t.every ?? DATA_DEFAULT_EVERY, index });
+    }
+  });
+  return watches;
 }
 
 /**
@@ -393,9 +438,42 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
       ...(every !== undefined ? { every } : {}),
     };
   }
+  if (t.kind === 'data') {
+    if (!Array.isArray(t.entities) || t.entities.length === 0) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest.${field}.entities must be a non-empty array of <schema>.<table> names`,
+        `${field}.entities`,
+      );
+    }
+    const entities = t.entities.map((raw, i) => {
+      const ef = `${field}.entities[${i}]`;
+      const entity = requireString(raw, ef);
+      if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${ef} "${entity}" is not a <schema>.<table> entity name`,
+          ef,
+        );
+      }
+      return entity;
+    });
+    let every: string | undefined;
+    if (t.every !== undefined) {
+      every = requireString(t.every, `${field}.every`);
+      if (!isValidCronExpression(every)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+          `${field}.every`,
+        );
+      }
+    }
+    return { kind: 'data', entities, ...(every !== undefined ? { every } : {}) };
+  }
   throw new ManifestError(
     'invalid_trigger',
-    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook" or "condition"`,
+    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook", "condition" or "data"`,
     `${field}.kind`,
   );
 }
@@ -622,12 +700,13 @@ export function validateManifest(raw: unknown): Manifest {
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
   const vault = validateVault(r.vault);
-  // A condition trigger IS a consented vault read — without a vault block
-  // there is no grant to evaluate it under, so the manifest is incoherent.
-  if (!vault && triggers.some((t) => t.kind === 'condition')) {
+  // A condition/data trigger IS a consented vault read — without a vault
+  // block there is no grant to evaluate it under, so the manifest is
+  // incoherent.
+  if (!vault && triggers.some((t) => t.kind === 'condition' || t.kind === 'data')) {
     throw new ManifestError(
       'invalid_trigger',
-      'manifest.triggers contains a condition trigger but no manifest.vault block declares the access it reads under',
+      'manifest.triggers contains a condition/data trigger but no manifest.vault block declares the access it reads under',
       'vault',
     );
   }

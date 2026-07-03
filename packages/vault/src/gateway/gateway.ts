@@ -31,6 +31,9 @@ import { backupVault, checkpointVault, createAppExt, type BackupResult } from '.
 import { exportVault, type VaultExport } from './portability.js';
 import { queryAppView, registerAppView, type ViewDefinition, type ViewResult } from './views.js';
 import type {
+  ChangeEntry,
+  ChangesRequest,
+  ChangesResult,
   CommandDefinition,
   Credential,
   Identity,
@@ -168,7 +171,21 @@ export class Gateway {
     }
     const target = ref.file === 'vault' ? this.db.vault : this.db.journal;
     const now = nowIso();
-    const grantFilter = compileFilters(target, ref.physical, consent.rowFilter, now);
+    // Your own business only: an agent reading the invocation ledger sees
+    // ITS invocations, structurally — this is how a parked send resumes
+    // (watch your own rows for status changes) without any caller ever
+    // reading another actor's traffic. Not grant-configurable: appended
+    // beside the grant filter, so it can narrow but never widen.
+    const structuralFilter =
+      identity.kind === 'agent' && request.entity === 'agent.command_invocation'
+        ? [{ column: 'agent_id', op: 'eq' as const, value: identity.callerId }]
+        : [];
+    const grantFilter = compileFilters(
+      target,
+      ref.physical,
+      [...consent.rowFilter, ...structuralFilter],
+      now,
+    );
     const callerFilter = compileFilters(target, ref.physical, request.where ?? [], now);
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
@@ -188,6 +205,91 @@ export class Gateway {
       detail: { filter: request.where ?? [], rowCount: rows.length },
     });
     return { rows, receiptId };
+  }
+
+  /**
+   * The consented change feed (data triggers' outbox): provenance rows for
+   * the watched entities after the caller's cursor. Every watched entity is
+   * consent-checked for read under the declared purpose — one denied entity
+   * denies the whole pull (fail closed, receipted). A `null` cursor
+   * bootstraps: no rows, just the current watermark, so a fresh watcher
+   * never replays history it was not granted while it happened.
+   */
+  changes(cred: Credential, request: ChangesRequest): ChangesResult {
+    const identity = this.identify(cred);
+    if (request.entities.length === 0) {
+      throw new GatewayError('contract', 'changes needs at least one entity to watch');
+    }
+    for (const entity of request.entities) {
+      const ref = resolveEntity(entity);
+      const consent = ref
+        ? evaluateConsent(this.db.vault, identity, ref.schema, ref.table, 'read', request.purpose)
+        : ({ decision: 'deny', failing: `unknown entity ${entity}`, grantId: null } as const);
+      if (consent.decision === 'deny') {
+        const receiptId = writeReceipt(this.db.journal, {
+          grantId: consent.grantId,
+          invocationId: null,
+          action: 'read',
+          objectType: 'consent.provenance',
+          objectId: null,
+          purpose: request.purpose,
+          decision: 'deny',
+          detail: { failing: consent.failing, entity },
+        });
+        throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
+      }
+    }
+    const watermarkRow = this.db.journal
+      .prepare('SELECT prov_id FROM consent_provenance ORDER BY prov_id DESC LIMIT 1')
+      .get() as { prov_id: string } | undefined;
+    const watermark = watermarkRow?.prov_id ?? '';
+    let changes: ChangeEntry[] = [];
+    let cursor = request.cursor ?? watermark;
+    if (request.cursor !== null) {
+      const limit = Math.min(Math.max(request.limit ?? 200, 1), 500);
+      const placeholders = request.entities.map(() => '?').join(', ');
+      const rows = this.db.journal
+        .prepare(
+          `SELECT prov_id, entity_type, entity_id, prov_activity, agent_kind, occurred_at
+             FROM consent_provenance
+            WHERE prov_id > ? AND entity_type IN (${placeholders})
+            ORDER BY prov_id ASC LIMIT ${limit}`,
+        )
+        .all(request.cursor, ...request.entities) as {
+        prov_id: string;
+        entity_type: string;
+        entity_id: string;
+        prov_activity: string;
+        agent_kind: ChangeEntry['agentKind'];
+        occurred_at: string;
+      }[];
+      changes = rows.map((r) => ({
+        provId: r.prov_id,
+        entity: r.entity_type,
+        entityId: r.entity_id,
+        activity: r.prov_activity,
+        agentKind: r.agent_kind,
+        occurredAt: r.occurred_at,
+      }));
+      const last = changes.at(-1);
+      // Advance to the last matched row; on an empty pull, jump to the
+      // pre-select watermark (safe — it was captured before the range scan,
+      // so nothing ≤ it can still be unmatched-but-matching) so a quiet
+      // watcher never rescans the same cold range twice.
+      if (last) cursor = last.provId;
+      else if (watermark > cursor) cursor = watermark;
+    }
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: null,
+      invocationId: null,
+      action: 'read',
+      objectType: 'consent.provenance',
+      objectId: null,
+      purpose: request.purpose,
+      decision: 'allow',
+      detail: { entities: request.entities, rowCount: changes.length },
+    });
+    return { changes, cursor, receiptId };
   }
 
   /** Typed-command invocation: the only write path (rule R04). */

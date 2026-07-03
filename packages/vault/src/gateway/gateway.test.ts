@@ -455,3 +455,107 @@ test('within-next-days filters to the forward horizon window (due soon, not over
   });
   expect(result.rows.map((r) => r.title)).toEqual(['due tomorrow']);
 });
+
+describe('changes feed (data-trigger outbox)', () => {
+  test('bootstrap watermark → writes appear once → cursor advances; denied entity fails closed', () => {
+    const cal = seedCalendar();
+    const agent = enrollAgent(db, { name: 'reconciler', modelRef: 'test' });
+    const agentCred: Credential = {
+      kind: 'agent',
+      agentId: agent.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    };
+    createGrant(db, {
+      granteePartyId: agent.partyId,
+      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+      grantedByPartyId: boot.ownerPartyId,
+      scopes: [{ schema: 'schedule', verbs: 'read+act' }, { schema: 'core', table: 'event', verbs: 'read' }],
+    });
+
+    // Bootstrap: no rows, a watermark to persist.
+    const boot1 = gw.changes(agentCred, {
+      entities: ['core.event'],
+      purpose: 'dpv:ServiceProvision',
+      cursor: null,
+    });
+    expect(boot1.changes).toEqual([]);
+
+    // A write lands (owner proposes an event) …
+    const outcome = gw.invoke(owner, {
+      command: 'schedule.propose_event',
+      input: proposeInput({ calendar_id: cal }),
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+
+    // … and the feed surfaces it exactly once.
+    const pull = gw.changes(agentCred, {
+      entities: ['core.event'],
+      purpose: 'dpv:ServiceProvision',
+      cursor: boot1.cursor,
+    });
+    expect(pull.changes.length).toBeGreaterThan(0);
+    expect(pull.changes.every((c) => c.entity === 'core.event')).toBe(true);
+    expect(pull.cursor > boot1.cursor).toBe(true);
+    const again = gw.changes(agentCred, {
+      entities: ['core.event'],
+      purpose: 'dpv:ServiceProvision',
+      cursor: pull.cursor,
+    });
+    expect(again.changes).toEqual([]);
+
+    // An entity outside the grant denies the WHOLE pull, receipted.
+    expect(() =>
+      gw.changes(agentCred, {
+        entities: ['core.event', 'core.transaction'],
+        purpose: 'dpv:ServiceProvision',
+        cursor: pull.cursor,
+      }),
+    ).toThrow(/deny/);
+  });
+
+  test('an agent reading the invocation ledger sees only ITS rows (confirmation-resume, structurally scoped)', () => {
+    const cal = seedCalendar();
+    const a = enrollAgent(db, { name: 'agent-a', modelRef: 'test' });
+    const b = enrollAgent(db, { name: 'agent-b', modelRef: 'test' });
+    const purposeId = boot.concepts['dpv:ServiceProvision'] as string;
+    for (const agent of [a, b]) {
+      createGrant(db, {
+        granteePartyId: agent.partyId,
+        purposeConceptId: purposeId,
+        grantedByPartyId: boot.ownerPartyId,
+        scopes: [
+          { schema: 'schedule', verbs: 'read+act' },
+          { schema: 'agent', table: 'command_invocation', verbs: 'read' },
+        ],
+      });
+    }
+    const credFor = (agent: { agentId: string }): Credential => ({
+      kind: 'agent',
+      agentId: agent.agentId,
+      deviceId: boot.deviceId,
+      deviceKey: boot.deviceKey,
+    });
+    // Each agent invokes once (disjoint windows — no busy conflict).
+    [a, b].forEach((agent, i) => {
+      const outcome = gw.invoke(credFor(agent), {
+        command: 'schedule.propose_event',
+        input: proposeInput({
+          calendar_id: cal,
+          summary: `by ${agent.agentId}`,
+          dtstart: `2026-08-0${i + 1}T09:00:00Z`,
+          dtend: `2026-08-0${i + 1}T09:15:00Z`,
+        }),
+        purpose: 'dpv:ServiceProvision',
+      });
+      expect(outcome.status).toBe('executed');
+    });
+    const mine = gw.read(credFor(a), {
+      entity: 'agent.command_invocation',
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(mine.rows.length).toBeGreaterThan(0);
+    expect(mine.rows.every((r) => r.agent_id === a.agentId)).toBe(true);
+  });
+});

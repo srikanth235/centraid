@@ -442,3 +442,67 @@ test('agent plane: deny-by-default → agent grant → allowed; high risk parks;
   expect(dark.ok).toBe(false);
   expect(dark.code).toBe('VAULT_NOT_ENROLLED');
 });
+
+test('agent changes feed + app parked surface ride the bridges', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  const calendarId = seedCalendar(plane);
+
+  // Agent side: watch core.event through the consented change feed.
+  plane.enrollAutomationAgent('reconciler');
+  plane.approveAgentGrant('reconciler', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [
+      { schema: 'schedule', verbs: 'read+act' },
+      { schema: 'core', table: 'event', verbs: 'read' },
+    ],
+  });
+  const agentBridge = plane.agentBridgeFor('reconciler');
+  const bootstrap = await agentBridge({
+    op: 'changes',
+    payload: { entities: ['core.event'], purpose: 'dpv:ServiceProvision', cursor: null },
+  });
+  expect(bootstrap.ok).toBe(true);
+  const cursor = (bootstrap.result as { cursor: string }).cursor;
+
+  // An app parks a high-risk booking request…
+  plane.enrollApp('bookings');
+  plane.approveGrant('bookings', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+  });
+  const appBridge = plane.bridgeFor('bookings');
+  // …after a low-risk write that lands in the agent's feed.
+  const proposed = await appBridge({
+    op: 'invoke',
+    payload: {
+      command: 'schedule.propose_event',
+      input: {
+        summary: 'Client call',
+        dtstart: '2026-09-01T10:00:00Z',
+        dtend: '2026-09-01T10:30:00Z',
+        calendar_id: calendarId,
+      },
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  expect(proposed.ok).toBe(true);
+  expect((proposed.result as { status: string }).status).toBe('parked');
+
+  // The parked op shows the app ITS pending approval (issue #260 seam).
+  const parked = await appBridge({ op: 'parked', payload: {} });
+  expect(parked.ok).toBe(true);
+  expect(parked.result).toMatchObject([{ command: 'schedule.propose_event', caller: 'bookings' }]);
+
+  // Owner confirms → the write lands → the agent's next pull sees it.
+  const invocationId = (parked.result as Array<{ invocationId: string }>)[0]!.invocationId;
+  const confirmed = plane.confirmParked(invocationId, true);
+  expect(confirmed.status).toBe('executed');
+  const pull = await agentBridge({
+    op: 'changes',
+    payload: { entities: ['core.event'], purpose: 'dpv:ServiceProvision', cursor },
+  });
+  expect(pull.ok).toBe(true);
+  const changes = (pull.result as { changes: Array<{ entity: string }> }).changes;
+  expect(changes.some((c) => c.entity === 'core.event')).toBe(true);
+});

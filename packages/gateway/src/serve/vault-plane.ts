@@ -50,6 +50,7 @@ import {
   registerTaskCommands,
   type AgentSummary,
   type AppSummary,
+  type ChangesRequest,
   type Credential,
   type Gateway as VaultGateway,
   type GrantSummary,
@@ -291,6 +292,15 @@ export class VaultPlane {
             };
           case 'describe':
             return { ok: true, result: this.gateway.discover(cred) };
+          case 'parked':
+            // The app's own parked invocations — the "my pending approvals"
+            // surface blueprints used to fake session-locally (issue #260).
+            return {
+              ok: true,
+              result: this.gateway
+                .listParked()
+                .filter((p) => p.callerKind === 'app' && p.caller === appId),
+            };
           default:
             return { ok: false, code: 'VAULT_ERROR', error: `unknown vault op` };
         }
@@ -353,6 +363,13 @@ export class VaultPlane {
               result: this.gateway
                 .listParked()
                 .filter((p) => p.callerKind === 'agent' && p.caller === appId),
+            };
+          case 'changes':
+            // The consented provenance feed data triggers ride; also callable
+            // from handlers that want to catch up since a stored cursor.
+            return {
+              ok: true,
+              result: this.gateway.changes(cred, call.payload as unknown as ChangesRequest),
             };
           case 'query':
             return {

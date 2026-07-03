@@ -297,3 +297,44 @@ describe('condition triggers', () => {
     ).toThrow(/cron/);
   });
 });
+
+describe('data triggers', () => {
+  const base = {
+    name: 'Reconciler',
+    prompt: 'match credits to invoices',
+    generated: { by: 'test', at: '2026-07-03' },
+    vault: {
+      purpose: 'dpv:Billing',
+      scopes: [{ schema: 'core', table: 'transaction', verbs: 'read' }],
+    },
+  };
+
+  it('accepts entities + every', () => {
+    const m = validateManifest({
+      ...base,
+      triggers: [{ kind: 'data', entities: ['core.transaction'], every: '*/2 * * * *' }],
+    });
+    expect(m.triggers[0]).toEqual({
+      kind: 'data',
+      entities: ['core.transaction'],
+      every: '*/2 * * * *',
+    });
+  });
+
+  it('requires a vault block and well-formed entity names', () => {
+    expect(() =>
+      validateManifest({
+        name: 'x',
+        prompt: 'y',
+        generated: { by: 't', at: 'now' },
+        triggers: [{ kind: 'data', entities: ['core.transaction'] }],
+      }),
+    ).toThrow(/vault block/);
+    expect(() =>
+      validateManifest({ ...base, triggers: [{ kind: 'data', entities: [] }] }),
+    ).toThrow(/entities/);
+    expect(() =>
+      validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['transactions'] }] }),
+    ).toThrow(/entity name/);
+  });
+});

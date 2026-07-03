@@ -618,31 +618,59 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         parsed.appId,
         parsed.automationId,
       );
-      if (!row || !row.enabled) return;
+      if (!row || !row.enabled || !row.manifest.vault) return;
       const trigger = row.manifest.triggers[triggerIndex];
-      if (!trigger || trigger.kind !== 'condition' || !row.manifest.vault) return;
-      const evaluation = await automation.evaluateConditionTrigger({
-        automationRef: ref,
-        trigger,
-        triggerIndex,
-        purpose: row.manifest.vault.purpose,
-        appsDir: paths.appsDir,
-        vault: vaultPlane.agentBridgeFor(parsed.appId),
-      });
-      if (evaluation.reason) {
-        logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+      if (!trigger) return;
+      const purpose = row.manifest.vault.purpose;
+      const vault = vaultPlane.agentBridgeFor(parsed.appId);
+      if (trigger.kind === 'condition') {
+        const evaluation = await automation.evaluateConditionTrigger({
+          automationRef: ref,
+          trigger,
+          triggerIndex,
+          purpose,
+          appsDir: paths.appsDir,
+          vault,
+        });
+        if (evaluation.reason) {
+          logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+          return;
+        }
+        if (!evaluation.fire) return;
+        fireAutomation(ref, {
+          triggerKind: 'scheduled',
+          triggerOrigin: 'condition',
+          input: {
+            trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
+            rows: evaluation.rows,
+            matched: evaluation.matched,
+          },
+        });
         return;
       }
-      if (!evaluation.fire) return;
-      fireAutomation(ref, {
-        triggerKind: 'scheduled',
-        triggerOrigin: 'condition',
-        input: {
-          trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
-          rows: evaluation.rows,
-          matched: evaluation.matched,
-        },
-      });
+      if (trigger.kind === 'data') {
+        const evaluation = await automation.evaluateDataTrigger({
+          automationRef: ref,
+          trigger,
+          triggerIndex,
+          purpose,
+          appsDir: paths.appsDir,
+          vault,
+        });
+        if (evaluation.reason) {
+          logger.warn(`data trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+          return;
+        }
+        if (!evaluation.fire) return;
+        fireAutomation(ref, {
+          triggerKind: 'scheduled',
+          triggerOrigin: 'data',
+          input: {
+            trigger: { kind: 'data', index: triggerIndex, entities: trigger.entities },
+            changes: evaluation.changes,
+          },
+        });
+      }
     };
     scheduler =
       options.scheduler ??

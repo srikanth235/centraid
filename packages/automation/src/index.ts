@@ -37,8 +37,10 @@ export {
   webhookTriggerOf,
   pendingWebhookTriggerOf,
   conditionTriggersOf,
+  watchTriggersOf,
   CONDITION_DEFAULT_EVERY,
   CONDITION_OPS,
+  DATA_DEFAULT_EVERY,
   type Manifest,
   type ManifestRequires,
   type ManifestVault,
@@ -53,6 +55,7 @@ export {
   type ConditionTrigger,
   type ConditionWhereClause,
   type ConditionOp,
+  type DataTrigger,
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
@@ -62,9 +65,12 @@ export {
 // tick and fires on unseen rows (duaility: time semantics live in the data).
 export {
   evaluateConditionTrigger,
+  evaluateDataTrigger,
   TRIGGER_STATE_PREFIX,
   type ConditionEvaluation,
   type EvaluateConditionOptions,
+  type DataEvaluation,
+  type EvaluateDataOptions,
 } from './fire/condition.js';
 
 // Automation identity — the directory-slug grammar and the

@@ -80,6 +80,36 @@ export interface ReadResult {
   receiptId: string;
 }
 
+/**
+ * A consented pull over the append-only provenance stream — the outbox data
+ * triggers ride. `cursor` is the last `prov_id` the caller consumed
+ * (UUIDv7, so strictly time-ordered); `null` bootstraps: no rows, just the
+ * current watermark, so a new trigger doesn't replay the vault's history.
+ */
+export interface ChangesRequest {
+  /** Logical entities to watch, e.g. `['core.transaction']`. Each is consent-checked for read. */
+  entities: string[];
+  purpose: string;
+  cursor: string | null;
+  limit?: number;
+}
+
+export interface ChangeEntry {
+  provId: string;
+  entity: string;
+  entityId: string;
+  activity: string;
+  agentKind: 'owner' | 'app' | 'ai_agent' | 'import';
+  occurredAt: string;
+}
+
+export interface ChangesResult {
+  changes: ChangeEntry[];
+  /** New watermark to persist. Unchanged when no rows matched. */
+  cursor: string;
+  receiptId: string;
+}
+
 export type InvokeOutcome =
   | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
   | { status: 'parked'; invocationId: string; reason: string }

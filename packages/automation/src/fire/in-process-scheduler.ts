@@ -25,11 +25,7 @@
 
 import type { Host, ReconcileResult } from './host.js';
 import type { Row } from '../scaffold/app.js';
-import {
-  CONDITION_DEFAULT_EVERY,
-  conditionTriggersOf,
-  cronTriggersOf,
-} from '../manifest/manifest.js';
+import { cronTriggersOf, watchTriggersOf } from '../manifest/manifest.js';
 import { cronMatches } from './cron-match.js';
 
 export interface InProcessSchedulerOptions {
@@ -204,10 +200,7 @@ function entryOf(row: Row): SchedulerEntry {
   return {
     ref: row.ref,
     crons: cronTriggersOf(row.triggers).map((t) => t.expr),
-    watches: conditionTriggersOf(row.triggers).map(({ trigger, index }) => ({
-      expr: trigger.every ?? CONDITION_DEFAULT_EVERY,
-      index,
-    })),
+    watches: watchTriggersOf(row.triggers).map(({ expr, index }) => ({ expr, index })),
   };
 }
 

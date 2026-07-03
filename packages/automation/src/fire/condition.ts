@@ -27,7 +27,7 @@ import {
   makeRuntimeDbProvider,
   type VaultBridge,
 } from '@centraid/app-engine';
-import type { ConditionTrigger } from '../manifest/manifest.js';
+import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
 import { parseRef } from '../manifest/ref.js';
 
 /**
@@ -154,4 +154,76 @@ export async function evaluateConditionTrigger(
     rows: fresh.slice(0, MAX_ROWS_PER_FIRE),
     matched: rows.length,
   };
+}
+
+export interface DataEvaluation {
+  /** True when new change entries arrived — the host should fire. */
+  fire: boolean;
+  /** The new provenance entries (already capped by the feed). */
+  changes: Record<string, unknown>[];
+  /** Deny/error detail when the pull could not run. `fire` is false. */
+  reason?: string;
+}
+
+export interface EvaluateDataOptions {
+  automationRef: string;
+  trigger: DataTrigger;
+  triggerIndex: number;
+  purpose: string;
+  appsDir: string;
+  vault: VaultBridge;
+}
+
+/**
+ * Pull the consented change feed for one data trigger and advance its
+ * cursor. The cursor is the journal's strictly time-ordered prov id,
+ * persisted beside the condition cursors under the reserved `__trigger:`
+ * prefix; a missing cursor bootstraps at the current watermark WITHOUT
+ * firing — a fresh watcher reacts to what happens next, not to history.
+ * The cursor persists before the fire decision returns, so a fire that
+ * later fails skips those entries rather than looping on them.
+ */
+export async function evaluateDataTrigger(opts: EvaluateDataOptions): Promise<DataEvaluation> {
+  const parsed = parseRef(opts.automationRef);
+  if (!parsed) {
+    return { fire: false, changes: [], reason: `invalid ref ${opts.automationRef}` };
+  }
+  const store = storeFor(path.join(opts.appsDir, parsed.appId, 'runtime.sqlite'));
+  const stateKey = `${TRIGGER_STATE_PREFIX}${opts.triggerIndex}:cursor`;
+  let cursor: string | null = null;
+  const entry = store.stateGet(opts.automationRef, stateKey);
+  if (entry) {
+    try {
+      const parsedCursor = JSON.parse(entry.valueJson) as unknown;
+      if (typeof parsedCursor === 'string') cursor = parsedCursor;
+    } catch {
+      cursor = null;
+    }
+  }
+  const result = await opts.vault({
+    op: 'changes',
+    payload: {
+      entities: [...opts.trigger.entities],
+      purpose: opts.purpose,
+      cursor,
+      limit: 200,
+    },
+  });
+  if (!result.ok) {
+    return {
+      fire: false,
+      changes: [],
+      reason: `${result.code ?? 'VAULT_ERROR'}: ${result.error ?? 'vault changes failed'}`,
+    };
+  }
+  const feed = result.result as {
+    changes?: Record<string, unknown>[];
+    cursor?: string;
+  };
+  const changes = feed?.changes ?? [];
+  if (typeof feed?.cursor === 'string') {
+    store.stateSet(opts.automationRef, stateKey, JSON.stringify(feed.cursor), Date.now());
+  }
+  // The bootstrap pull (cursor was null) intentionally never fires.
+  return { fire: cursor !== null && changes.length > 0, changes };
 }

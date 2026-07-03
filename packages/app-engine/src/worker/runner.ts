@@ -42,7 +42,7 @@ interface DbReplyMessage {
 interface VaultCallMessage {
   type: 'vault';
   id: number;
-  op: 'read' | 'invoke' | 'query' | 'describe';
+  op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
   payload: unknown;
 }
 
@@ -141,6 +141,14 @@ const vault = {
   /** Commands discoverable by this app (name, schema, risk, confirmation). */
   describe(): Promise<unknown> {
     return vaultCall('describe', {});
+  },
+  /**
+   * This app's own invocations awaiting owner confirmation — the "my
+   * pending approvals" surface (issue #260), so a parked request-booking or
+   * send can render as durable state instead of a session-local guess.
+   */
+  parked(): Promise<unknown> {
+    return vaultCall('parked', {});
   },
 };
 
