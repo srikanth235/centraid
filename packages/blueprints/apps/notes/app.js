@@ -398,10 +398,15 @@ function clearSearch() {
 
 // ---------- Read + render ----------
 
+// The browse window: the library query reads only this many recent notes
+// (pinned ride beside it). "Show more" grows it; search reaches the rest.
+let libraryWindow = 200;
+let libraryTruncated = false;
+
 async function refresh() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'library' });
+    data = await window.centraid.read({ query: 'library', input: { limit: libraryWindow } });
   } catch {
     if (firstLoad) {
       firstLoad = false;
@@ -433,6 +438,7 @@ async function refresh() {
   }
   notes = data?.notes ?? [];
   notebooks = data?.notebooks ?? [];
+  libraryTruncated = Boolean(data?.truncated);
   if (activeNotebook !== 'all' && !notebooks.some((nb) => nb.notebook_id === activeNotebook)) {
     activeNotebook = 'all';
   }
@@ -629,6 +635,25 @@ function renderNotes() {
     if (others.length > 0) list.append(head('Others'), grid(others));
   } else if (others.length > 0) {
     list.append(grid(others));
+  }
+  // The window is honest about its edge: browsing shows the latest slice,
+  // "Show more" grows it, search reaches everything beyond it.
+  if (libraryTruncated && !searchTerm) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${libraryWindow} notes — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'chip';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      libraryWindow += 200;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
 }
 

@@ -209,10 +209,12 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The whole drive: every folder in the owner's folders scheme and every document (a content item carrying a folders-scheme tag) newest first, trashed ones included with their purge dates.",
+      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (content items carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": { "type": "integer", "minimum": 20, "maximum": 2000 }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -221,6 +223,8 @@
           "folders": { "type": "array" },
           "documents": { "type": "array" },
           "root_folder_id": { "type": ["string", "null"] },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
           "vaultDenied": { "type": "object" }
         }
       }

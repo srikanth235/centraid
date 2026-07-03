@@ -14,6 +14,11 @@ const $ = (id) => document.getElementById(id);
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // reject before reading — ~8 MB
 
 let data = { folders: [], documents: [], root_folder_id: null };
+// The browse window: the drive query reads only this many recently filed
+// documents — vault data has no upper bound. "Show more" grows it; search
+// reaches everything beyond it.
+let driveWindow = 200;
+let driveTruncated = false;
 let currentFolder = null; // folder_id, or null = the drive's top level
 let trashView = false;
 let searchQuery = ''; // non-empty = flat search results across all folders
@@ -928,6 +933,26 @@ function renderDocs() {
   rows.forEach((doc, i) => {
     list.appendChild(trashView && !searchQuery ? renderTrashRow(doc, i) : renderDocRow(doc, i));
   });
+  // The window is honest about its edge: browsing (folders and trash alike)
+  // shows the latest filed slice, "Show more" grows it, search reaches
+  // everything beyond it.
+  if (driveTruncated && !searchQuery) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${driveWindow} documents — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      driveWindow += 200;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
+  }
 }
 
 function docIcon(doc) {
@@ -1300,7 +1325,7 @@ let readFailedShowing = false;
 async function refresh() {
   let next;
   try {
-    next = await window.centraid.read({ query: 'drive' });
+    next = await window.centraid.read({ query: 'drive', input: { limit: driveWindow } });
   } catch {
     readFailed($('noticeBanner')); // a broken vault must not look empty
     readFailedShowing = true;
@@ -1318,6 +1343,7 @@ async function refresh() {
     return;
   }
   data = next;
+  driveTruncated = Boolean(next?.truncated);
   selected = new Set([...selected].filter((id) => data.documents.some((d) => d.content_id === id)));
   render();
 }

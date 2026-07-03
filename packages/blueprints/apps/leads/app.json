@@ -309,10 +309,16 @@
   "queries": [
     {
       "name": "pipeline",
-      "description": "Every client as a pipeline card (lead / active / past) with its name, rate, running note and attachments, plus the parties not yet enrolled as candidates to add.",
+      "description": "A bounded recent window of clients as pipeline cards (lead / active / past; newest by UUIDv7 client_id, default 500) with their names, rates, running notes and attachments, plus the newest unenrolled parties as candidates to add — never a whole-table pull; `truncated` says older leads exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -323,6 +329,12 @@
           },
           "candidates": {
             "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
           },
           "vaultDenied": {
             "type": "object"

@@ -715,6 +715,16 @@ span.note-glyph {
   padding: 2rem 0;
 }
 
+.window-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
 .footnote {
   margin-top: 2rem;
   color: var(--ink-faint);

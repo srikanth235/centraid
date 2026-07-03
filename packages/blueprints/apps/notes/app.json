@@ -405,10 +405,16 @@
   "queries": [
     {
       "name": "library",
-      "description": "All notes newest first with their notebook names and decoded bodies, plus the notebooks for filtering.",
+      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names and decoded bodies, plus the notebooks for filtering — never a whole-table pull; `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -419,6 +425,12 @@
           },
           "notebooks": {
             "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
           },
           "vaultDenied": {
             "type": "object"

@@ -1,9 +1,12 @@
 /**
- * The notes projection: every knowledge.note, pinned first then newest,
- * joined in the handler with its notebook name(s) via
- * knowledge.note_placement and its body decoded from the canonical
- * core.content_item it references. Writes go through the knowledge
- * domain's typed commands via this app's actions.
+ * The notes projection as a bounded recent window: the newest notes by
+ * updated_at (caller-sized, default 200) plus every pinned note — never the
+ * whole knowledge.note table, because vault data has no upper bound (issue
+ * #262). Placements, attachments and canonical bodies are joined only for
+ * the windowed rows; anything older is reachable through the FTS search
+ * query or by growing the window (`truncated` tells the UI to offer that).
+ * Writes go through the knowledge domain's typed commands via this app's
+ * actions.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -65,20 +68,73 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
+  const window = Math.min(Math.max(Number(input?.limit) || 200, 20), 2000);
   try {
-    const [notes, notebooks, placements, contents, attachments] = await Promise.all([
-      ctx.vault.read({ entity: 'knowledge.note', purpose }),
+    // Pinned notes ride beside the window, not inside it — a pin is the
+    // owner saying "always on top", which must survive the note aging out
+    // of the recent slice.
+    const [recent, pinnedNotes, notebooks] = await Promise.all([
+      ctx.vault.read({
+        entity: 'knowledge.note',
+        orderBy: { column: 'updated_at', dir: 'desc' },
+        limit: window,
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'knowledge.note',
+        where: [{ column: 'pinned', op: 'eq', value: 1 }],
+        orderBy: { column: 'updated_at', dir: 'desc' },
+        limit: 200,
+        purpose,
+      }),
       ctx.vault.read({ entity: 'knowledge.notebook', purpose }),
-      ctx.vault.read({ entity: 'knowledge.note_placement', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
+    ]);
+    const byId = new Map();
+    for (const n of [...(recent.rows ?? []), ...(pinnedNotes.rows ?? [])]) {
+      byId.set(n.note_id, n);
+    }
+    const windowed = [...byId.values()];
+    if (windowed.length === 0) {
+      const books = (notebooks.rows ?? []).toSorted(
+        (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
+      );
+      return { notes: [], notebooks: books, truncated: false, window };
+    }
+    const noteIds = windowed.map((n) => n.note_id);
+
+    // Joins are `in`-bounded by the window — placements, attachment edges,
+    // then one content pull covering both bodies and attachment bytes.
+    const [placements, attachments] = await Promise.all([
+      ctx.vault.read({
+        entity: 'knowledge.note_placement',
+        where: [{ column: 'note_id', op: 'in', value: noteIds }],
+        purpose,
+      }),
       ctx.vault.read({
         entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'knowledge.note' }],
+        where: [
+          { column: 'subject_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'subject_id', op: 'in', value: noteIds },
+        ],
         purpose,
       }),
     ]);
+    const contentIds = [
+      ...new Set([
+        ...windowed.map((n) => n.body_content_id),
+        ...(attachments.rows ?? []).map((a) => a.content_id),
+      ]),
+    ].filter(Boolean);
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByNote = attachmentsBySubject('knowledge.note', attachments.rows ?? [], contentById);
@@ -88,7 +144,7 @@ export default async ({ ctx }) => {
       if (!notebooksByNote.has(p.note_id)) notebooksByNote.set(p.note_id, []);
       notebooksByNote.get(p.note_id).push(p.notebook_id);
     }
-    const rows = (notes.rows ?? [])
+    const rows = windowed
       .map((n) => {
         const notebookIds = notebooksByNote.get(n.note_id) ?? [];
         return {
@@ -114,7 +170,10 @@ export default async ({ ctx }) => {
       (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
     );
 
-    return { notes: rows, notebooks: books };
+    // A full window means there may be older notes beyond it — the UI
+    // offers "Show more" (a re-read with a larger window) and search.
+    const truncated = (recent.rows ?? []).length >= window;
+    return { notes: rows, notebooks: books, truncated, window };
   } catch (err) {
     return { notes: [], notebooks: [], vaultDenied: { code: err.code, message: err.message } };
   }

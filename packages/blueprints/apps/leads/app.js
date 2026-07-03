@@ -30,6 +30,10 @@ const CURRENCY_KEY = 'leads.currency';
 
 let data = { leads: [], candidates: [] };
 let loaded = false; // first successful read landed
+// The browse window: the pipeline query reads only this many recent clients
+// (UUIDv7 order — newest first). "Show more" grows it; search reaches the rest.
+let pipelineWindow = 500;
+let pipelineTruncated = false;
 let filterText = ''; // lowercased search needle
 let searchResults = null; // vault FTS matches while a term is active
 let attachTarget = null; // client_id the shared file input attaches to
@@ -211,7 +215,7 @@ async function moveLead(lead, toStatus) {
 async function refresh() {
   let next;
   try {
-    next = await window.centraid.read({ query: 'pipeline' });
+    next = await window.centraid.read({ query: 'pipeline', input: { limit: pipelineWindow } });
   } catch {
     // A broken vault must not look like an empty one.
     readFailed($('noticeBanner'));
@@ -227,6 +231,7 @@ async function refresh() {
     return;
   }
   data = next;
+  pipelineTruncated = Boolean(next?.truncated);
   loaded = true;
   renderAddForm();
   renderBoard();
@@ -260,6 +265,26 @@ function renderBoard() {
     const inColumn = data.leads.filter((l) => l.status === col.key);
     const shown = filterText ? matched.filter((l) => l.status === col.key) : inColumn;
     board.appendChild(renderColumn(col, inColumn, shown));
+  }
+  // The window is honest about its edge: the columns group the loaded slice
+  // (their counts count loaded cards), "Show more" grows it, and search
+  // reaches everything beyond it — so no footer while a term is active.
+  if (pipelineTruncated && !filterText) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${pipelineWindow} leads — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      pipelineWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    board.appendChild(footer);
   }
 }
 

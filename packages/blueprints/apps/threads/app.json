@@ -239,10 +239,16 @@
   "queries": [
     {
       "name": "inbox",
-      "description": "Every thread, most recent activity first, with its participants' display names, a last-message snippet, a draft flag, an unread flag (owner's read cursor vs the newest inbound message), and the party directory for starting new conversations.",
+      "description": "A bounded recent window of threads (newest by last_message_at, caller-sized via `limit`) with participants' display names, a last-message snippet, a draft flag, an unread flag (owner's read cursor vs the newest inbound message), and a capped recent slice of the party directory for starting new conversations — never a whole-table pull; `truncated` says older threads exist beyond the window (search reaches them).",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -253,6 +259,12 @@
           },
           "parties": {
             "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
           },
           "vaultDenied": {
             "type": "object"

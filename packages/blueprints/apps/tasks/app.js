@@ -177,10 +177,16 @@ async function removeAttachment(attachmentId) {
   if (narrate(outcome) || outcome?.status === 'denied') await refresh();
 }
 
+// The board window: the board query reads only this many newest open tasks
+// (the logbook read is capped at its visible 50). "Show more" grows it;
+// search reaches the rest through the vault's FTS index.
+let boardWindow = 500;
+let boardTruncated = false;
+
 async function refresh() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'board' });
+    data = await window.centraid.read({ query: 'board', input: { limit: boardWindow } });
   } catch {
     // A broken vault must not look like an empty one.
     readFailed($('noticeBanner'));
@@ -203,6 +209,7 @@ async function refresh() {
     return;
   }
   lastData = data;
+  boardTruncated = Boolean(data?.truncated);
   render();
 }
 
@@ -362,6 +369,27 @@ function renderBoard(open, counts) {
     empty.hidden = false;
   } else {
     empty.hidden = true;
+  }
+
+  // The window is honest about its edge: the board shows the newest open
+  // tasks, "Show more" grows the slice, search reaches everything beyond it.
+  if (boardTruncated && !state.search.trim()) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    const windowSize = lastData?.window ?? boardWindow;
+    label.textContent = `Showing your newest ${windowSize} open tasks — the rest are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      boardWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    board.appendChild(footer);
   }
 
   if (selectedId && !selectedEntry()) selectedId = null;

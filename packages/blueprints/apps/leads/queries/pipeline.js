@@ -1,10 +1,15 @@
 /**
- * The leads pipeline: a projection over business.client, whose lead → active
- * → past lifecycle is the pipeline itself. Each client is joined to its core
- * party for a name and its social.contact_card for a running note; files
- * (a proposal, a brief) attach per lead. Parties not yet enrolled are offered
- * as candidates to add. Everything comes from the vault; this app holds no
- * rows of its own.
+ * The leads pipeline as a bounded recent window: the newest clients
+ * (caller-sized, default 500 — a kanban rarely shows more), never the whole
+ * business.client table, because vault data has no upper bound (issue #262).
+ * business.client carries no timestamp, but client_id is UUIDv7, so
+ * descending PK order IS newest-first enrolment. Each windowed client is
+ * joined to its core party for a name and its social.contact_card for a
+ * running note; files (a proposal, a brief) attach per lead. Anything older
+ * is reachable through the FTS search query or by growing the window
+ * (`truncated` tells the UI to offer that). Parties not yet enrolled are
+ * offered as candidates to add. Everything comes from the vault; this app
+ * holds no rows of its own.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
@@ -33,17 +38,87 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:Billing';
+  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [clients, parties, cards, identifiers, attachments] = await Promise.all([
-      ctx.vault.read({ entity: 'business.client', purpose }),
-      ctx.vault.read({ entity: 'core.party', purpose }),
-      ctx.vault.read({ entity: 'social.contact_card', purpose }),
-      ctx.vault.read({ entity: 'core.party_identifier', purpose }),
+    const [clients, candidateParties] = await Promise.all([
+      ctx.vault.read({
+        entity: 'business.client',
+        orderBy: { column: 'client_id', dir: 'desc' },
+        limit: window,
+        purpose,
+      }),
+      // The add-lead picker offers the newest 300 parties (party_id is UUIDv7
+      // too) — a deliberate cap: the picker is a convenience shortlist, not a
+      // directory, and anyone beyond it is reachable through search or the
+      // new-contact flow.
+      ctx.vault.read({
+        entity: 'core.party',
+        orderBy: { column: 'party_id', dir: 'desc' },
+        limit: 300,
+        purpose,
+      }),
+    ]);
+
+    const clientRows = clients.rows ?? [];
+    // A full window means there may be older leads beyond it — the UI offers
+    // "Show more" (a re-read with a larger window) and search.
+    const truncated = clientRows.length >= window;
+
+    // Enrolment must be judged exactly, not against the windowed clients — a
+    // party whose client row aged out of the window is still a client, and
+    // offering them in the picker would collide with business_client's
+    // one-client-per-party. One `in`-bounded read over the shortlist settles
+    // it without pulling the client table.
+    const candidateRows = candidateParties.rows ?? [];
+    const enrolled = new Set(clientRows.map((c) => c.party_id));
+    if (candidateRows.length > 0) {
+      const shortlistClients = await ctx.vault.read({
+        entity: 'business.client',
+        where: [{ column: 'party_id', op: 'in', value: candidateRows.map((p) => p.party_id) }],
+        purpose,
+      });
+      for (const c of shortlistClients.rows ?? []) enrolled.add(c.party_id);
+    }
+    const candidates = candidateRows
+      .filter((p) => !enrolled.has(p.party_id))
+      .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
+      .toSorted((a, b) => String(a.display_name).localeCompare(String(b.display_name)));
+
+    // `in` with an empty array throws — with zero clients there is nothing
+    // to join, so return the empty board (the picker still stands).
+    if (clientRows.length === 0) {
+      return { leads: [], candidates, truncated: false, window };
+    }
+
+    const partyIds = [...new Set(clientRows.map((c) => c.party_id).filter(Boolean))];
+    const clientIds = clientRows.map((c) => c.client_id);
+
+    // Joins are `in`-bounded by the window — names, running notes, handles
+    // and attachment edges only for the clients on the board.
+    const [parties, cards, identifiers, attachments] = await Promise.all([
+      ctx.vault.read({
+        entity: 'core.party',
+        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'social.contact_card',
+        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'core.party_identifier',
+        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        purpose,
+      }),
       ctx.vault.read({
         entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'business.client' }],
+        where: [
+          { column: 'subject_type', op: 'eq', value: 'business.client' },
+          { column: 'subject_id', op: 'in', value: clientIds },
+        ],
         purpose,
       }),
     ]);
@@ -81,7 +156,6 @@ export default async ({ ctx }) => {
     }
     const attByClient = attachmentsBySubject('business.client', attachmentRows, contentById);
 
-    const clientRows = clients.rows ?? [];
     const leads = clientRows
       .map((c) => ({
         client_id: c.client_id,
@@ -97,14 +171,7 @@ export default async ({ ctx }) => {
       }))
       .toSorted((a, b) => a.name.localeCompare(b.name));
 
-    // Parties not yet enrolled as clients — the add-lead picker.
-    const enrolled = new Set(clientRows.map((c) => c.party_id));
-    const candidates = (parties.rows ?? [])
-      .filter((p) => !enrolled.has(p.party_id))
-      .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
-      .toSorted((a, b) => String(a.display_name).localeCompare(String(b.display_name)));
-
-    return { leads, candidates };
+    return { leads, candidates, truncated, window };
   } catch (err) {
     return { leads: [], candidates: [], vaultDenied: { code: err.code, message: err.message } };
   }

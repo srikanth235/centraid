@@ -28,6 +28,10 @@ let searchText = '';
 let searchResults = null; // vault FTS matches while a term is active
 let channelFilter = ''; // '' = all
 let firstInboxLoad = true;
+// The inbox window: the query reads only this many recent threads (issue
+// #262). "Show more" grows it; search reaches everything beyond it.
+let inboxWindow = 100;
+let inboxTruncated = false;
 // message_ids whose send parked this session — the ⏳ "waiting for your
 // approval" chip. The vault still says delivery='draft' while parked, so
 // this is honest session-scoped presentation, not invented state.
@@ -242,7 +246,7 @@ async function refresh() {
 async function loadInbox() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'inbox' });
+    data = await window.centraid.read({ query: 'inbox', input: { limit: inboxWindow } });
   } catch {
     if (firstInboxLoad) $('threadList').innerHTML = '';
     readFailed($('noticeBanner'));
@@ -261,6 +265,7 @@ async function loadInbox() {
   }
   inboxThreads = data?.threads ?? [];
   inboxParties = data?.parties ?? [];
+  inboxTruncated = Boolean(data?.truncated);
   renderInbox();
   renderRecipients();
 }
@@ -332,6 +337,25 @@ function renderInbox() {
     row.append(main, side);
     row.addEventListener('click', () => openThread(t));
     list.appendChild(row);
+  }
+  // The window is honest about its edge: browsing shows the latest slice,
+  // "Show more" grows it, search reaches everything beyond it.
+  if (inboxTruncated && !searching) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${inboxWindow} conversations — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'chip';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      inboxWindow += 100;
+      more.disabled = true;
+      await loadInbox();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
 }
 

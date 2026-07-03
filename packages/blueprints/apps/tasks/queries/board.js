@@ -1,10 +1,13 @@
 /**
- * The task board: every canonical task from schedule.task, shaped for a
- * Things-style view. Top-level open tasks come sorted (due first, then
- * priority where 1 is highest and 0 means unset, then title) with their
- * subtasks nested; closed top-level tasks form a logbook, most recently
- * completed first. Subtasks always render under their parent, whichever
- * side of the board the parent is on.
+ * The task board as a bounded window, never a whole-table pull (issue #262):
+ * the newest open tasks by task_id (UUIDv7, so creation order; caller-sized,
+ * default 500) plus the 50 most recently closed — exactly what the logbook
+ * shows, so the read matches the UI instead of hauling the whole closed
+ * history. Top-level open tasks come sorted (due first, then priority where
+ * 1 is highest and 0 means unset, then title) with their subtasks nested;
+ * closed top-level tasks form the logbook, most recently completed first.
+ * Anything beyond the window is reachable through the FTS search query or by
+ * growing the window (`truncated` tells the UI to offer that).
  *
  * Everything comes from the vault — this app holds no rows of its own; a
  * consent denial is a first-class outcome the UI renders, receipt included.
@@ -41,20 +44,93 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+const OPEN_STATUSES = ['needs-action', 'in-process'];
+const CLOSED_STATUSES = ['completed', 'cancelled'];
+
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
-  const OPEN = new Set(['needs-action', 'in-process']);
+  const OPEN = new Set(OPEN_STATUSES);
+  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [result, contents, attachments] = await Promise.all([
-      ctx.vault.read({ entity: 'schedule.task', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
+    const [openResult, closedResult] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'schedule.task' }],
+        entity: 'schedule.task',
+        where: [{ column: 'status', op: 'in', value: OPEN_STATUSES }],
+        orderBy: { column: 'task_id', dir: 'desc' },
+        limit: window,
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'schedule.task',
+        where: [{ column: 'status', op: 'in', value: CLOSED_STATUSES }],
+        orderBy: { column: 'completed_at', dir: 'desc' },
+        limit: 50,
         purpose,
       }),
     ]);
-    const rows = result.rows ?? [];
+    const byId = new Map();
+    for (const t of [...(openResult.rows ?? []), ...(closedResult.rows ?? [])]) {
+      byId.set(t.task_id, t);
+    }
+
+    // Families stay whole across the window edge: a subtask only renders
+    // under its parent, so first pull in any referenced parents the windows
+    // missed (`in` needs a non-empty array — skip when there's nothing to
+    // fetch)…
+    const missingParentIds = [
+      ...new Set(
+        [...byId.values()].map((t) => t.parent_task_id).filter((id) => id && !byId.has(id)),
+      ),
+    ];
+    if (missingParentIds.length > 0) {
+      const parents = await ctx.vault.read({
+        entity: 'schedule.task',
+        where: [{ column: 'task_id', op: 'in', value: missingParentIds }],
+        purpose,
+      });
+      for (const t of parents.rows ?? []) byId.set(t.task_id, t);
+    }
+
+    // …then the reverse edge: every subtask of a fetched top-level task —
+    // open ones so a windowed parent never renders with its still-to-do work
+    // silently gone, closed ones so `done_children` counts the truth (the
+    // read stays bounded: children of the windowed parents only).
+    const topLevelIds = [...byId.values()].filter((t) => !t.parent_task_id).map((t) => t.task_id);
+    if (topLevelIds.length > 0) {
+      const children = await ctx.vault.read({
+        entity: 'schedule.task',
+        where: [{ column: 'parent_task_id', op: 'in', value: topLevelIds }],
+        purpose,
+      });
+      for (const t of children.rows ?? []) byId.set(t.task_id, t);
+    }
+    const rows = [...byId.values()];
+    const taskIds = rows.map((t) => t.task_id);
+
+    // Joins are `in`-bounded by the fetched set — attachment edges, then one
+    // content pull covering only those attachments' bytes.
+    const attachments =
+      taskIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.attachment',
+            where: [
+              { column: 'subject_type', op: 'eq', value: 'schedule.task' },
+              { column: 'subject_id', op: 'in', value: taskIds },
+            ],
+            purpose,
+          })
+        : { rows: [] };
+    const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
+      Boolean,
+    );
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByTask = attachmentsBySubject('schedule.task', attachments.rows ?? [], contentById);
 
@@ -104,8 +180,18 @@ export default async ({ ctx }) => {
       .slice(0, 50)
       .map(withChildren);
 
+    // Counts describe what was fetched, not the whole table — a full open
+    // window means more open tasks exist beyond it, and `truncated` tells
+    // the UI to offer "Show more".
     const openCount = rows.filter((t) => OPEN.has(t.status)).length;
-    return { open, logbook, counts: { open: openCount, closed: rows.length - openCount } };
+    const truncated = (openResult.rows ?? []).length >= window;
+    return {
+      open,
+      logbook,
+      counts: { open: openCount, closed: rows.length - openCount },
+      truncated,
+      window,
+    };
   } catch (err) {
     return {
       open: [],
