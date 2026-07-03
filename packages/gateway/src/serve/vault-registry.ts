@@ -38,6 +38,7 @@ export interface VaultInfo {
   ownerPartyId: string;
 }
 
+/* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
 /** A refused registry act (delete the active vault, unknown id, …). */
 export class VaultRegistryError extends Error {
   constructor(
@@ -45,6 +46,7 @@ export class VaultRegistryError extends Error {
     message: string,
   ) {
     super(message);
+    this.name = 'VaultRegistryError';
   }
 }
 

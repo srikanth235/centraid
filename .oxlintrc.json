@@ -9,7 +9,8 @@
     "**/.expo/**",
     "**/node_modules/**",
     "packages/blueprints/apps/**",
-    "packages/blueprints/automations/**"
+    "packages/blueprints/automations/**",
+    "packages/blueprints/kit/**"
   ],
   "rules": {
     "arrow-body-style": "off",
