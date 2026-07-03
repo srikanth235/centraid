@@ -27,6 +27,8 @@ export type {
   FilterClause,
   ReadRequest,
   ReadResult,
+  SearchRequest,
+  SearchResult,
   ChangesRequest,
   ChangesResult,
   ChangeEntry,
@@ -45,6 +47,7 @@ export {
   type RevocationResult,
   type SweepResult,
 } from './gateway/duties.js';
+export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
 
 export {
   bootstrapVault,

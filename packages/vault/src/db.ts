@@ -10,6 +10,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { registerContentTextFn } from './schema/fts.js';
 import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
 
 export interface VaultDb {
@@ -45,6 +46,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     vault = openFile(path.join(dir, 'vault.db'));
     journal = openFile(path.join(dir, 'journal.db'));
   }
+  // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
+  // this function, so it must exist before migrations touch the file.
+  registerContentTextFn(vault);
   migrate(vault, VAULT_MIGRATIONS);
   migrate(journal, JOURNAL_MIGRATIONS);
   return {

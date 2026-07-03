@@ -26,6 +26,7 @@ import {
 } from './execution.js';
 import { applyFieldMask, compileFilters } from './filters.js';
 import { authenticate } from './identity.js';
+import { searchEntity } from './search.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
 import { backupVault, checkpointVault, createAppExt, type BackupResult } from './custody.js';
 import { exportVault, type VaultExport } from './portability.js';
@@ -43,6 +44,8 @@ import type {
   ReadRequest,
   ReadResult,
   Risk,
+  SearchRequest,
+  SearchResult,
 } from './types.js';
 import { GatewayError } from './types.js';
 
@@ -205,6 +208,16 @@ export class Gateway {
       detail: { filter: request.where ?? [], rowCount: rows.length },
     });
     return { rows, receiptId };
+  }
+
+  /**
+   * Consent-checked full-text search over a text-indexed entity: matching
+   * runs inside SQLite's FTS5 shadow tables (schema/fts.ts), so a caller
+   * gets its LIMIT of ranked matches instead of a whole table to grep.
+   */
+  search(cred: Credential, request: SearchRequest): SearchResult {
+    const identity = this.identify(cred);
+    return searchEntity(this.db, identity, request);
   }
 
   /**

@@ -99,10 +99,16 @@ function toParam(value: unknown): string | number {
  * by default (§03). Returns the SELECT list; a mask never widens past real
  * columns, and an empty intersection fails closed.
  */
-export function applyFieldMask(db: DatabaseSync, physical: string, mask: string[] | null): string {
-  if (mask === null) return '*';
+export function applyFieldMask(
+  db: DatabaseSync,
+  physical: string,
+  mask: string[] | null,
+  alias?: string,
+): string {
+  const prefix = alias ? `${alias}.` : '';
+  if (mask === null) return `${prefix}*`;
   const cols = tableColumns(db, physical);
   const allowed = mask.filter((c) => cols.has(c));
   if (allowed.length === 0) throw new Error(`field mask excludes every column of ${physical}`);
-  return allowed.map((c) => `"${c}"`).join(', ');
+  return allowed.map((c) => `${prefix}"${c}"`).join(', ');
 }

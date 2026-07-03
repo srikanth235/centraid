@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
+import { VAULT_MIGRATIONS } from './migrate.js';
 import { listVaultEntities, resolveEntity } from './tables.js';
 
 test('migrations create every table in the registry, in both files', () => {
@@ -38,9 +39,9 @@ test('migrations are idempotent via user_version', () => {
   const db = openVaultDb();
   // openVaultDb already migrated; a second migrate run must be a no-op —
   // exercised by reopening the same in-memory handle path being impossible,
-  // so assert user_version advanced exactly once.
+  // so assert user_version advanced exactly once per rung.
   const version = db.vault.prepare('PRAGMA user_version').get() as { user_version: number };
-  expect(version.user_version).toBe(1);
+  expect(version.user_version).toBe(VAULT_MIGRATIONS.length);
   db.close();
 });
 
