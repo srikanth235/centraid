@@ -21,6 +21,8 @@ let parentContext = null; // { task_id, title }
 // Client-side presentation state — never persisted, never sent to the vault.
 const state = { view: 'all', search: '' };
 let lastData = null; // last successful board read, re-rendered on filter flips
+let searchResults = null; // vault FTS matches while a term is active
+let searchSnippets = null; // task_id → ⟦…⟧ hit snippet for the matched rows
 let readFailedShown = false;
 
 function todayStr() {
@@ -236,15 +238,14 @@ const VIEW_BUCKETS = {
   upcoming: new Set(['week', 'later']),
 };
 
-// Quick find: keep a parent when it matches (with all its subtasks), or slim
-// it down to just the matching subtasks when only children hit.
+// Quick find is a vault question, not a local grep: while a term is active
+// the visible set is the FTS match set the search query returned. Keep a
+// parent when it matches (with all its subtasks), or slim it down to just
+// the matching subtasks when only children hit.
 function applySearch(open) {
-  const q = state.search.trim().toLowerCase();
-  if (!q) return open;
-  const hit = (t) =>
-    String(t.title ?? '')
-      .toLowerCase()
-      .includes(q);
+  if (!state.search.trim()) return open;
+  const matched = new Set((searchResults ?? []).map((t) => t.task_id));
+  const hit = (t) => matched.has(t.task_id);
   return open
     .map((task) => {
       if (hit(task)) return task;
@@ -370,14 +371,13 @@ function renderBoard(open, counts) {
 // ---------- The logbook (closed top-level tasks) ----------
 
 function renderLogbook(logbook) {
-  const q = state.search.trim().toLowerCase();
-  const visible = q
-    ? logbook.filter((t) =>
-        String(t.title ?? '')
-          .toLowerCase()
-          .includes(q),
-      )
-    : logbook;
+  // The logbook consumes the same vault match set as the board — one search,
+  // both sides of the app.
+  let visible = logbook;
+  if (state.search.trim()) {
+    const matched = new Set((searchResults ?? []).map((t) => t.task_id));
+    visible = logbook.filter((t) => matched.has(t.task_id));
+  }
   const details = $('logbook');
   details.hidden = visible.length === 0;
   $('logbookCount').textContent = visible.length ? `· ${visible.length}` : '';
@@ -576,6 +576,22 @@ async function cancelTask(task) {
 
 // ---------- One task row ----------
 
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and task text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
 // A clean inline-SVG "text lines" marker for rows that carry a note — no
 // emoji, inherits currentColor so themes and hover states just work.
 const NOTE_GLYPH_SVG =
@@ -636,9 +652,15 @@ function renderRow(task, { subtask = false, closed = false } = {}) {
     glyph.className = 'note-glyph';
     glyph.innerHTML = NOTE_GLYPH_SVG;
     titleLine.appendChild(glyph);
+  }
+  // A vault match carries its own snippet, already centered on the hit —
+  // while a term is active it takes the note line's place.
+  const snippet = searchSnippets?.get(task.task_id);
+  if (snippet || note) {
     const noteLine = document.createElement('span');
     noteLine.className = 'row-note';
-    noteLine.textContent = note.split('\n')[0];
+    if (snippet) snippetInto(noteLine, snippet);
+    else noteLine.textContent = note.split('\n')[0];
     main.appendChild(noteLine);
   }
 
@@ -938,8 +960,31 @@ $('quickAdd').addEventListener('submit', async (e) => {
 
 // ---------- Quick find + view switcher ----------
 
-const applySearchInput = debounce(() => {
-  state.search = $('searchInput').value;
+// Quick find asks the vault, not a local copy: the FTS5 index matches over
+// every task (title + description) inside SQLite and returns only the hits,
+// so the app never greps an unbounded table in memory. `searchSeq` drops
+// stale replies when the owner types faster than the vault answers.
+let searchSeq = 0;
+const applySearchInput = debounce(async () => {
+  const raw = $('searchInput').value.trim();
+  state.search = raw;
+  if (!raw) {
+    searchResults = null;
+    searchSnippets = null;
+    render();
+    return;
+  }
+  const seq = ++searchSeq;
+  let rows = [];
+  try {
+    const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+    rows = data?.tasks ?? [];
+  } catch {
+    rows = [];
+  }
+  if (seq !== searchSeq) return;
+  searchResults = rows;
+  searchSnippets = new Map(rows.filter((t) => t.snippet).map((t) => [t.task_id, t.snippet]));
   render();
 }, 120);
 $('searchInput').addEventListener('input', applySearchInput);
@@ -975,6 +1020,8 @@ document.addEventListener('keydown', (e) => {
     if (typing && e.target === $('searchInput')) {
       e.target.value = '';
       state.search = '';
+      searchResults = null;
+      searchSnippets = null;
       render();
       e.target.blur();
       return;

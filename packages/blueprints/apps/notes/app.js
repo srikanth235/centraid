@@ -17,6 +17,7 @@ let notebooks = [];
 let activeNotebook = 'all';
 let renamingNotebookId = null; // chip currently swapped for its rename input
 let searchTerm = '';
+let searchResults = null; // vault FTS matches while a term is active
 let firstLoad = true;
 let readErrorShown = false;
 
@@ -341,12 +342,49 @@ function previewText(body, term) {
   return flat.slice(0, 200);
 }
 
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and note content never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
+// Searching asks the vault, not a local copy: the FTS5 index matches over
+// every note (title + body) inside SQLite and returns only the hits, so the
+// app never greps an unbounded table in memory. `searchSeq` drops stale
+// replies when the owner types faster than the vault answers.
 const searchInput = $('searchInput');
 let searchDebounce = 0;
+let searchSeq = 0;
 searchInput.addEventListener('input', () => {
   clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(() => {
-    searchTerm = searchInput.value.trim().toLowerCase();
+  searchDebounce = setTimeout(async () => {
+    const raw = searchInput.value.trim();
+    searchTerm = raw.toLowerCase();
+    if (!raw) {
+      searchResults = null;
+      renderNotes();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = data?.notes ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
     renderNotes();
   }, 120);
 });
@@ -354,6 +392,7 @@ searchInput.addEventListener('input', () => {
 function clearSearch() {
   searchInput.value = '';
   searchTerm = '';
+  searchResults = null;
   renderNotes();
 }
 
@@ -553,20 +592,11 @@ function renameChipInput(nb) {
 }
 
 function visibleNotes() {
-  let rows = notes;
+  // While a term is active the list IS the vault's ranked matches — the
+  // library copy is only the browse view. The notebook chip still narrows.
+  let rows = searchTerm ? (searchResults ?? []) : notes;
   if (activeNotebook !== 'all') {
     rows = rows.filter((n) => (n.notebook_ids ?? []).includes(activeNotebook));
-  }
-  if (searchTerm) {
-    rows = rows.filter(
-      (n) =>
-        String(n.title ?? '')
-          .toLowerCase()
-          .includes(searchTerm) ||
-        String(n.body ?? '')
-          .toLowerCase()
-          .includes(searchTerm),
-    );
   }
   return rows;
 }
@@ -613,7 +643,9 @@ function renderRow(note) {
   row.appendChild(title);
   const text = document.createElement('span');
   text.className = 'note-preview';
-  highlightInto(text, previewText(note.body, searchTerm), searchTerm);
+  // A vault match carries its own snippet, already centered on the hit.
+  if (note.snippet) snippetInto(text, note.snippet);
+  else highlightInto(text, previewText(note.body, searchTerm), searchTerm);
   row.appendChild(text);
   const meta = document.createElement('span');
   meta.className = 'note-meta-row';

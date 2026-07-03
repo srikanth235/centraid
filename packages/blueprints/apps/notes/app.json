@@ -425,6 +425,31 @@
           }
         }
       }
+    },
+    {
+      "name": "search",
+      "description": "Full-text note search through the vault's FTS5 index (title + body) — returns only the ranked matches in the library row shape plus a hit snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

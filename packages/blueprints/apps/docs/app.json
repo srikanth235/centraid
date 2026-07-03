@@ -224,6 +224,25 @@
           "vaultDenied": { "type": "object" }
         }
       }
+    },
+    {
+      "name": "search",
+      "description": "Full-text document search through the vault's FTS5 index (title + text body) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Only content items carrying a folders-scheme tag come back; trashed documents never match.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "documents": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
     }
   ],
   "knobs": [

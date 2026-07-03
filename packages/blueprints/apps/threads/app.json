@@ -261,6 +261,31 @@
       }
     },
     {
+      "name": "search",
+      "description": "Full-text inbox search through the vault's FTS5 index (message bodies + thread subjects) — returns only the ranked matched threads in the inbox row shape, message hits carrying a hit-marked snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "threads": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "thread",
       "description": "One thread's messages in sent order, bodies decoded from their content items, senders named.",
       "input": {

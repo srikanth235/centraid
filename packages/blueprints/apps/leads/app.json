@@ -329,6 +329,31 @@
           }
         }
       }
+    },
+    {
+      "name": "search",
+      "description": "Full-text lead search through the vault's FTS5 index (party names plus contact-card nickname, org line and running note) — matched parties are joined back to their business.client rows in the pipeline card shape, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "leads": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

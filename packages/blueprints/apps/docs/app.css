@@ -654,6 +654,22 @@ input[type='checkbox'] {
   white-space: nowrap;
 }
 
+/* The vault search snippet — one line, hit markers rendered as <mark>. */
+.doc-snippet {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+mark {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0 0.05em;
+}
+
 .doc-cell {
   font-size: 0.78rem;
   color: var(--ink-faint);
