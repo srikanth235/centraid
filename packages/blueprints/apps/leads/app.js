@@ -408,6 +408,27 @@ function renderCard(lead) {
   top.appendChild(idBox);
   card.appendChild(top);
 
+  // The reach-them line: primary email/phone straight off the party's
+  // identifiers, each a real mailto:/tel: link.
+  if (lead.email || lead.tel) {
+    const contact = document.createElement('p');
+    contact.className = 'card-contact';
+    if (lead.email) {
+      const a = document.createElement('a');
+      a.href = `mailto:${lead.email}`;
+      a.textContent = lead.email;
+      contact.appendChild(a);
+    }
+    if (lead.email && lead.tel) contact.appendChild(document.createTextNode(' · '));
+    if (lead.tel) {
+      const a = document.createElement('a');
+      a.href = `tel:${lead.tel}`;
+      a.textContent = lead.tel;
+      contact.appendChild(a);
+    }
+    card.appendChild(contact);
+  }
+
   const note = document.createElement('p');
   note.className = lead.note ? 'card-note' : 'card-note empty-note';
   note.textContent = lead.note || 'No notes yet — click Note to add one.';

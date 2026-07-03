@@ -498,6 +498,25 @@ select {
   margin-top: 0.35rem;
 }
 
+.booking-actions .ghost.danger {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+/* Inline move editor: full row beneath the booking's actions. */
+.reschedule-form {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-top: 0.4rem;
+}
+
+.reschedule-form input {
+  min-height: 2.5rem;
+}
+
 .empty {
   color: var(--ink-soft);
   font-size: 0.9rem;

@@ -499,6 +499,36 @@ function renderBooking(b) {
     });
     actions.appendChild(confirm);
   }
+
+  // Decline a pending request / cancel a confirmed booking — both run
+  // schedule.cancel_event, which parks for the owner (medium risk).
+  if (b.status === 'tentative' || b.status === 'confirmed') {
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'ghost danger';
+    cancel.textContent = b.status === 'tentative' ? 'Decline' : 'Cancel';
+    cancel.addEventListener('click', async () => {
+      if (!armConfirm(cancel, { armedLabel: b.status === 'tentative' ? 'Decline?' : 'Cancel?' })) {
+        return;
+      }
+      cancel.disabled = true;
+      const outcome = await act('cancel-booking', { event_id: b.event_id });
+      cancel.disabled = false;
+      if (narrate(outcome, 'Cancellation sent for your approval — it lands once you confirm it.')) {
+        toast('Booking cancelled');
+        await refresh();
+      }
+    });
+    actions.appendChild(cancel);
+
+    const move = document.createElement('button');
+    move.type = 'button';
+    move.className = 'ghost';
+    move.textContent = 'Reschedule';
+    move.addEventListener('click', () => toggleRescheduleEditor(row, b));
+    actions.appendChild(move);
+  }
+
   const attach = document.createElement('button');
   attach.type = 'button';
   attach.className = 'ghost';
@@ -515,6 +545,81 @@ function renderBooking(b) {
   renderAttachments(strip, b.attachments, removeAttachment);
   row.appendChild(strip);
   return row;
+}
+
+// ---------- Reschedule editor (inline, one open per row) ----------
+
+function toggleRescheduleEditor(row, b) {
+  const open = row.querySelector('.reschedule-form');
+  if (open) {
+    open.remove();
+    return;
+  }
+  const form = document.createElement('form');
+  form.className = 'reschedule-form';
+
+  const pad = (n) => String(n).padStart(2, '0');
+  const toParts = (iso) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return { date: '', time: '' };
+    return {
+      date: localDayKey(d),
+      time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    };
+  };
+  const start = toParts(b.dtstart);
+  const end = toParts(b.dtend);
+
+  const date = document.createElement('input');
+  date.type = 'date';
+  date.value = start.date;
+  date.setAttribute('aria-label', 'New date');
+  const from = document.createElement('input');
+  from.type = 'time';
+  from.value = start.time;
+  from.setAttribute('aria-label', 'New start time');
+  const to = document.createElement('input');
+  to.type = 'time';
+  to.value = end.time;
+  to.setAttribute('aria-label', 'New end time');
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'primary small-btn';
+  save.textContent = 'Move';
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'ghost';
+  close.textContent = 'Close';
+  close.addEventListener('click', () => form.remove());
+  const err = document.createElement('span');
+  err.className = 'field-error';
+  err.setAttribute('role', 'alert');
+  err.hidden = true;
+
+  form.append(date, from, to, save, close, err);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    err.hidden = true;
+    if (!date.value || !from.value || !to.value) return;
+    if (to.value <= from.value) {
+      err.textContent = 'End must be after start.';
+      err.hidden = false;
+      return;
+    }
+    save.disabled = true;
+    const outcome = await act('reschedule-booking', {
+      event_id: b.event_id,
+      dtstart: new Date(`${date.value}T${from.value}`).toISOString(),
+      dtend: new Date(`${date.value}T${to.value}`).toISOString(),
+    });
+    save.disabled = false;
+    if (narrate(outcome, 'Move sent for your approval — the booking shifts once you confirm.')) {
+      toast('Booking moved');
+      await refresh();
+    }
+  });
+  row.appendChild(form);
+  date.focus();
 }
 
 $('filterPills').addEventListener('click', (e) => {

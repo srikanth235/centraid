@@ -2,22 +2,71 @@
   "manifestVersion": 1,
   "id": "bookings",
   "name": "Bookings",
-  "description": "A Calendly-style booking front door as a projection of the personal vault: availability windows are schedule.availability_rule, and each booking is a canonical core.event held for a client. Because an app can't seize your calendar, a booking request PARKS for your confirmation before it holds a slot, and confirming it puts it on the books. Files attach to any booking. No data of its own — revoke the grant and the app goes dark.",
+  "description": "A Calendly-style booking front door as a projection of the personal vault: availability windows are schedule.availability_rule, and each booking is a canonical core.event held for a client. Because an app can't seize your calendar, a booking request PARKS for your confirmation before it holds a slot, and confirming it puts it on the books. Files attach to any booking. No data of its own \u2014 revoke the grant and the app goes dark.",
   "version": "0.1.0",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your availability and the bookings held on your calendar, and lets you take and confirm requests.",
     "scopes": [
-      { "schema": "schedule", "verbs": "read" },
-      { "schema": "core", "table": "event", "verbs": "read" },
-      { "schema": "core", "table": "party", "verbs": "read" },
-      { "schema": "core", "table": "content_item", "verbs": "read" },
-      { "schema": "core", "table": "attachment", "verbs": "read" },
-      { "schema": "schedule", "table": "set_availability", "verbs": "act" },
-      { "schema": "schedule", "table": "request_booking", "verbs": "act" },
-      { "schema": "schedule", "table": "confirm_booking", "verbs": "act" },
-      { "schema": "core", "table": "attach", "verbs": "act" },
-      { "schema": "core", "table": "detach", "verbs": "act" }
+      {
+        "schema": "schedule",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "event",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "party",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "attachment",
+        "verbs": "read"
+      },
+      {
+        "schema": "schedule",
+        "table": "set_availability",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "request_booking",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "confirm_booking",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "reschedule_event",
+        "verbs": "act"
+      },
+      {
+        "schema": "schedule",
+        "table": "cancel_event",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "attach",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "detach",
+        "verbs": "act"
+      }
     ]
   },
   "actions": [
@@ -28,14 +77,27 @@
       "input": {
         "type": "object",
         "properties": {
-          "weekday_mask": { "type": "integer", "minimum": 1, "maximum": 127 },
-          "window_start": { "type": "string", "minLength": 1 },
-          "window_end": { "type": "string", "minLength": 1 },
+          "weekday_mask": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 127
+          },
+          "window_start": {
+            "type": "string",
+            "minLength": 1
+          },
+          "window_end": {
+            "type": "string",
+            "minLength": 1
+          },
           "kind": {
             "type": "string",
             "enum": ["work", "focus", "personal", "blocked"]
           },
-          "tz": { "type": "string", "minLength": 1 }
+          "tz": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["weekday_mask", "window_start", "window_end", "tz"],
         "additionalProperties": false
@@ -43,9 +105,15 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "writes": []
@@ -57,12 +125,29 @@
       "input": {
         "type": "object",
         "properties": {
-          "calendar_id": { "type": "string", "minLength": 1 },
-          "summary": { "type": "string", "minLength": 1 },
-          "dtstart": { "type": "string", "minLength": 1 },
-          "dtend": { "type": "string", "minLength": 1 },
-          "requester_party_id": { "type": "string", "minLength": 1 },
-          "description": { "type": "string" }
+          "calendar_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtstart": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtend": {
+            "type": "string",
+            "minLength": 1
+          },
+          "requester_party_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          }
         },
         "required": ["calendar_id", "summary", "dtstart", "dtend", "requester_party_id"],
         "additionalProperties": false
@@ -70,10 +155,18 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" },
-          "invocationId": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "invocationId": {
+            "type": "string"
+          }
         }
       },
       "writes": []
@@ -85,7 +178,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "event_id": { "type": "string", "minLength": 1 }
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["event_id"],
         "additionalProperties": false
@@ -93,9 +189,15 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "writes": []
@@ -107,9 +209,17 @@
       "input": {
         "type": "object",
         "properties": {
-          "subject_id": { "type": "string", "minLength": 1 },
-          "data_uri": { "type": "string", "minLength": 6 },
-          "title": { "type": "string" },
+          "subject_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "data_uri": {
+            "type": "string",
+            "minLength": 6
+          },
+          "title": {
+            "type": "string"
+          },
           "role": {
             "type": "string",
             "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
@@ -121,9 +231,15 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
       "writes": []
@@ -135,7 +251,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "attachment_id": { "type": "string", "minLength": 1 }
+          "attachment_id": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "required": ["attachment_id"],
         "additionalProperties": false
@@ -143,10 +262,58 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": { "type": "string" },
-          "output": { "type": "object" },
-          "reason": { "type": "string" }
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
         }
+      },
+      "writes": []
+    },
+    {
+      "name": "cancel-booking",
+      "description": "Decline a pending request or cancel a confirmed booking: schedule.cancel_event flips the event to cancelled (SEQUENCE bumped). Medium risk, so it parks for the owner's confirmation.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["event_id"],
+        "additionalProperties": false
+      },
+      "writes": []
+    },
+    {
+      "name": "reschedule-booking",
+      "description": "Move a booking to a new time via schedule.reschedule_event (same identity, SEQUENCE bumped). Medium risk, so it parks for the owner's confirmation.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtstart": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dtend": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["event_id", "dtstart", "dtend"],
+        "additionalProperties": false
       },
       "writes": []
     }
@@ -163,11 +330,21 @@
       "output": {
         "type": "object",
         "properties": {
-          "availability": { "type": "array" },
-          "bookings": { "type": "array" },
-          "calendars": { "type": "array" },
-          "parties": { "type": "array" },
-          "vaultDenied": { "type": "object" }
+          "availability": {
+            "type": "array"
+          },
+          "bookings": {
+            "type": "array"
+          },
+          "calendars": {
+            "type": "array"
+          },
+          "parties": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
         }
       }
     }
@@ -179,9 +356,18 @@
       "type": "segmented",
       "default": "sans",
       "options": [
-        { "value": "sans", "label": "Sans" },
-        { "value": "serif", "label": "Serif" },
-        { "value": "mono", "label": "Mono" }
+        {
+          "value": "sans",
+          "label": "Sans"
+        },
+        {
+          "value": "serif",
+          "label": "Serif"
+        },
+        {
+          "value": "mono",
+          "label": "Mono"
+        }
       ]
     },
     {
@@ -190,8 +376,14 @@
       "type": "segmented",
       "default": "narrow",
       "options": [
-        { "value": "narrow", "label": "Narrow" },
-        { "value": "wide", "label": "Wide" }
+        {
+          "value": "narrow",
+          "label": "Narrow"
+        },
+        {
+          "value": "wide",
+          "label": "Wide"
+        }
       ]
     },
     {
@@ -200,11 +392,26 @@
       "type": "swatch",
       "default": "#4E68DD",
       "options": [
-        { "value": "#4E68DD", "label": "Indigo" },
-        { "value": "#2EA098", "label": "Teal" },
-        { "value": "#7C5BD9", "label": "Violet" },
-        { "value": "#E55772", "label": "Rose" },
-        { "value": "#B47B3F", "label": "Ochre" }
+        {
+          "value": "#4E68DD",
+          "label": "Indigo"
+        },
+        {
+          "value": "#2EA098",
+          "label": "Teal"
+        },
+        {
+          "value": "#7C5BD9",
+          "label": "Violet"
+        },
+        {
+          "value": "#E55772",
+          "label": "Rose"
+        },
+        {
+          "value": "#B47B3F",
+          "label": "Ochre"
+        }
       ]
     }
   ]

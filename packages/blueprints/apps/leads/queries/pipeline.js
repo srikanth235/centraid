@@ -36,11 +36,11 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
 export default async ({ ctx }) => {
   const purpose = 'dpv:Billing';
   try {
-    const [clients, parties, cards, contents, attachments] = await Promise.all([
+    const [clients, parties, cards, identifiers, attachments] = await Promise.all([
       ctx.vault.read({ entity: 'business.client', purpose }),
       ctx.vault.read({ entity: 'core.party', purpose }),
       ctx.vault.read({ entity: 'social.contact_card', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
+      ctx.vault.read({ entity: 'core.party_identifier', purpose }),
       ctx.vault.read({
         entity: 'core.attachment',
         where: [{ column: 'subject_type', op: 'eq', value: 'business.client' }],
@@ -50,12 +50,36 @@ export default async ({ ctx }) => {
 
     const partyName = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
     const noteByParty = new Map((cards.rows ?? []).map((c) => [c.party_id, c.note]));
-    const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const attByClient = attachmentsBySubject(
-      'business.client',
-      attachments.rows ?? [],
-      contentById,
-    );
+
+    // One best handle per scheme per party — primary first — so a card can
+    // offer mailto:/tel: without dragging the whole identifier table along.
+    const idsByParty = new Map();
+    for (const row of identifiers.rows ?? []) {
+      if (!idsByParty.has(row.party_id)) idsByParty.set(row.party_id, []);
+      idsByParty.get(row.party_id).push(row);
+    }
+    const bestHandle = (partyId, scheme) => {
+      const ids = idsByParty.get(partyId) ?? [];
+      const hit =
+        ids.find((i) => i.scheme === scheme && i.is_primary) ??
+        ids.find((i) => i.scheme === scheme);
+      return hit?.value ?? null;
+    };
+
+    // Fetch only the content items the attachments reference — an unscoped
+    // content read would drag every byte-blob in the vault through here.
+    const attachmentRows = attachments.rows ?? [];
+    const contentIds = [...new Set(attachmentRows.map((a) => a.content_id).filter(Boolean))];
+    const contentById = new Map();
+    if (contentIds.length > 0) {
+      const contents = await ctx.vault.read({
+        entity: 'core.content_item',
+        where: [{ column: 'content_id', op: 'in', value: contentIds }],
+        purpose,
+      });
+      for (const c of contents.rows ?? []) contentById.set(c.content_id, c);
+    }
+    const attByClient = attachmentsBySubject('business.client', attachmentRows, contentById);
 
     const clientRows = clients.rows ?? [];
     const leads = clientRows
@@ -67,6 +91,8 @@ export default async ({ ctx }) => {
         default_rate_minor: c.default_rate_minor,
         currency: c.currency,
         note: noteByParty.get(c.party_id) ?? null,
+        email: bestHandle(c.party_id, 'email'),
+        tel: bestHandle(c.party_id, 'tel'),
         attachments: attByClient.get(c.client_id) ?? [],
       }))
       .toSorted((a, b) => a.name.localeCompare(b.name));
