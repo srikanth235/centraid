@@ -118,7 +118,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';
@@ -415,7 +419,8 @@ function renderInvoices() {
 
 function openPayPanel(inv) {
   payingInvoice = inv;
-  $('payTitle').textContent = `Settle ${inv.number} — ${fmtAmount(inv.total_minor, inv.currency)} from ${inv.client}`;
+  $('payTitle').textContent =
+    `Settle ${inv.number} — ${fmtAmount(inv.total_minor, inv.currency)} from ${inv.client}`;
   const candidates = data.credits.filter(
     (t) => t.currency === inv.currency && t.amount_minor >= inv.total_minor,
   );
@@ -546,9 +551,7 @@ $('clientForm').addEventListener('submit', async (e) => {
   const outcome = await act('add-client', {
     party_id: partyId,
     currency,
-    ...(Number.isFinite(rate) && rate >= 0
-      ? { default_rate_minor: Math.round(rate * 100) }
-      : {}),
+    ...(Number.isFinite(rate) && rate >= 0 ? { default_rate_minor: Math.round(rate * 100) } : {}),
   });
   if (narrate(outcome)) {
     $('clientForm').hidden = true;

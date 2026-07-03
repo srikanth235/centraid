@@ -113,13 +113,7 @@
             "minLength": 1
           }
         },
-        "required": [
-          "category_concept_id",
-          "period",
-          "limit_minor",
-          "currency",
-          "starts_on"
-        ],
+        "required": ["category_concept_id", "period", "limit_minor", "currency", "starts_on"],
         "additionalProperties": false
       },
       "writes": []
@@ -170,15 +164,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

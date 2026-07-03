@@ -110,7 +110,12 @@
       <form id="projectForm" class="panel" autocomplete="off" hidden>
         <div class="field-row">
           <select id="projectClient" aria-label="Client"></select>
-          <input id="projectName" type="text" placeholder="Project name…" aria-label="Project name" />
+          <input
+            id="projectName"
+            type="text"
+            placeholder="Project name…"
+            aria-label="Project name"
+          />
           <button type="submit" class="primary small-btn">Add</button>
         </div>
       </form>
@@ -123,8 +128,23 @@
       <form id="clientForm" class="panel" autocomplete="off" hidden>
         <div class="field-row">
           <select id="clientParty" aria-label="Party"></select>
-          <input id="clientCurrency" type="text" value="EUR" maxlength="3" aria-label="Currency" class="currency" />
-          <input id="clientRate" type="number" min="0" step="0.01" placeholder="Rate/h" aria-label="Hourly rate" class="rate" />
+          <input
+            id="clientCurrency"
+            type="text"
+            value="EUR"
+            maxlength="3"
+            aria-label="Currency"
+            class="currency"
+          />
+          <input
+            id="clientRate"
+            type="number"
+            min="0"
+            step="0.01"
+            placeholder="Rate/h"
+            aria-label="Hourly rate"
+            class="rate"
+          />
           <button type="submit" class="primary small-btn">Enroll</button>
         </div>
         <p class="muted small">

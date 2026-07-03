@@ -64,13 +64,7 @@
           "requester_party_id": { "type": "string", "minLength": 1 },
           "description": { "type": "string" }
         },
-        "required": [
-          "calendar_id",
-          "summary",
-          "dtstart",
-          "dtend",
-          "requester_party_id"
-        ],
+        "required": ["calendar_id", "summary", "dtstart", "dtend", "requester_party_id"],
         "additionalProperties": false
       },
       "output": {
@@ -118,15 +112,7 @@
           "title": { "type": "string" },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

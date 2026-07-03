@@ -219,8 +219,16 @@ function renderParkedSection(
         });
     };
     actions.append(
-      el('button', { class: 'cd-vault-approve-btn', type: 'button', onClick: () => decide(true) }, 'Approve'),
-      el('button', { class: 'cd-vault-deny-btn', type: 'button', onClick: () => decide(false) }, 'Deny'),
+      el(
+        'button',
+        { class: 'cd-vault-approve-btn', type: 'button', onClick: () => decide(true) },
+        'Approve',
+      ),
+      el(
+        'button',
+        { class: 'cd-vault-deny-btn', type: 'button', onClick: () => decide(false) },
+        'Deny',
+      ),
     );
     card.append(actions);
     section.append(card);

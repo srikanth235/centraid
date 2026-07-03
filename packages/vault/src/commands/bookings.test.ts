@@ -64,7 +64,12 @@ test('set_availability records a weekly window; a backwards window is refused', 
   const rule = db.vault
     .prepare('SELECT weekday_mask, window_start, window_end, kind FROM schedule_availability_rule')
     .get();
-  expect(rule).toMatchObject({ weekday_mask: 127, window_start: '09:00', window_end: '17:00', kind: 'work' });
+  expect(rule).toMatchObject({
+    weekday_mask: 127,
+    window_start: '09:00',
+    window_end: '17:00',
+    kind: 'work',
+  });
 
   const backwards = invoke('schedule.set_availability', {
     weekday_mask: 1,
@@ -93,9 +98,9 @@ test('request_booking holds a tentative slot inside availability, then confirm p
 
   const confirmed = invoke('schedule.confirm_booking', { event_id });
   expect(confirmed.status).toBe('executed');
-  const ev = db.vault
-    .prepare('SELECT status FROM core_event WHERE event_id = ?')
-    .get(event_id) as { status: string };
+  const ev = db.vault.prepare('SELECT status FROM core_event WHERE event_id = ?').get(event_id) as {
+    status: string;
+  };
   expect(ev.status).toBe('confirmed');
 });
 

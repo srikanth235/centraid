@@ -113,7 +113,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';
@@ -133,7 +137,11 @@ wireAttachInput($('attachInput'), () => attachTarget);
 function fmtWhen(dtstart, dtend) {
   try {
     const s = new Date(dtstart);
-    const day = s.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const day = s.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
     const t1 = s.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
     const t2 = dtend
       ? new Date(dtend).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
@@ -295,7 +303,10 @@ function renderDayToggles() {
     // Weekdays default on.
     btn.setAttribute('aria-pressed', String(i < 5));
     btn.addEventListener('click', () => {
-      btn.setAttribute('aria-pressed', btn.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+      btn.setAttribute(
+        'aria-pressed',
+        btn.getAttribute('aria-pressed') === 'true' ? 'false' : 'true',
+      );
     });
     wrap.appendChild(btn);
   });

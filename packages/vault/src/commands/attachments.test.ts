@@ -43,12 +43,15 @@ test('attach pins a data-URI file to a subject as its cover content item', () =>
     title: 'preview.png',
   });
   expect(out.status).toBe('executed');
-  const output = (out as { output: { attachment_id: string; content_id: string; is_primary: number } })
-    .output;
+  const output = (
+    out as { output: { attachment_id: string; content_id: string; is_primary: number } }
+  ).output;
   expect(output.is_primary).toBe(1); // first attachment is the cover
 
   const att = db.vault
-    .prepare('SELECT subject_type, subject_id, role, is_primary FROM core_attachment WHERE attachment_id = ?')
+    .prepare(
+      'SELECT subject_type, subject_id, role, is_primary FROM core_attachment WHERE attachment_id = ?',
+    )
     .get(output.attachment_id);
   expect(att).toMatchObject({
     subject_type: 'schedule.task',
@@ -57,8 +60,15 @@ test('attach pins a data-URI file to a subject as its cover content item', () =>
     is_primary: 1,
   });
   const content = db.vault
-    .prepare('SELECT media_type, byte_size, title, content_uri FROM core_content_item WHERE content_id = ?')
-    .get(output.content_id) as { media_type: string; byte_size: number; title: string; content_uri: string };
+    .prepare(
+      'SELECT media_type, byte_size, title, content_uri FROM core_content_item WHERE content_id = ?',
+    )
+    .get(output.content_id) as {
+    media_type: string;
+    byte_size: number;
+    title: string;
+    content_uri: string;
+  };
   expect(content.media_type).toBe('image/png');
   expect(content.title).toBe('preview.png');
   expect(content.byte_size).toBeGreaterThan(0);
@@ -68,8 +78,16 @@ test('attach pins a data-URI file to a subject as its cover content item', () =>
 test('identical bytes dedupe on sha256; a second attachment reuses the content item and is not primary', () => {
   const a = addTask('Task A');
   const b = addTask('Task B');
-  const first = invoke('core.attach', { subject_type: 'schedule.task', subject_id: a, data_uri: PNG });
-  const second = invoke('core.attach', { subject_type: 'schedule.task', subject_id: b, data_uri: PNG });
+  const first = invoke('core.attach', {
+    subject_type: 'schedule.task',
+    subject_id: a,
+    data_uri: PNG,
+  });
+  const second = invoke('core.attach', {
+    subject_type: 'schedule.task',
+    subject_id: b,
+    data_uri: PNG,
+  });
   const fo = (first as { output: { content_id: string } }).output;
   const so = (second as { output: { content_id: string; is_primary: number } }).output;
   expect(so.content_id).toBe(fo.content_id); // deduped
@@ -131,8 +149,9 @@ test('detach removes the edge but leaves the canonical content item', () => {
     subject_id: taskId,
     data_uri: PNG,
   });
-  const { attachment_id, content_id } = (attached as { output: { attachment_id: string; content_id: string } })
-    .output;
+  const { attachment_id, content_id } = (
+    attached as { output: { attachment_id: string; content_id: string } }
+  ).output;
   const out = invoke('core.detach', { attachment_id });
   expect(out.status).toBe('executed');
   const gone = db.vault

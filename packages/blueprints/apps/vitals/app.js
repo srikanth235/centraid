@@ -142,7 +142,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -207,7 +211,9 @@ function renderSparkline() {
   const step = (SPARK_W - SPARK_PAD * 2) / (series.length - 1);
   const y = (v) => SPARK_H - SPARK_PAD - ((v - min) / span) * (SPARK_H - SPARK_PAD * 2);
   const points = series.map((r, i) => [SPARK_PAD + i * step, y(r.value_num)]);
-  const path = points.map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${px.toFixed(1)},${py.toFixed(1)}`).join(' ');
+  const path = points
+    .map(([px, py], i) => `${i === 0 ? 'M' : 'L'}${px.toFixed(1)},${py.toFixed(1)}`)
+    .join(' ');
   const area = `${path} L${points[points.length - 1][0].toFixed(1)},${SPARK_H - SPARK_PAD} L${SPARK_PAD},${SPARK_H - SPARK_PAD} Z`;
   const last = points[points.length - 1];
 

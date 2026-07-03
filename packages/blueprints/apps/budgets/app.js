@@ -129,7 +129,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome, refresh)) break;
     }
     inputEl.value = '';
@@ -238,7 +242,9 @@ function renderBudgets(budgets) {
     const amount = document.createElement('span');
     amount.className = 'amount';
     amount.textContent =
-      spent > limit ? `${fmtMoney(spent - limit, b.currency)} over` : fmtMoney(limit - spent, b.currency) + ' left';
+      spent > limit
+        ? `${fmtMoney(spent - limit, b.currency)} over`
+        : fmtMoney(limit - spent, b.currency) + ' left';
     if (spent > limit) amount.classList.add('over');
     row.append(ring, text, amount);
     list.appendChild(row);

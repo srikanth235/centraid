@@ -44,26 +44,40 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
 export default async ({ ctx }) => {
   const purpose = 'dpv:Billing';
   try {
-    const [clients, projects, entries, invoices, lines, parties, activities, txns, contents, attachments] =
-      await Promise.all([
-        ctx.vault.read({ entity: 'business.client', purpose }),
-        ctx.vault.read({ entity: 'business.project', purpose }),
-        ctx.vault.read({ entity: 'business.time_entry', purpose }),
-        ctx.vault.read({ entity: 'business.invoice', purpose }),
-        ctx.vault.read({ entity: 'business.invoice_line', purpose }),
-        ctx.vault.read({ entity: 'core.party', purpose }),
-        ctx.vault.read({ entity: 'core.activity', purpose }),
-        ctx.vault.read({ entity: 'core.transaction', purpose }),
-        ctx.vault.read({ entity: 'core.content_item', purpose }),
-        ctx.vault.read({
-          entity: 'core.attachment',
-          where: [{ column: 'subject_type', op: 'eq', value: 'business.invoice' }],
-          purpose,
-        }),
-      ]);
+    const [
+      clients,
+      projects,
+      entries,
+      invoices,
+      lines,
+      parties,
+      activities,
+      txns,
+      contents,
+      attachments,
+    ] = await Promise.all([
+      ctx.vault.read({ entity: 'business.client', purpose }),
+      ctx.vault.read({ entity: 'business.project', purpose }),
+      ctx.vault.read({ entity: 'business.time_entry', purpose }),
+      ctx.vault.read({ entity: 'business.invoice', purpose }),
+      ctx.vault.read({ entity: 'business.invoice_line', purpose }),
+      ctx.vault.read({ entity: 'core.party', purpose }),
+      ctx.vault.read({ entity: 'core.activity', purpose }),
+      ctx.vault.read({ entity: 'core.transaction', purpose }),
+      ctx.vault.read({ entity: 'core.content_item', purpose }),
+      ctx.vault.read({
+        entity: 'core.attachment',
+        where: [{ column: 'subject_type', op: 'eq', value: 'business.invoice' }],
+        purpose,
+      }),
+    ]);
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const attByInvoice = attachmentsBySubject('business.invoice', attachments.rows ?? [], contentById);
+    const attByInvoice = attachmentsBySubject(
+      'business.invoice',
+      attachments.rows ?? [],
+      contentById,
+    );
 
     const partyName = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
     const clientRows = clients.rows ?? [];

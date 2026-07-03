@@ -8,7 +8,11 @@
 
 const $ = (id) => document.getElementById(id);
 
-const CADENCE_LABEL = { 'FREQ=WEEKLY': 'Weekly', 'FREQ=MONTHLY': 'Monthly', 'FREQ=YEARLY': 'Yearly' };
+const CADENCE_LABEL = {
+  'FREQ=WEEKLY': 'Weekly',
+  'FREQ=MONTHLY': 'Monthly',
+  'FREQ=YEARLY': 'Yearly',
+};
 
 let data = { subscriptions: [], monthly_active_minor: 0, accounts: [], parties: [] };
 let attachTarget = null; // series_id the shared file input attaches to
@@ -105,7 +109,11 @@ function wireAttachInput(inputEl, getSubjectId) {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', { subject_id: subjectId, data_uri: dataUri, title: file.name });
+      const outcome = await act('attach', {
+        subject_id: subjectId,
+        data_uri: dataUri,
+        title: file.name,
+      });
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';

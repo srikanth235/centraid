@@ -70,10 +70,9 @@ export default async ({ query, ctx }) => {
     // One content-item fetch covers both message bodies and thread attachments.
     const contentIds = [
       ...new Set(
-        [
-          ...rows.map((m) => m.body_content_id),
-          ...attachmentRows.map((a) => a.content_id),
-        ].filter(Boolean),
+        [...rows.map((m) => m.body_content_id), ...attachmentRows.map((a) => a.content_id)].filter(
+          Boolean,
+        ),
       ),
     ];
     const contentById = new Map();

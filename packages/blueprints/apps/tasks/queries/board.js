@@ -94,7 +94,10 @@ export default async ({ ctx }) => {
     };
 
     const topLevel = rows.filter((t) => !t.parent_task_id);
-    const open = topLevel.filter((t) => OPEN.has(t.status)).toSorted(byUrgency).map(withChildren);
+    const open = topLevel
+      .filter((t) => OPEN.has(t.status))
+      .toSorted(byUrgency)
+      .map(withChildren);
     const logbook = topLevel
       .filter((t) => !OPEN.has(t.status))
       .toSorted((a, b) => String(b.completed_at ?? '').localeCompare(String(a.completed_at ?? '')))

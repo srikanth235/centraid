@@ -205,15 +205,7 @@
           },
           "role": {
             "type": "string",
-            "enum": [
-              "photo",
-              "manual",
-              "receipt",
-              "warranty",
-              "contract",
-              "embed",
-              "other"
-            ]
+            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
         "required": ["subject_id", "data_uri"],

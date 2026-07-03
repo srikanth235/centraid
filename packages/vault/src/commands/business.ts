@@ -373,7 +373,14 @@ function logTime(ctx: HandlerCtx): Record<string, unknown> {
                             WHERE p.project_id = ?)),
                NULL)`,
     )
-    .run(entryId, activityId, input.project_id, input.billable ?? 1, input.rate_minor ?? null, input.project_id);
+    .run(
+      entryId,
+      activityId,
+      input.project_id,
+      input.billable ?? 1,
+      input.rate_minor ?? null,
+      input.project_id,
+    );
   ctx.wrote('business.time_entry', entryId);
   return { entry_id: entryId, activity_id: activityId };
 }
@@ -502,8 +509,7 @@ function createDraftInvoice(ctx: HandlerCtx): Record<string, unknown> {
   let total = 0;
   for (const row of entryRows) {
     const hours =
-      (new Date(row.ended_at as string).getTime() - new Date(row.started_at).getTime()) /
-      3_600_000;
+      (new Date(row.ended_at as string).getTime() - new Date(row.started_at).getTime()) / 3_600_000;
     // qty_scaled = hours × 100 (hundredths of an hour, see header comment).
     const qtyScaled = Math.max(1, Math.round(hours * 100));
     const amount = Math.round((qtyScaled * (row.rate_minor as number)) / 100);

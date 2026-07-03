@@ -60,7 +60,12 @@ function parseDataUri(uri: string): ParsedDataUri {
 }
 
 /** Dedupe-or-insert the content item behind an attachment. */
-function contentItemFor(ctx: HandlerCtx, uri: string, parsed: ParsedDataUri, title?: string): string {
+function contentItemFor(
+  ctx: HandlerCtx,
+  uri: string,
+  parsed: ParsedDataUri,
+  title?: string,
+): string {
   const sha = sha256Hex(uri);
   const existing = ctx.db
     .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
@@ -169,9 +174,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   const role = input.role ?? (parsed.mediaType.startsWith('image/') ? 'photo' : 'other');
   // The first file on a subject is its cover; the rest ride along.
   const existing = ctx.db
-    .prepare(
-      'SELECT count(*) AS n FROM core_attachment WHERE subject_type = ? AND subject_id = ?',
-    )
+    .prepare('SELECT count(*) AS n FROM core_attachment WHERE subject_type = ? AND subject_id = ?')
     .get(input.subject_type, input.subject_id) as { n: number };
   const isPrimary = existing.n === 0 ? 1 : 0;
   const attachmentId = ctx.newId();

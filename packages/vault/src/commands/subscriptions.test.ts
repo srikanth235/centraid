@@ -40,7 +40,9 @@ test('add_subscription records an active series with a tolerance default', () =>
   expect(out.status).toBe('executed');
   const seriesId = (out as { output: { series_id: string } }).output.series_id;
   const row = db.vault
-    .prepare('SELECT account_id, expected_minor, rrule, tolerance_pct, status FROM finance_recurring_series WHERE series_id = ?')
+    .prepare(
+      'SELECT account_id, expected_minor, rrule, tolerance_pct, status FROM finance_recurring_series WHERE series_id = ?',
+    )
     .get(seriesId);
   expect(row).toMatchObject({
     account_id: accountId,
@@ -69,7 +71,10 @@ test('set_subscription_status pauses then ends a series', () => {
   });
   const seriesId = (added as { output: { series_id: string } }).output.series_id;
 
-  const paused = invoke('finance.set_subscription_status', { series_id: seriesId, status: 'paused' });
+  const paused = invoke('finance.set_subscription_status', {
+    series_id: seriesId,
+    status: 'paused',
+  });
   expect(paused.status).toBe('executed');
   const ended = invoke('finance.set_subscription_status', { series_id: seriesId, status: 'ended' });
   expect(ended.status).toBe('executed');
