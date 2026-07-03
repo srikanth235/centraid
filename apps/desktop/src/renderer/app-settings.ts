@@ -754,10 +754,11 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     // Vaults (duaility §12) — the owner's vault registry: create / rename /
     // switch / delete, with exactly one active vault backing `ctx.vault`.
     // Async and self-re-rendering; lives under the Account group beside
-    // Profiles because both scope what the gateway acts on.
+    // Profiles because both scope what the gateway acts on. Rendered on
+    // page SHOW (see showSettingsPage), not here — renderVaultsPage bails
+    // on a detached host, and pageHosts are detached until shown.
     const vaultsHost = el('div', { class: 'cd-vaults-page' });
     pageHosts.vaults.append(drawerGroup('Vaults', [vaultsHost]));
-    void renderVaultsPage({ el, host: vaultsHost, showToast });
 
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
@@ -857,6 +858,10 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       ]);
       contentArea.replaceChildren(head, pageHosts[id]);
       contentArea.scrollTop = 0;
+      // The Vaults page fetches on every show: its host must be CONNECTED
+      // (renderVaultsPage no-ops on a detached one), and re-showing picks up
+      // registry changes made elsewhere (another window, the gateway CLI).
+      if (id === 'vaults') void renderVaultsPage({ el, host: vaultsHost, showToast });
     };
     let lastSection = '';
     for (const p of settingsPages) {
