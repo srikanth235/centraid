@@ -4,7 +4,13 @@
 // database files) recovers credentials by reading the enrolled rows back.
 
 import type { VaultDb } from './db.js';
-import { bootstrapVault, enrollAgent, enrollApp, type BootstrapResult } from './bootstrap.js';
+import {
+  bootstrapVault,
+  enrollAgent,
+  enrollApp,
+  type BootstrapResult,
+  type BootstrapVaultOptions,
+} from './bootstrap.js';
 import type { Risk } from './gateway/types.js';
 
 export interface HostBootstrap extends BootstrapResult {
@@ -17,13 +23,10 @@ export interface HostBootstrap extends BootstrapResult {
  * Recovery re-derives the owner credential from the oldest full-trust
  * owner device and rebuilds the seeded-concept map from the model.
  */
-export function ensureVaultBootstrapped(
-  db: VaultDb,
-  options: { ownerName: string; baseCurrency?: string; deviceName?: string },
-): HostBootstrap {
+export function ensureVaultBootstrapped(db: VaultDb, options: BootstrapVaultOptions): HostBootstrap {
   const vaultRow = db.vault
-    .prepare('SELECT vault_id, owner_party_id FROM core_vault LIMIT 1')
-    .get() as { vault_id: string; owner_party_id: string } | undefined;
+    .prepare('SELECT vault_id, owner_party_id, display_name FROM core_vault LIMIT 1')
+    .get() as { vault_id: string; owner_party_id: string; display_name: string } | undefined;
   if (!vaultRow) return { ...bootstrapVault(db, options), fresh: true };
 
   const device = db.vault
@@ -42,12 +45,18 @@ export function ensureVaultBootstrapped(
   for (const row of rows) concepts[row.notation] ??= row.concept_id;
   return {
     vaultId: vaultRow.vault_id,
+    displayName: vaultRow.display_name,
     ownerPartyId: vaultRow.owner_party_id,
     deviceId: device.device_id,
     deviceKey: device.public_key,
     concepts,
     fresh: false,
   };
+}
+
+/** Rename the vault (owner act on `core_vault.display_name`). */
+export function renameVault(db: VaultDb, displayName: string): void {
+  db.vault.prepare('UPDATE core_vault SET display_name = ?').run(displayName);
 }
 
 export interface EnrolledApp {

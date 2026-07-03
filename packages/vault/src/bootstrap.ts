@@ -11,6 +11,8 @@ import type { FilterClause, Risk } from './gateway/types.js';
 
 export interface BootstrapResult {
   vaultId: string;
+  /** The vault's owner-facing name (`core_vault.display_name`). */
+  displayName: string;
   ownerPartyId: string;
   deviceId: string;
   /** The first device's key — the owner's credential. */
@@ -51,11 +53,21 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: 'flags', notation: 'anomaly', label: 'Anomaly' },
 ];
 
+export interface BootstrapVaultOptions {
+  ownerName: string;
+  baseCurrency?: string;
+  deviceName?: string;
+  /**
+   * Pre-minted vault id. A multi-vault host names each vault's directory
+   * after its id, so the id must exist before the files do.
+   */
+  vaultId?: string;
+  /** Owner-facing vault name. Default: `<ownerName>'s vault`. */
+  vaultName?: string;
+}
+
 /** Create the vault row, owner party, seed vocabulary and first device. */
-export function bootstrapVault(
-  db: VaultDb,
-  options: { ownerName: string; baseCurrency?: string; deviceName?: string },
-): BootstrapResult {
+export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): BootstrapResult {
   const now = nowIso();
   const concepts: Record<string, string> = {};
   const schemeIds: Record<string, string> = {};
@@ -85,13 +97,14 @@ export function bootstrapVault(
        VALUES (?, 'person', ?, NULL, NULL, NULL, ?, ?, ?)`,
     )
     .run(ownerPartyId, options.ownerName, now, now, ONTOLOGY_VERSION);
-  const vaultId = uuidv7();
+  const vaultId = options.vaultId ?? uuidv7();
+  const displayName = options.vaultName ?? `${options.ownerName}'s vault`;
   db.vault
     .prepare(
       `INSERT INTO core_vault (vault_id, owner_party_id, display_name, status, base_currency, settings_json, created_at)
        VALUES (?, ?, ?, 'active', ?, '{}', ?)`,
     )
-    .run(vaultId, ownerPartyId, `${options.ownerName}'s vault`, options.baseCurrency ?? 'INR', now);
+    .run(vaultId, ownerPartyId, displayName, options.baseCurrency ?? 'INR', now);
   // §03/§07: condition is the highest-sensitivity table — excluded from
   // default grant scopes. A minimization policy makes schema-wide scopes skip
   // it; only a scope naming the table explicitly covers it.
@@ -104,6 +117,7 @@ export function bootstrapVault(
   const device = enrollDevice(db, ownerPartyId, options.deviceName ?? 'first device');
   return {
     vaultId,
+    displayName,
     ownerPartyId,
     deviceId: device.deviceId,
     deviceKey: device.deviceKey,

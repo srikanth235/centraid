@@ -53,10 +53,12 @@ export {
   enrollAgent,
   createGrant,
   type BootstrapResult,
+  type BootstrapVaultOptions,
   type ScopeSpec,
 } from './bootstrap.js';
 export {
   ensureVaultBootstrapped,
+  renameVault,
   lookupAppByName,
   ensureAppEnrolled,
   listActiveGrants,
