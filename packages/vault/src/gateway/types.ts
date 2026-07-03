@@ -33,7 +33,23 @@ export interface Identity {
 /** One predicate of a row filter (ODRL-constraint shaped, compiled to SQL). */
 export interface FilterClause {
   column: string;
-  op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte' | 'in' | 'is-null' | 'not-null' | 'within-days';
+  /**
+   * `within-days` looks BACK (col ≥ now − N days: "happened recently");
+   * `within-next-days` looks FORWARD (now ≤ col ≤ now + N days: "due soon" —
+   * the horizon window condition triggers ride).
+   */
+  op:
+    | 'eq'
+    | 'ne'
+    | 'lt'
+    | 'lte'
+    | 'gt'
+    | 'gte'
+    | 'in'
+    | 'is-null'
+    | 'not-null'
+    | 'within-days'
+    | 'within-next-days';
   value?: unknown;
 }
 

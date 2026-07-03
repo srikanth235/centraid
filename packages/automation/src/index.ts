@@ -36,8 +36,13 @@ export {
   cronTriggersOf,
   webhookTriggerOf,
   pendingWebhookTriggerOf,
+  conditionTriggersOf,
+  CONDITION_DEFAULT_EVERY,
+  CONDITION_OPS,
   type Manifest,
   type ManifestRequires,
+  type ManifestVault,
+  type ManifestVaultScope,
   type CostEstimate,
   type GeneratedMeta,
   type ManifestValidationCode,
@@ -45,10 +50,22 @@ export {
   type CronTrigger,
   type WebhookTrigger,
   type PendingWebhookTrigger,
+  type ConditionTrigger,
+  type ConditionWhereClause,
+  type ConditionOp,
   type OutputSchema,
   type HistoryConfig,
   type HistoryKeep,
 } from './manifest/manifest.js';
+
+// Condition-trigger evaluation — the host runs one consented read per gate
+// tick and fires on unseen rows (duaility: time semantics live in the data).
+export {
+  evaluateConditionTrigger,
+  TRIGGER_STATE_PREFIX,
+  type ConditionEvaluation,
+  type EvaluateConditionOptions,
+} from './fire/condition.js';
 
 // Automation identity — the directory-slug grammar and the
 // `<appId>/<id>` handle that scheduler labels, webhook routing,

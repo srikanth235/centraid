@@ -434,3 +434,24 @@ describe('confirmation routing + revocation + sweeps', () => {
     expect(outcome.status).toBe('denied');
   });
 });
+
+test('within-next-days filters to the forward horizon window (due soon, not overdue-forever)', () => {
+  const cal = seedCalendar();
+  const insert = db.vault.prepare(
+    `INSERT INTO schedule_task (task_id, owner_party_id, title, status, priority, due_at)
+     VALUES (?, ?, ?, 'needs-action', 0, ?)`,
+  );
+  const now = Date.now();
+  const iso = (deltaDays: number): string => new Date(now + deltaDays * 86_400_000).toISOString();
+  insert.run(uuidv7(), boot.ownerPartyId, 'due tomorrow', iso(1));
+  insert.run(uuidv7(), boot.ownerPartyId, 'due next month', iso(30));
+  insert.run(uuidv7(), boot.ownerPartyId, 'overdue last week', iso(-7));
+  void cal;
+
+  const result = gw.read(owner, {
+    entity: 'schedule.task',
+    where: [{ column: 'due_at', op: 'within-next-days', value: 3 }],
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(result.rows.map((r) => r.title)).toEqual(['due tomorrow']);
+});

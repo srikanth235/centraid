@@ -70,6 +70,14 @@ export function compileFilters(
       const cutoff = new Date(Date.parse(now) - days * 86_400_000).toISOString();
       parts.push(`${col} >= ?`);
       params.push(cutoff);
+    } else if (clause.op === 'within-next-days') {
+      // The forward horizon window ("due soon") — condition triggers ride it.
+      const days = Number(clause.value);
+      if (!Number.isFinite(days) || days <= 0)
+        throw new Error(`op "within-next-days" needs a positive number`);
+      const horizon = new Date(Date.parse(now) + days * 86_400_000).toISOString();
+      parts.push(`${col} >= ? AND ${col} <= ?`);
+      params.push(now, horizon);
     } else {
       const sqlOp = OPS[clause.op];
       if (!sqlOp) throw new Error(`unknown filter op "${clause.op}"`);

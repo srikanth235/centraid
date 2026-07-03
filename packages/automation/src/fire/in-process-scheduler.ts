@@ -25,7 +25,11 @@
 
 import type { Host, ReconcileResult } from './host.js';
 import type { Row } from '../scaffold/app.js';
-import { cronTriggersOf } from '../manifest/manifest.js';
+import {
+  CONDITION_DEFAULT_EVERY,
+  conditionTriggersOf,
+  cronTriggersOf,
+} from '../manifest/manifest.js';
 import { cronMatches } from './cron-match.js';
 
 export interface InProcessSchedulerOptions {
@@ -35,6 +39,14 @@ export interface InProcessSchedulerOptions {
    * but a returned rejection is routed to `onError`.
    */
   fire: (ref: string) => void | Promise<void>;
+  /**
+   * Evaluate one condition/data trigger (identified by its index in
+   * `manifest.triggers`) when its `every` gate matches the minute. The host
+   * runs the consented read and decides whether to fire — the scheduler only
+   * keeps the clock. Optional: a host without a vault plane registers no
+   * evaluator and condition triggers simply never gate open.
+   */
+  evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
   /** Clock seam for tests. Defaults to `() => new Date()`. */
   now?: () => Date;
   /** Sink for fire rejections and diagnostics. */
@@ -44,6 +56,8 @@ export interface InProcessSchedulerOptions {
 interface SchedulerEntry {
   readonly ref: string;
   readonly crons: readonly string[];
+  /** Condition-trigger gates: the `every` cron + the trigger's index. */
+  readonly watches: readonly { readonly expr: string; readonly index: number }[];
 }
 
 /** `Host` + the lifecycle the owning server drives. */
@@ -57,6 +71,7 @@ export interface LocalScheduler extends Host {
 export class InProcessScheduler implements LocalScheduler {
   private readonly entries = new Map<string, SchedulerEntry>();
   private readonly fire: (ref: string) => void | Promise<void>;
+  private readonly evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
   private readonly now: () => Date;
   private readonly onError?: (err: unknown, ref: string) => void;
   private boundary?: ReturnType<typeof setTimeout>;
@@ -65,15 +80,16 @@ export class InProcessScheduler implements LocalScheduler {
 
   constructor(opts: InProcessSchedulerOptions) {
     this.fire = opts.fire;
+    this.evaluate = opts.evaluate;
     this.now = opts.now ?? (() => new Date());
     this.onError = opts.onError;
   }
 
   async register(row: Row): Promise<void> {
     const entry = entryOf(row);
-    // The host's toggle path: a disabled or non-cron automation is simply
-    // not scheduled.
-    if (!row.enabled || entry.crons.length === 0) {
+    // The host's toggle path: a disabled or trigger-less automation is
+    // simply not scheduled.
+    if (!row.enabled || (entry.crons.length === 0 && entry.watches.length === 0)) {
       this.entries.delete(row.ref);
       return;
     }
@@ -93,7 +109,7 @@ export class InProcessScheduler implements LocalScheduler {
     for (const row of desired) {
       if (!row.enabled) continue;
       const entry = entryOf(row);
-      if (entry.crons.length > 0) next.set(row.ref, entry);
+      if (entry.crons.length > 0 || entry.watches.length > 0) next.set(row.ref, entry);
     }
 
     const added: string[] = [];
@@ -102,7 +118,8 @@ export class InProcessScheduler implements LocalScheduler {
     for (const [ref, entry] of next) {
       const prev = this.entries.get(ref);
       if (!prev) added.push(ref);
-      else if (!sameCrons(prev.crons, entry.crons)) updated.push(ref);
+      else if (!sameCrons(prev.crons, entry.crons) || !sameWatches(prev.watches, entry.watches))
+        updated.push(ref);
     }
     for (const ref of this.entries.keys()) {
       if (!next.has(ref)) removed.push(ref);
@@ -127,6 +144,11 @@ export class InProcessScheduler implements LocalScheduler {
     for (const entry of this.entries.values()) {
       if (entry.crons.some((expr) => cronMatches(expr, at))) {
         this.fireSafely(entry.ref);
+      }
+      if (this.evaluate) {
+        for (const watch of entry.watches) {
+          if (cronMatches(watch.expr, at)) this.evaluateSafely(entry.ref, watch.index);
+        }
       }
     }
   }
@@ -165,14 +187,41 @@ export class InProcessScheduler implements LocalScheduler {
       this.onError?.(err, ref);
     }
   }
+
+  private evaluateSafely(ref: string, triggerIndex: number): void {
+    try {
+      const r = this.evaluate?.(ref, triggerIndex);
+      if (r && typeof (r as Promise<void>).catch === 'function') {
+        (r as Promise<void>).catch((err) => this.onError?.(err, ref));
+      }
+    } catch (err) {
+      this.onError?.(err, ref);
+    }
+  }
 }
 
 function entryOf(row: Row): SchedulerEntry {
-  return { ref: row.ref, crons: cronTriggersOf(row.triggers).map((t) => t.expr) };
+  return {
+    ref: row.ref,
+    crons: cronTriggersOf(row.triggers).map((t) => t.expr),
+    watches: conditionTriggersOf(row.triggers).map(({ trigger, index }) => ({
+      expr: trigger.every ?? CONDITION_DEFAULT_EVERY,
+      index,
+    })),
+  };
 }
 
 function sameCrons(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((expr, i) => expr === b[i]);
+}
+
+function sameWatches(
+  a: readonly { expr: string; index: number }[],
+  b: readonly { expr: string; index: number }[],
+): boolean {
+  return (
+    a.length === b.length && a.every((w, i) => w.expr === b[i]!.expr && w.index === b[i]!.index)
+  );
 }
 
 /** `YYYY-MM-DDTHH:mm` in local time — the de-dupe key for one minute. */

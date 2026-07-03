@@ -105,3 +105,89 @@ describe('InProcessScheduler.tick', () => {
     expect(fired.sort()).toEqual(['a/one', 'b/two']);
   });
 });
+
+describe('condition-trigger watches', () => {
+  function conditionRow(ref: string, every?: string): Row {
+    const [ownerApp, id] = ref.split('/') as [string, string];
+    const triggers = [
+      { kind: 'cron' as const, expr: '0 8 * * *' },
+      {
+        kind: 'condition' as const,
+        entity: 'business.invoice',
+        ...(every !== undefined ? { every } : {}),
+      },
+    ];
+    return {
+      id,
+      dir: `/tmp/${id}`,
+      name: id,
+      ownerApp,
+      ref,
+      enabled: true,
+      triggers,
+      manifest: { ...manifest(true), triggers },
+    };
+  }
+
+  it('gates evaluation on the trigger every-cron with the ORIGINAL trigger index', async () => {
+    const fires: string[] = [];
+    const evals: Array<[string, number]> = [];
+    let clock = at(8, 0);
+    const s = new InProcessScheduler({
+      fire: (ref) => void fires.push(ref),
+      evaluate: (ref, idx) => void evals.push([ref, idx]),
+      now: () => clock,
+    });
+    await s.register(conditionRow('studio/chaser', '*/10 * * * *'));
+
+    // 08:00 — the cron fires AND the */10 gate opens; the condition trigger
+    // sits at index 1 of manifest.triggers (after the cron).
+    s.tick();
+    expect(fires).toEqual(['studio/chaser']);
+    expect(evals).toEqual([['studio/chaser', 1]]);
+
+    // 08:05 — neither.
+    clock = at(8, 5);
+    s.tick();
+    expect(evals).toHaveLength(1);
+
+    // 08:10 — gate only.
+    clock = at(8, 10);
+    s.tick();
+    expect(fires).toHaveLength(1);
+    expect(evals).toEqual([
+      ['studio/chaser', 1],
+      ['studio/chaser', 1],
+    ]);
+  });
+
+  it('a condition-only automation registers (no cron needed) and defaults to */5', async () => {
+    const evals: number[] = [];
+    let clock = at(9, 0);
+    const s = new InProcessScheduler({
+      fire: () => {},
+      evaluate: (_ref, idx) => void evals.push(idx),
+      now: () => clock,
+    });
+    const r = conditionRow('studio/chaser');
+    // Strip the cron so only the condition trigger remains (index 0).
+    const only: Row = { ...r, triggers: [r.triggers[1]!] };
+    await s.register(only);
+    expect(await s.list()).toEqual(['studio/chaser']);
+    s.tick();
+    expect(evals).toEqual([0]);
+    clock = at(9, 3);
+    s.tick();
+    expect(evals).toEqual([0]);
+    clock = at(9, 5);
+    s.tick();
+    expect(evals).toEqual([0, 0]);
+  });
+
+  it('without an evaluator, condition triggers never gate open', async () => {
+    const s = new InProcessScheduler({ fire: () => {}, now: () => at(9, 0) });
+    const r = conditionRow('studio/chaser', '* * * * *');
+    await s.register({ ...r, triggers: [r.triggers[1]!] });
+    expect(() => s.tick()).not.toThrow();
+  });
+});

@@ -168,6 +168,8 @@ export type FireAutomation = (
     runId?: string;
     triggerKind: AutomationTriggerKind;
     triggerOrigin: AutomationTriggerOrigin;
+    /** Trigger payload surfaced to the handler as `ctx.input` (condition/data fires). */
+    input?: unknown;
   },
 ) => void;
 
@@ -588,6 +590,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               runner: prefs?.kind ?? 'codex',
               triggerKind: opts.triggerKind,
               triggerOrigin: opts.triggerOrigin,
+              ...(opts.input !== undefined ? { input: opts.input } : {}),
               onRunEvent: (ev) => runEventBus.publish(runId, ev),
             });
           })().catch((err) => {
@@ -601,10 +604,51 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
     // settles its in-memory registry; it fires cron automations through the
     // same `fireAutomation` path as run-now. Injectable for tests.
+    // Condition-trigger evaluation (duaility: time semantics live in the
+    // data). On the trigger's `every` gate, run its consented read under the
+    // automation's agent grant; unseen rows fire the automation with the
+    // rows as `ctx.input`. A receipted deny or bridge error logs and skips —
+    // failure never widens access and never stalls the tick.
+    const evaluateCondition = async (ref: string, triggerIndex: number): Promise<void> => {
+      if (!vaultPlane) return;
+      const parsed = automation.parseRef(ref);
+      if (!parsed) return;
+      const row = await automation.readAppOwned(
+        schedulerCodeAppsDir(),
+        parsed.appId,
+        parsed.automationId,
+      );
+      if (!row || !row.enabled) return;
+      const trigger = row.manifest.triggers[triggerIndex];
+      if (!trigger || trigger.kind !== 'condition' || !row.manifest.vault) return;
+      const evaluation = await automation.evaluateConditionTrigger({
+        automationRef: ref,
+        trigger,
+        triggerIndex,
+        purpose: row.manifest.vault.purpose,
+        appsDir: paths.appsDir,
+        vault: vaultPlane.agentBridgeFor(parsed.appId),
+      });
+      if (evaluation.reason) {
+        logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+        return;
+      }
+      if (!evaluation.fire) return;
+      fireAutomation(ref, {
+        triggerKind: 'scheduled',
+        triggerOrigin: 'condition',
+        input: {
+          trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
+          rows: evaluation.rows,
+          matched: evaluation.matched,
+        },
+      });
+    };
     scheduler =
       options.scheduler ??
       new automation.InProcessScheduler({
         fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+        evaluate: (ref, triggerIndex) => evaluateCondition(ref, triggerIndex),
         onError: (err, ref) =>
           logger.warn(
             `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),

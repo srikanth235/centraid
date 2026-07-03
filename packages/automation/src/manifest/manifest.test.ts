@@ -223,3 +223,77 @@ describe('manifest vault block', () => {
     ).toThrow(/verbs/);
   });
 });
+
+describe('condition triggers', () => {
+  const base = {
+    name: 'Chaser',
+    prompt: 'chase what is due',
+    generated: { by: 'test', at: '2026-07-03' },
+    vault: {
+      purpose: 'dpv:Billing',
+      scopes: [{ schema: 'business', verbs: 'read' }],
+    },
+  };
+
+  it('accepts entity + where + every and preserves trigger order', () => {
+    const m = validateManifest({
+      ...base,
+      triggers: [
+        { kind: 'cron', expr: '0 9 * * *' },
+        {
+          kind: 'condition',
+          entity: 'business.invoice',
+          where: [
+            { column: 'status', op: 'eq', value: 'sent' },
+            { column: 'due_at', op: 'within-next-days', value: 3 },
+          ],
+          every: '*/10 * * * *',
+        },
+      ],
+    });
+    expect(m.triggers[1]).toEqual({
+      kind: 'condition',
+      entity: 'business.invoice',
+      where: [
+        { column: 'status', op: 'eq', value: 'sent' },
+        { column: 'due_at', op: 'within-next-days', value: 3 },
+      ],
+      every: '*/10 * * * *',
+    });
+  });
+
+  it('requires a vault block — the read needs a grant to run under', () => {
+    expect(() =>
+      validateManifest({
+        name: 'x',
+        prompt: 'y',
+        generated: { by: 't', at: 'now' },
+        triggers: [{ kind: 'condition', entity: 'business.invoice' }],
+      }),
+    ).toThrow(/vault block/);
+  });
+
+  it('rejects malformed entities, ops and gates', () => {
+    expect(() =>
+      validateManifest({ ...base, triggers: [{ kind: 'condition', entity: 'invoice' }] }),
+    ).toThrow(/schema.*table|entity/);
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [
+          {
+            kind: 'condition',
+            entity: 'business.invoice',
+            where: [{ column: 'status', op: 'like', value: '%x%' }],
+          },
+        ],
+      }),
+    ).toThrow(/op/);
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'condition', entity: 'business.invoice', every: 'often' }],
+      }),
+    ).toThrow(/cron/);
+  });
+});

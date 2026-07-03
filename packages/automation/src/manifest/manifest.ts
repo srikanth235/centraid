@@ -111,7 +111,54 @@ export type PendingWebhookTrigger = {
   readonly kind: 'webhook';
   readonly pending: true;
 };
-export type Trigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger;
+
+/** Filter ops a condition trigger may use — the vault's FilterClause grammar. */
+export const CONDITION_OPS = [
+  'eq',
+  'ne',
+  'lt',
+  'lte',
+  'gt',
+  'gte',
+  'in',
+  'is-null',
+  'not-null',
+  'within-days',
+  'within-next-days',
+] as const;
+export type ConditionOp = (typeof CONDITION_OPS)[number];
+
+export interface ConditionWhereClause {
+  readonly column: string;
+  readonly op: ConditionOp;
+  readonly value?: unknown;
+}
+
+/** Cron gate a condition trigger evaluates on when `every` is omitted. */
+export const CONDITION_DEFAULT_EVERY = '*/5 * * * *';
+
+/**
+ * A data-derived time trigger: on the `every` gate the host runs the
+ * declared consented read under the automation's agent grant and fires once
+ * per row it has not seen before (row-content dedup — a row that changes
+ * fires again; one that merely stays matched does not). This is how "invoice
+ * due in 3 days" or "warranty ends next week" become fires without wall-clock
+ * cron guesswork: the time semantics live in the data, the trigger just
+ * watches the window. Requires a manifest `vault` block — the read runs
+ * under that grant, and a receipted deny disables the evaluation, never
+ * widens it.
+ */
+export type ConditionTrigger = {
+  readonly kind: 'condition';
+  /** Logical vault entity, e.g. `business.invoice`. */
+  readonly entity: string;
+  /** Filter ANDed into the consented read. */
+  readonly where?: readonly ConditionWhereClause[];
+  /** 5-field cron gate for evaluation. Default: every 5 minutes. */
+  readonly every?: string;
+};
+
+export type Trigger = CronTrigger | WebhookTrigger | PendingWebhookTrigger | ConditionTrigger;
 
 /** The cron triggers from a trigger list, in declaration order. */
 export function cronTriggersOf(triggers: readonly Trigger[]): readonly CronTrigger[] {
@@ -137,6 +184,19 @@ export function pendingWebhookTriggerOf(
   triggers: readonly Trigger[],
 ): PendingWebhookTrigger | undefined {
   return triggers.find(isPendingWebhookTrigger);
+}
+
+/**
+ * The condition triggers from a trigger list with their positions in the
+ * ORIGINAL list — the index is the trigger's stable identity for evaluation
+ * cursors, so it must survive cron/webhook entries sitting between them.
+ */
+export function conditionTriggersOf(
+  triggers: readonly Trigger[],
+): readonly { trigger: ConditionTrigger; index: number }[] {
+  return triggers.flatMap((t, index) =>
+    t.kind === 'condition' ? [{ trigger: t, index }] : [],
+  );
 }
 
 /**
@@ -276,9 +336,66 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
     const secretHash = requireString(t.secretHash, `${field}.secretHash`);
     return { kind: 'webhook', id, secretHash };
   }
+  if (t.kind === 'condition') {
+    const entity = requireString(t.entity, `${field}.entity`);
+    if (!/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(entity)) {
+      throw new ManifestError(
+        'invalid_trigger',
+        `manifest.${field}.entity "${entity}" is not a <schema>.<table> entity name`,
+        `${field}.entity`,
+      );
+    }
+    let every: string | undefined;
+    if (t.every !== undefined) {
+      every = requireString(t.every, `${field}.every`);
+      if (!isValidCronExpression(every)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.every "${every}" is not a valid 5-field cron expression`,
+          `${field}.every`,
+        );
+      }
+    }
+    let where: ConditionWhereClause[] | undefined;
+    if (t.where !== undefined) {
+      if (!Array.isArray(t.where)) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${field}.where must be an array of {column, op, value?} clauses`,
+          `${field}.where`,
+        );
+      }
+      where = t.where.map((raw, i) => {
+        const cf = `${field}.where[${i}]`;
+        if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+          throw new ManifestError('invalid_trigger', `manifest.${cf} must be an object`, cf);
+        }
+        const c = raw as Record<string, unknown>;
+        const column = requireString(c.column, `${cf}.column`);
+        if (typeof c.op !== 'string' || !(CONDITION_OPS as readonly string[]).includes(c.op)) {
+          throw new ManifestError(
+            'invalid_trigger',
+            `manifest.${cf}.op must be one of ${CONDITION_OPS.join(', ')}`,
+            `${cf}.op`,
+          );
+        }
+        return {
+          column,
+          op: c.op as ConditionOp,
+          ...(c.value !== undefined ? { value: c.value } : {}),
+        } satisfies ConditionWhereClause;
+      });
+    }
+    return {
+      kind: 'condition',
+      entity,
+      ...(where ? { where } : {}),
+      ...(every !== undefined ? { every } : {}),
+    };
+  }
   throw new ManifestError(
     'invalid_trigger',
-    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron" or "webhook"`,
+    `manifest.${field}.kind "${String(t.kind)}" is not supported — expected "cron", "webhook" or "condition"`,
     `${field}.kind`,
   );
 }
@@ -505,6 +622,15 @@ export function validateManifest(raw: unknown): Manifest {
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
   const vault = validateVault(r.vault);
+  // A condition trigger IS a consented vault read — without a vault block
+  // there is no grant to evaluate it under, so the manifest is incoherent.
+  if (!vault && triggers.some((t) => t.kind === 'condition')) {
+    throw new ManifestError(
+      'invalid_trigger',
+      'manifest.triggers contains a condition trigger but no manifest.vault block declares the access it reads under',
+      'vault',
+    );
+  }
   const apps = optionalStringArray(r.apps, 'apps');
   const costEstimate = validateCostEstimate(r.costEstimate);
   const outputSchema = validateOutputSchema(r.outputSchema);
