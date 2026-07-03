@@ -36,8 +36,9 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     conversationRunnerSessionDir: path.join(abs, 'conversation-runner-sessions'),
     modelCatalogFile: path.join(abs, 'model-catalog.json'),
     tokenFile: path.join(abs, 'token.bin'),
-    // Mounting the vault plane (duaility §12): the daemon hosts one
-    // gateway, so it holds one owner vault beside the per-app silos.
+    // Mounting the vault registry (duaility §12): the daemon hosts one
+    // gateway, which holds the owner's vaults (one subdirectory each,
+    // exactly one active) beside the per-app silos.
     vaultDir: path.join(abs, 'vault'),
   };
 }

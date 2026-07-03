@@ -67,11 +67,14 @@ export interface GatewayPaths {
   modelCatalogFile?: string;
 
   /**
-   * Optional personal-vault directory (duaility §12). When set, the gateway
-   * mounts the vault plane: `vault.db` + `journal.db` live here, live apps
-   * are enrolled as `consent.app` rows, handlers get the consent-checked
-   * `ctx.vault` primitive, and the owner consent surface is served under
-   * `/centraid/_vault/*`. Omit to run without a vault — `ctx.vault` calls
+   * Optional personal-vault root (duaility §12). When set, the gateway
+   * mounts the vault registry: each vault lives in its own subdirectory
+   * (`<vaultDir>/<vaultId>/` holding `vault.db` + `journal.db`), exactly one
+   * is active at a time (pointer in `<vaultDir>/vaults.json`), live apps are
+   * enrolled as `consent.app` rows, handlers get the consent-checked
+   * `ctx.vault` primitive against the active vault, and the owner surface
+   * (vault create/rename/switch/delete + consent) is served under
+   * `/centraid/_vault/*`. Omit to run without vaults — `ctx.vault` calls
    * then fail closed with VAULT_UNAVAILABLE.
    */
   vaultDir?: string;

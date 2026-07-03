@@ -11,7 +11,8 @@
  * on top and takes nothing away.
  *
  * Lifecycle: `openVaultPlane()` opens/creates the two SQLite files under
- * `paths.vaultDir`, bootstraps the owner idempotently (recovery re-derives
+ * the vault's directory (one per vault, handed out by the vault registry),
+ * bootstraps the owner idempotently (recovery re-derives
  * the owner-device credential from the model), and registers the four
  * foundation domains. `start()` begins the sweep clock; `stop()` sweeps
  * the clock down, WAL-checkpoints, and closes the files.
@@ -34,6 +35,7 @@ import {
   markAppRevoked,
   openVaultDb,
   purposeConceptId,
+  renameVault,
   registerAttachmentCommands,
   registerBookingCommands,
   registerBusinessCommands,
@@ -72,6 +74,10 @@ export interface VaultPlaneOptions {
   logger: RuntimeLogger;
   /** Owner display name used only on first boot. */
   ownerName?: string;
+  /** Pre-minted vault id used only on first boot (multi-vault hosts name the dir after it). */
+  vaultId?: string;
+  /** Owner-facing vault name used only on first boot. */
+  vaultName?: string;
   /** Sweep cadence for lifecycle duties. Default: hourly. */
   sweepIntervalMs?: number;
 }
@@ -107,16 +113,25 @@ export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
   readonly boot: HostBootstrap;
+  /** The vault's directory — the registry deletes it on vault removal. */
+  readonly dir: string;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
   private sweepTimer: NodeJS.Timeout | undefined;
   private closed = false;
+  private displayName: string;
 
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
+    this.dir = options.dir;
     this.db = openVaultDb({ dir: options.dir });
-    this.boot = ensureVaultBootstrapped(this.db, { ownerName: options.ownerName ?? 'Owner' });
+    this.boot = ensureVaultBootstrapped(this.db, {
+      ownerName: options.ownerName ?? 'Owner',
+      ...(options.vaultId ? { vaultId: options.vaultId } : {}),
+      ...(options.vaultName ? { vaultName: options.vaultName } : {}),
+    });
+    this.displayName = this.boot.displayName;
     this.gateway = createGateway(this.db);
     registerScheduleCommands(this.gateway);
     registerTaskCommands(this.gateway);
@@ -142,6 +157,18 @@ export class VaultPlane {
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */
   get ownerCredential(): Credential {
     return { kind: 'device', deviceId: this.boot.deviceId, deviceKey: this.boot.deviceKey };
+  }
+
+  /** The vault's owner-facing name (`core_vault.display_name`). */
+  get name(): string {
+    return this.displayName;
+  }
+
+  /** Rename the vault (owner act). */
+  rename(name: string): void {
+    renameVault(this.db, name);
+    this.displayName = name;
+    this.logger.info(`vault plane: renamed vault ${this.boot.vaultId} to "${name}"`);
   }
 
   /**

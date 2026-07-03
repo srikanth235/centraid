@@ -1,11 +1,15 @@
 /*
  * Owner-facing vault routes (duaility §12, phase P04) — the consent surface
- * over the mounted vault plane. Everything here is an OWNER act: the routes
- * run behind the gateway's host-level auth, and the plane executes them with
+ * over the mounted vault registry. Everything here is an OWNER act: the routes
+ * run behind the gateway's host-level auth, and the planes execute them with
  * the owner-device credential. Apps never call these — their door is
  * `ctx.vault` inside handlers.
  *
- *   GET    /centraid/_vault/status                     — plane presence + identity
+ *   GET    /centraid/_vault/status                     — active vault presence + identity
+ *   GET    /centraid/_vault/vaults                     — every vault, active flagged
+ *   POST   /centraid/_vault/vaults                     — create {name?}
+ *   PATCH  /centraid/_vault/vaults/<vaultId>           — update {name?, active?}
+ *   DELETE /centraid/_vault/vaults/<vaultId>           — delete (409 while active)
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
  *   GET    /centraid/_vault/agents                     — enrolled automation agents + grants
@@ -14,18 +18,21 @@
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
  *
- * Deny-by-default is structural: until a POST …/grants lands, an enrolled
- * app's every vault call is a receipted deny.
+ * Per-vault routes (everything below `vaults`) answer for the ACTIVE vault
+ * unless `?vault=<vaultId>` names another one. Deny-by-default is structural:
+ * until a POST …/grants lands, an enrolled app's every vault call is a
+ * receipted deny — per vault.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GrantRequest, VaultPlane } from '../serve/vault-plane.js';
+import { VaultRegistryError, type VaultRegistry } from '../serve/vault-registry.js';
 import { readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault';
 
-export function makeVaultRouteHandler(plane: VaultPlane): RouteHandler {
+export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
@@ -33,14 +40,28 @@ export function makeVaultRouteHandler(plane: VaultPlane): RouteHandler {
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = req.method ?? 'GET';
 
+    // Per-vault routes answer for the active vault unless ?vault= names one.
+    const vaultParam = url.searchParams.get('vault');
+    let plane: VaultPlane;
+    try {
+      plane = vaultParam === null ? vaults.active() : requirePlane(vaults, vaultParam);
+    } catch (err) {
+      return sendRegistryError(res, err);
+    }
+
     try {
       if (method === 'GET' && (segments.length === 0 || segments[0] === 'status')) {
         return sendJson(res, 200, {
           active: true,
           vaultId: plane.boot.vaultId,
+          name: plane.name,
           ownerPartyId: plane.boot.ownerPartyId,
           fresh: plane.boot.fresh,
         });
+      }
+
+      if (segments[0] === 'vaults') {
+        return handleVaultsRoute(vaults, req, res, method, segments);
       }
 
       if (method === 'GET' && segments[0] === 'apps' && segments.length === 1) {
@@ -136,6 +157,79 @@ export function makeVaultRouteHandler(plane: VaultPlane): RouteHandler {
       });
     }
   };
+}
+
+/** The vault-lifecycle sub-surface: list / create / update / delete. */
+async function handleVaultsRoute(
+  vaults: VaultRegistry,
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  segments: string[],
+): Promise<boolean> {
+  try {
+    if (method === 'GET' && segments.length === 1) {
+      return sendJson(res, 200, { vaults: vaults.list() });
+    }
+
+    if (method === 'POST' && segments.length === 1) {
+      const body = await readJson(req);
+      if (body.name !== undefined && typeof body.name !== 'string') {
+        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+      }
+      return sendJson(res, 200, vaults.create(body.name as string | undefined));
+    }
+
+    if (method === 'PATCH' && segments.length === 2) {
+      const vaultId = segments[1] ?? '';
+      const body = await readJson(req);
+      if (body.name === undefined && body.active === undefined) {
+        return sendJson(res, 400, {
+          error: 'bad_request',
+          message: 'update body needs {name?: string, active?: true}',
+        });
+      }
+      if (body.name !== undefined && typeof body.name !== 'string') {
+        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+      }
+      if (body.active !== undefined && body.active !== true) {
+        return sendJson(res, 400, {
+          error: 'bad_request',
+          message: 'active can only be set to true — activate another vault instead',
+        });
+      }
+      let info = typeof body.name === 'string' ? vaults.rename(vaultId, body.name) : undefined;
+      if (body.active === true) info = vaults.setActive(vaultId);
+      return sendJson(res, 200, info ?? vaults.list().find((v) => v.vaultId === vaultId));
+    }
+
+    if (method === 'DELETE' && segments.length === 2) {
+      vaults.delete(segments[1] ?? '');
+      return sendJson(res, 200, { deleted: true });
+    }
+
+    return sendJson(res, 404, { error: 'not_found', message: 'unknown _vault/vaults route' });
+  } catch (err) {
+    return sendRegistryError(res, err);
+  }
+}
+
+function requirePlane(vaults: VaultRegistry, vaultId: string): VaultPlane {
+  const plane = vaults.get(vaultId);
+  if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
+  return plane;
+}
+
+function sendRegistryError(res: ServerResponse, err: unknown): boolean {
+  if (err instanceof VaultRegistryError) {
+    const status =
+      err.code === 'vault_not_found' ? 404 : err.code === 'vault_active' ? 409 : 400;
+    return sendJson(res, status, { error: err.code, message: err.message });
+  }
+  return sendJson(res, 500, {
+    error: 'internal_error',
+    message: err instanceof Error ? err.message : String(err),
+  });
 }
 
 const VERBS = new Set(['read', 'read+act', 'act']);

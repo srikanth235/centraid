@@ -36,4 +36,11 @@ export {
   type VaultPlaneOptions,
   type GrantRequest,
 } from './serve/vault-plane.js';
+export {
+  openVaultRegistry,
+  VaultRegistry,
+  VaultRegistryError,
+  type VaultRegistryOptions,
+  type VaultInfo,
+} from './serve/vault-registry.js';
 export { makeVaultRouteHandler } from './routes/vault-routes.js';

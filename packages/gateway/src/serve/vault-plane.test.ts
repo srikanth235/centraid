@@ -7,6 +7,7 @@ import http from 'node:http';
 import { ensureAppEnrolled, uuidv7 } from '@centraid/vault';
 import { Dispatcher, Registry } from '@centraid/app-engine';
 import { openVaultPlane, type VaultPlane } from './vault-plane.js';
+import { openVaultRegistry } from './vault-registry.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -158,10 +159,13 @@ test('the plane survives a restart: same identity, grants intact, ctx.vault stil
 
 test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const dir = await tempDir();
-  const plane = openPlane(dir);
+  // The route handler speaks to the registry; the acts land on its active plane.
+  const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  cleanups.push(() => registry.stop());
+  const plane = registry.active();
   const calendarId = seedCalendar(plane);
   plane.enrollApp('planner');
-  const handler = makeVaultRouteHandler(plane);
+  const handler = makeVaultRouteHandler(registry);
   const server = http.createServer((req, res) => {
     void handler(req, res).then((owned) => {
       if (!owned) {
