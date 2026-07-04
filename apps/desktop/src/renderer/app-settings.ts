@@ -4,9 +4,8 @@
 // chrome window (window.Chrome) with a sidebar from ctx.buildHomeSidebar, and
 // drives shell-owned state (prefs, profiles, the live sidebar setter) through
 // the ShellContext accessors.
-import { getAgentsStatus, getUserPrefs, saveUserPrefs } from './gateway-client.js';
+import { getAgentsStatus, getUserPrefs, listVaults, saveUserPrefs } from './gateway-client.js';
 import { renderPhonePage } from './app-phone.js';
-import { renderVaultsPage } from './app-vaults.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
   AccentKey,
@@ -59,11 +58,15 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     teardownCurrent();
     const seq = getRenderSeq();
 
-    // Profiles ("spaces") are backed by gateways — fetch the list so the
-    // Account → Profiles manage page can render the cards. Active id comes
-    // from the cached gateway summary (always primed before settings open).
-    const profileList = await window.CentraidApi.listGateways().catch(() => []);
-    const activeProfileId = getGateway()?.activeId ?? 'local';
+    // Spaces are backed by VAULTS (#280) — fetch the registry so the
+    // Account → Spaces manage page can render the cards. Connections
+    // (gateway endpoints) render as their own group below.
+    const vaultList = await listVaults()
+      .then((v) => v ?? [])
+      .catch(() => []);
+    const activeVaultId = vaultList.find((v) => v.active)?.vaultId ?? '';
+    const connectionList = await window.CentraidApi.listGateways().catch(() => []);
+    const activeConnectionId = getGateway()?.activeId ?? 'local';
 
     const main = el('div', { class: 'cd-settings-main' });
 
@@ -76,7 +79,6 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       | 'layout'
       | 'workspace'
       | 'profiles'
-      | 'vaults'
       | 'phone'
       | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
@@ -84,7 +86,6 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       layout: el('div', { class: 'cd-settings-page' }),
       workspace: el('div', { class: 'cd-settings-page' }),
       profiles: el('div', { class: 'cd-settings-page' }),
-      vaults: el('div', { class: 'cd-settings-page' }),
       phone: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
     };
@@ -732,20 +733,20 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       pollAgentsUntilSettled();
     });
 
-    // Profiles ("spaces") — full manage surface. Each profile is its own
-    // home grid of apps; switching re-scopes the shell. Lives under the
-    // Account group; the sidebar-head switcher (⌘⇧G or click the active
-    // profile) is the other entry point into the same actions.
+    // Spaces (#280: profiles are vaults) — full manage surface. Each space
+    // is a VAULT: its own apps, transcripts, and data, all inside the vault
+    // directory. Switching re-roots the shell. The sidebar-head switcher
+    // (⌘⇧G or click the active space) is the other entry point.
     pageHosts.profiles.append(
-      drawerGroup('Profiles', [
+      drawerGroup('Spaces', [
         el(
           'div',
           { class: 'settings-note' },
-          'Each profile is a separate space with its own apps. Switch from here or from the switcher at the top of the sidebar (⌘⇧G).',
+          'Each space is a vault — its own apps, chats, and data, deny-by-default to every app until you grant access. Switch from here or from the switcher at the top of the sidebar (⌘⇧G).',
         ),
         window.Profiles.buildManageBody({
-          profiles: profileList.map((p) => toProfileView(p, activeProfileId)),
-          activeId: activeProfileId,
+          profiles: vaultList.map((v) => toProfileView(v)),
+          activeId: activeVaultId,
           onSwitch: (id) => void switchProfile(id),
           onEdit: (p) => openProfileModal('edit', p),
           onDelete: (p) => requestDeleteProfile(p),
@@ -754,14 +755,67 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       ]),
     );
 
-    // Vaults (duaility §12) — the owner's vault registry: create / rename /
-    // switch / delete, with exactly one active vault backing `ctx.vault`.
-    // Async and self-re-rendering; lives under the Account group beside
-    // Profiles because both scope what the gateway acts on. Rendered on
-    // page SHOW (see showSettingsPage), not here — renderVaultsPage bails
-    // on a detached host, and pageHosts are detached until shown.
-    const vaultsHost = el('div', { class: 'cd-vaults-page' });
-    pageHosts.vaults.append(drawerGroup('Vaults', [vaultsHost]));
+    // Connections — the gateway endpoints hosting vault registries (#280
+    // demoted gateways to plumbing). Switching one swaps the whole world;
+    // the primordial local connection can't be removed.
+    const connectionRows = connectionList.map((g) => {
+      const isActive = g.id === activeConnectionId;
+      const row = el('div', { class: 'cd-prof-row', 'data-active': isActive ? 'true' : 'false' }, [
+        el('div', { class: 'cd-prof-row-text' }, [
+          el('div', { class: 'cd-prof-row-titlerow' }, [
+            el('span', { class: 'cd-prof-row-name' }, g.displayName),
+            ...(isActive ? [el('span', { class: 'cd-prof-row-badge' }, 'Connected')] : []),
+          ]),
+          el(
+            'div',
+            { class: 'cd-prof-row-sub' },
+            g.kind === 'remote' ? (g.url ?? 'Remote gateway') : 'This computer',
+          ),
+        ]),
+        el('div', { class: 'cd-prof-row-actions' }, [
+          ...(isActive
+            ? []
+            : [
+                el(
+                  'button',
+                  {
+                    class: 'cd-chip cd-prof-row-switch',
+                    type: 'button',
+                    onClick: () => {
+                      void window.CentraidApi.setActiveGateway({ id: g.id });
+                    },
+                  },
+                  'Connect',
+                ),
+              ]),
+          ...(g.id !== 'local'
+            ? [
+                el('button', {
+                  class: 'cd-icon-btn cd-prof-row-del',
+                  type: 'button',
+                  title: 'Remove connection',
+                  'aria-label': `Remove ${g.displayName}`,
+                  trustedHtml: Icon.Trash({ size: 13 }),
+                  onClick: () => {
+                    void window.CentraidApi.removeGateway({ id: g.id });
+                  },
+                }),
+              ]
+            : []),
+        ]),
+      ]);
+      return row;
+    });
+    pageHosts.profiles.append(
+      drawerGroup('Connections', [
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Gateways this desktop can talk to. Each connection hosts its own set of spaces.',
+        ),
+        el('div', { class: 'cd-prof-manage-list' }, connectionRows),
+      ]),
+    );
 
     // Phone (issue #263) — the "Connect phone" pairing QR + paired-device
     // allowlist over the iroh tunnel. Rendered on page SHOW like Vaults:
@@ -806,19 +860,11 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       },
       {
         id: 'profiles',
-        label: 'Profiles',
+        label: 'Spaces',
         section: 'Account',
         icon: 'Users',
         subtitle:
-          'Separate spaces — each with its own apps and chats. Switch, add, rename, recolor, or remove profiles.',
-      },
-      {
-        id: 'vaults',
-        label: 'Vaults',
-        section: 'Account',
-        icon: 'Key',
-        subtitle:
-          'Your personal vaults on this gateway. Apps and automations act on the active vault — access stays deny-by-default per vault until you grant it.',
+          'Separate spaces — each one a vault with its own apps, chats, and data. Switch, add, rename, recolor, or remove spaces; manage the connections that host them.',
       },
       {
         id: 'phone',
@@ -879,7 +925,6 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       // The Vaults page fetches on every show: its host must be CONNECTED
       // (renderVaultsPage no-ops on a detached one), and re-showing picks up
       // registry changes made elsewhere (another window, the gateway CLI).
-      if (id === 'vaults') void renderVaultsPage({ el, host: vaultsHost, showToast });
       if (id === 'phone') void renderPhonePage({ el, host: phoneHost, showToast });
     };
     let lastSection = '';

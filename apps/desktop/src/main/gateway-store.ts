@@ -23,13 +23,7 @@
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import {
-  LOCAL_GATEWAY_ID,
-  gatewayAppsDir,
-  gatewayDir,
-  gatewayProfilePath,
-  gatewaysRoot,
-} from './gateway-paths.js';
+import { LOCAL_GATEWAY_ID, gatewayDir, gatewayProfilePath, gatewaysRoot } from './gateway-paths.js';
 import { clearGatewayToken, getGatewayToken, setGatewayToken } from './gateway-secrets.js';
 
 export type GatewayKind = 'local' | 'remote';
@@ -97,10 +91,9 @@ function isValidAvatarColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
-/** Result of `resolveGateway` — profile + paths + effective URL/token. */
+/** Result of `resolveGateway` — profile + effective URL/token. */
 export interface ResolvedGateway {
   readonly profile: GatewayProfile;
-  readonly appsDir: string;
   /** For local: the in-process runtime's URL. For remote: profile.url. */
   readonly url: string;
   /** For local: the per-launch token. For remote: the keychain value (or ''). */
@@ -164,7 +157,6 @@ const DEFAULT_LOCAL_LABEL = 'Local';
 export async function ensureLocalGateway(): Promise<GatewayProfile> {
   const dir = gatewayDir(LOCAL_GATEWAY_ID);
   await fs.mkdir(dir, { recursive: true });
-  await fs.mkdir(gatewayAppsDir(LOCAL_GATEWAY_ID), { recursive: true });
   const existing = await readProfile(LOCAL_GATEWAY_ID);
   if (existing) return existing;
   const profile: GatewayProfile = {
@@ -309,44 +301,6 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
 }
 
 /**
- * Mint a UUID and persist a NEW local gateway profile + its workspace +
- * apps dirs. The in-process runtime for this gateway is NOT started —
- * `ensureLocalGateway(id)` starts on first activation. Used for
- * "create another local workspace" (isolated dev/scratch/per-project
- * locals). The primordial `'local'` gateway is still auto-created on
- * boot by `ensureLocalGateway`; this is purely additive.
- *
- * Profile metadata (`displayName`, `avatarColor`) is optional — read-time
- * defaults fill them in when callers (like the Add Profile form) leave
- * them blank.
- */
-export async function addLocalGateway(input: {
-  label: string;
-  displayName?: string;
-  avatarColor?: string;
-}): Promise<GatewayProfile> {
-  const label = input.label.trim();
-  if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
-  const id = randomUUID();
-  const displayName = input.displayName?.trim() || label;
-  const avatarColor = isValidAvatarColor(input.avatarColor)
-    ? input.avatarColor
-    : defaultAvatarColor(id);
-  const profile: GatewayProfile = {
-    id,
-    kind: 'local',
-    label,
-    displayName,
-    avatarColor,
-    createdAt: new Date().toISOString(),
-  };
-  await fs.mkdir(gatewayDir(id), { recursive: true });
-  await fs.mkdir(gatewayAppsDir(id), { recursive: true });
-  await writeProfile(profile);
-  return profile;
-}
-
-/**
  * Patch `displayName` and/or `avatarColor` on an existing profile. Pass
  * the empty string for `displayName` to reset it to `label`-derived
  * default at next read; pass `undefined` to leave the field untouched.
@@ -382,8 +336,8 @@ export async function updateProfileMetadata(
  * Refuses to remove the primordial `'local'` gateway — every install
  * has one, and the active-gateway fallback path in settings depends on
  * it always being there. Non-primordial local gateways (added via
- * `addLocalGateway`) can be removed. Idempotent — missing dir / token
- * is fine.
+ * is fine. (#280 removed "additional local workspaces" — a second space
+ * is a second VAULT now, so the only locals are the primordial one.)
  */
 export async function removeGateway(id: string): Promise<void> {
   if (id === LOCAL_GATEWAY_ID) {
@@ -433,7 +387,6 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
     const info = localGatewayInfo(profile.id);
     return {
       profile,
-      appsDir: gatewayAppsDir(profile.id),
       url: info?.url ?? '',
       token: info?.token ?? '',
     };
@@ -441,7 +394,6 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
   const token = (await getGatewayToken(profile.id)) ?? '';
   return {
     profile,
-    appsDir: gatewayAppsDir(profile.id),
     url: profile.url ?? '',
     token,
   };

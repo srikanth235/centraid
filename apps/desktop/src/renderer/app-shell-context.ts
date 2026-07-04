@@ -217,7 +217,8 @@ export interface ShellContext {
   // Profiles + sidebar (shell-owned; the settings page drives them)
   toggleSidebar(): void;
   buildHomeSidebar(active?: { page?: SidebarPage; appId?: string }): HTMLElement;
-  toProfileView(p: GatewayProfile, activeId: string): ProfileView;
+  /** Map one vault registry row to the switcher's view model (#280: profiles are vaults). */
+  toProfileView(v: import('./gateway-client-vault.js').VaultListEntry): ProfileView;
   switchProfile(id: string): Promise<void>;
   openProfileModal(mode: 'add' | 'edit', profile?: ProfileView): void;
   requestDeleteProfile(profile: ProfileView): void;

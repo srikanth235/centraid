@@ -8,7 +8,6 @@ import {
 } from './settings.js';
 import {
   addGateway,
-  addLocalGateway,
   GatewayError,
   listGateways,
   removeGateway,
@@ -72,7 +71,6 @@ export const Channel = {
   // UUID ids and can be renamed/removed freely.
   GATEWAYS_LIST: 'centraid:gateways:list',
   GATEWAYS_ADD: 'centraid:gateways:add',
-  GATEWAYS_ADD_LOCAL: 'centraid:gateways:add-local',
   GATEWAYS_REMOVE: 'centraid:gateways:remove',
   GATEWAYS_RENAME: 'centraid:gateways:rename',
   GATEWAYS_UPDATE_METADATA: 'centraid:gateways:update-metadata',
@@ -181,14 +179,6 @@ export function registerIpcHandlers(): void {
         avatarColor?: string;
       },
     ): Promise<GatewayProfile> => addGateway(input),
-  );
-
-  ipcMain.handle(
-    Channel.GATEWAYS_ADD_LOCAL,
-    async (
-      _e,
-      input: { label: string; displayName?: string; avatarColor?: string },
-    ): Promise<GatewayProfile> => addLocalGateway(input),
   );
 
   ipcMain.handle(

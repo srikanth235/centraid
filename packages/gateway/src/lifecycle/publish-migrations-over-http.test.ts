@@ -3,7 +3,7 @@
  *
  * The critical standalone bug: the git-store publish path only commits +
  * ff-merges code, so a published schema change never reached live
- * `data.sqlite`. These tests drive `serve({ appsStoreRoot })` over HTTP and
+ * `data.sqlite`. These tests drive `serve()` over HTTP and
  * assert that publishing a session that added a migration applies it to
  * live data — and that a migration incompatible with live rows aborts the
  * publish (422) without touching live data.
@@ -11,7 +11,7 @@
  * Migrations are `.sql` files, which the draft-file PUT route does not
  * accept (it mirrors the editable-text allowlist); the agent authors them
  * via its native file tools straight into the worktree. The tests do the
- * same via `handle.appsStore.snapshotSessionAppDir`.
+ * same via `activeAppsStore().snapshotSessionAppDir`.
  */
 
 import { afterEach, beforeEach, expect, test } from 'vitest';
@@ -28,11 +28,14 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
+}
+/** The ACTIVE vault's per-app data dir (#280 — apps live inside the vault). */
+function vaultAppsDir(): string {
+  const vaultId = handle.vaults.active().boot.vaultId;
+  return path.join(dataDir, 'vault', vaultId, 'apps');
 }
 
 function auth(): Record<string, string> {
@@ -53,7 +56,6 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-pub-mig-${crypto.randomUUID()}-`));
   handle = await serve({
     paths: pathsUnder(dataDir),
-    appsStoreRoot: path.join(dataDir, 'code'),
   });
 });
 
@@ -64,7 +66,7 @@ afterEach(async () => {
 
 /** Open a session and stage a file map (incl. `.sql`) directly into its worktree. */
 async function stage(sessionId: string, files: Record<string, string>): Promise<void> {
-  const store = handle.appsStore!;
+  const store = await handle.activeAppsStore();
   await store.openSession(sessionId);
   const appDir = await store.snapshotSessionAppDir(sessionId, 'notes');
   for (const [rel, content] of Object.entries(files)) {
@@ -96,7 +98,7 @@ async function liveSql(sql: string): Promise<{ rows: Array<Record<string, unknow
 /** Read `PRAGMA user_version` straight off the live DB (the `_sql` built-in
  *  refuses PRAGMA, so we open the file directly). */
 function liveUserVersion(): number {
-  const db = new DatabaseSync(path.join(dataDir, 'apps', 'notes', 'data.sqlite'));
+  const db = new DatabaseSync(path.join(vaultAppsDir(), 'notes', 'data.sqlite'));
   try {
     const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
     return row.user_version;

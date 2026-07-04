@@ -16,7 +16,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { WorktreeStore } from '../worktree-store/index.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from '../serve/serve.ts';
 import type { GatewayPaths } from '../paths.ts';
 
@@ -25,10 +25,8 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -54,9 +52,7 @@ const MANIFEST = (appId: string): string =>
   );
 
 /** Seed one published app on `main` via a session + publish. */
-async function seedApp(appsStoreRoot: string, appId: string): Promise<void> {
-  const store = new WorktreeStore({ root: appsStoreRoot });
-  await store.init();
+async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const session = await store.openSession('seed');
   const appDir = path.join(session.worktreePath, 'apps', appId);
   await fs.mkdir(path.join(appDir, 'queries'), { recursive: true });
@@ -80,12 +76,10 @@ afterEach(async () => {
 });
 
 test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
-  const appsStoreRoot = path.join(dataDir, 'code');
-  await seedApp(appsStoreRoot, 'app');
-
-  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
-  const store = handle.appsStore!;
-  expect(store).toBeTruthy();
+  handle = await serve({ paths: pathsUnder(dataDir) });
+  const store = await handle.activeAppsStore();
+  await seedApp(store, 'app');
+  await handle.vaults.settleActivation();
 
   // Open a session and stage a draft: new HTML + a changed query handler.
   await store.openSession('draft1');
@@ -129,9 +123,9 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 });
 
 test('an unknown draft session yields 503 (no live fallback)', async () => {
-  const appsStoreRoot = path.join(dataDir, 'code');
-  await seedApp(appsStoreRoot, 'app');
-  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir) });
+  await seedApp(await handle.activeAppsStore(), 'app');
+  await handle.vaults.settleActivation();
 
   const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
     headers: { Authorization: `Bearer ${handle.token}` },

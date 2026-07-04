@@ -112,8 +112,11 @@ export class InsightsStore {
   }
 
   private ensureReady(): PreparedStatements {
-    if (this.stmts) return this.stmts;
+    // The provider may resolve a different handle across calls (the gateway
+    // wires "the ACTIVE vault's transcripts.db") — re-prepare on change.
     const db = this.provider();
+    if (this.stmts && this.db === db) return this.stmts;
+    this.db = db;
     this.stmts = {
       kpis: db.prepare(`
         SELECT

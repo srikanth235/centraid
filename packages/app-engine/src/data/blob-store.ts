@@ -1,19 +1,19 @@
 /*
  * Per-app blob content-addressed store (CAS) — issue #190.
  *
- * Attachment bytes live on the filesystem under the app dir
- * (`<appsDir>/<appId>/blobs/<hash>`), keyed by the sha256 of their content —
- * never base64'd into a `*_json` column (which would bloat every transcript
- * read). Content addressing buys free dedup: the same file uploaded twice (or
- * arriving on two turns) lands once. The `attachments` rows in `runtime.sqlite`
- * carry the metadata + `hash`; this store owns the bytes.
+ * Attachment bytes live on the filesystem under the vault workspace's app dir
+ * (`<workspace appsDir>/<appId>/blobs/<hash>`), keyed by the sha256 of their
+ * content — never base64'd into a `*_json` column (which would bloat every
+ * transcript read). Content addressing buys free dedup: the same file uploaded
+ * twice (or arriving on two turns) lands once. The `attachments` rows in the
+ * vault's `transcripts.db` carry the metadata + `hash`; this store owns the
+ * bytes. The root is a provider — it resolves the ACTIVE vault's workspace
+ * per call (#280), so the bytes are vault-scoped and export with the vault.
  *
  * GC is refcount-by-hash: the conversation ledger is the source of truth for
  * which hashes are still referenced (`ConversationStore.referencedHashes`), and
  * `gc()` deletes every blob file whose hash is absent from that live set. Run
  * it after a delete-conversation cascade (which drops the `attachments` rows).
- *
- * The bytes are app-scoped, so this never crosses the per-app sharding line.
  */
 
 import { promises as fs } from 'node:fs';
@@ -45,15 +45,16 @@ export interface PutResult {
 }
 
 export class BlobStore {
-  private readonly appsDir: string;
+  private readonly appsDir: () => string;
 
-  constructor(appsDir: string) {
-    this.appsDir = appsDir;
+  /** `appsDir` resolves the CAS root per call (the active vault's workspace). */
+  constructor(appsDir: string | (() => string)) {
+    this.appsDir = typeof appsDir === 'string' ? () => appsDir : appsDir;
   }
 
   private blobDir(appId: string): string {
     if (!isValidAppId(appId)) throw new Error(`blob-store: invalid app id "${appId}"`);
-    return path.join(this.appsDir, appId, 'blobs');
+    return path.join(this.appsDir(), appId, 'blobs');
   }
 
   /** Absolute on-disk path for a blob. Throws on a non-sha256 hash (traversal guard). */

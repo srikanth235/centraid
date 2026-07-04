@@ -1,14 +1,6 @@
 import { serve, type GatewayServeHandle } from '@centraid/gateway';
 import { invalidatePreflightCache } from '@centraid/agent-runtime';
-import {
-  gatewayAnalyticsDb,
-  gatewayAppsDir,
-  gatewayConversationRunnerSessionsDir,
-  gatewayCodeStoreDir,
-  gatewayIdentityDb,
-  gatewayModelCatalogFile,
-  gatewayVaultDir,
-} from './gateway-paths.js';
+import { gatewayModelCatalogFile, gatewayPrefsFile, gatewayVaultDir } from './gateway-paths.js';
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
@@ -52,30 +44,6 @@ function ensureInfoProviderRegistered(): void {
   });
 }
 
-/**
- * Local gateway storage directory — `<userData>/gateways/<id>/apps/`.
- * The home shelf, the draft/published serving, and the dispatcher all read
- * from here (the old `centraid-preview://` protocol was retired in #141
- * Phase 4 in favor of gateway draft serving).
- */
-export async function localGatewayAppsDir(gatewayId: string): Promise<string> {
-  return gatewayAppsDir(gatewayId);
-}
-
-/**
- * Identity SQLite for the given local gateway (users + prefs).
- */
-export function localGatewayIdentityDb(gatewayId: string): string {
-  return gatewayIdentityDb(gatewayId);
-}
-
-/**
- * Central run-summary DB for the given local gateway.
- */
-export function localGatewayAnalyticsDb(gatewayId: string): string {
-  return gatewayAnalyticsDb(gatewayId);
-}
-
 export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServeHandle> {
   ensureInfoProviderRegistered();
   const ready = handles.get(gatewayId);
@@ -83,7 +51,6 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
   const inFlight = starting.get(gatewayId);
   if (inFlight) return inFlight;
   const p = (async () => {
-    const appsDir = await localGatewayAppsDir(gatewayId);
     // The gateway owns the template catalog AND its remote refresh now
     // (issue #141, Phase 5), so pass the optional remote manifest URL down
     // — the templates route fires a one-time best-effort fetch into the
@@ -100,10 +67,16 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
     const settings = await loadPersistedSettings();
     const handle = await serve({
       paths: {
-        appsDir,
-        identityDb: localGatewayIdentityDb(gatewayId),
-        analyticsDb: localGatewayAnalyticsDb(gatewayId),
-        conversationRunnerSessionDir: gatewayConversationRunnerSessionsDir(gatewayId),
+        // The vault is the unit (#280): apps, app code, transcripts, and
+        // run history all live inside the active vault's directory under
+        // this registry root. Mounting it is what makes the projection
+        // blueprints live — apps enroll on publish, handlers reach the
+        // canon through `ctx.vault`, and the owner consent surface serves
+        // under `/centraid/_vault/*`.
+        vaultDir: gatewayVaultDir(gatewayId),
+        // Device prefs (runner choice, theme, …) — a JSON file; the old
+        // identity.sqlite is gone (#280).
+        prefsFile: gatewayPrefsFile(gatewayId),
         // Chat picker's per-runner model catalog (issue #188): the gateway
         // seeds it with defaults and overwrites it with live self-reported
         // ids on Refresh.
@@ -112,17 +85,8 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.
         templatesCacheDir: templatesCacheDir(gatewayId),
-        // Personal vault (duaility §12): mounting the vault plane is what
-        // makes the projection blueprints live — live apps enroll on
-        // publish, handlers reach the canon through `ctx.vault`, and the
-        // owner consent surface serves under `/centraid/_vault/*`.
-        vaultDir: gatewayVaultDir(gatewayId),
         ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
-      // Issue #137: the local gateway owns app code as a git store too,
-      // so drafts survive restarts and the publish/session HTTP surface
-      // is identical to the standalone daemon.
-      appsStoreRoot: gatewayCodeStoreDir(gatewayId),
       // Inject the desktop's draft-session scheme so the gateway's unified
       // chat runner edits the SAME `desktop-<appId>` worktree the renderer
       // Code tab + local builder use (issue #160). Without this the runner

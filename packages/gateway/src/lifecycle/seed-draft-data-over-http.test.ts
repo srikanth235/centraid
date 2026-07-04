@@ -22,10 +22,8 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -51,7 +49,6 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-seed-${crypto.randomUUID()}-`));
   handle = await serve({
     paths: pathsUnder(dataDir),
-    appsStoreRoot: path.join(dataDir, 'code'),
   });
 });
 
@@ -61,7 +58,7 @@ afterEach(async () => {
 });
 
 async function writeWorktreeFiles(sessionId: string, files: Record<string, string>): Promise<void> {
-  const appDir = await handle.appsStore!.snapshotSessionAppDir(sessionId, 'notes');
+  const appDir = await (await handle.activeAppsStore()).snapshotSessionAppDir(sessionId, 'notes');
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(appDir, rel);
     await fs.mkdir(path.dirname(abs), { recursive: true });
@@ -91,7 +88,7 @@ async function liveSql(sql: string, write = false): Promise<Response> {
 
 test('first draft access seeds from prod + replays the draft pending migration', async () => {
   // Publish v1 — migration 0001 runs against live, so live carries one row.
-  const store = handle.appsStore!;
+  const store = await handle.activeAppsStore();
   await store.openSession('seed');
   await writeWorktreeFiles('seed', {
     'app.json': MANIFEST,
@@ -153,7 +150,7 @@ test('first draft access seeds from prod + replays the draft pending migration',
 
 /** Publish a baseline `notes` app (migration 0001 → live row). */
 async function publishBaseline(): Promise<void> {
-  const store = handle.appsStore!;
+  const store = await handle.activeAppsStore();
   await store.openSession('seed');
   await writeWorktreeFiles('seed', {
     'app.json': MANIFEST,
@@ -179,7 +176,7 @@ async function resetData(sessionId: string): Promise<Response> {
 
 test('reset-data re-seeds the draft from a fresh prod snapshot', async () => {
   await publishBaseline();
-  await handle.appsStore!.openSession('d1');
+  await (await handle.activeAppsStore()).openSession('d1');
 
   // Seed (first access) then mutate the draft.
   await draftSql('d1', 'SELECT 1');
@@ -210,7 +207,7 @@ test('reset-data re-seeds the draft from a fresh prod snapshot', async () => {
 
 test('reset-data surfaces an incompatible pending migration inline (422)', async () => {
   await publishBaseline();
-  await handle.appsStore!.openSession('d2');
+  await (await handle.activeAppsStore()).openSession('d2');
   // A NOT-NULL column with no default fails against the prod-seeded row.
   await writeWorktreeFiles('d2', {
     'migrations/0002_bad.sql': 'ALTER TABLE notes ADD COLUMN title TEXT NOT NULL;\n',
@@ -225,7 +222,7 @@ test('reset-data surfaces an incompatible pending migration inline (422)', async
 
 test('a failed seed migration leaves no draft DB, so a later access retries', async () => {
   await publishBaseline();
-  const store = handle.appsStore!;
+  const store = await handle.activeAppsStore();
   await store.openSession('d3');
   const appDir = await store.snapshotSessionAppDir('d3', 'notes');
   const draftDb = path.join(appDir, 'data.sqlite');

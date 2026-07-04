@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   ConversationStore,
-  makeRuntimeDbProvider,
+  makeTranscriptsDbProvider,
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
@@ -65,9 +65,11 @@ function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
 
 describe('runFire', () => {
   let appsDir: string;
+  let transcriptsDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-fire-'));
+    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -84,7 +86,7 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome, record } = await runFire(
-      { automationRef: 'notes/digest', appsDir },
+      { automationRef: 'notes/digest', appsDir, transcriptsDbFile },
       { openDispatch: stubDispatch(opened, closes) },
     );
 
@@ -126,7 +128,12 @@ describe('runFire', () => {
     };
 
     const { outcome } = await runFire(
-      { automationRef: 'notes/flow', appsDir, onRunEvent: (ev) => events.push(ev) },
+      {
+        automationRef: 'notes/flow',
+        appsDir,
+        transcriptsDbFile,
+        onRunEvent: (ev) => events.push(ev),
+      },
       { openDispatch: dispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -195,7 +202,12 @@ describe('runFire', () => {
       });
 
     const { outcome, record } = await runFire(
-      { automationRef: 'notes/ask', appsDir, onRunEvent: (ev) => events.push(ev) },
+      {
+        automationRef: 'notes/ask',
+        appsDir,
+        transcriptsDbFile,
+        onRunEvent: (ev) => events.push(ev),
+      },
       { openDispatch: dispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -210,9 +222,7 @@ describe('runFire', () => {
 
     // The usage event was persisted onto the agent node's ledger row, so the
     // run's token rollup is accurate.
-    const store = new ConversationStore(
-      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
-    );
+    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
     const agentNode = store.listItems(record.runId).find((n) => n.kind === 'agent');
     expect(agentNode).toBeTruthy();
     expect(agentNode!.model).toBe('a-capable-model');
@@ -247,13 +257,11 @@ describe('runFire', () => {
       });
 
     const { record } = await runFire(
-      { automationRef: 'notes/send', appsDir },
+      { automationRef: 'notes/send', appsDir, transcriptsDbFile },
       { openDispatch: dispatch },
     );
 
-    const store = new ConversationStore(
-      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
-    );
+    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
     const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     expect(toolNode).toBeTruthy();
     // Duration is the dispatcher's per-call window, not the batch span.
@@ -286,7 +294,12 @@ describe('runFire', () => {
       });
 
     const { outcome, record } = await runFire(
-      { automationRef: 'notes/flaky', appsDir, onRunEvent: (ev) => events.push(ev) },
+      {
+        automationRef: 'notes/flaky',
+        appsDir,
+        transcriptsDbFile,
+        onRunEvent: (ev) => events.push(ev),
+      },
       { openDispatch: dispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -299,9 +312,7 @@ describe('runFire', () => {
     expect(String(end.error)).toMatch(/spawn blew up/);
 
     // And the ledger row is closed (duration set), not stranded open.
-    const store = new ConversationStore(
-      makeRuntimeDbProvider(path.join(appsDir, 'notes', 'runtime.sqlite')),
-    );
+    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
     const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     expect(toolNode).toBeTruthy();
     expect(toolNode!.ok).toBe(false);
@@ -326,7 +337,7 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome } = await runFire(
-      { automationRef: 'notes/main', appsDir },
+      { automationRef: 'notes/main', appsDir, transcriptsDbFile },
       { openDispatch: stubDispatch(opened, closes) },
     );
 

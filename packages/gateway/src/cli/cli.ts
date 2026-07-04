@@ -139,11 +139,10 @@ async function commandServe(args: string[]): Promise<void> {
     logTag: 'centraid-gateway',
   });
 
-  // Seed runner prefs *after* serve() so the gateway DB has been
-  // migrated and `UserStore` can open it. setPrefs runs in a single
-  // BEGIN IMMEDIATE so re-seed on every boot is safe.
+  // Seed runner prefs *after* serve(). The write is an atomic JSON
+  // replace, so re-seed on every boot is safe.
   try {
-    seedRunnerPrefs(handle.userStore, config);
+    seedRunnerPrefs(handle.prefs, config);
   } catch (err) {
     process.stderr.write(
       `[centraid-gateway] warning: failed to seed runner prefs: ${err instanceof Error ? err.message : String(err)}\n`,

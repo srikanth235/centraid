@@ -1,16 +1,21 @@
 /*
- * AnalyticsStore — the central run-summary ledger (issue #98, decision 4).
+ * AnalyticsStore — the per-vault run-summary rollup (issue #98, decision 4;
+ * moved into the vault's own `transcripts.db` by #280).
  *
  * Push-based analytics: at run completion the runtime write-throughs one
- * summary row here. The file (`centraid-analytics.sqlite`) is gateway-
- * scoped — every run, every kind. Full run detail stays in the per-app
- * `runtime.sqlite` (automations) or `centraid-activity.sqlite` (chat);
- * this store is the single source the Insights screen and the desktop
+ * summary row here. The `run_summary` table lives INSIDE the vault's
+ * `transcripts.db` — every run, every kind, but only THIS vault's; a
+ * central file would aggregate across vaults, which #280 forbids. This
+ * store is the single source the Insights screen and the desktop
  * Executions feed read, so neither needs a cross-file scan.
  *
  * The write-through is best-effort: each caller wraps `recordRunSummary`
- * in try/catch so an analytics-DB hiccup never fails the run. The
- * per-app file stays authoritative for a future backfill.
+ * in try/catch so a rollup hiccup never fails the run. The ledger tables
+ * in the same file stay authoritative for a rebuild.
+ *
+ * The provider usually resolves "the ACTIVE vault's transcripts.db", so
+ * the handle can change across calls (a vault switch); `ensureReady`
+ * re-prepares when it does.
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
@@ -90,8 +95,9 @@ interface PreparedStatements {
 }
 
 /**
- * Store over the central `run_summary` table. Construct with the
- * analytics `DatabaseProvider` (`makeAnalyticsDbProvider`).
+ * Store over a vault's `run_summary` table. Construct with the vault's
+ * transcripts `DatabaseProvider` (`makeTranscriptsDbProvider`, or the
+ * gateway's active-vault resolver).
  */
 export class AnalyticsStore implements RunSummarySink {
   private readonly provider: DatabaseProvider;
@@ -103,8 +109,8 @@ export class AnalyticsStore implements RunSummarySink {
   }
 
   private ensureReady(): PreparedStatements {
-    if (this.stmts) return this.stmts;
     const db = this.provider();
+    if (this.stmts && this.db === db) return this.stmts;
     this.stmts = {
       upsert: db.prepare(`
         INSERT INTO run_summary (

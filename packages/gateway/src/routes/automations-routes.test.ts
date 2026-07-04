@@ -11,7 +11,7 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AnalyticsStore, InsightsStore, makeAnalyticsDbProvider } from '@centraid/app-engine';
+import { AnalyticsStore, InsightsStore, makeTranscriptsDbProvider } from '@centraid/app-engine';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
 
@@ -23,13 +23,14 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), `auto-routes-${crypto.randomUUID()}-`));
-  const provider = makeAnalyticsDbProvider(path.join(dir, 'analytics.sqlite'));
+  const transcriptsDbFile = path.join(dir, 'transcripts.db');
+  const provider = makeTranscriptsDbProvider(transcriptsDbFile);
   analytics = new AnalyticsStore(provider);
   insights = new InsightsStore(provider);
   fired = [];
   handler = makeAutomationsRouteHandler({
     store: new WorktreeStore({ root: path.join(dir, 'code') }),
-    dataAppsDir: path.join(dir, 'apps'),
+    transcriptsDbFile,
     analytics,
     insights,
     runAutomation: (input) => fired.push(input),

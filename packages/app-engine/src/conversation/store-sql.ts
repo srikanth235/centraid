@@ -279,12 +279,15 @@ export function prepare(db: DatabaseSync): PreparedStatements {
           (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
+    // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
+    // ledger file is per VAULT, one shared `transcripts.db` (#280).
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
         (SELECT COUNT(*) FROM items WHERE turn_id IN
           (SELECT id FROM turns WHERE conversation_id = c.id)) AS msg_count
       FROM conversations c
       WHERE c.user_id = ? AND c.kind IN ('chat','build')
+        AND (? IS NULL OR c.app_id = ?)
       ORDER BY c.updated_at DESC
     `),
     renameConversation: db.prepare(

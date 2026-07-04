@@ -3,12 +3,12 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type RunSummary } from '../conversation/run-summary-sink.js';
-import { makeAnalyticsDbProvider } from './analytics-db.js';
+import { makeTranscriptsDbProvider } from '../stores/gateway-db.js';
 import { AnalyticsStore } from './analytics-store.js';
 
 function store(): AnalyticsStore {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-analytics-'));
-  return new AnalyticsStore(makeAnalyticsDbProvider(join(dir, 'analytics.sqlite')));
+  return new AnalyticsStore(makeTranscriptsDbProvider(join(dir, 'transcripts.db')));
 }
 
 function summary(over: Partial<RunSummary> = {}): RunSummary {

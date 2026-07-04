@@ -7,7 +7,7 @@
  * the OpenClaw host:
  *
  *   1. Resolves `pluginConfig` + paths against the OpenClaw state dir.
- *   2. Constructs `buildGateway({ appsStoreRoot, lazyStoreInit, … })` — once
+ *   2. Constructs `buildGateway({ paths, … })` — once
  *      per process, lazily (no git-store `init()` at construction, so the
  *      worker subprocesses OpenClaw runs `register()` in stay inert).
  *   3. Mounts `gw.composedHandler` on the gateway-auth route prefixes
@@ -90,10 +90,10 @@ export default definePluginEntry({
     const appsDir = path.isAbsolute(appsDirRaw)
       ? appsDirRaw
       : path.join(resolveStateDir(process.env), appsDirRaw);
-    // Sibling SQLite files live one level up from `appsDir` — identity
-    // (`centraid-gateway.sqlite`: users + prefs) + the central analytics DB
-    // (`centraid-analytics.sqlite`). App CODE is a git store under
-    // `centraid-code`; app DATA stays under `appsDir`.
+    // #280 (the vault is the unit): everything personal — app code, app
+    // data, transcripts, run history — lives under the vault registry root
+    // (`centraid-vault`, one dir per vault). Only device prefs stay beside
+    // it. The legacy `appsDir` config knob now just anchors that root.
     const dbDir = path.dirname(appsDir);
 
     // Build the gateway core once per process. `register()` also runs in
@@ -105,18 +105,9 @@ export default definePluginEntry({
     // in every process is safe and gives the worker's tools a live runtime.
     const gwPromise: Promise<BuiltGateway> = buildGateway({
       paths: {
-        appsDir,
-        identityDb: path.join(dbDir, 'centraid-gateway.sqlite'),
-        analyticsDb: path.join(dbDir, 'centraid-analytics.sqlite'),
-        conversationRunnerSessionDir: path.join(
-          resolveStateDir(process.env),
-          'centraid',
-          'conversation-runner-sessions',
-        ),
+        vaultDir: path.join(dbDir, 'centraid-vault'),
+        prefsFile: path.join(dbDir, 'centraid-prefs.json'),
       },
-      // App CODE backed by the gateway-owned git store (issue #137).
-      appsStoreRoot: path.join(dbDir, 'centraid-code'),
-      lazyStoreInit: true,
       logger: api.logger,
       logTag: 'centraid',
       // Plane B (in-process): chat drives OpenClaw's embedded agent, not a
@@ -137,10 +128,12 @@ export default definePluginEntry({
       // run the handler in THIS process via `runOpenclawFire` — `ctx.tool` →
       // `callGatewayTool`, `ctx.agent` → simple-completion.
       fireAutomationFactory: (deps) => (automationRef, fireOpts) => {
+        const ws = deps.workspace();
         void runOpenclawFire(
           {
             automationRef,
-            appsDir: deps.appsDir,
+            appsDir: ws.appsDir,
+            transcriptsDbFile: ws.transcriptsDbFile,
             codeAppsDir: deps.codeAppsDir(),
             analytics: deps.analytics,
             triggerKind: fireOpts.triggerKind,
@@ -208,17 +201,19 @@ export default definePluginEntry({
     > => {
       if (webhookHandler) return webhookHandler;
       const gw = await gwPromise;
-      const codeAppsDir = gw.codeAppsDir!;
+      const codeAppsDir = gw.codeAppsDir;
       webhookHandler = makeWebhookRouteHandler({
         // `codeAppsDir()` resolves the automation from CODE on `main` — a
         // stable symlink path repointed atomically on publish, so resolving
         // once stays correct.
         appsDir: codeAppsDir(),
         fire: async ({ automationRef, body }) => {
+          const ws = gw.vaults.activeWorkspace();
           const outcome = await runOpenclawFire(
             {
               automationRef,
-              appsDir,
+              appsDir: ws.appsDir,
+              transcriptsDbFile: ws.transcriptsDbFile,
               codeAppsDir: codeAppsDir(),
               analytics: gw.analyticsStore,
               triggerKind: 'scheduled',

@@ -22,10 +22,8 @@ let started: number;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -80,7 +78,6 @@ beforeEach(async () => {
   started = 0;
   handle = await serve({
     paths: pathsUnder(dataDir),
-    appsStoreRoot: path.join(dataDir, 'code'),
     scheduler: stubScheduler(),
   });
 });

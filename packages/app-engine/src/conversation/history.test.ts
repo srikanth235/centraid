@@ -9,28 +9,52 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
 import { makeConversationRouteHandler } from '../http/conversation-routes.js';
 import { ConversationStore } from './store.js';
-import { makeRuntimeDbProvider } from '../stores/gateway-db.js';
+import { makeTranscriptsDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
+import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 
-// Tests that don't care about cross-user isolation share this stub UUID.
+// Tests that don't care about cross-user isolation share this stub owner id.
 const TEST_USER_ID = 'test-user-uuid-0000';
-const stubUserIdProvider = () => TEST_USER_ID;
 
-// Chat is app-scoped (issue #98): each method takes the owning `appId`,
-// which resolves `<appsDir>/<appId>/runtime.sqlite`. Tests pre-create the
-// app folder — SQLite creates the file, not the directory.
+// Chat is app-scoped by the `app_id` column inside ONE per-vault
+// `transcripts.db` (#280). Tests build a workspace over a temp vault dir.
 const APP = 'todos';
 
-/** A fresh temp apps dir with the given app folders (default `APP`). */
-function freshAppsDir(...appIds: string[]): string {
+/** A fresh temp vault dir with per-app data folders (default `APP`). */
+function freshVaultDir(...appIds: string[]): string {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-chat-history-'));
   for (const id of appIds.length ? appIds : [APP]) {
-    mkdirSync(join(dir, id), { recursive: true });
+    mkdirSync(join(dir, 'apps', id), { recursive: true });
   }
   return dir;
 }
 
-function newStore(provider: () => string = stubUserIdProvider): ConversationHistoryStore {
-  return new ConversationHistoryStore(freshAppsDir(), provider);
+// One cached transcripts provider per vault dir — mirrors the plane's
+// one-connection-per-file doctrine so two stores over the same dir share
+// the handle.
+const providersByDir = new Map<string, DatabaseProvider>();
+function transcriptsFor(dir: string): DatabaseProvider {
+  let provider = providersByDir.get(dir);
+  if (!provider) {
+    provider = makeTranscriptsDbProvider(join(dir, 'transcripts.db'));
+    providersByDir.set(dir, provider);
+  }
+  return provider;
+}
+
+/** Workspace provider over a temp vault dir, owned by `ownerPartyId`. */
+function workspaceFor(dir: string, ownerPartyId: string = TEST_USER_ID): WorkspaceProvider {
+  return () => ({
+    vaultId: 'vault-test',
+    ownerPartyId,
+    appsDir: join(dir, 'apps'),
+    transcripts: transcriptsFor(dir),
+    transcriptsDbFile: join(dir, 'transcripts.db'),
+    runnerSessionDir: join(dir, 'runner-sessions'),
+  });
+}
+
+function newStore(ownerPartyId: string = TEST_USER_ID): ConversationHistoryStore {
+  return new ConversationHistoryStore(workspaceFor(freshVaultDir(), ownerPartyId));
 }
 
 /** Build a minimal one-step chat turn for `recordTurn`. */
@@ -118,8 +142,8 @@ describe('ConversationHistoryStore', () => {
   });
 
   it('recordTurn defaults the run kind to chat; honors an explicit build kind (#181)', () => {
-    const appsDir = freshAppsDir();
-    const local = new ConversationHistoryStore(appsDir, stubUserIdProvider);
+    const appsDir = freshVaultDir();
+    const local = new ConversationHistoryStore(workspaceFor(appsDir));
     const chat = local.createSession(APP);
     const build = local.createSession(APP);
     local.recordTurn(APP, turn(chat.id, 'data q', 'data a', 1_000));
@@ -128,7 +152,7 @@ describe('ConversationHistoryStore', () => {
     // The kind moved UP onto the conversation (issue #190): a builder turn
     // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
     // persisted conversations back through a fresh store on the same file.
-    const conv = new ConversationStore(makeRuntimeDbProvider(join(appsDir, APP, 'runtime.sqlite')));
+    const conv = new ConversationStore(transcriptsFor(appsDir));
     expect(conv.getConversation(chat.id)?.kind).toBe('chat');
     expect(conv.getConversation(build.id)?.kind).toBe('build');
 
@@ -312,7 +336,7 @@ describe('ConversationHistoryStore', () => {
 
 describe('ConversationHistoryStore per-app scoping', () => {
   it('isolates sessions and lookups per app', () => {
-    const store = new ConversationHistoryStore(freshAppsDir('todos', 'habits'), stubUserIdProvider);
+    const store = new ConversationHistoryStore(workspaceFor(freshVaultDir('todos', 'habits')));
     const t = store.createSession('todos', 'todos-1');
     store.createSession('habits', 'habits-1');
     store.createSession('habits', 'habits-2');
@@ -325,17 +349,17 @@ describe('ConversationHistoryStore per-app scoping', () => {
 });
 
 describe('ConversationHistoryStore per-user scoping', () => {
-  // Two stores on the same app's runtime.sqlite, different user identities.
+  // Two stores on the same vault's transcripts.db, different owner identities.
   function pair(): { alice: ConversationHistoryStore; bob: ConversationHistoryStore } {
-    const appsDir = freshAppsDir();
+    const appsDir = freshVaultDir();
     return {
-      alice: new ConversationHistoryStore(appsDir, () => 'alice'),
-      bob: new ConversationHistoryStore(appsDir, () => 'bob'),
+      alice: new ConversationHistoryStore(workspaceFor(appsDir, 'alice')),
+      bob: new ConversationHistoryStore(workspaceFor(appsDir, 'bob')),
     };
   }
 
   it('createSession stamps the current user id on the row', () => {
-    const store = newStore(() => 'alice');
+    const store = newStore('alice');
     const s = store.createSession(APP);
     expect(s.userId).toBe('alice');
     expect(store.getSession(APP, s.id)?.userId).toBe('alice');
@@ -380,12 +404,12 @@ describe('ConversationHistoryStore per-user scoping', () => {
 
 describe('ConversationHistoryStore data persistence', () => {
   it("a second ConversationHistoryStore on the same app sees the first one's writes", () => {
-    const appsDir = freshAppsDir();
-    const first = new ConversationHistoryStore(appsDir, stubUserIdProvider);
+    const appsDir = freshVaultDir();
+    const first = new ConversationHistoryStore(workspaceFor(appsDir));
     const s = first.createSession(APP, 'kept');
     first.recordTurn(APP, turn(s.id, 'hello', 'world'));
 
-    const second = new ConversationHistoryStore(appsDir, stubUserIdProvider);
+    const second = new ConversationHistoryStore(workspaceFor(appsDir));
     const loaded = second.getSession(APP, s.id);
     expect(loaded?.title).toBe('kept');
     expect(loaded?.messages.length).toBe(2);

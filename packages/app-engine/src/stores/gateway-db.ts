@@ -1,57 +1,59 @@
 /*
- * Centraid SQLite state. app-engine owns two migration ladders — the
- * gateway (identity) file and the per-app runtime (ledger) file — each with
- * its own connection and `PRAGMA user_version`. The shared open primitive
- * (`openMigratedDb` / `makeMigratedDbProvider`) is exported so downstream
- * ladders reuse the same WAL/busy_timeout/FK pragmas: the `insights/`
- * sub-module owns the third ladder (`centraid-analytics.sqlite`, run summaries)
- * and builds its provider through these helpers (#151).
+ * Centraid SQLite state. app-engine owns one migration ladder — the
+ * per-vault transcripts file — plus the shared open primitive
+ * (`openMigratedDb` / `makeMigratedDbProvider`) that downstream ladders
+ * (the vault package's own files stay vault-owned) reuse for the same
+ * WAL/busy_timeout/FK pragmas.
  *
- *   gateway     (`centraid-gateway.sqlite`) — gateway-scoped identity
- *     users          — the user identity row(s). Single-user model today;
- *                      schema is multi-user-ready so a future shift to
- *                      multi-tenant doesn't need a column-add migration.
- *     user_prefs     — global prefs keyed by (user_id, key); JSON-encoded
- *                      values. Real FK-cascaded from `users` (same file).
- *
- *   runtime     (`<appRoot>/runtime.sqlite`) — one per app, the app's
- *                conversation ledger + automation KV
+ *   transcripts (`<vaultDir>/<vaultId>/transcripts.db`) — one per vault,
+ *                the vault's conversation ledger + automation KV + the
+ *                run-summary rollup (issue #280: the vault is the unit;
+ *                the old per-app `runtime.sqlite` and the central
+ *                `analytics.sqlite` both folded into this file)
  *     conversations    — the first-class spine: one durable thread per
  *                        chat window, automation, or builder session.
- *                        `kind` (chat|automation|build) moved UP here off
- *                        the per-turn row — a thread is single-kind. Scoped
- *                        by `user_id`; app-scoped (#98) by the file it lives
- *                        in. `app_id`/`automation_id` also live here.
+ *                        `kind` (chat|automation|build) lives here — a
+ *                        thread is single-kind. `app_id` scopes a thread
+ *                        to its app INSIDE the shared per-vault file (the
+ *                        per-app scoping used to be the file itself);
+ *                        `user_id` carries the vault owner's party id.
+ *                        A conversation binds to its vault at creation —
+ *                        it lives in that vault's file, so a mid-thread
+ *                        vault switch can never smear a thread across two
+ *                        vaults (#280).
  *     turns            — one row per execution: a chat turn, an automation
  *                        fire, a builder iteration. `conversation_id` is a
- *                        NOT NULL, FK-backed, CASCADE spine — the
- *                        conversation is the primary entity, not optional
- *                        metadata. Carries denormalized token/cost rollups
- *                        written at finish.
+ *                        NOT NULL, FK-backed, CASCADE spine. Carries
+ *                        denormalized token/cost rollups written at finish.
  *     items            — the ordered agentic trace, INCLUDING the inbound
  *                        message. `kind='message_in'` (ordinal 0) is the
  *                        user/trigger input as a first-class message;
  *                        `step` is one model inference call; `tool`/`agent`
- *                        are per-call audit rows. A turn's transcript folds
- *                        from here uniformly.
+ *                        are per-call audit rows.
  *     attachments      — universal inbound-file rows (chat upload OR
  *                        webhook/email file), FK'd to the `message_in` item
  *                        they arrived on. Bytes live content-addressed on
- *                        disk at `<appsDir>/<appId>/blobs/<hash>`, never in
- *                        sqlite. CASCADE off `items`.
+ *                        disk at `<workspace appsDir>/<appId>/blobs/<hash>`,
+ *                        never in sqlite. CASCADE off `items`.
  *     automation_state — per-automation KV, keyed by (automation_id, key).
+ *     run_summary      — one denormalized row per finished run, every kind.
+ *                        The Insights source. Best-effort write-through at
+ *                        `finishTurn`; the ledger tables above stay
+ *                        authoritative for a rebuild. Lives in the SAME
+ *                        per-vault file (same derived/append-heavy growth
+ *                        profile) so a central store can never aggregate
+ *                        across vaults (#280).
  *
  *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
  *     are real same-file FKs (CASCADE): deleting a conversation drops its
  *     turns, items, and attachment rows. `turns.parent_turn_id` stays a
- *     plain column (a cross-app sub-run — e.g. an `onFailure` cascade — has
- *     its parent in another app's file; a SQLite FK cannot span files).
- *     Runtime-owned; never reachable from handler `db` or the
- *     `centraid_sql_*` agent tools.
+ *     plain column (a sub-run's parent may be recorded before this row in
+ *     the same transaction batch). Runtime-owned; never reachable from
+ *     handler `db` or the `centraid_sql_*` agent tools.
  *
- * (The third ladder — `centraid-analytics.sqlite`, one `run_summary` row per
- * run, the Insights source — lives in the `insights/` sub-module, built through
- * the exported `makeMigratedDbProvider` helper.)
+ * The old gateway identity file (`identity.sqlite`: users + user_prefs) is
+ * gone — the vault owner IS the user (`core_vault.owner_party_id`), and
+ * device-level prefs live in a plain JSON file (see `prefs-store.ts`).
  *
  * Each file gets one connection and one provider. The OpenClaw plugin's
  * worker subprocesses (which construct the runtime in every context but
@@ -73,62 +75,24 @@ import { DatabaseSync } from 'node:sqlite';
  * subprocess — only the gateway worker actually serves the HTTP routes
  * that touch this state, so deferring file open keeps stray DB handles
  * out of workers that never read or write.
+ *
+ * NOTE (#280): a provider may resolve to a DIFFERENT handle across calls —
+ * the gateway wires "the ACTIVE vault's transcripts.db" as one provider, so
+ * a vault switch changes what it returns. Stores that cache prepared
+ * statements must compare the handle per call and re-prepare on change.
  */
 export type DatabaseProvider = () => DatabaseSync;
 
 /**
- * Gateway file migration ladder — `users` + `user_prefs`. The user
- * identity gets its own table (rather than a key='id' row in a generic
- * key/value bag) so other tables can carry a real FK reference. Prefs
- * are scoped per user from day one — single-user today, but the shape
- * doesn't need to change if we ever go multi-tenant. `user_prefs`
- * cascades from `users` (same file).
+ * Per-vault transcripts migration ladder — `transcripts.db`
+ * (issue #98 → #190 shape, moved per-vault and merged with the run-summary
+ * rollup by #280).
  */
-export const GATEWAY_MIGRATIONS: readonly string[] = [
-  // 0 → 1: baseline schema for the gateway (users) file.
-  `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      created_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_prefs (
-      user_id TEXT NOT NULL,
-      key TEXT NOT NULL,
-      value TEXT NOT NULL,
-      PRIMARY KEY (user_id, key),
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `,
-];
-
-/**
- * Per-app conversation-ledger migration ladder — `runtime.sqlite`
- * (issue #98, reshaped by #190).
- *
- * Decision 3 of the #98 revision: an app's conversation ledger and
- * `ctx.state` are per-app, in `<appRoot>/runtime.sqlite` — a separate file
- * from the handler-owned `data.sqlite`, version-persistent.
- *
- * Issue #190 makes "everything is chat" first-class. The **conversation** is
- * the primary entity: every turn belongs to exactly one, via a NOT NULL,
- * FK-backed, CASCADE `conversation_id` (no more polymorphic, FK-free
- * column). `kind` / `app_id` / `automation_id` move UP onto the conversation
- * — a thread is single-kind, so they stop being re-stamped per turn — and a
- * `CHECK` constraint guards the `kind` / `trigger` / item-`kind` enums.
- * The inbound message (a person typing, a webhook firing, a cron tick) is a
- * first-class `items` row (`kind='message_in'`, ordinal 0), same shape as the
- * response — not a JSON blob on the turn. `attachments` ride that inbound
- * message and cascade off it.
- *
- * `turns.parent_turn_id` stays FK-free: a cross-app sub-run (e.g. an
- * `onFailure` cascade) has its parent in a *different* app's file and a
- * SQLite FK cannot span files (an orthogonal sharding axis — #190 Out scope).
- */
-export const RUNTIME_MIGRATIONS: readonly string[] = [
-  // 0 → 1: the per-app conversation ledger. Pre-1.0 baseline (no production
-  // rows to migrate) — the rename from chat_sessions/runs/run_nodes is a code
-  // refactor absorbed by this slot, not a data migration (#190).
+export const TRANSCRIPTS_MIGRATIONS: readonly string[] = [
+  // 0 → 1: the per-vault conversation ledger + run-summary rollup. Pre-1.0
+  // baseline (no production rows to migrate) — the move from per-app
+  // `runtime.sqlite` + central `analytics.sqlite` is absorbed by this slot,
+  // not a data migration (#280).
   `
     CREATE TABLE IF NOT EXISTS conversations (
       id                 TEXT PRIMARY KEY,
@@ -147,6 +111,8 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
       ON conversations(user_id, updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_conversations_app
+      ON conversations(app_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversations_automation
       ON conversations(automation_id);
 
@@ -236,6 +202,35 @@ export const RUNTIME_MIGRATIONS: readonly string[] = [
       updated_at    INTEGER NOT NULL,
       PRIMARY KEY (automation_id, key)
     );
+
+    CREATE TABLE IF NOT EXISTS run_summary (
+      run_id                   TEXT PRIMARY KEY,
+      kind                     TEXT NOT NULL,
+      automation_ref           TEXT,
+      app_id                   TEXT,
+      trigger                  TEXT NOT NULL,
+      trigger_origin           TEXT,
+      ok                       INTEGER NOT NULL DEFAULT 0,
+      pinned                   INTEGER NOT NULL DEFAULT 0,
+      summary                  TEXT,
+      note                     TEXT,
+      error                    TEXT,
+      retry_of                 TEXT,
+      model                    TEXT,
+      started_at               INTEGER NOT NULL,
+      ended_at                 INTEGER,
+      total_input_tokens       INTEGER,
+      total_output_tokens      INTEGER,
+      total_cache_read_tokens  INTEGER,
+      total_cache_write_tokens INTEGER,
+      total_cost_usd           REAL,
+      step_count               INTEGER,
+      tool_count               INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_run_summary_started
+      ON run_summary(started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_run_summary_kind_ref
+      ON run_summary(kind, automation_ref, started_at DESC);
   `,
 ];
 
@@ -320,22 +315,12 @@ export function makeMigratedDbProvider(
   };
 }
 
-/** Open the gateway (users + user_prefs) DB file. */
-export function openGatewayDb(dbPath: string): DatabaseSync {
-  return openMigratedDb(dbPath, GATEWAY_MIGRATIONS, 'gateway');
+/** Open a vault's `transcripts.db` (conversations + turns + items + attachments + ctx.state + run_summary). */
+export function openTranscriptsDb(dbPath: string): DatabaseSync {
+  return openMigratedDb(dbPath, TRANSCRIPTS_MIGRATIONS, 'transcripts');
 }
 
-/** Lazy provider for the gateway (users + user_prefs) DB file. */
-export function makeGatewayDbProvider(dbPath: string): DatabaseProvider {
-  return makeMigratedDbProvider(dbPath, GATEWAY_MIGRATIONS, 'gateway');
-}
-
-/** Open an app's per-app `runtime.sqlite` (conversations + turns + items + attachments + ctx.state). */
-export function openRuntimeDb(dbPath: string): DatabaseSync {
-  return openMigratedDb(dbPath, RUNTIME_MIGRATIONS, 'runtime');
-}
-
-/** Lazy provider for an app's per-app `runtime.sqlite` run ledger. */
-export function makeRuntimeDbProvider(dbPath: string): DatabaseProvider {
-  return makeMigratedDbProvider(dbPath, RUNTIME_MIGRATIONS, 'runtime');
+/** Lazy provider for a vault's `transcripts.db` ledger. */
+export function makeTranscriptsDbProvider(dbPath: string): DatabaseProvider {
+  return makeMigratedDbProvider(dbPath, TRANSCRIPTS_MIGRATIONS, 'transcripts');
 }

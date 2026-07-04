@@ -18,7 +18,7 @@ import { mergePersistedSettings } from './settings-merge.js';
  *     serialized. Just the active gateway pointer + UI-level prefs.
  *   - **Effective form** (`DesktopSettings`, returned by `loadSettings`):
  *     the persisted fields, plus everything derived from the active
- *     gateway — `gatewayUrl`, `gatewayToken`, `appsDir`. App *code* now
+ *     gateway — `gatewayUrl`, `gatewayToken`. App *code* now
  *     lives in the gateway's git store (issue #137), so there is no
  *     `workspaceDir`; `appsDir` holds only per-app data.
  *     Every IPC handler that needs to act against the active gateway
@@ -69,7 +69,6 @@ export interface DesktopSettings {
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
   /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */
-  appsDir: string;
   /**
    * Derived — kind of the active gateway. `'local'` means the
    * in-process runtime owns the URL/token; `'remote'` means the URL
@@ -217,7 +216,6 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     // `readProfile` thread defaults — these are always populated.
     activeProfileDisplayName: resolved.profile.displayName ?? resolved.profile.label,
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
-    appsDir: resolved.appsDir,
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
@@ -252,7 +250,6 @@ export async function loadPersistedSettings(): Promise<PersistedSettings> {
  */
 export async function saveSettings(patch: Partial<DesktopSettings>): Promise<DesktopSettings> {
   const forbidden = [
-    'appsDir',
     'gatewayUrl',
     'gatewayToken',
     'activeGatewayKind',

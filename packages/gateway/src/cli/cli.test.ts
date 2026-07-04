@@ -7,7 +7,7 @@ import crypto from 'node:crypto';
 import url from 'node:url';
 import { validateConfig, DaemonConfigError } from './config.ts';
 import { buildPrefsPatch, seedRunnerPrefs } from './runner-prefs.ts';
-import type { UserStore } from '@centraid/app-engine';
+import type { PrefsStore } from '@centraid/app-engine';
 import { daemonLayoutFor } from './paths.ts';
 import { readOrMintToken, readPersistedToken } from './token.ts';
 
@@ -72,7 +72,7 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is
       patches.push(p);
       return p;
     },
-  } as unknown as UserStore;
+  } as unknown as PrefsStore;
   seedRunnerPrefs(fakeStore, { dataDir: '/x' });
   expect(patches.length).toBe(1);
   for (const v of Object.values(patches[0]!)) expect(v).toBe(null);
@@ -80,8 +80,8 @@ test('seedRunnerPrefs calls setPrefs even on empty config so a removed runner is
 
 test('daemonLayoutFor resolves relative paths to absolute', () => {
   const layout = daemonLayoutFor('./relative');
-  expect(path.isAbsolute(layout.appsDir)).toBeTruthy();
-  expect(layout.appsDir.endsWith(path.join('relative', 'apps'))).toBeTruthy();
+  expect(path.isAbsolute(layout.prefsFile)).toBeTruthy();
+  expect(layout.prefsFile.endsWith(path.join('relative', 'prefs.json'))).toBeTruthy();
 });
 
 test('daemonLayoutFor mounts the vault plane at <dataDir>/vault', () => {

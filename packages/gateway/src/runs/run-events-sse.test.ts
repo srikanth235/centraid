@@ -15,8 +15,7 @@ import {
   ConversationStore,
   AnalyticsStore,
   InsightsStore,
-  makeAnalyticsDbProvider,
-  makeRuntimeDbProvider,
+  makeTranscriptsDbProvider,
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import { WorktreeStore } from '../worktree-store/index.js';
@@ -30,11 +29,9 @@ let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
 const APP = 'brief';
 
-/** Open a ledger at the path the route resolves for `<APP>/...` run ids. */
+/** Open the vault ledger the route reads (one transcripts.db, #280). */
 function ledger(): ConversationStore {
-  return new ConversationStore(
-    makeRuntimeDbProvider(path.join(dir, 'apps', APP, 'runtime.sqlite')),
-  );
+  return new ConversationStore(makeTranscriptsDbProvider(path.join(dir, 'transcripts.db')));
 }
 
 /** Seed one automation fire: its own execution conversation + a turn under it. */
@@ -47,12 +44,13 @@ function seedTurn(store: ConversationStore, ref: string, turnId: string, started
 beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), `run-sse-${crypto.randomUUID()}-`));
   await fs.mkdir(path.join(dir, 'apps', APP), { recursive: true });
-  const provider = makeAnalyticsDbProvider(path.join(dir, 'analytics.sqlite'));
+  const transcriptsDbFile = path.join(dir, 'transcripts.db');
+  const provider = makeTranscriptsDbProvider(transcriptsDbFile);
   analytics = new AnalyticsStore(provider);
   bus = new RunEventBus();
   handler = makeAutomationsRouteHandler({
     store: new WorktreeStore({ root: path.join(dir, 'code') }),
-    dataAppsDir: path.join(dir, 'apps'),
+    transcriptsDbFile,
     analytics,
     insights: new InsightsStore(provider),
     runAutomation: () => undefined,

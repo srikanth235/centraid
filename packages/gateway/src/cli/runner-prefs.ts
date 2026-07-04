@@ -1,9 +1,9 @@
 /*
- * Seed the daemon's identity DB with `agent.runner.*` prefs from the
+ * Seed the daemon's prefs file with `agent.runner.*` prefs from the
  * config file.
  *
  * Without this, the runtime's per-turn prefs loader would see an empty
- * user_prefs row and fall back to "codex with whatever's on $PATH" —
+ * prefs.json and fall back to "codex with whatever's on $PATH" —
  * which is fine for a default but doesn't pick up the daemon operator's
  * configured binPath / extra args.
  *
@@ -14,7 +14,7 @@
  * remains the source of truth.
  */
 
-import type { UserStore } from '@centraid/app-engine';
+import type { PrefsStore } from '@centraid/app-engine';
 import type { DaemonConfig } from './config.js';
 
 const RUNNER_KEYS = [
@@ -38,10 +38,10 @@ export function buildPrefsPatch(config: DaemonConfig): Record<string, unknown> {
   return patch;
 }
 
-export function seedRunnerPrefs(userStore: UserStore, config: DaemonConfig): void {
+export function seedRunnerPrefs(prefs: PrefsStore, config: DaemonConfig): void {
   // Always apply the patch, even when `runner` is absent — that's the case
   // where the operator removed a previously seeded runner block and expects
   // the next boot to clear it. `buildPrefsPatch` defaults every known key to
   // `null`, so an empty config wipes prior state.
-  userStore.setPrefs(buildPrefsPatch(config));
+  prefs.setPrefs(buildPrefsPatch(config));
 }

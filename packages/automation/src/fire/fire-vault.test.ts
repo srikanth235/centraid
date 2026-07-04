@@ -95,6 +95,7 @@ describe('runFire + ctx.vault', () => {
           automationRef: 'notes/filer',
           runId: 'run-fixed',
           appsDir: dataDir,
+          transcriptsDbFile: path.join(dataDir, 'transcripts.db'),
           codeAppsDir: appsDir,
           vaultFor: (appId) => {
             bridgeApps.push(appId);
@@ -146,7 +147,11 @@ describe('runFire + ctx.vault', () => {
        };`,
     );
     const { outcome } = await runFire(
-      { automationRef: 'notes/blind', appsDir },
+      {
+        automationRef: 'notes/blind',
+        appsDir,
+        transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+      },
       { openDispatch: stubDispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -174,7 +179,12 @@ describe('runFire + ctx.vault', () => {
       error: 'deny (receipt r9): no active grant',
     });
     const { outcome } = await runFire(
-      { automationRef: 'notes/denied', appsDir, vaultFor: () => deny },
+      {
+        automationRef: 'notes/denied',
+        appsDir,
+        transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+        vaultFor: () => deny,
+      },
       { openDispatch: stubDispatch },
     );
     expect(outcome.ok).toBe(true);

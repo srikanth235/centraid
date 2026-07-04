@@ -9,15 +9,13 @@
  * per-app engine nor the per-app run ledger, so it stays its own folder rather
  * than dissolving into the package root.
  *
- *   - AnalyticsStore — push-based central run summaries. Implements
- *     app-engine's `RunSummarySink`, so `AgentRunsStore.finishRun` can
- *     write-through one row per run. Backed by `centraid-analytics.sqlite`.
+ *   - AnalyticsStore — push-based run summaries. Implements app-engine's
+ *     `RunSummarySink`, so `finishTurn` can write-through one row per run.
+ *     Backed by the vault's own `transcripts.db` `run_summary` table
+ *     (issue #280 — the central `analytics.sqlite` is gone; a per-vault
+ *     rollup can never aggregate across vaults).
  *   - InsightsStore — read-only aggregation over those summaries; the single
- *     source for the desktop Insights screen.
- *   - The `centraid-analytics.sqlite` migration ladder + provider
- *     (`analytics-db.ts`) — this sub-module owns its schema, built through
- *     app-engine's shared `makeMigratedDbProvider` so it opens with the same
- *     WAL/pragma/migrate seam as every other centraid SQLite file.
+ *     source for the desktop Insights screen. Follows the active vault.
  *
  * Re-exported from the app-engine package barrel; consumers import these
  * symbols from `@centraid/app-engine`. The `RunSummary` / `RunSummarySink`
@@ -26,7 +24,6 @@
  */
 
 export { AnalyticsStore, type ListSummariesOptions } from './analytics-store.js';
-export { openAnalyticsDb, makeAnalyticsDbProvider, ANALYTICS_MIGRATIONS } from './analytics-db.js';
 export {
   InsightsStore,
   INSIGHTS_QUOTA_TOKENS,

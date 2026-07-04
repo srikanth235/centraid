@@ -414,22 +414,11 @@ interface CentraidApi {
     avatarColor?: string;
   }): Promise<CentraidGatewayProfile>;
   /**
-   * Add a new local gateway (workspace). UUID id is minted server-side.
-   * The runtime for this gateway is not started until it is activated.
-   * Used for isolated dev/scratch/per-app local workspaces; the
-   * primordial `'local'` gateway is always present and is not created
-   * via this call.
-   */
-  addLocalGateway(input: {
-    label: string;
-    displayName?: string;
-    avatarColor?: string;
-  }): Promise<CentraidGatewayProfile>;
-  /**
-   * Remove a gateway. Refuses to remove the primordial `'local'`
-   * gateway; any other local (added via `addLocalGateway`) or remote
-   * gateway can be removed. Returns the new active gateway id (falls
-   * back to the primordial `'local'` if the removed gateway was active).
+   * Remove a gateway (connection). Refuses to remove the primordial
+   * `'local'` gateway; remote connections can be removed. Returns the
+   * new active gateway id (falls back to the primordial `'local'` if
+   * the removed gateway was active). (#280 removed additional local
+   * workspaces — a second space is a second VAULT.)
    */
   removeGateway(input: { id: string }): Promise<{ activeGatewayId: string }>;
   /** Rename a gateway's user-facing label. Id and paths never change. */
