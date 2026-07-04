@@ -93,7 +93,9 @@ function primaryHandle(person) {
 }
 
 function isFavorite(person) {
-  return person.card?.favorite === 1;
+  // Favorite is a flags-scheme tag on the canonical party (issue #274),
+  // decorated onto the row by the queries — not a card column.
+  return person.favorite === 1;
 }
 
 // Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers

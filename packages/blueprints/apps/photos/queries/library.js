@@ -72,6 +72,35 @@ export default async ({ input, ctx }) => {
     ]);
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+
+    // Favorite is a flags-scheme starred tag on the canonical content item
+    // (issue #274) — one bounded read over the windowed content ids, the
+    // same star the drive's Starred section reads.
+    const [flagSchemes, flagConcepts] = await Promise.all([
+      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+      ctx.vault.read({ entity: 'core.concept', purpose }),
+    ]);
+    const flagsScheme = (flagSchemes.rows ?? []).find(
+      (sch) => sch.uri === 'https://centraid.dev/schemes/flags',
+    );
+    const starredConcept = flagsScheme
+      ? (flagConcepts.rows ?? []).find(
+          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
+        )
+      : undefined;
+    const starredIds = new Set();
+    if (starredConcept && contentIds.length > 0) {
+      const starTags = await ctx.vault.read({
+        entity: 'core.tag',
+        where: [
+          { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
+          { column: 'target_type', op: 'eq', value: 'core.content_item' },
+          { column: 'target_id', op: 'in', value: contentIds },
+        ],
+        purpose,
+      });
+      for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
+    }
     const albumsById = new Map((albums.rows ?? []).map((a) => [a.album_id, a]));
     const albumIdsByAsset = new Map();
     for (const entry of entries.rows ?? []) {
@@ -84,6 +113,7 @@ export default async ({ input, ctx }) => {
       const albumIds = albumIdsByAsset.get(asset.asset_id) ?? [];
       return {
         ...asset,
+        favorite: starredIds.has(asset.content_id) ? 1 : 0,
         content_uri: content?.content_uri ?? null,
         media_type: content?.media_type ?? null,
         title: content?.title ?? null,

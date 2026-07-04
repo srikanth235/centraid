@@ -3,7 +3,7 @@
   "id": "people",
   "name": "People",
   "description": "The vault's single identity anchor rendered as a contacts app: every person, org, and agent is a core.party, their handles live in core.party_identifier, and enrichment (nickname, note, favorite) sits in social.contact_card. People are minted through core.add_party and renamed through core.update_party, handles bind through resolve_identity, and composing runs the full draft-then-send lifecycle — sending is risk-high, so it parks for the owner's confirmation. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "iconKey": "Users",
   "colorKey": "violet",
   "vault": {
@@ -27,6 +27,21 @@
       {
         "schema": "core",
         "table": "content_item",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
         "verbs": "read"
       },
       {

@@ -16,6 +16,7 @@
  */
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
+const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -57,6 +58,20 @@ export default async ({ input, ctx }) => {
       if (folderConceptIds.has(t.concept_id)) folderByContent.set(t.target_id, t.concept_id);
     }
 
+    // Starred rides the tag read already in hand (issue #274): the flags
+    // scheme's `starred` concept against the same matched content ids.
+    const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
+    const starredConceptId = flagsScheme
+      ? ((concepts.rows ?? []).find(
+          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
+        )?.concept_id ?? null)
+      : null;
+    const starredIds = new Set(
+      (tags.rows ?? [])
+        .filter((t) => starredConceptId != null && t.concept_id === starredConceptId)
+        .map((t) => t.target_id),
+    );
+
     // Vault order is rank order (best match first) — keep it.
     const documents = hits
       .filter((c) => folderByContent.has(c.content_id))
@@ -70,6 +85,7 @@ export default async ({ input, ctx }) => {
           content_uri: c.content_uri,
           created_at: c.created_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
+          starred: starredIds.has(c.content_id),
           trashed: c.deleted_at != null,
           purge_at: c.purge_at ?? null,
           snippet: typeof c._snippet === 'string' ? c._snippet : '',

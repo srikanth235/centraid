@@ -8,9 +8,11 @@
 // own: revoke the grant and this page goes dark while the documents, history
 // and receipts remain the owner's.
 //
-// Two things the vault has no signal for are surfaced honestly rather than
-// faked: there is no "starred" bit and no per-person "shared" edge, so the
-// Starred view stays an honest empty state and there is no sharing UI at all.
+// Starred is vault-canonical (issue #274): one flags-scheme tag on the
+// canonical content item, written through core.star_document/unstar_document
+// — the same star a favorited photo carries, so Starred here shows them too.
+// Sharing still has no vault signal (no per-person "shared" edge), so there
+// is honestly no sharing UI at all.
 
 import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
 
@@ -277,7 +279,6 @@ function compareDocs(a, b) {
 // The rows for the current view: nav (or search) → type filter → sort.
 function currentRows() {
   const { nav, type, search } = state;
-  if (nav.kind === 'starred') return []; // honest empty — no vault star signal
   let list;
   if (search.trim()) {
     list = searchResults ?? []; // flat vault FTS matches across every folder
@@ -285,6 +286,7 @@ function currentRows() {
     list = trashedFiles();
   } else {
     list = activeFiles();
+    if (nav.kind === 'starred') list = list.filter((f) => f.starred);
     if (nav.kind === 'folder') list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
   }
   if (type !== 'all') list = list.filter((f) => typeMeta(f.media_type).cat === type);
@@ -437,6 +439,12 @@ function openDocMenu(anchor, doc) {
         startRenameDoc(doc);
       }),
     );
+    box.appendChild(
+      popItem(doc.starred ? 'Remove star' : 'Star', () => {
+        closePopover();
+        toggleStar(doc);
+      }),
+    );
     box.appendChild(popItem('Move to…', () => openMovePopover(anchor, [doc])));
     box.appendChild(h('div', { class: 'd-popover-sep' }));
     box.appendChild(
@@ -474,6 +482,16 @@ async function restoreDoc(doc) {
   const outcome = await act('restore', { content_id: doc.content_id });
   if (narrate(outcome)) {
     toast('Restored to its folder · receipted.');
+    await refresh();
+  }
+}
+
+// One star across the vault: the flags-scheme tag on the canonical content
+// item, so favorites from Photos and stars from here are the same judgment.
+async function toggleStar(doc) {
+  const outcome = await act(doc.starred ? 'unstar' : 'star', { content_id: doc.content_id });
+  if (narrate(outcome)) {
+    toast(doc.starred ? 'Star removed · receipted.' : 'Starred · receipted.');
     await refresh();
   }
 }
@@ -638,7 +656,7 @@ function navItem({ icon, label, active, count, onClick }) {
 function renderSidebar() {
   const counts = {
     all: activeFiles().length,
-    starred: 0,
+    starred: activeFiles().filter((f) => f.starred).length,
     trash: trashedFiles().length,
   };
 
@@ -810,7 +828,8 @@ function renderToolbar() {
   if (state.search.trim()) sub = `${n} match${n === 1 ? '' : 'es'} “${state.search.trim()}”`;
   else if (state.nav.kind === 'trash') sub = `${n} in trash · auto-purge after 30 days`;
   else if (state.nav.kind === 'recent') sub = 'Newest across every folder';
-  else if (state.nav.kind === 'starred') sub = 'Starring isn’t wired to your vault yet';
+  else if (state.nav.kind === 'starred')
+    sub = `${n} starred document${n === 1 ? '' : 's'} · one star across your vault`;
   else sub = `${n} document${n === 1 ? '' : 's'}`;
   $('activeSub').textContent = sub;
 
@@ -955,11 +974,14 @@ function gridCard(doc, index) {
     ),
   );
 
+  const cardTitle = h('div', { class: 'd-card-title' }, doc.title ?? 'Untitled');
+  if (doc.starred)
+    cardTitle.appendChild(h('span', { class: 'd-star-ind', 'aria-label': 'Starred' }, '★'));
   card.appendChild(
     h(
       'div',
       { class: 'd-card-body' },
-      h('div', { class: 'd-card-title' }, doc.title ?? 'Untitled'),
+      cardTitle,
       h('div', { class: 'd-card-meta' }, `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`),
     ),
   );
@@ -1016,6 +1038,8 @@ function listRow(doc, index) {
     },
     doc.title ?? 'Untitled',
   );
+  if (doc.starred)
+    title.appendChild(h('span', { class: 'd-star-ind', 'aria-label': 'Starred' }, '★'));
   main.appendChild(title);
   if (state.search.trim() && doc.snippet) {
     const snip = h('div', { class: 'd-snippet' });
@@ -1116,11 +1140,11 @@ function renderRows() {
   list.replaceChildren();
 
   if (rows.length === 0) {
-    if (state.nav.kind === 'starred') {
+    if (state.nav.kind === 'starred' && state.type === 'all') {
       emptyState(
         I.star,
-        'Nothing starred',
-        'Starring is a personal marker — it isn’t backed by your vault yet, so this stays empty. Everything the drive holds lives in All documents.',
+        'Nothing starred yet',
+        'Star a document from its menu to pin it here. It is one star across your vault — photos you favorite land here too.',
       );
     } else if (state.search.trim()) {
       emptyState(
@@ -1257,6 +1281,14 @@ function renderDetails() {
       { class: 'd-detail-btn', href: doc.content_uri, download: doc.title ?? 'file' },
       'Download',
     ),
+    // A trashed document refuses star changes (the star survives restore).
+    trashed
+      ? null
+      : h(
+          'button',
+          { type: 'button', class: 'd-detail-btn', onclick: () => toggleStar(doc) },
+          doc.starred ? '★ Starred' : '☆ Star',
+        ),
   );
 
   const grid = h(

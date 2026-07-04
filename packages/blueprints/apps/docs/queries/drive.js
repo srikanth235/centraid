@@ -9,12 +9,16 @@
  * window (`truncated` tells the UI to offer that). Trashed documents
  * (deleted_at set) keep their tag so a restore lands them back where they
  * were; they ride the same window with trashed=true and their purge date.
- * Everything comes from the vault; this app holds no rows of its own.
+ * Starred is a flags-scheme tag on the same canonical content item (issue
+ * #274), decorated from one bounded read over the windowed ids — the same
+ * star a favorited photo carries. Everything comes from the vault; this
+ * app holds no rows of its own.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
+const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -71,14 +75,38 @@ export default async ({ input, ctx }) => {
       return { folders, documents: [], root_folder_id: rootFolderId, truncated: false, window };
     }
 
+    // Starred is a flags-scheme tag on the same canonical content item
+    // (issue #274) — one bounded read over the windowed ids. No scheme or
+    // concept yet just means nothing has ever been starred.
+    const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
+    const starredConcept = flagsScheme
+      ? (concepts.rows ?? []).find(
+          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
+        )
+      : undefined;
+
     // The content join is `in`-bounded by the windowed tags — only the
     // documents in the window ever ride the RPC, never every blob in the
     // vault.
-    const contents = await ctx.vault.read({
-      entity: 'core.content_item',
-      where: [{ column: 'content_id', op: 'in', value: [...folderByContent.keys()] }],
-      purpose,
-    });
+    const [contents, starTags] = await Promise.all([
+      ctx.vault.read({
+        entity: 'core.content_item',
+        where: [{ column: 'content_id', op: 'in', value: [...folderByContent.keys()] }],
+        purpose,
+      }),
+      starredConcept
+        ? ctx.vault.read({
+            entity: 'core.tag',
+            where: [
+              { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
+              { column: 'target_type', op: 'eq', value: 'core.content_item' },
+              { column: 'target_id', op: 'in', value: [...folderByContent.keys()] },
+            ],
+            purpose,
+          })
+        : { rows: [] },
+    ]);
+    const starredIds = new Set((starTags.rows ?? []).map((t) => t.target_id));
 
     const documents = (contents.rows ?? [])
       .map((c) => {
@@ -91,6 +119,7 @@ export default async ({ input, ctx }) => {
           content_uri: c.content_uri,
           created_at: c.created_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
+          starred: starredIds.has(c.content_id),
           trashed: c.deleted_at != null,
           purge_at: c.purge_at ?? null,
         };
