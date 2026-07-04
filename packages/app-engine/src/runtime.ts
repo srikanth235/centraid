@@ -37,6 +37,14 @@ export interface RuntimeLogger {
 export interface RuntimeOptions {
   /** Absolute path of the directory holding app folders + `_registry.json`. */
   appsDir: string;
+  /**
+   * Optional canonical dir for assets shared verbatim by every app
+   * (`kit.js` / `kit.css`). Apps no longer ship their own copy; a request
+   * for `/centraid/<id>/kit.js` that the app folder can't satisfy is served
+   * from here. Hosts point this at `@centraid/blueprints`'s `KIT_DIR`.
+   * Omit to disable the fallback.
+   */
+  sharedAssetsDir?: string;
   logger?: RuntimeLogger;
   /**
    * Optional change bus. When omitted the runtime constructs an internal
@@ -253,6 +261,7 @@ export class Runtime {
   /** Optional runner-status preflight. */
   readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
   private readonly appsDir: string;
+  private readonly sharedAssetsDir?: string;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
@@ -267,6 +276,7 @@ export class Runtime {
 
   constructor(opts: RuntimeOptions) {
     this.appsDir = opts.appsDir;
+    if (opts.sharedAssetsDir) this.sharedAssetsDir = opts.sharedAssetsDir;
     this.logger = opts.logger ?? noopLogger;
     this.registry = new Registry(opts.appsDir);
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
@@ -570,6 +580,9 @@ export class Runtime {
           const draftServe = draftSessionId
             ? { draft: { appId: entry.id, sessionId: draftSessionId } }
             : {};
+          // Kit assets (kit.js / kit.css) are served from the shared canonical
+          // dir when the app folder doesn't ship its own copy.
+          const sharedServe = this.sharedAssetsDir ? { sharedAssetsDir: this.sharedAssetsDir } : {};
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
           if (route.kind === 'app-index') {
             // Merge global prefs (gateway-side store) with this app's own
@@ -582,9 +595,9 @@ export class Runtime {
             const appSettings = readAppSettings(dataDbFile);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
-            await serveStatic(res, codeDir, rel, { settingsInject, ...draftServe });
+            await serveStatic(res, codeDir, rel, { settingsInject, ...draftServe, ...sharedServe });
           } else {
-            await serveStatic(res, codeDir, rel, draftServe);
+            await serveStatic(res, codeDir, rel, { ...draftServe, ...sharedServe });
           }
           return;
         }

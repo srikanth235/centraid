@@ -266,8 +266,10 @@ bun install   # or: npm install
 ## Phone-readiness
 
 The mobile shell is a thin viewer — on the phone this blueprint IS the
-UI. Keep the kit (\`kit.js\` / \`kit.css\`) when the app ships one, and keep
-the scaffold's responsive conventions intact: \`viewport-fit=cover\` in the
+UI. Keep the kit references (\`kit.js\` / \`kit.css\` are served by the runtime
+from one shared canonical copy — reference them from \`index.html\` / \`app.js\`,
+never copy them into the app folder), and keep the scaffold's responsive
+conventions intact: \`viewport-fit=cover\` in the
 viewport meta, \`env(safe-area-inset-*)\` body padding, the single 720px
 breakpoint, ≥ 44px hit targets, and the \`prefers-reduced-motion\` guard.
 Build on these; never strip them.

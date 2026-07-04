@@ -45,7 +45,7 @@
           <h1>Tasks</h1>
           <p id="subtitle" class="muted">Your canonical task list, from the vault.</p>
         </div>
-        <div class="head-tools">
+        <div class="head-tools" data-ask-mount>
           <input
             id="searchInput"
             type="search"
@@ -117,6 +117,22 @@
         checked against your consent and leaves a receipt you can review.
       </p>
     </main>
+    <script>
+      // "Ask your vault" config — kit.js injects the button + panel and, by
+      // default, drives the conversation through this app's _turn agent;
+      // writes park at the vault plane for the owner's approval.
+      window.KIT_ASK = {
+        scope: 'tasks',
+        placeholder: 'Ask your tasks…',
+        intro:
+          'Ask me to add, complete, reschedule or find tasks. I’ll show the change for your approval before it touches the vault.',
+        suggest: [
+          'Add “call mom tomorrow”',
+          'What’s due today?',
+          'Complete “Send the studio invoice”',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Bookings</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -156,6 +156,15 @@
         confirming it puts it on the books.
       </p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'bookings',
+        placeholder: 'Ask your bookings…',
+        intro:
+          'Ask me to set availability, log a request, or find a slot. Requests park for your approval before they hold a slot.',
+        suggest: ['Book Dana Thursday at 10', 'What’s pending?', 'Am I free Friday afternoon?'],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

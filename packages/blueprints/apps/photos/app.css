@@ -1,38 +1,68 @@
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --accent: #b47b3f;
-  --ink: #0f172a;
-  --ink-soft: #475569;
-  --ink-faint: #94a3b8;
-  --bg: #fcfcfc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Photos identity accent — violet. Swappable via --app-color. */
+  --accent: #7c5bd9;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #120a2e);
+  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 12%, transparent);
+  --on-accent: #ffffff;
+
+  --ink: hsl(255 20% 13%);
+  --ink-soft: hsl(255 7% 42%);
+  --ink-faint: hsl(255 8% 60%);
+
+  --bg: hsl(255 20% 98%);
   --surface: #ffffff;
-  --line: rgba(31, 31, 35, 0.07);
-  --danger: #dc2626;
-  /* Aliases the shared kit reads (--text/--muted) — track the ink tokens. */
+  --surface-2: hsl(255 22% 96%);
+
+  --line: rgba(28, 22, 44, 0.09);
+  --line-strong: rgba(28, 22, 44, 0.16);
+
+  --danger: #d0342c;
+
   --text: var(--ink);
   --muted: var(--ink-soft);
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(18, 12, 28, 0.28), 0 2px 6px -3px rgba(18, 12, 28, 0.12);
+  --shadow-lg: 0 26px 60px -24px rgba(18, 12, 28, 0.4);
+
+  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(220 12% 95%);
-  --ink-soft: hsl(220 8% 62%);
-  --ink-faint: hsl(220 6% 42%);
+  --ink: hsl(255 16% 94%);
+  --ink-soft: hsl(255 9% 66%);
+  --ink-faint: hsl(255 9% 48%);
   --bg: var(--bg-wall);
-  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
-  --line: hsla(220 25% 70% / 0.07);
+  --surface: hsl(255 12% calc(var(--bg-l) + 5%));
+  --surface-2: hsl(255 11% calc(var(--bg-l) + 8.5%));
+  --line: hsla(255 30% 76% / 0.1);
+  --line-strong: hsla(255 30% 78% / 0.2);
+  --danger: #f0645b;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f2edff);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg-l: 10%;
-    --ink: hsl(220 12% 95%);
-    --ink-soft: hsl(220 8% 62%);
-    --ink-faint: hsl(220 6% 42%);
+    --ink: hsl(255 16% 94%);
+    --ink-soft: hsl(255 9% 66%);
+    --ink-faint: hsl(255 9% 48%);
     --bg: var(--bg-wall);
-    --surface: hsl(225 11% 14.5%);
-    --line: hsla(220 25% 70% / 0.07);
+    --surface: hsl(255 12% 15%);
+    --surface-2: hsl(255 11% 18.5%);
+    --line: hsla(255 30% 76% / 0.1);
+    --line-strong: hsla(255 30% 78% / 0.2);
+    --danger: #f0645b;
+    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f2edff);
   }
 }
 
@@ -42,25 +72,29 @@
 
 body {
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
 main {
   max-width: 36rem;
   margin: 0 auto;
-  padding: 0.5rem 0 2rem;
+  padding: 0.75rem 0 4rem;
 }
 
 @media (min-width: 720px) {
   body {
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
   }
   main {
-    max-width: 56rem;
+    max-width: 58rem;
+    padding-top: 1.25rem;
   }
 }
 
@@ -69,40 +103,38 @@ main {
   align-items: center;
   gap: 0.6rem;
   flex-wrap: wrap;
-  margin-bottom: 1rem;
+  margin-bottom: 1.1rem;
 }
-
 .head h1 {
-  font-size: 1.5rem;
+  font-size: 1.55rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0.25rem 0 0;
 }
-
-/* Rounded, Google-Photos-style search pill. */
 .search {
   flex: 1;
   min-width: 11rem;
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  min-height: 2.5rem;
+  min-height: 2.6rem;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0 0.4rem 0 0.85rem;
+  padding: 0 0.4rem 0 0.95rem;
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
 }
-
 .search:focus-within {
-  border-color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
 .search-icon {
   color: var(--ink-faint);
   font-size: 1.1rem;
   line-height: 1;
 }
-
 .search input {
   flex: 1;
   min-width: 0;
@@ -110,16 +142,18 @@ main {
   background: transparent;
   padding: 0.5rem 0;
   border-radius: 0;
+  color: var(--ink);
+  font: inherit;
 }
-
+.search input::placeholder {
+  color: var(--ink-faint);
+}
 .search input:focus {
   outline: none;
 }
-
 .search input::-webkit-search-cancel-button {
   display: none;
 }
-
 .search-clear {
   width: 2rem;
   height: 2rem;
@@ -131,141 +165,154 @@ main {
   font-size: 1.1rem;
   line-height: 1;
 }
-
 .search-clear:hover {
-  background: var(--line);
+  background: var(--surface-2);
 }
-
 .head-btn {
   border-radius: 999px;
-  min-height: 2.5rem;
+  min-height: 2.6rem;
   padding: 0.45rem 0.95rem;
 }
-
 .head-btn[data-active='true'] {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  color: var(--accent-deep);
+  background: var(--accent-soft);
 }
-
 .muted {
   color: var(--ink-soft);
   font-size: 0.85rem;
   margin: 0;
 }
-
 .small {
   font-size: 0.8rem;
 }
 
-/* Consent banner — the vault's decisions are part of the UI. */
-.banner {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
-  background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-  line-height: 1.45;
-}
+/* ---------- Trust banners ------------------------------------------------ */
 
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .banner strong {
   display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.banner.notice::before {
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
 }
 
-.banner.notice {
-  border-left-color: var(--ink-faint);
-  color: var(--ink-soft);
-}
-
-/* ---------- Write affordances (shared pattern across apps) ---------- */
+/* ---------- Buttons & inputs -------------------------------------------- */
 
 button {
   font: inherit;
   cursor: pointer;
 }
-
 button[disabled] {
   opacity: 0.5;
   cursor: default;
   pointer-events: none;
 }
-
 button:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
 input {
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   color: var(--ink);
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.6rem;
   -webkit-appearance: none;
+  appearance: none;
 }
-
 input:focus {
   outline: none;
-  border-color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
 .primary {
   border-radius: 999px;
   border: none;
-  background: var(--app-color, var(--accent));
-  color: #fff;
+  background: var(--accent-deep);
+  color: var(--on-accent);
   font-weight: 600;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    filter 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
-
+.primary:hover {
+  filter: brightness(1.08);
+}
+.primary:active {
+  transform: scale(0.98);
+}
 .small-btn {
   font-size: 0.85rem;
   padding: 0.45rem 0.95rem;
-  min-height: 2.5rem;
+  min-height: 2.6rem;
   flex: none;
 }
-
 .ghost {
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: transparent;
+  background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.8rem;
   padding: 0.4rem 0.8rem;
-  min-height: 2.5rem;
+  min-height: 2.6rem;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
-
 .ghost:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
-
 .ghost.danger {
   color: var(--danger);
 }
-
 .ghost.danger:hover {
   border-color: var(--danger);
   color: var(--danger);
 }
 
-/* Album filter chips */
+/* ---------- Album chips + tools ----------------------------------------- */
+
 .chips {
   display: flex;
   gap: 0.375rem;
   flex-wrap: wrap;
   margin-bottom: 1rem;
 }
-
-/* display:flex would defeat the hidden attribute — restate it. */
 .chips[hidden] {
   display: none;
 }
-
 .chip {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -276,88 +323,70 @@ input:focus {
   min-height: 2.5rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .chip:hover {
-  border-color: var(--ink-faint);
+  border-color: var(--line-strong);
 }
-
 .chip[data-active='true'] {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
-  font-weight: 600;
+  border-color: transparent;
+  background: var(--accent-deep);
+  color: var(--on-accent);
+  font-weight: 500;
 }
-
 .chip-new {
   border-style: dashed;
   color: var(--ink-faint);
 }
-
 .chip-new:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line));
+  color: var(--accent-deep);
 }
-
-/* A chip that turned into a text field (new album, rename). */
 .chip-input {
   border-radius: 999px;
   font-size: 0.8rem;
   padding: 0.3rem 0.75rem;
   width: 10rem;
 }
-
-/* Tools for the selected album — sits right under the chips. */
 .album-tools {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   margin: -0.5rem 0 1rem;
 }
-
 .album-tools[hidden] {
   display: none;
 }
-
 .album-tools-label {
   color: var(--ink-soft);
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
   margin-right: auto;
 }
-
-/* ---------- Library layout: album sidebar at wide widths ----------
-   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
-   the wrappers below are inert there. At >=720px the same chips restyle
-   into a docs-style sidebar column beside the photo grid. */
 
 @media (min-width: 720px) {
   :root:not([data-app-width='narrow']) .split {
     display: grid;
     grid-template-columns: 15rem minmax(0, 1fr);
-    gap: 1.5rem;
+    gap: 1.75rem;
     align-items: start;
   }
-
-  /* Sidebar hides until data arrives (and while consent is denied) —
-     collapse to one column so the pane doesn't sit beside a ghost track. */
   :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
     grid-template-columns: 1fr;
   }
-
   :root:not([data-app-width='narrow']) .side-nav {
     position: sticky;
     top: 0.5rem;
     border: 1px solid var(--line);
     background: var(--surface);
-    border-radius: 0.75rem;
+    border-radius: var(--radius);
     padding: 0.5rem;
+    box-shadow: var(--shadow-sm);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chips {
     flex-direction: column;
     align-items: stretch;
     gap: 0.15rem;
     margin-bottom: 0;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip {
     display: flex;
     align-items: center;
@@ -365,53 +394,44 @@ input:focus {
     font-size: 0.875rem;
     border: none;
     background: none;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip[data-active='true'] {
-    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
-    color: var(--app-color, var(--accent));
+    background: var(--accent-soft);
+    color: var(--accent-deep);
     font-weight: 600;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-new {
     border: 1px dashed var(--line);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-input {
     width: 100%;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
   }
-
-  /* The tools row for the selected album stacks under the chips: the
-     count label takes its own line, the buttons wrap below it. */
   :root:not([data-app-width='narrow']) .side-nav .album-tools {
     flex-wrap: wrap;
     margin: 0.5rem 0 0.25rem;
     padding: 0 0.1rem;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .album-tools-label {
     flex-basis: 100%;
     margin-right: 0;
   }
 }
 
-/* Photo grid — sticky month headers and day labels span the full row;
-   tiles are square with 2px gaps. */
+/* ---------- Photo grid --------------------------------------------------- */
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
-  gap: 2px;
+  gap: 3px;
 }
-
 .grid .kit-skeleton {
   grid-column: 1 / -1;
   height: 6rem;
   margin: 0.15rem 0;
 }
-
 .month-label {
   grid-column: 1 / -1;
   position: sticky;
@@ -422,18 +442,18 @@ input:focus {
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.01em;
-  background: var(--bg);
+  background: color-mix(in oklab, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px);
 }
-
 .day-label {
   grid-column: 1 / -1;
-  margin: 0.35rem 0 0.2rem;
+  margin: 0.4rem 0 0.2rem;
+  font-family: var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
 }
-
-/* The browse window's honest edge: latest N shown, Show more grows it. */
 .window-footer {
   grid-column: 1 / -1;
   display: flex;
@@ -444,51 +464,42 @@ input:focus {
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
-
 .tile-wrap {
   position: relative;
   aspect-ratio: 1;
 }
-
 .tile {
   width: 100%;
   height: 100%;
   padding: 0;
   border: none;
-  border-radius: 0;
-  background: var(--surface);
+  border-radius: 0.35rem;
+  background: var(--surface-2);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tile:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
   outline-offset: -2px;
 }
-
 .tile img,
 .tile video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.18s ease;
-  pointer-events: none; /* the tile button owns the click */
+  transition: transform 0.18s var(--ease);
+  pointer-events: none;
 }
-
 .tile:hover img,
 .tile:focus-visible img {
   transform: scale(1.04);
 }
-
-/* In select mode the hover zoom gives way to the selection affordance. */
 .grid.selecting .tile:hover img,
 .grid.selecting .tile:focus-visible img {
   transform: none;
 }
-
-/* Selection dot — a real button with a ≥40px hit area; visible while
-   selecting or selected, and on hover/focus as a desktop accelerator
-   (the Select toggle in the header is the primary, always-visible way in). */
 .tile-check {
   position: absolute;
   top: 0;
@@ -505,7 +516,6 @@ input:focus {
   z-index: 2;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tile-check::before {
   content: '';
   width: 1.25rem;
@@ -515,24 +525,20 @@ input:focus {
   background: rgba(0, 0, 0, 0.25);
   box-shadow: 0 0 4px rgba(0, 0, 0, 0.4);
 }
-
 .grid.selecting .tile-check,
 .tile-wrap.selected .tile-check,
 .tile-check:focus-visible {
   opacity: 1;
 }
-
 @media (hover: hover) {
   .tile-wrap:hover .tile-check {
     opacity: 1;
   }
 }
-
 .tile-wrap.selected .tile-check::before {
-  background: var(--app-color, var(--accent));
+  background: var(--accent-deep);
   border-color: #fff;
 }
-
 .tile-wrap.selected .tile-check::after {
   content: '✓';
   position: absolute;
@@ -540,18 +546,14 @@ input:focus {
   font-size: 0.75rem;
   font-weight: 700;
 }
-
-/* A selected tile insets its image over an accent wash — Google style. */
 .tile-wrap.selected .tile {
-  background: color-mix(in srgb, var(--app-color, var(--accent)) 20%, var(--surface));
+  background: var(--accent-soft);
 }
-
 .tile-wrap.selected .tile img,
 .tile-wrap.selected .tile video {
   transform: scale(0.85);
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
 }
-
 .tile-video-badge {
   position: absolute;
   bottom: 0.35rem;
@@ -560,12 +562,10 @@ input:focus {
   border-radius: 99px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
   pointer-events: none;
 }
-
-/* Inside an album, each tile offers one contextual edit: leave it.
-   The button owns a 40px corner; the visible glyph stays small. */
 .tile-remove {
   position: absolute;
   top: 0;
@@ -581,7 +581,6 @@ input:focus {
   z-index: 2;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tile-remove span {
   width: 1.5rem;
   height: 1.5rem;
@@ -594,25 +593,19 @@ input:focus {
   align-items: center;
   justify-content: center;
 }
-
 .grid.selecting .tile-remove {
   display: none;
 }
-
 @media (hover: hover) {
   .tile-remove {
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s var(--ease);
   }
   .tile-wrap:hover .tile-remove,
   .tile-remove:focus-visible {
     opacity: 1;
   }
 }
-
-/* The favorite heart — bottom-right sibling of the selection dot. Touch
-   keeps it always on; pointers get it on hover/focus, and a favorited
-   photo wears its filled heart permanently. */
 .tile-heart {
   position: absolute;
   bottom: 0;
@@ -628,22 +621,19 @@ input:focus {
   z-index: 2;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tile-heart span {
   color: rgba(255, 255, 255, 0.92);
   font-size: 1.1rem;
   line-height: 1;
   text-shadow: 0 0 5px rgba(0, 0, 0, 0.6);
 }
-
 .grid.selecting .tile-heart {
   display: none;
 }
-
 @media (hover: hover) {
   .tile-heart {
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity 0.15s var(--ease);
   }
   .tile-wrap:hover .tile-heart,
   .tile-heart:focus-visible,
@@ -652,19 +642,17 @@ input:focus {
   }
 }
 
-/* ---------- Trash tiles (restore is the only action) ---------- */
+/* ---------- Trash tiles -------------------------------------------------- */
 
 .tile-wrap.trash .tile {
   cursor: default;
 }
-
 .tile-wrap.trash .tile img,
 .tile-wrap.trash .tile video {
   filter: grayscale(0.35);
   opacity: 0.85;
   transform: none;
 }
-
 .tile-purge {
   position: absolute;
   top: 0.35rem;
@@ -673,11 +661,11 @@ input:focus {
   border-radius: 99px;
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
-  font-size: 0.68rem;
+  font-family: var(--mono);
+  font-size: 0.62rem;
   pointer-events: none;
   z-index: 2;
 }
-
 .tile-restore {
   position: absolute;
   left: 50%;
@@ -694,11 +682,9 @@ input:focus {
   z-index: 2;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tile-restore:hover {
   background: rgba(0, 0, 0, 0.8);
 }
-
 .tile.placeholder {
   display: flex;
   flex-direction: column;
@@ -708,13 +694,12 @@ input:focus {
   border: 1px solid var(--line);
   padding: 0.5rem;
 }
-
 .placeholder-type {
   color: var(--ink-faint);
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
   word-break: break-all;
 }
-
 .placeholder-title {
   color: var(--ink-soft);
   font-size: 0.75rem;
@@ -725,8 +710,8 @@ input:focus {
   -webkit-box-orient: vertical;
 }
 
-/* Lightbox — tap the backdrop or press Escape to dismiss; ←/→ steps
-   through whatever the grid is showing. */
+/* ---------- Lightbox ----------------------------------------------------- */
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -737,16 +722,12 @@ input:focus {
   justify-content: center;
   gap: 0.75rem;
   padding: 2rem 1rem;
-  background: rgba(0, 0, 0, 0.85);
+  background: color-mix(in oklab, var(--ink) 88%, #000);
   cursor: pointer;
 }
-
-/* The class display wins over the UA [hidden] rule — restate it, or the
-   closed lightbox invisibly swallows every click on the page. */
 .lightbox[hidden] {
   display: none;
 }
-
 .lightbox-stage {
   display: flex;
   align-items: center;
@@ -755,21 +736,19 @@ input:focus {
   min-height: 0;
   cursor: default;
 }
-
 .lightbox img,
 .lightbox video {
   max-width: 100%;
   max-height: 58vh;
   object-fit: contain;
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
 }
-
 .lightbox-nav {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border: none;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.14);
@@ -781,106 +760,89 @@ input:focus {
   justify-content: center;
   -webkit-tap-highlight-color: transparent;
 }
-
 .lightbox-nav:hover {
   background: rgba(255, 255, 255, 0.28);
 }
-
 .lightbox-nav[disabled] {
   opacity: 0.25;
 }
-
 .lightbox-nav.prev {
   left: 0.75rem;
 }
-
 .lightbox-nav.next {
   right: 0.75rem;
 }
-
-/* The edit panel under the photo: caption, capture time, albums, delete. */
 .lightbox-panel {
   width: min(30rem, 100%);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.85rem 0.95rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
   cursor: default;
+  box-shadow: var(--shadow-lg);
 }
-
 .lightbox-meta {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-
 .lightbox-title {
   flex: 1;
   min-width: 10rem;
 }
-
 .lightbox-when {
   flex: none;
+  font-family: var(--mono);
+  color: var(--ink-soft);
 }
-
 .lightbox-albums {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
 }
-
 .lightbox-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.35rem;
 }
-
 .lightbox-fav {
   margin-right: auto;
 }
-
 .lightbox-fav.faved {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  color: var(--accent-deep);
 }
-
-/* Double-click zooms; while zoomed the image pans on drag. */
 .lightbox-stage img.zoomable {
   cursor: zoom-in;
   touch-action: none;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s var(--ease);
 }
-
 .lightbox-stage img.zoomed {
   cursor: grab;
   transition: none;
 }
-
 .lightbox-info {
   color: var(--ink-soft);
-  font-size: 0.78rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
   margin: 0;
 }
-
 .lightbox-download {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
 }
-
 .lightbox-note {
   color: var(--ink-soft);
   font-size: 0.78rem;
   margin: 0;
 }
-
 .lightbox-note:empty {
   display: none;
 }
-
 .lightbox-placeholder {
   width: min(20rem, 80vw);
   aspect-ratio: 1;
@@ -889,7 +851,7 @@ input:focus {
   justify-content: center;
   background: var(--surface);
   color: var(--ink-soft);
-  border-radius: 0.375rem;
+  border-radius: var(--radius-sm);
   font-size: 0.9rem;
   word-break: break-all;
   padding: 1rem;
@@ -901,26 +863,26 @@ input:focus {
   align-items: center;
   gap: 0.75rem;
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 2rem 0;
+  padding: 3rem 1rem;
 }
-
 .empty[hidden] {
   display: none;
 }
-
 .empty p {
   margin: 0;
 }
-
 .footnote {
-  margin-top: 1.5rem;
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
   text-align: center;
   color: var(--ink-faint);
+  font-size: 0.78rem;
 }
 
-/* ---------- Floating selection bar ---------- */
+/* ---------- Floating selection bar -------------------------------------- */
 
 .selection-bar {
   position: fixed;
@@ -936,28 +898,24 @@ input:focus {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.4rem 0.5rem 0.4rem 1rem;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-lg);
 }
-
 .selection-bar[hidden] {
   display: none;
 }
-
 .bar-count {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 500;
   white-space: nowrap;
 }
-
 .bar-btn {
   white-space: nowrap;
 }
-
 .bar-menu-wrap {
   position: relative;
   display: flex;
 }
-
 .album-menu {
   position: absolute;
   bottom: calc(100% + 0.5rem);
@@ -970,11 +928,10 @@ input:focus {
   overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
   padding: 0.3rem;
 }
-
 .album-menu-item {
   border: none;
   background: none;
@@ -983,17 +940,15 @@ input:focus {
   font-size: 0.85rem;
   padding: 0.6rem 0.7rem;
   min-height: 2.5rem;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .album-menu-item:hover,
 .album-menu-item:focus-visible {
-  background: var(--line);
+  background: var(--surface-2);
 }
-
 .album-menu-empty {
   margin: 0;
   padding: 0.6rem 0.7rem;
@@ -1001,7 +956,6 @@ input:focus {
   font-size: 0.8rem;
   max-width: 14rem;
 }
-
 .bar-close {
   width: 2.5rem;
   height: 2.5rem;
@@ -1012,17 +966,14 @@ input:focus {
   font-size: 1.2rem;
   line-height: 1;
 }
-
 .bar-close:hover {
-  background: var(--line);
+  background: var(--surface-2);
 }
-
-/* Lift kit toasts above the selection bar while it is showing. */
 body.has-selection .kit-toasts {
   bottom: 4.75rem;
 }
 
-/* ---------- Drop-to-add overlay ---------- */
+/* ---------- Drop-to-add overlay ----------------------------------------- */
 
 .drop-overlay {
   position: fixed;
@@ -1031,17 +982,15 @@ body.has-selection .kit-toasts {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  pointer-events: none; /* the drop lands on the window, not the veil */
+  background: color-mix(in oklab, var(--app-color, var(--accent)) 20%, rgba(10, 8, 16, 0.5));
+  pointer-events: none;
 }
-
 .drop-overlay[hidden] {
   display: none;
 }
-
 .drop-card {
   border: 2px dashed rgba(255, 255, 255, 0.85);
-  border-radius: 1rem;
+  border-radius: var(--radius);
   background: rgba(0, 0, 0, 0.4);
   color: #fff;
   font-size: 1.1rem;
@@ -1049,7 +998,7 @@ body.has-selection .kit-toasts {
   padding: 2rem 3rem;
 }
 
-/* ---------- Album picker (add photos from inside an album) ---------- */
+/* ---------- Album picker ------------------------------------------------- */
 
 .picker {
   position: fixed;
@@ -1059,13 +1008,12 @@ body.has-selection .kit-toasts {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(0, 0, 0, 0.55);
+  background: color-mix(in oklab, var(--ink) 55%, transparent);
+  backdrop-filter: blur(2px);
 }
-
 .picker[hidden] {
   display: none;
 }
-
 .picker-panel {
   width: min(40rem, 100%);
   max-height: 85vh;
@@ -1074,44 +1022,41 @@ body.has-selection .kit-toasts {
   gap: 0.75rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 1rem;
+  border-radius: var(--radius);
   padding: 1rem;
+  box-shadow: var(--shadow-lg);
 }
-
 .picker-head {
   margin: 0;
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-
 .picker-grid {
   flex: 1;
   min-height: 8rem;
   overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(6rem, 1fr));
-  gap: 2px;
+  gap: 3px;
   align-content: start;
 }
-
 .picker-empty {
   grid-column: 1 / -1;
   padding: 1.5rem 0;
   text-align: center;
+  color: var(--ink-soft);
 }
-
 .picker-tile {
   position: relative;
   aspect-ratio: 1;
   padding: 0;
   border: none;
-  border-radius: 0;
-  background: var(--bg);
+  border-radius: 0.35rem;
+  background: var(--surface-2);
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
 }
-
 .picker-tile img,
 .picker-tile video {
   width: 100%;
@@ -1120,16 +1065,15 @@ body.has-selection .kit-toasts {
   display: block;
   pointer-events: none;
 }
-
 .picker-tile:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
   outline-offset: -2px;
 }
-
 .picker-tile[aria-pressed='true'] {
   outline: 3px solid var(--app-color, var(--accent));
   outline-offset: -3px;
 }
-
 .picker-tile[aria-pressed='true']::after {
   content: '✓';
   position: absolute;
@@ -1138,7 +1082,7 @@ body.has-selection .kit-toasts {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 50%;
-  background: var(--app-color, var(--accent));
+  background: var(--accent-deep);
   color: #fff;
   font-size: 0.75rem;
   font-weight: 700;
@@ -1146,20 +1090,17 @@ body.has-selection .kit-toasts {
   align-items: center;
   justify-content: center;
 }
-
 .picker-foot {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
-
 .picker-count {
   margin-right: auto;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
 }
-
-/* ---------- Reduced motion ---------- */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -1170,18 +1111,17 @@ body.has-selection .kit-toasts {
   }
 }
 
-/* ---------- App-level knobs ---------- */
+/* ---------- App-level knobs --------------------------------------------- */
 
 :root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 :root[data-app-font='serif'] {
-  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
 }
 :root[data-app-font='mono'] {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
-
 :root[data-app-width='narrow'] main {
   max-width: 36rem;
 }

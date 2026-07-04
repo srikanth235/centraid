@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Home inventory</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -150,6 +150,19 @@
         Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'home inventory',
+        placeholder: 'Ask your inventory…',
+        intro:
+          'Ask me to add an item, log a warranty, or find something. Adds and edits show for your approval before they touch the vault.',
+        suggest: [
+          'Add espresso machine, $700, kitchen',
+          'Warranties expiring?',
+          'Total insured value?',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

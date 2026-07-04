@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Budgets</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -145,6 +145,15 @@
         <button id="bulkClear" type="button" class="ghost">Clear</button>
       </div>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'budgets',
+        placeholder: 'Ask your budgets…',
+        intro:
+          'Ask me to add a transaction, set a budget, or explain your spend. Writes show for your approval before they touch the vault.',
+        suggest: ['How much left for dining out?', 'Add a transaction', 'Am I over anywhere?'],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

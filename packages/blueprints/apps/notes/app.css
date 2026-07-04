@@ -1,275 +1,352 @@
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Notes identity accent — forest green. Swappable via --app-color. */
   --accent: #5c8a4e;
-  --ink: #0f172a;
-  --ink-soft: #475569;
-  --ink-faint: #94a3b8;
-  --bg: #fcfcfc;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 78%, #06180e);
+  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 13%, transparent);
+  --on-accent: #ffffff;
+
+  --ink: hsl(150 12% 12%);
+  --ink-soft: hsl(150 5% 40%);
+  --ink-faint: hsl(150 6% 58%);
+
+  --bg: hsl(140 16% 98%);
   --surface: #ffffff;
-  --line: rgba(31, 31, 35, 0.07);
-  --danger: #dc2626;
+  --surface-2: hsl(140 18% 95.5%);
+
+  --line: rgba(20, 30, 24, 0.09);
+  --line-strong: rgba(20, 30, 24, 0.16);
+
+  --danger: #d0342c;
+
+  --text: var(--ink);
+  --muted: var(--ink-soft);
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(16, 26, 20, 0.28), 0 2px 6px -3px rgba(16, 26, 20, 0.12);
+  --shadow-lg: 0 26px 60px -24px rgba(16, 26, 20, 0.4);
+
+  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(220 12% 95%);
-  --ink-soft: hsl(220 8% 62%);
-  --ink-faint: hsl(220 6% 42%);
+  --ink: hsl(140 12% 94%);
+  --ink-soft: hsl(140 7% 64%);
+  --ink-faint: hsl(140 7% 46%);
   --bg: var(--bg-wall);
-  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
-  --line: hsla(220 25% 70% / 0.07);
+  --surface: hsl(150 10% calc(var(--bg-l) + 5%));
+  --surface-2: hsl(150 9% calc(var(--bg-l) + 8.5%));
+  --line: hsla(140 24% 74% / 0.1);
+  --line-strong: hsla(140 24% 76% / 0.2);
+  --danger: #f0645b;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #eefaef);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg-l: 10%;
-    --ink: hsl(220 12% 95%);
-    --ink-soft: hsl(220 8% 62%);
-    --ink-faint: hsl(220 6% 42%);
+    --ink: hsl(140 12% 94%);
+    --ink-soft: hsl(140 7% 64%);
+    --ink-faint: hsl(140 7% 46%);
     --bg: var(--bg-wall);
-    --surface: hsl(225 11% 14.5%);
-    --line: hsla(220 25% 70% / 0.07);
+    --surface: hsl(150 10% 15%);
+    --surface-2: hsl(150 9% 18.5%);
+    --line: hsla(140 24% 74% / 0.1);
+    --line-strong: hsla(140 24% 76% / 0.2);
+    --danger: #f0645b;
+    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #eefaef);
   }
 }
 
 * {
   box-sizing: border-box;
 }
+[hidden] {
+  display: none !important;
+}
 
 body {
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
 main {
   max-width: 36rem;
   margin: 0 auto;
-  padding: 0.5rem 0 2rem;
+  padding: 0.75rem 0 4rem;
 }
 
 @media (min-width: 720px) {
   body {
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
   }
   main {
-    max-width: 56rem;
+    max-width: 58rem;
+    padding-top: 1.25rem;
   }
 }
 
 .head {
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
 }
-
 .head h1 {
-  font-size: 1.75rem;
+  font-size: 1.65rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin: 0 0 0.1rem;
+  line-height: 1.05;
+  margin: 0 0 0.2rem;
 }
-
+@media (min-width: 720px) {
+  .head h1 {
+    font-size: 1.9rem;
+  }
+}
 .muted {
   color: var(--ink-soft);
   font-size: 0.85rem;
   margin: 0;
 }
-
 .small {
   font-size: 0.8rem;
 }
 
-/* Consent banner — the vault's decisions are part of the UI. */
-.banner {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
-  background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-  line-height: 1.45;
-}
+/* ---------- Trust banners ------------------------------------------------ */
 
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .banner strong {
   display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.banner.notice::before {
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
 }
 
-.banner.notice {
-  border-left-color: var(--ink-faint);
-  color: var(--ink-soft);
-}
+/* ---------- Inputs & write affordances ----------------------------------- */
 
 button {
   font: inherit;
   cursor: pointer;
 }
-
-/* Search first — matches are highlighted in title and preview. */
-.search-wrap {
-  position: relative;
-  margin-bottom: 0.875rem;
-}
-
-.search-wrap input[type='search'] {
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  padding: 0.6rem 2.4rem 0.6rem 0.875rem;
-  width: 100%;
-  min-height: 2.5rem;
-  -webkit-appearance: none;
-}
-
-.search-wrap input[type='search']:focus {
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: none;
-  border-color: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
-.search-hint {
-  position: absolute;
-  top: 50%;
-  right: 0.75rem;
-  transform: translateY(-50%);
-  font-family: inherit;
-  font-size: 0.7rem;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  border-radius: 0.3rem;
-  padding: 0.05rem 0.4rem;
-  pointer-events: none;
-}
-
-mark {
-  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
-  color: inherit;
-  border-radius: 0.2em;
-  padding: 0 0.05em;
-}
-
-/* ---------- Inputs & write affordances ---------- */
 
 input[type='text'],
 textarea,
 select {
   font: inherit;
   color: var(--ink);
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.6rem;
   -webkit-appearance: none;
+  appearance: none;
 }
-
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink-faint);
+}
 input[type='text']:focus,
 textarea:focus,
 select:focus {
   outline: none;
-  border-color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
 textarea {
   resize: vertical;
   line-height: 1.5;
 }
-
 select {
   width: auto;
-  font-size: 0.8125rem;
+  font-size: 0.82rem;
   color: var(--ink-soft);
   padding: 0.3rem 0.5rem;
+  min-height: 2.4rem;
 }
 
 .primary {
-  border-radius: 0.625rem;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--app-color, var(--accent));
-  color: #fff;
+  background: var(--accent-deep);
+  color: var(--on-accent);
   font-weight: 600;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    filter 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
-
+.primary:hover {
+  filter: brightness(1.08);
+}
+.primary:active {
+  transform: scale(0.98);
+}
 .small-btn {
   font-size: 0.85rem;
-  padding: 0.45rem 0.9rem;
-  min-height: 2.5rem;
+  padding: 0.45rem 0.95rem;
+  min-height: 2.6rem;
 }
 
 .ghost {
-  border-radius: 0.625rem;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  background: transparent;
+  background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.8125rem;
-  padding: 0.35rem 0.75rem;
-  min-height: 2.5rem;
+  padding: 0.35rem 0.8rem;
+  min-height: 2.4rem;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
-
 .ghost:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
-
-/* Deletion is destructive; hovered or armed it takes the danger tint. */
 .ghost.danger:hover,
 .ghost.danger[data-kit-armed] {
   border-color: var(--danger);
   color: var(--danger);
 }
 
+/* ---------- Search ------------------------------------------------------- */
+
+.search-wrap {
+  position: relative;
+  margin-bottom: 1rem;
+}
+.search-wrap input[type='search'] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.6rem 2.6rem 0.6rem 0.95rem;
+  width: 100%;
+  min-height: 2.6rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-wrap input[type='search']::placeholder {
+  color: var(--ink-faint);
+}
+.search-wrap input[type='search']:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.search-hint {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+  transform: translateY(-50%);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  pointer-events: none;
+}
+mark {
+  background: var(--accent-soft);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0 0.05em;
+}
+
+/* ---------- Quick add ---------------------------------------------------- */
+
 #quickAdd {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
-
 #quickAddMore {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
-
 #quickAddMore[hidden] {
   display: none;
 }
-
 .quick-add-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
 }
-
 .quick-add-actions span {
   margin-right: auto;
 }
-
 .inline-form {
   display: flex;
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 1rem;
 }
-
-/* display:flex would defeat the hidden attribute — restate it. */
 .inline-form[hidden] {
   display: none;
 }
-
 .inline-form input {
   flex: 1;
   min-width: 0;
 }
-
 .chip-add {
   border-style: dashed;
   color: var(--ink-faint);
@@ -282,7 +359,6 @@ select {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-
 .note-view-actions {
   display: inline-flex;
   gap: 0.4rem;
@@ -290,41 +366,40 @@ select {
   flex-wrap: wrap;
 }
 
-/* Notebook filter chips — client-side, "All" plus one per notebook. */
+/* ---------- Notebook chips ---------------------------------------------- */
+
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 1rem;
 }
-
 .chips:empty {
   display: none;
 }
-
 .chip {
   font-size: 0.8rem;
-  padding: 0.3rem 0.8rem;
-  min-height: 2.5rem;
+  padding: 0.3rem 0.85rem;
+  min-height: 2.4rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-soft);
   -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
-
 .chip[aria-pressed='true'] {
-  background: var(--app-color, var(--accent));
-  border-color: var(--app-color, var(--accent));
-  color: #fff;
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 500;
 }
-
-/* Rename/delete ride beside the selected chip — always visible (touch has
-   no hover), pill-shaped so the armed "Delete?" label still fits, and never
-   under 2.5rem (40px) a side. */
 .chip-tool {
-  min-width: 2.5rem;
-  min-height: 2.5rem;
+  min-width: 2.4rem;
+  min-height: 2.4rem;
   padding: 0.3rem 0.55rem;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -333,74 +408,59 @@ select {
   font-size: 0.8rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .chip-tool:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
-
-/* Deleting a notebook is destructive-ish (notes survive, filing doesn't):
-   hovered or armed, the tool takes the danger tint like the note delete. */
 .chip-tool.danger:hover,
 .chip-tool.danger[data-kit-armed] {
   border-color: var(--danger);
   color: var(--danger);
 }
-
-/* The chip swapped for its rename input — chip-shaped, chip-sized. */
 input.chip-rename-input {
   width: 11rem;
-  min-height: 2.5rem;
-  padding: 0.3rem 0.8rem;
+  min-height: 2.4rem;
+  padding: 0.3rem 0.85rem;
   border-radius: 999px;
   font-size: 0.8rem;
 }
 
-/* ---------- Library layout: notebook sidebar at wide widths ----------
-   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
-   the wrappers below are inert there. At >=720px the same chips restyle
-   into a docs-style sidebar column beside the note pane. */
-
 .chip-group {
-  display: contents; /* mobile: active chip + tools flow inline with the row */
+  display: contents;
 }
+
+/* ---------- Wide layout: notebook sidebar ------------------------------- */
 
 @media (min-width: 720px) {
   :root:not([data-app-width='narrow']) .split {
     display: grid;
     grid-template-columns: 15rem minmax(0, 1fr);
-    gap: 1.5rem;
+    gap: 1.75rem;
     align-items: start;
   }
-
-  /* Sidebar hides until data arrives (and while consent is denied) —
-     collapse to one column so the pane doesn't sit beside a ghost track. */
   :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
     grid-template-columns: 1fr;
   }
-
   :root:not([data-app-width='narrow']) .side-nav {
     position: sticky;
-    top: 0.5rem;
+    top: 0.75rem;
     border: 1px solid var(--line);
     background: var(--surface);
-    border-radius: 0.75rem;
+    border-radius: var(--radius);
     padding: 0.5rem;
+    box-shadow: var(--shadow-sm);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chips {
     flex-direction: column;
     align-items: stretch;
     gap: 0.15rem;
     margin-bottom: 0;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-group {
     display: flex;
     align-items: center;
     gap: 0.15rem;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip {
     display: flex;
     align-items: center;
@@ -408,52 +468,47 @@ input.chip-rename-input {
     font-size: 0.875rem;
     border: none;
     background: none;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-group .chip {
     flex: 1;
     min-width: 0;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] {
-    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
-    color: var(--app-color, var(--accent));
+    background: var(--accent-soft);
+    color: var(--accent-deep);
     font-weight: 600;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-tool {
     flex-shrink: 0;
     border: none;
     background: none;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chip-add {
     border: 1px dashed var(--line);
   }
-
   :root:not([data-app-width='narrow']) .side-nav input.chip-rename-input {
     width: 100%;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .inline-form {
     flex-wrap: wrap;
     margin: 0.5rem 0 0.25rem;
   }
 }
 
-/* ---------- Note list: Pinned/Others sections, cards at wide widths ---------- */
+/* ---------- Note list ---------------------------------------------------- */
 
 .section-head {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   color: var(--ink-faint);
-  margin: 1.1rem 0 0.35rem;
+  margin: 1.25rem 0 0.4rem;
 }
 
 .note {
@@ -470,17 +525,14 @@ input.chip-rename-input {
   break-inside: avoid;
   -webkit-tap-highlight-color: transparent;
 }
-
 .note-grid > .note:last-child {
   border-bottom: none;
 }
-
 .note:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 2px;
-  border-radius: 0.5rem;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-radius: var(--radius-sm);
 }
-
 .note-title {
   display: block;
   font-size: 0.95rem;
@@ -488,7 +540,6 @@ input.chip-rename-input {
   line-height: 1.35;
   word-break: break-word;
 }
-
 .note-preview {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -496,31 +547,28 @@ input.chip-rename-input {
   overflow: hidden;
   color: var(--ink-soft);
   font-size: 0.82rem;
-  line-height: 1.45;
+  line-height: 1.5;
   margin-top: 0.15rem;
   word-break: break-word;
 }
-
 .note-meta-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 0.35rem;
-  font-size: 0.72rem;
+  margin-top: 0.4rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
   color: var(--ink-faint);
 }
-
 .tag {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.64rem;
   color: var(--ink-faint);
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0.1rem 0.5rem;
+  padding: 0.12rem 0.5rem;
 }
-
-/* Pin toggle lives on the row — hover-revealed on pointers, always there on
-   touch, and always visible when the note is pinned (it is the indicator). */
 .pin-btn {
   position: absolute;
   top: 0.35rem;
@@ -535,55 +583,52 @@ input.chip-rename-input {
   background: none;
   color: var(--ink-faint);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-
 .note:hover .pin-btn,
 .note:focus-within .pin-btn,
 .pin-btn.pinned {
   opacity: 1;
 }
-
 .pin-btn.pinned {
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
 }
-
 .pin-btn:hover {
-  color: var(--app-color, var(--accent));
-  background: var(--line);
+  color: var(--accent-deep);
+  background: var(--surface-2);
 }
-
 @media (hover: none) {
   .pin-btn {
     opacity: 1;
   }
 }
 
-/* Keep-style card grid once there is room; masonry-ish via CSS columns. */
 @media (min-width: 720px) {
   .note-grid {
     columns: 2;
-    column-gap: 0.8rem;
+    column-gap: 0.85rem;
   }
   .note,
   .note-grid > .note:last-child {
     border: 1px solid var(--line);
-    border-radius: 0.8rem;
+    border-radius: var(--radius);
     background: var(--surface);
-    padding: 0.8rem 2.75rem 0.8rem 0.9rem;
-    margin-bottom: 0.8rem;
+    padding: 0.85rem 2.75rem 0.85rem 0.95rem;
+    margin-bottom: 0.85rem;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.14s var(--ease);
   }
   .note:hover {
-    border-color: var(--ink-faint);
+    box-shadow: var(--shadow-md);
   }
   .pin-btn {
-    top: 0.45rem;
-    right: 0.35rem;
+    top: 0.5rem;
+    right: 0.4rem;
   }
 }
 
-/* ---------- Note view: edit-in-place ---------- */
+/* ---------- Note view: edit-in-place ------------------------------------ */
 
 .back {
   border: none;
@@ -591,124 +636,107 @@ input.chip-rename-input {
   padding: 0.25rem 0;
   margin-bottom: 0.75rem;
   min-height: 2.5rem;
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
   font-size: 0.85rem;
   font-weight: 500;
   -webkit-tap-highlight-color: transparent;
 }
-
 .note-title-input,
 .note-title-input:focus {
   border: none;
   background: transparent;
   border-radius: 0;
   padding: 0.25rem 0;
-  font-size: 1.35rem;
+  font-size: 1.4rem;
   font-weight: 600;
   letter-spacing: -0.01em;
   width: 100%;
+  box-shadow: none;
 }
-
 .note-meta-line {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
   margin: 0.1rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
 }
-
 .save-state {
   color: var(--ink-faint);
-  font-size: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
 }
-
 .save-state:empty {
   display: none;
 }
-
-/* The rendered body doubles as the edit affordance: click to type. */
 .note-body {
   line-height: 1.65;
   font-size: 0.95rem;
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
   min-height: 8rem;
   word-break: break-word;
   cursor: text;
 }
-
 .note-body:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 4px;
-  border-radius: 0.4rem;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-radius: var(--radius-sm);
 }
-
 .note-body-input {
-  margin-top: 0.75rem;
+  margin-top: 0.85rem;
   min-height: 10rem;
   line-height: 1.65;
   font-size: 0.95rem;
   overflow: hidden;
   resize: none;
 }
-
-/* Markdown blocks — small, safe subset rendered as real DOM nodes. */
 .note-body .md-p {
   margin: 0 0 0.1rem;
   white-space: pre-wrap;
   min-height: 1.2em;
 }
-
 .note-body .md-gap {
   margin: 0;
   height: 0.9em;
 }
-
 .note-body .md-h1 {
   font-size: 1.15rem;
   font-weight: 600;
   margin: 0.7em 0 0.25em;
 }
-
 .note-body .md-h2 {
   font-size: 1.05rem;
   font-weight: 600;
   margin: 0.6em 0 0.2em;
 }
-
 .note-body .md-h3 {
   font-size: 0.95rem;
   font-weight: 600;
   margin: 0.5em 0 0.15em;
 }
-
 .note-body .md-list {
   margin: 0.15em 0;
   padding-left: 1.4em;
 }
-
 .note-body .md-list li {
   margin: 0.1em 0;
 }
-
 .note-body code {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 0.85em;
-  background: var(--line);
+  background: var(--surface-2);
   border-radius: 0.3em;
   padding: 0.08em 0.35em;
 }
-
 .note-body a {
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
 }
-
-/* Checklists — live checkboxes over `- [ ]` source lines. */
 .check-line {
   display: flex;
   align-items: flex-start;
   gap: 0.15rem;
   margin-left: -0.55rem;
 }
-
 .check-box {
   display: flex;
   align-items: center;
@@ -718,20 +746,18 @@ input.chip-rename-input {
   flex: none;
   cursor: pointer;
 }
-
 .check-box input {
   width: 1.1rem;
   height: 1.1rem;
   margin: 0;
-  accent-color: var(--app-color, var(--accent));
+  accent-color: var(--accent-deep);
   cursor: pointer;
+  min-height: auto;
 }
-
 .check-text {
   padding-top: 0.35rem;
   min-height: 1.6em;
 }
-
 .check-line.done .check-text {
   color: var(--ink-faint);
   text-decoration: line-through;
@@ -739,18 +765,22 @@ input.chip-rename-input {
 
 .empty {
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 2rem 0;
+  padding: 3rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
-
 .footnote {
   margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
   text-align: center;
   color: var(--ink-faint);
+  font-size: 0.78rem;
 }
-
-/* The browse window's honest edge: latest N shown, Show more grows it. */
 .window-footer {
   display: flex;
   align-items: center;
@@ -761,45 +791,39 @@ input.chip-rename-input {
   font-size: 0.85rem;
 }
 
-/* ---------- Attachments (shared pattern across apps) ---------- */
+/* ---------- Attachments -------------------------------------------------- */
 
 .attach-block {
   margin-top: 1rem;
 }
-
 .attach-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-
 .attach-strip:empty {
   display: none;
 }
-
 .attach-tile {
   position: relative;
   width: 5rem;
   height: 5rem;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .attach-tile img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .attach-tile img.attach-zoom {
   cursor: zoom-in;
 }
-
 .attach-file {
   display: flex;
   align-items: center;
@@ -807,29 +831,28 @@ input.chip-rename-input {
   padding: 0.35rem;
   font-size: 0.68rem;
   line-height: 1.25;
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
   word-break: break-word;
   text-decoration: none;
 }
-
 .attach-meta {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  font-size: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.56rem;
   text-align: center;
   color: #fff;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   padding: 0.05rem 0;
 }
-
 .attach-remove {
   position: absolute;
   top: 0.15rem;
   right: 0.15rem;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.3rem;
+  height: 1.3rem;
   line-height: 1;
   border: none;
   border-radius: 50%;
@@ -841,25 +864,21 @@ input.chip-rename-input {
   align-items: center;
   justify-content: center;
 }
-
 .attach-add {
   display: inline-block;
   margin-top: 0.5rem;
 }
-
 .attach-add input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
 }
-
 .attach-add .ghost {
   display: inline-flex;
   align-items: center;
 }
 
-/* Full-size image lightbox — Esc or click anywhere closes. */
 .lightbox {
   position: fixed;
   inset: 0;
@@ -871,36 +890,35 @@ input.chip-rename-input {
   cursor: zoom-out;
   padding: 1.5rem;
 }
-
 .lightbox[hidden] {
   display: none;
 }
-
 .lightbox img {
   max-width: 100%;
   max-height: 100%;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pin-btn {
+  .pin-btn,
+  .note,
+  .primary {
     transition: none;
   }
 }
 
-/* ---------- App-level knobs ---------- */
+/* ---------- App-level knobs ---------------------------------------------- */
 
 :root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 :root[data-app-font='serif'] {
-  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
 }
 :root[data-app-font='mono'] {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
-
 :root[data-app-width='narrow'] main {
   max-width: 36rem;
 }

@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>People</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -208,6 +208,19 @@
         </div>
       </section>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'people',
+        placeholder: 'Ask your contacts…',
+        intro:
+          'Ask me to add a contact, find someone, or draft a message. Messages and edits show for your approval before they touch the vault.',
+        suggest: [
+          'Add Dana Whitfield, PM at Northwind',
+          'Who works at Northwind?',
+          'Draft a message to Alex',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
