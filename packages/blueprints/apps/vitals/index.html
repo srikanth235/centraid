@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Vitals</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -150,6 +150,19 @@
       </p>
       <p class="muted small shortcut-hint">Tip: press <kbd>l</kbd> to jump to the log field.</p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'vitals',
+        placeholder: 'Ask your vitals…',
+        intro:
+          'Ask me to log a reading, find a trend, or explain a metric. Readings show for your approval before they touch the vault.',
+        suggest: [
+          'Log resting HR 54 this morning',
+          'How’s my sleep trend?',
+          'Add a weight reading',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

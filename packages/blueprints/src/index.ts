@@ -59,6 +59,14 @@ const PACKAGE_ROOT = path.resolve(DIST_DIR, '..');
 /** Absolute path to the bundled templates directory (the package root). */
 export const appTemplatesDir: string = PACKAGE_ROOT;
 
+/**
+ * Absolute path to the canonical shared kit dir (`kit.js` / `kit.css`).
+ * Apps no longer carry per-app copies of these; the app-engine runtime
+ * serves them from here as a fallback for `/centraid/<id>/kit.{js,css}`.
+ * Hosts pass this as the runtime's `sharedAssetsDir`.
+ */
+export const KIT_DIR: string = path.join(PACKAGE_ROOT, 'kit');
+
 /** Manifest file name — same on bundle and cache. */
 const MANIFEST_FILE = 'manifest.json';
 

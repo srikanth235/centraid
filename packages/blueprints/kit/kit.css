@@ -1,35 +1,96 @@
-/* Centraid blueprint kit — shared UX styles for template apps.
-   Canonical copy: packages/blueprints/kit/kit.css; each template carries a
-   copy next to index.html (like wall.css). Run `node scripts/sync-kit.mjs`
-   after editing. Relies on each app's existing tokens: --surface, --line,
-   --text, --muted, --accent (all 14 app.css files define them). */
+/* ============================================================================
+   Centraid blueprint kit — shared UX primitives, synced across all 14 apps.
+   Canonical copy: packages/blueprints/kit/kit.css; each template carries a copy
+   next to index.html (like wall.css). Run `node scripts/sync-kit.mjs` after
+   editing.
 
-/* ---------- Toasts ---------- */
+   ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
+   Calm, instrument-grade, personal. Humanist system sans for content; system
+   mono for metadata, counts, dates and eyebrows (the signature). Neutrals do
+   the work; a single per-app accent (--accent / --app-color) is structural, not
+   decorative. Hairline borders, soft depth, motion under 200ms.
+
+   Shared tokens every app.css MUST define (contract):
+     --surface   card / raised fill
+     --line      hairline border
+     --text      primary ink            --muted     secondary ink
+     --accent    per-app accent (may be overridden by --app-color)
+
+   Optional tokens the redesigned apps ALSO define — kit degrades gracefully
+   when they're absent (older apps):
+     --surface-2   recessed / track fill      --line-strong  stronger hairline
+     --ink-faint   tertiary ink               --radius       base radius (0.75rem)
+     --shadow-md   soft elevation             --accent-soft  ~12% accent tint
+
+   Motion: --ease: cubic-bezier(.2,.7,.3,1); standard <=200ms.
+   ========================================================================== */
+
+:root {
+  --kit-ease: var(--ease, cubic-bezier(0.2, 0.7, 0.3, 1));
+  --kit-radius: var(--radius, 0.75rem);
+  --kit-surface-2: var(
+    --surface-2,
+    color-mix(in oklab, var(--muted, #888) 8%, var(--surface, #fff))
+  );
+  --kit-line-strong: var(--line-strong, var(--line, rgba(127, 127, 127, 0.25)));
+  --kit-faint: var(--ink-faint, var(--muted, #888));
+  --kit-accent: var(--app-color, var(--accent, #4553c4));
+  --kit-accent-soft: var(--accent-soft, color-mix(in oklab, var(--kit-accent) 12%, transparent));
+  --kit-shadow: var(--shadow-md, 0 12px 28px -14px rgba(15, 20, 32, 0.32));
+  --kit-accent-deep: var(--accent-deep, color-mix(in oklab, var(--kit-accent) 80%, #0a0f1e));
+  --kit-mono: var(--mono, ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace);
+}
+
+/* ---------- Toasts -------------------------------------------------------- */
+/* Bottom-center. Solid (never blurred) — a toast has a job to do. Rises in on
+   a short spring-free curve; a leading dot carries tone. */
 
 .kit-toasts {
   position: fixed;
-  bottom: 1rem;
   left: 50%;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   z-index: 60;
-  width: min(26rem, calc(100vw - 2rem));
+  width: min(27rem, calc(100vw - 2rem));
   pointer-events: none;
 }
 
 .kit-toast {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.8rem;
-  border-radius: 0.5rem;
-  background: var(--text, #1c2230);
+  gap: 0.625rem;
+  padding: 0.6rem 0.7rem 0.6rem 0.85rem;
+  border-radius: var(--kit-radius);
+  background: var(--text, #14181f);
   color: var(--surface, #fff);
   font-size: 0.85rem;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  line-height: 1.35;
+  letter-spacing: 0.005em;
+  box-shadow:
+    var(--kit-shadow),
+    0 0 0 0.5px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
+  animation: kit-toast-in 0.22s var(--kit-ease) both;
+}
+
+/* A small tone dot before the label. Neutral by default; apps may set
+   data-tone="accent|danger" for confirmations / failures. */
+.kit-toast::before {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--surface, #fff) 55%, transparent);
+}
+.kit-toast[data-tone='accent']::before {
+  background: var(--kit-accent);
+}
+.kit-toast[data-tone='danger']::before {
+  background: var(--danger, #f04452);
 }
 
 .kit-toast span {
@@ -39,142 +100,739 @@
 
 .kit-toast-action {
   border: none;
-  background: none;
+  background: color-mix(in oklab, var(--surface, #fff) 14%, transparent);
   color: inherit;
-  font-weight: 700;
-  text-decoration: underline;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  min-height: 2rem;
   cursor: pointer;
-  padding: 0.1rem 0.2rem;
+  transition: background 0.15s var(--kit-ease);
+}
+.kit-toast-action:hover,
+.kit-toast-action:focus-visible {
+  background: color-mix(in oklab, var(--surface, #fff) 24%, transparent);
+  outline: none;
 }
 
 .kit-toast-close {
   border: none;
   background: none;
   color: inherit;
-  opacity: 0.7;
+  opacity: 0.65;
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0.1rem 0.2rem;
+  border-radius: 0.4rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
 }
-
 .kit-toast-close:hover,
 .kit-toast-close:focus-visible {
   opacity: 1;
+  outline: none;
 }
 
-/* ---------- Loading skeletons ---------- */
-
-.kit-skeleton {
-  height: 2.4rem;
-  border-radius: 0.5rem;
-  margin: 0.45rem 0;
-  background: linear-gradient(
-    100deg,
-    var(--surface, rgba(127, 127, 127, 0.12)) 40%,
-    rgba(127, 127, 127, 0.22) 50%,
-    var(--surface, rgba(127, 127, 127, 0.12)) 60%
-  );
-  background-size: 200% 100%;
-  animation: kit-shimmer 1.4s ease infinite;
-}
-
-@keyframes kit-shimmer {
+@keyframes kit-toast-in {
   from {
-    background-position: 120% 0;
+    opacity: 0;
+    transform: translateY(0.75rem);
   }
   to {
-    background-position: -80% 0;
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- Loading skeletons -------------------------------------------- */
+/* A calm left-to-right sweep over a recessed base — not a flash. Compose
+   width with inline style or the modifier classes below. */
+
+.kit-skeleton {
+  height: 1rem;
+  border-radius: 0.5rem;
+  background: var(--kit-surface-2);
+  position: relative;
+  overflow: hidden;
+}
+
+.kit-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--text, #14181f) 6%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: kit-sweep 1.4s var(--kit-ease) infinite;
+}
+
+/* Convenience shapes used by list/detail loaders. */
+.kit-skeleton-line {
+  height: 0.85rem;
+  margin: 0.4rem 0;
+}
+.kit-skeleton-title {
+  height: 1.1rem;
+  width: 62%;
+  margin: 0.4rem 0;
+}
+.kit-skeleton-row {
+  height: 2.75rem;
+  margin: 0.5rem 0;
+  border-radius: var(--kit-radius);
+}
+.kit-skeleton-circle {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+}
+
+@keyframes kit-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .kit-skeleton {
+  .kit-skeleton::after {
+    animation: none;
+    opacity: 0.5;
+    transform: none;
+  }
+  .kit-toast {
     animation: none;
   }
 }
 
-/* ---------- Pending (parked) rows ---------- */
+/* ---------- Parked / pending (a write awaiting owner approval) ------------ */
+/* Deliberately calm — this is a designed state, not an error. The row keeps
+   its ink (no global opacity dimming); a hairline "ticket" rail and a mono
+   chip say "waiting", reassuringly. */
 
 .kit-pending {
-  opacity: 0.55;
+  position: relative;
+  color: var(--muted, #667);
+  border-radius: var(--kit-radius);
+  background: color-mix(in oklab, var(--kit-accent) 4%, transparent);
+}
+.kit-pending::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, var(--kit-accent) 0 4px, transparent 4px 8px);
+  opacity: 0.7;
 }
 
 .kit-pending-chip {
-  display: inline-block;
-  padding: 0.05rem 0.45rem;
-  border-radius: 99px;
-  border: 1px dashed var(--muted, #888);
-  color: var(--muted, #888);
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.5rem 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: var(--kit-accent-soft);
+  color: color-mix(in oklab, var(--kit-accent) 72%, var(--text, #14181f));
+  font-family: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  line-height: 1.4;
+}
+.kit-pending-chip::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: kit-spin 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-pending-chip::before {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+@keyframes kit-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
-/* ---------- Letter avatars ---------- */
+/* ---------- Letter / photo avatars --------------------------------------- */
+/* Structural only — apps set the fill (a hashed hue) inline. Default fill is a
+   quiet accent tint so an un-colored avatar still reads on brand. */
 
 .kit-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 999px;
+  width: 2.25rem;
+  height: 2.25rem;
+  background: var(--kit-accent);
   color: #fff;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
   flex: none;
   overflow: hidden;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px color-mix(in oklab, #000 8%, transparent);
+  user-select: none;
 }
-
 .kit-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+/* Optional square-ish variant for docs/photos/files. */
+.kit-avatar[data-shape='rounded'] {
+  border-radius: 0.6rem;
+}
 
-/* ---------- Charts ---------- */
+/* ---------- Charts (line / area / bar) ------------------------------------ */
+/* Accent-tinted, hairline-quiet. app.js draws the SVG geometry; kit styles the
+   strokes/fills so every chart across the family reads the same. */
 
 .kit-chart {
   width: 100%;
   height: auto;
   display: block;
+  overflow: visible;
+}
+
+.kit-chart-grid {
+  stroke: var(--line, rgba(127, 127, 127, 0.22));
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+.kit-chart-axis {
+  stroke: var(--kit-line-strong);
+  stroke-width: 1;
 }
 
 .kit-chart-line {
   fill: none;
-  stroke: var(--accent, #4553c4);
-  stroke-width: 2;
+  stroke: var(--kit-accent);
+  stroke-width: 1.75;
   stroke-linejoin: round;
+  stroke-linecap: round;
 }
-
 .kit-chart-area {
-  fill: var(--accent, #4553c4);
-  opacity: 0.12;
+  fill: var(--kit-accent);
+  opacity: 0.1;
   stroke: none;
 }
-
 .kit-chart-dot {
-  fill: var(--accent, #4553c4);
+  fill: var(--surface, #fff);
+  stroke: var(--kit-accent);
+  stroke-width: 1.75;
+}
+.kit-chart-dot[data-peak='true'] {
+  fill: var(--kit-accent);
 }
 
 .kit-chart-barrect {
-  fill: var(--accent, #4553c4);
+  fill: var(--kit-accent);
   opacity: 0.85;
+  rx: 3;
+}
+.kit-chart-barrect[data-muted='true'] {
+  fill: var(--kit-faint);
+  opacity: 0.4;
+}
+/* A faint track behind each bar (optional; app draws it as its own rect). */
+.kit-chart-track {
+  fill: var(--kit-surface-2);
+  rx: 3;
 }
 
 .kit-chart-ticklabel {
-  fill: var(--muted, #888);
+  fill: var(--kit-faint);
+  font-family: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
   font-size: 9px;
+  letter-spacing: 0.02em;
 }
+
+/* ---------- Progress / meter bars ---------------------------------------- */
 
 .kit-bar {
   display: block;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--line, rgba(127, 127, 127, 0.25));
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--kit-surface-2);
   overflow: hidden;
 }
-
 .kit-bar-fill {
   display: block;
   height: 100%;
-  background: var(--accent, #4553c4);
+  border-radius: inherit;
+  background: var(--kit-accent);
+  transition: width 0.35s var(--kit-ease);
+}
+/* Over-budget / over-target reading. */
+.kit-bar-fill[data-tone='danger'] {
+  background: var(--danger, #f04452);
+}
+.kit-bar-fill[data-tone='warn'] {
+  background: var(--warn, #d97706);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kit-bar-fill {
+    transition: none;
+  }
+}
+
+/* ---------- Ask / assistant (chat to your vault) -------------------------- */
+/* The AI proposes a write; it lands as a consent-gated (parked) action the
+   owner approves — same trust language as .kit-pending. Shared across all 14
+   apps so “Ask” looks and behaves identically everywhere. */
+
+.kit-ask-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--kit-accent) 35%, var(--line, #ccc));
+  background: var(--kit-accent-soft);
+  color: var(--kit-accent-deep);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.kit-ask-btn .kit-spark {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.kit-ask-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in oklab, var(--text, #14181f) 42%, transparent);
+  backdrop-filter: blur(2px);
+  animation: kit-fade 0.16s ease-out;
+}
+@media (min-width: 720px) {
+  .kit-ask-ov {
+    justify-content: flex-end;
+  }
+}
+@keyframes kit-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.kit-ask-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 32rem;
+  max-height: 88vh;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e5e5e5);
+  border-radius: 1.15rem 1.15rem 0 0;
+  box-shadow: var(--kit-shadow);
+  overflow: hidden;
+  animation: kit-ask-up 0.24s var(--kit-ease) both;
+}
+@media (min-width: 720px) {
+  .kit-ask-panel {
+    max-width: 25rem;
+    height: 100%;
+    max-height: none;
+    border-radius: 0;
+    animation: kit-ask-in 0.24s var(--kit-ease) both;
+  }
+}
+@keyframes kit-ask-up {
+  from {
+    transform: translateY(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes kit-ask-in {
+  from {
+    transform: translateX(1.5rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-ov,
+  .kit-ask-panel {
+    animation: none;
+  }
+}
+
+.kit-ask-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--line, #eee);
+  flex: none;
+}
+.kit-ask-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text, #111);
+}
+.kit-ask-head .kit-ask-note {
+  font-family: var(--kit-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kit-faint);
+}
+.kit-ask-x {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--kit-surface-2);
+  color: var(--muted, #888);
+  font-size: 1rem;
+  cursor: pointer;
+  flex: none;
+}
+
+.kit-ask-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.kit-msg {
+  max-width: 85%;
+  padding: 0.55rem 0.8rem;
+  border-radius: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.kit-msg.user {
+  align-self: flex-end;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  border-bottom-right-radius: 0.35rem;
+}
+.kit-msg.ai {
+  align-self: flex-start;
+  background: var(--kit-surface-2);
+  color: var(--text, #111);
+  border-bottom-left-radius: 0.35rem;
+}
+
+/* The proposed write — dashed accent, consent-gated, same feel as parked. */
+.kit-ask-action {
+  align-self: stretch;
+  border: 1.5px dashed color-mix(in oklab, var(--kit-accent) 45%, var(--line, #ccc));
+  border-radius: 0.8rem;
+  background: color-mix(in oklab, var(--kit-accent) 5%, transparent);
+  padding: 0.75rem 0.85rem;
+}
+.kit-ask-action .aa-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--kit-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--kit-accent-deep);
+  margin-bottom: 0.45rem;
+}
+.kit-ask-action .aa-label::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  animation: kit-spin 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-action .aa-label::before {
+    animation: none;
+    border-right-color: currentColor;
+  }
+}
+.kit-ask-action .aa-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text, #111);
+}
+.kit-ask-action .aa-detail {
+  font-family: var(--kit-mono);
+  font-size: 0.74rem;
+  color: var(--muted, #777);
+  margin-top: 0.2rem;
+}
+.kit-ask-action .aa-btns {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.65rem;
+}
+.kit-aa-approve {
+  flex: 1;
+  min-height: 2.4rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kit-aa-ghost {
+  min-height: 2.4rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 0.5rem;
+  background: var(--surface, #fff);
+  color: var(--muted, #777);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+/* Busy = the owner's decision is in flight at the vault plane. */
+.kit-ask-action.aa-busy {
+  opacity: 0.65;
+}
+.kit-ask-action button:disabled {
+  cursor: wait;
+}
+/* A refusal or failure the vault reported for this card — shown, not hidden. */
+.kit-ask-action .aa-note {
+  font-family: var(--kit-mono);
+  font-size: 0.72rem;
+  color: var(--kit-accent-deep);
+  margin-top: 0.5rem;
+}
+
+.kit-ask-suggest {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0;
+  flex-wrap: wrap;
+  flex: none;
+}
+.kit-ask-chip {
+  border: 1px solid var(--line, #ddd);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--muted, #777);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kit-ask-compose {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line, #eee);
+  flex: none;
+}
+.kit-ask-compose input {
+  flex: 1;
+  min-height: 2.6rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 999px;
+  background: var(--kit-surface-2);
+  color: var(--text, #111);
+  font: inherit;
+  font-size: 0.9rem;
+}
+.kit-ask-compose input::placeholder {
+  color: var(--kit-faint);
+}
+.kit-ask-send {
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.kit-ask-mic {
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--muted, #888);
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Elevated flow: scope, applied-receipt, diff, typing indicator */
+.kit-ask-context {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem 0;
+  flex: none;
+  flex-wrap: wrap;
+}
+.kit-ask-scope {
+  font-family: var(--kit-mono);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--kit-faint);
+  background: var(--kit-surface-2);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+}
+.kit-ask-applied {
+  align-self: stretch;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 0.8rem;
+  background: var(--surface, #fff);
+  padding: 0.65rem 0.8rem;
+}
+.kit-ask-applied .ck {
+  flex: none;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  margin-top: 0.05rem;
+}
+.kit-ask-applied .ac-t {
+  flex: 1;
+  font-size: 0.84rem;
+  color: var(--text, #111);
+}
+.kit-ask-applied .ac-t .ac-s {
+  display: block;
+  font-family: var(--kit-mono);
+  font-size: 0.66rem;
+  color: var(--kit-faint);
+  margin-top: 0.15rem;
+}
+.kit-ask-applied .ac-undo {
+  border: none;
+  background: none;
+  color: var(--kit-accent-deep);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex: none;
+}
+.kit-aa-diff {
+  margin-top: 0.5rem;
+  font-family: var(--kit-mono);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+.kit-aa-diff .d1 {
+  color: var(--muted, #888);
+  text-decoration: line-through;
+}
+.kit-aa-diff .d2 {
+  color: var(--kit-accent-deep);
+}
+.kit-ask-typing {
+  align-self: flex-start;
+  display: inline-flex;
+  gap: 0.28rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--kit-surface-2);
+  border-radius: 1.1rem;
+  border-bottom-left-radius: 0.35rem;
+}
+.kit-ask-typing i {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--kit-faint);
+  animation: kit-blink 1.2s infinite;
+}
+.kit-ask-typing i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.kit-ask-typing i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes kit-blink {
+  0%,
+  60%,
+  100% {
+    opacity: 0.25;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-typing i {
+    animation: none;
+    opacity: 0.5;
+  }
 }

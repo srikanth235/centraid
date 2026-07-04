@@ -145,3 +145,47 @@ describe('serveStatic — CSP + nonce', () => {
     expect(html).toMatch(/<html data-theme="dark" style="--bg-l:5%">/);
   });
 });
+
+describe('serveStatic — shared kit asset fallback', () => {
+  it('serves kit.js / kit.css from sharedAssetsDir when the app has no copy', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' }); // no kit.js
+    const sharedAssetsDir = newAppDir({
+      'kit.js': 'export const KIT = 1;',
+      'kit.css': '.kit{color:red}',
+    });
+    const js = mockRes();
+    await serveStatic(js.res, appDir, 'kit.js', { sharedAssetsDir });
+    expect(js.data.statusCode).toBe(200);
+    expect(js.data.body.toString('utf8')).toBe('export const KIT = 1;');
+    expect(js.data.headers['Content-Type']).toMatch(/javascript/);
+
+    const css = mockRes();
+    await serveStatic(css.res, appDir, 'kit.css', { sharedAssetsDir });
+    expect(css.data.statusCode).toBe(200);
+    expect(css.data.body.toString('utf8')).toBe('.kit{color:red}');
+    expect(css.data.headers['Content-Type']).toMatch(/css/);
+  });
+
+  it("prefers the app's own copy over the shared one", async () => {
+    const appDir = newAppDir({ 'kit.js': 'export const KIT = "app";' });
+    const sharedAssetsDir = newAppDir({ 'kit.js': 'export const KIT = "shared";' });
+    const { res, data } = mockRes();
+    await serveStatic(res, appDir, 'kit.js', { sharedAssetsDir });
+    expect(data.body.toString('utf8')).toBe('export const KIT = "app";');
+  });
+
+  it('404s a missing kit asset when no sharedAssetsDir is configured', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' });
+    const { res, data } = mockRes();
+    await serveStatic(res, appDir, 'kit.js');
+    expect(data.statusCode).toBe(404);
+  });
+
+  it('does not fall back for non-whitelisted files', async () => {
+    const appDir = newAppDir({ 'index.html': '<html></html>' });
+    const sharedAssetsDir = newAppDir({ 'secret.js': 'nope', 'kit.js': 'ok' });
+    const { res, data } = mockRes();
+    await serveStatic(res, appDir, 'secret.js', { sharedAssetsDir });
+    expect(data.statusCode).toBe(404);
+  });
+});

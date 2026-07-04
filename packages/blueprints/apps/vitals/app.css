@@ -1,43 +1,72 @@
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Vitals identity accent — rose (health / heart). Swappable via --app-color. */
   --accent: #e55772;
-  --ink: #0f172a;
-  --ink-soft: #475569;
-  --ink-faint: #94a3b8;
-  --bg: #fcfcfc;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 74%, #2a0710);
+  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 12%, transparent);
+  --on-accent: #ffffff;
+
+  --ink: hsl(345 18% 13%);
+  --ink-soft: hsl(345 7% 42%);
+  --ink-faint: hsl(345 8% 60%);
+
+  --bg: hsl(348 24% 98%);
   --surface: #ffffff;
-  --line: rgba(31, 31, 35, 0.07);
-  --danger: #dc2626;
-  --warn: #d97706;
-  /* Resolved at :root so per-card --accent overrides (family shades) can
-     reference it without a circular var() — see famColor() in app.js. */
+  --surface-2: hsl(348 26% 96%);
+
+  --line: rgba(40, 20, 26, 0.09);
+  --line-strong: rgba(40, 20, 26, 0.16);
+
+  --danger: #d0342c;
+  --warn: #c07908;
+
+  --text: var(--ink);
+  --muted: var(--ink-soft);
   --metric-base: var(--app-color, var(--accent));
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(28, 12, 18, 0.28), 0 2px 6px -3px rgba(28, 12, 18, 0.12);
+  --shadow-lg: 0 26px 60px -24px rgba(28, 12, 18, 0.4);
+
+  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(220 12% 95%);
-  --ink-soft: hsl(220 8% 62%);
-  --ink-faint: hsl(220 6% 42%);
+  --ink: hsl(345 16% 94%);
+  --ink-soft: hsl(345 8% 66%);
+  --ink-faint: hsl(345 8% 48%);
   --bg: var(--bg-wall);
-  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
-  --line: hsla(220 25% 70% / 0.07);
-  --danger: #f87171;
-  --warn: #fbbf24;
+  --surface: hsl(345 11% calc(var(--bg-l) + 5%));
+  --surface-2: hsl(345 10% calc(var(--bg-l) + 8.5%));
+  --line: hsla(345 24% 74% / 0.1);
+  --line-strong: hsla(345 24% 76% / 0.2);
+  --danger: #f0645b;
+  --warn: #e0a13c;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #fff0f3);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg-l: 10%;
-    --ink: hsl(220 12% 95%);
-    --ink-soft: hsl(220 8% 62%);
-    --ink-faint: hsl(220 6% 42%);
+    --ink: hsl(345 16% 94%);
+    --ink-soft: hsl(345 8% 66%);
+    --ink-faint: hsl(345 8% 48%);
     --bg: var(--bg-wall);
-    --surface: hsl(225 11% 14.5%);
-    --line: hsla(220 25% 70% / 0.07);
-    --danger: #f87171;
-    --warn: #fbbf24;
+    --surface: hsl(345 11% 15%);
+    --surface-2: hsl(345 10% 18.5%);
+    --line: hsla(345 24% 74% / 0.1);
+    --line-strong: hsla(345 24% 76% / 0.2);
+    --danger: #f0645b;
+    --warn: #e0a13c;
+    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #fff0f3);
   }
 }
 
@@ -47,101 +76,129 @@
 
 body {
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
 main {
   max-width: 36rem;
   margin: 0 auto;
-  padding: 0.5rem 0 2rem;
+  padding: 0.75rem 0 4rem;
 }
 
 @media (min-width: 720px) {
   body {
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
   }
   main {
     max-width: 56rem;
+    padding-top: 1.25rem;
   }
 }
 
 .head {
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
 }
-
 .head h1 {
-  font-size: 1.75rem;
+  font-size: 1.65rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0 0.1rem;
 }
-
+@media (min-width: 720px) {
+  .head h1 {
+    font-size: 1.9rem;
+  }
+}
 .muted {
   color: var(--ink-soft);
   font-size: 0.85rem;
   margin: 0;
 }
-
 .small {
   font-size: 0.8rem;
 }
 
-/* Consent + outcome banners — the vault's decisions are part of the UI. */
-.banner {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
-  background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-  line-height: 1.45;
-}
+/* ---------- Trust banners ------------------------------------------------ */
 
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .banner strong {
   display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
 }
-
-.banner.notice {
-  border-left-color: var(--ink-faint);
-  color: var(--ink-soft);
+.banner.notice::before {
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
 }
 
 button {
   font: inherit;
   cursor: pointer;
 }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
 /* Out-of-range cues — tints, not alarms. */
 .val-high {
   color: var(--danger);
 }
-
 .val-low {
   color: var(--warn);
 }
-
 .delta-up {
-  color: #e0705e;
+  color: var(--danger);
 }
-
 .delta-down {
-  color: #5b9bd5;
+  color: #4a90c2;
 }
 
-/* ---------- Metric card grid (the Apple Health home) ---------- */
+/* ---------- Metric card grid (Apple Health home) ------------------------ */
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  gap: 0.625rem;
+  gap: 0.7rem;
   margin-bottom: 1rem;
 }
-
 .metric-card {
   display: flex;
   flex-direction: column;
@@ -149,136 +206,146 @@ button {
   gap: 0.15rem;
   min-height: 2.75rem;
   text-align: left;
-  padding: 0.75rem 0.875rem 0.625rem;
+  padding: 0.8rem 0.9rem 0.7rem;
   border: 1px solid var(--line);
-  border-radius: 0.875rem;
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink);
+  box-shadow: var(--shadow-sm);
   -webkit-tap-highlight-color: transparent;
   transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
 }
-
+.metric-card:hover {
+  box-shadow: var(--shadow-md);
+}
 .metric-card.selected {
   border-color: var(--fam, var(--accent));
   box-shadow: 0 0 0 1px var(--fam, var(--accent));
 }
-
 .mc-name {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--fam, var(--accent));
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fam, var(--accent-deep));
 }
-
 .mc-value {
   display: flex;
   align-items: baseline;
   gap: 0.3rem;
   flex-wrap: wrap;
 }
-
 .mc-num {
+  font-family: var(--mono);
   font-size: 1.55rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
-
 .mc-unit {
-  font-size: 0.78rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
   color: var(--ink-soft);
 }
-
 .mc-delta {
-  font-size: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-
 .mc-when {
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
 }
-
 .mc-spark {
   margin-top: 0.35rem;
 }
-
 .mc-spark svg {
   display: block;
   width: 100%;
   height: 2.25rem;
 }
 
-/* ---------- Big time-axis chart ---------- */
+/* ---------- Big time-axis chart ----------------------------------------- */
 
 .chart-panel {
   border: 1px solid var(--line);
   background: var(--surface);
-  border-radius: 0.875rem;
-  padding: 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.9rem;
   margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
 }
-
 .chart-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
 }
-
 .chart-title-wrap {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-
 .chart-title {
   font-size: 0.9rem;
   font-weight: 600;
 }
-
+.chart-when {
+  font-family: var(--mono);
+  color: var(--ink-faint);
+}
 .chart-value {
+  font-family: var(--mono);
   font-size: 1.35rem;
-  font-weight: 650;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
+  color: var(--accent-deep);
   white-space: nowrap;
 }
-
 .range-bar {
   display: flex;
-  gap: 0.25rem;
-  margin-bottom: 0.5rem;
+  gap: 0.2rem;
+  margin-bottom: 0.6rem;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0.2rem;
 }
-
 .range-bar button {
   flex: 1;
-  min-height: 2.5rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  min-height: 2.1rem;
+  border: none;
+  border-radius: 999px;
   background: transparent;
   color: var(--ink-soft);
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
-
+.range-bar button:hover {
+  color: var(--ink);
+}
 .range-bar button.on {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
-
 .time-chart {
   display: block;
   width: 100%;
   height: auto;
   touch-action: pan-y;
 }
-
 .chart-line {
   fill: none;
   stroke-width: 2;
@@ -286,37 +353,32 @@ button {
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
-
 .chart-line-main {
   stroke: var(--accent);
 }
-
 .chart-line-dia {
   stroke: color-mix(in srgb, var(--accent) 45%, var(--ink-faint));
   stroke-width: 1.5;
 }
-
 .chart-band {
-  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  fill: var(--accent-soft);
 }
-
 .chart-dot {
   fill: var(--accent);
 }
-
 .chart-guide {
   stroke: var(--ink-faint);
   stroke-width: 1;
   stroke-dasharray: 3 3;
 }
-
 .chart-tick {
   fill: var(--ink-faint);
+  font-family: var(--mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Log form ---------- */
+/* ---------- Log form ----------------------------------------------------- */
 
 .log {
   display: flex;
@@ -324,56 +386,55 @@ button {
   gap: 0.5rem;
   margin-bottom: 1.25rem;
 }
-
 .log-main {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
-
 select,
 input[type='datetime-local'] {
-  height: 2.75rem;
-  padding: 0 0.875rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.85rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
   color: var(--ink);
   font: inherit;
   font-size: 0.9375rem;
   -webkit-appearance: none;
+  appearance: none;
 }
-
 select {
   flex: 1;
   min-width: 9rem;
+  color: var(--ink-soft);
 }
-
 select:focus,
 input:focus {
   outline: none;
-  border-color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
-/* Value entry: unit suffix lives inside the field; BP swaps in a second
-   input behind a "/" so the pair is one gesture. */
+input[type='datetime-local'] {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
 .value-wrap {
   flex: 1;
   min-width: 8.5rem;
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  height: 2.75rem;
+  min-height: 2.75rem;
   padding: 0 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
 }
-
 .value-wrap:focus-within {
-  border-color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
 .value-wrap input {
   flex: 1;
   min-width: 2.5rem;
@@ -384,165 +445,166 @@ input:focus {
   padding: 0;
   color: var(--ink);
   font: inherit;
+  font-family: var(--mono);
   font-size: 0.9375rem;
   font-variant-numeric: tabular-nums;
 }
-
 .value-wrap input:focus {
   outline: none;
 }
-
+.value-wrap input::placeholder {
+  color: var(--ink-faint);
+}
 .bp-sep {
   color: var(--ink-faint);
   font-size: 1.1rem;
 }
-
 .unit-suffix {
   flex-shrink: 0;
   color: var(--ink-faint);
-  font-size: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
 }
-
 .unit-suffix:empty {
   display: none;
 }
-
 .primary {
-  height: 2.75rem;
-  padding: 0 1.125rem;
-  border-radius: 0.625rem;
+  min-height: 2.75rem;
+  padding: 0 1.15rem;
+  border-radius: var(--radius-sm);
   border: none;
-  background: var(--app-color, var(--accent));
-  color: #fff;
+  background: var(--accent-deep);
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 0.9375rem;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    filter 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
-
+.primary:hover {
+  filter: brightness(1.08);
+}
+.primary:active {
+  transform: scale(0.98);
+}
 .primary:disabled {
-  opacity: 0.4;
+  background: var(--surface-2);
+  color: var(--ink-faint);
+  cursor: not-allowed;
 }
-
 .log-extras {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
 }
-
 .when-toggle {
   min-height: 2.5rem;
   padding: 0 0.75rem;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: transparent;
+  background: var(--surface);
   color: var(--ink-soft);
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.76rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .when-toggle[aria-expanded='true'] {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  color: var(--accent-deep);
 }
-
 #whenInput {
   min-height: 2.5rem;
-  height: 2.5rem;
   font-size: 0.85rem;
 }
-
 .chip-row {
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
 }
-
 .chip {
   min-height: 2.5rem;
-  padding: 0 0.75rem;
+  padding: 0 0.8rem;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: transparent;
+  background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.8rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .chip.on {
-  background: color-mix(in srgb, var(--app-color, var(--accent)) 12%, transparent);
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  background: var(--accent-soft);
+  border-color: transparent;
+  color: var(--accent-deep);
+  font-weight: 500;
 }
 
-/* ---------- Highlights + vault summary ---------- */
+/* ---------- Highlights + vault summary ---------------------------------- */
 
 .highlights {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-  gap: 0.625rem;
+  gap: 0.7rem;
   margin-bottom: 1rem;
 }
-
 .highlight-card {
   border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
   background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.85rem 0.95rem;
   font-size: 0.875rem;
   line-height: 1.45;
   font-variant-numeric: tabular-nums;
+  box-shadow: var(--shadow-sm);
 }
-
 .trends-card {
   border: 1px solid var(--line);
   background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius);
+  padding: 0.85rem 0.95rem;
   margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
 }
-
 .trends-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.5rem;
 }
-
 .trends-title {
   flex: 1;
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
 }
-
 .trends-head select {
   flex: 0 1 auto;
   min-width: 6.5rem;
-  height: 2.5rem;
+  min-height: 2.5rem;
   font-size: 0.85rem;
 }
-
 #trendsButton {
   min-height: 2.5rem;
   padding: 0 0.875rem;
-  border-radius: 0.625rem;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line);
   background: var(--surface);
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
   font-weight: 600;
   font-size: 0.85rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .trends-result {
   font-variant-numeric: tabular-nums;
   font-size: 0.875rem;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
-/* ---------- History ---------- */
+/* ---------- History ------------------------------------------------------ */
 
 .history-head {
   display: flex;
@@ -550,59 +612,56 @@ input:focus {
   gap: 0.6rem;
   min-height: 1.5rem;
 }
-
 .history-title {
-  font-size: 0.9rem;
-  font-weight: 600;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
 }
-
 .history-head .muted {
   flex: 1;
 }
-
 .ghost-btn {
   min-height: 2.5rem;
   padding: 0 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink-soft);
   font-size: 0.8rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .ghost-btn:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
-
 .day-label {
-  margin: 1rem 0 0.25rem;
+  margin: 1.25rem 0 0.35rem;
+  font-family: var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
 }
-
 .row {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
-  padding: 0.625rem 0;
+  padding: 0.65rem 0;
   border-bottom: 1px solid var(--line);
 }
-
 .row:last-child {
   border-bottom: none;
 }
-
 .row-time {
   flex-shrink: 0;
   width: 4.5rem;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
-
 .row-text {
   flex: 1;
   min-width: 0;
@@ -611,49 +670,52 @@ input:focus {
   word-break: break-word;
   font-variant-numeric: tabular-nums;
 }
-
 .row-value {
+  font-family: var(--mono);
   font-weight: 600;
 }
-
 .context-chip {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
   color: var(--ink-soft);
-  background: color-mix(in srgb, var(--ink-faint) 14%, transparent);
+  background: var(--surface-2);
   border-radius: 999px;
   padding: 0.1rem 0.5rem;
   white-space: nowrap;
 }
-
 .badge {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.64rem;
   color: var(--ink-faint);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.1rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-
 .row[data-modality='sensed'] .badge {
-  color: var(--app-color, var(--accent));
-  border-color: currentColor;
+  color: var(--accent-deep);
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  background: var(--accent-soft);
 }
-
 .empty {
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 2rem 0;
+  padding: 2.5rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
-
 .shortcut-hint {
-  margin-top: 1.5rem;
+  margin-top: 2rem;
   text-align: center;
 }
-
 kbd {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 0.75rem;
   border: 1px solid var(--line);
   border-radius: 0.3rem;
@@ -661,41 +723,36 @@ kbd {
   background: var(--surface);
 }
 
-/* ---------- Attachments (shared pattern across apps) ---------- */
+/* ---------- Attachments -------------------------------------------------- */
 
 .attach-block {
   margin-top: 1rem;
 }
-
 .attach-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-
 .attach-strip:empty {
   display: none;
 }
-
 .attach-tile {
   position: relative;
   width: 5rem;
   height: 5rem;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .attach-tile img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .attach-file {
   display: flex;
   align-items: center;
@@ -703,29 +760,28 @@ kbd {
   padding: 0.35rem;
   font-size: 0.68rem;
   line-height: 1.25;
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
   word-break: break-word;
   text-decoration: none;
 }
-
 .attach-meta {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  font-size: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.56rem;
   text-align: center;
   color: #fff;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(0, 0, 0, 0.5);
   padding: 0.05rem 0;
 }
-
 .attach-remove {
   position: absolute;
   top: 0.15rem;
   right: 0.15rem;
-  width: 1.15rem;
-  height: 1.15rem;
+  width: 1.3rem;
+  height: 1.3rem;
   line-height: 1;
   border: none;
   border-radius: 50%;
@@ -737,100 +793,84 @@ kbd {
   align-items: center;
   justify-content: center;
 }
-
 .attach-add {
   display: inline-block;
   margin-top: 0.5rem;
 }
-
 .attach-add input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
 }
-
 .attach-add .ghost {
   display: inline-block;
 }
-
-/* Per-row attach affordance: a small button in the row, and the strip on its
-   own line beneath the reading it belongs to. */
 .attach-btn {
   flex-shrink: 0;
-  height: 1.75rem;
-  padding: 0 0.5rem;
+  min-height: 2rem;
+  padding: 0 0.55rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink-soft);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .attach-btn:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: var(--line-strong);
+  color: var(--ink);
 }
-
-/* Per-row remove affordance: same footprint as the attach button so it is
-   touch-visible, tinting toward danger on hover and while armed ("Remove?"). */
 .remove-btn {
   flex-shrink: 0;
-  height: 1.75rem;
-  padding: 0 0.5rem;
+  min-height: 2rem;
+  padding: 0 0.55rem;
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  background: transparent;
+  border-radius: 999px;
+  background: var(--surface);
   color: var(--ink-faint);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   white-space: nowrap;
   -webkit-tap-highlight-color: transparent;
 }
-
 .remove-btn:hover,
 .remove-btn:focus-visible,
 .remove-btn[data-kit-armed='true'] {
   border-color: var(--danger);
   color: var(--danger);
 }
-
 .row-with-attachments {
   border-bottom: 1px solid var(--line);
 }
-
 .row-with-attachments:last-child {
   border-bottom: none;
 }
-
 .row-with-attachments .row {
   border-bottom: none;
 }
-
 .row-attachments {
   padding: 0 0 0.625rem 5.25rem;
 }
 
-/* ---------- Motion ---------- */
-
 @media (prefers-reduced-motion: reduce) {
-  .metric-card {
+  .metric-card,
+  .range-bar button,
+  .primary {
     transition: none;
   }
 }
 
-/* ---------- App-level knobs ---------- */
+/* ---------- App-level knobs --------------------------------------------- */
 
 :root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 :root[data-app-font='serif'] {
-  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
 }
 :root[data-app-font='mono'] {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
-
 :root[data-app-width='narrow'] main {
   max-width: 36rem;
 }

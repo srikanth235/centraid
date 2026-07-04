@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Notes</h1>
           <p id="subtitle" class="muted">All your notes, saved in your vault.</p>
@@ -170,6 +170,19 @@
         Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'notes',
+        placeholder: 'Ask your notes…',
+        intro:
+          'Ask me to write, find, summarise or tag a note. New notes show for your approval before they touch the vault.',
+        suggest: [
+          'Summarise my Q3 roadmap note',
+          'New note from this',
+          'What did I note about the offline story?',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

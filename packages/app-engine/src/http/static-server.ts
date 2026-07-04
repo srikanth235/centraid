@@ -1,8 +1,20 @@
 import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import path from 'node:path';
 import type { ServerResponse } from 'node:http';
 import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
 import { sendError } from './http-utils.js';
+
+/**
+ * Assets that are shared verbatim by every app and therefore served from a
+ * single canonical dir (`sharedAssetsDir`) instead of a per-app copy. An app
+ * folder no longer ships `kit.js` / `kit.css`; the request still comes in as
+ * the app-relative `/centraid/<id>/kit.js` (index.html `<link>` and app.js's
+ * `import './kit.js'` are unchanged), and `serveStatic` falls back to the
+ * shared dir when the app folder has no copy of its own. An app *may* still
+ * ship its own file to override — the per-app copy wins.
+ */
+const SHARED_ASSET_FILES = new Set(['kit.js', 'kit.css']);
 
 /**
  * Settings to bake into the served HTML's `<html>` tag. Two parallel maps:
@@ -38,6 +50,13 @@ export interface ServeStaticOptions {
    * draft route's app-changes, which proxies the same live change bus.
    */
   draft?: { appId: string; sessionId: string };
+  /**
+   * Canonical dir holding assets shared verbatim across every app
+   * (`kit.js` / `kit.css` — see {@link SHARED_ASSET_FILES}). When the app
+   * folder has no copy of a requested shared asset, it is served from here.
+   * Omit to disable the fallback (a missing file then 404s as usual).
+   */
+  sharedAssetsDir?: string;
 }
 
 export async function serveStatic(
@@ -46,14 +65,28 @@ export async function serveStatic(
   rel: string,
   opts: ServeStaticOptions = {},
 ): Promise<true> {
-  const file = resolveStaticPath(appDir, rel);
+  let file = resolveStaticPath(appDir, rel);
   if (!file) return sendError(res, 404, 'not_found', 'Asset not found.');
 
   let buf: Buffer;
   try {
     buf = await fs.readFile(file);
   } catch {
-    return sendError(res, 404, 'not_found', 'Asset not found.');
+    // Fall back to the shared canonical copy for whitelisted assets an app
+    // folder doesn't carry itself (kit.js / kit.css). Resolved through
+    // `resolveStaticPath` so the same escape/allowlist guards apply.
+    const base = path.basename(file);
+    const shared =
+      opts.sharedAssetsDir && SHARED_ASSET_FILES.has(base)
+        ? resolveStaticPath(opts.sharedAssetsDir, base)
+        : null;
+    if (!shared) return sendError(res, 404, 'not_found', 'Asset not found.');
+    try {
+      buf = await fs.readFile(shared);
+      file = shared;
+    } catch {
+      return sendError(res, 404, 'not_found', 'Asset not found.');
+    }
   }
 
   const contentType = contentTypeFor(file);

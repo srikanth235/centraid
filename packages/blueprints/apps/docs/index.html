@@ -54,7 +54,7 @@
             autocomplete="off"
           />
         </div>
-        <div class="head-actions">
+        <div class="head-actions" data-ask-mount>
           <button id="newFolderButton" type="button" class="ghost">New folder</button>
           <button id="uploadButton" type="button" class="primary small-btn">Upload</button>
         </div>
@@ -137,6 +137,19 @@
         Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'docs',
+        placeholder: 'Ask your docs…',
+        intro:
+          'Ask me to find a file, upload one, or share it. Uploads and shares show for your approval before they touch the vault.',
+        suggest: [
+          'Find my lease',
+          'Share the insurance policy with Sam',
+          'What did I upload this week?',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

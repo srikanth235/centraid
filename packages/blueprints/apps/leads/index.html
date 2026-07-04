@@ -40,7 +40,7 @@
   </head>
   <body>
     <main>
-      <header class="head">
+      <header class="head" data-ask-mount>
         <div>
           <h1>Leads</h1>
           <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -145,6 +145,19 @@
         Every write is a typed vault command — consent-checked and receipted.
       </p>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'leads',
+        placeholder: 'Ask your leads…',
+        intro:
+          'Ask me to add a lead, log an activity, move a stage or find a prospect. Every write shows for your approval before it touches the vault.',
+        suggest: [
+          'Add Rowan Studio, $6,500, proposal',
+          'What’s closing this week?',
+          'Move Maple &amp; Co. to won',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>

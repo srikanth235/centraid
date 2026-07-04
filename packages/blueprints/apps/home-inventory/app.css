@@ -1,149 +1,337 @@
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --accent: #5c677d;
-  --ink: #0f172a;
-  --ink-soft: #475569;
-  --ink-faint: #94a3b8;
-  --bg: #fcfcfc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Home-inventory identity accent — warm clay. Swappable via --app-color. */
+  --accent: #b5603f;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 74%, #240c04);
+  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 13%, transparent);
+  --on-accent: #ffffff;
+
+  --ink: hsl(20 22% 13%);
+  --ink-soft: hsl(20 8% 40%);
+  --ink-faint: hsl(20 9% 58%);
+
+  --bg: hsl(24 28% 98%);
   --surface: #ffffff;
-  --line: rgba(31, 31, 35, 0.07);
-  --danger: #dc2626;
+  --surface-2: hsl(24 28% 95.5%);
+
+  --line: rgba(40, 24, 16, 0.09);
+  --line-strong: rgba(40, 24, 16, 0.16);
+
+  --danger: #d0342c;
+  --warn: #b45309;
+
+  --text: var(--ink);
+  --muted: var(--ink-soft);
+
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(30, 18, 10, 0.28), 0 2px 6px -3px rgba(30, 18, 10, 0.12);
+  --shadow-lg: 0 26px 60px -24px rgba(30, 18, 10, 0.4);
+
+  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(220 12% 95%);
-  --ink-soft: hsl(220 8% 62%);
-  --ink-faint: hsl(220 6% 42%);
+  --ink: hsl(28 16% 94%);
+  --ink-soft: hsl(28 9% 66%);
+  --ink-faint: hsl(28 9% 48%);
   --bg: var(--bg-wall);
-  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
-  --line: hsla(220 25% 70% / 0.07);
+  --surface: hsl(24 11% calc(var(--bg-l) + 5%));
+  --surface-2: hsl(24 10% calc(var(--bg-l) + 8.5%));
+  --line: hsla(28 24% 74% / 0.1);
+  --line-strong: hsla(28 24% 76% / 0.2);
+  --danger: #f0645b;
+  --warn: #d99a4e;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #fdeee6);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg-l: 10%;
-    --ink: hsl(220 12% 95%);
-    --ink-soft: hsl(220 8% 62%);
-    --ink-faint: hsl(220 6% 42%);
+    --ink: hsl(28 16% 94%);
+    --ink-soft: hsl(28 9% 66%);
+    --ink-faint: hsl(28 9% 48%);
     --bg: var(--bg-wall);
-    --surface: hsl(225 11% 14.5%);
-    --line: hsla(220 25% 70% / 0.07);
+    --surface: hsl(24 11% 15%);
+    --surface-2: hsl(24 10% 18.5%);
+    --line: hsla(28 24% 74% / 0.1);
+    --line-strong: hsla(28 24% 76% / 0.2);
+    --danger: #f0645b;
+    --warn: #d99a4e;
+    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #fdeee6);
   }
 }
 
 * {
   box-sizing: border-box;
 }
-
-/* The hidden attribute must win over any display rule (e.g. flex forms). */
 [hidden] {
   display: none !important;
 }
 
 body {
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
 main {
   max-width: 36rem;
   margin: 0 auto;
-  padding: 0.5rem 0 2rem;
+  padding: 0.75rem 0 4rem;
 }
 
 @media (min-width: 720px) {
   body {
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
   }
   main {
-    max-width: 56rem;
+    max-width: 58rem;
+    padding-top: 1.25rem;
   }
 }
 
 .head {
-  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
 }
-
 .head h1 {
-  font-size: 1.75rem;
+  font-size: 1.65rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   margin: 0 0 0.1rem;
 }
-
+@media (min-width: 720px) {
+  .head h1 {
+    font-size: 1.9rem;
+  }
+}
 .muted {
   color: var(--ink-soft);
   font-size: 0.85rem;
   margin: 0;
 }
-
-/* The insurance number: the whole inventory summed per currency. */
-.total-value {
-  margin: 0.2rem 0 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--app-color, var(--accent));
-}
-
 .small {
   font-size: 0.8rem;
 }
-
-/* Consent banner — the vault's decisions are part of the UI. */
-.banner {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
-  background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-  line-height: 1.45;
+.total-value {
+  margin: 0.25rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-deep);
 }
 
+/* ---------- Trust banners ------------------------------------------------ */
+
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .banner strong {
   display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.banner.notice::before {
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
 }
 
-.banner.notice {
-  border-left-color: var(--ink-faint);
-  color: var(--ink-soft);
+/* ---------- Buttons & inputs -------------------------------------------- */
+
+button {
+  font: inherit;
+  cursor: pointer;
 }
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input,
+select {
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.75rem;
+  min-width: 0;
+  min-height: 2.6rem;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input::placeholder {
+  color: var(--ink-faint);
+}
+input:focus,
+select:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+input[type='number'],
+input[type='date'] {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+.value-input {
+  flex: none;
+  width: 7rem;
+}
+.currency-input {
+  flex: none;
+  width: 4.75rem;
+  text-transform: uppercase;
+  font-family: var(--mono);
+}
+.primary {
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--accent-deep);
+  color: var(--on-accent);
+  font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    filter 0.15s var(--ease),
+    transform 0.08s var(--ease);
+}
+.primary:hover {
+  filter: brightness(1.08);
+}
+.primary:active {
+  transform: scale(0.98);
+}
+.small-btn {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.95rem;
+}
+.ghost {
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.8rem;
+  min-height: 2.6rem;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.ghost:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.ghost.danger:hover,
+.ghost.danger[data-kit-armed] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ---------- Add form ----------------------------------------------------- */
+
+.add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.add-form .add-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.add-form .add-more input[type='text'] {
+  flex: 1;
+  min-width: 8rem;
+}
+.row-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0 0.75rem;
+}
+.row-form input[type='text'],
+.row-form input[type='url'] {
+  flex: 1;
+  min-width: 8rem;
+}
+
+/* ---------- Attention rows (warranties / maintenance) ------------------- */
 
 .day-label {
-  margin: 1rem 0 0.25rem;
+  margin: 1.25rem 0 0.35rem;
+  font-family: var(--mono);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  font-size: 0.66rem;
+  color: var(--ink-faint);
 }
-
 .row {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
-  padding: 0.625rem 0;
+  padding: 0.65rem 0;
   border-bottom: 1px solid var(--line);
 }
-
 .row:last-child {
   border-bottom: none;
 }
-
 .row-time {
   flex-shrink: 0;
   width: 8.5rem;
   color: var(--ink-soft);
-  font-size: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
 }
-
 .row-text {
   flex: 1;
   min-width: 0;
@@ -151,57 +339,52 @@ main {
   line-height: 1.35;
   word-break: break-word;
 }
-
 .row-detail {
   flex-shrink: 0;
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
 }
-
 .badge {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.64rem;
   color: var(--ink-faint);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 0.1rem 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-
-/* Warranty badges: covered in the app accent, expired kept faint. */
 .badge.ok {
-  color: var(--app-color, var(--accent));
-  border-color: currentColor;
+  color: var(--accent-deep);
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  background: var(--accent-soft);
 }
-
 .badge.off {
   color: var(--ink-faint);
   border-color: var(--line);
 }
-
-/* Mark-done sits at the end of a due row without stretching it. */
+.badge.warn {
+  color: var(--warn);
+  border-color: currentColor;
+}
 .done-btn {
   flex: none;
   align-self: center;
 }
-
-/* Overdue maintenance takes the danger tint. */
 .row[data-due='overdue'] .row-time,
 .row[data-due='overdue'] .badge {
   color: var(--danger);
 }
-
 .row[data-due='overdue'] .badge {
   border-color: currentColor;
 }
-
-/* Vault search hits: the ⟦…⟧ markers in a snippet render as <mark>. */
 mark {
-  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
+  background: var(--accent-soft);
   color: inherit;
   border-radius: 0.2em;
   padding: 0 0.05em;
 }
-
-/* The browse window's honest edge: latest N shown, Show more grows it. */
 .window-footer {
   display: flex;
   align-items: center;
@@ -211,258 +394,18 @@ mark {
   color: var(--ink-soft);
   font-size: 0.85rem;
 }
-
 .empty {
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 2rem 0;
-}
-
-/* ---------- Forms (add item, inline edit / warranty) ---------- */
-
-input,
-select {
-  font: inherit;
-  color: var(--ink);
+  padding: 3rem 1rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  padding: 0.55rem 0.75rem;
-  min-width: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
-input:focus,
-select:focus {
-  outline: none;
-  border-color: var(--app-color, var(--accent));
-}
-
-/* Value + currency: a short amount box and a 3-letter code beside it. */
-.value-input {
-  flex: none;
-  width: 7rem;
-}
-
-.currency-input {
-  flex: none;
-  width: 4.75rem;
-  text-transform: uppercase;
-}
-
-.primary {
-  border-radius: 0.625rem;
-  border: none;
-  background: var(--app-color, var(--accent));
-  color: #fff;
-  font-weight: 600;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.add-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.add-form .add-more {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.add-form .add-more input[type='text'] {
-  flex: 1;
-  min-width: 8rem;
-}
-
-/* An item's inline forms sit beneath its row. */
-.row-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0 0.75rem;
-}
-
-.row-form input[type='text'],
-.row-form input[type='url'] {
-  flex: 1;
-  min-width: 8rem;
-}
-
-/* Disposal is destructive-ish; armed (kit armConfirm) it takes the danger tint. */
-.ghost.danger:hover,
-.ghost.danger[data-kit-armed] {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-/* Warranty history lines beneath an item row. */
-.warranty-list {
-  padding: 0 0 0.625rem;
-}
-
-.warranty-line a {
-  color: var(--app-color, var(--accent));
-}
-
-/* Disposed items: kept as muted history in a collapsed section. */
-#disposedSection summary {
-  cursor: pointer;
-}
-
-.row[data-disposed] .row-text {
-  color: var(--ink-faint);
-}
-
-.footnote {
-  margin-top: 2rem;
-  text-align: center;
-  color: var(--ink-faint);
-}
-
-/* ---------- Attachments (shared pattern across apps) ---------- */
-
-button {
-  font: inherit;
-  cursor: pointer;
-}
-
-.ghost {
-  border-radius: 0.625rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--ink-soft);
-  font-size: 0.8125rem;
-  padding: 0.35rem 0.75rem;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.ghost:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
-}
-
-.small-btn {
-  font-size: 0.85rem;
-  padding: 0.45rem 0.9rem;
-}
-
-.attach-block {
-  margin-top: 1rem;
-}
-
-/* Each item is a row plus its own attachment strip. */
-.item {
-  border-bottom: 1px solid var(--line);
-}
-
-.item:last-child {
-  border-bottom: none;
-}
-
-.item .row {
-  border-bottom: none;
-}
-
-.attach-item-btn {
-  flex-shrink: 0;
-}
-
-.attach-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.item .attach-strip:not(:empty) {
-  padding: 0 0 0.625rem;
-}
-
-.attach-strip:empty {
-  display: none;
-}
-
-.attach-tile {
-  position: relative;
-  width: 5rem;
-  height: 5rem;
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  overflow: hidden;
-  background: var(--surface);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.attach-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.attach-file {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  padding: 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  color: var(--app-color, var(--accent));
-  word-break: break-word;
-  text-decoration: none;
-}
-
-.attach-meta {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  font-size: 0.6rem;
-  text-align: center;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.45);
-  padding: 0.05rem 0;
-}
-
-.attach-remove {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
-  width: 1.15rem;
-  height: 1.15rem;
-  line-height: 1;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.attach-add {
-  display: inline-block;
-  margin-top: 0.5rem;
-}
-
-.attach-add input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
-.attach-add .ghost {
-  display: inline-block;
-}
-
-/* ---------- Toolbar: search, view toggle, export ---------- */
+/* ---------- Toolbar: search, view toggle, export ------------------------ */
 
 .toolbar {
   position: sticky;
@@ -473,61 +416,57 @@ button {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background: var(--surface);
+  margin-bottom: 0.6rem;
+  background: color-mix(in oklab, var(--surface) 90%, transparent);
+  backdrop-filter: blur(8px);
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
-
 .toolbar input[type='search'] {
   flex: 1;
   min-width: 10rem;
+  border-radius: 999px;
 }
-
 .toolbar-actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
-
 .view-toggle {
   display: inline-flex;
-  gap: 0.25rem;
+  gap: 0.2rem;
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 0.2rem;
 }
-
+.view-toggle .ghost {
+  border: none;
+  background: none;
+  min-height: 2.1rem;
+  border-radius: 999px;
+}
 .view-toggle .ghost[aria-pressed='true'] {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
-  font-weight: 600;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
 }
 
-/* Comfortable touch targets everywhere actions live. */
-.ghost,
-.primary,
-.chip {
-  min-height: 2.5rem;
-}
+/* ---------- Rooms filter chips + sidebar -------------------------------- */
 
-/* ---------- Rooms filter: chip row on phones, sidebar at wide widths ---------- */
-
-/* Room filter chips — client-side, "All places" plus one per room. Scoped
-   under .chips so the role-prompt and warranty-preset chips keep their own
-   look. */
 .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-bottom: 1rem;
 }
-
 .chips:empty {
   display: none;
 }
-
 .chips .chip {
   font-size: 0.8rem;
-  padding: 0.3rem 0.8rem;
+  padding: 0.3rem 0.85rem;
   min-height: 2.5rem;
   border-radius: 999px;
   border: 1px solid var(--line);
@@ -535,60 +474,48 @@ button {
   color: var(--ink-soft);
   -webkit-tap-highlight-color: transparent;
 }
-
 .chips .chip[aria-pressed='true'] {
-  background: var(--app-color, var(--accent));
-  border-color: var(--app-color, var(--accent));
-  color: #fff;
+  background: var(--accent-deep);
+  border-color: transparent;
+  color: var(--on-accent);
+  font-weight: 500;
 }
-
-/* Item counts ride inside each chip, faint until the chip fills. */
 .chip-count {
   margin-left: 0.4rem;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
   font-variant-numeric: tabular-nums;
   color: var(--ink-faint);
 }
-
 .chips .chip[aria-pressed='true'] .chip-count {
   color: inherit;
 }
-
-/* ---------- Rooms layout: place sidebar at wide widths ----------
-   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
-   the wrappers below are inert there. At >=720px the same chips restyle
-   into a docs-style sidebar column beside the item pane. */
 
 @media (min-width: 720px) {
   :root:not([data-app-width='narrow']) .split {
     display: grid;
     grid-template-columns: 15rem minmax(0, 1fr);
-    gap: 1.5rem;
+    gap: 1.75rem;
     align-items: start;
   }
-
-  /* Sidebar hides until data arrives (and while consent is denied) —
-     collapse to one column so the pane doesn't sit beside a ghost track. */
   :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
     grid-template-columns: 1fr;
   }
-
   :root:not([data-app-width='narrow']) .side-nav {
     position: sticky;
     top: 0.5rem;
     border: 1px solid var(--line);
     background: var(--surface);
-    border-radius: 0.75rem;
+    border-radius: var(--radius);
     padding: 0.5rem;
+    box-shadow: var(--shadow-sm);
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chips {
     flex-direction: column;
     align-items: stretch;
     gap: 0.15rem;
     margin-bottom: 0;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chips .chip {
     display: flex;
     align-items: center;
@@ -596,18 +523,14 @@ button {
     font-size: 0.875rem;
     border: none;
     background: none;
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
   }
-
   :root:not([data-app-width='narrow']) .side-nav .chips .chip[aria-pressed='true'] {
-    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
-    color: var(--app-color, var(--accent));
+    background: var(--accent-soft);
+    color: var(--accent-deep);
     font-weight: 600;
   }
-
-  /* Counts right-aligned and faint like the docs folder tree — even on the
-     selected row, where the tinted background carries the state. */
   :root:not([data-app-width='narrow']) .side-nav .chip .chip-count,
   :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] .chip-count {
     margin-left: auto;
@@ -616,72 +539,70 @@ button {
   }
 }
 
-/* ---------- Attention rail: expiring warranties + maintenance ---------- */
+/* ---------- Attention rail ---------------------------------------------- */
 
 @media (min-width: 720px) {
   .attention {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0 1.5rem;
+    gap: 0 1.75rem;
     align-items: start;
   }
 }
-
 .section-hint {
   margin: 0.35rem 0 0.5rem;
   color: var(--ink-faint);
 }
 
-/* Warranty running out: warm amber, not alarm red. */
-.badge.warn {
-  color: #b45309;
-  border-color: currentColor;
+/* ---------- Item rows (list view) --------------------------------------- */
+
+.item {
+  border-bottom: 1px solid var(--line);
 }
-
-:root[data-theme='dark'] .badge.warn {
-  color: #d99a4e;
+.item:last-child {
+  border-bottom: none;
 }
-
-/* ---------- Item rows (list view) ---------- */
-
+.item .row {
+  border-bottom: none;
+}
 .item-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  min-height: 3.25rem;
-  padding: 0.4rem 0.25rem;
+  min-height: 3.4rem;
+  padding: 0.45rem 0.35rem;
   border: none;
   background: transparent;
   color: inherit;
   text-align: left;
-  border-radius: 0.625rem;
+  border-radius: var(--radius);
+  margin: 0 -0.35rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .item-row:hover,
 .item-row[aria-expanded='true'] {
-  background: var(--surface);
+  background: var(--surface-2);
 }
-
 .thumb {
   flex: none;
   display: inline-flex;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
-
 .thumb img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .thumb .kit-avatar {
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+.attach-item-btn {
+  flex-shrink: 0;
 }
 
-/* ---------- Photo grid (Sortly-style cards) ---------- */
+/* ---------- Photo grid (Sortly-style) ----------------------------------- */
 
 .place-grid {
   display: grid;
@@ -689,29 +610,26 @@ button {
   gap: 0.75rem;
   margin: 0.25rem 0 0.75rem;
 }
-
 .grid-card {
   position: relative;
   aspect-ratio: 1;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: var(--radius);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
   -webkit-tap-highlight-color: transparent;
 }
-
 .grid-card img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-
 .grid-card[aria-expanded='true'] {
   border-color: var(--app-color, var(--accent));
 }
-
 .grid-letter {
   display: flex;
   align-items: center;
@@ -719,7 +637,6 @@ button {
   width: 100%;
   height: 100%;
 }
-
 .grid-overlay {
   position: absolute;
   inset: auto 0 0 0;
@@ -732,7 +649,6 @@ button {
   color: #fff;
   text-align: left;
 }
-
 .grid-name {
   max-width: 100%;
   font-size: 0.85rem;
@@ -741,48 +657,44 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .grid-meta {
   max-width: 100%;
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
   opacity: 0.85;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .grid-badge {
   position: absolute;
   top: 0.4rem;
   left: 0.4rem;
   background: var(--surface);
 }
-
 .grid-span {
   grid-column: 1 / -1;
 }
 
-/* ---------- Detail card (one open at a time) ---------- */
+/* ---------- Detail card ------------------------------------------------- */
 
 .item-detail {
   border: 1px solid var(--line);
   border-left: 3px solid var(--app-color, var(--accent));
-  border-radius: 0.75rem;
+  border-radius: var(--radius);
   background: var(--surface);
-  padding: 0.75rem 0.875rem;
+  padding: 0.85rem 0.95rem;
   margin: 0.25rem 0 0.75rem;
+  box-shadow: var(--shadow-sm);
 }
-
 .item-detail:focus {
   outline: none;
 }
-
 .detail-head {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
 }
-
 .detail-head-text {
   flex: 1;
   min-width: 0;
@@ -790,20 +702,16 @@ button {
   flex-direction: column;
   gap: 0.15rem;
 }
-
 .detail-close {
   flex: none;
 }
-
 .coverage.ok {
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
   font-weight: 600;
 }
-
 .coverage.off {
   color: var(--ink-faint);
 }
-
 .detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -811,28 +719,26 @@ button {
   margin-top: 0.75rem;
   padding-bottom: 0.5rem;
 }
-
 .item-detail .attach-strip:not(:empty) {
   padding: 0.5rem 0 0.125rem;
 }
 
-/* ---------- Chips (attachment roles, warranty presets) ---------- */
+/* ---------- Chips (roles, presets) -------------------------------------- */
 
 .chip {
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: hsla(30, 35%, 55%, 0.12);
+  background: var(--accent-soft);
   color: var(--ink-soft);
   font-size: 0.8rem;
   padding: 0.3rem 0.85rem;
+  min-height: 2.5rem;
   -webkit-tap-highlight-color: transparent;
 }
-
 .chip:hover {
-  border-color: var(--app-color, var(--accent));
-  color: var(--app-color, var(--accent));
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line));
+  color: var(--accent-deep);
 }
-
 .role-prompt {
   display: flex;
   flex-wrap: wrap;
@@ -841,22 +747,20 @@ button {
   margin-top: 0.75rem;
   padding: 0.5rem 0.625rem;
   border: 1px dashed var(--line);
-  border-radius: 0.625rem;
+  border-radius: var(--radius-sm);
 }
-
 .preset-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   width: 100%;
 }
-
-/* Role badge on an attachment tile — a receipt reads as a receipt. */
 .attach-role {
   position: absolute;
   top: 0.15rem;
   left: 0.15rem;
-  font-size: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
@@ -864,39 +768,146 @@ button {
   text-transform: capitalize;
 }
 
-/* ---------- Motion ---------- */
+/* ---------- Warranty history + disposed --------------------------------- */
+
+.warranty-list {
+  padding: 0 0 0.625rem;
+}
+.warranty-line a {
+  color: var(--accent-deep);
+}
+#disposedSection summary {
+  cursor: pointer;
+}
+.row[data-disposed] .row-text {
+  color: var(--ink-faint);
+}
+.footnote {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  color: var(--ink-faint);
+  font-size: 0.78rem;
+}
+
+/* ---------- Attachments -------------------------------------------------- */
+
+.attach-block {
+  margin-top: 1rem;
+}
+.attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.item .attach-strip:not(:empty) {
+  padding: 0 0 0.625rem;
+}
+.attach-strip:empty {
+  display: none;
+}
+.attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  color: var(--accent-deep);
+  word-break: break-word;
+  text-decoration: none;
+}
+.attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--mono);
+  font-size: 0.56rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.05rem 0;
+}
+.attach-remove {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.attach-add {
+  display: inline-block;
+  margin-top: 0.5rem;
+}
+.attach-add input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.attach-add .ghost {
+  display: inline-block;
+}
 
 .item-row,
 .grid-card,
 .ghost,
 .chip {
   transition:
-    border-color 120ms ease,
-    background-color 120ms ease,
-    color 120ms ease;
+    border-color 0.14s var(--ease),
+    background-color 0.14s var(--ease),
+    color 0.14s var(--ease);
 }
-
 @media (prefers-reduced-motion: reduce) {
   .item-row,
   .grid-card,
   .ghost,
-  .chip {
+  .chip,
+  .primary {
     transition: none;
   }
 }
 
-/* ---------- App-level knobs ---------- */
+/* ---------- App-level knobs --------------------------------------------- */
 
 :root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 :root[data-app-font='serif'] {
-  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
 }
 :root[data-app-font='mono'] {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
-
 :root[data-app-width='narrow'] main {
   max-width: 36rem;
 }

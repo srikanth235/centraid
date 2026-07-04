@@ -52,6 +52,7 @@ import {
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
 } from '@centraid/app-engine';
+import { KIT_DIR } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import {
   makeConversationRunner,
@@ -484,6 +485,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const runtime = new Runtime({
     appsDir: paths.appsDir,
+    // Shared kit assets (kit.js / kit.css) are served from the blueprints
+    // package's canonical `kit/` dir; apps no longer ship per-app copies.
+    sharedAssetsDir: KIT_DIR,
     userStore,
     conversationHistoryStore,
     conversationRunner,

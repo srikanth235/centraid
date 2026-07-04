@@ -1,8 +1,11 @@
+// governance: allow-repo-hygiene file-size-limit the kit is the single canonical bundle every app loads verbatim (UX primitives + charts + the folded Ask-your-vault controller); it is served as one file, so splitting it would fracture that one-request contract without reducing surface
 // Centraid blueprint kit — the shared UX substrate for template apps.
 //
-// Canonical copy: packages/blueprints/kit/kit.js. Each template carries its
-// own copy next to index.html (same convention as wall.css) so apps stay
-// standalone; run `node scripts/sync-kit.mjs` after editing this file.
+// Canonical (and ONLY) copy: packages/blueprints/kit/kit.js. Apps don't
+// carry their own copies — the app-engine runtime serves `kit.js` /
+// `kit.css` from this dir (`sharedAssetsDir`, wired to `KIT_DIR`) whenever
+// an app folder has no override of its own. Edit here, and every app —
+// bundled template or deployed clone — picks it up on next load.
 //
 // Everything here is presentation plumbing the 14 apps used to hand-roll
 // with drift: outcome toasts, loading/error states, confirm-to-act, money
@@ -297,3 +300,611 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
   });
   return svg;
 }
+
+// ============================================================================
+//  "Ask your vault" controller — folded in from the former standalone kit-ask.js
+//  so every app ships a single synced kit.js (evaluated via app.js's
+//  `import './kit.js'`) instead of a second <script>. The IIFE below runs at
+//  module-eval time — before app.js's body — so `window.kitAsk` is ready to wire.
+//  Reads window.KIT_ASK (set inline in index.html before app.js) and mounts the
+//  Ask button + panel onto [data-ask-mount].
+//
+//  By default the panel drives itself against the real vault surfaces:
+//    - POST  <app>/_turn                        — the app's declared-handler
+//      agent (SSE stream). Writes the agent makes flow through the same
+//      dispatcher + vault consent gates as every other caller.
+//    - GET   /centraid/_vault/parked            — when a turn's write parks,
+//      the matching invocation is looked up and rendered as a proposed-write
+//      card. Nothing is written without the owner's say-so.
+//    - POST  /centraid/_vault/parked/<id>       — Approve/Discard post the
+//      real {approve} decision and render the actual InvokeOutcome.
+//    - GET   /centraid/_vault/status + /apps    — the context chip reflects
+//      the app's true grant state instead of a hardcoded label.
+//  An app can take over the conversation with:
+//    kitAsk.onAsk(async (text) => { ...custom driver... })
+// ============================================================================
+
+(function () {
+  var cfg = window.KIT_ASK || {};
+
+  function el(html) {
+    var t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstChild;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+    });
+  }
+
+  var MIC =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+
+  function panelHTML() {
+    var scope = esc(cfg.scope || 'this app');
+    var sugg = (cfg.suggest || [])
+      .map(function (s) {
+        return '<button type="button" class="kit-ask-chip">' + esc(s) + '</button>';
+      })
+      .join('');
+    var intro =
+      cfg.intro ||
+      'Ask me to add, change, find or remove anything here. I’ll show the change for your approval before it touches the vault.';
+    return (
+      '<div class="kit-ask-ov" id="kitAskOverlay" hidden><div class="kit-ask-panel" role="dialog" aria-modal="true" aria-label="Ask your vault">' +
+      '<div class="kit-ask-head"><h2>Ask</h2><span class="kit-ask-note">a projection of your vault</span><button type="button" class="kit-ask-x" aria-label="Close">✕</button></div>' +
+      '<div class="kit-ask-context"><span class="kit-ask-scope">Scope · ' +
+      scope +
+      '</span><span class="kit-ask-scope" data-kit-grant>read + write · consent-gated</span></div>' +
+      '<div class="kit-ask-log" role="log" aria-live="polite"><div class="kit-msg ai">' +
+      esc(intro) +
+      '</div></div>' +
+      '<div class="kit-ask-suggest">' +
+      sugg +
+      '</div>' +
+      '<form class="kit-ask-compose"><button type="button" class="kit-ask-mic" aria-label="Voice">' +
+      MIC +
+      '</button><input placeholder="' +
+      esc(cfg.placeholder || 'Ask…') +
+      '" aria-label="Ask"><button class="kit-ask-send" type="submit" aria-label="Send">→</button></form>' +
+      '</div></div>'
+    );
+  }
+
+  function init() {
+    if (window.kitAsk) return; // once
+    var mount =
+      document.querySelector('[data-ask-mount]') ||
+      document.querySelector('.head-tools') ||
+      document.querySelector('.head') ||
+      document.body;
+    if (
+      mount.classList &&
+      (mount.classList.contains('head') || mount.classList.contains('head-tools'))
+    ) {
+      mount.style.flexWrap = 'wrap';
+    }
+    var btn = el(
+      '<button type="button" class="kit-ask-btn" id="kitAskBtn"><span class="kit-spark">✦</span> Ask</button>',
+    );
+    mount.appendChild(btn);
+
+    var ov = el(panelHTML());
+    document.body.appendChild(ov);
+    var panel = ov.querySelector('.kit-ask-panel');
+    var log = ov.querySelector('.kit-ask-log');
+    var form = ov.querySelector('.kit-ask-compose');
+    var input = form.querySelector('input');
+    var lastFocus = null;
+
+    var grantChecked = false;
+    function open() {
+      lastFocus = document.activeElement;
+      ov.hidden = false;
+      if (!grantChecked) {
+        grantChecked = true;
+        refreshGrantChip(ov.querySelector('[data-kit-grant]'));
+      }
+      setTimeout(function () {
+        input && input.focus();
+      }, 60);
+    }
+    function close() {
+      ov.hidden = true;
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    btn.addEventListener('click', open);
+    ov.querySelector('.kit-ask-x').addEventListener('click', close);
+    ov.addEventListener('click', function (e) {
+      if (e.target === ov) close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !ov.hidden) close();
+    });
+    ov.querySelectorAll('.kit-ask-chip').forEach(function (c) {
+      c.addEventListener('click', function () {
+        input.value = c.textContent;
+        input.focus();
+      });
+    });
+
+    var handler = null;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = input.value.trim();
+      if (!v) return;
+      api.user(v);
+      input.value = '';
+      if (handler) handler(v);
+    });
+
+    function bubble(cls, html) {
+      var m = el('<div class="kit-msg ' + cls + '"></div>');
+      m.innerHTML = html;
+      log.appendChild(m);
+      log.scrollTop = log.scrollHeight;
+      return m;
+    }
+
+    var api = {
+      open: open,
+      close: close,
+      /** append a user bubble (escaped) */
+      user: function (t) {
+        return bubble('user', esc(t));
+      },
+      /** append an assistant bubble (HTML allowed — caller sanitises) */
+      ai: function (html) {
+        return bubble('ai', html);
+      },
+      /** show a typing indicator; returns { done() } */
+      typing: function () {
+        var t = el('<div class="kit-ask-typing"><i></i><i></i><i></i></div>');
+        log.appendChild(t);
+        log.scrollTop = log.scrollHeight;
+        return {
+          done: function () {
+            if (t.parentNode) t.remove();
+          },
+        };
+      },
+      /** a completed, receipted action (with optional Undo) */
+      applied: function (o) {
+        o = o || {};
+        var a = el(
+          '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
+            esc(o.title) +
+            '<span class="ac-s">' +
+            esc(o.receipt || 'saved as a receipt') +
+            '</span></span>' +
+            (o.onUndo ? '<button class="ac-undo">Undo</button>' : '') +
+            '</div>',
+        );
+        log.appendChild(a);
+        var u = a.querySelector('.ac-undo');
+        if (u)
+          u.addEventListener('click', function () {
+            o.onUndo();
+            a.remove();
+          });
+        log.scrollTop = log.scrollHeight;
+        return a;
+      },
+      /**
+       * A consent-gated proposed write.
+       *
+       * `onApprove` / `onDiscard` may return a promise — the card shows a
+       * busy state until it settles and renders the REAL outcome: resolve
+       * with `{ok: true, receipt?}` to swap to an applied receipt, or
+       * `{ok: false, note}` (or reject) to keep the card and surface the
+       * refusal honestly. A sync/void `onApprove` keeps the legacy
+       * immediate-swap behavior.
+       */
+      propose: function (o) {
+        o = o || {};
+        var diff = o.diff
+          ? '<div class="kit-aa-diff"><span class="d1">' +
+            esc(o.diff[0]) +
+            '</span> → <span class="d2">' +
+            esc(o.diff[1]) +
+            '</span></div>'
+          : '';
+        var card = el(
+          '<div class="kit-ask-action"><span class="aa-label">Proposed write · needs your ok</span>' +
+            '<div class="aa-title">' +
+            esc(o.title) +
+            '</div><div class="aa-detail">' +
+            esc(o.detail || '') +
+            '</div>' +
+            diff +
+            '<div class="aa-btns"><button class="kit-aa-approve">Approve</button>' +
+            (o.onEdit ? '<button class="kit-aa-ghost aa-edit">Edit</button>' : '') +
+            '<button class="kit-aa-ghost aa-discard">Discard</button></div></div>',
+        );
+        log.appendChild(card);
+        function setBusy(busy) {
+          card.querySelectorAll('button').forEach(function (b) {
+            b.disabled = busy;
+          });
+          card.classList.toggle('aa-busy', busy);
+        }
+        function note(text) {
+          var n =
+            card.querySelector('.aa-note') || card.appendChild(el('<div class="aa-note"></div>'));
+          n.textContent = text;
+          log.scrollTop = log.scrollHeight;
+        }
+        function swapApplied(receipt) {
+          card.replaceWith(
+            el(
+              '<div class="kit-ask-applied"><span class="ck">✓</span><span class="ac-t">' +
+                esc(o.title) +
+                '<span class="ac-s">' +
+                esc(receipt || 'approved · saved as a receipt') +
+                '</span></span></div>',
+            ),
+          );
+          log.scrollTop = log.scrollHeight;
+        }
+        card.querySelector('.kit-aa-approve').addEventListener('click', function () {
+          var settled = o.onApprove ? o.onApprove() : undefined;
+          if (!settled || typeof settled.then !== 'function') return swapApplied();
+          setBusy(true);
+          settled.then(
+            function (r) {
+              if (r && r.ok === false) {
+                setBusy(false);
+                note(r.note || 'The vault refused this write.');
+                return;
+              }
+              swapApplied(r && r.receipt);
+            },
+            function (err) {
+              setBusy(false);
+              note(String((err && err.message) || err || 'Approval failed.'));
+            },
+          );
+        });
+        var edit = card.querySelector('.aa-edit');
+        if (edit)
+          edit.addEventListener('click', function () {
+            o.onEdit();
+          });
+        card.querySelector('.aa-discard').addEventListener('click', function () {
+          var settled = o.onDiscard ? o.onDiscard() : undefined;
+          if (!settled || typeof settled.then !== 'function') return card.remove();
+          setBusy(true);
+          settled.then(
+            function () {
+              card.remove();
+            },
+            function (err) {
+              setBusy(false);
+              note(String((err && err.message) || err || 'Discard failed.'));
+            },
+          );
+        });
+        log.scrollTop = log.scrollHeight;
+        return card;
+      },
+      /**
+       * Override the natural-language handler. Without an override the
+       * panel drives the app's own `_turn` agent (declared handlers +
+       * vault consent gates) — see `makeVaultDriver`.
+       */
+      onAsk: function (fn) {
+        handler = fn;
+      },
+    };
+    window.kitAsk = api;
+
+    // Default brain: the app's _turn conversation agent. Registered after
+    // `window.kitAsk` exists so an app.js `onAsk` call simply replaces it.
+    if (!cfg.demo) handler = makeVaultDriver(api);
+
+    if (cfg.demo) playDemo(api, cfg.demo);
+    document.dispatchEvent(new CustomEvent('kitask:ready'));
+  }
+
+  // ---------- Default vault driver (real surfaces only, no stubs) ----------
+
+  /** App id as pinned by the runtime's injected change bridge; null in bare previews. */
+  function appId() {
+    return (window.centraid && window.centraid.appId) || null;
+  }
+
+  /** Base for app-scoped routes. Absolute when the bridge pinned an app id. */
+  function appBase() {
+    var id = appId();
+    return id ? '/centraid/' + encodeURIComponent(id) + '/' : '';
+  }
+
+  function fetchJson(url, opts) {
+    return fetch(url, opts).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try {
+          j = t ? JSON.parse(t) : null;
+        } catch (_) {}
+        return { ok: r.ok, status: r.status, body: j };
+      });
+    });
+  }
+
+  /**
+   * Reflect the app's REAL grant state in the context chip, read from the
+   * vault plane's owner surface. On any failure the default design-contract
+   * label stays — we never claim a state we couldn't verify.
+   */
+  function refreshGrantChip(chip) {
+    if (!chip || !appId()) return;
+    fetchJson('/centraid/_vault/status')
+      .then(function (s) {
+        if (!s.ok || !s.body || s.body.active !== true) {
+          chip.textContent = 'no vault connected';
+          return;
+        }
+        return fetchJson('/centraid/_vault/apps').then(function (a) {
+          var apps = (a.ok && a.body && a.body.apps) || [];
+          var mine = apps.filter(function (x) {
+            return x.appId === appId();
+          })[0];
+          if (!mine) {
+            chip.textContent = 'not enrolled — vault calls deny';
+            return;
+          }
+          var grants = mine.grants || [];
+          if (!grants.length) {
+            chip.textContent = 'no grant yet — writes deny or park';
+            return;
+          }
+          var verbs = {};
+          grants.forEach(function (g) {
+            (g.scopes || []).forEach(function (sc) {
+              String(sc.verbs || '')
+                .split(',')
+                .forEach(function (v) {
+                  if (v.trim()) verbs[v.trim()] = 1;
+                });
+            });
+          });
+          var list = Object.keys(verbs);
+          chip.textContent = (list.length ? list.join(' + ') : 'granted') + ' · consent-gated';
+        });
+      })
+      .catch(function () {
+        /* unreachable plane — leave the default label */
+      });
+  }
+
+  /**
+   * Default conversation driver: POST the question to the app's `_turn`
+   * agent and translate its SSE stream into panel bubbles. Writes the agent
+   * makes flow through the dispatcher + vault consent gates like any other
+   * caller; one that PARKS surfaces here as a proposed-write card whose
+   * Approve/Discard post the owner's real decision to
+   * `/centraid/_vault/parked/<invocationId>`. Nothing is fabricated: every
+   * bubble is agent text, every card a real parked invocation, and every
+   * failure is surfaced as the error it was.
+   */
+  function makeVaultDriver(api) {
+    var convKey = 'kitask:conversation:' + (appId() || location.pathname);
+    var convId = null;
+    function conversationId() {
+      if (convId) return convId;
+      try {
+        convId = sessionStorage.getItem(convKey);
+      } catch (_) {}
+      if (!convId) {
+        convId =
+          window.crypto && crypto.randomUUID
+            ? crypto.randomUUID()
+            : 'kitask-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        try {
+          sessionStorage.setItem(convKey, convId);
+        } catch (_) {}
+      }
+      return convId;
+    }
+
+    /** Post the owner's decision on one parked invocation; returns the InvokeOutcome. */
+    function confirmParked(invocationId, approve) {
+      return fetchJson('/centraid/_vault/parked/' + encodeURIComponent(invocationId), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ approve: approve }),
+      }).then(function (r) {
+        if (!r.ok) {
+          throw new Error(
+            (r.body && (r.body.message || r.body.error)) ||
+              'confirmation failed (' + r.status + ')',
+          );
+        }
+        return r.body;
+      });
+    }
+
+    function shortVal(v) {
+      var s = typeof v === 'string' ? v : JSON.stringify(v);
+      s = String(s == null ? '' : s);
+      return s.length > 60 ? s.slice(0, 57) + '…' : s;
+    }
+
+    /** Look up a freshly-parked invocation on the consent surface and render its card. */
+    function renderParked(invocationId) {
+      return fetchJson('/centraid/_vault/parked').then(function (r) {
+        var list = (r.ok && r.body && r.body.parked) || [];
+        var entry = list.filter(function (p) {
+          return p.invocationId === invocationId;
+        })[0];
+        if (!entry) {
+          api.ai(
+            esc(
+              'A write parked for your approval but is no longer pending — it may have been handled from another surface.',
+            ),
+          );
+          return;
+        }
+        var input = entry.input || {};
+        var detail = Object.keys(input)
+          .map(function (k) {
+            return k + ': ' + shortVal(input[k]);
+          })
+          .join(' · ');
+        api.propose({
+          title: entry.command,
+          detail: (entry.caller ? entry.caller + ' · ' : '') + (detail || 'no input'),
+          onApprove: function () {
+            return confirmParked(invocationId, true).then(function (outcome) {
+              if (outcome && outcome.status === 'executed') {
+                return { ok: true, receipt: 'approved · receipt ' + outcome.receiptId };
+              }
+              if (outcome && outcome.status === 'replayed')
+                return { ok: true, receipt: 'already applied' };
+              return {
+                ok: false,
+                note: (outcome && outcome.reason) || 'The vault refused this write.',
+              };
+            });
+          },
+          onDiscard: function () {
+            return confirmParked(invocationId, false);
+          },
+        });
+      });
+    }
+
+    /** Probe a tool result for a vault InvokeOutcome (bare or nested under `output`). */
+    function outcomeOf(x) {
+      if (!x || typeof x !== 'object') return null;
+      if (typeof x.status === 'string') return x;
+      if (x.output && typeof x.output === 'object' && typeof x.output.status === 'string') {
+        return x.output;
+      }
+      return null;
+    }
+
+    return function ask(text) {
+      var typing = api.typing();
+      var stream = null; // the streaming assistant bubble
+      function say(t) {
+        typing.done();
+        return api.ai(esc(t));
+      }
+      function append(delta) {
+        typing.done();
+        if (!stream) stream = api.ai('');
+        stream.textContent += delta;
+      }
+      function handleEvent(type, ev) {
+        if (type === 'assistant.delta' && ev && typeof ev.delta === 'string') {
+          append(ev.delta);
+        } else if (type === 'tool.result') {
+          var o = outcomeOf(ev && ev.result);
+          if (o && o.status === 'parked' && o.invocationId) renderParked(o.invocationId);
+          else if (o && o.status === 'denied') {
+            say(
+              'The vault denied that write' +
+                (o.reason ? ': ' + o.reason : '.') +
+                ' Grant this app access from Settings → Vault to allow it.',
+            );
+          }
+        } else if (type === 'final') {
+          if (ev && ev.text && (!stream || !stream.textContent)) say(ev.text);
+        } else if (type === 'error') {
+          say('The agent hit an error: ' + ((ev && ev.message) || 'unknown'));
+        } else if (type === 'aborted') {
+          say('The turn was aborted before it finished.');
+        }
+      }
+      function frame(raw) {
+        var type = null;
+        var data = '';
+        raw.split('\n').forEach(function (line) {
+          if (line.indexOf('event:') === 0) type = line.slice(6).trim();
+          else if (line.indexOf('data:') === 0) data += line.slice(5).trim();
+        });
+        if (!type || type === 'end') return;
+        var ev = null;
+        try {
+          ev = data ? JSON.parse(data) : null;
+        } catch (_) {}
+        handleEvent(type, ev);
+      }
+      fetch(appBase() + '_turn', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ conversationId: conversationId(), message: text }),
+      })
+        .then(function (res) {
+          if (!res.ok) {
+            return res.text().then(function (t) {
+              var j = null;
+              try {
+                j = t ? JSON.parse(t) : null;
+              } catch (_) {}
+              if (res.status === 503 && j && j.error === 'no_conversation_runner') {
+                say(
+                  'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
+                );
+              } else {
+                say(
+                  'The gateway refused the turn (' +
+                    res.status +
+                    (j && j.message ? ' · ' + j.message : '') +
+                    ').',
+                );
+              }
+            });
+          }
+          var reader = res.body.getReader();
+          var dec = new TextDecoder();
+          var buf = '';
+          function pump() {
+            return reader.read().then(function (r) {
+              if (r.done) return;
+              buf += dec.decode(r.value, { stream: true });
+              var i;
+              while ((i = buf.indexOf('\n\n')) !== -1) {
+                var raw = buf.slice(0, i);
+                buf = buf.slice(i + 2);
+                if (raw && raw.charAt(0) !== ':') frame(raw);
+              }
+              return pump();
+            });
+          }
+          return pump();
+        })
+        .catch(function (err) {
+          say("Couldn't reach the vault gateway — " + String((err && err.message) || err));
+        })
+        .then(function () {
+          typing.done();
+        });
+    };
+  }
+
+  // Preview-only sample turn so the flow is visible without a live vault.
+  function playDemo(api, d) {
+    api.open();
+    if (d.applied) api.applied(d.applied);
+    if (d.q) {
+      api.user(d.q);
+      var t = api.typing();
+      setTimeout(function () {
+        t.done();
+        if (d.a) api.ai(d.a);
+        if (d.propose) api.propose(d.propose);
+        if (d.q2) {
+          api.user(d.q2);
+          api.typing();
+        }
+      }, 750);
+    }
+  }
+
+  // Kick off once everything above is defined (var MIC included).
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();

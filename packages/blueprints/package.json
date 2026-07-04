@@ -7,6 +7,7 @@
     "dist",
     "apps",
     "automations",
+    "kit",
     "index.json",
     "manifest.json",
     "README.md"

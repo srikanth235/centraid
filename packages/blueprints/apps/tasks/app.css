@@ -1,36 +1,93 @@
+/* ============================================================================
+   Tasks — LIST archetype (quick-capture) for the Centraid blueprint family.
+   Redesign notes ("Field notebook" language):
+     · Humanist system sans for content, system mono for metadata — dates,
+       counts, priority flags, section counts, the "capture" affordances.
+     · One structural accent (teal by default, user-swappable via --app-color).
+       Deepened to --accent-deep wherever it sits under white text (AA).
+     · Rows are airy and quiet; hover lifts to --surface-2 with a soft radius.
+       Section headers are ledger-style mono eyebrows with a hairline rule + a
+       count. Overdue reads in --danger; today in the accent.
+     · Trust states are first-class, calm surfaces — see .banner / .kit-pending.
+   Mobile-first (~375px, single column); ≥720px widens the measure and lets the
+   capture bar breathe. Verified in light + dark. Keeps every id/class app.js
+   binds and the inline theme bootstrap in index.html.
+   ========================================================================== */
+
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* Per-app accent (user swatch overrides via --app-color). */
   --accent: #2ea098;
-  --ink: #0f172a;
-  --ink-soft: #475569;
-  --ink-faint: #94a3b8;
-  --bg: #fcfcfc;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 76%, #06110f);
+  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 12%, transparent);
+  --on-accent: #ffffff;
+
+  /* Ink ramp. */
+  --ink: hsl(228 22% 12%);
+  --ink-soft: hsl(228 9% 40%);
+  --ink-faint: hsl(228 10% 58%);
+
+  /* Surfaces. */
+  --bg: hsl(240 16% 97%);
   --surface: #ffffff;
-  --line: rgba(31, 31, 35, 0.07);
-  --danger: #dc2626;
-  --warn: #d97706;
+  --surface-2: hsl(240 17% 95%);
+
+  /* Lines. */
+  --line: rgba(20, 24, 44, 0.09);
+  --line-strong: rgba(20, 24, 44, 0.16);
+
+  --danger: #d0342c;
+  --warn: #b06a12;
+
+  /* Kit contract aliases. */
+  --text: var(--ink);
+  --muted: var(--ink-soft);
+
+  /* Shared primitives the kit + app read. */
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --shadow-sm: 0 0 0 0.5px var(--line-strong);
+  --shadow-md: 0 10px 26px -14px rgba(15, 20, 32, 0.28), 0 2px 6px -3px rgba(15, 20, 32, 0.12);
+  --shadow-lg: 0 26px 60px -24px rgba(15, 20, 32, 0.4);
+
+  /* Mono metadata face — the signature. */
+  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 :root[data-theme='dark'] {
   --bg-l: 10%;
-  --ink: hsl(220 12% 95%);
-  --ink-soft: hsl(220 8% 62%);
-  --ink-faint: hsl(220 6% 42%);
+  --ink: hsl(220 18% 94%);
+  --ink-soft: hsl(220 10% 64%);
+  --ink-faint: hsl(220 9% 46%);
   --bg: var(--bg-wall);
-  --surface: hsl(225 11% calc(var(--bg-l) + 4.5%));
-  --line: hsla(220 25% 70% / 0.07);
+  --surface: hsl(225 13% calc(var(--bg-l) + 5%));
+  --surface-2: hsl(225 12% calc(var(--bg-l) + 8.5%));
+  --line: hsla(220 30% 72% / 0.1);
+  --line-strong: hsla(220 30% 74% / 0.2);
+  --danger: #f0645b;
+  --warn: #e0a13c;
+  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f4fbfa);
+  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --bg-l: 10%;
-    --ink: hsl(220 12% 95%);
-    --ink-soft: hsl(220 8% 62%);
-    --ink-faint: hsl(220 6% 42%);
+    --ink: hsl(220 18% 94%);
+    --ink-soft: hsl(220 10% 64%);
+    --ink-faint: hsl(220 9% 46%);
     --bg: var(--bg-wall);
-    --surface: hsl(225 11% 14.5%);
-    --line: hsla(220 25% 70% / 0.07);
+    --surface: hsl(225 13% 15%);
+    --surface-2: hsl(225 12% 18.5%);
+    --line: hsla(220 30% 72% / 0.1);
+    --line-strong: hsla(220 30% 74% / 0.2);
+    --danger: #f0645b;
+    --warn: #e0a13c;
+    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f4fbfa);
   }
 }
 
@@ -38,37 +95,76 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
-  padding: max(1rem, env(safe-area-inset-top)) 1rem env(safe-area-inset-bottom);
+  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   min-height: 100vh;
+  line-height: 1.5;
 }
 
 main {
   max-width: 36rem;
   margin: 0 auto;
-  padding: 0.5rem 0 2rem;
+  padding: 0.75rem 0 4rem;
 }
 
 @media (min-width: 720px) {
   body {
-    padding: 1.5rem 2rem;
+    padding: 1.75rem 2rem;
   }
   main {
-    max-width: 56rem;
+    max-width: 52rem;
+    padding-top: 1.25rem;
   }
 }
+
+/* ---------- Header ------------------------------------------------------- */
 
 .head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 1rem 0.75rem;
   flex-wrap: wrap;
   margin-bottom: 1.25rem;
+}
+
+.head h1 {
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  margin: 0 0 0.2rem;
+}
+
+@media (min-width: 720px) {
+  .head h1 {
+    font-size: 1.9rem;
+  }
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.9em;
 }
 
 .head-tools {
@@ -84,269 +180,371 @@ main {
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.625rem;
-  width: 10.5rem;
-  min-height: 2.25rem;
+  border-radius: 999px;
+  padding: 0.5rem 0.85rem;
+  width: 11rem;
+  min-height: 2.5rem;
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
 }
-
+#searchInput::placeholder {
+  color: var(--ink-faint);
+}
 #searchInput:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 1px;
+  outline: none;
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 55%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* Segmented view switcher — Things' focus lists (All / Today / Upcoming). */
+/* Segmented focus switcher (All / Today / Upcoming). */
 .seg {
   display: inline-flex;
-  background: var(--surface);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  overflow: hidden;
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.15rem;
 }
 
 .seg button {
   font: inherit;
   font-size: 0.8rem;
+  font-weight: 500;
   color: var(--ink-soft);
   background: transparent;
   border: none;
-  padding: 0.4rem 0.75rem;
-  min-height: 2.25rem;
+  padding: 0.35rem 0.8rem;
+  min-height: 2.1rem;
+  border-radius: 999px;
   cursor: pointer;
+  transition:
+    color 0.15s var(--ease),
+    background 0.15s var(--ease);
 }
-
 .seg button:hover {
   color: var(--ink);
 }
-
 .seg button.on {
-  background: var(--app-color, var(--accent));
-  color: #fff;
-}
-
-.head h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  margin: 0 0 0.1rem;
-}
-
-.muted {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.small {
-  font-size: 0.8rem;
-}
-
-code {
-  font-size: 0.9em;
-}
-
-/* Consent + outcome banners — the vault's decisions are part of the UI. */
-.banner {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--app-color, var(--accent));
   background: var(--surface);
-  border-radius: 0.625rem;
-  padding: 0.75rem 0.875rem;
-  font-size: 0.875rem;
-  margin-bottom: 1rem;
-  line-height: 1.45;
+  color: var(--ink);
+  box-shadow:
+    var(--shadow-sm),
+    0 1px 2px rgba(15, 20, 32, 0.08);
+}
+:root[data-theme='dark'] .seg button.on {
+  box-shadow: 0 0 0 0.5px var(--line-strong);
+}
+.seg button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ---------- Trust banners (consent + notice) ----------------------------- */
+
+.banner {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+.banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--app-color, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .banner strong {
   display: block;
+  color: var(--ink);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
 }
-
 .banner.notice {
-  border-left-color: var(--ink-faint);
   color: var(--ink-soft);
 }
+.banner.notice::before {
+  background: var(--ink-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
+}
 
-/* ---------- Quick add ---------- */
+/* ---------- Quick add (the capture bar) ---------------------------------- */
 
 #quickAdd {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .quick-add-row {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.4rem 0.4rem 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color 0.15s var(--ease),
+    box-shadow 0.15s var(--ease);
+}
+.quick-add-row:focus-within {
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line-strong));
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 3px var(--accent-soft);
 }
 
 .quick-add-row input[type='text'] {
   flex: 1;
   min-width: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0.5rem 0.4rem;
+  font-size: 0.95rem;
+}
+.quick-add-row input[type='text']:focus-visible {
+  outline: none;
+}
+.quick-add-row input[type='text']::placeholder {
+  color: var(--ink-faint);
 }
 
-.quick-add-row input,
+/* Meta controls read as compact mono tokens. */
+.quick-add-row input[type='date'],
+.quick-add-row input[type='number'],
 .quick-add-row select,
 .rename {
   font: inherit;
   color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.625rem;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.5rem;
+  min-height: 2.4rem;
 }
-
-.quick-add-row input:focus-visible,
-.quick-add-row select:focus-visible,
-.rename:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 1px;
-}
-
 .quick-add-row input[type='date'],
 .quick-add-row input[type='number'],
 .quick-add-row select {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
-#effortInput {
-  width: 5.25rem;
-}
-
-/* Live preview of a natural-language date parsed from the title's tail. */
-.nl-preview {
-  margin: 0.4rem 0 0;
+  font-family: var(--mono);
   font-size: 0.78rem;
-  color: var(--app-color, var(--accent));
+  color: var(--ink-soft);
+}
+.quick-add-row input:focus-visible,
+.quick-add-row select:focus-visible,
+.rename:focus-visible {
+  outline: none;
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+#effortInput {
+  width: 5.5rem;
+}
+
+.nl-preview {
+  margin: 0.5rem 0 0;
+  padding-left: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--accent-deep);
 }
 
 #addBtn {
   font: inherit;
   font-size: 0.9rem;
-  font-weight: 500;
-  color: #fff;
-  background: var(--app-color, var(--accent));
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent-deep);
   border: none;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1.05rem;
+  min-height: 2.4rem;
   cursor: pointer;
+  flex: none;
+  transition:
+    filter 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
-
 #addBtn:hover {
   filter: brightness(1.08);
 }
+#addBtn:active {
+  transform: scale(0.97);
+}
+#addBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 
+/* Subtask parent chip. */
 .parent-chip[hidden] {
   display: none;
 }
-
 .parent-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
   font-size: 0.8rem;
   color: var(--ink-soft);
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 0.2rem 0.3rem 0.2rem 0.625rem;
-  margin-bottom: 0.5rem;
+  padding: 0.25rem 0.35rem 0.25rem 0.7rem;
+  margin-bottom: 0.6rem;
   max-width: 100%;
 }
-
 .parent-chip span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .parent-chip button {
   font: inherit;
   font-size: 0.75rem;
-  color: var(--ink-faint);
-  background: transparent;
+  color: var(--ink-soft);
+  background: color-mix(in oklab, var(--ink-faint) 18%, transparent);
   border: none;
   border-radius: 999px;
-  padding: 0.1rem 0.375rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
-
 .parent-chip button:hover {
   color: var(--danger);
 }
 
-/* ---------- Sections ---------- */
+/* On phones the meta controls wrap under the title on their own line. */
+@media (max-width: 519px) {
+  .quick-add-row {
+    flex-wrap: wrap;
+  }
+  .quick-add-row input[type='text'] {
+    flex: 1 0 100%;
+    order: -1;
+  }
+  #addBtn {
+    margin-left: auto;
+  }
 
-.section-label {
-  margin: 1.25rem 0 0.25rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.72rem;
+  /* Head tools span the full width on phones — search + segmented control
+     each get their own comfortable line rather than a cramped 11rem box. */
+  .head-tools {
+    width: 100%;
+  }
+  #searchInput {
+    flex: 1;
+    width: auto;
+  }
+  .seg {
+    width: 100%;
+  }
+  .seg button {
+    flex: 1;
+  }
 }
 
+/* ---------- Section headers (ledger eyebrows) ---------------------------- */
+
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1.5rem 0 0.35rem;
+  font-family: var(--mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.68rem;
+  color: var(--ink-faint);
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
 .section-label[data-bucket='overdue'] {
   color: var(--danger);
 }
-
 .section-label[data-bucket='today'] {
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
 }
-
-/* A bucket header lights up when a dragged row can be dropped on it. */
 .section-label.drop {
-  color: var(--app-color, var(--accent));
-  outline: 1.5px dashed var(--app-color, var(--accent));
-  outline-offset: 4px;
-  border-radius: 0.25rem;
+  color: var(--accent-deep);
+}
+.section-label.drop::after {
+  background: repeating-linear-gradient(to right, currentColor 0 6px, transparent 6px 12px);
+  opacity: 0.7;
 }
 
-/* ---------- Task rows ---------- */
+/* ---------- Task rows ---------------------------------------------------- */
 
 .row {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.55rem 0;
+  gap: 0.75rem;
+  padding: 0.6rem 0.6rem;
+  margin: 0 -0.6rem;
+  border-radius: var(--radius);
   border-bottom: 1px solid var(--line);
+  transition: background 0.15s var(--ease);
 }
-
 .row:last-child {
   border-bottom: none;
 }
-
-.row.subtask {
-  padding-left: 2.125rem;
+.row:hover {
+  background: var(--surface-2);
+  border-bottom-color: transparent;
+}
+.row:hover + .row {
+  border-top-color: transparent;
 }
 
+.row.subtask {
+  padding-left: 2.5rem;
+}
 .row.subtask .circle {
   width: 1.15rem;
   height: 1.15rem;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
 }
 
-/* Keyboard roving selection (↑/↓, then e / space / d). */
 .row.selected {
-  background: hsla(0, 0%, 50%, 0.09);
-  border-radius: 0.5rem;
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  border-bottom-color: transparent;
 }
 
-/* The brief Things-style completion beat: circle fills, title strikes and
-   fades, then the refresh re-sorts the row into the Logbook. */
+/* Completion beat: circle fills, title strikes + fades, then re-sorts. */
 .row.completing .circle {
   background: var(--app-color, var(--accent));
   border-color: var(--app-color, var(--accent));
 }
-
 .row.completing .row-text {
   color: var(--ink-faint);
   text-decoration: line-through;
-  opacity: 0.35;
+  opacity: 0.4;
   transition:
-    opacity 0.45s ease,
-    color 0.45s ease;
+    opacity 0.45s var(--ease),
+    color 0.45s var(--ease);
 }
 
-/* A real control now: click completes, click again reopens. */
+/* The check control. */
 .circle {
+  position: relative;
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
@@ -357,56 +555,53 @@ code {
   justify-content: center;
   padding: 0;
   flex-shrink: 0;
-  color: #fff;
-  font-size: 0.75rem;
+  color: var(--on-accent);
+  font-size: 0.72rem;
   cursor: pointer;
   transition:
-    background 0.12s ease,
-    border-color 0.12s ease;
+    background 0.14s var(--ease),
+    border-color 0.14s var(--ease),
+    transform 0.08s var(--ease);
 }
-
-/* Expand the tap target to ~40px without growing the drawn ring. */
-.circle {
-  position: relative;
-}
-
 .circle::after {
   content: '';
   position: absolute;
-  inset: -0.5rem;
+  inset: -0.6rem;
   border-radius: 50%;
 }
-
 .circle:hover {
   border-color: var(--app-color, var(--accent));
 }
-
+.circle:active {
+  transform: scale(0.92);
+}
+.circle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .circle[data-on='true'] {
   background: var(--app-color, var(--accent));
   border-color: var(--app-color, var(--accent));
 }
-
 .row[data-status='cancelled'] .circle {
   background: var(--ink-faint);
   border-color: var(--ink-faint);
 }
 
-/* The title column: title line on top, the note's first line beneath. */
+/* Title column. */
 .row-main {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.15rem;
 }
-
 .row-title-line {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.45rem;
   min-width: 0;
 }
-
 .row-text {
   flex: 1;
   min-width: 0;
@@ -416,8 +611,6 @@ code {
   cursor: text;
 }
 
-/* A quiet marker on rows that carry a note; clicking opens the details
-   popover. Inline SVG strokes inherit currentColor. */
 .note-glyph {
   flex-shrink: 0;
   display: inline-flex;
@@ -425,26 +618,23 @@ code {
   color: var(--ink-faint);
   background: transparent;
   border: none;
-  border-radius: 0.25rem;
+  border-radius: 0.3rem;
   padding: 0.1rem;
   cursor: pointer;
 }
-
 span.note-glyph {
   cursor: default;
 }
-
 .note-glyph svg {
-  width: 0.75rem;
-  height: 0.75rem;
+  width: 0.8rem;
+  height: 0.8rem;
 }
-
 .note-glyph:hover,
 .note-glyph:focus-visible {
-  color: var(--app-color, var(--accent));
+  color: var(--accent-deep);
+  outline: none;
 }
 
-/* The note's first line, muted and truncated, under the title. */
 .row-note {
   display: block;
   min-width: 0;
@@ -454,11 +644,9 @@ span.note-glyph {
   font-size: 0.78rem;
   color: var(--ink-faint);
 }
-
 .row[data-done='true'] .row-note {
   text-decoration: line-through;
 }
-
 .row[data-done='true'] .row-text {
   color: var(--ink-faint);
   text-decoration: line-through;
@@ -469,219 +657,243 @@ span.note-glyph {
   flex: 1;
   min-width: 0;
   font-size: 0.95rem;
-  padding: 0.25rem 0.4rem;
+  padding: 0.3rem 0.5rem;
+  background: var(--surface);
+  border-color: var(--line-strong);
 }
 
-/* ---------- Badges & chips ---------- */
+/* ---------- Badges & chips ---------------------------------------------- */
 
 .badge {
   flex-shrink: 0;
-  font-size: 0.72rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
-
 .badge.doing {
-  color: var(--app-color, var(--accent));
-  border: 1px solid currentColor;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
   border-radius: 999px;
-  padding: 0.05rem 0.45rem;
-  font-size: 0.68rem;
+  padding: 0.1rem 0.5rem;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .flag {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  line-height: 1;
 }
-
 .flag.high {
   color: var(--danger);
 }
-
 .flag.medium {
   color: var(--warn);
 }
-
 .flag.low {
   color: var(--ink-faint);
 }
 
 .row-due {
   flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
 }
-
 .overdue {
   color: var(--danger);
 }
 
-/* ---------- Reschedule affordance (every open row) ---------- */
-
+/* Reschedule affordance. */
 .due-btn {
   flex-shrink: 0;
-  font: inherit;
-  font-size: 0.75rem;
+  font-family: var(--mono);
+  font-size: 0.73rem;
   font-variant-numeric: tabular-nums;
   color: var(--ink-soft);
   background: transparent;
   border: 1px solid transparent;
   border-radius: 999px;
-  padding: 0.15rem 0.5rem;
+  padding: 0.2rem 0.55rem;
+  min-height: 1.9rem;
   cursor: pointer;
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
 }
-
 .due-btn:hover,
 .due-btn:focus-visible {
-  border-color: var(--line);
+  background: var(--surface-2);
   color: var(--ink);
+  outline: none;
 }
-
 .due-btn.overdue {
   color: var(--danger);
 }
-
-/* Undated rows earn the date only on hover/focus — calm by default. */
 .due-btn.due-add {
   color: var(--ink-faint);
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transition: opacity 0.15s var(--ease);
 }
-
 .row:hover .due-add,
 .row:focus-within .due-add {
   opacity: 1;
 }
 
-/* ---------- Popovers (reschedule, priority, effort & notes) ---------- */
+/* ---------- Popovers ----------------------------------------------------- */
 
 .popover {
   position: absolute;
   z-index: 50;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  min-width: 13rem;
+  gap: 0.6rem;
+  min-width: 13.5rem;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.625rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
-  padding: 0.625rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 0.75rem;
+  animation: pop-in 0.14s var(--ease) both;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.25rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
 }
 
 .pop-row {
   display: flex;
-  gap: 0.375rem;
+  gap: 0.4rem;
   flex-wrap: wrap;
 }
-
 .pop-label {
-  font-size: 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.66rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   color: var(--ink-faint);
 }
-
 .popover input,
 .popover select,
 .popover textarea {
   font: inherit;
   font-size: 0.85rem;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  min-height: 2.25rem;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
+  min-height: 2.4rem;
 }
-
 .popover input:focus-visible,
 .popover select:focus-visible,
 .popover textarea:focus-visible {
-  outline: 2px solid var(--app-color, var(--accent));
-  outline-offset: 1px;
+  outline: none;
+  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line-strong));
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-
-/* The Notes textarea wants room to breathe; ⌘/Ctrl+Enter saves, Esc closes.
-   The label host is uppercase + letter-spaced — the note text is not. */
 .popover textarea {
   display: block;
   width: 16rem;
   max-width: 72vw;
-  min-height: 4rem;
+  min-height: 4.5rem;
   resize: vertical;
-  line-height: 1.4;
+  line-height: 1.5;
   margin-top: 0.25rem;
   text-transform: none;
   letter-spacing: normal;
 }
-
 .popover .ghost {
-  min-height: 2rem;
-  padding: 0.25rem 0.6rem;
+  min-height: 2.1rem;
+  padding: 0.3rem 0.65rem;
 }
-
 .pop-save {
   font: inherit;
   font-size: 0.85rem;
-  font-weight: 500;
-  color: #fff;
-  background: var(--app-color, var(--accent));
+  font-weight: 600;
+  color: var(--on-accent);
+  background: var(--accent-deep);
   border: none;
-  border-radius: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  min-height: 2.25rem;
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.8rem;
+  min-height: 2.4rem;
   cursor: pointer;
 }
-
-/* ---------- Hover actions ---------- */
-
-.row-actions {
-  display: inline-flex;
-  gap: 0.25rem;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.12s ease;
+.pop-save:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ---------- Hover actions ------------------------------------------------ */
+
+/* Hidden by default so they don't reserve width and crush the title on
+   narrow phones; revealed on hover/focus (and always shown on touch below). */
+.row-actions {
+  display: none;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
 .row:hover .row-actions,
 .row:focus-within .row-actions {
-  opacity: 1;
+  display: inline-flex;
 }
 
 .ghost {
   font: inherit;
   font-size: 0.72rem;
   color: var(--ink-soft);
-  background: transparent;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 0.375rem;
-  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  min-height: 1.9rem;
   cursor: pointer;
+  transition:
+    color 0.15s var(--ease),
+    border-color 0.15s var(--ease);
 }
-
 .ghost:hover {
   color: var(--ink);
-  border-color: var(--ink-faint);
+  border-color: var(--line-strong);
 }
-
+.ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .ghost.danger:hover {
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 45%, var(--line));
 }
 
-/* Touch devices get no hover: keep row tools visible and comfortably big. */
+/* Touch: no hover — keep tools present and comfortably sized. */
 @media (hover: none) {
   .row-actions {
-    opacity: 0.65;
+    display: inline-flex;
+    opacity: 0.75;
   }
-
   .due-btn.due-add {
-    opacity: 0.55;
+    opacity: 0.6;
   }
-
   .ghost,
   .due-btn {
-    min-height: 2.5rem;
-    min-width: 2.5rem;
-    padding: 0.35rem 0.55rem;
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+    padding: 0.4rem 0.65rem;
+  }
+  .row:hover {
+    background: transparent;
   }
 }
 
@@ -689,30 +901,54 @@ span.note-glyph {
   .row-actions,
   .due-btn.due-add,
   .circle,
+  .row,
   .row.completing .row-text {
     transition: none;
   }
 }
 
-/* ---------- Logbook ---------- */
+/* ---------- Logbook ------------------------------------------------------ */
 
 #logbook {
-  margin-top: 1.5rem;
+  margin-top: 2rem;
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
 }
-
 #logbook summary {
   cursor: pointer;
-  font-size: 0.8rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   color: var(--ink-soft);
+  padding: 0.5rem 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+#logbook summary::-webkit-details-marker {
+  display: none;
+}
+#logbook summary::before {
+  content: '›';
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 1rem;
+  transition: transform 0.15s var(--ease);
+}
+#logbook[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .empty {
   color: var(--ink-soft);
-  font-size: 0.9rem;
+  font-size: 0.92rem;
   text-align: center;
-  padding: 2rem 0;
+  padding: 3rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
 }
 
 .window-footer {
@@ -726,79 +962,77 @@ span.note-glyph {
 }
 
 .footnote {
-  margin-top: 2rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
   color: var(--ink-faint);
+  font-size: 0.78rem;
+  line-height: 1.55;
 }
 
-/* ---------- Attachments (shared pattern across apps) ---------- */
+/* ---------- Attachments -------------------------------------------------- */
 
 .attach-block {
   margin-top: 1rem;
 }
-
 .attach-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
-
 .attach-strip:empty {
   display: none;
 }
-
 .attach-tile {
   position: relative;
   width: 5rem;
   height: 5rem;
   border: 1px solid var(--line);
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .attach-tile img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .attach-file {
   display: flex;
   align-items: center;
   text-align: center;
   padding: 0.35rem;
   font-size: 0.68rem;
-  line-height: 1.25;
-  color: var(--app-color, var(--accent));
+  line-height: 1.3;
+  color: var(--accent-deep);
   word-break: break-word;
   text-decoration: none;
 }
-
 .attach-meta {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  font-size: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
   text-align: center;
   color: #fff;
-  background: rgba(0, 0, 0, 0.45);
-  padding: 0.05rem 0;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0;
 }
-
 .attach-remove {
   position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
-  width: 1.15rem;
-  height: 1.15rem;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
   line-height: 1;
   border: none;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.58);
   color: #fff;
   font-size: 0.85rem;
   cursor: pointer;
@@ -806,42 +1040,36 @@ span.note-glyph {
   align-items: center;
   justify-content: center;
 }
-
 .attach-add {
   display: inline-block;
   margin-top: 0.5rem;
 }
-
 .attach-add input {
   position: absolute;
   width: 1px;
   height: 1px;
   opacity: 0;
 }
-
 .attach-add .ghost {
   display: inline-block;
 }
-
-/* A row's own attachment strip sits beneath it, indented to clear the circle. */
 .row-attachments {
-  padding: 0 0 0.55rem 2.125rem;
+  padding: 0 0 0.55rem 2.5rem;
 }
-
 .row-attachments.subtask {
-  padding-left: 4.25rem;
+  padding-left: 4.5rem;
 }
 
-/* ---------- App-level knobs ---------- */
+/* ---------- App-level knobs ---------------------------------------------- */
 
 :root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
 :root[data-app-font='serif'] {
-  font-family: 'New York', Georgia, 'Iowan Old Style', Cambria, serif;
+  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
 }
 :root[data-app-font='mono'] {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--mono);
 }
 
 :root[data-app-width='narrow'] main {

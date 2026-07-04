@@ -46,7 +46,7 @@
       <div class="split">
         <!-- ============ Inbox ============ -->
         <section id="inboxView" aria-label="Inbox">
-          <header class="head">
+          <header class="head" data-ask-mount>
             <div>
               <h1>Threads</h1>
               <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
@@ -194,6 +194,19 @@
         </div>
       </div>
     </main>
+    <script>
+      window.KIT_ASK = {
+        scope: 'threads',
+        placeholder: 'Ask your threads…',
+        intro:
+          'Ask me to draft a message, find a conversation or summarise a thread. Drafts open for your approval before anything sends.',
+        suggest: [
+          'Draft a reply to Dana',
+          'Find my thread with Alex',
+          'Summarise the Q3 planning thread',
+        ],
+      };
+    </script>
     <script type="module" src="app.js"></script>
   </body>
 </html>
