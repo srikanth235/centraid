@@ -150,6 +150,12 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       WHERE valid_to IS NULL
         AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
   );
+  // Tags are classification, not history: a tag on a purged row (its folder
+  // filing, its star) says nothing once the row is gone, so it deletes with
+  // the row instead of dangling (issue #274).
+  const dropTags = db.vault.prepare(
+    'DELETE FROM core_tag WHERE target_type = ? AND target_id = ?',
+  );
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
     // A trashed media asset over these bytes goes with them — the asset row
@@ -172,10 +178,12 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         'media.media_asset',
         asset.asset_id,
       );
+      dropTags.run('media.media_asset', asset.asset_id);
     }
     writeProvenance(db.journal, owner, 'core.content_item', row.content_id, 'sweep.purge');
     db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
     endDateLinks.run(now, 'core.content_item', row.content_id, 'core.content_item', row.content_id);
+    dropTags.run('core.content_item', row.content_id);
   }
   const retentionDeleted = enforceRetention(db, now);
   const receiptId = writeReceipt(db.journal, {

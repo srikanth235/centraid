@@ -410,6 +410,14 @@ describe('confirmation routing + revocation + sweeps', () => {
          VALUES ('c-old', 'text/plain', 'file:///x', 'h1', 1, '2020-01-01T00:00:00Z', '2020-01-02T00:00:00Z', '2019-12-31T00:00:00Z')`,
       )
       .run();
+    // Tags on the doomed row (its folder filing, its star) purge with it —
+    // classification on a gone row is noise, not history (issue #274).
+    db.vault
+      .prepare(
+        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_at)
+         VALUES ('t-old', 'core.content_item', 'c-old', ?, '2020-01-01T00:00:00Z')`,
+      )
+      .run(boot.concepts['anomaly'] as string);
     const result = gw.sweep(owner);
     expect(result.grantsExpired).toBe(1);
     expect(result.contentPurged).toBe(1);
@@ -419,6 +427,10 @@ describe('confirmation routing + revocation + sweeps', () => {
       n: number;
     };
     expect(gone.n).toBe(0);
+    const tagGone = db.vault
+      .prepare(`SELECT count(*) AS n FROM core_tag WHERE tag_id='t-old'`)
+      .get() as { n: number };
+    expect(tagGone.n).toBe(0);
   });
 
   test('readonly device may read but never act', () => {
