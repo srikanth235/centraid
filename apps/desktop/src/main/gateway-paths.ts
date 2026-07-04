@@ -19,18 +19,19 @@
 // `rm -rf gateways/<id>/` removes everything about a gateway, with
 // no orphan files left elsewhere.
 //
-// Each gateway gets:
+// Each gateway gets (issue #280 — the vault is the unit; everything
+// personal lives inside `vault/<vaultId>/`):
 //   - `profile.json`              — id, kind, label, url, createdAt
 //   - `token.bin`                 — encrypted bearer (gateway-secrets)
-//   - `code-store/...`            — git store owning app code (#137)
-//   - `apps/<appId>/...`          — per-app data storage (empty for remote)
-//   - `identity.sqlite`           — users + prefs (local only)
-//   - `analytics.sqlite`          — run summaries (local only)
-//   - `chat-runner-sessions/`     — codex thread state for in-app chat
+//   - `prefs.json`                — device prefs (runner choice, theme, …)
 //   - `templates-cache/`          — downloaded remote-template tarballs
-//   - `vault/`                    — personal vault pair (vault.db + journal.db)
+//   - `vault/`                    — vault registry root; each vault holds
+//                                   vault.db + journal.db + transcripts.db
+//                                   + apps/ (data) + code/ (git store)
+//                                   + runner-sessions/
 
 import { app } from 'electron';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /** Fixed id for the always-present in-process gateway. */
@@ -55,62 +56,12 @@ export function gatewayProfilePath(id: string): string {
 }
 
 /**
- * Per-gateway *data* storage — each app's `data.sqlite` + automation
- * `runtime.sqlite` live at `<appsDir>/<appId>/`, outside any git
- * worktree so they survive version swaps. Issue #137 moved app *code*
- * into the git store (`gatewayCodeStoreDir`); this dir now holds only
- * data, never code.
- *
- * For remote gateways this directory exists but stays empty — the
- * remote gateway owns its own storage server-side. Keeping the dir
- * lets us avoid kind-specific branching in every IPC handler.
+ * Device-prefs JSON file (runner choice, binPath, theme, …). The old
+ * `identity.sqlite` (users + user_prefs) is gone (#280): the vault owner
+ * IS the user, so what's left per gateway is device configuration.
  */
-export function gatewayAppsDir(id: string): string {
-  return path.join(gatewayDir(id), 'apps');
-}
-
-/**
- * Per-gateway git-store root (issue #137). Holds `apps.git/` (the bare
- * repo owning all app *code*, exported to GitHub) plus `worktrees/`
- * (session + materialized-main checkouts). App *data* stays under
- * `gatewayAppsDir(id)` so version swaps never touch user data. Passed
- * to `serve({ appsStoreRoot })`; the local gateway then owns drafts as
- * a git store exactly like the standalone daemon.
- */
-export function gatewayCodeStoreDir(id: string): string {
-  return path.join(gatewayDir(id), 'code-store');
-}
-
-/**
- * Gateway-side identity SQLite — users + per-user prefs (theme,
- * density, runner choice, …). The in-process local gateway is the
- * only consumer; remote gateways read identity from their server.
- * The file slot stays per-gateway for layout consistency even when
- * unused.
- */
-export function gatewayIdentityDb(id: string): string {
-  return path.join(gatewayDir(id), 'identity.sqlite');
-}
-
-/**
- * Gateway-side analytics SQLite — one row per run (chat turn,
- * automation fire). The local gateway writes here; remote gateways
- * track their own analytics server-side. Per-gateway so a future
- * "show me runs across all my gateways" pass has a natural place
- * to look.
- */
-export function gatewayAnalyticsDb(id: string): string {
-  return path.join(gatewayDir(id), 'analytics.sqlite');
-}
-
-/**
- * Codex chat-runner per-session state — `chat-runner-sessions/<id>/`
- * dirs the in-process Runtime materializes for each agentic chat
- * session. Per-gateway because a chat session is between the user
- * and a specific app on a specific gateway.
- */
-export function gatewayConversationRunnerSessionsDir(id: string): string {
-  return path.join(gatewayDir(id), 'chat-runner-sessions');
+export function gatewayPrefsFile(id: string): string {
+  return path.join(gatewayDir(id), 'prefs.json');
 }
 
 /**
@@ -126,17 +77,45 @@ export function gatewayTemplatesCacheDir(id: string): string {
 }
 
 /**
- * Personal-vault root (duaility §12) — one subdirectory per vault
- * (`<root>/<vaultId>/vault.db` + `journal.db`), exactly one active at a
- * time. Passing this as `GatewayPaths.vaultDir` is what mounts the vault
- * registry: live apps enroll as `consent.app` rows, handlers reach the
- * ACTIVE vault through `ctx.vault`, and the owner surface (vault
- * create/rename/switch/delete + consent) serves under `/centraid/_vault/*`.
- * Per-gateway like everything else — vaults are the gateway's canon, so
- * `todos` on the local gateway and on a Cloud account see different vaults.
+ * Personal-vault root (duaility §12, #280) — one subdirectory per vault,
+ * exactly one active at a time (`vaults.json` pointer). Post-#280 each
+ * vault's directory holds its WHOLE world: the sovereign pair (vault.db +
+ * journal.db), the conversation ledger (transcripts.db), per-app data
+ * (`apps/`), the app code store (`code/`), and runner scratch. Passing
+ * this as `GatewayPaths.vaultDir` mounts the registry; the owner surface
+ * serves under `/centraid/_vault/*`.
  */
 export function gatewayVaultDir(id: string): string {
   return path.join(gatewayDir(id), 'vault');
+}
+
+/**
+ * The ACTIVE vault's id for a gateway, read from the registry's
+ * `vaults.json` pointer. Undefined before the gateway has ever booted
+ * (no registry yet). Main-process flows that need a vault-scoped disk
+ * path (reveal-in-Finder, the in-process builder) resolve through this.
+ */
+export function activeVaultId(gatewayId: string): string | undefined {
+  try {
+    const raw = readFileSync(path.join(gatewayVaultDir(gatewayId), 'vaults.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { active?: unknown };
+    return typeof parsed.active === 'string' && parsed.active.length > 0
+      ? parsed.active
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The ACTIVE vault's app code store root (`apps.git` + worktrees) —
+ * `<vault>/<activeVaultId>/code` (#280: each vault owns its own code).
+ * Undefined before the vault registry exists on disk.
+ */
+export function activeVaultCodeStoreDir(gatewayId: string): string | undefined {
+  const vaultId = activeVaultId(gatewayId);
+  if (!vaultId) return undefined;
+  return path.join(gatewayVaultDir(gatewayId), vaultId, 'code');
 }
 
 /**

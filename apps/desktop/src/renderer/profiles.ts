@@ -1,24 +1,22 @@
 // governance: allow-repo-hygiene file-size-limit profile-switcher-presentation-layer pending split into switcher / modal / manage-page modules
 // profiles.ts — profile ("space") switcher presentation layer.
 //
-// A profile is a separate space with its own home grid of apps. In Centraid
-// a profile IS a gateway (the local/remote workspace the rest of the shell is
-// scoped under): name maps to the gateway's `displayName`, color to its
-// `avatarColor`. Icon and description have no backend field, so they're
-// persisted client-side via `window.Store`, keyed by gateway id.
+// A profile is a separate space with its own home grid of apps. Since #280
+// a profile IS a VAULT: name maps to `core_vault.display_name`, and
+// color/icon/blurb live in the vault's own settings (`core_vault.
+// settings_json`) — nothing is persisted client-side anymore, so a space's
+// identity travels with a vault export. Gateways demoted to *connections*;
+// the dropdown lists the other connections below the vault list.
 //
 // This module owns *presentation* only — the avatar, the sidebar-head
 // switcher, its dropdown, the add/edit modal, the delete dialog, the toast,
-// and the Settings "Profiles" manage body. All data + IPC wiring lives in
+// and the Settings "Spaces" manage body. All data + HTTP wiring lives in
 // app.ts, which feeds plain `ProfileView` records in and receives callbacks
-// out. Mirrors handoff-ref/profiles.jsx, implemented in the renderer's
-// vanilla-DOM idiom (a `window.*` namespace object, like Chrome/Icon/Store)
-// rather than the prototype's React-via-Babel pattern.
+// out.
 
 (function () {
   const Icon = window.Icon;
   const tokens = window.CentraidTokens;
-  const Store = window.Store;
 
   // Palette hexes, in the design's reference order. Mirrors
   // packages/design-tokens/palette.ts. Used for the color picker swatches.
@@ -77,40 +75,6 @@
   const glyph = (name: IconNameType, opts?: { size?: number; strokeWidth?: number }): string =>
     (Icon[name] ?? Icon[DEFAULT_ICON])(opts);
 
-  // ── Client-side profile metadata (icon + description) ────────────────
-  // The gateway backend has no icon/description fields, so they live in
-  // localStorage keyed by gateway id. `appsCount`/name/color come from the
-  // backend; these two are the only profile attributes Centraid owns here.
-  interface ProfileMeta {
-    icon: IconNameType;
-    blurb: string;
-  }
-  const META_KEY = 'profiles.meta';
-  type MetaMap = Record<string, Partial<ProfileMeta>>;
-
-  function readMetaMap(): MetaMap {
-    return Store.get<MetaMap>(META_KEY, {});
-  }
-  function metaFor(id: string): ProfileMeta {
-    const m = readMetaMap()[id] ?? {};
-    return {
-      icon: m.icon && Icon[m.icon] ? m.icon : DEFAULT_ICON,
-      blurb: typeof m.blurb === 'string' ? m.blurb : '',
-    };
-  }
-  function saveMeta(id: string, patch: Partial<ProfileMeta>): void {
-    const map = readMetaMap();
-    map[id] = { ...map[id], ...patch };
-    Store.set(META_KEY, map);
-  }
-  function forgetMeta(id: string): void {
-    const map = readMetaMap();
-    if (id in map) {
-      delete map[id];
-      Store.set(META_KEY, map);
-    }
-  }
-
   // ── Avatar — reuses the gradient app-tile finish so a profile reads as
   // a first-class member of the same visual family as the app icons. ─────
   function avatar(profile: { icon: IconNameType; color: string }, size = 28): HTMLElement {
@@ -134,6 +98,10 @@
 
   function kindLabel(kind: 'local' | 'remote'): string {
     return kind === 'remote' ? 'Remote' : 'Local';
+  }
+  /** Normalize a backend icon string into a renderable icon name. */
+  function safeIcon(name: string | undefined): IconNameType {
+    return name && Icon[name as IconNameType] ? (name as IconNameType) : DEFAULT_ICON;
   }
   function secondaryLine(p: ProfileView): string {
     const lead = p.blurb.trim() || kindLabel(p.kind);
@@ -229,6 +197,9 @@
     onEdit: (p: ProfileView) => void;
     onAdd: () => void;
     onManage: () => void;
+    /** Other gateway endpoints ("connections", #280) — switching one swaps the whole vault registry. */
+    connections?: Array<{ id: string; name: string; active: boolean; kind: 'local' | 'remote' }>;
+    onSwitchConnection?: (id: string) => void;
   }
   function openDropdown(opts: DropdownOpts): { close: () => void } {
     document.querySelectorAll('.cd-prof-pop, .cd-prof-pop-scrim').forEach((n) => n.remove());
@@ -310,7 +281,7 @@
     pop.append(
       menuAction(
         'Users',
-        'Manage profiles',
+        'Manage spaces',
         () => {
           close();
           opts.onManage();
@@ -318,6 +289,29 @@
         true,
       ),
     );
+
+    // Connections (#280): gateways are plumbing now — list the OTHER
+    // endpoints so switching machine/account stays one click, without
+    // conflating them with spaces.
+    const conns = opts.connections ?? [];
+    if (conns.length > 1 && opts.onSwitchConnection) {
+      pop.append(el('div', { class: 'cd-prof-pop-divider', 'aria-hidden': 'true' }));
+      pop.append(el('div', { class: 'cd-eyebrow cd-prof-pop-eyebrow' }, 'Connections'));
+      for (const c of conns) {
+        pop.append(
+          menuAction(
+            c.kind === 'remote' ? 'Compass' : 'Home',
+            c.active ? `${c.name} · connected` : c.name,
+            () => {
+              if (c.active) return;
+              close();
+              opts.onSwitchConnection?.(c.id);
+            },
+            c.active,
+          ),
+        );
+      }
+    }
 
     document.body.append(scrim, pop);
 
@@ -726,9 +720,7 @@
     PROFILE_COLORS,
     PROFILE_ICONS,
     DEFAULT_ICON,
-    metaFor,
-    saveMeta,
-    forgetMeta,
+    safeIcon,
     avatar,
     buildSwitcherHeader,
     openDropdown,

@@ -27,6 +27,13 @@ export interface VaultListEntry {
   /** Whether this vault is the gateway's active one (`ctx.vault` target). */
   active: boolean;
   ownerPartyId: string;
+  /**
+   * Presentation out of `core_vault.settings_json` (#280: profiles are
+   * vaults — the switcher's color/icon/blurb live IN the vault).
+   */
+  color?: string;
+  icon?: string;
+  blurb?: string;
 }
 
 /** One scope of a grant or a manifest request: schema-wide or one table. */
@@ -113,11 +120,18 @@ export async function createVault(input: { name?: string }): Promise<VaultListEn
   return readJson<VaultListEntry>(res, 'create vault');
 }
 
-/** Rename a vault and/or make it the active one. */
+/**
+ * Rename a vault, update its presentation (color/icon/blurb — #280:
+ * profiles are vaults), and/or make it the active one. Activation
+ * re-roots the gateway's whole workspace before the response lands.
+ */
 export async function updateVault(input: {
   vaultId: string;
   name?: string;
   active?: true;
+  color?: string | null;
+  icon?: string | null;
+  blurb?: string | null;
 }): Promise<VaultListEntry> {
   const { baseUrl, token } = await auth();
   const res = await doFetch(baseUrl, `/centraid/_vault/vaults/${enc(input.vaultId)}`, {
@@ -125,6 +139,9 @@ export async function updateVault(input: {
     headers: authHeaders(token, 'application/json'),
     body: JSON.stringify({
       ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.color !== undefined ? { color: input.color } : {}),
+      ...(input.icon !== undefined ? { icon: input.icon } : {}),
+      ...(input.blurb !== undefined ? { blurb: input.blurb } : {}),
       ...(input.active ? { active: true } : {}),
     }),
   });

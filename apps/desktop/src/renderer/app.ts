@@ -12,12 +12,17 @@
 // app-cards, app-appview, app-settings), wired through ./app-shell-context.
 
 import {
+  createVault,
   deleteAutomation,
+  deleteVault,
   getUserPrefs,
   listApps,
   listAutomations,
+  listVaults,
   runAutomationNow,
   saveUserPrefs,
+  updateVault,
+  type VaultListEntry,
 } from './gateway-client.js';
 import {
   chevronDown,
@@ -33,7 +38,6 @@ import type {
   AccentKey,
   AppearancePrefs,
   AutomationRunState,
-  GatewayProfile,
   GatewaySummary,
   ShellContext,
   ShellEntries,
@@ -439,52 +443,67 @@ import { createAppViewModule } from './app-appview.js';
   }
 
   // ── Profile switcher controller ─────────────────────────────────────
-  // A "profile" is a separate space (its own home grid of apps) — backed
-  // by a gateway: name ↔ displayName, color ↔ avatarColor, switch ↔
-  // setActiveGateway. Icon + description have no backend field, so they
-  // live client-side in window.Store (via window.Profiles.metaFor/saveMeta).
+  // A "profile" is a separate space (its own home grid of apps) — and since
+  // #280 a space IS a VAULT: name ↔ core_vault.display_name, color/icon/
+  // blurb ↔ the vault's own presentation settings, switch ↔ PATCH
+  // {active:true} (which re-roots the gateway's whole workspace — apps,
+  // transcripts, code — before the response lands). Gateways demoted to
+  // "connections": the dropdown lists the other endpoints below the vaults.
   // Presentation lives in profiles.ts; this controller owns the data and
-  // the IPC wiring. Switch / add / delete that touch the ACTIVE profile
-  // re-render through the onGatewayChanged broadcast; edits or deletes of a
-  // non-active profile re-render the current route directly.
+  // the HTTP wiring.
 
   let profileModalCtl: { close: () => void } | null = null;
   let profileDeleteCtl: { close: () => void } | null = null;
+
+  // Cached vault list backing the (synchronous) sidebar-head switcher
+  // render. Primed at boot and on every gateway change / vault op.
+  let vaultProfiles: VaultListEntry[] = [];
+
+  async function refreshVaultProfiles(): Promise<void> {
+    try {
+      vaultProfiles = (await listVaults()) ?? [];
+    } catch {
+      vaultProfiles = [];
+    }
+  }
 
   function activeAppsCount(): number {
     return getAppsWithDrafts().length;
   }
 
-  function toProfileView(p: GatewayProfile, activeId: string): ProfileView {
-    const meta = window.Profiles.metaFor(p.id);
+  function toProfileView(v: VaultListEntry): ProfileView {
     const view: ProfileView = {
-      id: p.id,
-      name: p.displayName,
-      color: p.avatarColor,
-      icon: meta.icon,
-      blurb: meta.blurb,
-      kind: p.kind,
-      primordial: p.id === 'local',
+      id: v.vaultId,
+      name: v.name,
+      color: v.color ?? window.Profiles.PROFILE_COLORS[0] ?? '#4E68DD',
+      icon: window.Profiles.safeIcon(v.icon),
+      blurb: v.blurb ?? '',
+      kind: currentGateway?.activeKind ?? 'local',
+      // The active vault can't be deleted (the registry refuses) — model
+      // that as "primordial" so the presentation layer hides Delete.
+      primordial: v.active,
     };
-    if (p.id === activeId) view.appsCount = activeAppsCount();
+    if (v.active) view.appsCount = activeAppsCount();
     return view;
   }
 
-  // Build the sidebar-head switcher row from the cached active gateway.
+  // Build the sidebar-head switcher row from the cached vault list.
   function buildProfileSwitcherHead(): HTMLElement {
-    const gw = currentGateway;
-    const id = gw ? gw.activeId : 'local';
-    const meta = window.Profiles.metaFor(id);
-    const active: ProfileView = {
-      id,
-      name: gw ? gw.activeDisplayName : 'Local',
-      color: gw ? gw.activeAvatarColor : (window.Profiles.PROFILE_COLORS[0] ?? '#4E68DD'),
-      icon: meta.icon,
-      blurb: meta.blurb,
-      kind: gw ? gw.activeKind : 'local',
-      primordial: id === 'local',
-      appsCount: activeAppsCount(),
-    };
+    const activeVault = vaultProfiles.find((v) => v.active);
+    const active: ProfileView = activeVault
+      ? toProfileView(activeVault)
+      : {
+          // Registry not primed yet (first paint) — placeholder from the
+          // connection summary; the next re-render shows the real vault.
+          id: '',
+          name: currentGateway?.activeDisplayName ?? 'Personal',
+          color: window.Profiles.PROFILE_COLORS[0] ?? '#4E68DD',
+          icon: window.Profiles.DEFAULT_ICON,
+          blurb: '',
+          kind: currentGateway?.activeKind ?? 'local',
+          primordial: true,
+          appsCount: activeAppsCount(),
+        };
     return window.Profiles.buildSwitcherHeader({
       active,
       onToggle: (rect) => void openProfileSwitcher(rect),
@@ -500,30 +519,58 @@ import { createAppViewModule } from './app-appview.js';
   }
 
   async function openProfileSwitcher(anchor: DOMRect): Promise<void> {
-    const [profiles, settings] = await Promise.all([
+    const [vaults, gateways, settings] = await Promise.all([
+      listVaults().then((v) => v ?? []),
       window.CentraidApi.listGateways(),
       window.CentraidApi.getSettings(),
     ]);
-    const activeId = settings.activeGatewayId;
+    vaultProfiles = vaults;
+    const activeVaultId = vaults.find((v) => v.active)?.vaultId ?? '';
     window.Profiles.openDropdown({
       anchor,
-      activeId,
-      profiles: profiles.map((p) => toProfileView(p, activeId)),
+      activeId: activeVaultId,
+      profiles: vaults.map(toProfileView),
       onSwitch: (id) => void switchProfile(id),
       onEdit: (p) => openProfileModal('edit', p),
       onAdd: () => openProfileModal('add'),
       onManage: () => renderSettings('profiles'),
+      connections: gateways.map((g) => ({
+        id: g.id,
+        name: g.displayName,
+        active: g.id === settings.activeGatewayId,
+        kind: g.kind,
+      })),
+      onSwitchConnection: (id) => void switchConnection(id),
     });
   }
 
+  // Switch the active VAULT (#280). The PATCH re-roots the gateway's
+  // workspace server-side before responding; every vault-scoped piece of
+  // renderer state is stale after it, so bounce to Home (which refetches
+  // the app list against the new active vault).
   async function switchProfile(id: string): Promise<void> {
+    const target = vaultProfiles.find((v) => v.vaultId === id);
+    if (target?.active) return;
+    try {
+      await updateVault({ vaultId: id, active: true });
+      await refreshVaultProfiles();
+      window.Profiles.toast({ msg: `Switched · ${target?.name ?? 'space'}`, kind: 'ok' });
+      applyRoute({ kind: 'home' });
+    } catch (err) {
+      window.Profiles.toast({ msg: `Switch failed: ${String(err)}`, kind: 'del' });
+    }
+  }
+
+  // Switch the active CONNECTION (gateway endpoint). Main broadcasts
+  // onGatewayChanged → refresh + bounce to home; the handler also re-primes
+  // the vault cache against the new endpoint.
+  async function switchConnection(id: string): Promise<void> {
     if (currentGateway && id === currentGateway.activeId) return;
     try {
-      const profiles = await window.CentraidApi.listGateways();
-      const name = profiles.find((p) => p.id === id)?.displayName ?? id;
+      const gateways = await window.CentraidApi.listGateways();
+      const name = gateways.find((g) => g.id === id)?.displayName ?? id;
       await window.CentraidApi.setActiveGateway({ id });
-      // main broadcasts onGatewayChanged → refresh + bounce to home.
-      window.Profiles.toast({ msg: `Switched · ${name}`, kind: 'ok' });
+      window.Profiles.toast({ msg: `Connected · ${name}`, kind: 'ok' });
     } catch (err) {
       window.Profiles.toast({ msg: `Switch failed: ${String(err)}`, kind: 'del' });
     }
@@ -565,31 +612,33 @@ import { createAppViewModule } from './app-appview.js';
   ): Promise<void> {
     try {
       if (mode === 'add') {
-        const created = await window.CentraidApi.addLocalGateway({
-          label: data.name,
-          displayName: data.name,
-          avatarColor: data.color,
+        const created = await createVault({ name: data.name });
+        await updateVault({
+          vaultId: created.vaultId,
+          color: data.color,
+          icon: data.icon,
+          blurb: data.blurb || null,
         });
-        window.Profiles.saveMeta(created.id, { icon: data.icon, blurb: data.blurb });
         profileModalCtl?.close();
         profileModalCtl = null;
-        window.Profiles.toast({ msg: `Profile created · ${data.name}`, kind: 'ok' });
-        // Mirror the reference: a freshly created profile becomes active,
-        // re-scoping the home grid to the (empty) new space.
-        await window.CentraidApi.setActiveGateway({ id: created.id });
+        window.Profiles.toast({ msg: `Space created · ${data.name}`, kind: 'ok' });
+        // Mirror the reference: a freshly created space becomes active,
+        // re-scoping the home grid to the (empty) new vault.
+        await updateVault({ vaultId: created.vaultId, active: true });
+        await refreshVaultProfiles();
+        applyRoute({ kind: 'home' });
       } else if (profile) {
-        await window.CentraidApi.updateProfileMetadata({
-          id: profile.id,
-          displayName: data.name,
-          avatarColor: data.color,
+        await updateVault({
+          vaultId: profile.id,
+          name: data.name,
+          color: data.color,
+          icon: data.icon,
+          blurb: data.blurb || null,
         });
-        window.Profiles.saveMeta(profile.id, { icon: data.icon, blurb: data.blurb });
+        await refreshVaultProfiles();
         profileModalCtl?.close();
         profileModalCtl = null;
         window.Profiles.toast({ msg: `Saved · ${data.name}`, kind: 'ok' });
-        if (currentGateway && profile.id === currentGateway.activeId) {
-          await refreshRuntimeMode();
-        }
         await reRenderShellForRoute();
       }
     } catch (err) {
@@ -611,18 +660,12 @@ import { createAppViewModule } from './app-appview.js';
 
   async function confirmDeleteProfile(profile: ProfileView): Promise<void> {
     try {
-      await window.CentraidApi.removeGateway({ id: profile.id });
-      window.Profiles.forgetMeta(profile.id);
+      await deleteVault({ vaultId: profile.id });
+      await refreshVaultProfiles();
       profileDeleteCtl?.close();
       profileDeleteCtl = null;
       window.Profiles.toast({ msg: `Deleted · ${profile.name}`, kind: 'del' });
-      // removeGateway *always* emits GATEWAY_CHANGED from main (active or
-      // not — the list changed and caches must drop). The onGatewayChanged
-      // handler owns the refresh: it re-scopes to Home if the active space
-      // changed, or refreshes the current route in place otherwise (so a
-      // non-active delete from Settings updates the manage list without
-      // yanking the user off the page). Re-rendering here too would race
-      // that broadcast and stack two shells, so we deliberately don't.
+      await reRenderShellForRoute();
     } catch (err) {
       window.Profiles.toast({ msg: `Delete failed: ${String(err)}`, kind: 'del' });
     }
@@ -1655,14 +1698,13 @@ import { createAppViewModule } from './app-appview.js';
       void openProfileSwitcher(profileHeadAnchor());
       return;
     }
-    // ⌘1…⌘9 jumps directly to the Nth profile (Linear-style
-    // workspace-shortcut pattern). Order matches the switcher's
-    // rendered order — local-first then remote-by-createdAt, same
-    // as `listGateways`. Without shift, plain digits stay free for
-    // text input; we explicitly skip when shift / alt are held so
-    // the system shortcuts (⌘⇧1, ⌘⌥1) keep firing. Bound at the
-    // document level so the user doesn't have to open the switcher
-    // first — feels native to anyone who has used Linear.
+    // ⌘1…⌘9 jumps directly to the Nth space (Linear-style
+    // workspace-shortcut pattern). A space is a VAULT (#280); order
+    // matches the switcher's rendered order (creation order). Without
+    // shift, plain digits stay free for text input; we explicitly skip
+    // when shift / alt are held so the system shortcuts (⌘⇧1, ⌘⌥1) keep
+    // firing. Bound at the document level so the user doesn't have to
+    // open the switcher first — feels native to anyone who has used Linear.
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key >= '1' && e.key <= '9') {
       // Skip when the user is typing into a real input — ⌘1 in a
       // text field shouldn't punt them out of their workspace.
@@ -1672,15 +1714,16 @@ import { createAppViewModule } from './app-appview.js';
       if (inEditable) return;
       const n = parseInt(e.key, 10) - 1;
       void (async (): Promise<void> => {
-        const profiles = await window.CentraidApi.listGateways();
-        const target = profiles[n];
-        if (!target) return;
+        const vaults = (await listVaults()) ?? [];
+        vaultProfiles = vaults;
+        const target = vaults[n];
+        if (!target || target.active) return;
         e.preventDefault();
-        const current = await window.CentraidApi.getSettings();
-        if (target.id === current.activeGatewayId) return;
         try {
-          await window.CentraidApi.setActiveGateway({ id: target.id });
-          showToast(`Switched to ${target.displayName}`);
+          await updateVault({ vaultId: target.vaultId, active: true });
+          await refreshVaultProfiles();
+          showToast(`Switched to ${target.name}`);
+          applyRoute({ kind: 'home' });
         } catch (err) {
           showToast(`Switch failed: ${String(err)}`);
         }
@@ -1709,14 +1752,26 @@ import { createAppViewModule } from './app-appview.js';
         root,
         onComplete: async ({ displayName, avatarColor }) => {
           // Persist the user's identity onto the primordial local
-          // profile. updateProfileMetadata validates the color server-
-          // side (#RRGGBB) and trims the name; we let any throw bubble
-          // up to the onboarding view's error display.
+          // profile (the on-disk displayName is also the "onboarding
+          // done" signal) — and onto the first VAULT, which is the
+          // user-facing space from here on (#280): its name + avatar
+          // color live in core_vault, so they travel with an export.
           await window.CentraidApi.updateProfileMetadata({
             id: 'local',
             displayName,
             avatarColor,
           });
+          try {
+            const vaults = (await listVaults()) ?? [];
+            const active = vaults.find((v) => v.active);
+            if (active) {
+              await updateVault({ vaultId: active.vaultId, name: displayName, color: avatarColor });
+            }
+          } catch {
+            // Best-effort — the vault keeps its bootstrap name if the
+            // gateway isn't reachable yet; editable any time from the
+            // switcher.
+          }
           // Mark onboarding done so a relaunch skips this view. We
           // could also flip a Store key client-side, but persisting in
           // main keeps the source of truth in one place — and means
@@ -1731,12 +1786,14 @@ import { createAppViewModule } from './app-appview.js';
           // call renderHome() explicitly. We still nudge the runtime
           // mode here so the very first home render has it primed.
           await refreshRuntimeMode();
+          await refreshVaultProfiles();
           renderHome();
         },
       });
       return;
     }
     await refreshRuntimeMode();
+    await refreshVaultProfiles();
     renderHome();
   })();
 
@@ -1753,6 +1810,9 @@ import { createAppViewModule } from './app-appview.js';
     void (async (): Promise<void> => {
       const prevActiveId = currentGateway?.activeId;
       await refreshRuntimeMode();
+      // The vault registry is per-connection — re-prime the switcher cache
+      // against the new endpoint (#280).
+      await refreshVaultProfiles();
       // Re-scope to Home only when the *active* space actually flipped (a
       // switch, or deleting the active profile and falling back to local).
       // A broadcast that leaves the active space intact — renaming or

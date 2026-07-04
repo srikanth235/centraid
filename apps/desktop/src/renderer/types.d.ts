@@ -275,21 +275,22 @@ declare global {
 
   /**
    * Renderer-facing profile record fed into the profile switcher's
-   * presentation layer (`window.Profiles`). A profile IS a gateway:
-   * `name`/`color`/`kind` come from the gateway backend (displayName /
-   * avatarColor / kind), while `icon`/`blurb` are Centraid-owned
-   * metadata persisted client-side via `window.Store`. `appsCount` is
-   * known only for the active profile (others omit it).
+   * presentation layer (`window.Profiles`). Since #280 a profile IS a
+   * VAULT: `id` is the vaultId, `name` maps to `core_vault.display_name`,
+   * and `color`/`icon`/`blurb` come from the vault's own presentation
+   * settings — nothing is persisted client-side. `kind` reflects the
+   * hosting CONNECTION (local runtime vs remote endpoint). `appsCount`
+   * is known only for the active profile (others omit it).
    */
   interface ProfileView {
     id: string;
     name: string;
-    /** `#RRGGBB` avatar color (maps to gateway `avatarColor`). */
+    /** `#RRGGBB` avatar color (maps to the vault's presentation settings). */
     color: string;
     icon: IconName;
     blurb: string;
     kind: 'local' | 'remote';
-    /** True for the primordial `'local'` gateway — cannot be deleted. */
+    /** True for the ACTIVE vault — the registry refuses to delete it. */
     primordial: boolean;
     /** App count, when known (active profile only). */
     appsCount?: number;
@@ -306,12 +307,8 @@ declare global {
     readonly PROFILE_COLORS: readonly string[];
     readonly PROFILE_ICONS: readonly IconName[];
     readonly DEFAULT_ICON: IconName;
-    /** Read the client-side icon/description metadata for a profile id. */
-    metaFor: (id: string) => { icon: IconName; blurb: string };
-    /** Persist icon/description metadata for a profile id. */
-    saveMeta: (id: string, patch: { icon?: IconName; blurb?: string }) => void;
-    /** Drop stored metadata for a removed profile. */
-    forgetMeta: (id: string) => void;
+    /** Normalize a backend icon string into a renderable icon name. */
+    safeIcon: (name: string | undefined) => IconName;
     avatar: (profile: { icon: IconName; color: string }, size?: number) => HTMLElement;
     buildSwitcherHeader: (opts: {
       active: ProfileView;
@@ -326,6 +323,9 @@ declare global {
       onEdit: (p: ProfileView) => void;
       onAdd: () => void;
       onManage: () => void;
+      /** Other gateway endpoints ("connections", #280). */
+      connections?: Array<{ id: string; name: string; active: boolean; kind: 'local' | 'remote' }>;
+      onSwitchConnection?: (id: string) => void;
     }) => { close: () => void };
     openModal: (opts: {
       mode: 'add' | 'edit';

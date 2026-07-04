@@ -23,7 +23,7 @@
 import path from 'node:path';
 import { mkdir, stat } from 'node:fs/promises';
 import { openSession, closeSession } from './apps-store-client.js';
-import { gatewayCodeStoreDir } from './gateway-paths.js';
+import { activeVaultCodeStoreDir } from './gateway-paths.js';
 import { loadSettings } from './settings.js';
 
 async function dirExists(p: string): Promise<boolean> {
@@ -141,14 +141,9 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
   await assertActiveGatewayLocal(`editing app "${appId}"`);
   const settings = await loadSettings();
   const sessionId = await ensureAppSession(appId);
-  return path.join(
-    gatewayCodeStoreDir(settings.activeGatewayId),
-    'worktrees',
-    'sessions',
-    sessionId,
-    'apps',
-    appId,
-  );
+  const codeStore = activeVaultCodeStoreDir(settings.activeGatewayId);
+  if (!codeStore) throw new Error('no active vault — the code store is not mounted yet');
+  return path.join(codeStore, 'worktrees', 'sessions', sessionId, 'apps', appId);
 }
 
 /**
@@ -165,12 +160,9 @@ export async function ensureAppSessionDir(appId: string): Promise<string> {
 export async function resolveAppRevealDir(appId: string): Promise<string> {
   await assertActiveGatewayLocal(`revealing app "${appId}"`);
   const settings = await loadSettings();
-  const liveDir = path.join(
-    gatewayCodeStoreDir(settings.activeGatewayId),
-    'active-main',
-    'apps',
-    appId,
-  );
+  const codeStore = activeVaultCodeStoreDir(settings.activeGatewayId);
+  if (!codeStore) throw new Error('no active vault — the code store is not mounted yet');
+  const liveDir = path.join(codeStore, 'active-main', 'apps', appId);
   if (await dirExists(liveDir)) return liveDir;
   // Not on `main` (a draft) — materialize/open its editing session and reveal
   // that. `mkdir` guarantees the folder exists even for a brand-new draft the
