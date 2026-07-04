@@ -197,6 +197,30 @@ describe('consent clamps', () => {
   });
 });
 
+describe('home.asset_item surface', () => {
+  test('name and serial match; disposal keeps the row searchable', () => {
+    const insert = db.vault.prepare(
+      `INSERT INTO home_asset_item (item_id, owner_party_id, name, serial_no, disposed_on)
+       VALUES (?, ?, ?, ?, ?)`,
+    );
+    insert.run('it-1', boot.ownerPartyId, 'Dehumidifier', 'SN-9981', null);
+    insert.run('it-2', boot.ownerPartyId, 'Old dehumidifier', null, '2024-01-15');
+    insert.run('it-3', boot.ownerPartyId, 'Toaster', null, null);
+    const byName = gw.search(owner, {
+      entity: 'home.asset_item',
+      query: 'dehumid',
+      purpose: PURPOSE,
+    });
+    expect(byName.rows.map((r) => r.item_id).toSorted()).toEqual(['it-1', 'it-2']);
+    const bySerial = gw.search(owner, {
+      entity: 'home.asset_item',
+      query: 'SN-9981',
+      purpose: PURPOSE,
+    });
+    expect(bySerial.rows.map((r) => r.item_id)).toEqual(['it-1']);
+  });
+});
+
 describe('pre-index vaults', () => {
   test('v1→v2 migration backfills existing rows into the index', () => {
     // Rebuild the index empty, then re-run only the backfill path by
