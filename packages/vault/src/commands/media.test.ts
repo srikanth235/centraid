@@ -148,18 +148,25 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
   expect(again.status).toBe('failed');
 });
 
-test('update_asset toggles favorite on and off', () => {
-  const { asset_id } = addAsset({ data_uri: PIXEL });
+test('update_asset toggles favorite as a starred tag on the canonical content item', () => {
+  const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
+  const starred = () =>
+    db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+          WHERE t.target_type = 'core.content_item' AND t.target_id = ?
+            AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+      )
+      .get(content_id) as { n: number };
   expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
-  let row = db.vault
-    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { favorite: number };
-  expect(row.favorite).toBe(1);
+  expect(starred().n).toBe(1);
+  // Re-favoriting stays a single tag (UNIQUE target+concept, delete-then-insert).
+  expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
+  expect(starred().n).toBe(1);
   expect(invoke('media.update_asset', { asset_id, favorite: 0 }).status).toBe('executed');
-  row = db.vault
-    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { favorite: number };
-  expect(row.favorite).toBe(0);
+  expect(starred().n).toBe(0);
 });
 
 test('restore_asset brings a trashed asset and its bytes back; restoring live fails', () => {

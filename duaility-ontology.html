@@ -474,13 +474,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <section id="principles" class="dark">
   <div class="wrap">
     <p class="eyebrow">§04 · Modeling principles</p>
-    <h2>Four commitments the model never breaks</h2>
-    <p class="lede">Everything in §03 is a consequence of these four decisions.</p>
+    <h2>Five commitments the model never breaks</h2>
+    <p class="lede">Everything in §03 is a consequence of these five decisions.</p>
     <div class="cards4">
       <article class="pcard rv"><span class="pn">P1</span><h3>Shared where meaning is stable, local where behavior differs</h3><p>“A person,” “a place,” “money moved,” “something was measured” — these mean the same thing in every app, so they live once, in the core, carrying identity and history. What differs per domain is behavior: a workout’s training load, an invoice’s dunning rules. Domains add thin typed extensions — a <span class="k">workout</span> holds a FK to the <span class="k">activity</span> it <em>is</em> — and never fork identity into a parallel copy.</p></article>
       <article class="pcard rv"><span class="pn">P2</span><h3>Own the meaning, rent the bytes</h3><p>The durable asset is the graph: rows, relationships, provenance, classifications. Pixels, PDFs and audio sit behind <span class="k">content_uri</span> with a <span class="k">sha256</span> integrity hash — storable on any disk, NAS or object store, and re-homeable without touching a single relationship. Losing a blob store loses bytes you can re-fetch; losing the model would lose the meaning. So the model is what you own.</p></article>
       <article class="pcard rv"><span class="pn">P3</span><h3>Consent travels with the data</h3><p>Sovereignty is a plane, not a settings page. Apps hold scoped, expiring grants (purpose-bound per W3C DPV, expressed as ODRL-style rules); shares, retention and residency are policy rows; every access decision leaves a Kantara-style receipt chained to W3C PROV provenance. A grant is evaluated on <em>every</em> read and action — consent is data the data carries.</p></article>
       <article class="pcard rv"><span class="pn">P4</span><h3>Agents act through commands, never tables</h3><p>The agent plane exposes one uniform surface — discover, query, reason, act, verify, explain, learn — where every action is a typed command (an MCP tool) with declared pre- and postconditions. Agents never hold a write handle to a table: they invoke <span class="k">agent.command</span>s that are consent-checked, executed transactionally, provenance-stamped and receipted. Corrections feed back as durable judgment rows, not vibes.</p></article>
+      <article class="pcard rv"><span class="pn">P5</span><h3>Entity-scoped meaning joins, surface-scoped state rides</h3><p>An owner judgment <em>about an entity</em> — starred, a memo, a relationship — means the same thing in every app that renders the entity, so it lives in the universal joins (<span class="k">core.tag</span>, <span class="k">knowledge.annotation</span>, <span class="k">core.link</span>), keyed to the <em>canonical</em> row. State that only means something inside one surface — pinned-to-top, sort order, a cover image — rides the domain’s own rows. A flag never mints a column, a row or a table: Gmail stars ≠ Drive stars ≠ Photos favorites is a fragmentation artifact of separate databases, not a design to copy. Reference products are evidence, not authority.</p></article>
     </div>
   </div>
 </section>
@@ -598,7 +599,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <section id="rules">
   <div class="wrap">
     <p class="eyebrow">§11 · Implementation rules</p>
-    <h2>Nine hard rules, then a first boundary</h2>
+    <h2>Ten hard rules, then a first boundary</h2>
     <p class="lede">The stance in §01 survives contact with engineering only if these are enforced in code review, not aspiration.</p>
     <div class="rules">
       <article class="rule rv"><h3>IDs are immutable and meaningless</h3><p>UUIDv7 <span class="k">TEXT</span> keys, minted once, never recycled, carrying no semantics. Merges keep both rows and record a <span class="k">core.link</span> of relation <em>same-as</em> with provenance — history is never rewritten.</p></article>
@@ -609,6 +610,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
       <article class="rule rv"><h3>Consent travels with the data</h3><p>Every read path and every command execution evaluates <span class="k">consent.grant_scope</span> (purpose, verbs, row filter, field mask, expiry) in the gateway and emits a <span class="k">consent.receipt</span>. A share or export carries its policy with it.</p></article>
       <article class="rule rv"><h3>Version the ontology explicitly</h3><p>Every row stamps <span class="k">ontology_version</span>; migrations are forward-only scripts registered per version. An agent must refuse a command whose schema version it doesn’t recognize rather than guess.</p></article>
       <article class="rule rv"><h3>Corrections become durable judgment</h3><p>When the owner fixes the agent — recategorizes a transaction, un-tags a face — the diff is stored as <span class="k">agent.correction</span> and distilled into a scoped <span class="k">agent.judgment</span> rule the agent consults before acting again. Learning is rows, auditable and revocable.</p></article>
+      <article class="rule rv"><h3>One judgment, one mechanism</h3><p>Entity-scoped meaning goes through a universal join; surface-scoped state rides the domain row. Starred is a flags-scheme <span class="k">core.tag</span> on the canonical entity; an owner memo is a <span class="k">knowledge.annotation</span>; employment is a <span class="k">core.link</span>. A <span class="k">favorite</span> boolean on a domain table is a rejected review — it silently discards who judged and when, and re-imports the app-silo fragmentation the vault exists to dissolve.</p></article>
       <article class="rule rv"><h3>Generated apps ride the paved road</h3><p>Vibecoded apps are untrusted code by construction, so they get no special path: a manifest becomes a grant (<span class="k">origin=generated</span>, explicit <span class="k">risk_ceiling</span>), reads go through registered <span class="k">consent.app_view</span> definitions the gateway clamps to scope, writes go through existing typed commands, and custom data lives in <span class="k">core.attribute</span>/<span class="k">concept</span>/<span class="k">link</span> or a per-app extension file that may point <em>into</em> the canonical model but is never referenced <em>by</em> it. Uninstall = revoke grant + delete file; when apps are cheap to generate, projections become disposable and the model becomes everything.</p></article>
     </div>
     <div class="cta rv">
@@ -872,7 +874,7 @@ cols:[
 ['broader_concept_id','TEXT','FK','core.concept','skos:broader — hierarchy without a second taxonomy system.'],
 ['definition','TEXT','','', 'skos:definition for agents and humans alike.'],
 ]},
-{ n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join.',
+{ n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join. Owner flags ride here too: starred/favorite is one flags-scheme tag on the canonical entity, the same star in every surface that renders it.',
 cols:[
 ['tag_id','TEXT (uuidv7)','PK NN','', 'Immutable tag identity.'],
 ['target_type','TEXT','NN','', 'Logical table of the tagged row.'],
@@ -1273,7 +1275,7 @@ cols:[
 
 { id:'social', label:'social', desc:'Contact cards, circles, threads, messages. People are core parties; relationships are core links. This schema owns address-book decoration and conversation.',
 tables:[
-{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname, org/title, notes, favorite. Decoration over identity — deleting a card never deletes the person.',
+{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname, org/title, notes. Starring is a flags-scheme core.tag on the party, not a card field (one judgment, one mechanism). Decoration over identity — deleting a card never deletes the person.',
 cols:[
 ['card_id','TEXT (uuidv7)','PK NN','', 'Card identity.'],
 ['party_id','TEXT','FK UQ NN','core.party','The party this card decorates (1:1).'],
@@ -1281,7 +1283,6 @@ cols:[
 ['org_title','TEXT','','', 'vCard ORG + TITLE, denormalized for display.'],
 ['related_org_party_id','TEXT','FK','core.party','Employer as a party (schema.org worksFor).'],
 ['note','TEXT','','', 'vCard NOTE — the “met at Ravi’s wedding” field.'],
-['favorite','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
 ['vcard_rev','TEXT (iso8601)','','', 'vCard REV for sync round-trips.'],
 ]},
 { n:'circle', std:'FOAF Group · vCard MEMBER', p:'A named grouping (Family, Clients, Book club). Circles are also the natural grain for shares and grants.',

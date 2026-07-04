@@ -103,6 +103,7 @@ export { registerSubscriptionCommands } from './commands/subscriptions.js';
 export { registerPartyCommands } from './commands/parties.js';
 export { registerMediaCommands } from './commands/media.js';
 export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';
+export { FLAGS_SCHEME_URI, STARRED_NOTATION } from './commands/flags.js';
 export { registerHomeCommands } from './commands/home.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';

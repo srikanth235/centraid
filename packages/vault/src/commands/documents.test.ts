@@ -166,3 +166,49 @@ test('delete_folder refuses non-empty folders (documents or subfolders), root is
     invoke('core.rename_folder', { folder_id: root?.concept_id ?? '', name: 'x' }).status,
   ).toBe('failed');
 });
+
+/** Count of starred flags-scheme tags on a content item (issue #274). */
+function starCount(contentId: string): number {
+  const row = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM core_tag t
+         JOIN core_concept c ON c.concept_id = t.concept_id
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE t.target_type = 'core.content_item' AND t.target_id = ?
+          AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+    )
+    .get(contentId) as { n: number };
+  return row.n;
+}
+
+test('star/unstar are idempotent single tags; the concept carries the Favorite altLabel', () => {
+  const contentId = addDocument({ data_uri: PDF, title: 'Lease.pdf' });
+  expect(invoke('core.star_document', { content_id: contentId }).status).toBe('executed');
+  expect(invoke('core.star_document', { content_id: contentId }).status).toBe('executed');
+  expect(starCount(contentId)).toBe(1);
+  // One judgment, one vocabulary: star and favorite are the same concept.
+  const concept = db.vault
+    .prepare(
+      `SELECT c.pref_label, c.alt_labels_json FROM core_concept c
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+    )
+    .get() as { pref_label: string; alt_labels_json: string };
+  expect(concept.pref_label).toBe('Starred');
+  expect(JSON.parse(concept.alt_labels_json)).toContain('Favorite');
+  expect(invoke('core.unstar_document', { content_id: contentId }).status).toBe('executed');
+  expect(invoke('core.unstar_document', { content_id: contentId }).status).toBe('executed');
+  expect(starCount(contentId)).toBe(0);
+});
+
+test('a trashed document refuses star changes but keeps its star through restore', () => {
+  const contentId = addDocument({ data_uri: PDF, title: 'Taxes.pdf' });
+  expect(invoke('core.star_document', { content_id: contentId }).status).toBe('executed');
+  expect(invoke('core.trash_document', { content_id: contentId }).status).toBe('executed');
+  const whileTrashed = invoke('core.unstar_document', { content_id: contentId });
+  expect(whileTrashed.status).toBe('failed');
+  if (whileTrashed.status === 'failed') expect(whileTrashed.predicate).toContain('document_exists');
+  expect(starCount(contentId)).toBe(1);
+  expect(invoke('core.restore_document', { content_id: contentId }).status).toBe('executed');
+  expect(starCount(contentId)).toBe(1);
+});

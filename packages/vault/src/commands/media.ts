@@ -11,6 +11,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { setStarred, starredExistsSql } from './flags.js';
 
 /** ~8 MB of decoded content; the data: URI is ~4/3 of that in base64. */
 const MAX_DATA_URI_CHARS = 11_000_000;
@@ -215,8 +216,8 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   const assetId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, favorite, deleted_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, 0, NULL)`,
+      `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL)`,
     )
     .run(
       assetId,
@@ -248,6 +249,9 @@ const UPDATE_ASSET: CommandDefinition = {
       captured_at: { type: 'string' },
       // The caption lives on the canonical content item as its title.
       title: { type: 'string' },
+      // The contract keeps its `favorite` input; storage is a starred tag on
+      // the canonical core.content_item (issue #274) — favorite a photo here
+      // and the same content item reads as starred in the drive.
       favorite: { type: 'integer', enum: [0, 1] },
     },
   },
@@ -275,7 +279,8 @@ const UPDATE_ASSET: CommandDefinition = {
                            ELSE EXISTS(SELECT 1 FROM media_media_asset a JOIN core_content_item c ON c.content_id = a.content_id
                                         WHERE a.asset_id = :asset_id AND c.title = :title) END)
               AND (SELECT CASE WHEN :favorite IS NULL THEN 1
-                           ELSE EXISTS(SELECT 1 FROM media_media_asset WHERE asset_id = :asset_id AND favorite = :favorite) END)
+                           WHEN :favorite = 1 THEN ${starredExistsSql('core.content_item', '(SELECT content_id FROM media_media_asset WHERE asset_id = :asset_id)')}
+                           ELSE NOT ${starredExistsSql('core.content_item', '(SELECT content_id FROM media_media_asset WHERE asset_id = :asset_id)')} END)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -300,9 +305,11 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
       .run(input.captured_at, input.asset_id);
   }
   if (input.favorite !== undefined) {
-    ctx.db
-      .prepare('UPDATE media_media_asset SET favorite = ? WHERE asset_id = ?')
-      .run(input.favorite, input.asset_id);
+    const asset = ctx.db
+      .prepare('SELECT content_id FROM media_media_asset WHERE asset_id = ?')
+      .get(input.asset_id) as { content_id: string } | undefined;
+    if (!asset) throw new Error('asset vanished between check and execute');
+    setStarred(ctx, 'core.content_item', asset.content_id, input.favorite === 1);
   }
   if (input.title !== undefined) {
     ctx.db

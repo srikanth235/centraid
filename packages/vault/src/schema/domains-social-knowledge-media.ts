@@ -9,7 +9,6 @@ CREATE TABLE social_contact_card (
   org_title            TEXT,
   related_org_party_id TEXT REFERENCES core_party(party_id),
   note                 TEXT,
-  favorite             INTEGER NOT NULL CHECK (favorite IN (0,1)),
   vcard_rev            TEXT
 ) STRICT;
 
@@ -115,7 +114,6 @@ CREATE TABLE media_media_asset (
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
-  favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0,1)),
   deleted_at       TEXT
 ) STRICT;
 

@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); documents own the whole drive loop (8 commands with their contracts), so it is large by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); documents own the whole drive loop (10 commands with their contracts), so it is large by design.
 // Document commands (core §01): a drive over the vault without a new table.
 // A document IS a canonical core_content_item — the same sha256-deduped
 // data: URI custody attachments and note bodies use — filed into folders.
@@ -14,6 +14,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { setStarred, starredExistsSql } from './flags.js';
 
 /** ~8 MB of decoded content; the data: URI is ~4/3 of that in base64. */
 const MAX_DATA_URI_CHARS = 11_000_000;
@@ -441,6 +442,84 @@ function restoreDocument(ctx: HandlerCtx): Record<string, unknown> {
   return { content_id: input.content_id };
 }
 
+const STAR_DOCUMENT: CommandDefinition = {
+  name: 'core.star_document',
+  ownerSchema: 'core',
+  inputSchema: {
+    type: 'object',
+    required: ['content_id'],
+    additionalProperties: false,
+    properties: { content_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['content_id'],
+    properties: { content_id: { type: 'string' } },
+  },
+  preconditions: [
+    // A trashed document refuses state changes (same rule as rename/move),
+    // but an already-starred one keeps its tag through trash and restore.
+    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  postconditions: [
+    {
+      name: 'document_starred',
+      sql: `SELECT ${starredExistsSql('core.content_item', ':content_id')} AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: starDocument,
+};
+
+function starDocument(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { content_id: string };
+  setStarred(ctx, 'core.content_item', input.content_id, true);
+  ctx.wrote('core.content_item', input.content_id);
+  return { content_id: input.content_id };
+}
+
+const UNSTAR_DOCUMENT: CommandDefinition = {
+  name: 'core.unstar_document',
+  ownerSchema: 'core',
+  inputSchema: {
+    type: 'object',
+    required: ['content_id'],
+    additionalProperties: false,
+    properties: { content_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['content_id'],
+    properties: { content_id: { type: 'string' } },
+  },
+  preconditions: [
+    { name: 'document_exists', sql: DOCUMENT_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  postconditions: [
+    {
+      name: 'document_unstarred',
+      sql: `SELECT ${starredExistsSql('core.content_item', ':content_id')} AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: unstarDocument,
+};
+
+function unstarDocument(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { content_id: string };
+  setStarred(ctx, 'core.content_item', input.content_id, false);
+  ctx.wrote('core.content_item', input.content_id);
+  return { content_id: input.content_id };
+}
+
 const CREATE_FOLDER: CommandDefinition = {
   name: 'core.create_folder',
   ownerSchema: 'core',
@@ -630,6 +709,8 @@ export function registerDocumentCommands(gateway: Gateway): void {
   gateway.registerCommand(MOVE_DOCUMENT);
   gateway.registerCommand(TRASH_DOCUMENT);
   gateway.registerCommand(RESTORE_DOCUMENT);
+  gateway.registerCommand(STAR_DOCUMENT);
+  gateway.registerCommand(UNSTAR_DOCUMENT);
   gateway.registerCommand(CREATE_FOLDER);
   gateway.registerCommand(RENAME_FOLDER);
   gateway.registerCommand(DELETE_FOLDER);

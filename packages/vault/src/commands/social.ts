@@ -9,6 +9,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { setStarred, starredExistsSql } from './flags.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -325,6 +326,9 @@ const UPDATE_CARD: CommandDefinition = {
       party_id: { type: 'string', minLength: 1 },
       nickname: { type: 'string' },
       note: { type: 'string' },
+      // The contract keeps its `favorite` input; storage is a starred tag on
+      // the canonical core.party (issue #274) — the same star every surface
+      // rendering this person reads.
       favorite: { type: 'integer', minimum: 0, maximum: 1 },
     },
   },
@@ -346,6 +350,17 @@ const UPDATE_CARD: CommandDefinition = {
     {
       name: 'card_decorates_party',
       sql: 'SELECT count(*) AS n FROM social_contact_card WHERE party_id = :party_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // favorite=1 reads back as a starred tag on the party, favorite=0 as
+      // its absence; an untouched favorite binds NULL and passes trivially.
+      name: 'favorite_reflected_as_flag',
+      sql: `SELECT (CASE WHEN :favorite IS NULL THEN 1
+                 WHEN :favorite = 1 THEN ${starredExistsSql('core.party', ':party_id')}
+                 ELSE NOT ${starredExistsSql('core.party', ':party_id')} END) AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -374,26 +389,21 @@ function updateCard(ctx: HandlerCtx): Record<string, unknown> {
         `UPDATE social_contact_card SET
            nickname = COALESCE(?, nickname),
            note = COALESCE(?, note),
-           favorite = COALESCE(?, favorite),
            vcard_rev = ?
          WHERE card_id = ?`,
       )
-      .run(input.nickname ?? null, input.note ?? null, input.favorite ?? null, ctx.now, cardId);
+      .run(input.nickname ?? null, input.note ?? null, ctx.now, cardId);
   } else {
     cardId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, related_org_party_id, note, favorite, vcard_rev)
-         VALUES (?, ?, ?, NULL, NULL, ?, ?, ?)`,
+        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, related_org_party_id, note, vcard_rev)
+         VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
       )
-      .run(
-        cardId,
-        input.party_id,
-        input.nickname ?? null,
-        input.note ?? null,
-        input.favorite ?? 0,
-        ctx.now,
-      );
+      .run(cardId, input.party_id, input.nickname ?? null, input.note ?? null, ctx.now);
+  }
+  if (input.favorite !== undefined) {
+    setStarred(ctx, 'core.party', input.party_id, input.favorite === 1);
   }
   ctx.wrote('social.contact_card', cardId);
   return { card_id: cardId };

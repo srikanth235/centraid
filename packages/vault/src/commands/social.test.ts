@@ -214,6 +214,19 @@ test('resolve_identity refuses a handle claimed by a different party (no identit
     expect(outcome.predicate).toContain('handle_not_claimed_elsewhere');
 });
 
+/** The starred flags-scheme tag rows on a target (issue #274). */
+function starredTags(targetType: string, targetId: string) {
+  return db.vault
+    .prepare(
+      `SELECT t.tagged_by_party_id FROM core_tag t
+         JOIN core_concept c ON c.concept_id = t.concept_id
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE t.target_type = ? AND t.target_id = ?
+          AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+    )
+    .all(targetType, targetId) as { tagged_by_party_id: string | null }[];
+}
+
 test('update_card upserts decoration without touching identity', () => {
   const first = gw.invoke(owner, {
     command: 'social.update_card',
@@ -228,13 +241,33 @@ test('update_card upserts decoration without touching identity', () => {
   });
   expect(second.status).toBe('executed');
   const card = db.vault
-    .prepare('SELECT nickname, note, favorite FROM social_contact_card WHERE party_id = ?')
+    .prepare('SELECT nickname, note FROM social_contact_card WHERE party_id = ?')
     .get(raviId);
-  expect(card).toMatchObject({ nickname: 'Rav', note: 'met at the wedding', favorite: 1 });
+  expect(card).toMatchObject({ nickname: 'Rav', note: 'met at the wedding' });
+  // The favorite input landed as a starred tag on the canonical party — and
+  // the untouched second call left it alone.
+  expect(starredTags('core.party', raviId)).toHaveLength(1);
   const cards = db.vault.prepare('SELECT count(*) AS n FROM social_contact_card').get() as {
     n: number;
   };
   expect(cards.n).toBe(1);
+});
+
+test('favorite is one starred tag on the party: re-star stays single, unstar removes it', () => {
+  const setFavorite = (favorite: number) =>
+    gw.invoke(owner, {
+      command: 'social.update_card',
+      input: { party_id: raviId, favorite },
+      purpose: 'dpv:ServiceProvision',
+    });
+  expect(setFavorite(1).status).toBe('executed');
+  expect(setFavorite(1).status).toBe('executed');
+  const tags = starredTags('core.party', raviId);
+  expect(tags).toHaveLength(1);
+  // Provenance a boolean column never carried: who starred.
+  expect(tags[0]?.tagged_by_party_id).toBe(boot.ownerPartyId);
+  expect(setFavorite(0).status).toBe('executed');
+  expect(starredTags('core.party', raviId)).toHaveLength(0);
 });
 
 test('a self-thread (note to self) drafts with one participant and sends', () => {
