@@ -286,6 +286,16 @@
         { "value": "#E55772", "label": "Rose" },
         { "value": "#B47B3F", "label": "Ochre" }
       ]
+    },
+    {
+      "key": "appView",
+      "label": "Default view",
+      "type": "segmented",
+      "default": "grid",
+      "options": [
+        { "value": "grid", "label": "Grid" },
+        { "value": "list", "label": "List" }
+      ]
     }
   ]
 }

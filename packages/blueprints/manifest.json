@@ -832,6 +832,22 @@
               "label": "Ochre"
             }
           ]
+        },
+        {
+          "key": "appView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "grid",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grid"
+            },
+            {
+              "value": "list",
+              "label": "List"
+            }
+          ]
         }
       ]
     },

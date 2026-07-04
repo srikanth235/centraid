@@ -1,42 +1,112 @@
-// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Docs is a finished drive — tree, filing, search, preview, trash, restore — and splitting it would break that "one file" contract.
-// Docs — a small drive as a projection over the personal vault. Every row
-// is a core.content_item whose bytes are sha256-deduped; folders are SKOS
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Docs is a finished drive — sidebar, grid/list, filing, search, details, quick-look, trash, restore — and splitting it would break that "one file" contract.
+// Docs — the drive, reinvented, as a projection over the personal vault. Every
+// row is a core.content_item whose bytes are sha256-deduped; folders are SKOS
 // concepts in the owner's folders scheme and filing is one tag per document.
 // Trash sets a purge date ~30 days out and keeps the folder tag, so restore
-// lands a document back where it was. Every write is a typed vault command,
-// all risk low. The app stores nothing — revoke the grant and this page goes
-// dark while the documents, history and receipts remain the owner's.
+// lands a document back where it was. Every write is a typed vault command —
+// consent-checked and receipted, all risk low. The app stores nothing of its
+// own: revoke the grant and this page goes dark while the documents, history
+// and receipts remain the owner's.
+//
+// Two things the vault has no signal for are surfaced honestly rather than
+// faked: there is no "starred" bit and no per-person "shared" edge, so the
+// Starred view stays an honest empty state and there is no sharing UI at all.
 
 import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // reject before reading — ~8 MB
 
+// ---------- Tiny DOM helpers ----------
+
+function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style') e.setAttribute('style', v);
+    else if (k.startsWith('on') && typeof v === 'function')
+      e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+
+// ---------- Icons ----------
+
+const I = {
+  folder:
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h5l2 2h9v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/></svg>',
+  clock:
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
+  star: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg>',
+  allDocs:
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h5l2 2h9v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/></svg>',
+  trash:
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+  upload:
+    '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0 4 4m-4-4-4 4M5 21h14"/></svg>',
+  folderPlus:
+    '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink-2)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h5l2 2h9v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/><path d="M12 11v5M9.5 13.5h5"/></svg>',
+  check:
+    '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 6"/></svg>',
+  dots: '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>',
+  close:
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  chevL:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>',
+  chevR:
+    '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+  download:
+    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
+  sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>',
+  moon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+};
+
+// ---------- State ----------
+
 let data = { folders: [], documents: [], root_folder_id: null };
-// The browse window: the drive query reads only this many recently filed
-// documents — vault data has no upper bound. "Show more" grows it; search
-// reaches everything beyond it.
 let driveWindow = 200;
 let driveTruncated = false;
-let currentFolder = null; // folder_id, or null = the drive's top level
-let trashView = false;
-let searchQuery = ''; // non-empty = flat search results across all folders
-let searchResults = null; // vault FTS matches while a search term is active
-let sortKey = 'name'; // 'name' | 'size' | 'added'
-let sortDir = 1; // 1 asc, -1 desc
+
+const state = {
+  view: document.documentElement.getAttribute('data-app-view') === 'list' ? 'list' : 'grid',
+  nav: { kind: 'all' }, // all | recent | starred | folder(folderId) | trash
+  sortKey: 'added', // added | name | size
+  sortDir: -1,
+  type: 'all', // all | pdf | image | doc | sheet
+  search: '',
+  selected: new Set(),
+  anchorIndex: null,
+  detailsId: null,
+  quickId: null,
+  newMenuOpen: false,
+  creatingFolder: false,
+  renamingFolderId: null,
+  narrow: false,
+};
+
+let visibleRows = []; // the row list as rendered — selection range + quick-look order
+let searchResults = null;
+let searchSeq = 0;
 let uploading = false;
-let selected = new Set(); // content_ids picked via row checkboxes
-let anchorIndex = null; // last non-shift toggle, for shift-range selection
-let expanded = new Set(); // folder_ids whose children show in the tree
-let visibleRows = []; // the row list as rendered — preview + shift-range order
-let previewId = null; // content_id while the preview overlay is open
-let previewReturnFocus = null;
+
+// ---------- Notice / consent narration ----------
 
 function notice(text) {
-  const el = $('noticeBanner');
-  el.textContent = text;
-  el.hidden = !text;
+  const b = $('noticeBanner');
+  b.textContent = text || '';
+  b.hidden = !text;
 }
 
 // The vault speaks in predicates; the drive speaks in plain language.
@@ -52,6 +122,8 @@ function friendlyOutcome(outcome) {
   return FRIENDLY_PREDICATES[outcome?.predicate] ?? outcomeMessage(outcome);
 }
 
+// Returns true when the write executed; otherwise narrates parked / failed /
+// denied honestly and returns false.
 function narrate(outcome) {
   if (outcome?.status === 'executed') {
     notice('');
@@ -60,9 +132,8 @@ function narrate(outcome) {
   if (outcome?.status === 'parked') {
     notice('Sent to the owner for confirmation — it lands once approved.');
   } else if (outcome?.status === 'failed') {
-    const friendly = FRIENDLY_PREDICATES[outcome.predicate];
     notice(
-      friendly ??
+      FRIENDLY_PREDICATES[outcome.predicate] ??
         `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
     );
   } else if (outcome?.status === 'denied') {
@@ -83,13 +154,22 @@ async function act(action, input) {
 // ---------- Formatting ----------
 
 function fmtBytes(n) {
-  if (!n) return '';
+  if (!n) return '—';
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  if (n < 1048576) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1048576).toFixed(1)} MB`;
 }
-
 function fmtDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const m = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return d.getFullYear() === new Date().getFullYear() ? m : `${m}, ${d.getFullYear()}`;
+  } catch {
+    return String(iso).slice(0, 10);
+  }
+}
+function fmtFull(iso) {
   if (!iso) return '';
   try {
     return new Date(iso).toLocaleDateString(undefined, {
@@ -101,8 +181,6 @@ function fmtDate(iso) {
     return String(iso).slice(0, 10);
   }
 }
-
-// "purges in N days" reads better than a raw date on a trash row.
 function purgeCountdown(iso) {
   if (!iso) return '';
   const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
@@ -113,121 +191,141 @@ function purgeCountdown(iso) {
 }
 
 // Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// the vault returns become <mark>, and document text never parses as HTML.
-function snippetInto(el, snippet) {
+// become <mark>; document text never parses as HTML.
+function snippetInto(elm, snippet) {
   const parts = String(snippet ?? '').split(/[⟦⟧]/);
   for (let i = 0; i < parts.length; i += 1) {
     if (!parts[i]) continue;
     if (i % 2 === 1) {
       const mark = document.createElement('mark');
       mark.textContent = parts[i];
-      el.appendChild(mark);
+      elm.appendChild(mark);
     } else {
-      el.appendChild(document.createTextNode(parts[i]));
+      elm.appendChild(document.createTextNode(parts[i]));
     }
   }
 }
 
-function iconKind(mediaType) {
-  const t = String(mediaType ?? '');
-  if (t === 'application/pdf') return { cls: 'pdf', label: 'PDF' };
-  if (t.startsWith('image/')) return { cls: 'image', label: 'IMG' };
-  return { cls: 'generic', label: 'FILE' };
+// ---------- File types ----------
+
+function typeMeta(mediaType) {
+  const t = String(mediaType ?? '').toLowerCase();
+  if (t === 'application/pdf')
+    return { label: 'PDF', name: 'PDF document', cat: 'pdf', cv: '--c-pdf' };
+  if (t.startsWith('image/')) return { label: 'IMG', name: 'Image', cat: 'image', cv: '--c-image' };
+  if (
+    t.includes('spreadsheet') ||
+    t === 'application/vnd.ms-excel' ||
+    t === 'text/csv' ||
+    t === 'application/vnd.oasis.opendocument.spreadsheet'
+  )
+    return { label: 'XLS', name: 'Spreadsheet', cat: 'sheet', cv: '--c-sheet' };
+  if (
+    t.includes('presentation') ||
+    t === 'application/vnd.ms-powerpoint' ||
+    t === 'application/vnd.oasis.opendocument.presentation'
+  )
+    return { label: 'PPT', name: 'Presentation', cat: 'slide', cv: '--c-slide' };
+  if (
+    t.includes('word') ||
+    t === 'application/msword' ||
+    t === 'application/vnd.oasis.opendocument.text' ||
+    t === 'application/rtf' ||
+    t.startsWith('text/')
+  )
+    return { label: 'DOC', name: 'Document', cat: 'doc', cv: '--c-doc' };
+  return { label: 'FILE', name: 'File', cat: 'other', cv: '--ink-3' };
 }
 
-// ---------- Folder tree helpers ----------
+function loadable(uri) {
+  return /^(data:|https?:)/i.test(String(uri ?? ''));
+}
+function isImage(doc) {
+  return String(doc.media_type ?? '').startsWith('image/') && loadable(doc.content_uri);
+}
+function tintBg(cv, pct) {
+  return `color-mix(in oklab, var(${cv}) ${pct}%, transparent)`;
+}
+
+// ---------- Data helpers ----------
 
 function folderById(id) {
   return data.folders.find((f) => f.folder_id === id);
 }
-
-function childrenOf(parentId) {
-  return data.folders.filter((f) => f.parent_id === parentId);
+function folderName(id) {
+  return id == null ? 'Documents' : (folderById(id)?.name ?? 'a folder');
 }
-
-function docsIn(folderId, { trashed }) {
-  return data.documents.filter((d) => d.folder_id === folderId && d.trashed === trashed);
+function activeFiles() {
+  return data.documents.filter((f) => !f.trashed);
 }
-
-function trashedDocs() {
-  return data.documents.filter((d) => d.trashed);
+function trashedFiles() {
+  return data.documents.filter((f) => f.trashed);
 }
-
-// Path from the top level down to a folder, for the breadcrumb.
-function pathTo(folderId) {
-  const path = [];
-  let cursor = folderId == null ? null : folderById(folderId);
-  while (cursor) {
-    path.unshift(cursor);
-    cursor = cursor.parent_id == null ? null : folderById(cursor.parent_id);
-  }
-  return path;
-}
-
-function folderPathLabel(folderId) {
-  return ['Documents', ...pathTo(folderId).map((f) => f.name)].join(' / ');
-}
-
-function ensurePathExpanded(folderId) {
-  for (const f of pathTo(folderId)) expanded.add(f.folder_id);
-}
-
-// ---------- Row list: filter (view or search) + sort ----------
 
 function compareDocs(a, b) {
   let r = 0;
-  if (sortKey === 'size') r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
-  else if (sortKey === 'added')
-    r = String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''));
-  else {
+  if (state.sortKey === 'size') r = (a.byte_size ?? 0) - (b.byte_size ?? 0);
+  else if (state.sortKey === 'name')
     r = String(a.title ?? '').localeCompare(String(b.title ?? ''), undefined, {
       numeric: true,
       sensitivity: 'base',
     });
-  }
-  return r * sortDir;
+  else r = String(a.created_at ?? '').localeCompare(String(b.created_at ?? ''));
+  return r * state.sortDir;
 }
 
+// The rows for the current view: nav (or search) → type filter → sort.
 function currentRows() {
-  let rows;
-  if (searchQuery) {
-    rows = searchResults ?? [];
-  } else if (trashView) {
-    rows = trashedDocs();
+  const { nav, type, search } = state;
+  if (nav.kind === 'starred') return []; // honest empty — no vault star signal
+  let list;
+  if (search.trim()) {
+    list = searchResults ?? []; // flat vault FTS matches across every folder
+  } else if (nav.kind === 'trash') {
+    list = trashedFiles();
   } else {
-    rows = docsIn(currentFolder, { trashed: false });
+    list = activeFiles();
+    if (nav.kind === 'folder') list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
   }
-  return rows.toSorted(compareDocs);
-}
-
-function setSort(key) {
-  if (sortKey === key) sortDir = -sortDir;
-  else {
-    sortKey = key;
-    sortDir = key === 'name' ? 1 : -1;
+  if (type !== 'all') list = list.filter((f) => typeMeta(f.media_type).cat === type);
+  if (search.trim()) return list; // keep the vault's rank order for search
+  if (nav.kind === 'recent') {
+    return [...list]
+      .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+      .slice(0, 8);
   }
-  renderDocs();
-  renderListHeader();
+  return [...list].sort(compareDocs);
 }
 
 // ---------- Selection ----------
 
 function clearSelection() {
-  selected.clear();
-  anchorIndex = null;
+  state.selected.clear();
+  state.anchorIndex = null;
 }
-
-function selectionChanged() {
-  renderDocs();
-  renderListHeader();
-  renderBulkBar();
-}
-
 function selectedDocs() {
-  return data.documents.filter((d) => selected.has(d.content_id));
+  return data.documents.filter((d) => state.selected.has(d.content_id));
+}
+function toggleSelect(id, index, shift) {
+  const sel = state.selected;
+  if (shift && state.anchorIndex != null) {
+    const [a, b] = [Math.min(state.anchorIndex, index), Math.max(state.anchorIndex, index)];
+    const on = !sel.has(id);
+    for (let i = a; i <= b; i += 1) {
+      const rid = visibleRows[i]?.content_id;
+      if (!rid) continue;
+      if (on) sel.add(rid);
+      else sel.delete(rid);
+    }
+  } else {
+    if (sel.has(id)) sel.delete(id);
+    else sel.add(id);
+    state.anchorIndex = index;
+  }
+  render();
 }
 
-// ---------- Shared popover (kebab menu + the one "Move to…" tree) ----------
+// ---------- Popover (kebab + move) ----------
 
 let popoverEl = null;
 let popoverCleanup = null;
@@ -239,147 +337,130 @@ function closePopover() {
   popoverEl = null;
   popoverCleanup = null;
 }
-
 function openPopover(anchor, build) {
   closePopover();
-  const el = document.createElement('div');
-  el.className = 'popover';
-  el.setAttribute('role', 'menu');
-  build(el);
-  document.body.appendChild(el);
+  const box = h('div', { class: 'd-popover', role: 'menu' });
+  build(box);
+  document.body.appendChild(box);
   const rect = anchor.getBoundingClientRect();
   const left = Math.max(
     8,
-    Math.min(rect.right - el.offsetWidth, window.innerWidth - el.offsetWidth - 8),
+    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
   );
   let top = rect.bottom + 4;
-  if (top + el.offsetHeight > window.innerHeight - 8) {
-    top = Math.max(8, rect.top - el.offsetHeight - 4);
-  }
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
-  const onDocClick = (e) => {
-    if (!el.contains(e.target) && !anchor.contains(e.target)) closePopover();
-  };
-  const onKey = (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      closePopover();
-      if (anchor.isConnected) anchor.focus();
-      return;
-    }
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    const items = [...el.querySelectorAll('.popover-item:not(:disabled)')];
-    if (items.length === 0) return;
-    e.preventDefault();
-    const idx = items.indexOf(document.activeElement);
-    const next =
-      e.key === 'ArrowDown'
-        ? (items[idx + 1] ?? items[0])
-        : (items[idx - 1] ?? items[items.length - 1]);
-    next.focus();
+  if (top + box.offsetHeight > window.innerHeight - 8)
+    top = Math.max(8, rect.top - box.offsetHeight - 4);
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
+  const onDoc = (e) => {
+    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
   };
   const onScroll = (e) => {
-    if (!el.contains(e.target)) closePopover();
+    if (!box.contains(e.target)) closePopover();
   };
-  // Attach on the next tick so the opening click doesn't self-close; the
-  // cleanup clears the timer too, or a same-tick close would leak the handler.
-  const clickTimer = setTimeout(() => document.addEventListener('click', onDocClick), 0);
-  document.addEventListener('keydown', onKey, true);
+  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
   window.addEventListener('resize', closePopover);
   window.addEventListener('scroll', onScroll, true);
-  popoverEl = el;
+  popoverEl = box;
   popoverCleanup = () => {
-    clearTimeout(clickTimer);
-    document.removeEventListener('click', onDocClick);
-    document.removeEventListener('keydown', onKey, true);
+    clearTimeout(timer);
+    document.removeEventListener('click', onDoc);
     window.removeEventListener('resize', closePopover);
     window.removeEventListener('scroll', onScroll, true);
   };
-  el.querySelector('.popover-item:not(:disabled)')?.focus();
 }
-
-function menuItem(label, onClick, { danger = false } = {}) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = `popover-item${danger ? ' danger' : ''}`;
-  btn.setAttribute('role', 'menuitem');
-  btn.textContent = label;
-  btn.addEventListener('click', onClick);
+function popItem(label, onClick, { danger = false, disabled = false, iconHtml = null } = {}) {
+  const btn = h('button', {
+    type: 'button',
+    class: `d-popover-item${danger ? ' danger' : ''}`,
+    role: 'menuitem',
+    disabled: disabled || undefined,
+    onclick: onClick,
+  });
+  if (iconHtml) btn.appendChild(el(iconHtml));
+  btn.appendChild(document.createTextNode(label));
   return btn;
 }
 
-// One shared "Move to…" tree for kebab menus and the bulk toolbar — the
-// old per-row <select> rebuilt the whole folder tree for every row.
+// One shared "Move to…" tree for the kebab and the bulk toolbar.
 function openMovePopover(anchor, docs) {
   const ids = docs.map((d) => d.content_id);
   const single = docs.length === 1 ? docs[0] : null;
-  openPopover(anchor, (el) => {
-    const head = document.createElement('p');
-    head.className = 'popover-head';
-    head.textContent = single
-      ? `Move “${single.title ?? 'document'}” to`
-      : `Move ${docs.length} documents to`;
-    el.appendChild(head);
-    const list = document.createElement('div');
-    list.className = 'popover-scroll';
-    const addTarget = (folderId, name, depth) => {
-      const btn = menuItem(name, async () => {
+  openPopover(anchor, (box) => {
+    box.appendChild(
+      h(
+        'p',
+        { class: 'd-popover-head' },
+        single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
+      ),
+    );
+    const scroll = h('div', { class: 'd-popover-scroll' });
+    const target = (folderId, name, depth) => {
+      const btn = popItem(name, async () => {
         closePopover();
         await moveDocs(ids, folderId, name);
       });
-      btn.style.paddingLeft = `${0.75 + depth * 0.85}rem`;
+      btn.style.paddingLeft = `${0.7 + depth * 0.85}rem`;
       if (single && (single.folder_id ?? null) === folderId) btn.disabled = true;
-      list.appendChild(btn);
+      scroll.appendChild(btn);
     };
-    addTarget(null, 'Documents', 0);
-    const walk = (parentId, depth) => {
-      for (const f of childrenOf(parentId)) {
-        addTarget(f.folder_id, f.name, depth);
-        walk(f.folder_id, depth + 1);
-      }
-    };
-    walk(null, 1);
-    el.appendChild(list);
+    target(null, 'Documents', 0);
+    for (const f of data.folders) target(f.folder_id, f.name, 1);
+    box.appendChild(scroll);
   });
 }
 
-function openDocMenu(anchor, doc, cells) {
-  openPopover(anchor, (el) => {
-    const download = document.createElement('a');
-    download.className = 'popover-item';
-    download.setAttribute('role', 'menuitem');
-    download.href = doc.content_uri;
-    download.download = doc.title ?? 'file';
-    download.textContent = 'Download';
-    download.addEventListener('click', () => closePopover());
-    el.appendChild(download);
-    el.appendChild(
-      menuItem('Rename', () => {
+function openDocMenu(anchor, doc) {
+  closePopover();
+  openPopover(anchor, (box) => {
+    box.appendChild(
+      popItem('Open', () => {
         closePopover();
-        openDocEditor(cells, doc);
+        openQuick(doc.content_id);
       }),
     );
-    el.appendChild(menuItem('Move to…', () => openMovePopover(anchor, [doc])));
-    const trash = menuItem(
-      'Trash',
-      async () => {
-        if (!armConfirm(trash, { armedLabel: 'Trash — sure?' })) return;
-        closePopover();
-        await trashDoc(doc);
+    const dl = h(
+      'a',
+      {
+        class: 'd-popover-item',
+        role: 'menuitem',
+        href: doc.content_uri,
+        download: doc.title ?? 'file',
+        onclick: closePopover,
       },
-      { danger: true },
+      'Download',
     );
-    el.appendChild(trash);
+    box.appendChild(dl);
+    box.appendChild(
+      popItem('Rename', () => {
+        closePopover();
+        startRenameDoc(doc);
+      }),
+    );
+    box.appendChild(popItem('Move to…', () => openMovePopover(anchor, [doc])));
+    box.appendChild(h('div', { class: 'd-popover-sep' }));
+    box.appendChild(
+      popItem(
+        'Trash',
+        async (e) => {
+          const btn = e.currentTarget;
+          if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
+          closePopover();
+          await trashDoc(doc);
+        },
+        { danger: true },
+      ),
+    );
   });
 }
 
-// ---------- Single-document writes ----------
+// ---------- Document writes ----------
 
 async function trashDoc(doc) {
   const outcome = await act('trash', { content_id: doc.content_id });
   if (!narrate(outcome)) return;
-  toast(`“${doc.title ?? 'Document'}” moved to trash.`, {
+  if (state.detailsId === doc.content_id) state.detailsId = null;
+  toast(`Moved to trash · receipted.`, {
     undoLabel: 'Undo',
     onUndo: async () => {
       const back = await act('restore', { content_id: doc.content_id });
@@ -389,12 +470,20 @@ async function trashDoc(doc) {
   await refresh();
 }
 
-async function moveDocs(ids, folderId, folderName) {
+async function restoreDoc(doc) {
+  const outcome = await act('restore', { content_id: doc.content_id });
+  if (narrate(outcome)) {
+    toast('Restored to its folder · receipted.');
+    await refresh();
+  }
+}
+
+async function moveDocs(ids, folderId, name) {
   const input = (id) => ({ content_id: id, ...(folderId == null ? {} : { folder_id: folderId }) });
   if (ids.length === 1) {
     const outcome = await act('move', input(ids[0]));
     if (!narrate(outcome)) return;
-    toast(`Moved to ${folderName}.`);
+    toast(`Moved to ${name} · receipted.`);
     clearSelection();
     await refresh();
     return;
@@ -402,12 +491,24 @@ async function moveDocs(ids, folderId, folderName) {
   await runBulk(ids, (id) => act('move', input(id)), {
     progress: 'Moving',
     done: 'Moved',
-    suffix: ` to ${folderName}`,
+    suffix: ` to ${name}`,
   });
 }
 
-// Loop an action over many rows: live progress in the notice banner,
-// keep going past failures, one summary toast at the end.
+async function startRenameDoc(doc) {
+  const title = window.prompt?.('Rename document', doc.title ?? '');
+  if (title == null) return;
+  const trimmed = title.trim();
+  if (!trimmed || trimmed === doc.title) return;
+  const outcome = await act('rename', { content_id: doc.content_id, title: trimmed });
+  if (narrate(outcome)) {
+    toast('Renamed · receipted.');
+    await refresh();
+  }
+}
+
+// Loop an action over many rows: live progress, keep going past failures,
+// one summary toast at the end.
 async function runBulk(ids, run, { progress, done, suffix = '' }) {
   const n = ids.length;
   let ok = 0;
@@ -423,14 +524,46 @@ async function runBulk(ids, run, { progress, done, suffix = '' }) {
   notice(
     failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
   );
-  const parts = [`${done} ${ok} of ${n}${suffix}.`];
+  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
   if (parked > 0) parts.push(`${parked} waiting for approval.`);
   toast(parts.join(' '));
   clearSelection();
   await refresh();
 }
 
-// ---------- Upload (fileToDataUri — shared pattern across apps) ----------
+// ---------- Folder writes ----------
+
+async function createFolder(name) {
+  const outcome = await act('create-folder', { name });
+  if (narrate(outcome)) {
+    state.creatingFolder = false;
+    toast(`Folder “${name}” created · receipted.`);
+    await refresh();
+  } else {
+    render();
+  }
+}
+async function renameFolder(folderId, name) {
+  const outcome = await act('rename-folder', { folder_id: folderId, name });
+  if (narrate(outcome)) {
+    state.renamingFolderId = null;
+    toast('Folder renamed · receipted.');
+    await refresh();
+  } else {
+    render();
+  }
+}
+async function deleteFolder(folder) {
+  const outcome = await act('delete-folder', { folder_id: folder.folder_id });
+  if (narrate(outcome)) {
+    if (state.nav.kind === 'folder' && state.nav.folderId === folder.folder_id)
+      state.nav = { kind: 'all' };
+    toast('Folder deleted · receipted.');
+    await refresh();
+  }
+}
+
+// ---------- Upload (picker + drag-and-drop) ----------
 
 function fileToDataUri(file) {
   return new Promise((resolve, reject) => {
@@ -441,25 +574,21 @@ function fileToDataUri(file) {
   });
 }
 
-// One loop for the picker and drag-and-drop: per-file progress, keep going
-// past failures, then a summary toast (plus a notice listing what fell out).
 async function uploadFiles(fileList) {
   if (uploading) return;
   const files = [...fileList];
   if (files.length === 0) return;
-  const folderId = trashView || searchQuery ? null : currentFolder;
+  const folderId = state.nav.kind === 'folder' ? state.nav.folderId : null;
   const skipped = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
   const accepted = files.filter((f) => f.size <= MAX_UPLOAD_BYTES);
   const failures = [];
-  if (skipped.length === 1) {
+  if (skipped.length === 1)
     failures.push(
       `“${skipped[0].name}” is ${fmtBytes(skipped[0].size)} — files up to 8 MB travel well.`,
     );
-  } else if (skipped.length > 1) {
-    failures.push(`Skipped ${skipped.length} files over 8 MB.`);
-  }
+  else if (skipped.length > 1) failures.push(`Skipped ${skipped.length} files over 8 MB.`);
+
   uploading = true;
-  $('uploadButton').disabled = true;
   let ok = 0;
   let parked = 0;
   for (let i = 0; i < accepted.length; i += 1) {
@@ -482,138 +611,953 @@ async function uploadFiles(fileList) {
     else failures.push(`“${file.name}”: ${friendlyOutcome(outcome) ?? 'the upload failed'}`);
   }
   uploading = false;
-  $('uploadButton').disabled = false;
   notice(failures.join(' '));
   if (accepted.length > 0) {
-    const parts = [`Uploaded ${ok} of ${accepted.length}.`];
+    const parts = [`Uploaded ${ok} of ${accepted.length} · receipted.`];
     if (parked > 0) parts.push(`${parked} waiting for approval.`);
     toast(parts.join(' '));
   }
   await refresh();
 }
 
-$('uploadButton').addEventListener('click', () => $('uploadInput').click());
-$('emptyUploadButton').addEventListener('click', () => $('uploadInput').click());
+// ---------- Sidebar render ----------
 
-$('uploadInput').addEventListener('change', async () => {
-  const input = $('uploadInput');
-  const files = [...input.files];
-  input.value = '';
-  await uploadFiles(files);
-});
-
-// Drag-and-drop: a window-level drop zone with a highlight overlay.
-let dragDepth = 0;
-
-function dragHasFiles(e) {
-  return [...(e.dataTransfer?.types ?? [])].includes('Files');
+function navItem({ icon, label, active, count, onClick }) {
+  const item = h('button', {
+    type: 'button',
+    class: 'd-nav-item',
+    'aria-current': String(!!active),
+    onclick: onClick,
+  });
+  item.appendChild(el(icon));
+  item.appendChild(h('span', {}, label));
+  if (count != null) item.appendChild(h('span', { class: 'd-nav-count' }, count));
+  return item;
 }
 
-window.addEventListener('dragenter', (e) => {
-  if (!dragHasFiles(e)) return;
-  e.preventDefault();
-  dragDepth += 1;
-  const target =
-    trashView || searchQuery ? 'Documents' : (folderById(currentFolder)?.name ?? 'Documents');
-  $('dropTarget').textContent = `Drop to upload to ${target}`;
-  $('dropOverlay').hidden = false;
-});
+function renderSidebar() {
+  const counts = {
+    all: activeFiles().length,
+    starred: 0,
+    trash: trashedFiles().length,
+  };
 
-window.addEventListener('dragover', (e) => {
-  if (dragHasFiles(e)) e.preventDefault();
-});
+  const nav = $('smartNav');
+  nav.replaceChildren(
+    navItem({
+      icon: I.allDocs,
+      label: 'All documents',
+      active: state.nav.kind === 'all',
+      count: counts.all,
+      onClick: () => selectNav({ kind: 'all' }),
+    }),
+    navItem({
+      icon: I.clock,
+      label: 'Recent',
+      active: state.nav.kind === 'recent',
+      onClick: () => selectNav({ kind: 'recent' }),
+    }),
+    navItem({
+      icon: I.star,
+      label: 'Starred',
+      active: state.nav.kind === 'starred',
+      count: counts.starred,
+      onClick: () => selectNav({ kind: 'starred' }),
+    }),
+  );
 
-window.addEventListener('dragleave', () => {
-  if ($('dropOverlay').hidden) return;
-  dragDepth = Math.max(0, dragDepth - 1);
-  if (dragDepth === 0) $('dropOverlay').hidden = true;
-});
+  const list = $('folderList');
+  list.replaceChildren();
 
-window.addEventListener('drop', async (e) => {
-  e.preventDefault();
-  dragDepth = 0;
-  $('dropOverlay').hidden = true;
-  const files = e.dataTransfer?.files;
-  if (files?.length) await uploadFiles(files);
-});
-
-// ---------- New folder ----------
-
-$('newFolderButton').addEventListener('click', () => {
-  const form = $('folderForm');
-  form.hidden = !form.hidden;
-  if (!form.hidden) {
-    const parent = trashView ? null : currentFolder;
-    $('folderFormTarget').textContent =
-      `In ${parent ? (folderById(parent)?.name ?? 'Documents') : 'Documents'}`;
-    $('folderNameInput').focus();
+  if (state.creatingFolder) {
+    const input = h('input', {
+      type: 'text',
+      placeholder: 'Folder name…',
+      'aria-label': 'New folder name',
+    });
+    const create = h('button', { type: 'button' }, 'Create');
+    const commit = () => {
+      const name = input.value.trim();
+      if (name) createFolder(name);
+      else {
+        state.creatingFolder = false;
+        render();
+      }
+    };
+    create.addEventListener('click', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      }
+      if (e.key === 'Escape') {
+        state.creatingFolder = false;
+        render();
+      }
+    });
+    list.appendChild(h('div', { class: 'd-folder-edit' }, input, create));
+    setTimeout(() => input.focus(), 0);
   }
-});
 
-$('cancelFolder').addEventListener('click', () => {
-  $('folderForm').hidden = true;
-  $('folderNameInput').value = '';
-});
+  for (const f of data.folders) {
+    if (state.renamingFolderId === f.folder_id) {
+      const input = h('input', { type: 'text', 'aria-label': 'Folder name' });
+      input.value = f.name;
+      const save = h('button', { type: 'button' }, 'Save');
+      const commit = () => {
+        const name = input.value.trim();
+        if (name && name !== f.name) renameFolder(f.folder_id, name);
+        else {
+          state.renamingFolderId = null;
+          render();
+        }
+      };
+      save.addEventListener('click', commit);
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+        if (e.key === 'Escape') {
+          state.renamingFolderId = null;
+          render();
+        }
+      });
+      list.appendChild(h('div', { class: 'd-folder-edit' }, input, save));
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 0);
+      continue;
+    }
+    const count = activeFiles().filter((d) => (d.folder_id ?? null) === f.folder_id).length;
+    const active = state.nav.kind === 'folder' && state.nav.folderId === f.folder_id;
+    const item = navItem({
+      icon: I.folder,
+      label: f.name,
+      active,
+      count: count || '',
+      onClick: () => selectNav({ kind: 'folder', folderId: f.folder_id }),
+    });
+    const rename = h('button', {
+      type: 'button',
+      class: 'd-tool-btn',
+      'aria-label': `Rename ${f.name}`,
+      onclick: (e) => {
+        e.stopPropagation();
+        state.renamingFolderId = f.folder_id;
+        render();
+      },
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"/></svg>',
+    });
+    const del = h('button', {
+      type: 'button',
+      class: 'd-tool-btn danger',
+      'aria-label': `Delete ${f.name}`,
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
+    });
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!armConfirm(del, { armedLabel: '×?' })) return;
+      deleteFolder(f);
+    });
+    const tools = h('span', { class: 'd-folder-tools' }, rename, del);
+    list.appendChild(h('div', { class: 'd-folder' }, item, tools));
+  }
 
-$('folderForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = $('folderNameInput').value.trim();
-  if (!name) {
-    notice('Give the folder a name.');
+  list.appendChild(
+    navItem({
+      icon: I.trash,
+      label: 'Trash',
+      active: state.nav.kind === 'trash',
+      count: counts.trash || '',
+      onClick: () => selectNav({ kind: 'trash' }),
+    }),
+  );
+
+  // Storage → an honest footprint of what the drive is holding right now.
+  // The vault gives no account-wide total, so we report real bytes + count
+  // over the loaded window instead of a fabricated "used / total".
+  const files = activeFiles();
+  const bytes = files.reduce((s, f) => s + (f.byte_size ?? 0), 0);
+  const store = $('storage');
+  store.replaceChildren(
+    h(
+      'div',
+      { class: 'd-storage-top' },
+      h('span', { class: 'lbl' }, 'Footprint'),
+      h('span', { class: 'val' }, String(files.length)),
+    ),
+    h(
+      'div',
+      { class: 'd-storage-label' },
+      `${fmtBytes(bytes)} across ${files.length} document${files.length === 1 ? '' : 's'}${driveTruncated ? ' — newest in view' : ''}`,
+    ),
+  );
+}
+
+// ---------- Toolbar render ----------
+
+function renderToolbar() {
+  const rows = visibleRows;
+  const titles = { all: 'All documents', recent: 'Recent', starred: 'Starred', trash: 'Trash' };
+  let title = state.nav.kind === 'folder' ? folderName(state.nav.folderId) : titles[state.nav.kind];
+  if (state.search.trim()) title = `Results for “${state.search.trim()}”`;
+  $('activeTitle').textContent = title;
+
+  const n = rows.length;
+  let sub;
+  if (state.search.trim()) sub = `${n} match${n === 1 ? '' : 'es'} “${state.search.trim()}”`;
+  else if (state.nav.kind === 'trash') sub = `${n} in trash · auto-purge after 30 days`;
+  else if (state.nav.kind === 'recent') sub = 'Newest across every folder';
+  else if (state.nav.kind === 'starred') sub = 'Starring isn’t wired to your vault yet';
+  else sub = `${n} document${n === 1 ? '' : 's'}`;
+  $('activeSub').textContent = sub;
+
+  const chips = [
+    ['all', 'All'],
+    ['pdf', 'PDFs'],
+    ['image', 'Images'],
+    ['doc', 'Docs'],
+    ['sheet', 'Sheets'],
+  ];
+  $('typeChips').replaceChildren(
+    ...chips.map(([key, label]) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'd-chip',
+          'aria-pressed': String(state.type === key),
+          onclick: () => {
+            state.type = key;
+            clearSelection();
+            render();
+          },
+        },
+        label,
+      ),
+    ),
+  );
+
+  const sortNames = { added: 'Date', name: 'Name', size: 'Size' };
+  $('sortLabel').textContent = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
+
+  $('viewGrid').setAttribute('aria-pressed', String(state.view === 'grid'));
+  $('viewList').setAttribute('aria-pressed', String(state.view === 'list'));
+}
+
+// ---------- Bulk bar ----------
+
+function renderBulk() {
+  const bar = $('bulkBar');
+  const n = state.selected.size;
+  bar.hidden = n === 0;
+  if (n === 0) return;
+  const inTrash = state.nav.kind === 'trash' && !state.search.trim();
+  const actions = h('div', { class: 'd-bulk-actions' });
+  if (inTrash) {
+    actions.appendChild(
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'd-bulk-btn',
+          onclick: () =>
+            runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
+              progress: 'Restoring',
+              done: 'Restored',
+            }),
+        },
+        'Restore',
+      ),
+    );
+  } else {
+    const move = h('button', { type: 'button', class: 'd-bulk-btn' }, 'Move to…');
+    move.addEventListener('click', () => openMovePopover(move, selectedDocs()));
+    actions.appendChild(move);
+    const trash = h('button', { type: 'button', class: 'd-bulk-btn danger' }, 'Trash');
+    trash.addEventListener('click', () => {
+      if (!armConfirm(trash, { armedLabel: `Trash ${n} — sure?` })) return;
+      runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
+        progress: 'Trashing',
+        done: 'Trashed',
+      });
+    });
+    actions.appendChild(trash);
+  }
+  actions.appendChild(
+    h(
+      'button',
+      {
+        type: 'button',
+        class: 'd-bulk-btn',
+        onclick: () => {
+          clearSelection();
+          render();
+        },
+      },
+      'Clear',
+    ),
+  );
+  bar.replaceChildren(h('span', { class: 'd-bulk-count' }, `${n} selected`), actions);
+}
+
+// ---------- Rows: grid + list ----------
+
+function checkbox(cls, selected, onClick, label) {
+  const btn = h('button', {
+    type: 'button',
+    class: cls,
+    'aria-pressed': String(selected),
+    'aria-label': label,
+    onclick: onClick,
+  });
+  if (selected) btn.appendChild(el(I.check));
+  return btn;
+}
+
+function gridCard(doc, index) {
+  const m = typeMeta(doc.media_type);
+  const selected = state.selected.has(doc.content_id);
+  const card = h('div', { class: 'd-card', 'data-selected': String(selected) });
+
+  const thumb = h('div', { class: 'd-thumb', style: `background:${tintBg(m.cv, 15)};` });
+  if (isImage(doc)) {
+    thumb.appendChild(h('img', { src: doc.content_uri, alt: '', loading: 'lazy' }));
+  } else {
+    thumb.appendChild(h('span', { class: 'd-thumb-label', style: `color:var(${m.cv});` }, m.label));
+    thumb.appendChild(
+      h(
+        'div',
+        { class: 'd-thumb-lines' },
+        h('i', { style: `width:70%;background:var(${m.cv});opacity:.18;` }),
+        h('i', { style: `width:90%;background:var(${m.cv});opacity:.14;` }),
+        h('i', { style: `width:55%;background:var(${m.cv});opacity:.14;` }),
+      ),
+    );
+  }
+  thumb.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openQuick(doc.content_id);
+  });
+  card.appendChild(thumb);
+
+  card.appendChild(
+    checkbox(
+      'd-card-select',
+      selected,
+      (e) => {
+        e.stopPropagation();
+        toggleSelect(doc.content_id, index, e.shiftKey);
+      },
+      `Select ${doc.title ?? 'document'}`,
+    ),
+  );
+
+  card.appendChild(
+    h(
+      'div',
+      { class: 'd-card-body' },
+      h('div', { class: 'd-card-title' }, doc.title ?? 'Untitled'),
+      h('div', { class: 'd-card-meta' }, `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`),
+    ),
+  );
+
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button, a')) return;
+    openDetails(doc.content_id);
+  });
+  return card;
+}
+
+function listRow(doc, index) {
+  const m = typeMeta(doc.media_type);
+  const selected = state.selected.has(doc.content_id);
+  const trashed = state.nav.kind === 'trash' && !state.search.trim();
+  const row = h('div', { class: 'd-row', 'data-selected': String(selected) });
+
+  row.appendChild(
+    checkbox(
+      'd-check',
+      selected,
+      (e) => {
+        e.stopPropagation();
+        toggleSelect(doc.content_id, index, e.shiftKey);
+      },
+      `Select ${doc.title ?? 'document'}`,
+    ),
+  );
+
+  const badge = h('button', {
+    type: 'button',
+    class: 'd-badge',
+    style: `background:${tintBg(m.cv, 16)};`,
+    'aria-label': `Preview ${doc.title ?? 'document'}`,
+    onclick: (e) => {
+      e.stopPropagation();
+      openQuick(doc.content_id);
+    },
+  });
+  if (isImage(doc)) badge.appendChild(h('img', { src: doc.content_uri, alt: '', loading: 'lazy' }));
+  else badge.appendChild(h('span', { style: `color:var(${m.cv});` }, m.label));
+  row.appendChild(badge);
+
+  const main = h('div', { class: 'd-row-main' });
+  const title = h(
+    'button',
+    {
+      type: 'button',
+      class: 'd-row-title',
+      onclick: (e) => {
+        e.stopPropagation();
+        openQuick(doc.content_id);
+      },
+    },
+    doc.title ?? 'Untitled',
+  );
+  main.appendChild(title);
+  if (state.search.trim() && doc.snippet) {
+    const snip = h('div', { class: 'd-snippet' });
+    snippetInto(snip, doc.snippet);
+    main.appendChild(snip);
+  }
+  // On narrow the wide columns are hidden, so the meta rides under the name.
+  if (state.narrow) {
+    let metaText;
+    if (trashed) metaText = `from ${folderName(doc.folder_id)} · ${purgeCountdown(doc.purge_at)}`;
+    else if (state.search.trim()) metaText = `in ${folderName(doc.folder_id)}`;
+    else metaText = `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`;
+    main.appendChild(h('div', { class: 'd-row-meta' }, metaText));
+  }
+  row.appendChild(main);
+
+  // Wide-only columns
+  row.appendChild(
+    h(
+      'span',
+      { class: 'd-cell where' },
+      trashed ? `from ${folderName(doc.folder_id)}` : folderName(doc.folder_id),
+    ),
+  );
+  row.appendChild(h('span', { class: 'd-cell size' }, fmtBytes(doc.byte_size)));
+  row.appendChild(
+    h(
+      'span',
+      { class: `d-cell added${trashed ? ' purge' : ''}` },
+      trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at),
+    ),
+  );
+
+  const end = h('div', { class: 'd-row-end' });
+  if (trashed) {
+    end.appendChild(
+      h(
+        'button',
+        {
+          type: 'button',
+          class: 'd-restore',
+          onclick: (e) => {
+            e.stopPropagation();
+            restoreDoc(doc);
+          },
+        },
+        'Restore',
+      ),
+    );
+  } else {
+    const kebab = h('button', {
+      type: 'button',
+      class: 'd-kebab',
+      'aria-label': `Actions for ${doc.title ?? 'document'}`,
+      'aria-haspopup': 'menu',
+      html: I.dots,
+    });
+    kebab.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDocMenu(kebab, doc);
+    });
+    end.appendChild(kebab);
+  }
+  row.appendChild(end);
+
+  row.addEventListener('click', (e) => {
+    if (e.target.closest('button, a, input')) return;
+    openDetails(doc.content_id);
+  });
+  return row;
+}
+
+function emptyState(icon, title, sub, actionEl) {
+  const box = $('empty');
+  const subEl = h('div', { class: 'd-empty-sub' }, sub);
+  if (actionEl) subEl.appendChild(actionEl);
+  box.replaceChildren(
+    h('div', { class: 'd-empty-icon' }, el(icon)),
+    h('div', { class: 'd-empty-title' }, title),
+    subEl,
+  );
+  box.hidden = false;
+}
+
+function renderRows() {
+  const rows = visibleRows;
+  const grid = $('grid');
+  const listWrap = $('listWrap');
+  const listHead = $('listHead');
+  const list = $('list');
+  const empty = $('empty');
+  const foot = $('windowFoot');
+  grid.hidden = true;
+  listWrap.hidden = true;
+  empty.hidden = true;
+  foot.hidden = true;
+  grid.replaceChildren();
+  list.replaceChildren();
+
+  if (rows.length === 0) {
+    if (state.nav.kind === 'starred') {
+      emptyState(
+        I.star,
+        'Nothing starred',
+        'Starring is a personal marker — it isn’t backed by your vault yet, so this stays empty. Everything the drive holds lives in All documents.',
+      );
+    } else if (state.search.trim()) {
+      emptyState(
+        I.allDocs,
+        'No matches',
+        `No documents match “${state.search.trim()}”. Try fewer words.`,
+      );
+    } else if (state.nav.kind === 'trash') {
+      emptyState(I.trash, 'Trash is empty', 'Trashed documents purge after about 30 days.');
+    } else if (state.type !== 'all') {
+      emptyState(
+        I.allDocs,
+        'No matches',
+        'No documents of this type here. Clear the filter to see everything.',
+      );
+    } else if (state.nav.kind === 'folder') {
+      const up = h(
+        'button',
+        { type: 'button', onclick: () => $('uploadInput').click() },
+        'Upload to this folder',
+      );
+      emptyState(I.folder, 'Empty folder', 'Nothing filed here yet.', up);
+    } else if (activeFiles().length === 0) {
+      const up = h(
+        'button',
+        { type: 'button', onclick: () => $('uploadInput').click() },
+        'Upload your first document',
+      );
+      emptyState(
+        I.allDocs,
+        'Your drive is empty',
+        'Leases, IDs, warranties, tax forms — file the important stuff here.',
+        up,
+      );
+    } else {
+      emptyState(I.allDocs, 'Nothing here', 'No documents to show.');
+    }
     return;
   }
-  const parent = trashView ? null : currentFolder;
-  const outcome = await act('create-folder', {
-    name,
-    ...(parent != null ? { parent_folder_id: parent } : {}),
-  });
-  if (narrate(outcome)) {
-    $('folderForm').hidden = true;
-    $('folderNameInput').value = '';
-    await refresh();
+
+  if (state.view === 'grid') {
+    grid.hidden = false;
+    rows.forEach((doc, i) => grid.appendChild(gridCard(doc, i)));
+  } else {
+    listWrap.hidden = false;
+    listHead.hidden = state.narrow;
+    if (!state.narrow) renderListHead(rows);
+    rows.forEach((doc, i) => list.appendChild(listRow(doc, i)));
   }
-});
+
+  if (driveTruncated && !state.search.trim() && state.nav.kind !== 'starred') {
+    foot.hidden = false;
+    const more = h(
+      'button',
+      {
+        type: 'button',
+        onclick: async () => {
+          driveWindow += 200;
+          more.disabled = true;
+          await refresh();
+        },
+      },
+      'Show more',
+    );
+    foot.replaceChildren(
+      h('span', {}, `Showing your latest ${driveWindow} documents — older ones are a search away.`),
+      more,
+    );
+  }
+}
+
+function renderListHead(rows) {
+  const head = $('listHead');
+  const allSel = rows.length > 0 && rows.every((d) => state.selected.has(d.content_id));
+  const check = checkbox(
+    'd-check',
+    allSel,
+    () => {
+      if (allSel) for (const d of rows) state.selected.delete(d.content_id);
+      else for (const d of rows) state.selected.add(d.content_id);
+      state.anchorIndex = null;
+      render();
+    },
+    allSel ? 'Deselect all' : 'Select all',
+  );
+  head.replaceChildren(
+    check,
+    h('span', { style: 'width:34px;' }),
+    h('span', { class: 'd-col name' }, 'Name'),
+    h('span', { class: 'd-col where' }, 'Where'),
+    h('span', { class: 'd-col size' }, 'Size'),
+    h('span', { class: 'd-col added' }, 'Added'),
+    h('span', { class: 'd-col end' }),
+  );
+}
+
+// ---------- Details drawer ----------
+
+function openDetails(id) {
+  state.detailsId = id;
+  state.quickId = null;
+  renderQuick();
+  renderDetails();
+}
+function closeDetails() {
+  state.detailsId = null;
+  renderDetails();
+}
+
+function renderDetails() {
+  const root = $('detailsRoot');
+  const doc = state.detailsId ? data.documents.find((d) => d.content_id === state.detailsId) : null;
+  if (!doc) {
+    root.replaceChildren();
+    return;
+  }
+  const m = typeMeta(doc.media_type);
+  const trashed = doc.trashed;
+
+  const hero = h('div', { class: 'd-hero', style: `background:${tintBg(m.cv, 16)};` });
+  if (isImage(doc)) hero.appendChild(h('img', { src: doc.content_uri, alt: '' }));
+  else hero.appendChild(h('span', { style: `color:var(${m.cv});` }, m.label));
+
+  const actions = h(
+    'div',
+    { class: 'd-detail-actions' },
+    h(
+      'button',
+      { type: 'button', class: 'd-detail-btn', onclick: () => openQuick(doc.content_id) },
+      'Open',
+    ),
+    h(
+      'a',
+      { class: 'd-detail-btn', href: doc.content_uri, download: doc.title ?? 'file' },
+      'Download',
+    ),
+  );
+
+  const grid = h(
+    'dl',
+    { class: 'd-detail-grid' },
+    h('dt', {}, 'Type'),
+    h('dd', {}, m.name),
+    h('dt', {}, 'Size'),
+    h('dd', {}, fmtBytes(doc.byte_size)),
+    h('dt', {}, trashed ? 'Was in' : 'Folder'),
+    h('dd', {}, folderName(doc.folder_id)),
+    h('dt', {}, trashed ? 'Purges' : 'Added'),
+    h('dd', {}, trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)),
+  );
+
+  // Activity — only what the projection can honestly derive: this document was
+  // uploaded (created_at) and filed into its folder. Each is a real receipted
+  // vault write, so it wears a receipt chip.
+  const events = [];
+  if (doc.folder_id != null)
+    events.push({ text: `Filed in ${folderName(doc.folder_id)}`, date: fmtFull(doc.created_at) });
+  events.push({ text: 'Uploaded to your vault', date: fmtFull(doc.created_at) });
+  const activity = h('div', {});
+  events.forEach((ev, i) => {
+    activity.appendChild(
+      h(
+        'div',
+        { class: 'd-activity-item' },
+        h(
+          'div',
+          { class: 'd-activity-rail' },
+          h('span', { class: 'd-activity-dot' }),
+          i < events.length - 1 ? h('span', { class: 'd-activity-line' }) : null,
+        ),
+        h(
+          'div',
+          {},
+          h('div', { class: 'd-activity-text' }, ev.text),
+          h(
+            'div',
+            { class: 'd-activity-meta' },
+            h('span', { class: 'd-activity-date' }, ev.date),
+            h('span', { class: 'd-receipt-chip' }, 'receipt'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  const foot = h('div', { class: 'd-details-foot' });
+  if (trashed) {
+    foot.appendChild(
+      h(
+        'button',
+        { type: 'button', class: 'd-detail-btn', onclick: () => restoreDoc(doc) },
+        'Restore',
+      ),
+    );
+  } else {
+    const move = h('button', { type: 'button', class: 'd-detail-btn' }, 'Move');
+    move.addEventListener('click', () => openMovePopover(move, [doc]));
+    foot.appendChild(move);
+    const trash = h('button', { type: 'button', class: 'd-detail-btn danger' }, 'Trash');
+    trash.addEventListener('click', () => {
+      if (!armConfirm(trash, { armedLabel: 'Trash — sure?' })) return;
+      trashDoc(doc);
+    });
+    foot.appendChild(trash);
+  }
+
+  const drawer = h(
+    'aside',
+    { class: 'd-details', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Document details' },
+    h(
+      'div',
+      { class: 'd-details-head' },
+      h('span', { class: 'lbl' }, 'Details'),
+      h('button', {
+        type: 'button',
+        class: 'd-details-x',
+        'aria-label': 'Close',
+        onclick: closeDetails,
+        html: I.close,
+      }),
+    ),
+    h(
+      'div',
+      { class: 'd-details-body' },
+      hero,
+      h('div', { class: 'd-detail-name' }, doc.title ?? 'Untitled'),
+      h('div', { class: 'd-detail-ext' }, `${extOf(doc)} · ${fmtBytes(doc.byte_size)}`),
+      actions,
+      h('div', { class: 'd-detail-label' }, 'Details'),
+      grid,
+      h('div', { class: 'd-detail-label' }, 'Activity'),
+      activity,
+    ),
+    foot,
+  );
+
+  root.replaceChildren(h('div', { class: 'd-details-backdrop', onclick: closeDetails }), drawer);
+}
+
+function extOf(doc) {
+  const t = String(doc.title ?? '');
+  const dot = t.lastIndexOf('.');
+  if (dot > 0 && dot < t.length - 1) return `.${t.slice(dot + 1).toLowerCase()}`;
+  return typeMeta(doc.media_type).label.toLowerCase();
+}
+
+// ---------- Quick-look ----------
+
+let lastQuickId = null;
+
+function openQuick(id) {
+  state.quickId = id;
+  renderQuick();
+}
+function closeQuick() {
+  state.quickId = null;
+  renderQuick();
+}
+function quickStep(delta) {
+  const idx = visibleRows.findIndex((d) => d.content_id === state.quickId);
+  const next = idx < 0 ? undefined : visibleRows[idx + delta];
+  if (next) openQuick(next.content_id);
+}
+
+function renderQuick() {
+  const root = $('quickRoot');
+  const doc = state.quickId ? data.documents.find((d) => d.content_id === state.quickId) : null;
+  if (!doc) {
+    root.replaceChildren();
+    lastQuickId = null;
+    return;
+  }
+  if (doc.content_id === lastQuickId && root.firstElementChild) return; // avoid reloading an open iframe on unrelated renders
+  lastQuickId = doc.content_id;
+
+  const m = typeMeta(doc.media_type);
+  const idx = visibleRows.findIndex((d) => d.content_id === doc.content_id);
+
+  let stageInner;
+  if (isImage(doc)) {
+    stageInner = h('img', {
+      class: 'd-quick-image',
+      src: doc.content_uri,
+      alt: doc.title ?? 'Image',
+    });
+  } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
+    stageInner = h('iframe', {
+      class: 'd-quick-frame',
+      src: doc.content_uri,
+      title: doc.title ?? 'PDF',
+    });
+  } else {
+    // A document-page mock for docs / sheets / slides / other.
+    const page = h('div', { class: 'd-quick-page' });
+    page.appendChild(
+      h('i', {
+        style: `height:11px;width:44%;background:var(${m.cv});opacity:.85;margin-bottom:22px;`,
+      }),
+    );
+    const widths = [96, 88, 93, 70, 90, 82, 60];
+    widths.forEach((w, i) =>
+      page.appendChild(
+        h('i', {
+          style: `height:7px;width:${w}%;background:${i < 4 ? '#e6e7ea' : '#eceef1'};margin-bottom:${i === 3 ? 26 : 11}px;`,
+        }),
+      ),
+    );
+    stageInner = page;
+  }
+
+  const prev = h('button', {
+    type: 'button',
+    class: 'd-quick-nav prev',
+    'aria-label': 'Previous',
+    disabled: idx <= 0 || undefined,
+    onclick: () => quickStep(-1),
+    html: I.chevL,
+  });
+  const next = h('button', {
+    type: 'button',
+    class: 'd-quick-nav next',
+    'aria-label': 'Next',
+    disabled: idx < 0 || idx >= visibleRows.length - 1 || undefined,
+    onclick: () => quickStep(1),
+    html: I.chevR,
+  });
+
+  const overlay = h(
+    'div',
+    { class: 'd-quick', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Quick look' },
+    h(
+      'div',
+      { class: 'd-quick-top' },
+      h(
+        'span',
+        { class: 'd-quick-badge', style: `background:${tintBg(m.cv, 20)};color:var(${m.cv});` },
+        m.label,
+      ),
+      h('span', { class: 'd-quick-title' }, doc.title ?? 'Untitled'),
+      h(
+        'a',
+        { class: 'd-quick-btn', href: doc.content_uri, download: doc.title ?? 'file' },
+        el(I.download),
+        'Download',
+      ),
+      h('button', {
+        type: 'button',
+        class: 'd-quick-btn icon',
+        'aria-label': 'Close',
+        onclick: closeQuick,
+        html: I.close,
+      }),
+    ),
+    h('div', { class: 'd-quick-stage' }, prev, stageInner, next),
+    h(
+      'div',
+      { class: 'd-quick-foot' },
+      `${folderName(doc.folder_id)} · ${fmtBytes(doc.byte_size)} · added ${fmtFull(doc.created_at)}`,
+    ),
+  );
+  root.replaceChildren(overlay);
+}
+
+// ---------- New menu ----------
+
+function renderNewMenu() {
+  const menu = $('newMenu');
+  menu.hidden = !state.newMenuOpen;
+  $('newBtn').setAttribute('aria-expanded', String(state.newMenuOpen));
+  if (!state.newMenuOpen) {
+    menu.replaceChildren();
+    return;
+  }
+  const upload = h('button', {
+    type: 'button',
+    class: 'd-menu-item',
+    role: 'menuitem',
+    onclick: () => {
+      state.newMenuOpen = false;
+      renderNewMenu();
+      $('uploadInput').click();
+    },
+  });
+  upload.appendChild(el(I.upload));
+  upload.appendChild(document.createTextNode('Upload files'));
+  const folder = h('button', {
+    type: 'button',
+    class: 'd-menu-item',
+    role: 'menuitem',
+    onclick: () => {
+      state.newMenuOpen = false;
+      state.creatingFolder = true;
+      render();
+    },
+  });
+  folder.appendChild(el(I.folderPlus));
+  folder.appendChild(document.createTextNode('New folder'));
+  menu.replaceChildren(upload, h('div', { class: 'd-menu-sep' }), folder);
+}
 
 // ---------- Navigation ----------
 
-function clearSearch() {
-  searchSeq += 1; // an in-flight vault reply must not resurrect the results
-  searchQuery = '';
+function selectNav(nav) {
+  state.nav = nav;
+  clearSelection();
+  state.detailsId = null;
+  state.search = '';
   searchResults = null;
   $('searchInput').value = '';
-}
-
-function openFolder(folderId) {
-  currentFolder = folderId;
-  trashView = false;
-  clearSearch();
-  clearSelection();
-  ensurePathExpanded(folderId);
+  state.newMenuOpen = false;
+  state.creatingFolder = false;
+  state.renamingFolderId = null;
+  if (state.narrow) $('root').classList.remove('side-open');
+  renderDetails();
   render();
 }
 
-function openTrash() {
-  trashView = true;
-  clearSearch();
-  clearSelection();
-  render();
+// ---------- Master render ----------
+
+function render() {
+  // A folder can vanish under us (deleted elsewhere) — fall back to the top.
+  if (state.nav.kind === 'folder' && !folderById(state.nav.folderId)) state.nav = { kind: 'all' };
+  closePopover();
+  visibleRows = currentRows(); // one source of truth for toolbar counts + rows
+  renderSidebar();
+  renderNewMenu();
+  renderToolbar();
+  renderBulk();
+  renderRows();
 }
 
-$('trashButton').addEventListener('click', openTrash);
-window.addEventListener('focus', refresh);
-
-// ---------- Search: the vault's FTS5 index, flat across all folders ----------
-
-// Searching asks the vault, not a local copy: the FTS5 index matches every
-// document (title + text body) inside SQLite and returns only the hits, so
-// the app never greps an unbounded table in memory. `searchSeq` drops stale
-// replies when the owner types faster than the vault answers.
-let searchSeq = 0;
+// ---------- Search ----------
 
 const applySearch = debounce(async () => {
   const q = $('searchInput').value.trim();
-  if (q === searchQuery) return;
-  searchQuery = q;
+  if (q === state.search) return;
+  state.search = q;
   clearSelection();
   if (!q) {
     searchResults = null;
@@ -633,692 +1577,7 @@ const applySearch = debounce(async () => {
   render();
 }, 150);
 
-$('searchInput').addEventListener('input', applySearch);
-$('searchInput').addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  e.preventDefault();
-  if (!$('searchInput').value && !searchQuery) return;
-  clearSearch();
-  clearSelection();
-  render();
-});
-
-// ---------- Render: sidebar tree (collapsible, expanded to the current path) ----------
-
-function renderTree() {
-  const tree = $('folderTree');
-  tree.innerHTML = '';
-  tree.appendChild(renderTreeRow(null, 0));
-  const walk = (parentId, depth) => {
-    for (const f of childrenOf(parentId)) {
-      tree.appendChild(renderTreeRow(f, depth));
-      if (expanded.has(f.folder_id)) walk(f.folder_id, depth + 1);
-    }
-  };
-  walk(null, 1);
-  $('trashCount').textContent = String(trashedDocs().length || '');
-  $('trashButton').setAttribute('aria-current', String(trashView));
-}
-
-function renderTreeRow(folder, depth) {
-  const row = document.createElement('div');
-  row.className = 'tree-row';
-
-  const id = folder?.folder_id ?? null;
-  const kids = folder ? childrenOf(id) : [];
-  if (folder && kids.length > 0) {
-    const caret = document.createElement('button');
-    caret.type = 'button';
-    caret.className = 'tree-caret';
-    caret.textContent = '▸';
-    const open = expanded.has(id);
-    caret.setAttribute('aria-expanded', String(open));
-    caret.setAttribute('aria-label', `${open ? 'Collapse' : 'Expand'} ${folder.name}`);
-    caret.style.marginLeft = `${(depth - 1) * 0.7}rem`;
-    caret.addEventListener('click', () => {
-      if (expanded.has(id)) expanded.delete(id);
-      else expanded.add(id);
-      renderTree();
-    });
-    row.appendChild(caret);
-  } else {
-    const spacer = document.createElement('span');
-    spacer.className = 'tree-caret-spacer';
-    spacer.style.marginLeft = `${Math.max(0, depth - 1) * 0.7}rem`;
-    row.appendChild(spacer);
-  }
-
-  const item = document.createElement('button');
-  item.type = 'button';
-  item.className = 'tree-item';
-  item.setAttribute('aria-current', String(!trashView && !searchQuery && currentFolder === id));
-  const label = document.createElement('span');
-  label.className = 'tree-label';
-  label.textContent = folder ? folder.name : 'Documents';
-  const count = document.createElement('span');
-  count.className = 'tree-count';
-  count.textContent = String(docsIn(id, { trashed: false }).length || '');
-  item.append(label, count);
-  item.addEventListener('click', () => openFolder(id));
-  row.appendChild(item);
-
-  if (folder) {
-    const tools = document.createElement('span');
-    tools.className = 'tree-tools';
-    const rename = document.createElement('button');
-    rename.type = 'button';
-    rename.className = 'tool-btn';
-    rename.textContent = 'Rename';
-    rename.setAttribute('aria-label', `Rename folder ${folder.name}`);
-    rename.addEventListener('click', () => openFolderEditor(row, folder));
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'tool-btn danger';
-    del.textContent = 'Delete';
-    del.setAttribute('aria-label', `Delete folder ${folder.name}`);
-    del.addEventListener('click', async () => {
-      if (!armConfirm(del)) return;
-      const outcome = await act('delete-folder', { folder_id: folder.folder_id });
-      if (narrate(outcome)) {
-        if (currentFolder === folder.folder_id) currentFolder = folder.parent_id;
-        await refresh();
-      }
-    });
-    tools.append(rename, del);
-    row.appendChild(tools);
-  }
-  return row;
-}
-
-// Inline folder rename — swaps the row for an input + save/cancel.
-function openFolderEditor(row, folder) {
-  const editor = document.createElement('div');
-  editor.className = 'tree-edit';
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = folder.name;
-  input.setAttribute('aria-label', 'Folder name');
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'ghost';
-  save.textContent = 'Save';
-  const commit = async () => {
-    const name = input.value.trim();
-    if (!name || name === folder.name) {
-      render();
-      return;
-    }
-    const outcome = await act('rename-folder', { folder_id: folder.folder_id, name });
-    if (narrate(outcome)) await refresh();
-    else render();
-  };
-  save.addEventListener('click', commit);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commit();
-    }
-    if (e.key === 'Escape') render();
-  });
-  editor.append(input, save);
-  row.replaceChildren(editor);
-  input.focus();
-  input.select();
-}
-
-// ---------- Render: breadcrumb ----------
-
-function renderBreadcrumb() {
-  const bar = $('breadcrumb');
-  bar.innerHTML = '';
-  if (searchQuery) {
-    bar.appendChild(crumb(`Results for “${searchQuery}”`, true, () => {}));
-    return;
-  }
-  if (trashView) {
-    bar.appendChild(crumb('Trash', true, openTrash));
-    return;
-  }
-  const path = pathTo(currentFolder);
-  bar.appendChild(crumb('Documents', path.length === 0, () => openFolder(null)));
-  path.forEach((f, i) => {
-    const sep = document.createElement('span');
-    sep.textContent = '›';
-    sep.setAttribute('aria-hidden', 'true');
-    bar.appendChild(sep);
-    bar.appendChild(crumb(f.name, i === path.length - 1, () => openFolder(f.folder_id)));
-  });
-}
-
-function crumb(text, isCurrent, onClick) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'crumb';
-  btn.textContent = text;
-  btn.setAttribute('aria-current', String(isCurrent));
-  if (!isCurrent) btn.addEventListener('click', onClick);
-  return btn;
-}
-
-// ---------- Render: selection toolbar ----------
-
-function renderBulkBar() {
-  const bar = $('bulkBar');
-  bar.innerHTML = '';
-  bar.hidden = selected.size === 0;
-  if (selected.size === 0) return;
-
-  const label = document.createElement('span');
-  label.className = 'bulk-count';
-  label.textContent = `${selected.size} selected`;
-  bar.appendChild(label);
-
-  if (!trashView || searchQuery) {
-    const move = document.createElement('button');
-    move.type = 'button';
-    move.className = 'ghost';
-    move.textContent = 'Move to…';
-    move.addEventListener('click', () => openMovePopover(move, selectedDocs()));
-    bar.appendChild(move);
-
-    const trash = document.createElement('button');
-    trash.type = 'button';
-    trash.className = 'ghost danger';
-    trash.textContent = 'Trash';
-    trash.addEventListener('click', async () => {
-      if (!armConfirm(trash, { armedLabel: `Trash ${selected.size} — sure?` })) return;
-      await runBulk([...selected], (id) => act('trash', { content_id: id }), {
-        progress: 'Trashing',
-        done: 'Trashed',
-      });
-    });
-    bar.appendChild(trash);
-  } else {
-    const restore = document.createElement('button');
-    restore.type = 'button';
-    restore.className = 'ghost';
-    restore.textContent = 'Restore';
-    restore.addEventListener('click', async () => {
-      await runBulk([...selected], (id) => act('restore', { content_id: id }), {
-        progress: 'Restoring',
-        done: 'Restored',
-      });
-    });
-    bar.appendChild(restore);
-  }
-
-  const clear = document.createElement('button');
-  clear.type = 'button';
-  clear.className = 'ghost bulk-clear';
-  clear.textContent = 'Clear';
-  clear.addEventListener('click', () => {
-    clearSelection();
-    selectionChanged();
-  });
-  bar.appendChild(clear);
-}
-
-// ---------- Render: sort header ----------
-
-const SORT_COLUMNS = [
-  ['name', 'Name'],
-  ['size', 'Size'],
-  ['added', 'Added'],
-];
-
-function renderListHeader() {
-  const head = $('listHeader');
-  head.innerHTML = '';
-  head.hidden = visibleRows.length === 0;
-  if (visibleRows.length === 0) return;
-
-  const checkWrap = document.createElement('label');
-  checkWrap.className = 'doc-check';
-  const check = document.createElement('input');
-  check.type = 'checkbox';
-  const allPicked = visibleRows.every((d) => selected.has(d.content_id));
-  const somePicked = visibleRows.some((d) => selected.has(d.content_id));
-  check.checked = allPicked;
-  check.indeterminate = !allPicked && somePicked;
-  check.setAttribute('aria-label', allPicked ? 'Deselect all' : 'Select all');
-  check.addEventListener('click', () => {
-    if (check.checked) for (const d of visibleRows) selected.add(d.content_id);
-    else for (const d of visibleRows) selected.delete(d.content_id);
-    anchorIndex = null;
-    selectionChanged();
-  });
-  checkWrap.appendChild(check);
-  head.appendChild(checkWrap);
-
-  for (const [key, text] of SORT_COLUMNS) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `col-btn col-${key}`;
-    btn.dataset.active = String(sortKey === key);
-    btn.setAttribute(
-      'aria-label',
-      sortKey === key
-        ? `Sorted by ${text.toLowerCase()}, ${sortDir === 1 ? 'ascending' : 'descending'} — reverse`
-        : `Sort by ${text.toLowerCase()}`,
-    );
-    const label = document.createElement('span');
-    label.textContent = text;
-    btn.appendChild(label);
-    if (sortKey === key) {
-      const dir = document.createElement('span');
-      dir.className = 'col-dir';
-      dir.textContent = sortDir === 1 ? '↑' : '↓';
-      dir.setAttribute('aria-hidden', 'true');
-      btn.appendChild(dir);
-    }
-    btn.addEventListener('click', () => setSort(key));
-    head.appendChild(btn);
-  }
-  const spacer = document.createElement('span');
-  head.appendChild(spacer);
-}
-
-// ---------- Render: document rows ----------
-
-function renderDocs() {
-  const list = $('docList');
-  list.innerHTML = '';
-  const rows = currentRows();
-  visibleRows = rows;
-  const active = data.documents.filter((d) => !d.trashed);
-  $('emptyDrive').hidden = !(!searchQuery && !trashView && active.length === 0);
-  $('emptyFolder').hidden = !(!searchQuery && !trashView && active.length > 0 && rows.length === 0);
-  $('emptyTrash').hidden = !(!searchQuery && trashView && rows.length === 0);
-  $('emptySearch').hidden = !(searchQuery && rows.length === 0);
-  rows.forEach((doc, i) => {
-    list.appendChild(trashView && !searchQuery ? renderTrashRow(doc, i) : renderDocRow(doc, i));
-  });
-  // The window is honest about its edge: browsing (folders and trash alike)
-  // shows the latest filed slice, "Show more" grows it, search reaches
-  // everything beyond it.
-  if (driveTruncated && !searchQuery) {
-    const footer = document.createElement('div');
-    footer.className = 'window-footer';
-    const label = document.createElement('span');
-    label.textContent = `Showing your latest ${driveWindow} documents — older ones are a search away. `;
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'ghost';
-    more.textContent = 'Show more';
-    more.addEventListener('click', async () => {
-      driveWindow += 200;
-      more.disabled = true;
-      await refresh();
-    });
-    footer.append(label, more);
-    list.appendChild(footer);
-  }
-}
-
-function docIcon(doc) {
-  const { cls, label } = iconKind(doc.media_type);
-  const icon = document.createElement('span');
-  icon.className = `doc-icon ${cls}`;
-  icon.textContent = label;
-  icon.setAttribute('aria-hidden', 'true');
-  return icon;
-}
-
-// Row checkbox: plain click toggles (and re-anchors), shift-click selects
-// the whole range from the anchor — the spreadsheet muscle memory.
-function rowCheck(doc, index) {
-  const wrap = document.createElement('label');
-  wrap.className = 'doc-check';
-  const input = document.createElement('input');
-  input.type = 'checkbox';
-  input.checked = selected.has(doc.content_id);
-  input.setAttribute('aria-label', `Select ${doc.title ?? 'document'}`);
-  input.addEventListener('click', (e) => {
-    if (e.shiftKey && anchorIndex != null) {
-      const [a, b] = [Math.min(anchorIndex, index), Math.max(anchorIndex, index)];
-      for (let i = a; i <= b; i += 1) {
-        const id = visibleRows[i]?.content_id;
-        if (!id) continue;
-        if (input.checked) selected.add(id);
-        else selected.delete(id);
-      }
-    } else {
-      if (input.checked) selected.add(doc.content_id);
-      else selected.delete(doc.content_id);
-      anchorIndex = index;
-    }
-    selectionChanged();
-  });
-  wrap.appendChild(input);
-  return wrap;
-}
-
-function docMain(doc, metaText, { metaNarrowOnly = false } = {}) {
-  const main = document.createElement('div');
-  main.className = 'doc-main';
-  const title = document.createElement('button');
-  title.type = 'button';
-  title.className = 'doc-title';
-  title.textContent = doc.title ?? 'Untitled';
-  title.addEventListener('click', () => openPreview(doc.content_id));
-  main.appendChild(title);
-  if (metaText) {
-    const meta = document.createElement('span');
-    meta.className = `doc-meta${metaNarrowOnly ? ' narrow-only' : ''}`;
-    meta.textContent = metaText;
-    main.appendChild(meta);
-  }
-  return main;
-}
-
-function metaCell(cls, text) {
-  const el = document.createElement('span');
-  el.className = `doc-cell ${cls}`;
-  el.textContent = text;
-  return el;
-}
-
-function renderDocRow(doc, index) {
-  const row = document.createElement('div');
-  row.className = 'doc-row';
-  if (selected.has(doc.content_id)) row.dataset.selected = 'true';
-  row.appendChild(rowCheck(doc, index));
-  row.appendChild(docIcon(doc));
-  const main = searchQuery
-    ? docMain(doc, `in ${folderPathLabel(doc.folder_id)}`)
-    : docMain(doc, [fmtBytes(doc.byte_size), fmtDate(doc.created_at)].filter(Boolean).join(' · '), {
-        metaNarrowOnly: true,
-      });
-  // A vault match carries its own snippet, centered on the hit — it explains
-  // why a document matched even when its title doesn't.
-  if (searchQuery && doc.snippet) {
-    const snip = document.createElement('span');
-    snip.className = 'doc-snippet';
-    snippetInto(snip, doc.snippet);
-    main.appendChild(snip);
-  }
-  row.appendChild(main);
-  row.appendChild(metaCell('cell-size', fmtBytes(doc.byte_size)));
-  row.appendChild(metaCell('cell-added', fmtDate(doc.created_at)));
-
-  const kebab = document.createElement('button');
-  kebab.type = 'button';
-  kebab.className = 'kebab';
-  kebab.textContent = '⋮';
-  kebab.setAttribute('aria-label', `Actions for ${doc.title ?? 'document'}`);
-  kebab.setAttribute('aria-haspopup', 'menu');
-  kebab.addEventListener('click', () => openDocMenu(kebab, doc, { row, main }));
-  row.appendChild(kebab);
-
-  // The row's main area opens the preview; controls keep their own clicks.
-  row.addEventListener('click', (e) => {
-    if (e.target.closest('button, a, input, label')) return;
-    openPreview(doc.content_id);
-  });
-  return row;
-}
-
-// Inline document rename — the title swaps for an input + save.
-function openDocEditor({ row, main }, doc) {
-  const editor = document.createElement('div');
-  editor.className = 'doc-edit';
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = doc.title ?? '';
-  input.setAttribute('aria-label', 'Document name');
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'ghost';
-  save.textContent = 'Save';
-  const commit = async () => {
-    const title = input.value.trim();
-    if (!title || title === doc.title) {
-      render();
-      return;
-    }
-    const outcome = await act('rename', { content_id: doc.content_id, title });
-    if (narrate(outcome)) await refresh();
-    else render();
-  };
-  save.addEventListener('click', commit);
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      commit();
-    }
-    if (e.key === 'Escape') render();
-  });
-  editor.append(input, save);
-  main.replaceWith(editor);
-  row.classList.add('editing');
-  input.focus();
-  input.select();
-}
-
-function renderTrashRow(doc, index) {
-  const row = document.createElement('div');
-  row.className = 'doc-row';
-  if (selected.has(doc.content_id)) row.dataset.selected = 'true';
-  row.appendChild(rowCheck(doc, index));
-  row.appendChild(docIcon(doc));
-  const wasIn =
-    doc.folder_id == null ? 'Documents' : (folderById(doc.folder_id)?.name ?? 'a folder');
-  const main = docMain(doc, `from ${wasIn}`);
-  const narrowPurge = document.createElement('span');
-  narrowPurge.className = 'doc-meta narrow-only purge';
-  narrowPurge.textContent = purgeCountdown(doc.purge_at);
-  main.appendChild(narrowPurge);
-  row.appendChild(main);
-  row.appendChild(metaCell('cell-size', fmtBytes(doc.byte_size)));
-  const purge = metaCell('cell-added purge', purgeCountdown(doc.purge_at));
-  row.appendChild(purge);
-
-  const restore = document.createElement('button');
-  restore.type = 'button';
-  restore.className = 'ghost';
-  restore.textContent = 'Restore';
-  restore.addEventListener('click', async () => {
-    const outcome = await act('restore', { content_id: doc.content_id });
-    if (narrate(outcome)) await refresh();
-  });
-  row.appendChild(restore);
-
-  row.addEventListener('click', (e) => {
-    if (e.target.closest('button, a, input, label')) return;
-    openPreview(doc.content_id);
-  });
-  return row;
-}
-
-// ---------- Preview overlay ----------
-
-function openPreview(contentId) {
-  previewReturnFocus = document.activeElement;
-  previewId = contentId;
-  renderPreview();
-}
-
-function closePreview() {
-  previewId = null;
-  const box = $('preview');
-  box.hidden = true;
-  box.innerHTML = '';
-  if (previewReturnFocus?.isConnected) previewReturnFocus.focus();
-  previewReturnFocus = null;
-}
-
-function previewStep(delta) {
-  const idx = visibleRows.findIndex((d) => d.content_id === previewId);
-  const next = idx < 0 ? undefined : visibleRows[idx + delta];
-  if (!next) return;
-  previewId = next.content_id;
-  renderPreview();
-}
-
-function previewable(doc) {
-  const t = String(doc.media_type ?? '');
-  const uri = String(doc.content_uri ?? '');
-  const loadable = uri.startsWith('data:') || uri.startsWith('http:') || uri.startsWith('https:');
-  if (!loadable) return 'none';
-  if (t.startsWith('image/')) return 'image';
-  if (t === 'application/pdf') return 'pdf';
-  return 'none';
-}
-
-function renderPreview() {
-  const box = $('preview');
-  const doc = data.documents.find((d) => d.content_id === previewId);
-  if (!doc) {
-    closePreview();
-    return;
-  }
-  // Keep focus on the same control across next/prev re-renders.
-  const keepFocus = box.contains(document.activeElement) ? document.activeElement.dataset.pv : null;
-  box.innerHTML = '';
-
-  const top = document.createElement('div');
-  top.className = 'preview-top';
-  const title = document.createElement('span');
-  title.className = 'preview-title';
-  title.textContent = doc.title ?? 'Untitled';
-  top.appendChild(title);
-  const download = document.createElement('a');
-  download.className = 'preview-btn preview-download';
-  download.href = doc.content_uri;
-  download.download = doc.title ?? 'file';
-  download.textContent = 'Download';
-  download.dataset.pv = 'download';
-  top.appendChild(download);
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'preview-btn preview-close';
-  close.textContent = '✕';
-  close.setAttribute('aria-label', 'Close preview');
-  close.dataset.pv = 'close';
-  close.addEventListener('click', closePreview);
-  top.appendChild(close);
-  box.appendChild(top);
-
-  const stage = document.createElement('div');
-  stage.className = 'preview-stage';
-  const kind = previewable(doc);
-  if (kind === 'image') {
-    const img = document.createElement('img');
-    img.src = doc.content_uri;
-    img.alt = doc.title ?? 'Document';
-    stage.appendChild(img);
-  } else if (kind === 'pdf') {
-    const frame = document.createElement('iframe');
-    frame.className = 'preview-frame';
-    frame.src = doc.content_uri;
-    frame.title = doc.title ?? 'PDF preview';
-    stage.appendChild(frame);
-  } else {
-    const card = document.createElement('div');
-    card.className = 'preview-card';
-    card.appendChild(docIcon(doc));
-    const name = document.createElement('p');
-    name.className = 'preview-card-title';
-    name.textContent = doc.title ?? 'Untitled';
-    card.appendChild(name);
-    const facts = document.createElement('dl');
-    facts.className = 'preview-facts';
-    const addFact = (k, v) => {
-      if (!v) return;
-      const dt = document.createElement('dt');
-      dt.textContent = k;
-      const dd = document.createElement('dd');
-      dd.textContent = v;
-      facts.append(dt, dd);
-    };
-    addFact('Type', doc.media_type);
-    addFact('Size', fmtBytes(doc.byte_size));
-    addFact('Added', fmtDate(doc.created_at));
-    addFact(
-      doc.trashed ? 'Trash' : 'Folder',
-      doc.trashed ? purgeCountdown(doc.purge_at) : folderPathLabel(doc.folder_id),
-    );
-    card.appendChild(facts);
-    const note = document.createElement('p');
-    note.className = 'preview-card-note';
-    note.textContent = 'No preview for this type — download it to open.';
-    card.appendChild(note);
-    stage.appendChild(card);
-  }
-  stage.addEventListener('click', (e) => {
-    if (e.target === stage) closePreview();
-  });
-  box.appendChild(stage);
-
-  const idx = visibleRows.findIndex((d) => d.content_id === doc.content_id);
-  for (const [cls, delta, glyph, name] of [
-    ['prev', -1, '‹', 'Previous document'],
-    ['next', 1, '›', 'Next document'],
-  ]) {
-    const nav = document.createElement('button');
-    nav.type = 'button';
-    nav.className = `preview-nav ${cls}`;
-    nav.textContent = glyph;
-    nav.setAttribute('aria-label', name);
-    nav.dataset.pv = cls;
-    nav.disabled = idx < 0 || !visibleRows[idx + delta];
-    nav.addEventListener('click', () => previewStep(delta));
-    box.appendChild(nav);
-  }
-
-  box.hidden = false;
-  const focusTarget =
-    (keepFocus && box.querySelector(`[data-pv="${keepFocus}"]:not(:disabled)`)) ||
-    box.querySelector('[data-pv="close"]');
-  focusTarget?.focus();
-}
-
-// Focus stays trapped inside the dialog while it is open.
-function trapPreviewFocus(e) {
-  const box = $('preview');
-  const focusables = [...box.querySelectorAll('button, a[href], iframe')].filter(
-    (el) => !el.disabled,
-  );
-  if (focusables.length === 0) {
-    e.preventDefault();
-    return;
-  }
-  const first = focusables[0];
-  const last = focusables[focusables.length - 1];
-  const inside = box.contains(document.activeElement);
-  if (e.shiftKey && (!inside || document.activeElement === first)) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && (!inside || document.activeElement === last)) {
-    e.preventDefault();
-    first.focus();
-  }
-}
-
-window.addEventListener('keydown', (e) => {
-  if ($('preview').hidden) return;
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    closePreview();
-  } else if (e.key === 'ArrowLeft') previewStep(-1);
-  else if (e.key === 'ArrowRight') previewStep(1);
-  else if (e.key === 'Tab') trapPreviewFocus(e);
-});
-
 // ---------- Refresh ----------
-
-function render() {
-  // A folder can vanish under us (deleted elsewhere) — fall back to the top.
-  if (currentFolder != null && !folderById(currentFolder)) currentFolder = null;
-  ensurePathExpanded(currentFolder);
-  closePopover();
-  renderTree();
-  renderBreadcrumb();
-  renderBulkBar();
-  renderDocs();
-  renderListHeader();
-  if (previewId != null) renderPreview();
-}
 
 let readFailedShowing = false;
 
@@ -1327,7 +1586,7 @@ async function refresh() {
   try {
     next = await window.centraid.read({ query: 'drive', input: { limit: driveWindow } });
   } catch {
-    readFailed($('noticeBanner')); // a broken vault must not look empty
+    readFailed($('noticeBanner'));
     readFailedShowing = true;
     return;
   }
@@ -1337,16 +1596,183 @@ async function refresh() {
   }
   const denied = next?.vaultDenied;
   $('consentBanner').hidden = !denied;
-  $('live').hidden = Boolean(denied);
+  $('root').classList.toggle('denied', Boolean(denied));
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     return;
   }
-  data = next;
+  data = next ?? data;
+  data.folders = data.folders ?? [];
+  data.documents = data.documents ?? [];
   driveTruncated = Boolean(next?.truncated);
-  selected = new Set([...selected].filter((id) => data.documents.some((d) => d.content_id === id)));
+  // Drop selections and open surfaces for documents that no longer exist.
+  state.selected = new Set(
+    [...state.selected].filter((id) => data.documents.some((d) => d.content_id === id)),
+  );
+  if (state.detailsId && !data.documents.some((d) => d.content_id === state.detailsId))
+    state.detailsId = null;
+  if (state.quickId && !data.documents.some((d) => d.content_id === state.quickId))
+    state.quickId = null;
   render();
+  renderDetails();
+  renderQuick();
 }
 
-showSkeleton($('docList'), 6);
+// ---------- Chrome wiring ----------
+
+function isDarkNow() {
+  const t = document.documentElement.dataset.theme;
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function setThemeIcon() {
+  $('themeBtn').innerHTML = isDarkNow() ? I.sun : I.moon;
+}
+function toggleTheme() {
+  const dark = !isDarkNow();
+  const root = document.documentElement;
+  root.dataset.theme = dark ? 'dark' : 'light';
+  if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
+  setThemeIcon();
+}
+
+$('newBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  state.newMenuOpen = !state.newMenuOpen;
+  renderNewMenu();
+});
+document.addEventListener('click', (e) => {
+  if (state.newMenuOpen && !e.target.closest('.d-new-wrap')) {
+    state.newMenuOpen = false;
+    renderNewMenu();
+  }
+});
+$('viewGrid').addEventListener('click', () => {
+  state.view = 'grid';
+  render();
+});
+$('viewList').addEventListener('click', () => {
+  state.view = 'list';
+  render();
+});
+$('themeBtn').addEventListener('click', toggleTheme);
+$('sortBtn').addEventListener('click', () => {
+  const order = ['added', 'name', 'size'];
+  if (state.sortDir === -1 && state.sortKey !== 'name') {
+    state.sortDir = 1;
+    render();
+    return;
+  }
+  if (state.sortDir === 1) {
+    state.sortDir = -1;
+    render();
+    return;
+  }
+  const i = order.indexOf(state.sortKey);
+  const nextKey = order[(i + 1) % order.length];
+  state.sortKey = nextKey;
+  state.sortDir = nextKey === 'name' ? 1 : -1;
+  render();
+});
+$('hamburger').addEventListener('click', () => $('root').classList.add('side-open'));
+$('sideClose').addEventListener('click', () => $('root').classList.remove('side-open'));
+$('scrim').addEventListener('click', () => $('root').classList.remove('side-open'));
+
+$('searchInput').addEventListener('input', applySearch);
+$('searchInput').addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  e.preventDefault();
+  if (!$('searchInput').value && !state.search) return;
+  $('searchInput').value = '';
+  searchSeq += 1;
+  state.search = '';
+  searchResults = null;
+  clearSelection();
+  render();
+});
+
+$('uploadInput').addEventListener('change', async () => {
+  const input = $('uploadInput');
+  const files = [...input.files];
+  input.value = '';
+  await uploadFiles(files);
+});
+window.addEventListener('focus', refresh);
+
+// Drag-and-drop onto the current folder.
+let dragDepth = 0;
+function dragHasFiles(e) {
+  return [...(e.dataTransfer?.types ?? [])].includes('Files');
+}
+window.addEventListener('dragenter', (e) => {
+  if (!dragHasFiles(e)) return;
+  e.preventDefault();
+  dragDepth += 1;
+  const target = state.nav.kind === 'folder' ? folderName(state.nav.folderId) : 'Documents';
+  $('dropTarget').textContent = `Drop to upload to ${target}`;
+  $('dropOverlay').hidden = false;
+});
+window.addEventListener('dragover', (e) => {
+  if (dragHasFiles(e)) e.preventDefault();
+});
+window.addEventListener('dragleave', () => {
+  if ($('dropOverlay').hidden) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) $('dropOverlay').hidden = true;
+});
+window.addEventListener('drop', async (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  $('dropOverlay').hidden = true;
+  const files = e.dataTransfer?.files;
+  if (files?.length) await uploadFiles(files);
+});
+
+// Keyboard: quick-look nav, and a layered Escape.
+window.addEventListener('keydown', (e) => {
+  if (state.quickId) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeQuick();
+    } else if (e.key === 'ArrowLeft') quickStep(-1);
+    else if (e.key === 'ArrowRight') quickStep(1);
+    return;
+  }
+  if (e.key !== 'Escape') return;
+  if (state.detailsId) {
+    closeDetails();
+    return;
+  }
+  if (state.newMenuOpen) {
+    state.newMenuOpen = false;
+    renderNewMenu();
+    return;
+  }
+  if ($('root').classList.contains('side-open')) $('root').classList.remove('side-open');
+});
+
+// Component-width driven responsive: blueprints render inside a panel, so we
+// measure the root's own width (not the viewport) and toggle the phone layout.
+function measure() {
+  const root = $('root');
+  const forced = document.documentElement.getAttribute('data-app-width') === 'narrow';
+  const narrow = forced || root.clientWidth < 860;
+  if (narrow !== state.narrow) {
+    state.narrow = narrow;
+    root.classList.toggle('is-narrow', narrow);
+    if (!narrow) root.classList.remove('side-open');
+    renderRows();
+  }
+}
+
+// ---------- Boot ----------
+
+setThemeIcon();
+$('root').classList.toggle('is-narrow', $('root').clientWidth < 860);
+state.narrow = $('root').clientWidth < 860;
+showSkeleton($('list'), 6);
+$('listWrap').hidden = false;
+measure();
+setInterval(measure, 250);
 refresh();
