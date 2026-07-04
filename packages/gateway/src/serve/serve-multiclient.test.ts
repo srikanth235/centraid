@@ -21,7 +21,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
-import { WorktreeStore } from '../worktree-store/index.js';
+import type { WorktreeStore } from '../worktree-store/index.js';
 import { serve, type GatewayServeHandle } from './serve.ts';
 import type { GatewayPaths } from '../paths.ts';
 
@@ -30,17 +30,13 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
 /** Publish one app onto the git-store `main`, before serve() boots. */
-async function seedApp(appsStoreRoot: string, appId: string): Promise<void> {
-  const store = new WorktreeStore({ root: appsStoreRoot });
-  await store.init();
+async function seedApp(store: WorktreeStore, appId: string): Promise<void> {
   const session = await store.openSession('seed');
   const appDir = path.join(session.worktreePath, 'apps', appId);
   await fs.mkdir(appDir, { recursive: true });
@@ -55,9 +51,9 @@ async function seedApp(appsStoreRoot: string, appId: string): Promise<void> {
 
 beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `mc-gateway-${crypto.randomUUID()}-`));
-  const appsStoreRoot = path.join(dataDir, 'code');
-  await seedApp(appsStoreRoot, 'multiclient-test');
-  handle = await serve({ paths: pathsUnder(dataDir), appsStoreRoot });
+  handle = await serve({ paths: pathsUnder(dataDir) });
+  await seedApp(await handle.activeAppsStore(), 'multiclient-test');
+  await handle.vaults.settleActivation();
 });
 
 afterEach(async () => {

@@ -25,11 +25,14 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
+}
+/** The ACTIVE vault's per-app data dir (#280 — apps live inside the vault). */
+function vaultAppsDir(): string {
+  const vaultId = handle.vaults.active().boot.vaultId;
+  return path.join(dataDir, 'vault', vaultId, 'apps');
 }
 
 function auth(extra: Record<string, string> = {}): Record<string, string> {
@@ -52,7 +55,6 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-lifecycle-${crypto.randomUUID()}-`));
   handle = await serve({
     paths: pathsUnder(dataDir),
-    appsStoreRoot: path.join(dataDir, 'code'),
   });
 });
 
@@ -204,7 +206,7 @@ test('automation set-enabled then delete flows through publish', async () => {
 
   // Seed the app's data dir so the delete has real per-app data to tear
   // down (data.sqlite + run ledgers), not just the code on `main`.
-  const dataAppDir = path.join(dataDir, 'apps', 'digest');
+  const dataAppDir = path.join(vaultAppsDir(), 'digest');
   await fs.mkdir(dataAppDir, { recursive: true });
   await fs.writeFile(path.join(dataAppDir, 'data.sqlite'), 'rows');
 
@@ -232,7 +234,7 @@ test('DELETE /_apps/<id> tears down the app data dir, not just the code', async 
     body: JSON.stringify({ id: 'shelf', name: 'Shelf', publish: true }),
   });
   // Seed the app's data dir (data.sqlite + ledgers live under appsDir).
-  const dataAppDir = path.join(dataDir, 'apps', 'shelf');
+  const dataAppDir = path.join(vaultAppsDir(), 'shelf');
   await fs.mkdir(dataAppDir, { recursive: true });
   await fs.writeFile(path.join(dataAppDir, 'data.sqlite'), 'rows');
 
@@ -258,7 +260,7 @@ test('DELETE /_apps/<id> deletes a never-published draft without a no_changes er
   });
   expect(staged.status).toBe(201);
   // Seed the draft's data dir the way ensureRegistered would.
-  const dataAppDir = path.join(dataDir, 'apps', 'scratch');
+  const dataAppDir = path.join(vaultAppsDir(), 'scratch');
   await fs.mkdir(dataAppDir, { recursive: true });
   await fs.writeFile(path.join(dataAppDir, 'data.sqlite'), 'rows');
 

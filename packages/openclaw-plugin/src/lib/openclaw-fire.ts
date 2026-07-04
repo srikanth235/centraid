@@ -52,10 +52,12 @@ export interface OpenclawFireOptions {
   automationRef: string;
   /**
    * Directory holding the gateway's per-app DATA folders
-   * (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). Stable across version
+   * (`<appsDir>/<id>/data.sqlite`). Stable across version
    * swaps — this is NOT where code lives (issue #137).
    */
   appsDir: string;
+  /** The vault's `transcripts.db` — the run ledger every fire writes (#280). */
+  transcriptsDbFile: string;
   /**
    * Directory holding the live app CODE on git-store `main`. Resolved per fire
    * from the store's active-main link so a publish/rollback is picked up.
@@ -194,6 +196,7 @@ export async function runOpenclawFire(
     {
       automationRef: opts.automationRef,
       appsDir: opts.appsDir,
+      transcriptsDbFile: opts.transcriptsDbFile,
       codeAppsDir: opts.codeAppsDir,
       ...(opts.analytics ? { analytics: opts.analytics } : {}),
       onLog: (level, msg) => log[level](msg),

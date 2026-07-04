@@ -235,14 +235,22 @@ async function handleVaultsRoute(
     if (method === 'PATCH' && segments.length === 2) {
       const vaultId = segments[1] ?? '';
       const body = await readJson(req);
-      if (body.name === undefined && body.active === undefined) {
+      const presentationKeys = ['color', 'icon', 'blurb'] as const;
+      const hasPresentation = presentationKeys.some((k) => body[k] !== undefined);
+      if (body.name === undefined && body.active === undefined && !hasPresentation) {
         return sendJson(res, 400, {
           error: 'bad_request',
-          message: 'update body needs {name?: string, active?: true}',
+          message:
+            'update body needs {name?: string, active?: true, color?: string, icon?: string, blurb?: string}',
         });
       }
       if (body.name !== undefined && typeof body.name !== 'string') {
         return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
+      }
+      for (const k of presentationKeys) {
+        if (body[k] !== undefined && body[k] !== null && typeof body[k] !== 'string') {
+          return sendJson(res, 400, { error: 'bad_request', message: `${k} must be a string` });
+        }
       }
       if (body.active !== undefined && body.active !== true) {
         return sendJson(res, 400, {
@@ -251,7 +259,22 @@ async function handleVaultsRoute(
         });
       }
       let info = typeof body.name === 'string' ? vaults.rename(vaultId, body.name) : undefined;
-      if (body.active === true) info = vaults.setActive(vaultId);
+      if (hasPresentation) {
+        // Presentation lives IN the vault (#280: profiles are vaults) — the
+        // switcher's color/icon/blurb travel with an export.
+        const patch: Partial<Record<'color' | 'icon' | 'blurb', string | null>> = {};
+        for (const k of presentationKeys) {
+          if (body[k] !== undefined) patch[k] = body[k] as string | null;
+        }
+        info = vaults.updatePresentation(vaultId, patch);
+      }
+      if (body.active === true) {
+        info = vaults.setActive(vaultId);
+        // Re-root the gateway's workspace (#280: apps, transcripts, code all
+        // follow the vault) BEFORE answering, so the renderer sees the new
+        // world fully mounted when it reloads.
+        await vaults.settleActivation();
+      }
       return sendJson(res, 200, info ?? vaults.list().find((v) => v.vaultId === vaultId));
     }
 

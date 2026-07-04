@@ -70,6 +70,10 @@ export {
 export {
   ensureVaultBootstrapped,
   renameVault,
+  readVaultSettings,
+  readVaultPresentation,
+  updateVaultPresentation,
+  type VaultPresentation,
   lookupAppByName,
   ensureAppEnrolled,
   listActiveGrants,

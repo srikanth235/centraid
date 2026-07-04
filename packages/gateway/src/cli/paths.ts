@@ -7,14 +7,15 @@
  * segment — the daemon hosts exactly one gateway, so there's nothing
  * to multiplex.
  *
+ * Issue #280 — the vault is the unit. Everything personal (apps, code,
+ * transcripts, run history) lives inside `vault/<vaultId>/`; the daemon
+ * level keeps only plumbing:
+ *
  *   <dataDir>/
- *     apps/                 — registered apps + `_registry.json`
- *     identity.sqlite       — users + per-user prefs
- *     analytics.sqlite      — one summary row per run
- *     conversation-runner-sessions/ — codex thread state for in-app chat
+ *     prefs.json            — device prefs (runner choice, binPath, …)
  *     model-catalog.json    — chat picker's per-runner model catalog
  *     token.bin             — persistent bearer token (mode 0o600)
- *     vault/                — personal vault pair (vault.db + journal.db)
+ *     vault/                — vault registry root (one dir per vault)
  */
 
 import path from 'node:path';
@@ -23,22 +24,17 @@ import type { GatewayPaths } from '../paths.js';
 export interface DaemonLayout extends GatewayPaths {
   /** Persistent shared-bearer token file (`<dataDir>/token.bin`). */
   tokenFile: string;
-  /** The daemon always mounts the vault plane (narrowed from optional). */
-  vaultDir: string;
 }
 
 export function daemonLayoutFor(dataDir: string): DaemonLayout {
   const abs = path.resolve(dataDir);
   return {
-    appsDir: path.join(abs, 'apps'),
-    identityDb: path.join(abs, 'identity.sqlite'),
-    analyticsDb: path.join(abs, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(abs, 'conversation-runner-sessions'),
+    prefsFile: path.join(abs, 'prefs.json'),
     modelCatalogFile: path.join(abs, 'model-catalog.json'),
     tokenFile: path.join(abs, 'token.bin'),
     // Mounting the vault registry (duaility §12): the daemon hosts one
     // gateway, which holds the owner's vaults (one subdirectory each,
-    // exactly one active) beside the per-app silos.
+    // exactly one active) — and, post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
   };
 }

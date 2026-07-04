@@ -33,7 +33,7 @@ import {
   ConversationStore,
   AnalyticsStore,
   InsightsStore,
-  makeRuntimeDbProvider,
+  makeTranscriptsDbProvider,
   type Item,
   type Turn,
   type AutomationTriggerKind,
@@ -49,11 +49,11 @@ import { readJson, sendError, sendJson } from './route-helpers.js';
 export interface AutomationsRouteOptions {
   /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
   store: WorktreeStore;
-  /** Stable per-app data dir (run ledgers + analytics live here). */
-  dataAppsDir: string;
-  /** Central analytics store (the gateway already owns one). */
+  /** The vault's `transcripts.db` — every run's full ledger lives here (#280). */
+  transcriptsDbFile: string;
+  /** The vault's run-summary rollup (same file as the ledger, #280). */
   analytics: AnalyticsStore;
-  /** Insights aggregator over the same analytics DB. */
+  /** Insights aggregator over the same rollup. */
   insights: InsightsStore;
   /**
    * Fire an automation now (fire-and-forget). Injected so `serve()` wires
@@ -247,19 +247,13 @@ export function makeAutomationsRouteHandler(
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   const codeAppsDir = (): string => path.join(opts.store.getActiveMainLink(), 'apps');
 
-  // Run-ledger store for one run id — every run's full ledger is its
-  // app's `runtime.sqlite` under the stable data dir. Automation run ids
-  // are `<appId>/<id>:...` (app id inline); a chat run id is a bare UUID,
-  // so its owning app comes from the central run summary.
-  const runsStoreForRunId = (runId: string): ConversationStore | undefined => {
-    const slash = runId.indexOf('/');
-    const appId = slash > 0 ? runId.slice(0, slash) : opts.analytics.getSummary(runId)?.appId;
-    if (!appId) return undefined;
-    const dbPath = path.join(opts.dataAppsDir, appId, 'runtime.sqlite');
-    // No ledger file means the app/run is unknown here — return undefined
-    // rather than letting sqlite throw on a missing parent dir.
-    if (!existsSync(dbPath)) return undefined;
-    return new ConversationStore(makeRuntimeDbProvider(dbPath));
+  // Run-ledger store — every run's full ledger is the vault's single
+  // `transcripts.db` (#280), so run-id → file resolution is gone. A ledger
+  // file that doesn't exist yet just means no run ever landed here.
+  const runsStore = new ConversationStore(makeTranscriptsDbProvider(opts.transcriptsDbFile));
+  const runsStoreForRunId = (_runId: string): ConversationStore | undefined => {
+    if (!existsSync(opts.transcriptsDbFile)) return undefined;
+    return runsStore;
   };
 
   // SSE: stream one run end-to-end (issue #158, ledger-tail hybrid). Subscribe

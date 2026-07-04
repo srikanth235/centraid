@@ -11,10 +11,8 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -33,13 +31,14 @@ test('binds to loopback by default and mints a 32-byte random token', () => {
   expect(handle.token.length).toBe(64);
 });
 
-test('mkdirs the appsDir on bootstrap so the registry has somewhere to live', async () => {
-  const stat = await fs.stat(path.join(dataDir, 'apps'));
+test('activates the vault workspace so its apps dir exists (#280)', async () => {
+  const vaultId = handle.vaults.active().boot.vaultId;
+  const stat = await fs.stat(path.join(dataDir, 'vault', vaultId, 'apps'));
   expect(stat.isDirectory()).toBeTruthy();
 });
 
 test('returns the constructed stores on the handle for host introspection', () => {
-  expect(handle.userStore).toBeTruthy();
+  expect(handle.prefs).toBeTruthy();
   expect(handle.analyticsStore).toBeTruthy();
   expect(handle.conversationHistoryStore).toBeTruthy();
   expect(handle.runtime).toBeTruthy();

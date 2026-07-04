@@ -18,10 +18,8 @@ let gateway: BuiltGateway;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -59,7 +57,7 @@ afterEach(async () => {
 
 test('constructs the graph and exposes the lifecycle without binding a socket', () => {
   expect(gateway.runtime).toBeTruthy();
-  expect(gateway.userStore).toBeTruthy();
+  expect(gateway.prefs).toBeTruthy();
   expect(gateway.analyticsStore).toBeTruthy();
   expect(gateway.conversationHistoryStore).toBeTruthy();
   expect(typeof gateway.start).toBe('function');
@@ -71,43 +69,41 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
   expect((gateway as unknown as Record<string, unknown>).token).toBe(undefined);
 });
 
-test('the legacy backend reports no appsStore on the handle', () => {
-  expect(gateway.appsStore).toBe(undefined);
-});
-
-test('mounts the vault registry when vaultDir is set, recovers it across rebuilds', async () => {
-  // The default gateway (no vaultDir) has no registry.
-  expect(gateway.vaults).toBeUndefined();
-
-  const paths = { ...pathsUnder(dataDir), vaultDir: path.join(dataDir, 'vault') };
-  const withVault = await buildGateway({ paths });
+test('mounts the vault registry and recovers it across rebuilds (#280)', async () => {
+  // The registry is mandatory now — the whole app world is vault-scoped.
+  expect(gateway.vaults).toBeDefined();
+  expect(gateway.vaults.active().boot.fresh).toBe(true);
+  expect(gateway.vaults.list()).toHaveLength(1);
+  // The owner consent surface answers through the composed chain.
+  const mounted = await mountUnauthed(gateway.composedHandler);
   try {
-    expect(withVault.vaults).toBeDefined();
-    expect(withVault.vaults?.active().boot.fresh).toBe(true);
-    expect(withVault.vaults?.list()).toHaveLength(1);
-    // The owner consent surface answers through the composed chain.
-    const mounted = await mountUnauthed(withVault.composedHandler);
-    try {
-      const status = await (await fetch(`${mounted.url}/centraid/_vault/status`)).json();
-      expect(status).toMatchObject({
-        active: true,
-        vaultId: withVault.vaults?.active().boot.vaultId,
-      });
-    } finally {
-      await mounted.close();
-    }
+    const status = await (await fetch(`${mounted.url}/centraid/_vault/status`)).json();
+    expect(status).toMatchObject({
+      active: true,
+      vaultId: gateway.vaults.active().boot.vaultId,
+    });
   } finally {
-    await withVault.stop();
+    await mounted.close();
   }
 
   // A rebuild over the same paths recovers the same vault, not a new one.
-  const again = await buildGateway({ paths });
+  const again = await buildGateway({ paths: pathsUnder(dataDir) });
   try {
-    expect(again.vaults?.active().boot.fresh).toBe(false);
-    expect(again.vaults?.active().boot.vaultId).toBe(withVault.vaults?.active().boot.vaultId);
+    expect(again.vaults.active().boot.fresh).toBe(false);
+    expect(again.vaults.active().boot.vaultId).toBe(gateway.vaults.active().boot.vaultId);
   } finally {
     await again.stop();
   }
+});
+
+test('the active vault owns a code store — activeAppsStore materializes it', async () => {
+  const store = await gateway.activeAppsStore();
+  expect(store).toBeTruthy();
+  // The store lives INSIDE the active vault's directory (#280).
+  const vaultId = gateway.vaults.active().boot.vaultId;
+  expect(store.getActiveMainLink().startsWith(path.join(dataDir, 'vault', vaultId, 'code'))).toBe(
+    true,
+  );
 });
 
 test('composedHandler dispatches runtime routes with NO bearer check', async () => {
@@ -124,23 +120,25 @@ test('composedHandler dispatches runtime routes with NO bearer check', async () 
   }
 });
 
-test('composedHandler routes the chat-history + user-store prefixes', async () => {
+test('composedHandler routes the chat-history + prefs prefixes', async () => {
   await gateway.start('http://127.0.0.1:0');
   const srv = await mountUnauthed(gateway.composedHandler);
   try {
     // Both prefixes resolve to their store handlers (not the runtime
-    // fall-through) — proving the chat → user → extra → runtime order.
+    // fall-through) — proving the chat → prefs → extra → runtime order.
     const chat = await fetch(`${srv.url}/_centraid-user/prefs`);
     expect(chat.status).not.toBe(404);
+    // `/id` answers with the ACTIVE vault's owner party id (#280).
+    const id = (await (await fetch(`${srv.url}/_centraid-user/id`)).json()) as { id: string };
+    expect(id.id).toBe(gateway.vaults.active().boot.ownerPartyId);
   } finally {
     await srv.close();
   }
 });
 
-test('start() bootstraps the registry so app routes resolve', async () => {
+test('start() activates the vault workspace so its apps dir exists', async () => {
   await gateway.start('http://127.0.0.1:0');
-  // mkdir of appsDir happens in buildGateway; the registry is loaded in
-  // start(). After start, the apps listing is queryable.
-  const stat = await fs.stat(path.join(dataDir, 'apps'));
+  const vaultId = gateway.vaults.active().boot.vaultId;
+  const stat = await fs.stat(path.join(dataDir, 'vault', vaultId, 'apps'));
   expect(stat.isDirectory()).toBeTruthy();
 });

@@ -2,48 +2,44 @@
 /*
  * `buildGateway()` — construct the host-agnostic centraid gateway core.
  *
- * The gateway is the host-agnostic lift of what `apps/desktop/src/main/
- * local-runtime.ts` used to do inline. `buildGateway()` constructs the
- * WHOLE object graph (stores, chat runner, `Runtime`, the in-process
- * scheduler, every route handler) and returns it — *without* binding a
- * socket. It also exposes a `composedHandler` that replays the gateway's
- * route chain (`conversation → userStore → extraHandlers[] →
- * runtime.handle`) minus the bearer check, for hosts that own auth
- * themselves. The listener-and-bearer wrapper lives in `serve.ts`.
+ * Issue #280 — the vault is the unit. The gateway core is one stable object
+ * graph (runtime, dispatcher, prefs, route chain) whose PERSONAL surfaces
+ * all resolve through the ACTIVE vault at call time: the conversation
+ * ledger + run rollup ride the vault's `transcripts.db`, per-app data dirs
+ * live under the vault's `apps/`, and each vault owns its OWN app code
+ * store (`code/` — bare repo + worktrees). Switching vaults re-roots the
+ * whole app world; `VaultRegistry.settleActivation()` runs the re-root
+ * (registry sync + scheduler reconcile) before the switch response lands.
  *
  * Three hosts mount the same core:
  *
  *   - Electron embed: `buildGateway()` (or `serve()`) in the main
- *     process, paths derived from `gateway-paths.ts`, secrets read from
- *     `safeStorage`.
+ *     process, paths derived from `gateway-paths.ts`.
  *   - `centraid-gateway` daemon: `serve()`, paths derived from a
- *     `--data-dir` config, secrets from a sealed file on disk.
+ *     `--data-dir` config.
  *   - `@centraid/openclaw-plugin`: `buildGateway()` + mount
  *     `composedHandler` on the OpenClaw HTTP server (which owns auth),
  *     driving `start()`/`stop()` from `gateway_start`/shutdown.
  *
  * Construction (stores → prefs loader → chat runner → `Runtime` → route
- * handlers) runs in `buildGateway()`; the per-step rationale lives in the
- * inline comments below. The returned `start(publicBaseUrl)` then runs the
- * post-listener lifecycle (bootstrap, git-store registry sync, scheduler
- * start + reconcile — issue #149). The only thing the caller injects is
- * paths + secrets (+ an optional scheduler, for tests).
+ * handlers) runs in `buildGateway()`; the per-vault host bundle (code
+ * store, draft resolver, unified chat runner, store-backed route handlers)
+ * is built lazily per vault and cached by vault id. The returned
+ * `start(publicBaseUrl)` runs the post-listener lifecycle (activate the
+ * current vault's workspace, scheduler start + reconcile — issue #149).
  */
 
 import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
   ConversationHistoryStore,
   InsightsStore,
+  PrefsStore,
   Runtime,
-  UserStore,
   cleanupDeregisteredApp,
-  makeAnalyticsDbProvider,
   makeConversationRouteHandler,
-  makeGatewayDbProvider,
   makeUserStoreRouteHandler,
   type ConversationRunner,
   type RunnerStatus,
@@ -51,11 +47,11 @@ import {
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type VaultWorkspace,
 } from '@centraid/app-engine';
 import { KIT_DIR } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import {
-  makeConversationRunner,
   runAutomation,
   runPreflight,
   CatalogWarmer,
@@ -72,6 +68,7 @@ import {
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
+import type { VaultPlane } from './vault-plane.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver } from '../lifecycle/draft-data.js';
@@ -105,20 +102,10 @@ export interface BuildGatewayOptions {
    */
   logTag?: string;
   /**
-   * When provided, the gateway owns app *code* as a git store rooted
-   * here (issue #137): `<appsStoreRoot>/apps.git` + `worktrees/`. The
-   * runtime then serves handlers + static from the live `main`
-   * worktree instead of `<appsDir>/<id>/versions/<active>/`. App
-   * *data* (`data.sqlite`) still lives under `paths.appsDir`, so the
-   * two stores stay cleanly separated. Omit for the legacy
-   * tarball-upload backend (OpenClaw, pre-#137 setups).
-   */
-  appsStoreRoot?: string;
-  /**
    * Maps an app id to the draft-session id the unified chat runner edits.
    * Defaults to a host-neutral `chat-<appId>`; the desktop injects
    * `desktop-<appId>` so its renderer Code tab + local builder + gateway
-   * chat share ONE worktree. Only consulted when `appsStoreRoot` is set.
+   * chat share ONE worktree.
    */
   sessionIdFor?: (appId: string) => string;
   /**
@@ -140,26 +127,12 @@ export interface BuildGatewayOptions {
   /**
    * Override for how an automation is fired (Plane B). The gateway's default
    * runs the handler through `runAutomation` (codex/claude CLI puppet).
-   * The OpenClaw plugin injects an in-process fire (`runOpenclawFire`:
-   * `ctx.tool` → `callGatewayTool`, `ctx.agent` → simple-completion) here, so
-   * BOTH scheduled (cron) and manual (run-now) fires execute in OpenClaw's
-   * process. The factory is called once with the gateway-resolved deps; it
-   * returns the fire function the scheduler + automations route share.
-   *
-   * (Phase 2 of issue #164 replaces this whole-function override with a
-   * shared orchestrator parameterized by injected dispatchers.)
+   * The OpenClaw plugin injects an in-process fire here, so BOTH scheduled
+   * (cron) and manual (run-now) fires execute in OpenClaw's process. The
+   * factory is called once with the gateway-resolved deps; it returns the
+   * fire function the scheduler + automations route share.
    */
   fireAutomationFactory?: FireAutomationFactory;
-  /**
-   * Defer the git-store `init()` (bare-repo + worktree materialization) from
-   * construction to `start()`. OpenClaw runs the plugin's `register()` in
-   * multiple worker subprocesses but `start()` only in the HTTP-serving
-   * process; deferring keeps the concurrent git-init off the workers (only
-   * the one process that calls `start()` touches the repo). Desktop/daemon
-   * omit it — single-process, so `init()` at construction is safe and keeps
-   * the store ready before the socket binds.
-   */
-  lazyStoreInit?: boolean;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the run-now route. */
@@ -176,11 +149,11 @@ export type FireAutomation = (
 
 /** Gateway-resolved deps handed to a {@link FireAutomationFactory}. */
 export interface FireAutomationDeps {
-  /** Per-app DATA root (`<appsDir>/<id>/runtime.sqlite` + `data.sqlite`). */
-  appsDir: string;
-  /** Resolves the live `main` worktree's `apps` dir; rotates per publish. */
+  /** The ACTIVE vault's workspace, resolved at fire time (#280). */
+  workspace: () => VaultWorkspace;
+  /** Resolves the active vault's live `main` worktree apps dir. */
   codeAppsDir: () => string;
-  /** Central analytics sink for finished-run summaries. */
+  /** Run-summary rollup (follows the active vault's transcripts.db). */
   analytics: AnalyticsStore;
   /** Logger for fire failures. */
   logger: RuntimeLogger;
@@ -192,60 +165,71 @@ export type FireAutomationFactory = (deps: FireAutomationDeps) => FireAutomation
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
 
-// Prefixes the chat-history + user-store routes answer to, mirrored from
+// Prefixes the chat-history + prefs routes answer to, mirrored from
 // app-engine's http-server.ts so `composedHandler` matches the same URLs
 // `startRuntimeHttpServer` does.
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
 
+/** The per-vault host bundle — one per vault, built lazily, cached by id. */
+interface VaultHost {
+  vaultId: string;
+  store: WorktreeStore;
+  codeAppsDir: () => string;
+  liveDataFile: (appId: string) => string;
+  draftCodeDir: (appId: string, sessionId: string) => Promise<string | undefined>;
+  runner: ConversationRunner;
+  /** Store-backed route handlers (apps-store / lifecycle / automations). */
+  handlers: RouteHandler[];
+}
+
 export interface BuiltGateway {
   /** The constructed runtime (handles, dispatcher, change bus). */
   runtime: Runtime;
-  /** Stores exposed so callers can read directly without reconstructing. */
-  userStore: UserStore;
+  /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
+  prefs: PrefsStore;
+  /** Run-summary rollup over the ACTIVE vault's transcripts.db. */
   analyticsStore: AnalyticsStore;
   conversationHistoryStore: ConversationHistoryStore;
   /**
-   * The personal-vault registry (duaility §12), when `paths.vaultDir` was
-   * supplied. Hosts drive owner acts (create/rename/switch/delete vaults,
-   * grants, confirmations, backups) through this; apps only ever reach the
-   * active vault via `ctx.vault`.
+   * The personal-vault registry (duaility §12). Hosts drive owner acts
+   * (create/rename/switch/delete vaults, grants, confirmations) through
+   * this; apps only ever reach the active vault via `ctx.vault`.
    */
-  vaults?: VaultRegistry;
+  vaults: VaultRegistry;
   /**
-   * The git-store backend, when `appsStoreRoot` was supplied. Callers
-   * (the publish endpoint, export/import, the desktop's file IPC) drive
-   * sessions + publishes through this. `undefined` on the legacy backend.
+   * The ACTIVE vault's git-store backend. Callers (the publish endpoint,
+   * export/import, the desktop's file IPC) drive sessions + publishes
+   * through this. Async — the store materializes lazily per vault.
    */
-  appsStore?: WorktreeStore;
+  activeAppsStore(): Promise<WorktreeStore>;
   /**
-   * Resolves the live `main` worktree's `apps` dir (`<active-main>/apps`),
-   * rotating atomically per publish/rollback. Present only on the git-store
-   * backend. Hosts that register their own automation surface — e.g. the
-   * OpenClaw plugin's `/_centraid-hook` webhook route — resolve automation
-   * CODE through this without naming the underlying `WorktreeStore`.
+   * Resolves the ACTIVE vault's live `main` worktree apps dir, rotating
+   * atomically per publish/rollback. Hosts that register their own
+   * automation surface (e.g. the OpenClaw plugin's `_centraid-hook`
+   * webhook route) resolve automation CODE through this. Throws before
+   * `start()` has activated the first workspace.
    */
-  codeAppsDir?: () => string;
+  codeAppsDir: () => string;
   /**
-   * Route handlers run after auth, before `runtime.handle` (templates
-   * always; apps-store / lifecycle / automations on the git-store
-   * backend). Passed straight to `startRuntimeHttpServer` by `serve()`.
+   * Route handlers run after auth, before `runtime.handle` (vault routes,
+   * templates, agents, then the active vault's store-backed handlers).
+   * Passed straight to `startRuntimeHttpServer` by `serve()`.
    */
   extraHandlers: RouteHandler[];
   /**
-   * One handler replaying the full chain — `conversation → userStore →
+   * One handler replaying the full chain — `conversation → prefs →
    * extraHandlers[] → runtime.handle` — MINUS the bearer check (cf.
-   * `app-engine` http-server.ts:135-147). Hosts that own auth (the
-   * OpenClaw plugin's `auth: 'gateway'`) mount this on a single prefix
-   * route. Always resolves the response, so it returns `true`.
+   * `app-engine` http-server.ts). Hosts that own auth (the OpenClaw
+   * plugin's `auth: 'gateway'`) mount this on a single prefix route.
+   * Always resolves the response, so it returns `true`.
    */
   composedHandler: RouteHandler;
   /**
    * Post-listener lifecycle. Call once the host has bound a socket,
    * passing the live origin so post-turn webhook minting can build
-   * absolute `_centraid-hook` URLs. Runs `runtime.bootstrap()`, syncs the
-   * registry off the git-store `main`, then starts + reconciles the cron
-   * scheduler.
+   * absolute `_centraid-hook` URLs. Activates the current vault's
+   * workspace, then starts + reconciles the cron scheduler.
    */
   start(publicBaseUrl: string): Promise<void>;
   /** Stop the cron scheduler. Idempotent. */
@@ -256,117 +240,29 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const { paths } = options;
   const logger = options.logger ?? defaultLogger(options.logTag);
 
-  await fs.mkdir(paths.appsDir, { recursive: true });
+  // Vault registry (duaility §12, #280): the gateway is the sole holder of
+  // the owner's vaults — one plane per vault under the root, exactly one
+  // active at a time. Required: post-#280 the whole app surface (code,
+  // data, transcripts) is vault-scoped, so there is no vault-less mode.
+  const vaultRegistry: VaultRegistry = openVaultRegistry({
+    rootDir: paths.vaultDir,
+    logger,
+  });
+  const activeWorkspace = (): VaultWorkspace => vaultRegistry.activeWorkspace();
 
-  // Vault registry (duaility §12): when a vaultDir is given, the gateway is
-  // the sole holder of the owner's vaults — one plane per vault under that
-  // root, exactly one active at a time. Opened before the Runtime so the
-  // `ctx.vault` bridge factory exists at construction.
-  const vaultRegistry: VaultRegistry | undefined = paths.vaultDir
-    ? openVaultRegistry({ rootDir: paths.vaultDir, logger })
-    : undefined;
+  // Device prefs (`prefs.json`) + the ACTIVE vault's ledger stores. The
+  // analytics/insights providers resolve the active vault per call, so a
+  // vault switch lands without reconstructing either store (#280).
+  const prefs = new PrefsStore(paths.prefsFile);
+  const transcriptsProvider = () => activeWorkspace().transcripts();
+  const analyticsStore = new AnalyticsStore(transcriptsProvider);
+  const insightsStore = new InsightsStore(transcriptsProvider);
+  const conversationHistoryStore = new ConversationHistoryStore(activeWorkspace, analyticsStore);
 
-  // Git-store backend (issue #137). When a root is given, the gateway
-  // owns app code as a bare git repo + worktrees; the runtime serves
-  // handlers from the live `main` worktree. Constructed + initialized
-  // here so the code-dir override is available at Runtime construction.
-  let appsStore: WorktreeStore | undefined;
-  if (options.appsStoreRoot !== undefined) {
-    appsStore = new WorktreeStore({ root: options.appsStoreRoot });
-    // `lazyStoreInit` hosts (OpenClaw) defer `init()` to `start()` so the
-    // concurrent git-init stays off worker subprocesses; everyone else inits
-    // here so the store is ready before the socket binds.
-    if (!options.lazyStoreInit) await appsStore.init();
-  }
-  const codeDirOverride = appsStore
-    ? (appId: string) => appsStore!.resolveActiveAppDir(appId)
-    : undefined;
-  // Stable live data file — injected so a publish migrates live data and a
-  // draft seeds from it (issue #144).
-  const liveDataFile = (appId: string): string => path.join(paths.appsDir, appId, 'data.sqlite');
-  // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
-  // session worktree (serving the staged draft before publish) and lazily
-  // seed the worktree's branched `data.sqlite` from live there — data dir =
-  // code dir in draft mode, so one resolver primes both planes.
-  const draftCodeDir = appsStore ? makeDraftCodeDirResolver(appsStore, liveDataFile) : undefined;
-
-  // Cron-scheduler reconcile (issue #149). Automation *code* lives under
-  // the git-store materialized `main` (`active-main/apps`), or `appsDir`
-  // for the flat/legacy layout. We re-scan + reconcile the whole desired
-  // set (idempotent) rather than register single rows, so a publish /
-  // delete / rollback keeps the in-process cron scheduler in sync. Coalesced
-  // so concurrent publishes don't thrash it. `scheduler` is the single
-  // persistent instance, assigned once the fire surface is wired below.
-  const schedulerCodeAppsDir = (): string =>
-    appsStore ? path.join(appsStore.getActiveMainLink(), 'apps') : paths.appsDir;
-  let scheduler: automation.LocalScheduler | undefined;
-  let reconcileInFlight = false;
-  let reconcileDirty = false;
-  const reconcileScheduler = (): void => {
-    const sched = scheduler;
-    if (!sched) return;
-    if (reconcileInFlight) {
-      reconcileDirty = true;
-      return;
-    }
-    reconcileInFlight = true;
-    void (async () => {
-      do {
-        reconcileDirty = false;
-        const { rows } = await automation.list(schedulerCodeAppsDir());
-        // Every automation app acts through an enrolled agent.agent (duaility
-        // §12) — enroll identities as the desired set settles. Idempotent;
-        // grants stay owner-approved and deny-by-default.
-        if (vaultRegistry) {
-          for (const appId of new Set(rows.map((r) => r.ownerApp))) {
-            try {
-              vaultRegistry.enrollAutomationAgent(appId);
-            } catch (err) {
-              logger.warn(
-                `vault plane: agent enrollment for "${appId}" failed: ` +
-                  (err instanceof Error ? err.message : String(err)),
-              );
-            }
-          }
-        }
-        const diff = await sched.reconcile(rows);
-        if (diff.added.length || diff.updated.length || diff.removed.length) {
-          logger.info(
-            `scheduler reconcile — ` +
-              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
-          );
-        }
-      } while (reconcileDirty);
-    })()
-      .catch((err) =>
-        logger.warn(
-          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
-        ),
-      )
-      .finally(() => {
-        reconcileInFlight = false;
-      });
-  };
-
-  // Gateway identity DB + the central analytics DB. Each store wraps a
-  // lazy provider that opens its file on first use. Conversations (chat +
-  // build) live in each app's `runtime.sqlite` under `appsDir`, so
-  // `ConversationHistoryStore` is constructed with `appsDir` and resolves the
-  // file per app.
-  const gatewayDbProvider = makeGatewayDbProvider(paths.identityDb);
-  const analyticsProvider = makeAnalyticsDbProvider(paths.analyticsDb);
-  const analyticsStore = new AnalyticsStore(analyticsProvider);
-  const userStore = new UserStore(gatewayDbProvider);
-  const conversationHistoryStore = new ConversationHistoryStore(
-    paths.appsDir,
-    () => userStore.getUserId(),
-    analyticsStore,
-  );
-
-  // Per-turn prefs loader. Re-reads the gateway user_prefs row every chat
-  // turn so a settings change lands without a restart.
+  // Per-turn prefs loader. Re-reads `prefs.json` every chat turn so a
+  // settings change lands without a restart.
   const prefsLoader = async (): Promise<RunnerPrefs | undefined> => {
-    const allPrefs = userStore.getAllPrefs();
+    const allPrefs = prefs.getAllPrefs();
     const kindRaw = allPrefs['agent.runner.kind'];
     // Codex is the default when the user hasn't picked — matches the
     // settings panel's "Codex preferred when both present" copy.
@@ -401,20 +297,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ? new CatalogWarmer({
         catalogPath,
         enumerateModels: async (kind) => {
-          const prefs = await prefsLoader();
-          const isActive = prefs?.kind === kind;
+          const runnerPrefs = await prefsLoader();
+          const isActive = runnerPrefs?.kind === kind;
           return enumerateRunnerModels({
             kind,
-            ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
-            ...(isActive && prefs?.extraArgs ? { extraArgs: prefs.extraArgs } : {}),
+            ...(isActive && runnerPrefs?.binPath ? { binPath: runnerPrefs.binPath } : {}),
+            ...(isActive && runnerPrefs?.extraArgs ? { extraArgs: runnerPrefs.extraArgs } : {}),
           });
         },
         enumerateTools: async (kind) => {
-          const prefs = await prefsLoader();
-          const isActive = prefs?.kind === kind;
+          const runnerPrefs = await prefsLoader();
+          const isActive = runnerPrefs?.kind === kind;
           return enumerateHostTools(kind, {
             cwd: toolProbeCwd,
-            ...(isActive && prefs?.binPath ? { binPath: prefs.binPath } : {}),
+            ...(isActive && runnerPrefs?.binPath ? { binPath: runnerPrefs.binPath } : {}),
           });
         },
       })
@@ -458,253 +354,138 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // only after `startRuntimeHttpServer` resolves below — a turn only ever
   // runs post-start, so this holder is populated by then.
   let serverUrl = '';
-  // Unified chat (issue #141, Phase 3): when a git store backs app code,
-  // every chat turn runs in the app's draft worktree with the union of
-  // native file tools + the `centraid_*` dispatcher — one surface that both
-  // tweaks the app's code and operates its data. Without a store (no draft
-  // worktree to edit) we fall back to the data-only chat adapter.
-  // A host can inject its own in-process chat runner (Plane B); otherwise the
-  // gateway builds its own — unified (draft worktree + dispatcher tools) on the
-  // git-store backend, data-only on the legacy backend.
-  const conversationRunner =
-    options.conversationRunner ??
-    (appsStore
-      ? makeUnifiedConversationRunner({
-          store: appsStore,
-          prefsLoader,
-          getDispatcher,
-          publicBaseUrl: () => serverUrl,
-          liveDataFile,
-          ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
-          ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-        })
-      : makeConversationRunner({
-          prefsLoader,
-          getDispatcher,
-        }));
 
-  const runtime = new Runtime({
-    appsDir: paths.appsDir,
-    // Shared kit assets (kit.js / kit.css) are served from the blueprints
-    // package's canonical `kit/` dir; apps no longer ship per-app copies.
-    sharedAssetsDir: KIT_DIR,
-    userStore,
-    conversationHistoryStore,
-    conversationRunner,
-    conversationRunnerSessionDir: paths.conversationRunnerSessionDir,
-    runnerStatus:
-      options.runnerStatus ??
-      (async (statusOpts) => {
-        const prefs = await prefsLoader();
-        if (!prefs) {
-          return {
-            kind: 'none' as const,
-            ok: false,
-            reason: 'No coding agent configured.',
-            hint: 'Open Settings → Agents and pick Codex or Claude Code.',
-          };
-        }
-        // The model list is a pure catalog read; enumeration is owned by the
-        // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
-        // the client polls `modelsStatus` until it leaves `loading`.
-        const status = await runPreflight(prefs, catalogPath ? { catalogPath } : {});
-        if (catalogPath && warmer && status.ok) {
-          const count = status.models?.length ?? 0;
-          if ((statusOpts?.refresh ?? false) || count === 0) void warmer.warm(prefs.kind, 'models');
-          status.modelsStatus = deriveStatus(count, warmer.isWarming(prefs.kind, 'models'));
-        }
-        return status;
-      }),
-    logger,
-    ...(codeDirOverride ? { codeDirOverride } : {}),
-    ...(draftCodeDir ? { draftCodeDir } : {}),
-    ...(vaultRegistry ? { vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId) } : {}),
-  });
+  // ── Per-vault host bundles (#280) ─────────────────────────────────────
+  // Each vault owns its app world: a git code store under the vault dir,
+  // a draft resolver seeded from the vault's own live data, a unified chat
+  // runner over that store, and the store-backed route handlers. Built
+  // lazily per vault, cached by id; the active one resolves per request.
+  const hosts = new Map<string, Promise<VaultHost>>();
+  // Synchronous handle to the last ACTIVATED host — the scheduler + the
+  // OpenClaw webhook route resolve code paths through this between
+  // activations (both only run post-start, when it is always set).
+  let currentHost: VaultHost | undefined;
+  // In-process bus for live run streaming (issue #158): a fire publishes via
+  // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
+  const runEventBus = new RunEventBus();
 
-  runtimeRef = runtime;
-
-  // Template catalog (issue #141): the gateway owns it, so the renderer
-  // reads `GET /centraid/_templates` directly. Mounted regardless of the
-  // code backend — templates are bundle/cache-resolved, independent of the
-  // git store. The git-store publish/session/files surface (issue #137) is
-  // appended below when a store backend is active.
-  const extraHandlers: RouteHandler[] = [
-    // Owner consent surface for the vault plane (grants, parked
-    // confirmations). Mounted first — its `_vault` prefix is disjoint from
-    // every other route family.
-    ...(vaultRegistry ? [makeVaultRouteHandler(vaultRegistry)] : []),
-    makeTemplatesRouteHandler({
-      ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
-      ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
-    }),
-    // Coding-agent detection (codex/claude credentials on the gateway host).
-    // The gateway is colocated with the runner, so it probes its own host —
-    // a remote gateway reports its host's agents, not the desktop's. It also
-    // reports EACH agent's models (issue #188) so Settings → Agents can offer a
-    // per-agent default-model picker; the active runner's configured
-    // binPath/extraArgs are honored when enumerating it, defaults otherwise.
-    makeAgentsRouteHandler(
-      catalogPath
-        ? {
-            ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
-            // Tools refresh on their own `?refreshTools=1` flag — slower (spawns
-            // a CLI) than the zero-token model refresh, so it's a separate
-            // trigger and a separate button in Settings → Agents.
-            ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
-          }
-        : {},
-    ),
-  ];
-
-  let builtCodeAppsDir: (() => string) | undefined;
-  if (appsStore) {
-    const store = appsStore;
-    const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
-    builtCodeAppsDir = codeAppsDir;
-    // In-process bus for live run streaming (issue #158): a fire publishes via
-    // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
-    const runEventBus = new RunEventBus();
-    // The one fire path, shared by "run now" (manual) and the cron
-    // scheduler (scheduled). A host can override the fire entirely (Plane B —
-    // OpenClaw runs it in-process); the default below runs on THIS host with
-    // the gateway's own runner pref, against the live `main` code + the stable
-    // data tree, streaming each run over the event bus.
-    const fireAutomation: FireAutomation = options.fireAutomationFactory
-      ? options.fireAutomationFactory({
-          appsDir: paths.appsDir,
-          codeAppsDir,
-          analytics: analyticsStore,
-          logger,
-        })
-      : (automationRef, opts): void => {
-          // Mint the runId here so every fire (cron included) has a bus channel.
-          const runId =
-            opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-          void (async () => {
-            const prefs = await prefsLoader();
-            await runAutomation({
-              automationRef,
-              runId,
-              appsDir: paths.appsDir,
-              codeAppsDir: codeAppsDir(),
-              analytics: analyticsStore,
-              // Each fire's ctx.vault rides the automation's enrolled
-              // agent.agent credential, resolved per app id (duaility §12).
-              ...(vaultRegistry
-                ? { vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId) }
-                : {}),
-              runner: prefs?.kind ?? 'codex',
-              triggerKind: opts.triggerKind,
-              triggerOrigin: opts.triggerOrigin,
-              ...(opts.input !== undefined ? { input: opts.input } : {}),
-              onRunEvent: (ev) => runEventBus.publish(runId, ev),
-            });
-          })().catch((err) => {
-            const message = err instanceof Error ? err.message : String(err);
-            // Failed before the ledger opened: close off the bus or the viewer hangs.
-            runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
-            logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
+  // The one fire path, shared by "run now" (manual) and the cron scheduler
+  // (scheduled). A host can override the fire entirely (Plane B — OpenClaw
+  // runs it in-process); the default below runs on THIS host with the
+  // gateway's own runner pref, against the ACTIVE vault's live `main` code
+  // + its data tree, streaming each run over the event bus.
+  const fireAutomation: FireAutomation = options.fireAutomationFactory
+    ? options.fireAutomationFactory({
+        workspace: activeWorkspace,
+        codeAppsDir: () => requireHost().codeAppsDir(),
+        analytics: analyticsStore,
+        logger,
+      })
+    : (automationRef, opts): void => {
+        // Mint the runId here so every fire (cron included) has a bus channel.
+        const runId =
+          opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+        void (async () => {
+          const runnerPrefs = await prefsLoader();
+          const host = await activeHost();
+          const ws = activeWorkspace();
+          await runAutomation({
+            automationRef,
+            runId,
+            appsDir: ws.appsDir,
+            transcriptsDbFile: ws.transcriptsDbFile,
+            codeAppsDir: host.codeAppsDir(),
+            analytics: analyticsStore,
+            // Each fire's ctx.vault rides the automation's enrolled
+            // agent.agent credential, resolved per app id (duaility §12).
+            vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
+            runner: runnerPrefs?.kind ?? 'codex',
+            triggerKind: opts.triggerKind,
+            triggerOrigin: opts.triggerOrigin,
+            ...(opts.input !== undefined ? { input: opts.input } : {}),
+            onRunEvent: (ev) => runEventBus.publish(runId, ev),
           });
-        };
-    // One persistent in-process cron scheduler for the gateway's lifetime
-    // (issue #149). `reconcileScheduler()` (boot + every publish/delete)
-    // settles its in-memory registry; it fires cron automations through the
-    // same `fireAutomation` path as run-now. Injectable for tests.
-    // Condition-trigger evaluation (duaility: time semantics live in the
-    // data). On the trigger's `every` gate, run its consented read under the
-    // automation's agent grant; unseen rows fire the automation with the
-    // rows as `ctx.input`. A receipted deny or bridge error logs and skips —
-    // failure never widens access and never stalls the tick.
-    const evaluateCondition = async (ref: string, triggerIndex: number): Promise<void> => {
-      if (!vaultRegistry) return;
-      const parsed = automation.parseRef(ref);
-      if (!parsed) return;
-      const row = await automation.readAppOwned(
-        schedulerCodeAppsDir(),
-        parsed.appId,
-        parsed.automationId,
-      );
-      if (!row || !row.enabled || !row.manifest.vault) return;
-      const trigger = row.manifest.triggers[triggerIndex];
-      if (!trigger) return;
-      const purpose = row.manifest.vault.purpose;
-      const vault = vaultRegistry.agentBridgeFor(parsed.appId);
-      if (trigger.kind === 'condition') {
-        const evaluation = await automation.evaluateConditionTrigger({
-          automationRef: ref,
-          trigger,
-          triggerIndex,
-          purpose,
-          appsDir: paths.appsDir,
-          vault,
+        })().catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          // Failed before the ledger opened: close off the bus or the viewer hangs.
+          runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+          logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
         });
-        if (evaluation.reason) {
-          logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
-          return;
-        }
-        if (!evaluation.fire) return;
-        fireAutomation(ref, {
-          triggerKind: 'scheduled',
-          triggerOrigin: 'condition',
-          input: {
-            trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
-            rows: evaluation.rows,
-            matched: evaluation.matched,
-          },
-        });
-        return;
-      }
-      if (trigger.kind === 'data') {
-        const evaluation = await automation.evaluateDataTrigger({
-          automationRef: ref,
-          trigger,
-          triggerIndex,
-          purpose,
-          appsDir: paths.appsDir,
-          vault,
-        });
-        if (evaluation.reason) {
-          logger.warn(`data trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
-          return;
-        }
-        if (!evaluation.fire) return;
-        fireAutomation(ref, {
-          triggerKind: 'scheduled',
-          triggerOrigin: 'data',
-          input: {
-            trigger: { kind: 'data', index: triggerIndex, entities: trigger.entities },
-            changes: evaluation.changes,
-          },
-        });
-      }
-    };
-    scheduler =
-      options.scheduler ??
-      new automation.InProcessScheduler({
-        fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
-        evaluate: (ref, triggerIndex) => evaluateCondition(ref, triggerIndex),
-        onError: (err, ref) =>
-          logger.warn(
-            `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),
-          ),
+      };
+
+  const requireHost = (): VaultHost => {
+    if (!currentHost) throw new Error('gateway: no vault workspace activated yet');
+    return currentHost;
+  };
+
+  const activeHost = (): Promise<VaultHost> => {
+    const plane = vaultRegistry.active();
+    return hostFor(plane);
+  };
+
+  const hostFor = (plane: VaultPlane): Promise<VaultHost> => {
+    const vaultId = plane.boot.vaultId;
+    const cached = hosts.get(vaultId);
+    if (cached) return cached;
+    const built = buildHost(plane).catch((err) => {
+      // A failed build must not poison the cache — drop it so the next
+      // request retries (e.g. after a transient git failure).
+      hosts.delete(vaultId);
+      throw err;
+    });
+    hosts.set(vaultId, built);
+    return built;
+  };
+
+  // Drop an app from the registry AND delete its wrapper dir under the
+  // active vault (`<apps>/<id>/` — data.sqlite + blobs), then run the
+  // vault-side uninstall cascade (§11: revoke + retire enrollment).
+  const deregisterAndCleanup = async (appId: string): Promise<void> => {
+    const removed = await requireRuntime().registry.deregister(appId);
+    if (removed) await cleanupDeregisteredApp(activeWorkspace().appsDir, removed, logger);
+    vaultRegistry.revokeApp(appId);
+  };
+
+  const requireRuntime = (): Runtime => {
+    if (!runtimeRef) throw new Error('gateway: runtime not constructed yet');
+    return runtimeRef;
+  };
+
+  async function buildHost(plane: VaultPlane): Promise<VaultHost> {
+    const workspace = plane.workspace;
+    const store = new WorktreeStore({ root: plane.codeStoreRoot });
+    await store.init();
+    const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
+    // Stable live data file — injected so a publish migrates live data and a
+    // draft seeds from it (issue #144). Rooted in THIS vault's workspace.
+    const liveDataFile = (appId: string): string =>
+      path.join(workspace.appsDir, appId, 'data.sqlite');
+    // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
+    // session worktree and lazily seed the worktree's branched `data.sqlite`
+    // from live there.
+    const draftCodeDir = makeDraftCodeDirResolver(store, liveDataFile);
+
+    // Unified chat (issue #141, Phase 3): every chat turn runs in the app's
+    // draft worktree with the union of native file tools + the `centraid_*`
+    // dispatcher — one surface that both tweaks the app's code and operates
+    // its data. A host-injected runner (Plane B) bypasses this per-vault one.
+    const runner: ConversationRunner =
+      options.conversationRunner ??
+      makeUnifiedConversationRunner({
+        store,
+        prefsLoader,
+        getDispatcher,
+        publicBaseUrl: () => serverUrl,
+        liveDataFile,
+        ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
+        ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       });
-    // Drop an app from the registry AND delete its wrapper dir
-    // (`<appsDir>/<id>/` — data.sqlite + run ledgers). Mirrors the legacy
-    // `registry-deregister` route so deleting an app over the git-store
-    // surface doesn't strand per-app data that a recreated id would inherit.
-    // The code on `main` is already gone (`store.deleteApp`).
-    const deregisterAndCleanup = async (appId: string): Promise<void> => {
-      const removed = await runtime.registry.deregister(appId);
-      if (removed) await cleanupDeregisteredApp(paths.appsDir, removed, logger);
-      // Uninstall = revoke + delete (§11): every active vault grant is
-      // revoked (cascade runs) and the enrollment row retired.
-      vaultRegistry?.revokeApp(appId);
-    };
-    extraHandlers.push(
+
+    const handlers: RouteHandler[] = [
       makeAppsStoreRouteHandler(store, {
         onAppLive: async (appId) => {
-          await runtime.registry.ensureUploaded(appId);
-          vaultRegistry?.enrollApp(appId);
+          await requireRuntime().registry.ensureUploaded(appId);
+          vaultRegistry.enrollApp(appId);
           // A publish/rollback may have added/removed/toggled an
           // automation — resync the cron scheduler off the new `main`.
           reconcileScheduler();
@@ -717,28 +498,26 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
-      // Stages into a session worktree (the draft); `publish:true` merges
-      // onto `main` + reconciles the scheduler. Webhook secrets minted here.
       makeLifecycleRouteHandler({
         store,
         codeAppsDir,
         ...(paths.templatesCacheDir ? { templatesCacheDir: paths.templatesCacheDir } : {}),
         ensureRegistered: async (appId) => {
-          await runtime.registry.ensureUploaded(appId);
-          vaultRegistry?.enrollApp(appId);
+          await requireRuntime().registry.ensureUploaded(appId);
+          vaultRegistry.enrollApp(appId);
         },
         deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
         liveDataFile,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
-      // the run feed + per-run detail, and insights. Run-now fires on
-      // THIS host with the gateway's own runner config.
+      // the run feed + per-run detail, and insights — all over THIS
+      // vault's transcripts ledger.
       makeAutomationsRouteHandler({
         store,
-        dataAppsDir: paths.appsDir,
+        transcriptsDbFile: workspace.transcriptsDbFile,
         analytics: analyticsStore,
-        insights: new InsightsStore(analyticsProvider),
+        insights: insightsStore,
         runAutomation: ({ automationRef, runId }) =>
           fireAutomation(automationRef, {
             runId,
@@ -747,16 +526,243 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           }),
         subscribeRunEvents: (runId, listener) => runEventBus.subscribe(runId, listener),
       }),
-    );
+    ];
+
+    return {
+      vaultId: workspace.vaultId,
+      store,
+      codeAppsDir,
+      liveDataFile,
+      draftCodeDir,
+      runner,
+      handlers,
+    };
   }
 
-  // `composedHandler` replays the chain `startRuntimeHttpServer` runs
-  // (app-engine http-server.ts:135-147) — chat-history → user-store →
-  // extra handlers → `runtime.handle` — but WITHOUT the bearer check, for
-  // hosts that own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's
-  // job too: a fronting gateway emits its own.
+  // ── Scheduler (issue #149) ────────────────────────────────────────────
+  // One persistent in-process cron scheduler for the gateway's lifetime;
+  // `reconcileScheduler()` (activation + every publish/delete) settles its
+  // in-memory registry off the ACTIVE vault's `main`. Coalesced so
+  // concurrent publishes don't thrash it.
+  const schedulerCodeAppsDir = (): string => requireHost().codeAppsDir();
+  let scheduler: automation.LocalScheduler | undefined;
+  let reconcileInFlight = false;
+  let reconcileDirty = false;
+  const reconcileScheduler = (): void => {
+    const sched = scheduler;
+    if (!sched) return;
+    if (reconcileInFlight) {
+      reconcileDirty = true;
+      return;
+    }
+    reconcileInFlight = true;
+    void (async () => {
+      do {
+        reconcileDirty = false;
+        const { rows } = await automation.list(schedulerCodeAppsDir());
+        // Every automation app acts through an enrolled agent.agent (duaility
+        // §12) — enroll identities in the ACTIVE vault as the desired set
+        // settles. Idempotent; grants stay owner-approved and deny-by-default.
+        for (const appId of new Set(rows.map((r) => r.ownerApp))) {
+          try {
+            vaultRegistry.enrollAutomationAgent(appId);
+          } catch (err) {
+            logger.warn(
+              `vault plane: agent enrollment for "${appId}" failed: ` +
+                (err instanceof Error ? err.message : String(err)),
+            );
+          }
+        }
+        const diff = await sched.reconcile(rows);
+        if (diff.added.length || diff.updated.length || diff.removed.length) {
+          logger.info(
+            `scheduler reconcile — ` +
+              `added=${diff.added.length} updated=${diff.updated.length} removed=${diff.removed.length}`,
+          );
+        }
+      } while (reconcileDirty);
+    })()
+      .catch((err) =>
+        logger.warn(
+          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
+        ),
+      )
+      .finally(() => {
+        reconcileInFlight = false;
+      });
+  };
+
+  // Condition-trigger evaluation (duaility: time semantics live in the
+  // data). On the trigger's `every` gate, run its consented read under the
+  // automation's agent grant; unseen rows fire the automation with the
+  // rows as `ctx.input`. A receipted deny or bridge error logs and skips —
+  // failure never widens access and never stalls the tick.
+  const evaluateCondition = async (ref: string, triggerIndex: number): Promise<void> => {
+    const parsed = automation.parseRef(ref);
+    if (!parsed) return;
+    const row = await automation.readAppOwned(
+      schedulerCodeAppsDir(),
+      parsed.appId,
+      parsed.automationId,
+    );
+    if (!row || !row.enabled || !row.manifest.vault) return;
+    const trigger = row.manifest.triggers[triggerIndex];
+    if (!trigger) return;
+    const purpose = row.manifest.vault.purpose;
+    const vault = vaultRegistry.agentBridgeFor(parsed.appId);
+    const transcriptsDbFile = activeWorkspace().transcriptsDbFile;
+    if (trigger.kind === 'condition') {
+      const evaluation = await automation.evaluateConditionTrigger({
+        automationRef: ref,
+        trigger,
+        triggerIndex,
+        purpose,
+        transcriptsDbFile,
+        vault,
+      });
+      if (evaluation.reason) {
+        logger.warn(`condition trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+        return;
+      }
+      if (!evaluation.fire) return;
+      fireAutomation(ref, {
+        triggerKind: 'scheduled',
+        triggerOrigin: 'condition',
+        input: {
+          trigger: { kind: 'condition', index: triggerIndex, entity: trigger.entity },
+          rows: evaluation.rows,
+          matched: evaluation.matched,
+        },
+      });
+      return;
+    }
+    if (trigger.kind === 'data') {
+      const evaluation = await automation.evaluateDataTrigger({
+        automationRef: ref,
+        trigger,
+        triggerIndex,
+        purpose,
+        transcriptsDbFile,
+        vault,
+      });
+      if (evaluation.reason) {
+        logger.warn(`data trigger ${ref}[${triggerIndex}] skipped: ${evaluation.reason}`);
+        return;
+      }
+      if (!evaluation.fire) return;
+      fireAutomation(ref, {
+        triggerKind: 'scheduled',
+        triggerOrigin: 'data',
+        input: {
+          trigger: { kind: 'data', index: triggerIndex, entities: trigger.entities },
+          changes: evaluation.changes,
+        },
+      });
+    }
+  };
+  scheduler =
+    options.scheduler ??
+    new automation.InProcessScheduler({
+      fire: (ref) => fireAutomation(ref, { triggerKind: 'scheduled', triggerOrigin: 'cron' }),
+      evaluate: (ref, triggerIndex) => evaluateCondition(ref, triggerIndex),
+      onError: (err, ref) =>
+        logger.warn(
+          `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),
+        ),
+    });
+
+  // ── The runtime ───────────────────────────────────────────────────────
+  // One Runtime for the gateway's lifetime; its apps dir, registry, chat
+  // runner, and session scratch all resolve through the active vault.
+  const runtime = new Runtime({
+    appsDir: () => activeWorkspace().appsDir,
+    // Shared kit assets (kit.js / kit.css) are served from the blueprints
+    // package's canonical `kit/` dir; apps no longer ship per-app copies.
+    sharedAssetsDir: KIT_DIR,
+    userStore: prefs,
+    conversationHistoryStore,
+    conversationRunner: options.conversationRunner ?? {
+      // Facade over the ACTIVE vault's unified runner (#280) — builder-
+      // capable, so turns persist as `kind='build'` (issue #181).
+      runKind: 'build',
+      run: async (input) => (await activeHost()).runner.run(input),
+    },
+    conversationRunnerSessionDir: () => activeWorkspace().runnerSessionDir,
+    runnerStatus:
+      options.runnerStatus ??
+      (async (statusOpts) => {
+        const runnerPrefs = await prefsLoader();
+        if (!runnerPrefs) {
+          return {
+            kind: 'none' as const,
+            ok: false,
+            reason: 'No coding agent configured.',
+            hint: 'Open Settings → Agents and pick Codex or Claude Code.',
+          };
+        }
+        // The model list is a pure catalog read; enumeration is owned by the
+        // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
+        // the client polls `modelsStatus` until it leaves `loading`.
+        const status = await runPreflight(runnerPrefs, catalogPath ? { catalogPath } : {});
+        if (catalogPath && warmer && status.ok) {
+          const count = status.models?.length ?? 0;
+          if ((statusOpts?.refresh ?? false) || count === 0)
+            void warmer.warm(runnerPrefs.kind, 'models');
+          status.modelsStatus = deriveStatus(count, warmer.isWarming(runnerPrefs.kind, 'models'));
+        }
+        return status;
+      }),
+    logger,
+    codeDirOverride: async (appId: string) => (await activeHost()).store.resolveActiveAppDir(appId),
+    draftCodeDir: async (appId: string, sessionId: string) =>
+      (await activeHost()).draftCodeDir(appId, sessionId),
+    vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId),
+  });
+
+  runtimeRef = runtime;
+
+  // ── Route chain ───────────────────────────────────────────────────────
+  const extraHandlers: RouteHandler[] = [
+    // Owner consent surface for the vault plane (grants, parked
+    // confirmations, vault lifecycle). Mounted first — its `_vault` prefix
+    // is disjoint from every other route family.
+    makeVaultRouteHandler(vaultRegistry),
+    // Template catalog (issue #141): the gateway owns it, so the renderer
+    // reads `GET /centraid/_templates` directly. Templates are SEEDS —
+    // gateway-level, read-only material instantiated INTO a vault (#280).
+    makeTemplatesRouteHandler({
+      ...(paths.templatesCacheDir ? { cacheDir: paths.templatesCacheDir } : {}),
+      ...(paths.remoteTemplatesUrl ? { remoteTemplatesUrl: paths.remoteTemplatesUrl } : {}),
+    }),
+    // Coding-agent detection (codex/claude credentials on the gateway host).
+    makeAgentsRouteHandler(
+      catalogPath
+        ? {
+            ...(resolveCatalogModels ? { resolveModels: resolveCatalogModels } : {}),
+            ...(resolveCatalogTools ? { resolveTools: resolveCatalogTools } : {}),
+          }
+        : {},
+    ),
+    // The ACTIVE vault's store-backed handlers (apps-store / lifecycle /
+    // automations), resolved per request so a vault switch re-roots them.
+    async (req, res) => {
+      const host = await activeHost();
+      for (const handler of host.handlers) {
+        if (await handler(req, res)) return true;
+      }
+      return false;
+    },
+  ];
+
+  // `composedHandler` replays the chain `startRuntimeHttpServer` runs —
+  // chat-history → prefs → extra handlers → `runtime.handle` — but WITHOUT
+  // the bearer check, for hosts that own auth (OpenClaw's `auth: 'gateway'`).
+  // CORS is the host's job too: a fronting gateway emits its own.
   const conversationHandler = makeConversationRouteHandler(() => conversationHistoryStore);
-  const userStoreHandler = makeUserStoreRouteHandler(() => userStore);
+  const userStoreHandler = makeUserStoreRouteHandler(
+    () => prefs,
+    () => activeWorkspace().ownerPartyId,
+  );
   const composedHandler: RouteHandler = async (req, res) => {
     const url = req.url ?? '';
     if (url.startsWith(CONVERSATIONS_PREFIX) && (await conversationHandler(req, res))) return true;
@@ -768,26 +774,28 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     return true;
   };
 
+  // ── Workspace activation (#280) ───────────────────────────────────────
+  // Mount the ACTIVE vault's workspace: build (or reuse) its host bundle,
+  // load its registry, sync every app on its `main` into the registry +
+  // enroll it in the vault, then settle the cron scheduler. Runs at boot
+  // and after every vault switch (the vault-routes PATCH awaits it).
+  const activateWorkspace = async (): Promise<void> => {
+    const host = await activeHost();
+    currentHost = host;
+    await runtime.bootstrap();
+    for (const appId of await host.store.listApps()) {
+      await runtime.registry.ensureUploaded(appId);
+      vaultRegistry.enrollApp(appId);
+    }
+    reconcileScheduler();
+  };
+  vaultRegistry.setActivationHook(activateWorkspace);
+
   const start = async (publicBaseUrl: string): Promise<void> => {
     // Publish the live origin to the unified chat runner so post-turn
     // webhook minting can build absolute `_centraid-hook` URLs.
     serverUrl = publicBaseUrl;
-    // `lazyStoreInit` hosts deferred the git-store `init()` to here so it runs
-    // only in the process that calls `start()` (single git-init, no worker
-    // races). A no-op for the eager path — `init()` already ran at construction.
-    if (appsStore && options.lazyStoreInit) await appsStore.init();
-    await runtime.bootstrap();
-
-    // Git-store sync: every app present on `main` gets a registry entry
-    // so `registry.get(id)` resolves and its data dir (`<appsDir>/<id>/`,
-    // where data.sqlite lives) exists. Code is served from the worktree
-    // via the override; this only bookkeeps existence + the data dir.
-    if (appsStore) {
-      for (const appId of await appsStore.listApps()) {
-        await runtime.registry.ensureUploaded(appId);
-        vaultRegistry?.enrollApp(appId);
-      }
-    }
+    await activateWorkspace();
 
     // Start the in-process cron scheduler and settle it with disk. Under
     // n8n semantics it only fires while running — downtime is not
@@ -796,15 +804,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     reconcileScheduler();
 
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
-    vaultRegistry?.start();
+    vaultRegistry.start();
 
     // Warm the host-capability catalog — BOTH models and tools — for each
     // detected runner on EVERY gateway start, in the background so it never
-    // delays readiness. The chat picker, builder grounding, and Settings →
-    // Agents read this cache; this boot probe front-loads enumeration so the
-    // pickers are fresh before anyone opens them (the seed is gone — a cold
-    // catalog shows a loading state until this fills it in). Best-effort; the
-    // warmer dedupes, so a client Refresh mid-boot joins this run.
+    // delays readiness. Best-effort; the warmer dedupes, so a client Refresh
+    // mid-boot joins this run.
     if (warmer) {
       const activeWarmer = warmer;
       void (async () => {
@@ -839,17 +844,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const stop = async (): Promise<void> => {
     await scheduler?.stop();
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
-    vaultRegistry?.stop();
+    vaultRegistry.stop();
   };
 
   return {
     runtime,
-    userStore,
+    prefs,
     analyticsStore,
     conversationHistoryStore,
-    ...(vaultRegistry ? { vaults: vaultRegistry } : {}),
-    ...(appsStore ? { appsStore } : {}),
-    ...(builtCodeAppsDir ? { codeAppsDir: builtCodeAppsDir } : {}),
+    vaults: vaultRegistry,
+    activeAppsStore: async () => (await activeHost()).store,
+    codeAppsDir: () => requireHost().codeAppsDir(),
     extraHandlers,
     composedHandler,
     start,

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one cohesive plane (mount + both bridge planes + workspace accessors, #280); pending split of the bridge executors into a sibling module
 /*
  * The vault plane (duaility §12) — the gateway's mount of the owner's
  * personal vault (`@centraid/vault`) beside the per-app data silos.
@@ -36,6 +37,9 @@ import {
   openVaultDb,
   purposeConceptId,
   renameVault,
+  readVaultPresentation,
+  updateVaultPresentation,
+  type VaultPresentation,
   registerAttachmentCommands,
   registerBookingCommands,
   registerBusinessCommands,
@@ -69,7 +73,15 @@ import {
   type SweepResult,
   type VaultDb,
 } from '@centraid/vault';
-import type { RuntimeLogger, VaultBridge, VaultCallResult } from '@centraid/app-engine';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import {
+  openTranscriptsDb,
+  type RuntimeLogger,
+  type VaultBridge,
+  type VaultCallResult,
+  type VaultWorkspace,
+} from '@centraid/app-engine';
 import {
   linkAsOwner,
   pickEntities,
@@ -131,6 +143,8 @@ export class VaultPlane {
   private sweepTimer: NodeJS.Timeout | undefined;
   private closed = false;
   private displayName: string;
+  /** Lazily-opened `transcripts.db` handle — closed with the plane. */
+  private transcriptsDb: DatabaseSync | undefined;
 
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
@@ -176,11 +190,62 @@ export class VaultPlane {
     return this.displayName;
   }
 
+  /**
+   * The vault's workspace (#280 — the vault is the unit): the ledger,
+   * per-app data dirs, and runner scratch that live BESIDE the sovereign
+   * pair inside this vault's directory. app-engine operates entirely
+   * through this view; the registry hands out the active one.
+   */
+  get workspace(): VaultWorkspace {
+    return {
+      vaultId: this.boot.vaultId,
+      ownerPartyId: this.boot.ownerPartyId,
+      appsDir: path.join(this.dir, 'apps'),
+      transcripts: () => this.transcripts(),
+      transcriptsDbFile: path.join(this.dir, 'transcripts.db'),
+      runnerSessionDir: path.join(this.dir, 'runner-sessions'),
+    };
+  }
+
+  /**
+   * Root of this vault's app CODE store (`apps.git` + worktrees) — the
+   * gateway constructs a `WorktreeStore` here per vault (#280: each family
+   * member builds their own apps; the code travels with the vault).
+   */
+  get codeStoreRoot(): string {
+    return path.join(this.dir, 'code');
+  }
+
+  /** Lazily open (and cache) this vault's `transcripts.db`. */
+  private transcripts(): DatabaseSync {
+    if (this.closed) throw new Error(`vault plane ${this.boot.vaultId} is stopped`);
+    if (!this.transcriptsDb) {
+      this.transcriptsDb = openTranscriptsDb(path.join(this.dir, 'transcripts.db'));
+    }
+    return this.transcriptsDb;
+  }
+
   /** Rename the vault (owner act). */
   rename(name: string): void {
     renameVault(this.db, name);
     this.displayName = name;
     this.logger.info(`vault plane: renamed vault ${this.boot.vaultId} to "${name}"`);
+  }
+
+  /**
+   * The vault's presentation (avatar color / icon / blurb) — owner-facing
+   * identity that lives IN the vault (`core_vault.settings_json`), so it
+   * travels with an export (#280: profiles are vaults).
+   */
+  get presentation(): VaultPresentation {
+    return readVaultPresentation(this.db);
+  }
+
+  /** Merge a presentation patch (owner act); null/empty clears a field. */
+  updatePresentation(
+    patch: Partial<Record<'color' | 'icon' | 'blurb', string | null>>,
+  ): VaultPresentation {
+    return updateVaultPresentation(this.db, patch);
   }
 
   /**
@@ -487,6 +552,14 @@ export class VaultPlane {
       this.logger.warn(
         `vault plane: checkpoint on stop failed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    }
+    if (this.transcriptsDb) {
+      try {
+        this.transcriptsDb.close();
+      } catch {
+        /* already closed */
+      }
+      this.transcriptsDb = undefined;
     }
     this.db.close();
   }

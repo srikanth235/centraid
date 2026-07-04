@@ -1,6 +1,6 @@
 /*
  * Publish/session/files HTTP surface for the git-store backend
- * (issue #137). Drives a booted `serve({ appsStoreRoot })` over HTTP
+ * (issue #137). Drives a booted `serve()` over HTTP
  * end-to-end: open a session, write draft files, publish (with
  * gateway-side manifest validation), serve the published app, then
  * roll back. Replaces the tarball-upload flow.
@@ -19,10 +19,8 @@ let handle: GatewayServeHandle;
 
 function pathsUnder(dir: string): GatewayPaths {
   return {
-    appsDir: path.join(dir, 'apps'),
-    identityDb: path.join(dir, 'identity.sqlite'),
-    analyticsDb: path.join(dir, 'analytics.sqlite'),
-    conversationRunnerSessionDir: path.join(dir, 'conversation-runner-sessions'),
+    vaultDir: path.join(dir, 'vault'),
+    prefsFile: path.join(dir, 'prefs.json'),
   };
 }
 
@@ -50,7 +48,6 @@ beforeEach(async () => {
   dataDir = await fs.mkdtemp(path.join(os.tmpdir(), `gw-routes-${crypto.randomUUID()}-`));
   handle = await serve({
     paths: pathsUnder(dataDir),
-    appsStoreRoot: path.join(dataDir, 'code'),
   });
 });
 

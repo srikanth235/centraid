@@ -62,6 +62,70 @@ export function renameVault(db: VaultDb, displayName: string): void {
   db.vault.prepare('UPDATE core_vault SET display_name = ?').run(displayName);
 }
 
+/**
+ * The vault's owner-facing presentation (issue #280 — profiles are vaults).
+ * Lives in `core_vault.settings_json`: the avatar color, icon, and blurb the
+ * desktop switcher shows belong to the VAULT, not to any client's
+ * localStorage — they travel with an export and survive device changes.
+ */
+export interface VaultPresentation {
+  /** `#RRGGBB` avatar color. */
+  color?: string;
+  /** Icon name from the shell's icon set. */
+  icon?: string;
+  /** One-line description shown under the vault name. */
+  blurb?: string;
+}
+
+/** Read the vault's settings bag (`core_vault.settings_json`), `{}` when unset. */
+export function readVaultSettings(db: VaultDb): Record<string, unknown> {
+  const row = db.vault.prepare('SELECT settings_json FROM core_vault LIMIT 1').get() as
+    | { settings_json: string | null }
+    | undefined;
+  if (!row?.settings_json) return {};
+  try {
+    const parsed = JSON.parse(row.settings_json) as unknown;
+    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+/** The vault's presentation fields out of the settings bag. */
+export function readVaultPresentation(db: VaultDb): VaultPresentation {
+  const bag = readVaultSettings(db).presentation;
+  if (bag === null || typeof bag !== 'object' || Array.isArray(bag)) return {};
+  const p = bag as Record<string, unknown>;
+  return {
+    ...(typeof p.color === 'string' ? { color: p.color } : {}),
+    ...(typeof p.icon === 'string' ? { icon: p.icon } : {}),
+    ...(typeof p.blurb === 'string' ? { blurb: p.blurb } : {}),
+  };
+}
+
+/**
+ * Merge a presentation patch into `core_vault.settings_json` (owner act).
+ * `null`/empty-string values clear a field.
+ */
+export function updateVaultPresentation(
+  db: VaultDb,
+  patch: Partial<Record<keyof VaultPresentation, string | null>>,
+): VaultPresentation {
+  const settings = readVaultSettings(db);
+  const current = readVaultPresentation(db) as Record<string, unknown>;
+  for (const key of ['color', 'icon', 'blurb'] as const) {
+    if (!(key in patch)) continue;
+    const v = patch[key];
+    if (v === null || v === undefined || v === '') delete current[key];
+    else current[key] = v;
+  }
+  settings.presentation = current;
+  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  return current as VaultPresentation;
+}
+
 export interface EnrolledApp {
   appId: string;
   signingKey: string;

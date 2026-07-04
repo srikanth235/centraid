@@ -17,7 +17,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { uuidv7 } from '@centraid/vault';
-import type { RuntimeLogger, VaultBridge } from '@centraid/app-engine';
+import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane } from './vault-plane.js';
 
 export interface VaultRegistryOptions {
@@ -36,6 +36,10 @@ export interface VaultInfo {
   name: string;
   active: boolean;
   ownerPartyId: string;
+  /** Presentation out of `core_vault.settings_json` (#280: profiles are vaults). */
+  color?: string;
+  icon?: string;
+  blurb?: string;
 }
 
 /* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
@@ -60,6 +64,12 @@ export class VaultRegistry {
   private readonly planes = new Map<string, VaultPlane>();
   private activeId!: string;
   private started = false;
+  /**
+   * Host hook run after the active pointer moves (#280): the gateway
+   * re-roots its workspace here (registry sync, scheduler reconcile).
+   * Assigned post-construction — the registry opens before the runtime.
+   */
+  private activationHook: (() => Promise<void>) | undefined;
 
   constructor(options: VaultRegistryOptions) {
     this.rootDir = options.rootDir;
@@ -141,12 +151,35 @@ export class VaultRegistry {
   }
 
   private info(plane: VaultPlane): VaultInfo {
+    const presentation = plane.presentation;
     return {
       vaultId: plane.boot.vaultId,
       name: plane.name,
       active: plane.boot.vaultId === this.activeId,
       ownerPartyId: plane.boot.ownerPartyId,
+      ...(presentation.color ? { color: presentation.color } : {}),
+      ...(presentation.icon ? { icon: presentation.icon } : {}),
+      ...(presentation.blurb ? { blurb: presentation.blurb } : {}),
     };
+  }
+
+  /** The ACTIVE vault's workspace — the world app-engine operates in (#280). */
+  activeWorkspace(): VaultWorkspace {
+    return this.active().workspace;
+  }
+
+  /** Register the host's post-switch re-root hook (#280). */
+  setActivationHook(hook: () => Promise<void>): void {
+    this.activationHook = hook;
+  }
+
+  /**
+   * Run the host's activation hook (after `setActive`, and once at boot).
+   * The vault-routes PATCH awaits this so the renderer sees the new
+   * workspace fully mounted when the response lands.
+   */
+  async settleActivation(): Promise<void> {
+    if (this.activationHook) await this.activationHook();
   }
 
   /** The active vault's plane — where `ctx.vault` and default owner acts land. */
@@ -190,6 +223,16 @@ export class VaultRegistry {
     if (trimmed.length === 0)
       throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
     plane.rename(trimmed);
+    return this.info(plane);
+  }
+
+  /** Merge a presentation patch into one vault (owner act, #280). */
+  updatePresentation(
+    vaultId: string,
+    patch: Partial<Record<'color' | 'icon' | 'blurb', string | null>>,
+  ): VaultInfo {
+    const plane = this.require(vaultId);
+    plane.updatePresentation(patch);
     return this.info(plane);
   }
 
@@ -249,21 +292,23 @@ export class VaultRegistry {
     };
   }
 
-  /** Enroll a live app in every mounted vault (identity only). */
+  /**
+   * Enroll a live app in the ACTIVE vault (identity only). Post-#280 an app
+   * is a vault asset — it lives in one vault's code store and is enrolled
+   * there alone, so `consent.app` now governs the vault's OWN apps.
+   */
   enrollApp(appId: string): void {
-    for (const plane of this.planes.values()) plane.enrollApp(appId);
+    this.active().enrollApp(appId);
   }
 
-  /** Enroll an automation's acting identity in every mounted vault. */
+  /** Enroll an automation's acting identity in the ACTIVE vault. */
   enrollAutomationAgent(appId: string): void {
-    for (const plane of this.planes.values()) plane.enrollAutomationAgent(appId);
+    this.active().enrollAutomationAgent(appId);
   }
 
-  /** Uninstall cascade, everywhere the app was ever enrolled. */
+  /** Uninstall cascade in the ACTIVE vault (the app lives nowhere else, #280). */
   revokeApp(appId: string): { grantsRevoked: number } {
-    let grantsRevoked = 0;
-    for (const plane of this.planes.values()) grantsRevoked += plane.revokeApp(appId).grantsRevoked;
-    return { grantsRevoked };
+    return this.active().revokeApp(appId);
   }
 
   /** Start every plane's standing-duty clock; new vaults start on creation. */

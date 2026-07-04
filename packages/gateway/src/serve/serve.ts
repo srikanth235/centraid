@@ -50,6 +50,9 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
     extraHandlers: gateway.extraHandlers,
+    // `/_centraid-user/id` answers with the ACTIVE vault's owner party id —
+    // the vault owner IS the user (#280).
+    ownerIdProvider: () => gateway.vaults.active().boot.ownerPartyId,
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
@@ -67,9 +70,11 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       await server.close();
     },
     runtime: gateway.runtime,
-    userStore: gateway.userStore,
+    prefs: gateway.prefs,
     analyticsStore: gateway.analyticsStore,
     conversationHistoryStore: gateway.conversationHistoryStore,
-    ...(gateway.appsStore ? { appsStore: gateway.appsStore } : {}),
+    vaults: gateway.vaults,
+    activeAppsStore: gateway.activeAppsStore,
+    codeAppsDir: gateway.codeAppsDir,
   } satisfies GatewayServeHandle;
 }
