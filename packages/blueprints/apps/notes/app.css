@@ -260,6 +260,11 @@ select {
   margin-bottom: 1rem;
 }
 
+/* display:flex would defeat the hidden attribute — restate it. */
+.inline-form[hidden] {
+  display: none;
+}
+
 .inline-form input {
   flex: 1;
   min-width: 0;
@@ -349,6 +354,95 @@ input.chip-rename-input {
   padding: 0.3rem 0.8rem;
   border-radius: 999px;
   font-size: 0.8rem;
+}
+
+/* ---------- Library layout: notebook sidebar at wide widths ----------
+   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
+   the wrappers below are inert there. At >=720px the same chips restyle
+   into a docs-style sidebar column beside the note pane. */
+
+.chip-group {
+  display: contents; /* mobile: active chip + tools flow inline with the row */
+}
+
+@media (min-width: 720px) {
+  :root:not([data-app-width='narrow']) .split {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* Sidebar hides until data arrives (and while consent is denied) —
+     collapse to one column so the pane doesn't sit beside a ghost track. */
+  :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
+    grid-template-columns: 1fr;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav {
+    position: sticky;
+    top: 0.5rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 0.75rem;
+    padding: 0.5rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chips {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15rem;
+    margin-bottom: 0;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-group {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip {
+    display: flex;
+    align-items: center;
+    text-align: left;
+    font-size: 0.875rem;
+    border: none;
+    background: none;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-group .chip {
+    flex: 1;
+    min-width: 0;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+    color: var(--app-color, var(--accent));
+    font-weight: 600;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-tool {
+    flex-shrink: 0;
+    border: none;
+    background: none;
+    border-radius: 0.5rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-add {
+    border: 1px dashed var(--line);
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav input.chip-rename-input {
+    width: 100%;
+    border-radius: 0.5rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .inline-form {
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.25rem;
+  }
 }
 
 /* ---------- Note list: Pinned/Others sections, cards at wide widths ---------- */

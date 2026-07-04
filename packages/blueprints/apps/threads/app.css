@@ -90,6 +90,16 @@ body.thread-open main {
   padding-bottom: 0;
 }
 
+/* The split wrapper joins the height chain (main → .split → .thread-col)
+   so the messenger column still pins its compose bar. On desktop the split
+   media block below swaps this for the two-pane grid. */
+body.thread-open .split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .thread-col {
   flex: 1;
   min-height: 0;
@@ -710,6 +720,12 @@ button {
   padding: 2rem 0;
 }
 
+/* Split-mode empty state — inert below the breakpoint, where the view swap
+   owns the whole screen. The split media block below reveals it. */
+.thread-placeholder {
+  display: none;
+}
+
 /* ---------- Attachments (shared pattern across apps) ---------- */
 
 .small-btn {
@@ -806,6 +822,64 @@ button {
 
 .attach-add .ghost {
   display: inline-block;
+}
+
+/* ---------- Split view (desktop master-detail) ---------- */
+/* ≥720px outside a narrow tile: the inbox becomes a persistent left pane
+   and the conversation renders beside it. Below the breakpoint (or in a
+   narrow tile) none of this applies — the mobile full-screen swap, back
+   button included, is untouched. app.js keeps the `hidden` attributes in
+   agreement via the same isSplit() check. */
+@media (min-width: 720px) {
+  :root:not([data-app-width='narrow']) .split {
+    display: grid;
+    grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  :root:not([data-app-width='narrow']) #inboxView {
+    min-width: 0;
+  }
+
+  /* With a conversation open the body is already the fixed messenger frame
+     (body.thread-open above, which also gives .split its flex sizing):
+     pin the single grid row to that height and let the list pane scroll on
+     its own, since the page itself no longer can. */
+  :root:not([data-app-width='narrow']) body.thread-open .split {
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  :root:not([data-app-width='narrow']) body.thread-open #inboxView {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* The list never leaves the screen — back has nowhere to go. */
+  :root:not([data-app-width='narrow']) #backBtn {
+    display: none;
+  }
+
+  /* The open conversation, marked in the list it was opened from. */
+  :root:not([data-app-width='narrow']) .thread-row[aria-current='true'] {
+    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+    border-radius: 0.625rem;
+  }
+
+  /* Nothing selected: a quiet card keeps the conversation column honest.
+     Driven by #messageView's own `hidden` state, so it survives resizes. */
+  :root:not([data-app-width='narrow']) #messageView[hidden] + .thread-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 18rem;
+    border: 1px solid var(--line);
+    border-radius: 0.75rem;
+    background: var(--surface);
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
 }
 
 /* ---------- App-level knobs ---------- */

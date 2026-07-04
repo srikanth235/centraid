@@ -261,6 +261,11 @@ input:focus {
   margin-bottom: 1rem;
 }
 
+/* display:flex would defeat the hidden attribute — restate it. */
+.chips[hidden] {
+  display: none;
+}
+
 .chip {
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -308,10 +313,89 @@ input:focus {
   margin: -0.5rem 0 1rem;
 }
 
+.album-tools[hidden] {
+  display: none;
+}
+
 .album-tools-label {
   color: var(--ink-soft);
   font-size: 0.8rem;
   margin-right: auto;
+}
+
+/* ---------- Library layout: album sidebar at wide widths ----------
+   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
+   the wrappers below are inert there. At >=720px the same chips restyle
+   into a docs-style sidebar column beside the photo grid. */
+
+@media (min-width: 720px) {
+  :root:not([data-app-width='narrow']) .split {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* Sidebar hides until data arrives (and while consent is denied) —
+     collapse to one column so the pane doesn't sit beside a ghost track. */
+  :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
+    grid-template-columns: 1fr;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav {
+    position: sticky;
+    top: 0.5rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 0.75rem;
+    padding: 0.5rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chips {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15rem;
+    margin-bottom: 0;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip {
+    display: flex;
+    align-items: center;
+    text-align: left;
+    font-size: 0.875rem;
+    border: none;
+    background: none;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip[data-active='true'] {
+    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+    color: var(--app-color, var(--accent));
+    font-weight: 600;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-new {
+    border: 1px dashed var(--line);
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chip-input {
+    width: 100%;
+    border-radius: 0.5rem;
+  }
+
+  /* The tools row for the selected album stacks under the chips: the
+     count label takes its own line, the buttons wrap below it. */
+  :root:not([data-app-width='narrow']) .side-nav .album-tools {
+    flex-wrap: wrap;
+    margin: 0.5rem 0 0.25rem;
+    padding: 0 0.1rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .album-tools-label {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
 }
 
 /* Photo grid — sticky month headers and day labels span the full row;

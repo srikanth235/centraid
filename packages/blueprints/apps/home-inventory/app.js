@@ -38,6 +38,10 @@ let searchResults = null;
 // (newest first). "Show more" grows it; search reaches the rest.
 let inventoryWindow = 500;
 let inventoryTruncated = false;
+// Room filter: '' = all places, NO_PLACE = items without a room, else a
+// core.place id.
+const NO_PLACE = '__none__';
+let activePlace = '';
 // One detail card open at a time.
 let openItemId = null;
 // While an edit/warranty form is open, refreshes park here instead of
@@ -191,6 +195,45 @@ function fillPlaceSelect(select, selectedId) {
   if (select.value !== (selectedId ?? '')) select.value = '';
 }
 
+// The rooms nav: "All places", one chip per room, plus "No room" when
+// unfiled items exist. Counts are whole-inventory — the nav answers
+// "what lives in this room?", not "what matches my search?".
+function renderPlaceNav() {
+  const nav = $('placeNav');
+  nav.innerHTML = '';
+  const items = lastData?.items ?? [];
+  const counts = new Map();
+  for (const it of items) {
+    const key = it.place_id || NO_PLACE;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const entries = [{ id: '', name: 'All places', count: items.length }];
+  for (const p of lastData?.places ?? []) {
+    entries.push({ id: p.place_id, name: p.name, count: counts.get(p.place_id) ?? 0 });
+  }
+  if (counts.has(NO_PLACE)) {
+    entries.push({ id: NO_PLACE, name: 'No room', count: counts.get(NO_PLACE) });
+  }
+  for (const e of entries) {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.setAttribute('aria-pressed', String(e.id === activePlace));
+    const label = document.createElement('span');
+    label.textContent = e.name;
+    const count = document.createElement('span');
+    count.className = 'chip-count';
+    count.textContent = String(e.count);
+    chip.append(label, count);
+    chip.addEventListener('click', () => {
+      activePlace = e.id;
+      renderPlaceNav();
+      renderItems();
+    });
+    nav.appendChild(chip);
+  }
+}
+
 // ---------- Attachments (shared pattern across apps) ----------
 // Read a File as a base64 data: URI — the vault stores bytes inline, so the
 // browser does the encoding before the data ever leaves the app.
@@ -321,8 +364,10 @@ async function refresh() {
   $('consentBanner').hidden = !denied;
   $('addForm').hidden = Boolean(denied);
   $('toolbar').hidden = Boolean(denied);
+  $('sideNav').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
+    $('placeNav').innerHTML = '';
     $('maintenanceDue').hidden = true;
     $('warrantyExpiring').hidden = true;
     $('itemList').innerHTML = '';
@@ -333,6 +378,17 @@ async function refresh() {
   }
   lastData = data;
   inventoryTruncated = Boolean(data?.truncated);
+  // A room that vanished from the vault can't stay selected — fall back to
+  // all places (same for "No room" once every item is filed somewhere).
+  if (
+    activePlace &&
+    (activePlace === NO_PLACE
+      ? !(data?.items ?? []).some((it) => !it.place_id)
+      : !(data?.places ?? []).some((p) => p.place_id === activePlace))
+  ) {
+    activePlace = '';
+  }
+  renderPlaceNav();
   refreshAddFormPickers();
   renderTotalValue(data?.items ?? []);
   renderMaintenance(data?.maintenance ?? []);
@@ -496,14 +552,27 @@ function snippetInto(el, snippet) {
 function renderItems() {
   const list = $('itemList');
   const all = lastData?.items ?? [];
+  // The room filter narrows the browse list, and — while a term is active —
+  // the vault's ranked matches too, so the nav constrains what search shows.
+  const inRoom = (items) =>
+    activePlace
+      ? items.filter((it) =>
+          activePlace === NO_PLACE ? !it.place_id : it.place_id === activePlace,
+        )
+      : items;
+  const inPlace = inRoom(all);
   const term = searchTerm.trim();
   // While a term is active the list IS the vault's ranked matches — search
-  // reaches every item in the vault, not just the browse window's slice.
-  const shown = term ? (searchResults?.items ?? []) : all;
+  // reaches every item in the vault, not just the browse window's slice —
+  // then narrowed to the active room.
+  const shown = term ? inRoom(searchResults?.items ?? []) : inPlace;
   if (openItemId && !shown.some((it) => it.item_id === openItemId)) openItemId = null;
 
   $('empty').hidden = term ? true : all.length > 0;
-  $('noMatches').hidden = !(term && shown.length === 0);
+  // "No matches" covers both an empty search and an empty room; the copy
+  // switches to name whichever filter is in force.
+  $('noMatches').hidden = !((term || activePlace) && all.length > 0 && shown.length === 0);
+  $('noMatches').textContent = term ? 'No items match your search.' : 'Nothing in this room yet.';
   list.classList.toggle('grid-view', viewMode === 'grid');
   list.innerHTML = '';
 

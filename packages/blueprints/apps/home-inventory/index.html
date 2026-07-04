@@ -124,17 +124,27 @@
         </section>
       </div>
 
-      <section id="itemList" aria-label="Items by place"></section>
-      <p id="empty" class="empty" hidden>
-        Nothing here yet — add the first item above, or record assets in the vault.
-      </p>
-      <p id="noMatches" class="empty" hidden>No items match your search.</p>
+      <!-- Rooms nav ahead of the pane: on phones it reads as a chip row
+           directly above the items; at wide widths it becomes a sidebar. -->
+      <div class="split">
+        <nav id="sideNav" class="side-nav" aria-label="Rooms" hidden>
+          <div id="placeNav" class="chips" role="group" aria-label="Filter by room"></div>
+        </nav>
 
-      <!-- Disposal keeps the row; the history stays, collapsed out of the way. -->
-      <details id="disposedSection" hidden>
-        <summary class="day-label muted small">Disposed</summary>
-        <div id="disposedRows"></div>
-      </details>
+        <div class="pane">
+          <section id="itemList" aria-label="Items by place"></section>
+          <p id="empty" class="empty" hidden>
+            Nothing here yet — add the first item above, or record assets in the vault.
+          </p>
+          <p id="noMatches" class="empty" hidden>No items match your search.</p>
+
+          <!-- Disposal keeps the row; the history stays, collapsed out of the way. -->
+          <details id="disposedSection" hidden>
+            <summary class="day-label muted small">Disposed</summary>
+            <div id="disposedRows"></div>
+          </details>
+        </div>
+      </div>
 
       <p class="footnote muted small">
         Every write is a typed vault command — consent-checked and receipted.

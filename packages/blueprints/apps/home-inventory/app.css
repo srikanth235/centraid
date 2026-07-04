@@ -509,6 +509,113 @@ button {
   min-height: 2.5rem;
 }
 
+/* ---------- Rooms filter: chip row on phones, sidebar at wide widths ---------- */
+
+/* Room filter chips — client-side, "All places" plus one per room. Scoped
+   under .chips so the role-prompt and warranty-preset chips keep their own
+   look. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.chips:empty {
+  display: none;
+}
+
+.chips .chip {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.8rem;
+  min-height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chips .chip[aria-pressed='true'] {
+  background: var(--app-color, var(--accent));
+  border-color: var(--app-color, var(--accent));
+  color: #fff;
+}
+
+/* Item counts ride inside each chip, faint until the chip fills. */
+.chip-count {
+  margin-left: 0.4rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.chips .chip[aria-pressed='true'] .chip-count {
+  color: inherit;
+}
+
+/* ---------- Rooms layout: place sidebar at wide widths ----------
+   Mobile (and narrow tiles) keep the horizontal chip row exactly as-is;
+   the wrappers below are inert there. At >=720px the same chips restyle
+   into a docs-style sidebar column beside the item pane. */
+
+@media (min-width: 720px) {
+  :root:not([data-app-width='narrow']) .split {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  /* Sidebar hides until data arrives (and while consent is denied) —
+     collapse to one column so the pane doesn't sit beside a ghost track. */
+  :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
+    grid-template-columns: 1fr;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav {
+    position: sticky;
+    top: 0.5rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    border-radius: 0.75rem;
+    padding: 0.5rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chips {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.15rem;
+    margin-bottom: 0;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chips .chip {
+    display: flex;
+    align-items: center;
+    text-align: left;
+    font-size: 0.875rem;
+    border: none;
+    background: none;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.6rem;
+  }
+
+  :root:not([data-app-width='narrow']) .side-nav .chips .chip[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--app-color, var(--accent)) 10%, transparent);
+    color: var(--app-color, var(--accent));
+    font-weight: 600;
+  }
+
+  /* Counts right-aligned and faint like the docs folder tree — even on the
+     selected row, where the tinted background carries the state. */
+  :root:not([data-app-width='narrow']) .side-nav .chip .chip-count,
+  :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] .chip-count {
+    margin-left: auto;
+    padding-left: 0.5rem;
+    color: var(--ink-faint);
+  }
+}
+
 /* ---------- Attention rail: expiring warranties + maintenance ---------- */
 
 @media (min-width: 720px) {
