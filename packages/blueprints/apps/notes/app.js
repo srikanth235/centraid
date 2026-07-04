@@ -428,6 +428,7 @@ async function refresh() {
   $('consentBanner').hidden = !denied;
   $('quickAdd').hidden = Boolean(denied);
   $('searchWrap').hidden = Boolean(denied);
+  $('sideNav').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     $('notebookChips').innerHTML = '';
@@ -482,11 +483,16 @@ function renderChips() {
       renderChips();
       renderNotes();
     });
-    row.appendChild(chip);
     // The selected notebook is manageable in place: rename and delete ride
-    // beside its chip — a typo'd notebook is no longer forever.
+    // beside its chip — a typo'd notebook is no longer forever. The group
+    // wrapper keeps chip + tools on one sidebar row at wide widths.
     if (nb.notebook_id !== 'all' && nb.notebook_id === activeNotebook) {
-      row.append(renameChipButton(nb), deleteChipButton(nb));
+      const group = document.createElement('div');
+      group.className = 'chip-group';
+      group.append(chip, renameChipButton(nb), deleteChipButton(nb));
+      row.appendChild(group);
+    } else {
+      row.appendChild(chip);
     }
   }
   const add = document.createElement('button');

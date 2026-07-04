@@ -40,131 +40,159 @@
   </head>
   <body>
     <main>
-      <!-- ============ Inbox ============ -->
-      <section id="inboxView" aria-label="Inbox">
-        <header class="head">
-          <div>
-            <h1>Threads</h1>
-            <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+      <!-- Two panes on desktop, one at a time on mobile: app.css turns this
+           wrapper into a master-detail grid at ≥720px (non-narrow tiles);
+           below that it is an inert div and the views swap full-screen. -->
+      <div class="split">
+        <!-- ============ Inbox ============ -->
+        <section id="inboxView" aria-label="Inbox">
+          <header class="head">
+            <div>
+              <h1>Threads</h1>
+              <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
+            </div>
+            <button id="newMsgBtn" type="button" class="ghost new-msg">＋ New message</button>
+          </header>
+
+          <div id="consentBanner" class="banner" hidden>
+            <strong>No vault access yet.</strong>
+            <span id="consentDetail"
+              >Ask the owner to approve this app's requested scopes in vault settings.</span
+            >
           </div>
-          <button id="newMsgBtn" type="button" class="ghost new-msg">＋ New message</button>
-        </header>
+          <div
+            id="noticeBanner"
+            class="banner notice"
+            role="status"
+            aria-live="polite"
+            hidden
+          ></div>
 
-        <div id="consentBanner" class="banner" hidden>
-          <strong>No vault access yet.</strong>
-          <span id="consentDetail"
-            >Ask the owner to approve this app's requested scopes in vault settings.</span
-          >
-        </div>
-        <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
-
-        <!-- New conversation: recipient → channel → (subject) → first message.
-             The write path always supported this; the draft action opens the
-             thread and the app jumps straight into it. -->
-        <form id="newMsgForm" class="new-msg-form" autocomplete="off" hidden>
-          <p class="muted small">
-            New message — the draft opens a thread; nothing sends by itself.
-          </p>
-          <input
-            id="recipientSearch"
-            type="text"
-            placeholder="To: search people…"
-            aria-label="Recipient"
-            role="combobox"
-            aria-expanded="false"
-            aria-controls="recipientList"
-          />
-          <div id="recipientList" class="recipient-list" role="listbox" aria-label="People"></div>
-          <div class="new-msg-row">
-            <div id="channelSelect" class="chip-row" role="radiogroup" aria-label="Channel">
-              <button type="button" class="chip selected" data-channel="dm" aria-pressed="true">
-                DM
-              </button>
-              <button type="button" class="chip" data-channel="sms" aria-pressed="false">
-                SMS
-              </button>
-              <button type="button" class="chip" data-channel="email" aria-pressed="false">
-                Email
+          <!-- New conversation: recipient → channel → (subject) → first message.
+               The write path always supported this; the draft action opens the
+               thread and the app jumps straight into it. -->
+          <form id="newMsgForm" class="new-msg-form" autocomplete="off" hidden>
+            <p class="muted small">
+              New message — the draft opens a thread; nothing sends by itself.
+            </p>
+            <input
+              id="recipientSearch"
+              type="text"
+              placeholder="To: search people…"
+              aria-label="Recipient"
+              role="combobox"
+              aria-expanded="false"
+              aria-controls="recipientList"
+            />
+            <div id="recipientList" class="recipient-list" role="listbox" aria-label="People"></div>
+            <div class="new-msg-row">
+              <div id="channelSelect" class="chip-row" role="radiogroup" aria-label="Channel">
+                <button type="button" class="chip selected" data-channel="dm" aria-pressed="true">
+                  DM
+                </button>
+                <button type="button" class="chip" data-channel="sms" aria-pressed="false">
+                  SMS
+                </button>
+                <button type="button" class="chip" data-channel="email" aria-pressed="false">
+                  Email
+                </button>
+              </div>
+            </div>
+            <input
+              id="subjectInput"
+              type="text"
+              placeholder="Subject"
+              aria-label="Subject"
+              hidden
+            />
+            <textarea
+              id="newMsgBody"
+              rows="2"
+              placeholder="First message…"
+              aria-label="First message"
+            ></textarea>
+            <div class="new-msg-actions">
+              <button type="button" id="cancelNewMsg" class="ghost">Cancel</button>
+              <button type="submit" id="startThreadBtn" class="primary" disabled>
+                Start draft
               </button>
             </div>
-          </div>
-          <input id="subjectInput" type="text" placeholder="Subject" aria-label="Subject" hidden />
-          <textarea
-            id="newMsgBody"
-            rows="2"
-            placeholder="First message…"
-            aria-label="First message"
-          ></textarea>
-          <div class="new-msg-actions">
-            <button type="button" id="cancelNewMsg" class="ghost">Cancel</button>
-            <button type="submit" id="startThreadBtn" class="primary" disabled>Start draft</button>
-          </div>
-        </form>
+          </form>
 
-        <div class="toolbar">
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Search conversations…"
-            aria-label="Search conversations"
-          />
-        </div>
-        <div id="channelFilter" class="chip-row" role="radiogroup" aria-label="Filter by channel">
-          <button type="button" class="chip selected" data-filter="" aria-pressed="true">
-            All
-          </button>
-          <button type="button" class="chip" data-filter="dm" aria-pressed="false">DM</button>
-          <button type="button" class="chip" data-filter="sms" aria-pressed="false">SMS</button>
-          <button type="button" class="chip" data-filter="email" aria-pressed="false">Email</button>
-        </div>
-
-        <section id="threadList" aria-label="Threads"></section>
-        <p id="emptyInbox" class="empty" hidden>
-          No conversations yet. Start one with ＋ New message, or import history through the vault's
-          ingest.
-        </p>
-      </section>
-
-      <!-- ============ Thread ============ -->
-      <section id="messageView" class="thread-col" aria-label="Conversation" hidden>
-        <div class="thread-head">
-          <button id="backBtn" type="button" class="back" aria-label="Back to threads">‹</button>
-          <button
-            id="threadTitleBtn"
-            type="button"
-            class="thread-title-btn"
-            aria-expanded="false"
-            aria-controls="threadDetails"
-          >
-            <span id="threadTitle" class="thread-title"></span>
-            <span id="threadSub" class="muted small"></span>
-          </button>
-        </div>
-        <div id="threadDetails" class="thread-details" hidden>
-          <ul id="participantList" class="participant-list" aria-label="Participants"></ul>
-          <div id="attachBlock" class="attach-block">
-            <div id="attachStrip" class="attach-strip"></div>
-            <label class="attach-add">
-              <input id="attachInput" type="file" multiple hidden />
-              <span class="ghost small-btn">＋ Attach file</span>
-            </label>
+          <div class="toolbar">
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Search conversations…"
+              aria-label="Search conversations"
+            />
           </div>
-        </div>
-        <div id="messageList" role="log" aria-label="Messages"></div>
-        <p id="emptyThread" class="empty" hidden>No messages in this thread yet.</p>
-        <form id="composeForm" class="compose" autocomplete="off">
-          <textarea
-            id="composeInput"
-            rows="1"
-            placeholder="Message…"
-            aria-label="Message"
-          ></textarea>
-          <div class="compose-actions">
-            <button id="draftBtn" type="button" class="ghost">Save draft</button>
-            <button id="sendBtn" type="submit" class="primary">Send</button>
+          <div id="channelFilter" class="chip-row" role="radiogroup" aria-label="Filter by channel">
+            <button type="button" class="chip selected" data-filter="" aria-pressed="true">
+              All
+            </button>
+            <button type="button" class="chip" data-filter="dm" aria-pressed="false">DM</button>
+            <button type="button" class="chip" data-filter="sms" aria-pressed="false">SMS</button>
+            <button type="button" class="chip" data-filter="email" aria-pressed="false">
+              Email
+            </button>
           </div>
-        </form>
-      </section>
+
+          <section id="threadList" aria-label="Threads"></section>
+          <p id="emptyInbox" class="empty" hidden>
+            No conversations yet. Start one with ＋ New message, or import history through the
+            vault's ingest.
+          </p>
+        </section>
+
+        <!-- ============ Thread ============ -->
+        <section id="messageView" class="thread-col" aria-label="Conversation" hidden>
+          <div class="thread-head">
+            <button id="backBtn" type="button" class="back" aria-label="Back to threads">‹</button>
+            <button
+              id="threadTitleBtn"
+              type="button"
+              class="thread-title-btn"
+              aria-expanded="false"
+              aria-controls="threadDetails"
+            >
+              <span id="threadTitle" class="thread-title"></span>
+              <span id="threadSub" class="muted small"></span>
+            </button>
+          </div>
+          <div id="threadDetails" class="thread-details" hidden>
+            <ul id="participantList" class="participant-list" aria-label="Participants"></ul>
+            <div id="attachBlock" class="attach-block">
+              <div id="attachStrip" class="attach-strip"></div>
+              <label class="attach-add">
+                <input id="attachInput" type="file" multiple hidden />
+                <span class="ghost small-btn">＋ Attach file</span>
+              </label>
+            </div>
+          </div>
+          <div id="messageList" role="log" aria-label="Messages"></div>
+          <p id="emptyThread" class="empty" hidden>No messages in this thread yet.</p>
+          <form id="composeForm" class="compose" autocomplete="off">
+            <textarea
+              id="composeInput"
+              rows="1"
+              placeholder="Message…"
+              aria-label="Message"
+            ></textarea>
+            <div class="compose-actions">
+              <button id="draftBtn" type="button" class="ghost">Save draft</button>
+              <button id="sendBtn" type="submit" class="primary">Send</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Split-mode empty state: pure CSS shows this only while the split
+             grid is active and #messageView is hidden — no JS bookkeeping to
+             lose across breakpoint or tile-width changes. -->
+        <div id="threadPlaceholder" class="thread-placeholder">
+          Select a thread to read it here.
+        </div>
+      </div>
     </main>
     <script type="module" src="app.js"></script>
   </body>

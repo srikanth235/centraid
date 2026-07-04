@@ -66,85 +66,101 @@
         <kbd class="search-hint" aria-hidden="true">/</kbd>
       </div>
 
-      <div id="notebookChips" class="chips" role="group" aria-label="Filter by notebook"></div>
+      <div class="split">
+        <nav id="sideNav" class="side-nav" aria-label="Notebooks" hidden>
+          <div id="notebookChips" class="chips" role="group" aria-label="Filter by notebook"></div>
 
-      <form id="notebookForm" class="inline-form" autocomplete="off" hidden>
-        <input
-          id="notebookNameInput"
-          type="text"
-          placeholder="Notebook name…"
-          aria-label="Notebook name"
-        />
-        <button type="submit" class="primary small-btn">Create</button>
-        <button type="button" id="cancelNotebook" class="ghost">Cancel</button>
-      </form>
+          <form id="notebookForm" class="inline-form" autocomplete="off" hidden>
+            <input
+              id="notebookNameInput"
+              type="text"
+              placeholder="Notebook name…"
+              aria-label="Notebook name"
+            />
+            <button type="submit" class="primary small-btn">Create</button>
+            <button type="button" id="cancelNotebook" class="ghost">Cancel</button>
+          </form>
+        </nav>
 
-      <form id="quickAdd" autocomplete="off">
-        <input id="titleInput" type="text" placeholder="New note title…" aria-label="Note title" />
-        <div id="quickAddMore" hidden>
-          <textarea
-            id="bodyInput"
-            rows="4"
-            placeholder="Write your note…"
-            aria-label="Note body"
-          ></textarea>
-          <div class="quick-add-actions">
-            <span id="quickAddTarget" class="muted small"></span>
-            <button type="button" id="cancelAdd" class="ghost">Cancel</button>
-            <button type="submit" class="primary small-btn">Add note</button>
-          </div>
+        <div class="pane">
+          <form id="quickAdd" autocomplete="off">
+            <input
+              id="titleInput"
+              type="text"
+              placeholder="New note title…"
+              aria-label="Note title"
+            />
+            <div id="quickAddMore" hidden>
+              <textarea
+                id="bodyInput"
+                rows="4"
+                placeholder="Write your note…"
+                aria-label="Note body"
+              ></textarea>
+              <div class="quick-add-actions">
+                <span id="quickAddTarget" class="muted small"></span>
+                <button type="button" id="cancelAdd" class="ghost">Cancel</button>
+                <button type="submit" class="primary small-btn">Add note</button>
+              </div>
+            </div>
+          </form>
+
+          <section id="noteList" aria-label="Notes"></section>
+
+          <section id="noteView" aria-label="Note" hidden>
+            <div class="note-view-bar">
+              <button id="backButton" type="button" class="back">← All notes</button>
+              <span class="note-view-actions">
+                <button id="pinButton" type="button" class="ghost"></button>
+                <select id="moveSelect" aria-label="Notebook"></select>
+                <button
+                  id="checklistButton"
+                  type="button"
+                  class="ghost"
+                  title="Insert checklist item"
+                >
+                  ☑ Checklist
+                </button>
+                <button id="deleteButton" type="button" class="ghost danger">Delete</button>
+              </span>
+            </div>
+            <input
+              id="noteTitleInput"
+              class="note-title-input"
+              type="text"
+              placeholder="Title"
+              aria-label="Note title"
+            />
+            <p class="muted small note-meta-line">
+              <span id="noteMeta"></span>
+              <span id="saveState" class="save-state" role="status" aria-live="polite"></span>
+            </p>
+            <div
+              id="noteBodyRender"
+              class="note-body"
+              tabindex="0"
+              aria-label="Note body — press Enter to edit"
+            ></div>
+            <textarea
+              id="noteBodyInput"
+              class="note-body-input"
+              rows="8"
+              placeholder="Write your note…"
+              aria-label="Note body"
+              hidden
+            ></textarea>
+            <div id="attachBlock" class="attach-block">
+              <div id="attachStrip" class="attach-strip"></div>
+              <label class="attach-add">
+                <input id="attachInput" type="file" multiple hidden />
+                <span class="ghost small-btn">＋ Attach file</span>
+              </label>
+            </div>
+          </section>
+
+          <p id="empty" class="empty" hidden>No notes yet. Write the first one above.</p>
         </div>
-      </form>
-
-      <section id="noteList" aria-label="Notes"></section>
-
-      <section id="noteView" aria-label="Note" hidden>
-        <div class="note-view-bar">
-          <button id="backButton" type="button" class="back">← All notes</button>
-          <span class="note-view-actions">
-            <button id="pinButton" type="button" class="ghost"></button>
-            <select id="moveSelect" aria-label="Notebook"></select>
-            <button id="checklistButton" type="button" class="ghost" title="Insert checklist item">
-              ☑ Checklist
-            </button>
-            <button id="deleteButton" type="button" class="ghost danger">Delete</button>
-          </span>
-        </div>
-        <input
-          id="noteTitleInput"
-          class="note-title-input"
-          type="text"
-          placeholder="Title"
-          aria-label="Note title"
-        />
-        <p class="muted small note-meta-line">
-          <span id="noteMeta"></span>
-          <span id="saveState" class="save-state" role="status" aria-live="polite"></span>
-        </p>
-        <div
-          id="noteBodyRender"
-          class="note-body"
-          tabindex="0"
-          aria-label="Note body — press Enter to edit"
-        ></div>
-        <textarea
-          id="noteBodyInput"
-          class="note-body-input"
-          rows="8"
-          placeholder="Write your note…"
-          aria-label="Note body"
-          hidden
-        ></textarea>
-        <div id="attachBlock" class="attach-block">
-          <div id="attachStrip" class="attach-strip"></div>
-          <label class="attach-add">
-            <input id="attachInput" type="file" multiple hidden />
-            <span class="ghost small-btn">＋ Attach file</span>
-          </label>
-        </div>
-      </section>
-
-      <p id="empty" class="empty" hidden>No notes yet. Write the first one above.</p>
+      </div>
 
       <div id="lightbox" class="lightbox" role="dialog" aria-label="Attachment preview" hidden>
         <img id="lightboxImg" alt="" />

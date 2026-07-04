@@ -74,13 +74,27 @@
       <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
 
       <div id="live">
-        <nav id="albumChips" class="chips" aria-label="Albums" hidden></nav>
-        <div id="albumTools" class="album-tools" hidden></div>
+        <div class="split">
+          <nav id="sideNav" class="side-nav" aria-label="Albums" hidden>
+            <div
+              id="albumChips"
+              class="chips"
+              role="group"
+              aria-label="Filter by album"
+              hidden
+            ></div>
+            <div id="albumTools" class="album-tools" hidden></div>
+          </nav>
 
-        <section id="grid" class="grid" aria-label="Photo library"></section>
-        <div id="empty" class="empty" hidden>
-          <p id="emptyText">No photos yet — your library starts with the first upload.</p>
-          <button id="emptyUpload" type="button" class="primary small-btn">＋ Add photos</button>
+          <div class="pane">
+            <section id="grid" class="grid" aria-label="Photo library"></section>
+            <div id="empty" class="empty" hidden>
+              <p id="emptyText">No photos yet — your library starts with the first upload.</p>
+              <button id="emptyUpload" type="button" class="primary small-btn">
+                ＋ Add photos
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -228,6 +228,9 @@ async function refresh() {
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
   $('live').hidden = Boolean(denied);
+  // The sidebar wrapper only opens once a read lands — until then (and
+  // while consent is denied) the grid pane keeps the full width.
+  $('sideNav').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     return;

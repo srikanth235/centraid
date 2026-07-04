@@ -203,6 +203,32 @@ async function removeAttachment(attachmentId) {
 
 // ---------- View switching ----------
 
+// Desktop master-detail: at ≥720px outside a narrow tile, app.css turns
+// `.split` into a two-pane grid and the inbox stays on screen beside the
+// conversation. Below that (or in a narrow tile) the two views swap
+// full-screen exactly as before — this check is the single source of truth
+// for which world we're in.
+const splitQuery = window.matchMedia('(min-width: 720px)');
+const isSplit = () =>
+  splitQuery.matches && document.documentElement.getAttribute('data-app-width') !== 'narrow';
+
+// Crossing the boundary — a resize, or the tile flipping data-app-width via
+// the settings bridge — re-derives the panes from currentThread, so the
+// open conversation (and the no-selection placeholder) survive the move.
+function syncSplitLayout() {
+  if (isSplit()) {
+    $('inboxView').hidden = false; // mobile may have hidden it under an open thread
+    if (!firstInboxLoad) renderInbox(); // stamp aria-current on the now-visible list
+  } else if (currentThread) {
+    $('inboxView').hidden = true; // back to the swap: the thread owns the screen
+  }
+}
+splitQuery.addEventListener('change', syncSplitLayout);
+new MutationObserver(syncSplitLayout).observe(document.documentElement, {
+  attributes: true,
+  attributeFilter: ['data-app-width'],
+});
+
 function showInbox() {
   currentThread = null;
   optimisticBody = null;
@@ -210,6 +236,7 @@ function showInbox() {
   $('messageView').hidden = true;
   $('inboxView').hidden = false;
   hideNotice();
+  if (isSplit()) renderInbox(); // drop the aria-current highlight right away
   refresh();
 }
 
@@ -220,7 +247,12 @@ async function openThread(t) {
   $('composeInput').value = '';
   autosizeCompose();
   document.body.classList.add('thread-open');
-  $('inboxView').hidden = true;
+  if (isSplit()) {
+    $('inboxView').hidden = false;
+    renderInbox(); // move aria-current + settle the unread dot in the list pane
+  } else {
+    $('inboxView').hidden = true;
+  }
   $('messageView').hidden = false;
   $('threadDetails').hidden = true;
   $('threadTitleBtn').setAttribute('aria-expanded', 'false');
@@ -235,7 +267,8 @@ async function openThread(t) {
 
 async function refresh() {
   if (currentThread) {
-    await loadThread();
+    // In split the list pane never left the screen — keep it fresh too.
+    await Promise.all([loadThread(), isSplit() ? loadInbox() : undefined]);
   } else {
     await loadInbox();
   }
@@ -298,6 +331,9 @@ function renderInbox() {
     row.type = 'button';
     row.className = 'thread-row';
     if (unread) row.dataset.unread = 'true';
+    // The open conversation, marked for the split view's persistent list
+    // (and for assistive tech everywhere — invisible during the mobile swap).
+    if (currentThread?.thread_id === t.thread_id) row.setAttribute('aria-current', 'true');
     row.appendChild(letterAvatar(t.others?.[0] ?? threadTitle(t)));
     const main = document.createElement('span');
     main.className = 'row-main';
@@ -605,9 +641,11 @@ $('composeInput').addEventListener('keydown', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (!$('newMsgForm').hidden && $('messageView').hidden) {
+  // In split the list pane is permanent: Escape may close the New message
+  // form (always on screen there) but never acts as "back".
+  if (!$('newMsgForm').hidden && ($('messageView').hidden || isSplit())) {
     closeNewMsgForm();
-  } else if (!$('messageView').hidden) {
+  } else if (!$('messageView').hidden && !isSplit()) {
     showInbox();
   }
 });
@@ -843,6 +881,8 @@ $('newMsgForm').addEventListener('submit', async (e) => {
     participants: [recipientName],
     others: [recipientName],
   });
+  // The split list pane is still visible — pull the fresh thread into it.
+  if (isSplit()) await loadInbox();
 });
 
 // ---------- Boot ----------
