@@ -276,9 +276,9 @@ test('one collection holds a photo and a note together — the "Paris trip" the 
   const photo = invoke('media.add_asset', { data_uri: PIXEL });
   expect(photo.status).toBe('executed');
   const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
-  expect(
-    invoke('media.add_to_album', { album_id: collectionId, asset_id: assetId }).status,
-  ).toBe('executed');
+  expect(invoke('media.add_to_album', { album_id: collectionId, asset_id: assetId }).status).toBe(
+    'executed',
+  );
   // …and filed into from the notebook surface: same collection, mixed types.
   const note = createNote({ title: 'Packing list', body_text: 'adapters, coats' });
   expect(

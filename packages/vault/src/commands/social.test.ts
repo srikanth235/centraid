@@ -388,7 +388,7 @@ test('employment is a works-for link with provenance; the card keeps only a disp
   expect(stored).toMatchObject({ asserted_by: 'owner', valid_to: null });
 });
 
-test("the running memo replaces on edit and clears on empty — one memo per author per entity", () => {
+test('the running memo replaces on edit and clears on empty — one memo per author per entity', () => {
   const setNote = (note: string) =>
     gw.invoke(owner, {
       command: 'social.update_card',

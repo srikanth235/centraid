@@ -22,7 +22,12 @@ function actorPartyId(ctx: HandlerCtx): string {
 }
 
 /** Append a memo annotation on a canonical entity (create-time notes). */
-export function annotate(ctx: HandlerCtx, targetType: string, targetId: string, body: string): void {
+export function annotate(
+  ctx: HandlerCtx,
+  targetType: string,
+  targetId: string,
+  body: string,
+): void {
   const annotationId = ctx.newId();
   ctx.db
     .prepare(

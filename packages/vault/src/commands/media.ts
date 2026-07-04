@@ -386,7 +386,9 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
     .prepare('SELECT collection_id FROM core_collection WHERE cover_content_id = ?')
     .all(asset.content_id) as { collection_id: string }[];
   ctx.db
-    .prepare(`DELETE FROM core_collection_entry WHERE target_type = 'media.media_asset' AND target_id = ?`)
+    .prepare(
+      `DELETE FROM core_collection_entry WHERE target_type = 'media.media_asset' AND target_id = ?`,
+    )
     .run(input.asset_id);
   for (const collection of covered) {
     ctx.db

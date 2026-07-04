@@ -124,6 +124,7 @@ Design doc: `duaility-ontology.html` (P5 + rule 10, table/section edits).
 | claude-code-cca13a7e-cb0-1783174826-1 | claude-code | cca13a7e-cb04-4d81-bf16-26c5ea4ed20e | #274 | claude-opus-4-8 | 8486 | 75702 | 14793404 | 30092 | 114280 | 8.6646 | 188775 | 3137436 | 114085320 | 456242 | docs(receipts): narrative + attestations for the #274 ontology unification (#274 |
 | claude-code-cca13a7e-cb0-1783174976-1 | claude-code | cca13a7e-cb04-4d81-bf16-26c5ea4ed20e | #274 | claude-opus-4-8 | 1522 | 36054 | 9181760 | 18568 | 56144 | 5.2880 | 190297 | 3173490 | 123267080 | 474810 | docs(receipts): narrative + attestations for the #274 ontology unification (#274 |
 | claude-code-cca13a7e-cb0-1783175033-1 | claude-code | cca13a7e-cb04-4d81-bf16-26c5ea4ed20e | #274 | claude-opus-4-8 | 9721 | 18671 | 2680730 | 7912 | 36304 | 1.7035 | 200018 | 3192161 | 125947810 | 482722 | docs(receipts): narrative + attestations for the #274 ontology unification (#274 |
+| claude-code-cca13a7e-cb0-1783175911-1 | claude-code | cca13a7e-cb04-4d81-bf16-26c5ea4ed20e | #274 | claude-opus-4-8 | 8806 | 17485 | 11058766 | 6614 | 32905 | 5.8480 | 208824 | 3209646 | 137006576 | 489336 | style(vault): oxfmt the #274 files edited out-of-band (#274)Five vault files wer |
 
 ### Steering
 

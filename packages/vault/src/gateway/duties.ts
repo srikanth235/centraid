@@ -154,9 +154,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // Tags are classification and entries are curation, not history: a tag or
   // a collection entry on a purged row says nothing once the row is gone,
   // so both delete with the row instead of dangling (issue #274).
-  const dropTags = db.vault.prepare(
-    'DELETE FROM core_tag WHERE target_type = ? AND target_id = ?',
-  );
+  const dropTags = db.vault.prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?');
   const dropEntries = db.vault.prepare(
     'DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?',
   );
