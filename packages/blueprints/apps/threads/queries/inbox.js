@@ -8,8 +8,12 @@
  * carries its participants' display names, a last-message snippet, a
  * has_draft flag so the inbox can surface unreleased drafts the way a mail
  * client does, and an unread flag — the owner's read cursor (last_read_at on
- * their participant row) held against the newest inbound message. Everything
- * comes from the vault — this app holds no rows of its own. A capped recent
+ * their participant row) held against the newest inbound message. Messages
+ * come from one bulk read (newest 1000 across the window); the rare quiet
+ * thread whose history all predates that cap gets a per-thread top-up read,
+ * so every visible thread derives its snippet, draft and unread facts.
+ * Everything comes from the vault — this app holds no rows of its own. A
+ * capped recent
  * slice of the party directory (minus the owner) rides along so the "New
  * message" picker needs no extra scope.
  *
@@ -35,9 +39,10 @@ export default async ({ input, ctx }) => {
       // is a fact read from the vault, never a guess.
       ctx.vault.read({ entity: 'core.vault', purpose }),
       // The New-message picker's directory, deliberately capped: party_id is
-      // UUIDv7 (time-ordered), so this is the 500 newest parties. Anyone
-      // older is still named correctly as a thread participant — just not
-      // offered in the picker.
+      // UUIDv7 (time-ordered), so this is the 500 newest parties — the
+      // picker's instant zero-term state. Anyone older is reachable through
+      // the find-people search query, and still named correctly as a thread
+      // participant here.
       ctx.vault.read({
         entity: 'core.party',
         orderBy: { column: 'party_id', dir: 'desc' },
@@ -60,7 +65,8 @@ export default async ({ input, ctx }) => {
 
     // Joins are `in`-bounded by the window. Messages get their own cap: the
     // newest 1000 across the windowed threads is enough to derive snippet,
-    // draft and unread for essentially every visible thread.
+    // draft and unread for essentially every visible thread — the few it
+    // misses get a per-thread top-up read below.
     const [participants, messages] = await Promise.all([
       ctx.vault.read({
         entity: 'social.thread_participant',
@@ -115,15 +121,10 @@ export default async ({ input, ctx }) => {
     // inbound — the owner's own sends (and drafts) never make a thread
     // unread. An unresolved sender (party_id NULL, handle only) is by
     // definition not the owner, so it counts.
-    //
-    // A quiet thread whose entire history fell outside the 1000-message
-    // window degrades gracefully: empty snippet, has_draft false, unread
-    // false. Its place in the inbox is untouched — last_message_at ordering
-    // and the rendered timestamp come from the thread row itself.
     const lastByThread = new Map();
     const draftThreads = new Set();
     const lastInboundByThread = new Map();
-    for (const m of messages.rows ?? []) {
+    const fold = (m) => {
       if (m.delivery === 'draft') draftThreads.add(m.thread_id);
       const prev = lastByThread.get(m.thread_id);
       if (!prev || String(m.sent_at ?? '').localeCompare(String(prev.sent_at ?? '')) > 0) {
@@ -136,8 +137,34 @@ export default async ({ input, ctx }) => {
           lastInboundByThread.set(m.thread_id, when);
         }
       }
+    };
+    for (const m of messages.rows ?? []) fold(m);
+    // A quiet thread whose entire history fell outside the 1000-message bulk
+    // read gets a per-thread top-up: its newest 30 messages — plenty to
+    // derive snippet, draft flag and unread — folded through the same
+    // derivation. The missed set is empty unless the bulk read actually hit
+    // its cap, so the common case costs nothing.
+    const missed = windowedThreads.filter(
+      (t) => t.last_message_at && !lastByThread.has(t.thread_id),
+    );
+    if (missed.length > 0) {
+      const topUps = await Promise.all(
+        missed.map((t) =>
+          ctx.vault.read({
+            entity: 'social.message',
+            where: [{ column: 'thread_id', op: 'eq', value: t.thread_id }],
+            orderBy: { column: 'sent_at', dir: 'desc' },
+            limit: 30,
+            purpose,
+          }),
+        ),
+      );
+      for (const chunk of topUps) {
+        for (const m of chunk.rows ?? []) fold(m);
+      }
     }
-    // One content fetch, restricted to the last-message bodies only.
+    // One content fetch, restricted to the last-message bodies only — after
+    // the top-up, so quiet threads' snippets are fetched too.
     const contentIds = [
       ...new Set([...lastByThread.values()].map((m) => m.body_content_id).filter(Boolean)),
     ];
