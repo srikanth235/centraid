@@ -5,8 +5,10 @@
  * stay in `finance.recurring_series`.
  *
  * Available on `ctx`:
- *   ctx.vault.read/invoke  — consent-checked canon access (this automation's
- *                            enrolled agent; every call is receipted)
+ *   ctx.vault.read/search/invoke — consent-checked canon access and full-text
+ *                            search over the vault's FTS index (this
+ *                            automation's enrolled agent; every call is
+ *                            receipted)
  *   ctx.state.get/set/del  — cross-run key/value persistence
  *
  * Return `{ summary?, output? }` — `summary` shows in the run list.
