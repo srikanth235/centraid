@@ -91,6 +91,7 @@ function renderVaultBlock(manifest: Manifest | undefined): string {
     `Handlers reach the vault through \`ctx.vault\` (available in every action/query handler beside \`db\`):`,
     ``,
     `- \`await ctx.vault.read({ entity, where?, limit?, purpose })\` — consent-checked read of a canonical entity (e.g. \`core.event\`, \`social.contact_card\`). Returns \`{ rows, receiptId }\`.`,
+    `- \`await ctx.vault.search({ entity, query, where?, limit?, purpose })\` — full-text search over a text-indexed entity (\`knowledge.note\`, \`core.content_item\`, \`social.thread\`, \`social.message\`, \`core.party\`, \`social.contact_card\`, \`schedule.task\`, \`core.event\`, \`core.transaction\`). \`query\` is the owner's typed words (matched as AND-ed prefixes; FTS operators are treated as literals). Returns \`{ rows, receiptId }\` ranked best-first; each row adds \`_snippet\` — the matched fragment with \`⟦\`/\`⟧\` around hits (escape the text FIRST, then turn markers into markup). ALWAYS search this way instead of reading a whole entity and filtering text in JS — vault data has no upper bound.`,
     `- \`await ctx.vault.invoke({ command, input, purpose })\` — typed command (e.g. \`schedule.propose_event\`). Returns an outcome: \`{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }\` — check \`status\` before assuming the write landed; \`parked\` means the owner must confirm.`,
     `- \`await ctx.vault.describe()\` — the commands this app can discover (name, schema, risk).`,
     ``,

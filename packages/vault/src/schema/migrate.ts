@@ -7,6 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { CONSENT_DDL } from './consent.js';
 import { CORE_DDL } from './core.js';
+import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
@@ -29,6 +30,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     HOME_DDL,
     BUSINESS_DDL,
   ].join('\n'),
+  // v2: the text-search plane — FTS5 shadow tables + sync triggers, with a
+  // backfill so a pre-index vault becomes searchable on first open.
+  FTS_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

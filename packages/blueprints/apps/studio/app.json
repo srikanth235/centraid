@@ -4,6 +4,8 @@
   "name": "Studio",
   "description": "Your client work as a projection of the personal vault: clients are core parties, tracked time is canonical activity, invoices settle against canonical transactions. The whole self-employed loop — client → project → time → invoice → payment — runs through the business domain's typed commands with act consent granted per command; drafting an invoice awaits owner confirmation and sending one always does. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.4.0",
+  "iconKey": "Clock",
+  "colorKey": "teal",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Shows and runs your client work: projects, tracked time, and invoices.",

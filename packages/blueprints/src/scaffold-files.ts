@@ -10,7 +10,7 @@
  * CLI / local paths.
  */
 
-import { toCss } from '@centraid/design-tokens';
+import { toCss, type ColorKey, type IconName } from '@centraid/design-tokens';
 import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 import { AppScaffoldError } from './scaffold-types.js';
@@ -40,6 +40,10 @@ export interface ScaffoldAppOpts {
   name?: string;
   description?: string;
   version?: string;
+  /** Tile glyph stamped into `app.json` (issue #263). Defaults to `Sparkle`. */
+  iconKey?: IconName;
+  /** Tile hue stamped into `app.json` (issue #263). Defaults to `violet`. */
+  colorKey?: ColorKey;
 }
 
 /**
@@ -59,6 +63,11 @@ export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): Scaffo
     name,
     version: opts.version ?? '0.1.0',
     ...(opts.description?.trim() ? { description: opts.description.trim() } : {}),
+    // Tile identity travels with the app (issue #263): the home shelves read
+    // these off the listing instead of a per-device localStorage shim. The
+    // defaults match the desktop's canonical draft look (Sparkle on violet).
+    iconKey: opts.iconKey ?? 'Sparkle',
+    colorKey: opts.colorKey ?? 'violet',
     actions: [],
     queries: [],
     knobs: DEFAULT_APP_KNOBS,

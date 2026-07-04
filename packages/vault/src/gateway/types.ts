@@ -53,13 +53,47 @@ export interface FilterClause {
   value?: unknown;
 }
 
+/**
+ * Deterministic ordering for a read. The column is validated against the
+ * table's real columns (the same allow-list discipline as FilterClause) —
+ * caller strings never become SQL text. PKs are UUIDv7, so ordering by an
+ * id column IS time order on tables that carry no timestamp.
+ */
+export interface OrderBy {
+  column: string;
+  /** Default `asc`. */
+  dir?: 'asc' | 'desc';
+}
+
 export interface ReadRequest {
   /** Logical entity, e.g. `core.event`. */
   entity: string;
   /** Caller-supplied filter, ANDed with the grant's row filter. */
   where?: FilterClause[];
+  /**
+   * With `limit`, this is what makes a bounded window a RECENT window —
+   * an unordered LIMIT picks arbitrary rows.
+   */
+  orderBy?: OrderBy;
   limit?: number;
   /** Declared DPV purpose, e.g. `dpv:ServiceProvision`. */
+  purpose: string;
+}
+
+/**
+ * Full-text search over a text-indexed entity — read-shaped consent, index-
+ * shaped execution. `query` is whatever the owner typed: it is tokenized and
+ * quoted before it becomes an FTS5 MATCH (implicit AND, prefix on every
+ * word), so FTS operators in user text are literals, never syntax.
+ */
+export interface SearchRequest {
+  /** Logical entity, e.g. `knowledge.note`. Must be text-searchable. */
+  entity: string;
+  /** Owner-typed words. */
+  query: string;
+  /** Caller-supplied filter, ANDed with the grant's row filter. */
+  where?: FilterClause[];
+  limit?: number;
   purpose: string;
 }
 
@@ -76,6 +110,17 @@ export interface InvokeRequest {
 }
 
 export interface ReadResult {
+  rows: Record<string, unknown>[];
+  receiptId: string;
+}
+
+/**
+ * Matches, best first (bm25). Each row carries the grant-masked base columns
+ * plus `_rank` and `_snippet` — the matched fragment with `⟦`/`⟧` around each
+ * hit. Renderers must escape the fragment BEFORE turning the markers into
+ * markup; the markers exist so no vault text is ever shipped as HTML.
+ */
+export interface SearchResult {
   rows: Record<string, unknown>[];
   receiptId: string;
 }

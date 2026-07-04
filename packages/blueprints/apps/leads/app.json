@@ -4,6 +4,8 @@
   "name": "Leads",
   "description": "A lightweight CRM as a projection of the personal vault: leads are business.client rows whose lead \u2192 active \u2192 past lifecycle IS the pipeline. Names come from core.party, running notes from social.contact_card, and files (a proposal, a brief) attach per lead. Prospects are enrolled from the vault's existing people or minted on the spot through core.add_party and enrolled in one flow; creating, enrolling, advancing and noting all run through typed vault commands \u2014 consent-checked and receipted. No data of its own \u2014 revoke the grant and the app goes dark.",
   "version": "0.3.0",
+  "iconKey": "Users",
+  "colorKey": "rose",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Shows your prospect pipeline and lets you enrol, advance and note leads.",
@@ -309,10 +311,16 @@
   "queries": [
     {
       "name": "pipeline",
-      "description": "Every client as a pipeline card (lead / active / past) with its name, rate, running note and attachments, plus the parties not yet enrolled as candidates to add.",
+      "description": "A bounded recent window of clients as pipeline cards (lead / active / past; newest by UUIDv7 client_id, default 500) with their names, rates, running notes and attachments, plus the newest unenrolled parties as candidates to add — never a whole-table pull; `truncated` says older leads exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -322,6 +330,37 @@
             "type": "array"
           },
           "candidates": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text lead search through the vault's FTS5 index (party names plus contact-card nickname, org line and running note) — matched parties are joined back to their business.client rows in the pipeline card shape, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "leads": {
             "type": "array"
           },
           "vaultDenied": {

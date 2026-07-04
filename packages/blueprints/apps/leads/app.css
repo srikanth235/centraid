@@ -255,6 +255,19 @@ select {
   }
 }
 
+/* The browse window's honest edge: latest N loaded, Show more grows it.
+   Spans the board grid so it sits below the columns, not beside them. */
+.window-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
 .column {
   border: 1px solid var(--line);
   border-radius: 0.75rem;

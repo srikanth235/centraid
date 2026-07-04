@@ -19,7 +19,13 @@ import {
   runAutomationNow,
   saveUserPrefs,
 } from './gateway-client.js';
-import { chevronDown, colorForIcon, relativeTime, triggersSummary } from './app-format.js';
+import {
+  chevronDown,
+  colorForIcon,
+  relativeTime,
+  tileVisualFromListing,
+  triggersSummary,
+} from './app-format.js';
 import { buildLayoutToggle } from './app-glyphs.js';
 import { auStatusForRow } from './automation-identity.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
@@ -794,25 +800,41 @@ import { createAppViewModule } from './app-appview.js';
         userApps = reconciled;
         persist();
       }
+      // Published tiles read their visual identity from `app.json` via the
+      // listing (issue #263) — the gateway row wins over whatever the local
+      // `home.userApps` shim stored, so a rename of the icon/hue at the
+      // source shows up on every device. Overlay in memory only; the pin
+      // store keeps ordering/timestamps and its legacy values as fallback.
+      for (const ua of userApps) {
+        const row = projs.find((p) => p.id === ua.id || p.id === ua.centraidAppId);
+        if (!row) continue;
+        const vis = tileVisualFromListing(row);
+        if (!vis) continue;
+        ua.iconKey = vis.iconKey;
+        ua.colorKey = vis.colorKey;
+        ua.color = vis.color;
+      }
       const knownIds = new Set(getApps().map((a) => a.id));
       drafts = projs
         .filter((p) => p.kind !== 'automation')
         .filter((p) => !knownIds.has(p.id))
         .map((p) => {
-          // Drafts default to the Sparkle icon (no inference has run yet);
-          // its canonical colour is accent-violet so every draft reads as
-          // "draft" at a glance rather than picking a random hue per id.
+          // Tile identity from `app.json` when the listing carries it
+          // (issue #263); otherwise the canonical draft look — Sparkle on
+          // accent-violet — so every draft reads as "draft" at a glance
+          // rather than picking a random hue per id.
+          const vis = tileVisualFromListing(p);
           return {
             __draft: true,
-            color: colorForIcon('Sparkle'),
-            colorKey: 'violet',
+            color: vis?.color ?? colorForIcon('Sparkle'),
+            colorKey: vis?.colorKey ?? 'violet',
             // Prefer the real `app.json#description` when present (carried
             // over from the template manifest on clone, or set by the user
             // in the builder). Fall back to the status string for older
             // scaffolds without a description.
             desc: p.description || 'Draft — not yet published',
             hasIndex: !!p.hasIndex,
-            iconKey: 'Sparkle',
+            iconKey: vis?.iconKey ?? 'Sparkle',
             id: p.id,
             name: p.name || p.id,
           } as DraftAppMeta;

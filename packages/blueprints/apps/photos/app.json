@@ -4,6 +4,8 @@
   "name": "Photos",
   "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
   "version": "0.2.0",
+  "iconKey": "Camera",
+  "colorKey": "ochre",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your photo library and albums, and lets you upload, caption and organize.",

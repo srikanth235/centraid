@@ -17,7 +17,7 @@ import Icon from '../components/Icon';
 import Logo from '../components/Logo';
 import Button from '../components/Button';
 import { colors, spacing, t, family } from '../theme';
-import { GatewayError, hydrateGatewayUrl, listApps, resolveAppMeta } from '../lib/gateway';
+import { GatewayError, listApps, resolveAppMeta, resolveGatewayBase } from '../lib/gateway';
 import type { RootScreenProps } from '../navigation';
 
 const COLS = 4;
@@ -37,12 +37,14 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
   const inputRef = useRef<TextInput | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
-    const gatewayUrl = await hydrateGatewayUrl();
-    if (!gatewayUrl) {
-      setState({ kind: 'no-gateway' });
-      return;
-    }
     try {
+      // Tunnel first, manual URL second. `undefined` means neither is set
+      // up yet — the empty state points at pairing.
+      const base = await resolveGatewayBase();
+      if (!base) {
+        setState({ kind: 'no-gateway' });
+        return;
+      }
       const rows = await listApps();
       setState({ apps: rows.map(resolveAppMeta), kind: 'ready' });
     } catch (err) {
@@ -117,6 +119,15 @@ export default function HomeScreen({ navigation }: RootScreenProps<'Home'>): Rea
               <Text style={styles.title}>centraid</Text>
             </View>
             <View style={styles.headerActions}>
+              {state.kind === 'ready' ? (
+                <Pressable
+                  onPress={() => navigation.navigate('Approvals')}
+                  style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
+                  accessibilityLabel="Approvals"
+                >
+                  <Icon name="CheckCircle" size={18} color={colors.ink} strokeWidth={1.75} />
+                </Pressable>
+              ) : null}
               <Pressable
                 onPress={openSearch}
                 style={({ pressed }) => [styles.iconBtn, pressed && { opacity: 0.6 }]}
@@ -188,11 +199,14 @@ function renderBody(
       <View style={styles.empty}>
         <Text style={styles.emptyTitle}>Connect to your desktop.</Text>
         <Text style={styles.emptyCopy}>
-          Apps you build on your Mac show up here over your local network. Set your gateway URL to
-          get started.
+          Apps you build on your Mac show up here. Scan the pairing QR code once and everything
+          loads over an encrypted tunnel.
         </Text>
         <View style={styles.emptyAction}>
-          <Button label="Open Settings" icon="Settings" onPress={openSettings} />
+          <Button label="Pair with your desktop" icon="Camera" onPress={openSettings} />
+        </View>
+        <View style={styles.emptyAction}>
+          <Button label="Open Settings" icon="Settings" variant="soft" onPress={openSettings} />
         </View>
       </View>
     );
@@ -203,8 +217,8 @@ function renderBody(
         <Text style={styles.emptyTitle}>Gateway unreachable.</Text>
         <Text style={styles.emptyCopy}>{state.message}</Text>
         <Text style={styles.emptyHint}>
-          Make sure Centraid is running on your Mac and that both devices are on the same Wi-Fi.
-          Pull to refresh once reconnected.
+          Make sure Centraid is running on your Mac and both devices are online. Pull to refresh
+          once reconnected.
         </Text>
         <View style={styles.emptyAction}>
           <Button label="Check Settings" icon="Settings" variant="soft" onPress={openSettings} />

@@ -137,6 +137,31 @@ test('session → write → publish → serve → rollback round-trip', async ()
   expect(after.versions.map((v) => v.active)).toEqual([false, true]);
 });
 
+test('GET /_apps surfaces the app.json tile identity (iconKey/colorKey, #263)', async () => {
+  await openSession('s1');
+  const manifest = JSON.parse(MANIFEST) as Record<string, unknown>;
+  await putFile(
+    's1',
+    'app.json',
+    JSON.stringify({ ...manifest, iconKey: 'Todo', colorKey: 'indigo' }),
+  );
+  await putFile('s1', 'queries/ping.js', 'export default async () => ({ pong: 1 });\n');
+  const pub = await fetch(`${handle.url}/centraid/_apps/todo/publish`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: 's1', message: 'first' }),
+  });
+  expect(pub.status).toBe(201);
+
+  const list = (await (
+    await fetch(`${handle.url}/centraid/_apps`, { headers: auth() })
+  ).json()) as Array<{ id: string; iconKey?: string; colorKey?: string; hasIndex: boolean }>;
+  const row = list.find((a) => a.id === 'todo')!;
+  expect(row.iconKey).toBe('Todo');
+  expect(row.colorKey).toBe('indigo');
+  expect(row.hasIndex).toBe(false);
+});
+
 test('publish rejects an invalid manifest (declared handler file missing)', async () => {
   await openSession('s1');
   // Manifest declares a `ping` query but we never write queries/ping.js.

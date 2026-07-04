@@ -4,6 +4,8 @@
   "name": "Threads",
   "description": "Your message history as a projection of the personal vault: threads and messages are canonical social rows, bodies are content items. Sending is the consent model's showcase — a send parks until the owner explicitly confirms it. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.4.0",
+  "iconKey": "Send",
+  "colorKey": "indigo",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Reads your message threads and drafts replies; every send waits for your confirmation.",
@@ -239,10 +241,16 @@
   "queries": [
     {
       "name": "inbox",
-      "description": "Every thread, most recent activity first, with its participants' display names, a last-message snippet, a draft flag, an unread flag (owner's read cursor vs the newest inbound message), and the party directory for starting new conversations.",
+      "description": "A bounded recent window of threads (newest by last_message_at, caller-sized via `limit`) with participants' display names, a last-message snippet, a draft flag, an unread flag (owner's read cursor vs the newest inbound message), and a capped recent slice of the party directory for starting new conversations — never a whole-table pull; `truncated` says older threads exist beyond the window (search reaches them).",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -252,6 +260,37 @@
             "type": "array"
           },
           "parties": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text inbox search through the vault's FTS5 index (message bodies + thread subjects) — returns only the ranked matched threads in the inbox row shape, message hits carrying a hit-marked snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "threads": {
             "type": "array"
           },
           "vaultDenied": {

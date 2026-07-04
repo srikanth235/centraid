@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
 import { registerIpcHandlers } from './main/ipc.js';
+import { ensurePhoneLink } from './main/phone-link.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -65,6 +66,12 @@ void app.whenReady().then(() => {
   void installAuthInjector();
   registerIpcHandlers();
   createWindow();
+  // Phone link (issue #263): bring the iroh endpoint up front so paired
+  // phones reconnect without any UI open. Failures surface in the
+  // Settings → Phone panel via PHONE_STATUS; they must not block launch.
+  ensurePhoneLink().catch((err) => {
+    process.stdout.write(`[phone-link] failed to start: ${String(err)}\n`);
+  });
   // Remote template refresh now runs inside the embedded gateway (issue
   // #141, Phase 5): `local-gateway` passes the configured remote manifest
   // URL into `serve()`, and the gateway's `/centraid/_templates` route

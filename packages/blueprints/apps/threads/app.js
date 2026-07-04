@@ -22,11 +22,16 @@ import {
 const $ = (id) => document.getElementById(id);
 
 let currentThread = null; // the open thread row, or null for the inbox
-let inboxThreads = []; // last inbox payload, for client-side search/filter
+let inboxThreads = []; // last inbox payload, for the channel filter + unread count
 let inboxParties = []; // recipient directory for New message (owner excluded)
 let searchText = '';
+let searchResults = null; // vault FTS matches while a term is active
 let channelFilter = ''; // '' = all
 let firstInboxLoad = true;
+// The inbox window: the query reads only this many recent threads (issue
+// #262). "Show more" grows it; search reaches everything beyond it.
+let inboxWindow = 100;
+let inboxTruncated = false;
 // message_ids whose send parked this session — the ⏳ "waiting for your
 // approval" chip. The vault still says delivery='draft' while parked, so
 // this is honest session-scoped presentation, not invented state.
@@ -241,7 +246,7 @@ async function refresh() {
 async function loadInbox() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'inbox' });
+    data = await window.centraid.read({ query: 'inbox', input: { limit: inboxWindow } });
   } catch {
     if (firstInboxLoad) $('threadList').innerHTML = '';
     readFailed($('noticeBanner'));
@@ -260,16 +265,13 @@ async function loadInbox() {
   }
   inboxThreads = data?.threads ?? [];
   inboxParties = data?.parties ?? [];
+  inboxTruncated = Boolean(data?.truncated);
   renderInbox();
   renderRecipients();
 }
 
 function inboxMatches(t) {
-  if (channelFilter && t.channel !== channelFilter) return false;
-  const q = searchText.trim().toLowerCase();
-  if (!q) return true;
-  const hay = [threadTitle(t), ...(t.participants ?? []), t.snippet ?? ''].join(' ').toLowerCase();
-  return hay.includes(q);
+  return !channelFilter || t.channel === channelFilter;
 }
 
 function renderInbox() {
@@ -278,12 +280,15 @@ function renderInbox() {
   // The header counts every unread thread, not just the filtered view.
   const unreadCount = inboxThreads.filter(isUnread).length;
   $('subtitle').textContent = unreadCount > 0 ? `${unreadCount} unread` : SUBTITLE_DEFAULT;
-  const rows = inboxThreads.filter(inboxMatches);
+  // A live search term swaps the source list for the vault's FTS matches
+  // (rank order); the channel filter applies to either source.
+  const searching = Boolean(searchText.trim());
+  const rows = (searching ? (searchResults ?? []) : inboxThreads).filter(inboxMatches);
   const empty = $('emptyInbox');
   empty.hidden = rows.length > 0;
   if (rows.length === 0) {
     empty.textContent =
-      inboxThreads.length > 0
+      searching || inboxThreads.length > 0
         ? 'No conversations match — clear the search or filter.'
         : 'No conversations yet. Start one with ＋ New message, or import history through the vault’s ingest.';
   }
@@ -307,7 +312,10 @@ function renderInbox() {
       mark.textContent = 'Draft · ';
       snippet.appendChild(mark);
     }
-    snippet.appendChild(document.createTextNode(t.snippet || ' '));
+    // Search rows carry the vault's hit-marked snippet; inbox rows are
+    // plain text and must never be reinterpreted as markers.
+    if (searching && t.snippet) snippetInto(snippet, t.snippet);
+    else snippet.appendChild(document.createTextNode(t.snippet || ' '));
     main.append(text, snippet);
     const side = document.createElement('span');
     side.className = 'row-side';
@@ -329,6 +337,25 @@ function renderInbox() {
     row.append(main, side);
     row.addEventListener('click', () => openThread(t));
     list.appendChild(row);
+  }
+  // The window is honest about its edge: browsing shows the latest slice,
+  // "Show more" grows it, search reaches everything beyond it.
+  if (inboxTruncated && !searching) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${inboxWindow} conversations — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'chip';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      inboxWindow += 100;
+      more.disabled = true;
+      await loadInbox();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
 }
 
@@ -599,10 +626,48 @@ wireAttachInput($('attachInput'), () => currentThread?.thread_id);
 
 // ---------- Inbox search + channel filter ----------
 
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and message text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
+// Searching asks the vault, not a local copy: the FTS5 index matches over
+// every message body and thread subject inside SQLite and returns only the
+// hit threads, so the app never greps an unbounded table in memory.
+// `searchSeq` drops stale replies when the owner types faster than the
+// vault answers.
+let searchSeq = 0;
 $('searchInput').addEventListener(
   'input',
-  debounce(() => {
-    searchText = $('searchInput').value;
+  debounce(async () => {
+    const raw = $('searchInput').value.trim();
+    searchText = raw;
+    if (!raw) {
+      searchResults = null;
+      renderInbox();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = data?.threads ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
     renderInbox();
   }, 150),
 );

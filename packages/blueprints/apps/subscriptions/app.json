@@ -4,6 +4,8 @@
   "name": "Subscriptions",
   "description": "Every recurring charge as a projection of the personal vault: subscriptions are finance.recurring_series over your accounts, each normalized to a monthly figure so the running total is honest, and each cadence rolled forward from its anchor date so you see what renews next and what the next 30 days cost. Distinct from Budgets — this answers what renews and what you're bleeding monthly. Add, edit, pause and cancel run through typed finance commands; files (a receipt, a contract) attach per subscription. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.0",
+  "iconKey": "Coin",
+  "colorKey": "ochre",
   "vault": {
     "purpose": "dpv:Billing",
     "why": "Shows what recurring charges you carry and their monthly cost, and lets you add, pause and cancel them.",

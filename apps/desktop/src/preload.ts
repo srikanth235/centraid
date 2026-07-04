@@ -33,6 +33,13 @@ const Channel = {
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
+
+  // Phone link (issue #263)
+  PHONE_STATUS: 'centraid:phone:status',
+  PHONE_BEGIN_PAIRING: 'centraid:phone:begin-pairing',
+  PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
+  PHONE_REVOKE: 'centraid:phone:revoke',
+  PHONE_PAIRED: 'centraid:phone:paired',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -168,4 +175,18 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // insights moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway
   // owns scaffold + webhook mint + stage + publish.
+
+  // Phone link (issue #263) — the Settings → Phone panel drives the
+  // main-process iroh tunnel: status + device list, one-time pairing QR,
+  // and per-device revocation. Pairing completion arrives as a broadcast.
+  getPhoneLinkStatus: () => ipcRenderer.invoke(Channel.PHONE_STATUS),
+  beginPhonePairing: () => ipcRenderer.invoke(Channel.PHONE_BEGIN_PAIRING),
+  cancelPhonePairing: () => ipcRenderer.invoke(Channel.PHONE_CANCEL_PAIRING),
+  revokePhoneDevice: (input: { deviceId: string }) =>
+    ipcRenderer.invoke(Channel.PHONE_REVOKE, input),
+  onPhonePaired: (cb: (msg: { device: unknown }) => void) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg as { device: unknown });
+    ipcRenderer.on(Channel.PHONE_PAIRED, handler);
+    return () => ipcRenderer.off(Channel.PHONE_PAIRED, handler);
+  },
 });

@@ -12,12 +12,13 @@ two publish outcomes stranded an already-live app as a permanent draft.
 
 ## Checklist
 
-- [x] Commit 1 — builder: promote to Home on `no_changes`; make the
-      live-URL fetch best-effort
+- [x] Commit 1 — builder: promote to Home on `no_changes`; make the live-URL fetch best-effort
 
 ## What changed
 
-`apps/desktop/src/renderer/builder.ts` (`handlePublish`), two paths:
+Commit 1 — builder: promote to Home on `no_changes`; make the live-URL
+fetch best-effort. `apps/desktop/src/renderer/builder.ts` (`handlePublish`),
+two paths:
 
 1. **Unedited scaffold/clone → `no_changes`.** A clone/scaffold already
    lands a baseline on the gateway's `main`, so publishing before any

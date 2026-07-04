@@ -25,7 +25,18 @@ its own look and feel, modeled on its popular benchmark.
 - `home.update_item` cannot CLEAR a place_id once set (minLength 1, no null path) — flagged by the Wave 4b agent
 - Platform seam: a "my parked invocations" read surface (all seven audit tracks asked for it; apps fake pending state session-locally today)
 
-## Wave 0 — what changed
+## What changed
+
+Six commits landed the wave plan, one per checklist item:
+
+- Commit 1 — Wave 0: correctness fixes (timezones, currency totals, video, silent no-ops) — detailed below.
+- Commit 2 — Wave 1: shared blueprint kit (toast/aria-live, skeletons, arm-confirm, parked rows, charts, avatars), linked by all 14 apps.
+- Commit 3 — Wave 2: benchmark-parity UI wave across all 14 apps (one agent per app; per-app details in the commit message).
+- Commit 4 — Wave 3: bookings decline/cancel/reschedule scopes + leads contact info scope.
+- Commit 5 — Wave 4a: vault command batch (new columns + 13 new/extended commands, 155 vault tests green).
+- Commit 6 — Wave 4b: the nine apps surface the new commands (renewal dates, delete reading, rooms/values, favorites/trash, notebook management, unread, task notes, availability/budget removal).
+
+### Wave 0 detail
 
 - **studio**: `log-time` was stamping the owner's wall clock with a `Z`
   suffix; now converts via `new Date(...).toISOString()`. Hours no

@@ -4,6 +4,8 @@
   "name": "People",
   "description": "The vault's single identity anchor rendered as a contacts app: every person, org, and agent is a core.party, their handles live in core.party_identifier, and enrichment (nickname, note, favorite) sits in social.contact_card. People are minted through core.add_party and renamed through core.update_party, handles bind through resolve_identity, and composing runs the full draft-then-send lifecycle — sending is risk-high, so it parks for the owner's confirmation. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.4.0",
+  "iconKey": "Users",
+  "colorKey": "violet",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows the people in your life and keeps their cards current.",

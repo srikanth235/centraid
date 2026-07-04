@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -79,6 +80,50 @@ test('deny-by-default → owner grant → allowed → uninstall goes dark', asyn
   });
   expect(dark.ok).toBe(false);
   expect(dark.code).toBe('VAULT_NOT_ENROLLED');
+});
+
+test('search op rides both bridges: FTS match vault-side, consent still one door', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  plane.db.vault
+    .prepare(
+      `INSERT INTO schedule_task (task_id, owner_party_id, title, description, status, priority)
+       VALUES (?, ?, 'Chase the budget approval', 'ping finance about the Q3 budget', 'needs-action', 5)`,
+    )
+    .run(uuidv7(), plane.boot.ownerPartyId);
+
+  plane.enrollApp('tasks');
+  const appBridge = plane.bridgeFor('tasks');
+  const deniedApp = await appBridge({
+    op: 'search',
+    payload: { entity: 'schedule.task', query: 'budget', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(deniedApp.ok).toBe(false);
+  expect(deniedApp.code).toBe('VAULT_CONSENT');
+  plane.approveGrant('tasks', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', verbs: 'read' }],
+  });
+  const appHit = await appBridge({
+    op: 'search',
+    payload: { entity: 'schedule.task', query: 'budg', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(appHit.ok).toBe(true);
+  const appRows = (appHit.result as { rows: Record<string, unknown>[] }).rows;
+  expect(appRows).toHaveLength(1);
+  expect(String(appRows[0]?._snippet)).toContain('⟦budget⟧');
+
+  plane.enrollAutomationAgent('chaser');
+  plane.approveAgentGrant('chaser', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', verbs: 'read' }],
+  });
+  const agentHit = await plane.agentBridgeFor('chaser')({
+    op: 'search',
+    payload: { entity: 'schedule.task', query: 'finance budget', purpose: 'dpv:ServiceProvision' },
+  });
+  expect(agentHit.ok).toBe(true);
+  expect((agentHit.result as { rows: unknown[] }).rows).toHaveLength(1);
 });
 
 test('an app invoke above its risk ceiling parks; the owner confirm releases it into the canon', async () => {

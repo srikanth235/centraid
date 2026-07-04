@@ -263,6 +263,15 @@ bun install   # or: npm install
   \`name\`, \`version\`. Every new handler file needs a matching entry —
   the dispatcher refuses to invoke a file that isn't declared.
 
+## Phone-readiness
+
+The mobile shell is a thin viewer — on the phone this blueprint IS the
+UI. Keep the kit (\`kit.js\` / \`kit.css\`) when the app ships one, and keep
+the scaffold's responsive conventions intact: \`viewport-fit=cover\` in the
+viewport meta, \`env(safe-area-inset-*)\` body padding, the single 720px
+breakpoint, ≥ 44px hit targets, and the \`prefers-reduced-motion\` guard.
+Build on these; never strip them.
+
 See \`@centraid/openclaw-plugin\` for the full handler-arg types.
 `;
 

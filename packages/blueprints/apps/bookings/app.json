@@ -4,6 +4,8 @@
   "name": "Bookings",
   "description": "A Calendly-style booking front door as a projection of the personal vault: availability windows are schedule.availability_rule, and each booking is a canonical core.event held for a client. Because an app can't seize your calendar, a booking request PARKS for your confirmation before it holds a slot, and confirming it puts it on the books. Files attach to any booking. No data of its own \u2014 revoke the grant and the app goes dark.",
   "version": "0.1.0",
+  "iconKey": "Calendar",
+  "colorKey": "indigo",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows your availability and the bookings held on your calendar, and lets you take and confirm requests.",

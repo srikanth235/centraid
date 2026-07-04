@@ -429,6 +429,17 @@ button {
   letter-spacing: 0.04em;
 }
 
+/* The browse window's honest edge: latest N shown, Show more grows it. */
+.window-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
 /* ---------- Thread view ---------- */
 
 .thread-head {

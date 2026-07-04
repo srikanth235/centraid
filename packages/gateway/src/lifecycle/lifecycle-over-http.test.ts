@@ -98,6 +98,22 @@ test('POST /_apps stages a draft, and publish:true lands it on main', async () =
   expect(row?.name).toBe('Tasks');
 });
 
+test('POST /_apps stamps the tile identity into app.json and the listing (#263)', async () => {
+  // Explicit keys pass through; omitted keys fall back to Sparkle/violet.
+  const published = await fetch(`${handle.url}/centraid/_apps`, {
+    method: 'POST',
+    headers: auth({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ id: 'todos', name: 'Todos', iconKey: 'Todo', publish: true }),
+  });
+  expect(published.status).toBe(201);
+  const rows = (await (
+    await fetch(`${handle.url}/centraid/_apps`, { headers: auth() })
+  ).json()) as Array<{ id: string; iconKey?: string; colorKey?: string }>;
+  const row = rows.find((a) => a.id === 'todos')!;
+  expect(row.iconKey).toBe('Todo');
+  expect(row.colorKey).toBe('violet');
+});
+
 test('POST /_apps rejects a collision with an app already on main', async () => {
   const first = await fetch(`${handle.url}/centraid/_apps`, {
     method: 'POST',

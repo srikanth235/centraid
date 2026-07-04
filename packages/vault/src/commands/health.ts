@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one file per life domain (§07) — the health commands share the observation/activity spine and its boundary rules
 // Health domain commands (§07): everything measured is a core.observation,
 // everything done is a core.activity — this domain only adds clinical/fitness
 // meaning (extend-don't-fork, R02). Boundary: health never mints people,

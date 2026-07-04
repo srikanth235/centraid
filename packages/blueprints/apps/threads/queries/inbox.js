@@ -1,32 +1,97 @@
 /**
- * The inbox projection: every social.thread, most recent activity first,
- * with its participants' display names, a last-message snippet, a has_draft
- * flag so the inbox can surface unreleased drafts the way a mail client
- * does, and an unread flag — the owner's read cursor (last_read_at on their
- * participant row) held against the newest inbound message. Everything
- * comes from the vault — this app holds no rows of its own. The full party
- * directory (minus the owner) rides along so the "New message" picker needs
- * no extra scope.
+ * The inbox projection as a bounded recent window: the newest threads by
+ * last_message_at (caller-sized, default 100) — never the whole social table
+ * set, because vault data has no upper bound (issue #262). Participants,
+ * parties, messages and snippet bodies are joined only for the windowed
+ * threads; anything older is reachable through the FTS search query or by
+ * growing the window (`truncated` tells the UI to offer that). Each row
+ * carries its participants' display names, a last-message snippet, a
+ * has_draft flag so the inbox can surface unreleased drafts the way a mail
+ * client does, and an unread flag — the owner's read cursor (last_read_at on
+ * their participant row) held against the newest inbound message. Everything
+ * comes from the vault — this app holds no rows of its own. A capped recent
+ * slice of the party directory (minus the owner) rides along so the "New
+ * message" picker needs no extra scope.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
-export default async ({ ctx }) => {
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
+  const window = Math.min(Math.max(Number(input?.limit) || 100, 20), 2000);
   try {
-    const [threads, participants, parties, vaultRow, messages] = await Promise.all([
-      ctx.vault.read({ entity: 'social.thread', purpose }),
-      ctx.vault.read({ entity: 'social.thread_participant', purpose }),
-      ctx.vault.read({ entity: 'core.party', purpose }),
+    // SQLite puts NULLs last under ORDER BY … DESC, so threads that never
+    // saw a message trail the window instead of poisoning its top.
+    const [threads, vaultRow, directory] = await Promise.all([
+      ctx.vault.read({
+        entity: 'social.thread',
+        orderBy: { column: 'last_message_at', dir: 'desc' },
+        limit: window,
+        purpose,
+      }),
       // core.vault names the owner party — "the other person" in a thread
       // is a fact read from the vault, never a guess.
       ctx.vault.read({ entity: 'core.vault', purpose }),
-      ctx.vault.read({ entity: 'social.message', purpose }),
+      // The New-message picker's directory, deliberately capped: party_id is
+      // UUIDv7 (time-ordered), so this is the 500 newest parties. Anyone
+      // older is still named correctly as a thread participant — just not
+      // offered in the picker.
+      ctx.vault.read({
+        entity: 'core.party',
+        orderBy: { column: 'party_id', dir: 'desc' },
+        limit: 500,
+        purpose,
+      }),
     ]);
     const ownerPartyId = vaultRow.rows?.[0]?.owner_party_id ?? null;
-    const nameByParty = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
+    const pickerParties = (directory.rows ?? [])
+      .filter((p) => p.party_id !== ownerPartyId)
+      .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
+      .toSorted((a, b) => String(a.display_name ?? '').localeCompare(String(b.display_name ?? '')));
+    const windowedThreads = threads.rows ?? [];
+    // `in` over an empty id list is a vault error, so the empty inbox
+    // returns before any join.
+    if (windowedThreads.length === 0) {
+      return { threads: [], parties: pickerParties, truncated: false, window };
+    }
+    const threadIds = windowedThreads.map((t) => t.thread_id);
+
+    // Joins are `in`-bounded by the window. Messages get their own cap: the
+    // newest 1000 across the windowed threads is enough to derive snippet,
+    // draft and unread for essentially every visible thread.
+    const [participants, messages] = await Promise.all([
+      ctx.vault.read({
+        entity: 'social.thread_participant',
+        where: [{ column: 'thread_id', op: 'in', value: threadIds }],
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'social.message',
+        where: [{ column: 'thread_id', op: 'in', value: threadIds }],
+        orderBy: { column: 'sent_at', dir: 'desc' },
+        limit: 1000,
+        purpose,
+      }),
+    ]);
+
+    // Participants are named from their own party rows, `in`-bounded — the
+    // picker's 500-party cap must never rename someone in a thread.
+    const participantPartyIds = [
+      ...new Set((participants.rows ?? []).map((tp) => tp.party_id).filter(Boolean)),
+    ];
+    const participantParties =
+      participantPartyIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.party',
+            where: [{ column: 'party_id', op: 'in', value: participantPartyIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const nameByParty = new Map(
+      (participantParties.rows ?? []).map((p) => [p.party_id, p.display_name]),
+    );
     const namesByThread = new Map();
     const othersByThread = new Map();
     // The owner's read cursor per thread — social.mark_thread_read stamps
@@ -50,6 +115,11 @@ export default async ({ ctx }) => {
     // inbound — the owner's own sends (and drafts) never make a thread
     // unread. An unresolved sender (party_id NULL, handle only) is by
     // definition not the owner, so it counts.
+    //
+    // A quiet thread whose entire history fell outside the 1000-message
+    // window degrades gracefully: empty snippet, has_draft false, unread
+    // false. Its place in the inbox is untouched — last_message_at ordering
+    // and the rendered timestamp come from the thread row itself.
     const lastByThread = new Map();
     const draftThreads = new Set();
     const lastInboundByThread = new Map();
@@ -80,7 +150,7 @@ export default async ({ ctx }) => {
       });
       for (const item of items.rows ?? []) contentById.set(item.content_id, item);
     }
-    const rows = (threads.rows ?? [])
+    const rows = windowedThreads
       .map((t) => {
         const last = lastByThread.get(t.thread_id);
         // Unread is a comparison of two vault facts: the newest inbound
@@ -106,15 +176,10 @@ export default async ({ ctx }) => {
           String(a.last_message_at ?? a.created_at ?? ''),
         ),
       );
-    return {
-      threads: rows,
-      parties: (parties.rows ?? [])
-        .filter((p) => p.party_id !== ownerPartyId)
-        .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
-        .toSorted((a, b) =>
-          String(a.display_name ?? '').localeCompare(String(b.display_name ?? '')),
-        ),
-    };
+    // A full window means there may be older threads beyond it — the UI
+    // offers "Show more" (a re-read with a larger window) and search.
+    const truncated = windowedThreads.length >= window;
+    return { threads: rows, parties: pickerParties, truncated, window };
   } catch (err) {
     return { threads: [], parties: [], vaultDenied: { code: err.code, message: err.message } };
   }

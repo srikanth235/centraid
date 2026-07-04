@@ -173,6 +173,8 @@ export class WorktreeStore {
       description?: string;
       kind?: 'app' | 'automation';
       hasIndex: boolean;
+      iconKey?: string;
+      colorKey?: string;
     }>
   > {
     this.assertInitialized();
@@ -196,6 +198,10 @@ export class WorktreeStore {
             ? { kind: manifest.kind as 'app' | 'automation' }
             : {}),
           hasIndex,
+          // Tile identity (issue #263) — pass-through strings; the shells
+          // validate against the design-tokens sets before rendering.
+          ...(typeof manifest.iconKey === 'string' ? { iconKey: manifest.iconKey } : {}),
+          ...(typeof manifest.colorKey === 'string' ? { colorKey: manifest.colorKey } : {}),
         };
       }),
     );

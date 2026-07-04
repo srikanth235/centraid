@@ -53,6 +53,58 @@ export async function rewriteIndexHtmlTitle(appDir: string, newName: string): Pr
   if (next !== raw) await fs.writeFile(htmlPath, next);
 }
 
+/**
+ * Tile visual identity (icon glyph + hue) carried in `app.json`. Keys are
+ * plain strings at this layer — the catalog (`index.json`) declares them
+ * with the `@centraid/design-tokens` types, and the shells validate before
+ * rendering, so the rewrite stays pass-through.
+ */
+export interface AppVisualIdentity {
+  iconKey?: string;
+  colorKey?: string;
+}
+
+/**
+ * Pure string variant: backfill `iconKey` / `colorKey` in an `app.json`
+ * string from the template's catalog entry (issue #263 — tile identity
+ * lives at the source, not in a desktop localStorage shim). Keys the
+ * manifest already declares win — a template's own app.json is copied
+ * verbatim on clone, so this only fills gaps (older cached template
+ * copies that predate the keys). Returns `null` when the input is
+ * unparseable so the caller can skip it.
+ */
+export function applyAppVisualIdentity(raw: string, visual: AppVisualIdentity): string | null {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null; // unparseable — caller leaves it alone.
+  }
+  if (visual.iconKey && typeof parsed.iconKey !== 'string') parsed.iconKey = visual.iconKey;
+  if (visual.colorKey && typeof parsed.colorKey !== 'string') parsed.colorKey = visual.colorKey;
+  return JSON.stringify(parsed, null, 2) + '\n';
+}
+
+/**
+ * Backfill `iconKey` / `colorKey` in `<appDir>/app.json` from the
+ * template's catalog entry. Missing or unparseable app.json → no-op;
+ * keys already present in the manifest are left alone.
+ */
+export async function stampAppVisualIdentity(
+  appDir: string,
+  visual: AppVisualIdentity,
+): Promise<void> {
+  const appJsonPath = path.join(appDir, 'app.json');
+  let raw: string;
+  try {
+    raw = await fs.readFile(appJsonPath, 'utf8');
+  } catch {
+    return; // app has no app.json — nothing to stamp.
+  }
+  const next = applyAppVisualIdentity(raw, visual);
+  if (next !== null && next !== raw) await fs.writeFile(appJsonPath, next);
+}
+
 export interface AutomationManifestRewriteOptions {
   /**
    * When true, also reset `generated` to

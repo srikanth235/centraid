@@ -14,9 +14,15 @@ const $ = (id) => document.getElementById(id);
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // reject before reading — ~8 MB
 
 let data = { folders: [], documents: [], root_folder_id: null };
+// The browse window: the drive query reads only this many recently filed
+// documents — vault data has no upper bound. "Show more" grows it; search
+// reaches everything beyond it.
+let driveWindow = 200;
+let driveTruncated = false;
 let currentFolder = null; // folder_id, or null = the drive's top level
 let trashView = false;
 let searchQuery = ''; // non-empty = flat search results across all folders
+let searchResults = null; // vault FTS matches while a search term is active
 let sortKey = 'name'; // 'name' | 'size' | 'added'
 let sortDir = 1; // 1 asc, -1 desc
 let uploading = false;
@@ -106,6 +112,22 @@ function purgeCountdown(iso) {
   return `purges in ${days} days`;
 }
 
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and document text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
 function iconKind(mediaType) {
   const t = String(mediaType ?? '');
   if (t === 'application/pdf') return { cls: 'pdf', label: 'PDF' };
@@ -169,14 +191,7 @@ function compareDocs(a, b) {
 function currentRows() {
   let rows;
   if (searchQuery) {
-    const q = searchQuery.toLowerCase();
-    rows = data.documents.filter(
-      (d) =>
-        !d.trashed &&
-        String(d.title ?? '')
-          .toLowerCase()
-          .includes(q),
-    );
+    rows = searchResults ?? [];
   } else if (trashView) {
     rows = trashedDocs();
   } else {
@@ -562,7 +577,9 @@ $('folderForm').addEventListener('submit', async (e) => {
 // ---------- Navigation ----------
 
 function clearSearch() {
+  searchSeq += 1; // an in-flight vault reply must not resurrect the results
   searchQuery = '';
+  searchResults = null;
   $('searchInput').value = '';
 }
 
@@ -585,13 +602,34 @@ function openTrash() {
 $('trashButton').addEventListener('click', openTrash);
 window.addEventListener('focus', refresh);
 
-// ---------- Search: titles across all folders, flat, with folder paths ----------
+// ---------- Search: the vault's FTS5 index, flat across all folders ----------
 
-const applySearch = debounce(() => {
+// Searching asks the vault, not a local copy: the FTS5 index matches every
+// document (title + text body) inside SQLite and returns only the hits, so
+// the app never greps an unbounded table in memory. `searchSeq` drops stale
+// replies when the owner types faster than the vault answers.
+let searchSeq = 0;
+
+const applySearch = debounce(async () => {
   const q = $('searchInput').value.trim();
   if (q === searchQuery) return;
   searchQuery = q;
   clearSelection();
+  if (!q) {
+    searchResults = null;
+    render();
+    return;
+  }
+  const seq = ++searchSeq;
+  let rows = [];
+  try {
+    const res = await window.centraid.read({ query: 'search', input: { term: q } });
+    rows = res?.documents ?? [];
+  } catch {
+    rows = [];
+  }
+  if (seq !== searchSeq) return;
+  searchResults = rows;
   render();
 }, 150);
 
@@ -895,6 +933,26 @@ function renderDocs() {
   rows.forEach((doc, i) => {
     list.appendChild(trashView && !searchQuery ? renderTrashRow(doc, i) : renderDocRow(doc, i));
   });
+  // The window is honest about its edge: browsing (folders and trash alike)
+  // shows the latest filed slice, "Show more" grows it, search reaches
+  // everything beyond it.
+  if (driveTruncated && !searchQuery) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${driveWindow} documents — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      driveWindow += 200;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
+  }
 }
 
 function docIcon(doc) {
@@ -971,6 +1029,14 @@ function renderDocRow(doc, index) {
     : docMain(doc, [fmtBytes(doc.byte_size), fmtDate(doc.created_at)].filter(Boolean).join(' · '), {
         metaNarrowOnly: true,
       });
+  // A vault match carries its own snippet, centered on the hit — it explains
+  // why a document matched even when its title doesn't.
+  if (searchQuery && doc.snippet) {
+    const snip = document.createElement('span');
+    snip.className = 'doc-snippet';
+    snippetInto(snip, doc.snippet);
+    main.appendChild(snip);
+  }
   row.appendChild(main);
   row.appendChild(metaCell('cell-size', fmtBytes(doc.byte_size)));
   row.appendChild(metaCell('cell-added', fmtDate(doc.created_at)));
@@ -1259,7 +1325,7 @@ let readFailedShowing = false;
 async function refresh() {
   let next;
   try {
-    next = await window.centraid.read({ query: 'drive' });
+    next = await window.centraid.read({ query: 'drive', input: { limit: driveWindow } });
   } catch {
     readFailed($('noticeBanner')); // a broken vault must not look empty
     readFailedShowing = true;
@@ -1277,6 +1343,7 @@ async function refresh() {
     return;
   }
   data = next;
+  driveTruncated = Boolean(next?.truncated);
   selected = new Set([...selected].filter((id) => data.documents.some((d) => d.content_id === id)));
   render();
 }

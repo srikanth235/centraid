@@ -177,6 +177,42 @@ describe('cloneTemplate index.html <title> rewrite', () => {
     expect(html).toMatch(/<title>Foo &amp; &lt;Bar&gt;<\/title>/);
   });
 
+  it('backfills the catalog tile identity into app.json (template copy predates the keys)', async () => {
+    await cloneTemplate({
+      appsDir,
+      newAppId: 'hydrate-2',
+      templateDir,
+      newName: 'Hydrate 2',
+      iconKey: 'Water',
+      colorKey: 'teal',
+    });
+    const appJson = JSON.parse(
+      await fs.readFile(path.join(appsDir, 'hydrate-2', 'app.json'), 'utf8'),
+    ) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Water');
+    expect(appJson.colorKey).toBe('teal');
+  });
+
+  it('keeps the template app.json tile identity over the catalog entry', async () => {
+    await fs.writeFile(
+      path.join(templateDir, 'app.json'),
+      JSON.stringify({ name: 'Hydrate', version: '0.1.0', iconKey: 'Todo', colorKey: 'indigo' }),
+    );
+    await cloneTemplate({
+      appsDir,
+      newAppId: 'hydrate-3',
+      templateDir,
+      newName: 'Hydrate 3',
+      iconKey: 'Water',
+      colorKey: 'teal',
+    });
+    const appJson = JSON.parse(
+      await fs.readFile(path.join(appsDir, 'hydrate-3', 'app.json'), 'utf8'),
+    ) as { iconKey: string; colorKey: string };
+    expect(appJson.iconKey).toBe('Todo');
+    expect(appJson.colorKey).toBe('indigo');
+  });
+
   it('leaves index.html untouched when no <title> tag exists', async () => {
     await fs.writeFile(
       path.join(templateDir, 'index.html'),

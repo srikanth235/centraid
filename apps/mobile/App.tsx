@@ -24,6 +24,7 @@ import JetBrainsMono_600SemiBold from '@expo-google-fonts/jetbrains-mono/600Semi
 import HomeScreen from './src/screens/Home';
 import AppDetailScreen from './src/screens/AppDetail';
 import SettingsScreen from './src/screens/Settings';
+import ApprovalsScreen from './src/screens/Approvals';
 import MobileFallbackScreen from './src/screens/MobileFallback';
 import type { RootStackParamList } from './src/navigation';
 
@@ -108,6 +109,7 @@ export default function App(): React.JSX.Element | null {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="AppDetail" component={AppDetailScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
+            <Stack.Screen name="Approvals" component={ApprovalsScreen} />
             <Stack.Screen
               name="MobileFallback"
               component={MobileFallbackScreen}

@@ -49,6 +49,7 @@ import {
   formatBytes,
   shortVersionTitle,
 } from './format.js';
+import { inferAppVisual } from './app-format.js';
 import { cronNextRuns, describeCron } from './cron.js';
 import { lineDiff } from './diff.js';
 
@@ -3550,7 +3551,17 @@ import { lineDiff } from './diff.js';
       pushMessage({ kind: 'divider', text: `Today · ${hhmm}` });
       pushMessage({ kind: 'status', text: 'Setting up app…', spinning: true });
       try {
-        await createApp({ id, name: projName, version: '0.1.0' });
+        // Stamp the prompt-inferred tile identity into the scaffold's
+        // app.json (issue #263) so the home tile's icon/hue come from the
+        // source of truth, not a per-device localStorage shim.
+        const visual = inferAppVisual(initialPrompt);
+        await createApp({
+          id,
+          name: projName,
+          version: '0.1.0',
+          iconKey: visual.iconKey,
+          colorKey: visual.colorKey,
+        });
         appId = id;
         // Subtitle holds the editable description, not a status — leave it
         // alone so the user's placeholder/value isn't clobbered.

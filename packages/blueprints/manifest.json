@@ -298,6 +298,7 @@
         "kit.js",
         "package.json",
         "queries/board.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -483,6 +484,7 @@
         "kit.js",
         "package.json",
         "queries/inbox.js",
+        "queries/search.js",
         "queries/thread.js",
         "wall.css"
       ],
@@ -579,6 +581,7 @@
         "kit.js",
         "package.json",
         "queries/library.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -772,6 +775,7 @@
         "kit.js",
         "package.json",
         "queries/drive.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -1240,6 +1244,7 @@
         "kit.js",
         "package.json",
         "queries/pipeline.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [

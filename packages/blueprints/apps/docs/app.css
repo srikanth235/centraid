@@ -654,6 +654,22 @@ input[type='checkbox'] {
   white-space: nowrap;
 }
 
+/* The vault search snippet — one line, hit markers rendered as <mark>. */
+.doc-snippet {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+mark {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0 0.05em;
+}
+
 .doc-cell {
   font-size: 0.78rem;
   color: var(--ink-faint);
@@ -988,6 +1004,17 @@ input[type='checkbox'] {
   margin-top: 2rem;
   text-align: center;
   color: var(--ink-faint);
+}
+
+/* The browse window's honest edge: latest N shown, Show more grows it. */
+.window-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
 }
 
 /* ---------- App-level knobs ---------- */

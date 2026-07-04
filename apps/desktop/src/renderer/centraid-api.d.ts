@@ -335,6 +335,29 @@ export interface CentraidCloneTemplateResult {
 // data chat now stream the gateway's native `TurnStreamEvent` directly (see
 // `renderer/gateway-client-conversation.ts`).
 
+/** A phone paired over the iroh tunnel (issue #263). */
+export interface CentraidPhoneDevice {
+  deviceId: string;
+  name: string;
+  platform: string;
+  /** Base32 iroh EndpointId — the device's transport identity. */
+  endpointId: string;
+  addedAt: string;
+}
+
+export interface CentraidPhoneLinkStatus {
+  running: boolean;
+  endpointId?: string;
+  error?: string;
+  devices: CentraidPhoneDevice[];
+}
+
+export interface CentraidPhonePairingInfo {
+  payload: string;
+  qrDataUrl: string;
+  expiresAt: number;
+}
+
 interface CentraidApi {
   getSettings(): Promise<CentraidSettings>;
   saveSettings(patch: Partial<CentraidSettings>): Promise<CentraidSettings>;
@@ -445,6 +468,17 @@ interface CentraidApi {
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
   getGatewayAuth(): Promise<{ baseUrl: string; token?: string }>;
+  // ----- Phone link (issue #263) -----
+  /** Tunnel status + the paired-device allowlist. */
+  getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
+  /** Mint a fresh one-time pairing code; returns the QR as a data URL. */
+  beginPhonePairing(): Promise<CentraidPhonePairingInfo>;
+  cancelPhonePairing(): Promise<{ ok: true }>;
+  /** Revoke a paired phone — drops its live connections at the transport. */
+  revokePhoneDevice(input: { deviceId: string }): Promise<{ removed: boolean }>;
+  /** Subscribe to pairing completions. Returns the unsubscribe. */
+  onPhonePaired(cb: (msg: { device: CentraidPhoneDevice }) => void): () => void;
+
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.

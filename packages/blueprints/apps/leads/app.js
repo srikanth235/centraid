@@ -30,7 +30,12 @@ const CURRENCY_KEY = 'leads.currency';
 
 let data = { leads: [], candidates: [] };
 let loaded = false; // first successful read landed
+// The browse window: the pipeline query reads only this many recent clients
+// (UUIDv7 order — newest first). "Show more" grows it; search reaches the rest.
+let pipelineWindow = 500;
+let pipelineTruncated = false;
 let filterText = ''; // lowercased search needle
+let searchResults = null; // vault FTS matches while a term is active
 let attachTarget = null; // client_id the shared file input attaches to
 let attachRole = null; // role chosen in the per-card picker (null = auto)
 let draggedLead = null; // the lead being dragged between columns
@@ -210,7 +215,7 @@ async function moveLead(lead, toStatus) {
 async function refresh() {
   let next;
   try {
-    next = await window.centraid.read({ query: 'pipeline' });
+    next = await window.centraid.read({ query: 'pipeline', input: { limit: pipelineWindow } });
   } catch {
     // A broken vault must not look like an empty one.
     readFailed($('noticeBanner'));
@@ -226,6 +231,7 @@ async function refresh() {
     return;
   }
   data = next;
+  pipelineTruncated = Boolean(next?.truncated);
   loaded = true;
   renderAddForm();
   renderBoard();
@@ -248,23 +254,37 @@ function renderAddForm() {
   }
 }
 
-function matchesFilter(lead) {
-  if (!filterText) return true;
-  return (
-    String(lead.name).toLowerCase().includes(filterText) ||
-    String(lead.note ?? '')
-      .toLowerCase()
-      .includes(filterText)
-  );
-}
-
 function renderBoard() {
   const board = $('board');
   board.innerHTML = '';
   $('empty').hidden = data.leads.length > 0;
+  // While a term is active the board IS the vault's ranked matches; stage
+  // grouping still happens here so the kanban keeps its columns.
+  const matched = filterText ? (searchResults ?? []) : data.leads;
   for (const col of COLUMNS) {
     const inColumn = data.leads.filter((l) => l.status === col.key);
-    board.appendChild(renderColumn(col, inColumn));
+    const shown = filterText ? matched.filter((l) => l.status === col.key) : inColumn;
+    board.appendChild(renderColumn(col, inColumn, shown));
+  }
+  // The window is honest about its edge: the columns group the loaded slice
+  // (their counts count loaded cards), "Show more" grows it, and search
+  // reaches everything beyond it — so no footer while a term is active.
+  if (pipelineTruncated && !filterText) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${pipelineWindow} leads — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      pipelineWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    board.appendChild(footer);
   }
 }
 
@@ -281,7 +301,7 @@ function columnSummary(cards) {
   return `${fmtMoney(avg, rated[0].currency)}/h avg`;
 }
 
-function renderColumn(col, cards) {
+function renderColumn(col, cards, shown) {
   const column = document.createElement('div');
   column.className = 'column';
   column.dataset.status = col.key;
@@ -291,7 +311,6 @@ function renderColumn(col, cards) {
   const title = document.createElement('span');
   title.className = 'column-title';
   title.textContent = col.title;
-  const shown = cards.filter(matchesFilter);
   const meta = document.createElement('span');
   meta.className = 'column-count';
   const countText =
@@ -598,10 +617,31 @@ function openNoteEditor(card, lead, { lostTo } = {}) {
 
 // ---------- Search ----------
 
+// Searching asks the vault, not a local copy: the FTS5 index matches names,
+// org lines and running notes inside SQLite and returns only the hits, so
+// the board never greps every contact in memory. `searchSeq` drops stale
+// replies when the owner types faster than the vault answers.
+let searchSeq = 0;
 $('searchInput').addEventListener(
   'input',
-  debounce(() => {
-    filterText = $('searchInput').value.trim().toLowerCase();
+  debounce(async () => {
+    const raw = $('searchInput').value.trim();
+    filterText = raw.toLowerCase();
+    if (!raw) {
+      searchResults = null;
+      if (loaded) renderBoard();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const res = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = res?.leads ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
     if (loaded) renderBoard();
   }, 150),
 );

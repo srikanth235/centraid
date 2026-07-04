@@ -4,6 +4,8 @@
   "name": "Tasks",
   "description": "A Things-style task manager as a projection of the personal vault: canonical tasks from schedule.task, nothing stored here. Adding, completing and editing all run through the schedule domain's typed task commands — consent-checked, contract-checked and receipted. Revoke the grant and the app goes dark while the tasks, history and receipts remain the owner's.",
   "version": "0.3.0",
+  "iconKey": "Check",
+  "colorKey": "teal",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your canonical task list.",
@@ -273,10 +275,16 @@
   "queries": [
     {
       "name": "board",
-      "description": "The task board: open top-level tasks with their subtasks nested (due first, then priority), a logbook of the 50 most recently closed tasks, and open/done counts.",
+      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed) — never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -290,6 +298,37 @@
           },
           "counts": {
             "type": "object"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text task search through the vault's FTS5 index (title + description) — returns only the ranked matches in the board's per-task row shape plus a hit snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tasks": {
+            "type": "array"
           },
           "vaultDenied": {
             "type": "object"

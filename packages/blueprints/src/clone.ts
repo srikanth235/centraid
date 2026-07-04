@@ -1,12 +1,15 @@
+// governance: allow-repo-hygiene file-size-limit clone orchestration + identity/visual rewrites share one copy-then-rewrite pipeline — splitting would fracture the per-clone invariants
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { AppInfo } from './scaffold-types.js';
 import { AppScaffoldError } from './scaffold-types.js';
 import {
+  applyAppVisualIdentity,
   applyManifestName,
   rewriteAutomationManifestNames,
   rewriteIndexHtmlTitle,
   rewriteTitleInHtml,
+  stampAppVisualIdentity,
 } from './app-rewrites.js';
 import type { ScaffoldFile } from './scaffold-files.js';
 import { isDisplayNameTaken, validateAppId } from './scaffold.js';
@@ -30,6 +33,13 @@ export interface CloneTemplateOptions {
    * tile subtitle).
    */
   newDesc?: string;
+  /**
+   * Template tile identity from the catalog entry (issue #263). Backfills
+   * `app.json#iconKey` / `#colorKey` when the template's own copy predates
+   * the keys; a template app.json that already declares them wins.
+   */
+  iconKey?: string;
+  colorKey?: string;
 }
 
 /**
@@ -74,6 +84,12 @@ export async function cloneTemplate(opts: CloneTemplateOptions): Promise<AppInfo
   await ensureCanonicalSubdirs(destDir);
 
   await rewriteAppJson(destDir, opts.newName, opts.newDesc, opts.newAppId);
+  // Backfill the tile identity from the catalog entry so a clone of an
+  // older cached template (app.json without iconKey/colorKey) still lands
+  // with the template's canonical look (issue #263).
+  if (opts.iconKey || opts.colorKey) {
+    await stampAppVisualIdentity(destDir, { iconKey: opts.iconKey, colorKey: opts.colorKey });
+  }
   await rewritePackageJson(destDir, opts.newAppId);
   // Keep the browser-tab title aligned with the new display name. The
   // template's <title> is hardcoded to its own brand ("Hydrate"), which
@@ -218,6 +234,13 @@ export interface CloneTemplateFilesOptions {
   newName?: string;
   /** Optional one-line description; defaults to the template's. */
   newDesc?: string;
+  /**
+   * Template tile identity from the catalog entry (issue #263). Backfills
+   * `app.json#iconKey` / `#colorKey` when the template's own copy predates
+   * the keys; a template app.json that already declares them wins.
+   */
+  iconKey?: string;
+  colorKey?: string;
 }
 
 /**
@@ -269,7 +292,14 @@ export function cloneTemplateFiles(opts: CloneTemplateFilesOptions): ScaffoldFil
   const descTrimmed = descSource.trim();
   if (descTrimmed) nextAppJson.description = descTrimmed;
   else delete nextAppJson.description;
-  set('app.json', JSON.stringify(nextAppJson, null, 2) + '\n');
+  // Backfill the tile identity from the catalog entry (issue #263) —
+  // no-op when the template's app.json already declares the keys.
+  const withVisual =
+    applyAppVisualIdentity(JSON.stringify(nextAppJson, null, 2) + '\n', {
+      iconKey: opts.iconKey,
+      colorKey: opts.colorKey,
+    }) ?? JSON.stringify(nextAppJson, null, 2) + '\n';
+  set('app.json', withVisual);
 
   // package.json — only rewrite the convention-following name.
   const pkgIdx = byPath.get('package.json');

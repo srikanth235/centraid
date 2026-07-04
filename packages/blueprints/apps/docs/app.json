@@ -4,6 +4,8 @@
   "name": "Docs",
   "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. Every file's bytes are a sha256-deduped canonical content item; folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Trash sets a purge date about 30 days out and keeps the folder tag, so a restored document lands right back where it was. Uploading, renaming, moving, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
   "version": "0.1.0",
+  "iconKey": "Folder",
+  "colorKey": "slate",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Keeps your important documents filed, downloadable and restorable.",
@@ -209,10 +211,12 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The whole drive: every folder in the owner's folders scheme and every document (a content item carrying a folders-scheme tag) newest first, trashed ones included with their purge dates.",
+      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (content items carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": { "type": "integer", "minimum": 20, "maximum": 2000 }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -221,6 +225,27 @@
           "folders": { "type": "array" },
           "documents": { "type": "array" },
           "root_folder_id": { "type": ["string", "null"] },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text document search through the vault's FTS5 index (title + text body) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Only content items carrying a folders-scheme tag come back; trashed documents never match.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "documents": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

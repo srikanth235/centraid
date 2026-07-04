@@ -4,6 +4,8 @@
   "name": "Notes",
   "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
   "version": "0.5.0",
+  "iconKey": "Book",
+  "colorKey": "forest",
   "vault": {
     "purpose": "dpv:ServiceProvision",
     "why": "Shows and manages your notes and notebooks.",
@@ -405,10 +407,16 @@
   "queries": [
     {
       "name": "library",
-      "description": "All notes newest first with their notebook names and decoded bodies, plus the notebooks for filtering.",
+      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names and decoded bodies, plus the notebooks for filtering — never a whole-table pull; `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -418,6 +426,37 @@
             "type": "array"
           },
           "notebooks": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text note search through the vault's FTS5 index (title + body) — returns only the ranked matches in the library row shape plus a hit snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "notes": {
             "type": "array"
           },
           "vaultDenied": {

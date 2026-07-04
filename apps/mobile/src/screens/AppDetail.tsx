@@ -11,24 +11,23 @@ import type {
 import AppHeader from '../components/AppHeader';
 import Button from '../components/Button';
 import { colors, spacing, t } from '../theme';
-import {
-  appLiveUrl,
-  getGatewayUrl,
-  GatewayError,
-  parseOrigin,
-  resolveAppMeta,
-  type AppRegistryRow,
-} from '../lib/gateway';
-import { fetchInlinedAppDocument, type InlinedDocument } from '../lib/asset-inliner';
+import { appLiveUrl, resolveGatewayBase, resolveAppMeta } from '../lib/gateway';
 import { dispatch } from '../lib/bridge/dispatch';
-import { buildInjectedJs } from '../lib/bridge/injected';
+import { INJECTED_JS } from '../lib/bridge/injected';
 import { CENTRAID_HANDSHAKE, type BridgeRequest } from '../lib/bridge/protocol';
 import type { RootScreenProps } from '../navigation';
 
 /**
- * Renders a Centraid app inside a WebView pointing at the user's gateway.
- * The native shell owns the titlebar + back button; the app's UI runs in
- * the WebView. See issue #14 (Phase B) for the architecture.
+ * Renders a Centraid app inside a WebView. The native shell owns the
+ * titlebar + back button; the app's UI runs in the WebView, loaded
+ * straight from `<base>/centraid/<id>/`.
+ *
+ * The base URL comes from the paired tunnel when available — a localhost
+ * proxy that forwards everything (documents, ES-module imports, EventSource)
+ * to the desktop over iroh, so no inlining or header tricks are needed. The
+ * manual-URL dev fallback loads the same URL directly; that only works
+ * against a token-less dev gateway, since the WebView attaches no bearer —
+ * an authed gateway needs the tunnel.
  */
 export default function AppDetailScreen({
   navigation,
@@ -36,63 +35,33 @@ export default function AppDetailScreen({
 }: RootScreenProps<'AppDetail'>): React.JSX.Element {
   const { appId } = route.params;
 
-  const liveUrlOrError = useMemo(() => {
-    try {
-      return { kind: 'ok' as const, url: appLiveUrl(appId) };
-    } catch (err) {
-      const message =
-        err instanceof GatewayError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : 'Gateway not configured.';
-      return { kind: 'err' as const, message };
-    }
-  }, [appId]);
-
-  // WKWebView's `source.headers` only attaches headers to the initial
-  // document GET — sub-resource loads (<script src>, <link href>) don't
-  // inherit them, so the gateway 401s those and the page's JS never runs.
-  // Workaround: native fetches the HTML + every referenced asset with
-  // the bearer attached and inlines them, then we hand the WebView a
-  // self-contained document. The page's runtime fetch() calls (e.g.
-  // `/centraid/_tool/centraid_read` issued by `window.centraid.read`,
-  // and the `_changes` SSE stream) are intercepted by the injected
-  // bridge shim and proxied through native — see lib/bridge/injected.ts.
-  const gatewayOrigin = useMemo(() => parseOrigin(getGatewayUrl()), []);
-  const injectedJs = useMemo(() => buildInjectedJs(gatewayOrigin), [gatewayOrigin]);
-
-  // Display metadata: a fabricated RegistryRow gives `resolveAppMeta` the
-  // shape it wants — we only need the id at this layer; resolution falls
-  // back to a derived tile for unknown ids.
-  const meta = useMemo(() => {
-    const row: AppRegistryRow = {
-      id: appId,
-      path: '',
-      mode: 'uploaded',
-      registeredAt: '',
-    };
-    return resolveAppMeta(row);
-  }, [appId]);
+  // Display metadata: resolution falls back to a derived tile for ids the
+  // built-in catalog doesn't know — we only have the id at this layer.
+  const meta = useMemo(() => resolveAppMeta({ id: appId }), [appId]);
 
   const webViewRef = useRef<WebView | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | undefined>(undefined);
   const [reloadKey, setReloadKey] = useState(0);
-  const [doc, setDoc] = useState<InlinedDocument | undefined>(undefined);
+  const [baseUrl, setBaseUrl] = useState<string | undefined>(undefined);
+  const [noGateway, setNoGateway] = useState(false);
 
-  // Fetch + inline the app's index.html each time we mount or retry.
+  // Resolve the gateway base (tunnel first) each time we mount or retry.
   useEffect(() => {
-    if (liveUrlOrError.kind !== 'ok') return;
     let cancelled = false;
-    setDoc(undefined);
+    setBaseUrl(undefined);
+    setNoGateway(false);
     setLoadError(undefined);
     setLoading(true);
-    fetchInlinedAppDocument(appId)
-      .then((d) => {
+    resolveGatewayBase()
+      .then((base) => {
         if (cancelled) return;
-        setDoc(d);
+        if (base) setBaseUrl(base);
+        else {
+          setNoGateway(true);
+          setLoading(false);
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -102,7 +71,7 @@ export default function AppDetailScreen({
     return () => {
       cancelled = true;
     };
-  }, [appId, reloadKey, liveUrlOrError.kind]);
+  }, [appId, reloadKey]);
 
   const handleNavStateChange = useCallback((event: WebViewNavigation): void => {
     setCanGoBack(event.canGoBack);
@@ -173,10 +142,10 @@ export default function AppDetailScreen({
         iconKey={meta.iconKey}
         onBack={() => navigation.goBack()}
       />
-      {liveUrlOrError.kind === 'err' ? (
+      {noGateway ? (
         <ErrorState
-          title="Gateway not set"
-          message={liveUrlOrError.message}
+          title="Not connected"
+          message="Pair with your desktop (or set a gateway URL under Advanced) to open apps."
           actionLabel="Open Settings"
           onAction={() => navigation.navigate('Settings')}
         />
@@ -189,11 +158,11 @@ export default function AppDetailScreen({
         />
       ) : (
         <View style={styles.webWrap}>
-          {doc ? (
+          {baseUrl ? (
             <WebView
               key={reloadKey}
               ref={webViewRef}
-              source={{ html: doc.html, baseUrl: doc.baseUrl }}
+              source={{ uri: appLiveUrl(baseUrl, appId) }}
               onNavigationStateChange={handleNavStateChange}
               onLoadStart={() => {
                 setLoading(true);
@@ -204,7 +173,7 @@ export default function AppDetailScreen({
               onMessage={(event) => {
                 void handleMessage(event);
               }}
-              injectedJavaScriptBeforeContentLoaded={injectedJs}
+              injectedJavaScriptBeforeContentLoaded={INJECTED_JS}
               style={styles.web}
               allowsBackForwardNavigationGestures={false}
               originWhitelist={['*']}

@@ -78,7 +78,7 @@ type WorkerMessage =
   | {
       type: 'vault';
       id: number;
-      op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+      op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
       payload: Record<string, unknown>;
     }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
@@ -251,7 +251,7 @@ const runs = {
 // (this agent's invocations awaiting owner confirmation) and `changes`
 // (the consented journal feed data triggers ride).
 function vaultCall(
-  op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes',
+  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
   return rpcCall({ type: 'vault', op, payload });
@@ -260,6 +260,10 @@ function vaultCall(
 const vault = {
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('read', request);
+  },
+  /** FTS5 search over a text-indexed entity — match vault-side, never grep a full read. */
+  search(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('search', request);
   },
   invoke(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('invoke', request);

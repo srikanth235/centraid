@@ -42,7 +42,7 @@ interface DbReplyMessage {
 interface VaultCallMessage {
   type: 'vault';
   id: number;
-  op: 'read' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
   payload: unknown;
 }
 
@@ -129,6 +129,16 @@ const vault = {
   /** Consent-checked read of a canonical entity: `{entity, where?, limit?, purpose}`. */
   read(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('read', request);
+  },
+  /**
+   * Full-text search over a text-indexed entity:
+   * `{entity, query, where?, limit?, purpose}` → ranked `{rows, receiptId}`,
+   * each row carrying `_snippet` (matched fragment, hits marked `⟦…⟧`).
+   * Matching runs inside the vault's FTS5 index — never read a whole
+   * entity to grep it in memory.
+   */
+  search(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('search', request);
   },
   /** Typed-command invocation: `{command, input, purpose}` → outcome `{status, output, …}`. */
   invoke(request: Record<string, unknown>): Promise<unknown> {
