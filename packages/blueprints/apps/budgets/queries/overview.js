@@ -118,18 +118,43 @@ export default async ({ query, ctx }) => {
   }
 
   try {
-    const [transactions, accounts, budgets, concepts, contents, attachments] = await Promise.all([
+    // Accounts, budgets and concepts are small vocabulary tables — read
+    // whole. Transactions are the windowed read the where/limit above bound.
+    const [transactions, accounts, budgets, concepts] = await Promise.all([
       ctx.vault.read({ entity: 'core.transaction', where, limit, purpose }),
       ctx.vault.read({ entity: 'core.account', purpose }),
       ctx.vault.read({ entity: 'finance.budget', purpose }),
       ctx.vault.read({ entity: 'core.concept', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
-      ctx.vault.read({
-        entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'core.transaction' }],
-        purpose,
-      }),
     ]);
+
+    // Joins are `in`-bounded by the windowed transactions — attachment
+    // edges first, then one content pull covering only the bytes those
+    // edges cite. core.content_item holds every attachment in the vault
+    // (receipts here, but also photos, manuals, note bodies…) and has no
+    // upper bound, so it must never be read whole.
+    const txnIds = (transactions.rows ?? []).map((t) => t.txn_id);
+    const attachments =
+      txnIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.attachment',
+            where: [
+              { column: 'subject_type', op: 'eq', value: 'core.transaction' },
+              { column: 'subject_id', op: 'in', value: txnIds },
+            ],
+            purpose,
+          })
+        : { rows: [] };
+    const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
+      Boolean,
+    );
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByTxn = attachmentsBySubject('core.transaction', attachments.rows ?? [], contentById);
     // Rows arrive unordered; newest movement first is the ledger's natural

@@ -238,10 +238,16 @@
   "queries": [
     {
       "name": "library",
-      "description": "Every live media asset with its content item's content_uri and media_type, plus the albums it belongs to, newest first; trashed assets ride separately with their days-until-purge.",
+      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -250,6 +256,8 @@
           "assets": { "type": "array" },
           "albums": { "type": "array" },
           "trash": { "type": "array" },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
           "vaultDenied": { "type": "object" }
         }
       }

@@ -36,6 +36,7 @@ let pipelineWindow = 500;
 let pipelineTruncated = false;
 let filterText = ''; // lowercased search needle
 let searchResults = null; // vault FTS matches while a term is active
+let candidateResults = null; // vault FTS parties while a picker term is active
 let attachTarget = null; // client_id the shared file input attaches to
 let attachRole = null; // role chosen in the per-card picker (null = auto)
 let draggedLead = null; // the lead being dragged between columns
@@ -239,19 +240,29 @@ async function refresh() {
 
 function renderAddForm() {
   const select = $('candidateSelect');
+  const previous = select.value;
   select.innerHTML = '';
+  // Zero-term the picker offers the pipeline's shortlist; with a term it
+  // shows the vault's ranked matches instead (see the filter wiring below).
+  const list = candidateResults ?? data.candidates;
   const placeholder = document.createElement('option');
   placeholder.value = '';
-  placeholder.textContent = data.candidates.length ? 'Pick a person…' : 'No unenrolled people';
+  placeholder.textContent = list.length
+    ? 'Pick a person…'
+    : candidateResults
+      ? 'No one matches'
+      : 'No unenrolled people';
   placeholder.disabled = true;
   placeholder.selected = true;
   select.appendChild(placeholder);
-  for (const c of data.candidates) {
+  for (const c of list) {
     const el = document.createElement('option');
     el.value = c.party_id;
     el.textContent = c.display_name;
     select.appendChild(el);
   }
+  // A pick survives a re-render (a refresh, a late reply) while still listed.
+  if (previous && list.some((c) => c.party_id === previous)) select.value = previous;
 }
 
 function renderBoard() {
@@ -365,7 +376,7 @@ function renderColumn(col, cards, shown) {
         behavior: reducedMotion() ? 'auto' : 'smooth',
         block: 'nearest',
       });
-      (addMode === 'contact' ? $('nameInput') : $('candidateSelect')).focus();
+      (addMode === 'contact' ? $('nameInput') : $('candidateFilter')).focus();
     });
     column.appendChild(add);
   }
@@ -652,8 +663,38 @@ $('searchInput').addEventListener(
 // contact through core.add_party and enrol them in one stroke.
 let addMode = 'existing'; // 'existing' | 'contact'
 
+// The picker's shipped shortlist stops at the newest 300 parties — a
+// convenience, not a directory. Typing here asks the vault's FTS5 index
+// over core.party instead (find-candidates), so anyone ever recorded is
+// enrollable without growing that cap. `candidateSeq` drops stale replies,
+// same as the board search above; an empty term restores the shortlist.
+let candidateSeq = 0;
+$('candidateFilter').addEventListener(
+  'input',
+  debounce(async () => {
+    const raw = $('candidateFilter').value.trim();
+    if (!raw) {
+      candidateResults = null;
+      renderAddForm();
+      return;
+    }
+    const seq = ++candidateSeq;
+    let rows = [];
+    try {
+      const res = await window.centraid.read({ query: 'find-candidates', input: { term: raw } });
+      rows = res?.candidates ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== candidateSeq) return;
+    candidateResults = rows;
+    renderAddForm();
+  }, 250),
+);
+
 function applyAddMode() {
   const contact = addMode === 'contact';
+  $('candidateFilter').hidden = contact;
   $('candidateSelect').hidden = contact;
   $('nameInput').hidden = !contact;
   $('contactRow').hidden = !contact;
@@ -666,7 +707,7 @@ function applyAddMode() {
 $('modeToggle').addEventListener('click', () => {
   addMode = addMode === 'contact' ? 'existing' : 'contact';
   applyAddMode();
-  (addMode === 'contact' ? $('nameInput') : $('candidateSelect')).focus();
+  (addMode === 'contact' ? $('nameInput') : $('candidateFilter')).focus();
 });
 
 function initCurrency() {
@@ -737,6 +778,9 @@ $('addForm').addEventListener('submit', async (e) => {
   const outcome = await act('add-lead', { party_id, currency, ...rateField });
   if (narrate(outcome)) {
     $('rateInput').value = '';
+    // The matches now offer someone just enrolled — back to the shortlist.
+    $('candidateFilter').value = '';
+    candidateResults = null;
     rememberCurrency(currency);
     await refresh();
   }

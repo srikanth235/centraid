@@ -369,10 +369,16 @@
   "queries": [
     {
       "name": "inventory",
-      "description": "Owned asset items grouped by place, each with its room, purchase value and warranty history, plus disposed items, maintenance plans with a projected next-due date, and the owner's places for the room picker.",
+      "description": "A bounded recent window of owned asset items (newest first — item ids are time-ordered) grouped by place, each with its room, purchase value and warranty history, plus the newest 200 disposed items, maintenance plans for the windowed items with a projected next-due date, and the owner's places for the room picker — never a whole-table pull; `truncated` says older items exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -388,6 +394,40 @@
             "type": "array"
           },
           "places": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text item search through the vault's FTS5 index (name + serial number) — returns only the ranked matches in the inventory row shape plus a hit snippet, never a whole-table pull; matched disposed items come back in their own list so \"where did that old thing go?\" has an answer.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "disposed": {
             "type": "array"
           },
           "vaultDenied": {

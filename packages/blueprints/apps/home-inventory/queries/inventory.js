@@ -1,10 +1,16 @@
 /**
- * The home-inventory projection: owned asset items joined to their place
- * name, purchase value and warranty history, plus disposed items (disposal
- * keeps the row), maintenance plans with a projected next-due date, and the
- * owner's places (the room picker's options). Everything comes from the
- * vault — this app holds no rows of its own; writes go back through the
- * home domain's typed commands.
+ * The home-inventory projection as a bounded recent window: the newest owned
+ * asset items (caller-sized, default 500), never the whole home.asset_item
+ * table, because vault data has no upper bound (issue #262). home_asset_item
+ * carries no timestamp, but item_id is UUIDv7, so descending PK order IS
+ * newest-first acquisition. Each windowed item is joined to its place name,
+ * purchase value and warranty history; disposed items (disposal keeps the
+ * row) ride beside the window as a fixed history shelf; maintenance plans
+ * are projected to a next-due date for the windowed items; and the owner's
+ * places fill the room picker. Anything older is reachable through the FTS
+ * search query or by growing the window (`truncated` tells the UI to offer
+ * that). Everything comes from the vault — this app holds no rows of its
+ * own; writes go back through the home domain's typed commands.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -41,23 +47,90 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
+  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [items, warranties, plans, places, attachments] = await Promise.all([
-      ctx.vault.read({ entity: 'home.asset_item', purpose }),
-      ctx.vault.read({ entity: 'home.warranty', purpose }),
-      ctx.vault.read({ entity: 'home.maintenance_plan', purpose }),
-      ctx.vault.read({ entity: 'core.place', purpose }),
+    const [ownedRead, disposedRead, places] = await Promise.all([
       ctx.vault.read({
-        entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'home.asset_item' }],
+        entity: 'home.asset_item',
+        where: [{ column: 'disposed_on', op: 'is-null' }],
+        orderBy: { column: 'item_id', dir: 'desc' },
+        limit: window,
         purpose,
       }),
+      // The disposed shelf is history, not inventory: a fixed 200 newest
+      // disposals answers "which one was that?" without a caller-sized
+      // window of its own — anything older is a search away (disposal
+      // keeps the row, and disposed items stay in the FTS index).
+      ctx.vault.read({
+        entity: 'home.asset_item',
+        where: [{ column: 'disposed_on', op: 'not-null' }],
+        orderBy: { column: 'disposed_on', dir: 'desc' },
+        limit: 200,
+        purpose,
+      }),
+      // core.place stays a full read — the room list is the picker's
+      // option set and stays small (rooms, not items).
+      ctx.vault.read({ entity: 'core.place', purpose }),
     ]);
     const today = new Date().toISOString().slice(0, 10);
 
     const placeName = new Map((places.rows ?? []).map((p) => [p.place_id, p.name]));
+
+    // The owner's places, name-sorted — the room picker's option list.
+    const placeList = (places.rows ?? [])
+      .map((p) => ({ place_id: p.place_id, name: p.name }))
+      .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
+
+    // Disposal keeps the row — disposed items stay visible as history,
+    // newest disposal first (the window's read order).
+    const disposed = (disposedRead.rows ?? []).map((it) => ({
+      item_id: it.item_id,
+      name: it.name,
+      serial_no: it.serial_no ?? null,
+      disposed_on: it.disposed_on,
+      place_name: (it.place_id != null && placeName.get(it.place_id)) || null,
+    }));
+
+    const owned = ownedRead.rows ?? [];
+    // A full window means there may be older items beyond it — the UI
+    // offers "Show more" (a re-read with a larger window) and search.
+    const truncated = owned.length >= window;
+
+    // `in` with an empty array throws — with zero owned items there is
+    // nothing to join, so return the empty inventory (history and the
+    // room picker still stand).
+    if (owned.length === 0) {
+      return { items: [], disposed, maintenance: [], places: placeList, truncated, window };
+    }
+    const itemIds = owned.map((it) => it.item_id);
+
+    // Joins are `in`-bounded by the window — warranty history, maintenance
+    // plans and attachment edges only for the items on screen.
+    const [warranties, plans, attachments] = await Promise.all([
+      ctx.vault.read({
+        entity: 'home.warranty',
+        where: [{ column: 'item_id', op: 'in', value: itemIds }],
+        purpose,
+      }),
+      // Maintenance plans are shown for windowed items only — a plan whose
+      // item aged out of the window ages out with it (grow the window or
+      // search to bring the item, and its plans, back).
+      ctx.vault.read({
+        entity: 'home.maintenance_plan',
+        where: [{ column: 'item_id', op: 'in', value: itemIds }],
+        purpose,
+      }),
+      ctx.vault.read({
+        entity: 'core.attachment',
+        where: [
+          { column: 'subject_type', op: 'eq', value: 'home.asset_item' },
+          { column: 'subject_id', op: 'in', value: itemIds },
+        ],
+        purpose,
+      }),
+    ]);
 
     // Fetch only the content items this app's attachments reference — a
     // wholesale core.content_item read would ship every photo's bytes on
@@ -94,7 +167,6 @@ export default async ({ ctx }) => {
       list.sort((x, y) => String(y.ends_on).localeCompare(String(x.ends_on)));
     }
 
-    const owned = (items.rows ?? []).filter((it) => it.disposed_on == null);
     const joined = owned
       .map((it) => {
         const itemWarranties = warrantiesByItem.get(it.item_id) ?? [];
@@ -119,22 +191,8 @@ export default async ({ ctx }) => {
           String(a.name).localeCompare(String(b.name)),
       );
 
-    // Disposal keeps the row — disposed items stay visible as history,
-    // newest disposal first.
-    const disposed = (items.rows ?? [])
-      .filter((it) => it.disposed_on != null)
-      .map((it) => ({
-        item_id: it.item_id,
-        name: it.name,
-        serial_no: it.serial_no ?? null,
-        disposed_on: it.disposed_on,
-        place_name: (it.place_id != null && placeName.get(it.place_id)) || null,
-      }))
-      .toSorted((a, b) => String(b.disposed_on).localeCompare(String(a.disposed_on)));
-
     const itemName = new Map(owned.map((it) => [it.item_id, it.name]));
     const maintenance = (plans.rows ?? [])
-      .filter((p) => itemName.has(p.item_id))
       .map((p) => ({
         plan_id: p.plan_id,
         name: p.name,
@@ -145,12 +203,7 @@ export default async ({ ctx }) => {
       }))
       .toSorted((a, b) => String(a.next_due_on ?? '￿').localeCompare(String(b.next_due_on ?? '￿')));
 
-    // The owner's places, name-sorted — the room picker's option list.
-    const placeList = (places.rows ?? [])
-      .map((p) => ({ place_id: p.place_id, name: p.name }))
-      .toSorted((a, b) => String(a.name).localeCompare(String(b.name)));
-
-    return { items: joined, disposed, maintenance, places: placeList };
+    return { items: joined, disposed, maintenance, places: placeList, truncated, window };
   } catch (err) {
     return {
       items: [],

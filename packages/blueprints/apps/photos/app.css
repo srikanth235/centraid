@@ -349,6 +349,18 @@ input:focus {
   font-size: 0.72rem;
 }
 
+/* The browse window's honest edge: latest N shown, Show more grows it. */
+.window-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
 .tile-wrap {
   position: relative;
   aspect-ratio: 1;

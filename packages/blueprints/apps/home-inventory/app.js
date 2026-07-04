@@ -31,6 +31,13 @@ let attachTarget = null;
 let pendingFiles = [];
 let viewMode = 'list'; // 'list' | 'grid'
 let searchTerm = '';
+// The vault's ranked matches while a term is active ({ items, disposed });
+// null while browsing — the browse list is only the recent window.
+let searchResults = null;
+// The browse window: the inventory query reads only this many owned items
+// (newest first). "Show more" grows it; search reaches the rest.
+let inventoryWindow = 500;
+let inventoryTruncated = false;
 // One detail card open at a time.
 let openItemId = null;
 // While an edit/warranty form is open, refreshes park here instead of
@@ -298,7 +305,7 @@ let readWasFailing = false;
 async function refresh() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'inventory' });
+    data = await window.centraid.read({ query: 'inventory', input: { limit: inventoryWindow } });
   } catch {
     readFailed($('noticeBanner'));
     readWasFailing = true;
@@ -325,11 +332,12 @@ async function refresh() {
     return;
   }
   lastData = data;
+  inventoryTruncated = Boolean(data?.truncated);
   refreshAddFormPickers();
   renderTotalValue(data?.items ?? []);
   renderMaintenance(data?.maintenance ?? []);
   renderExpiring(data?.items ?? []);
-  renderDisposed(data?.disposed ?? []);
+  renderDisposedShelf();
   if (activeEditor) {
     // Someone is typing in an edit or warranty form — don't wipe it.
     renderPending = true;
@@ -469,29 +477,33 @@ function placeKeyOf(it) {
   return it.place_name ?? 'No place recorded';
 }
 
-function matchesSearch(it, term) {
-  return (
-    String(it.name ?? '')
-      .toLowerCase()
-      .includes(term) ||
-    String(it.serial_no ?? '')
-      .toLowerCase()
-      .includes(term) ||
-    String(it.place_name ?? '')
-      .toLowerCase()
-      .includes(term)
-  );
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and item text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
 }
 
 function renderItems() {
   const list = $('itemList');
   const all = lastData?.items ?? [];
-  const term = searchTerm.trim().toLowerCase();
-  const shown = term ? all.filter((it) => matchesSearch(it, term)) : all;
+  const term = searchTerm.trim();
+  // While a term is active the list IS the vault's ranked matches — search
+  // reaches every item in the vault, not just the browse window's slice.
+  const shown = term ? (searchResults?.items ?? []) : all;
   if (openItemId && !shown.some((it) => it.item_id === openItemId)) openItemId = null;
 
-  $('empty').hidden = all.length > 0;
-  $('noMatches').hidden = !(all.length > 0 && shown.length === 0);
+  $('empty').hidden = term ? true : all.length > 0;
+  $('noMatches').hidden = !(term && shown.length === 0);
   list.classList.toggle('grid-view', viewMode === 'grid');
   list.innerHTML = '';
 
@@ -514,13 +526,18 @@ function renderItems() {
   for (const [place, placeItems] of byPlace) {
     const h = document.createElement('p');
     h.className = 'day-label muted small';
-    const total = totals.get(place);
-    const count = term ? `${placeItems.length} of ${total}` : `${total}`;
-    // "Kitchen · 12 items · €3,450" — the room's value subtotal (per
-    // currency, from the room's full contents even mid-search).
-    const bits = [place, `${count} item${total === 1 ? '' : 's'}`];
-    const roomTotals = currencyTotals(allByPlace.get(place) ?? []);
-    if (roomTotals.size > 0) bits.push(joinMoney(roomTotals));
+    // Browsing: "Kitchen · 12 items · €3,450" — the room's value subtotal
+    // (per currency). Searching: matches only — search reaches beyond the
+    // browse window, so window-derived totals would lie next to the hits.
+    let bits;
+    if (term) {
+      bits = [place, `${placeItems.length} match${placeItems.length === 1 ? '' : 'es'}`];
+    } else {
+      const total = totals.get(place);
+      bits = [place, `${total} item${total === 1 ? '' : 's'}`];
+      const roomTotals = currencyTotals(allByPlace.get(place) ?? []);
+      if (roomTotals.size > 0) bits.push(joinMoney(roomTotals));
+    }
     h.textContent = bits.join(' · ');
     list.appendChild(h);
 
@@ -545,6 +562,26 @@ function renderItems() {
         list.appendChild(wrap);
       }
     }
+  }
+
+  // The window is honest about its edge: browsing shows the newest slice,
+  // "Show more" grows it, search reaches every item beyond it.
+  if (inventoryTruncated && !term) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your newest ${inventoryWindow} items — older ones are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      inventoryWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
 }
 
@@ -606,7 +643,14 @@ function renderRow(it) {
   text.textContent = it.name;
   row.appendChild(text);
 
-  if (it.serial_no) {
+  // A vault match carries its own snippet (⟦…⟧ around the hit in the name
+  // or serial) — show why the row matched instead of the bare serial line.
+  if (searchTerm.trim() && it.snippet) {
+    const detail = document.createElement('span');
+    detail.className = 'row-detail muted small';
+    snippetInto(detail, it.snippet);
+    row.appendChild(detail);
+  } else if (it.serial_no) {
     const detail = document.createElement('span');
     detail.className = 'row-detail muted small';
     detail.textContent = `Serial ${it.serial_no}`;
@@ -1064,6 +1108,14 @@ function renderWarrantyForm(it) {
   return form;
 }
 
+// The disposed shelf follows the active source: the vault's matched
+// disposals while a term is active (search reaches disposals older than
+// the fixed 200-row history shelf), the browse shelf otherwise.
+function renderDisposedShelf() {
+  const term = searchTerm.trim();
+  renderDisposed(term ? (searchResults?.disposed ?? []) : (lastData?.disposed ?? []));
+}
+
 // Disposed items stay as history — muted rows in a collapsed section, with
 // enough detail (serial, place) to answer "which one was that?".
 function renderDisposed(items) {
@@ -1190,12 +1242,34 @@ $('addForm').addEventListener('submit', async (e) => {
 
 // ---------- Toolbar wiring ----------
 
+// Searching asks the vault, not a local copy: the FTS5 index matches name
+// and serial over every item inside SQLite and returns only the hits, so
+// the app never greps an unbounded table in memory. `searchSeq` drops
+// stale replies when the owner types faster than the vault answers.
+let searchSeq = 0;
 $('searchInput').addEventListener(
   'input',
-  debounce(() => {
+  debounce(async () => {
     searchTerm = $('searchInput').value;
+    const raw = searchTerm.trim();
+    if (!raw) {
+      searchResults = null;
+      renderItems();
+      renderDisposedShelf();
+      return;
+    }
+    const seq = ++searchSeq;
+    let data = null;
+    try {
+      data = await window.centraid.read({ query: 'search', input: { term: raw } });
+    } catch {
+      data = null;
+    }
+    if (seq !== searchSeq) return;
+    searchResults = { items: data?.items ?? [], disposed: data?.disposed ?? [] };
     renderItems();
-  }, 120),
+    renderDisposedShelf();
+  }, 250),
 );
 
 function setView(mode) {

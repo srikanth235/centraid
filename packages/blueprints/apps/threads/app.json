@@ -300,6 +300,31 @@
       }
     },
     {
+      "name": "find-people",
+      "description": "As-you-type recipient search for the New-message picker through the vault's FTS5 index over the party directory (display + sort names) — returns only the ranked matches, owner excluded, so the picker reaches every party without growing the inbox's shortlist cap.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
       "name": "thread",
       "description": "One thread's messages in sent order, bodies decoded from their content items, senders named.",
       "input": {

@@ -496,6 +496,14 @@ button {
   vertical-align: 0.1em;
 }
 
+/* Vault search hit markers (⟦…⟧ → <mark>) in the payee line. */
+mark {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0 0.05em;
+}
+
 .amount.credit {
   color: var(--pos);
 }

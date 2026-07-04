@@ -1,12 +1,21 @@
 /**
- * The subscriptions projection: every finance.recurring_series — the vault's
- * model of money that repeats — joined to the account it charges and the
- * counterparty it pays, with each amount normalized to a monthly figure so
- * the running total is comparable. Active series with an anchor date also
- * carry next_on (the anchor rolled forward by the cadence to today or later)
- * and feed the 30-day upcoming window. Files attach per subscription (a
- * receipt or contract). Everything comes from the vault; this app holds no
- * rows.
+ * The subscriptions projection as a bounded recent window: the newest
+ * finance.recurring_series by series_id (caller-sized, default 500; the
+ * table has no timestamp column, but its PK is UUIDv7 so id order is time
+ * order) — never the whole table, because vault data has no upper bound
+ * (issue #262). Each windowed series joins to the account it charges and
+ * the counterparty it pays, with each amount normalized to a monthly figure
+ * so the running total is comparable. Honesty note: the monthly-active
+ * total and the 30-day upcoming projection are computed over the window —
+ * with more series than the window, they cover the newest `window` of them,
+ * and `truncated` tells the UI to say so and offer to grow it. Active
+ * series with an anchor date carry next_on (the anchor rolled forward by
+ * the cadence to today or later) and feed the upcoming window. Attachments
+ * and their content bytes are joined only for the windowed rows. Everything
+ * comes from the vault; this app holds no rows.
+ *
+ * A consent denial is a first-class outcome, not an error: the UI renders
+ * it as the "ask the owner for access" state, receipt id included.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
@@ -130,23 +139,103 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
-export default async ({ ctx }) => {
+export default async ({ input, ctx }) => {
   const purpose = 'dpv:Billing';
+  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [series, accounts, parties, contents, attachments] = await Promise.all([
-      ctx.vault.read({ entity: 'finance.recurring_series', purpose }),
-      ctx.vault.read({ entity: 'core.account', purpose }),
-      ctx.vault.read({ entity: 'core.party', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
+    const [series, accounts, directory] = await Promise.all([
+      // series_id is UUIDv7 (time-ordered) and the table carries no
+      // timestamp column, so PK desc is newest-first.
       ctx.vault.read({
-        entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'finance.recurring_series' }],
+        entity: 'finance.recurring_series',
+        orderBy: { column: 'series_id', dir: 'desc' },
+        limit: window,
+        purpose,
+      }),
+      // Accounts stay a full read — the list is a person's banks and cards,
+      // small by nature, and the add form needs all of them.
+      ctx.vault.read({ entity: 'core.account', purpose }),
+      // The add-form payee picker offers the newest 300 parties (party_id is
+      // UUIDv7 too) — a deliberate cap: the picker is a convenience
+      // shortlist, not a directory. A counterparty beyond it is still named
+      // correctly on its row by the `in`-bounded read below.
+      ctx.vault.read({
+        entity: 'core.party',
+        orderBy: { column: 'party_id', dir: 'desc' },
+        limit: 300,
         purpose,
       }),
     ]);
 
+    const seriesRows = series.rows ?? [];
+    // A full window means there may be older series beyond it — the UI
+    // offers "Show more" (a re-read with a larger window).
+    const truncated = seriesRows.length >= window;
+    const pickerParties = (directory.rows ?? [])
+      .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
+      .toSorted((a, b) => String(a.display_name ?? '').localeCompare(String(b.display_name ?? '')));
+    const accountList = (accounts.rows ?? []).map((a) => ({
+      account_id: a.account_id,
+      name: a.name,
+      currency: a.currency,
+    }));
+    // `in` over an empty id list is a vault error, so the empty vault
+    // returns before any join.
+    if (seriesRows.length === 0) {
+      return {
+        subscriptions: [],
+        monthly_active_minor: 0,
+        upcoming: [],
+        accounts: accountList,
+        parties: pickerParties,
+        truncated: false,
+        window,
+      };
+    }
+    const seriesIds = seriesRows.map((s) => s.series_id);
+
+    // Both core.party needs merge into one strategy: the shortlist above
+    // seeds the name map for free, and one targeted `in` read fills in only
+    // the counterparties that aged past its 300-row cap — never the whole
+    // party table.
+    const partyName = new Map((directory.rows ?? []).map((p) => [p.party_id, p.display_name]));
+    const missingCounterpartyIds = [
+      ...new Set(seriesRows.map((s) => s.counterparty_party_id).filter(Boolean)),
+    ].filter((id) => !partyName.has(id));
+    // Attachments are `in`-bounded by the windowed series; content bytes are
+    // fetched below only for the attachments actually found.
+    const [counterparties, attachments] = await Promise.all([
+      missingCounterpartyIds.length > 0
+        ? ctx.vault.read({
+            entity: 'core.party',
+            where: [{ column: 'party_id', op: 'in', value: missingCounterpartyIds }],
+            purpose,
+          })
+        : { rows: [] },
+      ctx.vault.read({
+        entity: 'core.attachment',
+        where: [
+          { column: 'subject_type', op: 'eq', value: 'finance.recurring_series' },
+          { column: 'subject_id', op: 'in', value: seriesIds },
+        ],
+        purpose,
+      }),
+    ]);
+    for (const p of counterparties.rows ?? []) partyName.set(p.party_id, p.display_name);
+
+    const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
+      Boolean,
+    );
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
+
     const accountById = new Map((accounts.rows ?? []).map((a) => [a.account_id, a]));
-    const partyName = new Map((parties.rows ?? []).map((p) => [p.party_id, p.display_name]));
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attBySeries = attachmentsBySubject(
       'finance.recurring_series',
@@ -158,7 +247,7 @@ export default async ({ ctx }) => {
     const horizon = addDaysKey(today, 30);
     const upcoming = [];
     let monthlyActiveMinor = 0;
-    const subscriptions = (series.rows ?? [])
+    const subscriptions = seriesRows
       .map((s) => {
         const cad = cadenceOf(s.rrule);
         const monthly = Math.round((s.expected_minor ?? 0) * cad.perMonth);
@@ -217,14 +306,10 @@ export default async ({ ctx }) => {
       subscriptions,
       monthly_active_minor: monthlyActiveMinor,
       upcoming,
-      accounts: (accounts.rows ?? []).map((a) => ({
-        account_id: a.account_id,
-        name: a.name,
-        currency: a.currency,
-      })),
-      parties: (parties.rows ?? [])
-        .map((p) => ({ party_id: p.party_id, display_name: p.display_name }))
-        .toSorted((a, b) => String(a.display_name).localeCompare(String(b.display_name))),
+      accounts: accountList,
+      parties: pickerParties,
+      truncated,
+      window,
     };
   } catch (err) {
     return {

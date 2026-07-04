@@ -375,10 +375,47 @@
   "queries": [
     {
       "name": "directory",
-      "description": "Every party sorted by display name, each with its identifiers (scheme + value) and contact card if one exists.",
+      "description": "A bounded recent window of parties (most recently touched by updated_at, caller-sized) sorted by name within the window, each with its identifiers (scheme + value), contact card, and attachments — never a whole-table pull; `truncated` says more people exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "people": {
+            "type": "array"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "window": {
+            "type": "integer"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Full-text people search through the vault's FTS5 index (party name plus contact-card nickname, org line, and note) — returns only the ranked matches in the directory row shape plus a hit snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
         "additionalProperties": false
       },
       "output": {

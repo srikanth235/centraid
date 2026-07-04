@@ -205,10 +205,16 @@ function setThumbSrc(img, asset) {
 
 // ---------- Data ----------
 
+// The browse window: the library query reads only this many recent live
+// assets (trash rides beside it, capped server-side). "Show more" grows it —
+// photos has no search plane, so the window is the only way back in time.
+let libraryWindow = 500;
+let libraryTruncated = false;
+
 async function refresh() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'library' });
+    data = await window.centraid.read({ query: 'library', input: { limit: libraryWindow } });
   } catch {
     // A broken vault must not look like an empty one.
     readFailed($('noticeBanner'));
@@ -229,6 +235,7 @@ async function refresh() {
   assets = data?.assets ?? [];
   albums = data?.albums ?? [];
   trash = data?.trash ?? [];
+  libraryTruncated = Boolean(data?.truncated);
   // The trash shelf folds away when it empties; Favorites is always a place.
   if (selectedAlbum === TRASH && trash.length === 0) selectedAlbum = null;
   if (
@@ -488,6 +495,26 @@ function renderGrid() {
         grid.appendChild(renderTile(asset));
       }
     }
+  }
+  // The window is honest about its edge: All, Favorites, albums and the
+  // client-side search all filter the same loaded slice, so any of them can
+  // silently miss photos older than the window. "Show more" grows it — with
+  // no search plane, that is the only road back in time.
+  if (libraryTruncated) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent =
+      selectedAlbum || searchQuery
+        ? `This view covers your latest ${libraryWindow} photos — older ones may be missing. `
+        : `Showing your latest ${libraryWindow} photos. `;
+    const more = ghostBtn('Show more', async () => {
+      more.disabled = true;
+      libraryWindow += 500;
+      await refresh();
+    });
+    footer.append(label, more);
+    grid.appendChild(footer);
   }
 }
 

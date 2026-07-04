@@ -2,8 +2,10 @@
  * Automation handler — runs on the cron schedule in automation.json.
  *
  * Available on `ctx`:
- *   ctx.vault.read/invoke  — consent-checked canon access (this automation's
- *                            enrolled agent; every call is receipted)
+ *   ctx.vault.read/search/invoke — consent-checked canon access and full-text
+ *                            search over the vault's FTS index (this
+ *                            automation's enrolled agent; every call is
+ *                            receipted)
  *   ctx.vault.parked       — this agent's invocations awaiting the owner
  *   ctx.tool(name, args)   — call an MCP tool
  *   ctx.agent({ prompt })  — one constrained model turn

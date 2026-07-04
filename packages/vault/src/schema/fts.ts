@@ -120,6 +120,16 @@ const SPECS: readonly FtsEntitySpec[] = [
     idColumn: 'txn_id',
     columns: [{ name: 'description', kind: 'column' }],
   },
+  {
+    // Disposed items stay in the index — disposal keeps the row as history,
+    // and "where did that old dehumidifier go" is exactly a search question.
+    entity: 'home.asset_item',
+    idColumn: 'item_id',
+    columns: [
+      { name: 'name', kind: 'column' },
+      { name: 'serial_no', kind: 'column' },
+    ],
+  },
 ];
 
 /** What the gateway needs to run (and consent-clamp) a search. */

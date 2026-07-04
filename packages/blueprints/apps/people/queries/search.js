@@ -1,13 +1,13 @@
 /**
- * The people projection as a bounded recent window: the most recently
- * touched parties by updated_at (caller-sized, default 500) — never the
- * whole core.party table, because vault data has no upper bound (issue
- * #262). Identifiers (core.party_identifier), contact cards
- * (social.contact_card) and attachments are joined only for the windowed
- * rows; anyone older is reachable through the FTS search query or by
- * growing the window (`truncated` tells the UI to offer that). Recency
- * bounds the window, but within it the directory keeps its sort-name
- * order — recency selects, the name presents.
+ * People search as a vault projection: the FTS5 index inside the vault does
+ * the matching, so the app never pulls every party to grep them. A person's
+ * searchable text lives on two entities — the name on core.party, the
+ * nickname, org line and running note on social.contact_card — so both
+ * indexes are asked and their hits union to one set of parties. The matches
+ * are joined (identifiers, cards, attachments — each scoped to the matched
+ * ids only) into the exact row shape the directory query returns, plus a
+ * `snippet` carrying the vault's ⟦…⟧ hit markers so the UI can show why
+ * each person matched.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -15,12 +15,9 @@
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
-/**
- * Group the owner's attachments for one subject type into a map keyed by
- * subject_id, each value a UI-ready list joined to its content item. This is
- * the shared attachment-projection shape every app copies — polymorphic edges
- * in core.attachment, bytes in core.content_item.
- */
+const MAX_PEOPLE = 50;
+
+/** The shared attachment projection — see directory.js for the shape's home. */
 function attachmentsBySubject(subjectType, attachments, contentById) {
   const bySubject = new Map();
   for (const a of attachments) {
@@ -46,21 +43,33 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
-  const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
+  const term = String(input?.term ?? '').trim();
+  if (!term) return { people: [] };
   try {
-    const parties = await ctx.vault.read({
-      entity: 'core.party',
-      orderBy: { column: 'updated_at', dir: 'desc' },
-      limit: window,
-      purpose,
-    });
-    const windowed = parties.rows ?? [];
-    if (windowed.length === 0) return { people: [], truncated: false, window };
-    const partyIds = windowed.map((p) => p.party_id);
+    const [partyHits, cardHits] = await Promise.all([
+      ctx.vault.search({ entity: 'core.party', query: term, limit: 100, purpose }),
+      ctx.vault.search({ entity: 'social.contact_card', query: term, limit: 100, purpose }),
+    ]);
+    // Union in rank order: name matches first, then card-only matches. A
+    // party hit by both keeps its best (name) position — and that snippet.
+    const hitPartyIds = [];
+    const snippetByParty = new Map();
+    for (const row of [...(partyHits.rows ?? []), ...(cardHits.rows ?? [])]) {
+      if (!row.party_id || snippetByParty.has(row.party_id)) continue;
+      snippetByParty.set(row.party_id, typeof row._snippet === 'string' ? row._snippet : '');
+      hitPartyIds.push(row.party_id);
+    }
+    const partyIds = hitPartyIds.slice(0, MAX_PEOPLE);
+    if (partyIds.length === 0) return { people: [] };
 
-    // Joins are `in`-bounded by the window — identifiers, cards, and the
-    // attachment edges for exactly these parties, nothing beyond them.
-    const [identifiers, cards, attachments] = await Promise.all([
+    // Joins are `in`-bounded by the matched ids — the same shape the
+    // directory window builds, so the UI renders either list with one code.
+    const [parties, identifiers, cards, attachments] = await Promise.all([
+      ctx.vault.read({
+        entity: 'core.party',
+        where: [{ column: 'party_id', op: 'in', value: partyIds }],
+        purpose,
+      }),
       ctx.vault.read({
         entity: 'core.party_identifier',
         where: [{ column: 'party_id', op: 'in', value: partyIds }],
@@ -87,9 +96,8 @@ export default async ({ input, ctx }) => {
     }
     const cardByParty = new Map();
     for (const card of cards.rows ?? []) cardByParty.set(card.party_id, card);
-    // Fetch only the content items the attachments actually reference —
-    // the party edges above are the index, so an unscoped content read
-    // would drag every byte-blob in the vault through the gateway.
+    // Fetch only the content items the attachments actually reference — an
+    // unscoped content read would drag every byte-blob in the vault through.
     const attachmentRows = attachments.rows ?? [];
     const contentIds = [...new Set(attachmentRows.map((a) => a.content_id).filter(Boolean))];
     const contentById = new Map();
@@ -102,20 +110,21 @@ export default async ({ input, ctx }) => {
       for (const c of contents.rows ?? []) contentById.set(c.content_id, c);
     }
     const attByParty = attachmentsBySubject('core.party', attachmentRows, contentById);
-    const sortKey = (p) => String(p.sort_name ?? p.display_name);
-    const people = windowed
-      .toSorted((a, b) => sortKey(a).localeCompare(sortKey(b)))
+
+    // Vault order is rank order (best match first) — keep it, no name sort.
+    const partyById = new Map((parties.rows ?? []).map((p) => [p.party_id, p]));
+    const people = partyIds
+      .map((id) => partyById.get(id))
+      .filter(Boolean)
       .map((party) => ({
         ...party,
         identifiers: idsByParty.get(party.party_id) ?? [],
         card: cardByParty.get(party.party_id) ?? null,
         attachments: attByParty.get(party.party_id) ?? [],
+        snippet: snippetByParty.get(party.party_id) ?? '',
       }));
 
-    // A full window means there may be more people beyond it — the UI
-    // offers "Show more" (a re-read with a larger window) and search.
-    const truncated = windowed.length >= window;
-    return { people, truncated, window };
+    return { people };
   } catch (err) {
     return { people: [], vaultDenied: { code: err.code, message: err.message } };
   }

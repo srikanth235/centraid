@@ -37,6 +37,7 @@ let baseLimit = 1000;
 const fetchedMonths = new Map(); // 'YYYY-MM' → { truncated, limit }
 let selectedMonth = localMonthKey(new Date());
 let searchText = '';
+let searchResults = null; // vault FTS matches while a term is active
 let filterCategory = null; // concept_id | 'uncategorized' | null
 const selection = new Set(); // txn_ids checked for bulk categorize
 const flaggedThisSession = new Set(); // txns flagged since load (aria-pressed)
@@ -228,12 +229,22 @@ async function selectMonth(m) {
 function render() {
   hasRendered = true;
   const txns = monthTxns(selectedMonth);
+  // While a term is active the ledger (and its chips) show the vault's FTS
+  // matches across ALL history, not just the loaded month; summary, budgets
+  // and charts stay on the selected month — a search never moves a cap's
+  // progress. Matches come rank-ordered, but the ledger groups by day, so
+  // they are re-sorted newest first for coherent day heads.
+  const ledgerRows = searchText
+    ? [...(searchResults ?? [])].toSorted((a, b) =>
+        String(b.posted_at).localeCompare(String(a.posted_at)),
+      )
+    : txns;
   renderMonthNav();
   renderSummary(txns);
   renderBudgets(txns);
   renderCharts(txns);
-  renderChips(txns);
-  renderLedger(txns);
+  renderChips(ledgerRows);
+  renderLedger(ledgerRows);
   renderBulkBar();
   renderTruncation();
   renderBudgetForm();
@@ -468,14 +479,13 @@ function renderChips(txns) {
   }
 }
 
+// Text matching happens in the vault's FTS index (the search query), never
+// here — only the category chips still filter client-side, and they apply
+// to search matches too.
 function filteredTxns(txns) {
   let rows = txns;
   if (filterCategory === 'uncategorized') rows = rows.filter(needsCategory);
   else if (filterCategory) rows = rows.filter((t) => t.category_concept_id === filterCategory);
-  if (searchText) {
-    const q = searchText.toLowerCase();
-    rows = rows.filter((t) => payeeText(t).toLowerCase().includes(q));
-  }
   return rows;
 }
 
@@ -514,10 +524,12 @@ function renderLedger(txns) {
   const empty = $('emptyTxns');
   empty.hidden = rows.length > 0;
   if (rows.length === 0) {
-    if (pool.size === 0) {
+    if (pool.size === 0 && !searchText) {
       empty.textContent =
         'No transactions yet — import a statement through the vault’s ingest to see them here.';
-    } else if (filterCategory || searchText) {
+    } else if (searchText) {
+      empty.textContent = 'No transactions match this search — it looks through the whole ledger.';
+    } else if (filterCategory) {
       empty.textContent = 'No transactions match these filters.';
     } else {
       empty.textContent = `No transactions in ${monthLabel(selectedMonth)}.`;
@@ -574,7 +586,24 @@ function renderTxnRow(t) {
   const text = document.createElement('span');
   text.className = 'row-text';
   const payee = document.createElement('span');
-  payee.textContent = payeeText(t);
+  if (typeof t.snippet === 'string' && t.snippet.includes('⟦')) {
+    // A search hit: the payee line IS the matched description, so instead
+    // of a duplicate snippet row the vault's ⟦…⟧ hit markers become <mark>
+    // in place — text nodes only, descriptions never parse as HTML.
+    const parts = t.snippet.split(/[⟦⟧]/);
+    for (let i = 0; i < parts.length; i += 1) {
+      if (!parts[i]) continue;
+      if (i % 2 === 1) {
+        const mark = document.createElement('mark');
+        mark.textContent = parts[i];
+        payee.appendChild(mark);
+      } else {
+        payee.appendChild(document.createTextNode(parts[i]));
+      }
+    }
+  } else {
+    payee.textContent = payeeText(t);
+  }
   text.appendChild(payee);
   if (isTransfer(t)) {
     const badge = document.createElement('span');
@@ -764,6 +793,16 @@ async function bulkCategorize() {
 
 function renderTruncation() {
   const note = $('truncNote');
+  if (searchText) {
+    // The search query caps at its own limit (100), not the month window's.
+    if ((searchResults ?? []).length >= 100) {
+      note.textContent = 'Showing the 100 best matches — narrow the search to see the rest.';
+      note.hidden = false;
+    } else {
+      note.hidden = true;
+    }
+    return;
+  }
   const monthInfo = fetchedMonths.get(selectedMonth);
   if (monthInfo?.truncated) {
     note.textContent = `Showing ${monthInfo.limit} of this month’s transactions — the rest are not loaded.`;
@@ -963,12 +1002,34 @@ $('nextMonth').addEventListener('click', () => {
   if (selectedMonth < localMonthKey(new Date())) selectMonth(monthShift(selectedMonth, 1));
 });
 
+// Searching asks the vault, not the pool: the FTS5 index matches over every
+// transaction description inside SQLite and returns only the hits, so a
+// search reaches ALL history — not just the loaded month or window.
+// `searchSeq` drops stale replies when the owner types faster than the
+// vault answers.
+let searchSeq = 0;
 $('searchInput').addEventListener(
   'input',
-  debounce(() => {
-    searchText = $('searchInput').value.trim();
+  debounce(async () => {
+    const raw = $('searchInput').value.trim();
+    searchText = raw;
+    if (!raw) {
+      searchResults = null;
+      if (hasRendered) render();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = data?.transactions ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
     if (hasRendered) render();
-  }, 150),
+  }, 250),
 );
 
 $('bulkApply').addEventListener('click', bulkCategorize);
