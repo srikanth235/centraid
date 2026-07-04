@@ -6,24 +6,33 @@ Pod::Spec.new do |s|
   s.author         = 'centraid'
   s.homepage       = 'https://centraid.dev'
   s.license        = { :type => 'MIT' }
-  s.platforms      = { :ios => '15.1' }
+  # iroh-ffi 1.0's Apple deps call nw_path_is_ultra_constrained (iOS 17+); the
+  # vendored xcframework is built with a 17.5 floor. The app target must be
+  # >= 17.5 too (set ios.deploymentTarget via expo-build-properties).
+  s.platforms      = { :ios => '17.5' }
   s.swift_version  = '5.9'
   s.source         = { :git => '' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
 
-  # Iroh Swift binding (uniffi-generated from n0-computer/iroh-ffi 1.0).
-  # The canonical distribution is the `IrohLib` Swift package
-  # (https://github.com/n0-computer/iroh-ffi) — add it to the generated Xcode
-  # project via SPM after `bunx expo prebuild`, or vendor the generated Swift
-  # sources + XCFramework behind a local podspec and uncomment:
-  # s.dependency 'IrohLib', '~> 1.0'
-  # All binding touchpoints live in TunnelWire.swift (adapter section).
+  # Iroh Swift binding (uniffi-generated from n0-computer/iroh-ffi 1.0.0),
+  # vendored locally rather than via SPM/CocoaPods (upstream's IrohLib.podspec
+  # is stale at 0.35.0). IrohLib.swift is the generated wrapper — compiled into
+  # this pod's module, so TunnelWire.swift uses its types without an import.
+  # Iroh.xcframework carries the compiled Rust FFI (module `Iroh`) for
+  # ios-arm64, ios-arm64_x86_64-simulator, and macos-arm64.
+  # Regenerate: download IrohLib.xcframework.zip from the v1.0.0 release +
+  #   cargo run --bin uniffi-bindgen generate --language swift --library <dylib>
+  s.vendored_frameworks = 'Iroh.xcframework'
+  # iroh's netdev/netwatch use these on Apple platforms.
+  s.frameworks = 'SystemConfiguration', 'Network'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
   }
 
-  s.source_files = '**/*.{h,m,swift}'
+  # Non-recursive glob: keep the vendored xcframework's own headers out of the
+  # pod's compiled sources. All module + generated sources are flat in ios/.
+  s.source_files = '*.{h,m,swift}'
 end

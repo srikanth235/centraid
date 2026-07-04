@@ -9,7 +9,10 @@
  */
 
 import Foundation
-import IrohLib
+// The uniffi-generated iroh Swift wrapper (IrohLib.swift) is compiled directly
+// into this pod, so its types (Endpoint, Connection, …) are in-module — no
+// `import IrohLib`. The low-level FFI comes from the vendored Iroh.xcframework
+// (module `Iroh`), which IrohLib.swift imports internally.
 
 struct TunnelError: Error, LocalizedError {
   let message: String
@@ -197,20 +200,21 @@ actor TunnelTransport {
 
 enum IrohAdapter {
   static func bindEndpoint(secretKey: Data) async throws -> Endpoint {
-    let builder = Endpoint.builder()
-    builder.applyN0()
-    builder.secretKey(bytes: secretKey)
-    return try await builder.bind()
+    // iroh-ffi 1.0: no builder — Endpoint.bind(options:). presetN0 carries the
+    // n0 relay/discovery defaults; secretKey is the raw 32 bytes.
+    try await Endpoint.bind(options: EndpointOptions(preset: presetN0(), secretKey: secretKey))
   }
 
   static func dial(_ endpoint: Endpoint, ticket: String, alpn: String) async throws -> Connection {
-    let addr = try EndpointTicket.fromString(s: ticket).endpointAddr()
+    // EndpointTicket.fromString takes `str:` (EndpointId.fromString uses `s:`).
+    let addr = try EndpointTicket.fromString(str: ticket).endpointAddr()
     return try await endpoint.connect(addr: addr, alpn: Data(alpn.utf8))
   }
 
   static func openBi(_ connection: Connection) async throws -> TunnelStream {
     let bi = try await connection.openBi()
-    return TunnelStream(send: bi.send, recv: bi.recv)
+    // send()/recv() are methods in the 1.0 binding, not properties.
+    return TunnelStream(send: bi.send(), recv: bi.recv())
   }
 
   static func writeAll(_ send: SendStream, _ data: Data) async throws {
@@ -231,7 +235,8 @@ enum IrohAdapter {
   }
 
   static func closeConnection(_ connection: Connection) {
-    connection.close(errorCode: 0, reason: Data())
+    // Connection.close throws in the 1.0 binding; best-effort on cleanup paths.
+    try? connection.close(errorCode: 0, reason: Data())
   }
 
   static func closeEndpoint(_ endpoint: Endpoint) async {
