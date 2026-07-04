@@ -40,10 +40,15 @@ export interface RunAutomationOptions {
    */
   runId?: string;
   /**
-   * Directory holding the per-app *data* folders — each automation's run
-   * ledger is `<appsDir>/<appId>/runtime.sqlite`. Survives version swaps.
+   * Directory holding the per-app *data* folders (`data.sqlite`), inside the
+   * vault's workspace. Survives version swaps.
    */
   appsDir: string;
+  /**
+   * The vault's `transcripts.db` file — the run ledger every fire writes
+   * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
+   */
+  transcriptsDbFile: string;
   /**
    * Directory holding the per-app *code* folders — automation manifests +
    * handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/` (issue
@@ -122,6 +127,7 @@ export async function runAutomation(
       automationRef: opts.automationRef,
       ...(opts.runId ? { runId: opts.runId } : {}),
       appsDir: opts.appsDir,
+      transcriptsDbFile: opts.transcriptsDbFile,
       ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
       ...(opts.analytics ? { analytics: opts.analytics } : {}),
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),

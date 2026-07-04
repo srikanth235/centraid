@@ -262,6 +262,7 @@ bun run typecheck && bun run test && bun run lint && bun run format:check && bun
 | claude-code-77c1b781-428-1783186725-1 | claude-code | 77c1b781-428e-4a47-b2d5-ebf99e544c0a | #280 | claude-opus-4-8 | 3586 | 1019 | 495030 | 118 | 4723 | 0.2748 | 105452 | 2880958 | 130539642 | 510875 | wip |
 | claude-code-77c1b781-428-1783186748-1 | claude-code | 77c1b781-428e-4a47-b2d5-ebf99e544c0a | #280 | claude-opus-4-8 | 2 | 3760 | 496049 | 131 | 3893 | 0.2748 | 105454 | 2884718 | 131035691 | 511006 | wip |
 | claude-code-77c1b781-428-1783186840-1 | claude-code | 77c1b781-428e-4a47-b2d5-ebf99e544c0a | #280 | claude-opus-4-8 | 303 | 10684 | 5026665 | 9788 | 20775 | 2.8263 | 105757 | 2895402 | 136062356 | 520794 | feat(app-engine): one per-vault transcripts ledger; the identity DB dies (#280)T |
+| claude-code-77c1b781-428-1783186872-1 | claude-code | 77c1b781-428e-4a47-b2d5-ebf99e544c0a | #280 | claude-opus-4-8 | 7140 | 2830 | 1011606 | 910 | 10880 | 0.5819 | 112897 | 2898232 | 137073962 | 521704 | feat(automation): fire the run ledger into the vault's transcripts.db (#280)The  |
 
 ## Steering
 

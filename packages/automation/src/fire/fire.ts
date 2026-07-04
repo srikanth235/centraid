@@ -19,10 +19,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
 import {
   ConversationStore,
-  makeRuntimeDbProvider,
+  makeTranscriptsDbProvider,
   type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -75,11 +74,15 @@ export interface RunFireOptions {
    */
   runId?: string;
   /**
-   * Directory holding the per-app *data* folders — each automation's run
-   * ledger is `<appsDir>/<appId>/runtime.sqlite`. Survives version swaps (it
-   * is never inside a git worktree).
+   * Directory holding the per-app *data* folders (`data.sqlite`). Survives
+   * version swaps (it is never inside a git worktree). Per-vault since #280.
    */
   appsDir: string;
+  /**
+   * The vault's `transcripts.db` file — the run ledger every fire writes
+   * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
+   */
+  transcriptsDbFile: string;
   /**
    * Directory holding the per-app *code* folders — automation manifests +
    * handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/` (issue
@@ -173,10 +176,12 @@ export async function runFire(
     throw new Error(`automation ${opts.automationRef}: not found under ${codeAppsDir}`);
   }
 
-  // The automation's run ledger is its app's per-app `runtime.sqlite` (issue
-  // #98); `finishRun` write-throughs a summary to `analytics`.
-  const runtimeDbPath = path.join(opts.appsDir, parsed.appId, 'runtime.sqlite');
-  const runsStore = new ConversationStore(makeRuntimeDbProvider(runtimeDbPath), opts.analytics);
+  // The automation's run ledger is its vault's `transcripts.db` (#280);
+  // `finishRun` write-throughs a summary to `analytics` (same file).
+  const runsStore = new ConversationStore(
+    makeTranscriptsDbProvider(opts.transcriptsDbFile),
+    opts.analytics,
+  );
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
@@ -234,6 +239,7 @@ export async function runFire(
             {
               automationRef: next.ref,
               appsDir: opts.appsDir,
+              transcriptsDbFile: opts.transcriptsDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
               ...(opts.analytics ? { analytics: opts.analytics } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
