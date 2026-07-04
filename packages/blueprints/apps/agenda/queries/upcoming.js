@@ -64,23 +64,50 @@ export default async ({ query, ctx }) => {
       { column: 'dtstart', op: 'gte', value: fromLower },
     ];
     if (to) where.push({ column: 'dtstart', op: 'lt', value: to });
-    const [events, calendars, exts, contents, attachments] = await Promise.all([
+    const [events, calendars] = await Promise.all([
       ctx.vault.read({ entity: 'core.event', where, purpose }),
       ctx.vault.read({ entity: 'schedule.calendar', purpose }),
-      // The event→calendar edge lives in schedule.event_ext; the UI colors
-      // and filters by calendar, so each event carries its calendar_id.
-      ctx.vault.read({ entity: 'schedule.event_ext', purpose }),
-      ctx.vault.read({ entity: 'core.content_item', purpose }),
+    ]);
+    const windowed = events.rows ?? [];
+    if (windowed.length === 0) {
+      return { events: [], calendars: calendars.rows ?? [] };
+    }
+    const eventIds = windowed.map((e) => e.event_id);
+    // Joins are `in`-bounded by the windowed events (issue #264) — the
+    // event→calendar edge in schedule.event_ext (the UI colors and filters
+    // by calendar, so each event carries its calendar_id), then the
+    // attachment edges.
+    const [exts, attachments] = await Promise.all([
+      ctx.vault.read({
+        entity: 'schedule.event_ext',
+        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        purpose,
+      }),
       ctx.vault.read({
         entity: 'core.attachment',
-        where: [{ column: 'subject_type', op: 'eq', value: 'core.event' }],
+        where: [
+          { column: 'subject_type', op: 'eq', value: 'core.event' },
+          { column: 'subject_id', op: 'in', value: eventIds },
+        ],
         purpose,
       }),
     ]);
+    // One bounded pull covers only the bytes those attachments reference.
+    const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
+      Boolean,
+    );
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByEvent = attachmentsBySubject('core.event', attachments.rows ?? [], contentById);
     const calByEvent = new Map((exts.rows ?? []).map((x) => [x.event_id, x.calendar_id]));
-    const rows = (events.rows ?? [])
+    const rows = windowed
       .filter((e) => {
         // True lower bound: keep anything still running at `from`.
         const endMs = new Date(e.dtend ?? e.dtstart).getTime();

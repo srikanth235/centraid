@@ -311,6 +311,31 @@
           }
         }
       }
+    },
+    {
+      "name": "search",
+      "description": "Full-text payee search through the vault's FTS5 index over core.transaction descriptions — returns only the ranked matches in the overview row shape plus a hit snippet, reaching the entire ledger rather than the loaded window.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

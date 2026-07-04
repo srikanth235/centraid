@@ -8,9 +8,11 @@
 // math); rows sort by what renews next, Bobby-style, and the next 30 days
 // stack up in "Up next". Adding, editing, pausing, cancelling and
 // reactivating run through typed finance commands (all risk low); files
-// attach per subscription. The app stores nothing — revoke the grant and
-// this page goes dark while the series, history and receipts remain the
-// owner's.
+// attach per subscription. The list reads a bounded recent window (issue
+// #262) — the newest series, with the total and runway computed over that
+// slice and "Show more" to grow it — because vault data has no upper bound.
+// The app stores nothing — revoke the grant and this page goes dark while
+// the series, history and receipts remain the owner's.
 
 import {
   armConfirm,
@@ -179,12 +181,18 @@ wireAttachInput($('attachInput'), () => attachTarget);
 
 // ---------- Read + render ----------
 
+// The browse window: the list query reads only this many recent series
+// (newest first), and the monthly total and 30-day runway are computed over
+// that slice. "Show more" grows it.
+let listWindow = 500;
+let listTruncated = false;
+
 let readBroken = false;
 
 async function refresh() {
   let next;
   try {
-    next = await window.centraid.read({ query: 'list' });
+    next = await window.centraid.read({ query: 'list', input: { limit: listWindow } });
   } catch {
     // A broken vault must not look like an empty one; focus retries.
     readBroken = true;
@@ -203,6 +211,7 @@ async function refresh() {
     return;
   }
   data = next;
+  listTruncated = Boolean(next?.truncated);
   renderTotal();
   renderAddForm();
   renderToolbar();
@@ -376,6 +385,25 @@ function renderList() {
     none.textContent =
       ui.filter === 'paused' ? 'Nothing paused right now.' : 'Nothing here — switch the filter.';
     list.appendChild(none);
+  }
+  // The window is honest about its edge: the list, the monthly total and the
+  // 30-day runway all cover the latest slice; "Show more" grows it.
+  if (listTruncated) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your latest ${listWindow} subscriptions — totals count just these. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'ghost';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      listWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
 
   // Cancelled rows stay out of the way behind a disclosure, but never

@@ -3,7 +3,9 @@
 // here is a core.party; handles come from core.party_identifier and the
 // editable enrichment (nickname, note, favorite) lives in
 // social.contact_card, upserted through a typed vault command routed via
-// this app's handlers (ctx.vault on the gateway side). Handles bind via
+// this app's handlers (ctx.vault on the gateway side). Browsing reads a
+// bounded recent window (issue #262) and typing in the search box asks the
+// vault's FTS5 index instead of grepping a local copy. Handles bind via
 // social.resolve_identity, and composing walks the vault's own two-step
 // lifecycle: draft_message executes, send_message parks for the owner —
 // the app never sends anything on its own authority. The app's own
@@ -17,6 +19,12 @@ const $ = (id) => document.getElementById(id);
 let people = [];
 let detail = null; // person whose detail panel is open
 let loadedOnce = false;
+let searchTerm = '';
+let searchResults = null; // vault-ranked matches while a term is active
+// The browse window: the directory query reads only this many recently
+// touched parties. "Show more" grows it; search reaches everyone beyond it.
+let directoryWindow = 500;
+let directoryTruncated = false;
 let returnFocusPartyId = null; // row to refocus when the panel closes
 // party_id → parked send awaiting the owner's confirmation. Session-local by
 // design: the app stores nothing, so a reload simply stops showing the chip
@@ -88,21 +96,20 @@ function isFavorite(person) {
   return person.card?.favorite === 1;
 }
 
-// Search covers everything a user remembers about someone: name, nickname,
-// org line, note, and every raw handle.
-function matches(person, q) {
-  if (!q) return true;
-  const hay = [
-    person.display_name,
-    person.card?.nickname,
-    person.card?.org_title,
-    person.card?.note,
-    ...(person.identifiers ?? []).map((i) => i.value),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  return hay.includes(q);
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and contact text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
 }
 
 // ---------- Avatars (photo attachment falls back to letter tile) ----------
@@ -222,7 +229,7 @@ async function attachFiles(inputEl, role) {
 async function refresh() {
   let data;
   try {
-    data = await window.centraid.read({ query: 'directory' });
+    data = await window.centraid.read({ query: 'directory', input: { limit: directoryWindow } });
   } catch {
     // A broken vault must not look like an empty one — surface the first
     // failure; later ones retry silently off the change feed.
@@ -252,6 +259,7 @@ async function refresh() {
   $('addPersonBtn').hidden = false;
   $('exportBtn').hidden = false;
   people = data?.people ?? [];
+  directoryTruncated = Boolean(data?.truncated);
   const n = people.length;
   $('subtitle').textContent =
     `${n} ${n === 1 ? 'person' : 'people'} — all from your vault, nothing stored here.`;
@@ -264,29 +272,57 @@ async function refresh() {
 }
 
 function renderPeople() {
-  const q = $('searchInput').value.trim().toLowerCase();
   const list = $('peopleList');
   list.innerHTML = '';
-  const shown = people.filter((p) => matches(p, q));
+  // While a term is active the list IS the vault's ranked matches — the
+  // directory copy is only the browse view, so no A–Z regrouping here.
+  const shown = searchTerm ? (searchResults ?? []) : people;
   $('empty').hidden = shown.length > 0;
+  $('empty').textContent = searchTerm
+    ? 'No people match your search.'
+    : "No people yet. Add someone above, resolve a handle, or import contacts through the vault's ingest.";
 
-  // Pinned Starred section, then sticky A–Z groups over the full list.
-  const starred = shown.filter(isFavorite);
-  if (starred.length > 0) {
-    list.appendChild(sectionHead('★ Starred', 'starred'));
-    for (const person of starred) list.appendChild(renderRow(person));
-  }
   const groups = new Map();
-  for (const person of shown) {
-    const letter = groupLetter(person);
-    if (!groups.has(letter)) groups.set(letter, []);
-    groups.get(letter).push(person);
+  if (searchTerm) {
+    for (const person of shown) list.appendChild(renderRow(person));
+  } else {
+    // Pinned Starred section, then sticky A–Z groups over the full list.
+    const starred = shown.filter(isFavorite);
+    if (starred.length > 0) {
+      list.appendChild(sectionHead('★ Starred', 'starred'));
+      for (const person of starred) list.appendChild(renderRow(person));
+    }
+    for (const person of shown) {
+      const letter = groupLetter(person);
+      if (!groups.has(letter)) groups.set(letter, []);
+      groups.get(letter).push(person);
+    }
+    for (const [letter, members] of groups) {
+      list.appendChild(sectionHead(letter, `letter-${letter}`));
+      for (const person of members) list.appendChild(renderRow(person));
+    }
   }
-  for (const [letter, members] of groups) {
-    list.appendChild(sectionHead(letter, `letter-${letter}`));
-    for (const person of members) list.appendChild(renderRow(person));
+  renderLetterRail([...groups.keys()], searchTerm, shown.length);
+
+  // The window is honest about its edge: browsing shows the most recently
+  // touched slice, "Show more" grows it, search reaches everyone beyond it.
+  if (directoryTruncated && !searchTerm) {
+    const footer = document.createElement('div');
+    footer.className = 'window-footer';
+    const label = document.createElement('span');
+    label.textContent = `Showing your ${directoryWindow} most recently touched people — the rest are a search away. `;
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'chip';
+    more.textContent = 'Show more';
+    more.addEventListener('click', async () => {
+      directoryWindow += 500;
+      more.disabled = true;
+      await refresh();
+    });
+    footer.append(label, more);
+    list.appendChild(footer);
   }
-  renderLetterRail([...groups.keys()], q, shown.length);
 
   if (returnFocusPartyId && !detail) {
     const row = list.querySelector(`[data-party-id="${CSS.escape(returnFocusPartyId)}"]`);
@@ -339,9 +375,14 @@ function renderRow(person) {
   name.textContent = person.display_name;
   const detailLine = document.createElement('span');
   detailLine.className = 'muted small row-detail';
-  detailLine.textContent = [primaryHandle(person), person.card?.org_title]
-    .filter(Boolean)
-    .join(' · ');
+  // A vault match carries its own snippet, already centered on the hit.
+  if (searchTerm && person.snippet) {
+    snippetInto(detailLine, person.snippet);
+  } else {
+    detailLine.textContent = [primaryHandle(person), person.card?.org_title]
+      .filter(Boolean)
+      .join(' · ');
+  }
   text.append(name, detailLine);
   row.appendChild(text);
   if (parkedByParty.has(person.party_id)) {
@@ -833,10 +874,7 @@ document.addEventListener('keydown', (e) => {
     else if (!$('cardForm').hidden) closeCardForm();
     else if (detail) closeDetail();
     else if (!$('personForm').hidden) closeAddPerson();
-    else if ($('searchInput').value) {
-      $('searchInput').value = '';
-      renderPeople();
-    }
+    else if (searchTerm || $('searchInput').value) clearSearch();
     return;
   }
   if (isTyping(e.target)) return;
@@ -851,7 +889,41 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-$('searchInput').addEventListener('input', debounce(renderPeople, 120));
+// Searching asks the vault, not a local copy: the FTS5 index matches over
+// every party and contact card inside SQLite and returns only the hits, so
+// the app never greps an unbounded directory in memory. `searchSeq` drops
+// stale replies when the owner types faster than the vault answers.
+let searchSeq = 0;
+$('searchInput').addEventListener(
+  'input',
+  debounce(async () => {
+    const raw = $('searchInput').value.trim();
+    searchTerm = raw.toLowerCase();
+    if (!raw) {
+      searchResults = null;
+      renderPeople();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = data?.people ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
+    renderPeople();
+  }, 250),
+);
+
+function clearSearch() {
+  $('searchInput').value = '';
+  searchTerm = '';
+  searchResults = null;
+  renderPeople();
+}
 
 wireAttachInputs();
 function wireAttachInputs() {

@@ -501,6 +501,25 @@ textarea:focus {
   outline: none;
 }
 
+/* Vault search hits: the ⟦…⟧ markers in a snippet render as <mark>. */
+mark {
+  background: color-mix(in srgb, var(--app-color, var(--accent)) 28%, transparent);
+  color: inherit;
+  border-radius: 0.2em;
+  padding: 0 0.05em;
+}
+
+/* The browse window's honest edge: latest N shown, Show more grows it. */
+.window-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
 /* ---------- Star toggles (favorite is visible state, not a hidden flag) ---------- */
 
 .star-btn {

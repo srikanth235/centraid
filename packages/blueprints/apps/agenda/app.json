@@ -283,6 +283,31 @@
           }
         }
       }
+    },
+    {
+      "name": "search",
+      "description": "Full-text event search through the vault's FTS5 index (summary + description) — returns only the ranked non-cancelled matches in the upcoming row shape plus a hit snippet, never a whole-table pull.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

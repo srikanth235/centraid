@@ -23,6 +23,7 @@
         "kit.css",
         "kit.js",
         "package.json",
+        "queries/search.js",
         "queries/upcoming.js",
         "wall.css"
       ],
@@ -207,6 +208,7 @@
         "kit.js",
         "package.json",
         "queries/overview.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -393,6 +395,7 @@
         "kit.js",
         "package.json",
         "queries/directory.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -873,6 +876,7 @@
         "kit.js",
         "package.json",
         "queries/inventory.js",
+        "queries/search.js",
         "wall.css"
       ],
       "appKnobs": [

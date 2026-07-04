@@ -158,10 +158,16 @@
   "queries": [
     {
       "name": "list",
-      "description": "Every recurring series joined to its account and counterparty, each amount normalized to a monthly figure, with the active monthly total, attachments, and — for active series with an anchor date — the next renewal date plus a 30-day upcoming-renewals window; plus accounts and parties for the add form.",
+      "description": "A bounded recent window of recurring series (newest by series_id, caller-sized) joined to account and counterparty, each amount normalized to a monthly figure, with the active monthly total and 30-day upcoming-renewals runway computed over the window, attachments, and — for active series with an anchor date — the next renewal date; plus accounts and a capped party shortlist for the add form. Never a whole-table pull; `truncated` says older series exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 2000
+          }
+        },
         "additionalProperties": false
       },
       "output": {
@@ -172,6 +178,8 @@
           "upcoming": { "type": "array" },
           "accounts": { "type": "array" },
           "parties": { "type": "array" },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
           "vaultDenied": { "type": "object" }
         }
       }

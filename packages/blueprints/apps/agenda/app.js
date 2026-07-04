@@ -23,7 +23,8 @@ let view = 'month'; // 'month' | 'week' | 'list'
 // The day the month/week views are anchored on; navigation moves it whole
 // months or weeks depending on the view.
 let cursor = new Date();
-let searchText = '';
+// Vault FTS matches while the list search is active; null = no search.
+let searchResults = null;
 const hiddenCals = new Set();
 let calById = new Map();
 let firstLoad = true;
@@ -734,22 +735,30 @@ function renderWeek() {
 
 // ---------- List view ----------
 
+// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
+// the vault returns become <mark>, and event text never parses as HTML.
+function snippetInto(el, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      el.appendChild(mark);
+    } else {
+      el.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
 function renderList() {
   const list = $('dayList');
   list.innerHTML = '';
-  let evs = visibleEvents();
-  const q = searchText.trim().toLowerCase();
-  if (q) {
-    evs = evs.filter(
-      (ev) =>
-        String(ev.summary ?? '')
-          .toLowerCase()
-          .includes(q) ||
-        String(ev.description ?? '')
-          .toLowerCase()
-          .includes(q),
-    );
-  }
+  // A search swaps the loaded window for the vault's FTS matches (which can
+  // reach past events the window never loaded); the calendar chips filter
+  // either set the same way.
+  const source = searchResults ?? events;
+  const evs = source.filter((ev) => !ev.calendar_id || !hiddenCals.has(ev.calendar_id));
   $('empty').hidden = evs.length > 0;
   const byDay = bucketByDay(evs);
   const keys = [...byDay.keys()].sort();
@@ -784,6 +793,14 @@ function renderRow(seg) {
   const text = document.createElement('span');
   text.className = 'row-text';
   text.textContent = ev.summary;
+  // A vault search match carries its own snippet, already centered on the
+  // hit — it renders beneath the summary with the term marked.
+  if (ev.snippet) {
+    const snip = document.createElement('span');
+    snip.className = 'row-snippet muted small';
+    snippetInto(snip, ev.snippet);
+    text.append(document.createElement('br'), snip);
+  }
   main.append(time, dot, text);
   main.addEventListener('click', () => openEventDetail(ev, main));
   const badge = document.createElement('span');
@@ -1176,17 +1193,48 @@ $('prevMonth').addEventListener('click', () => nav(-1));
 $('nextMonth').addEventListener('click', () => nav(1));
 $('todayBtn').addEventListener('click', goToday);
 
+// Searching asks the vault, not the loaded window: the FTS5 index matches
+// over every event (summary + description) inside SQLite and returns only
+// the hits, so the app never greps an unbounded table in memory. `searchSeq`
+// drops stale replies when the owner types faster than the vault answers.
+let searchSeq = 0;
 $('searchInput').addEventListener(
   'input',
-  debounce(() => {
-    searchText = $('searchInput').value;
+  debounce(async () => {
+    const raw = $('searchInput').value.trim();
+    if (!raw) {
+      searchResults = null;
+      renderList();
+      return;
+    }
+    const seq = ++searchSeq;
+    let rows = [];
+    try {
+      const data = await window.centraid.read({ query: 'search', input: { term: raw } });
+      rows = data?.events ?? [];
+    } catch {
+      rows = [];
+    }
+    if (seq !== searchSeq) return;
+    searchResults = rows;
     renderList();
-  }, 150),
+  }, 250),
 );
+
+function clearSearch() {
+  $('searchInput').value = '';
+  searchResults = null;
+  renderList();
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    closeOverlay();
+    if (!$('overlay').hidden) {
+      closeOverlay();
+      return;
+    }
+    // Esc in the search box clears it back to the loaded list.
+    if (e.target === $('searchInput') && $('searchInput').value) clearSearch();
     return;
   }
   // Never hijack typing, and let the open panel own its keys.
