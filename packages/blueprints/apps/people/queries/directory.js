@@ -15,6 +15,61 @@
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
+const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
+
+/**
+ * The windowed party ids carrying the flags-scheme starred tag (issue
+ * #274). Favorite is entity-scoped meaning on the canonical core.party —
+ * one bounded tag read, never a card column.
+ */
+async function starredParties(ctx, partyIds, purpose) {
+  if (partyIds.length === 0) return new Set();
+  const [schemes, concepts] = await Promise.all([
+    ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+    ctx.vault.read({ entity: 'core.concept', purpose }),
+  ]);
+  const scheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
+  const starred = scheme
+    ? (concepts.rows ?? []).find(
+        (c) => c.scheme_id === scheme.scheme_id && c.notation === 'starred',
+      )
+    : undefined;
+  if (!starred) return new Set();
+  const tags = await ctx.vault.read({
+    entity: 'core.tag',
+    where: [
+      { column: 'concept_id', op: 'eq', value: starred.concept_id },
+      { column: 'target_type', op: 'eq', value: 'core.party' },
+      { column: 'target_id', op: 'in', value: partyIds },
+    ],
+    purpose,
+  });
+  return new Set((tags.rows ?? []).map((t) => t.target_id));
+}
+
+/**
+ * The running memo per party (issue #274): the newest knowledge.annotation
+ * targeting each canonical core.party — "met at Ravi's wedding" lives on
+ * the person, not in a card column. One bounded read.
+ */
+async function partyMemos(ctx, partyIds, purpose) {
+  if (partyIds.length === 0) return new Map();
+  const annotations = await ctx.vault.read({
+    entity: 'knowledge.annotation',
+    where: [
+      { column: 'target_type', op: 'eq', value: 'core.party' },
+      { column: 'target_id', op: 'in', value: partyIds },
+    ],
+    orderBy: { column: 'created_at', dir: 'desc' },
+    purpose,
+  });
+  const memoByParty = new Map();
+  for (const a of annotations.rows ?? []) {
+    if (!memoByParty.has(a.target_id)) memoByParty.set(a.target_id, a.body_text);
+  }
+  return memoByParty;
+}
+
 /**
  * Group the owner's attachments for one subject type into a map keyed by
  * subject_id, each value a UI-ready list joined to its content item. This is
@@ -102,6 +157,8 @@ export default async ({ input, ctx }) => {
       for (const c of contents.rows ?? []) contentById.set(c.content_id, c);
     }
     const attByParty = attachmentsBySubject('core.party', attachmentRows, contentById);
+    const starredIds = await starredParties(ctx, partyIds, purpose);
+    const memoByParty = await partyMemos(ctx, partyIds, purpose);
     const sortKey = (p) => String(p.sort_name ?? p.display_name);
     const people = windowed
       .toSorted((a, b) => sortKey(a).localeCompare(sortKey(b)))
@@ -109,6 +166,8 @@ export default async ({ input, ctx }) => {
         ...party,
         identifiers: idsByParty.get(party.party_id) ?? [],
         card: cardByParty.get(party.party_id) ?? null,
+        favorite: starredIds.has(party.party_id) ? 1 : 0,
+        note: memoByParty.get(party.party_id) ?? null,
         attachments: attByParty.get(party.party_id) ?? [],
       }));
 

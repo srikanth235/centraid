@@ -87,9 +87,9 @@ test('albums: entries keep positions, first photo becomes cover, cover hands off
     'executed',
   );
   let album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string };
-  expect(album.cover_asset_id).toBe(a.asset_id);
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string };
+  expect(album.cover_content_id).toBe(a.content_id);
   // Twice into the same album is a receipted refusal, not a UNIQUE throw.
   const dup = invoke('media.add_to_album', { album_id: albumId, asset_id: a.asset_id });
   expect(dup.status).toBe('failed');
@@ -97,9 +97,9 @@ test('albums: entries keep positions, first photo becomes cover, cover hands off
     invoke('media.remove_from_album', { album_id: albumId, asset_id: a.asset_id }).status,
   ).toBe('executed');
   album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string };
-  expect(album.cover_asset_id).toBe(b.asset_id);
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string };
+  expect(album.cover_content_id).toBe(b.content_id);
 });
 
 test('rename_album and delete_album curate without touching assets', () => {
@@ -110,7 +110,9 @@ test('rename_album and delete_album curate without touching assets', () => {
     'executed',
   );
   expect(invoke('media.delete_album', { album_id: albumId }).status).toBe('executed');
-  const albums = db.vault.prepare('SELECT count(*) AS n FROM media_album').get() as { n: number };
+  const albums = db.vault.prepare('SELECT count(*) AS n FROM core_collection').get() as {
+    n: number;
+  };
   expect(albums.n).toBe(0);
   const assets = db.vault.prepare('SELECT count(*) AS n FROM media_media_asset').get() as {
     n: number;
@@ -125,19 +127,21 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
   const outcome = invoke('media.delete_asset', { asset_id });
   expect(outcome.status).toBe('executed');
   expect((outcome as { output: { content_released: number } }).output.content_released).toBe(1);
-  const entries = db.vault.prepare('SELECT count(*) AS n FROM media_album_entry').get() as {
+  const entries = db.vault.prepare('SELECT count(*) AS n FROM core_collection_entry').get() as {
     n: number;
   };
   expect(entries.n).toBe(0);
   const album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string | null };
-  expect(album.cover_asset_id).toBeNull();
-  // The asset row survives in the trash — restore can bring it back whole.
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string | null };
+  expect(album.cover_content_id).toBeNull();
+  // The asset row survives in the trash with its own grace window (issue
+  // #274) — restore can bring it back whole.
   const asset = db.vault
-    .prepare('SELECT deleted_at FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { deleted_at: string | null };
+    .prepare('SELECT deleted_at, purge_at FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { deleted_at: string | null; purge_at: string | null };
   expect(asset.deleted_at).not.toBeNull();
+  expect(asset.purge_at).not.toBeNull();
   const content = db.vault
     .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
     .get(content_id) as { deleted_at: string | null; purge_at: string | null };
@@ -148,18 +152,25 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
   expect(again.status).toBe('failed');
 });
 
-test('update_asset toggles favorite on and off', () => {
-  const { asset_id } = addAsset({ data_uri: PIXEL });
+test('update_asset toggles favorite as a starred tag on the canonical content item', () => {
+  const { asset_id, content_id } = addAsset({ data_uri: PIXEL });
+  const starred = () =>
+    db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+          WHERE t.target_type = 'core.content_item' AND t.target_id = ?
+            AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+      )
+      .get(content_id) as { n: number };
   expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
-  let row = db.vault
-    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { favorite: number };
-  expect(row.favorite).toBe(1);
+  expect(starred().n).toBe(1);
+  // Re-favoriting stays a single tag (UNIQUE target+concept, delete-then-insert).
+  expect(invoke('media.update_asset', { asset_id, favorite: 1 }).status).toBe('executed');
+  expect(starred().n).toBe(1);
   expect(invoke('media.update_asset', { asset_id, favorite: 0 }).status).toBe('executed');
-  row = db.vault
-    .prepare('SELECT favorite FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { favorite: number };
-  expect(row.favorite).toBe(0);
+  expect(starred().n).toBe(0);
 });
 
 test('restore_asset brings a trashed asset and its bytes back; restoring live fails', () => {

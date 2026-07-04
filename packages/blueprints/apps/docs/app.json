@@ -2,8 +2,8 @@
   "manifestVersion": 1,
   "id": "docs",
   "name": "Docs",
-  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. Every file's bytes are a sha256-deduped canonical content item; folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Trash sets a purge date about 30 days out and keeps the folder tag, so a restored document lands right back where it was. Uploading, renaming, moving, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.1.0",
+  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. Every file's bytes are a sha256-deduped canonical content item; folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the same canonical item, so a photo favorited in Photos shows in Starred here. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.2.0",
   "iconKey": "Folder",
   "colorKey": "slate",
   "vault": {
@@ -19,6 +19,8 @@
       { "schema": "core", "table": "move_document", "verbs": "act" },
       { "schema": "core", "table": "trash_document", "verbs": "act" },
       { "schema": "core", "table": "restore_document", "verbs": "act" },
+      { "schema": "core", "table": "star_document", "verbs": "act" },
+      { "schema": "core", "table": "unstar_document", "verbs": "act" },
       { "schema": "core", "table": "create_folder", "verbs": "act" },
       { "schema": "core", "table": "rename_folder", "verbs": "act" },
       { "schema": "core", "table": "delete_folder", "verbs": "act" }
@@ -140,6 +142,50 @@
       "writes": []
     },
     {
+      "name": "star",
+      "description": "Star a document through core.star_document — one flags-scheme tag on the canonical content item, the same star every other surface reads. Idempotent; refuses trashed documents.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "content_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["content_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "unstar",
+      "description": "Remove a document's star through core.unstar_document. Idempotent; refuses trashed documents (a trashed document keeps its star through restore).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "content_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["content_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
       "name": "create-folder",
       "description": "Create a folder (a SKOS concept in the folders scheme) through core.create_folder; refuses duplicate sibling names.",
       "confirmation": "none",
@@ -211,7 +257,7 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (content items carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them.",
+      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (content items carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the canonical item). truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them.",
       "input": {
         "type": "object",
         "properties": {

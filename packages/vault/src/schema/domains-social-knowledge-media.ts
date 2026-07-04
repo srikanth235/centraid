@@ -6,10 +6,10 @@ CREATE TABLE social_contact_card (
   card_id              TEXT PRIMARY KEY,
   party_id             TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
   nickname             TEXT,
+  -- Display label only (vCard ORG + TITLE). The employment CLAIM is a
+  -- core.link (party -works-for-> org) with provenance, never a card field
+  -- (issue #274 kink 4; the social boundary always said so).
   org_title            TEXT,
-  related_org_party_id TEXT REFERENCES core_party(party_id),
-  note                 TEXT,
-  favorite             INTEGER NOT NULL CHECK (favorite IN (0,1)),
   vcard_rev            TEXT
 ) STRICT;
 
@@ -76,22 +76,6 @@ CREATE TABLE knowledge_note (
   updated_at      TEXT NOT NULL
 ) STRICT;
 
-CREATE TABLE knowledge_notebook (
-  notebook_id        TEXT PRIMARY KEY,
-  owner_party_id     TEXT NOT NULL REFERENCES core_party(party_id),
-  name               TEXT NOT NULL,
-  parent_notebook_id TEXT REFERENCES knowledge_notebook(notebook_id),
-  sort_order         INTEGER NOT NULL
-) STRICT;
-
-CREATE TABLE knowledge_note_placement (
-  placement_id TEXT PRIMARY KEY,
-  note_id      TEXT NOT NULL REFERENCES knowledge_note(note_id),
-  notebook_id  TEXT NOT NULL REFERENCES knowledge_notebook(notebook_id),
-  position     INTEGER NOT NULL,
-  UNIQUE (note_id, notebook_id)
-) STRICT;
-
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
   author_party_id TEXT NOT NULL REFERENCES core_party(party_id),
@@ -115,25 +99,10 @@ CREATE TABLE media_media_asset (
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
-  favorite         INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0,1)),
-  deleted_at       TEXT
-) STRICT;
-
-CREATE TABLE media_album (
-  album_id       TEXT PRIMARY KEY,
-  owner_party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  title          TEXT NOT NULL,
-  cover_asset_id TEXT REFERENCES media_media_asset(asset_id),
-  created_at     TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE media_album_entry (
-  entry_id TEXT PRIMARY KEY,
-  album_id TEXT NOT NULL REFERENCES media_album(album_id),
-  asset_id TEXT NOT NULL REFERENCES media_media_asset(asset_id),
-  position INTEGER NOT NULL,
-  added_at TEXT NOT NULL,
-  UNIQUE (album_id, asset_id)
+  -- The standard soft-delete pair (issue #274): every owner-deletable row
+  -- carries its own grace window, not just the drive's content items.
+  deleted_at       TEXT,
+  purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 
 CREATE TABLE media_face_region (

@@ -929,7 +929,7 @@ const PICK_KIND_LABELS = {
   'core.content_item': 'File',
   'schedule.task': 'Task',
   'knowledge.note': 'Note',
-  'knowledge.notebook': 'Notebook',
+  'core.collection': 'Collection',
   'social.thread': 'Thread',
   'media.media_asset': 'Photo',
   'home.asset_item': 'Belonging',

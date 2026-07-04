@@ -6,14 +6,15 @@
  * table, because every photo's bytes ride inline as a data: URI and a full
  * content read ships the entire library on every refresh (issue #264).
  * Content items and album entries are joined only for the windowed rows;
- * albums stay a full read (an album list is small). Media has no text
+ * albums stay a full read (a collection list is small). Media has no text
  * index, so anything older is reachable only by growing the window
  * (`truncated` tells the UI to offer that).
  *
  * Trash is a first-class shelf, not a filter the UI must remember: the
  * `assets` array is live rows only, and trashed assets ride separately in
- * `trash` with days-until-purge derived from the content item's purge_at
- * (absent when the bytes are still rented elsewhere and never soft-deleted).
+ * `trash` with days-until-purge from the asset's own purge_at (issue #274:
+ * the standard soft-delete pair — the shelf empties even when the bytes
+ * stay rented elsewhere).
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -45,7 +46,8 @@ export default async ({ input, ctx }) => {
         limit: 200,
         purpose,
       }),
-      ctx.vault.read({ entity: 'media.album', purpose }),
+      // Albums are collections (issue #274) — the one curation mechanism.
+      ctx.vault.read({ entity: 'core.collection', purpose }),
     ]);
 
     // Joins are `in`-bounded by the windows — THIS is the point of the
@@ -57,8 +59,11 @@ export default async ({ input, ctx }) => {
     const [entries, contents] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
-            entity: 'media.album_entry',
-            where: [{ column: 'asset_id', op: 'in', value: assetIds }],
+            entity: 'core.collection_entry',
+            where: [
+              { column: 'target_type', op: 'eq', value: 'media.media_asset' },
+              { column: 'target_id', op: 'in', value: assetIds },
+            ],
             purpose,
           })
         : { rows: [] },
@@ -72,11 +77,47 @@ export default async ({ input, ctx }) => {
     ]);
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-    const albumsById = new Map((albums.rows ?? []).map((a) => [a.album_id, a]));
+
+    // Favorite is a flags-scheme starred tag on the canonical content item
+    // (issue #274) — one bounded read over the windowed content ids, the
+    // same star the drive's Starred section reads.
+    const [flagSchemes, flagConcepts] = await Promise.all([
+      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+      ctx.vault.read({ entity: 'core.concept', purpose }),
+    ]);
+    const flagsScheme = (flagSchemes.rows ?? []).find(
+      (sch) => sch.uri === 'https://centraid.dev/schemes/flags',
+    );
+    const starredConcept = flagsScheme
+      ? (flagConcepts.rows ?? []).find(
+          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
+        )
+      : undefined;
+    const starredIds = new Set();
+    if (starredConcept && contentIds.length > 0) {
+      const starTags = await ctx.vault.read({
+        entity: 'core.tag',
+        where: [
+          { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
+          { column: 'target_type', op: 'eq', value: 'core.content_item' },
+          { column: 'target_id', op: 'in', value: contentIds },
+        ],
+        purpose,
+      });
+      for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
+    }
+    // Keep the app's album row shape over collection rows: a collection may
+    // also hold notes and documents; this surface renders its photo side.
+    const albumRows = (albums.rows ?? []).map((c) => ({
+      album_id: c.collection_id,
+      title: c.name,
+      cover_content_id: c.cover_content_id ?? null,
+    }));
+    const albumsById = new Map(albumRows.map((a) => [a.album_id, a]));
     const albumIdsByAsset = new Map();
     for (const entry of entries.rows ?? []) {
-      if (!albumIdsByAsset.has(entry.asset_id)) albumIdsByAsset.set(entry.asset_id, []);
-      albumIdsByAsset.get(entry.asset_id).push(entry.album_id);
+      if (!albumIdsByAsset.has(entry.target_id)) albumIdsByAsset.set(entry.target_id, []);
+      albumIdsByAsset.get(entry.target_id).push(entry.collection_id);
     }
 
     const join = (asset) => {
@@ -84,6 +125,7 @@ export default async ({ input, ctx }) => {
       const albumIds = albumIdsByAsset.get(asset.asset_id) ?? [];
       return {
         ...asset,
+        favorite: starredIds.has(asset.content_id) ? 1 : 0,
         content_uri: content?.content_uri ?? null,
         media_type: content?.media_type ?? null,
         title: content?.title ?? null,
@@ -105,7 +147,9 @@ export default async ({ input, ctx }) => {
     live.sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')));
 
     const trash = (trashedAssets.rows ?? []).map((asset) => {
-      const purgeAt = contentById.get(asset.content_id)?.purge_at ?? null;
+      // The asset carries its own grace window (issue #274); the content
+      // fallback covers vaults trashed before the pair landed.
+      const purgeAt = asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
       const ms = purgeAt == null ? NaN : Date.parse(purgeAt) - Date.now();
       return {
         ...join(asset),
@@ -122,7 +166,7 @@ export default async ({ input, ctx }) => {
     const truncated = (liveAssets.rows ?? []).length >= window;
     return {
       assets: live,
-      albums: albums.rows ?? [],
+      albums: albumRows,
       trash,
       truncated,
       window,

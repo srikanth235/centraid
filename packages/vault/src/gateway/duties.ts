@@ -78,6 +78,7 @@ export interface SweepResult {
   grantsExpired: number;
   sharesExpired: number;
   contentPurged: number;
+  assetsPurged: number;
   retentionDeleted: number;
   receiptId: string;
 }
@@ -150,6 +151,13 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       WHERE valid_to IS NULL
         AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
   );
+  // Tags are classification and entries are curation, not history: a tag or
+  // a collection entry on a purged row says nothing once the row is gone,
+  // so both delete with the row instead of dangling (issue #274).
+  const dropTags = db.vault.prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?');
+  const dropEntries = db.vault.prepare(
+    'DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?',
+  );
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
     // A trashed media asset over these bytes goes with them — the asset row
@@ -160,10 +168,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     if (asset) {
       writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
       db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
-      db.vault.prepare('DELETE FROM media_album_entry WHERE asset_id = ?').run(asset.asset_id);
-      db.vault
-        .prepare('UPDATE media_album SET cover_asset_id = NULL WHERE cover_asset_id = ?')
-        .run(asset.asset_id);
+      dropEntries.run('media.media_asset', asset.asset_id);
       db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
       endDateLinks.run(
         now,
@@ -172,10 +177,34 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         'media.media_asset',
         asset.asset_id,
       );
+      dropTags.run('media.media_asset', asset.asset_id);
     }
     writeProvenance(db.journal, owner, 'core.content_item', row.content_id, 'sweep.purge');
+    // A collection cover pointing at these bytes goes dark rather than
+    // dangling (the FK would refuse the delete otherwise).
+    db.vault
+      .prepare('UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?')
+      .run(row.content_id);
     db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
     endDateLinks.run(now, 'core.content_item', row.content_id, 'core.content_item', row.content_id);
+    dropTags.run('core.content_item', row.content_id);
+    dropEntries.run('core.content_item', row.content_id);
+  }
+  // The standard soft-delete pair on domain rows (issue #274): a trashed
+  // asset whose own grace window lapsed purges even while its bytes stay
+  // rented elsewhere (an attachment, an avatar) — asset meaning and byte
+  // custody have independent lifecycles. Assets already removed alongside
+  // their purged content above are gone and don't reappear here.
+  const lapsedAssets = db.vault
+    .prepare('SELECT asset_id FROM media_media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .all(now) as { asset_id: string }[];
+  for (const a of lapsedAssets) {
+    writeProvenance(db.journal, owner, 'media.media_asset', a.asset_id, 'sweep.purge');
+    db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(a.asset_id);
+    dropEntries.run('media.media_asset', a.asset_id);
+    db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(a.asset_id);
+    endDateLinks.run(now, 'media.media_asset', a.asset_id, 'media.media_asset', a.asset_id);
+    dropTags.run('media.media_asset', a.asset_id);
   }
   const retentionDeleted = enforceRetention(db, now);
   const receiptId = writeReceipt(db.journal, {
@@ -190,6 +219,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       grantsExpired: Number(grants.changes),
       sharesExpired: Number(shares.changes),
       contentPurged: purgeable.length,
+      assetsPurged: lapsedAssets.length,
       retentionDeleted,
     },
   });
@@ -197,6 +227,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     grantsExpired: Number(grants.changes),
     sharesExpired: Number(shares.changes),
     contentPurged: purgeable.length,
+    assetsPurged: lapsedAssets.length,
     retentionDeleted,
     receiptId,
   };

@@ -96,8 +96,14 @@ const SPECS: readonly FtsEntitySpec[] = [
     columns: [
       { name: 'nickname', kind: 'column' },
       { name: 'org_title', kind: 'column' },
-      { name: 'note', kind: 'column' },
     ],
+  },
+  {
+    // Owner memos (issue #274): the running note about a person, the remark
+    // on a workout — annotations on canonical entities, searchable as text.
+    entity: 'knowledge.annotation',
+    idColumn: 'annotation_id',
+    columns: [{ name: 'body_text', kind: 'column' }],
   },
   {
     entity: 'schedule.task',

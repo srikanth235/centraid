@@ -10,6 +10,7 @@ import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential, InvokeOutcome } from '../gateway/types.js';
 import { uuidv7 } from '../ids.js';
+import { registerLinkCommands } from './links.js';
 import { registerSocialCommands } from './social.js';
 
 let db: VaultDb;
@@ -214,6 +215,19 @@ test('resolve_identity refuses a handle claimed by a different party (no identit
     expect(outcome.predicate).toContain('handle_not_claimed_elsewhere');
 });
 
+/** The starred flags-scheme tag rows on a target (issue #274). */
+function starredTags(targetType: string, targetId: string) {
+  return db.vault
+    .prepare(
+      `SELECT t.tagged_by_party_id FROM core_tag t
+         JOIN core_concept c ON c.concept_id = t.concept_id
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE t.target_type = ? AND t.target_id = ?
+          AND s.uri = 'https://centraid.dev/schemes/flags' AND c.notation = 'starred'`,
+    )
+    .all(targetType, targetId) as { tagged_by_party_id: string | null }[];
+}
+
 test('update_card upserts decoration without touching identity', () => {
   const first = gw.invoke(owner, {
     command: 'social.update_card',
@@ -228,13 +242,44 @@ test('update_card upserts decoration without touching identity', () => {
   });
   expect(second.status).toBe('executed');
   const card = db.vault
-    .prepare('SELECT nickname, note, favorite FROM social_contact_card WHERE party_id = ?')
+    .prepare('SELECT nickname FROM social_contact_card WHERE party_id = ?')
     .get(raviId);
-  expect(card).toMatchObject({ nickname: 'Rav', note: 'met at the wedding', favorite: 1 });
+  expect(card).toMatchObject({ nickname: 'Rav' });
+  // The note landed as the caller's memo annotation on the canonical party…
+  const memo = db.vault
+    .prepare(
+      `SELECT body_text, author_party_id FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .get(raviId) as { body_text: string; author_party_id: string };
+  expect(memo).toMatchObject({
+    body_text: 'met at the wedding',
+    author_party_id: boot.ownerPartyId,
+  });
+  // …and the favorite input as a starred tag — the untouched second call
+  // left the star alone.
+  expect(starredTags('core.party', raviId)).toHaveLength(1);
   const cards = db.vault.prepare('SELECT count(*) AS n FROM social_contact_card').get() as {
     n: number;
   };
   expect(cards.n).toBe(1);
+});
+
+test('favorite is one starred tag on the party: re-star stays single, unstar removes it', () => {
+  const setFavorite = (favorite: number) =>
+    gw.invoke(owner, {
+      command: 'social.update_card',
+      input: { party_id: raviId, favorite },
+      purpose: 'dpv:ServiceProvision',
+    });
+  expect(setFavorite(1).status).toBe('executed');
+  expect(setFavorite(1).status).toBe('executed');
+  const tags = starredTags('core.party', raviId);
+  expect(tags).toHaveLength(1);
+  // Provenance a boolean column never carried: who starred.
+  expect(tags[0]?.tagged_by_party_id).toBe(boot.ownerPartyId);
+  expect(setFavorite(0).status).toBe('executed');
+  expect(starredTags('core.party', raviId)).toHaveLength(0);
 });
 
 test('a self-thread (note to self) drafts with one participant and sends', () => {
@@ -297,4 +342,74 @@ test('mark_thread_read stamps only the owner cursor and moves it forward', () =>
     purpose: 'dpv:ServiceProvision',
   });
   expect(ghost.status).toBe('failed');
+});
+
+test('employment is a works-for link with provenance; the card keeps only a display label', () => {
+  const orgId = uuidv7();
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES (?, 'org', 'Acme Studio', ?, ?, '1.1')`,
+    )
+    .run(orgId, now, now);
+  registerLinkCommands(gw);
+  // The display label rides the card…
+  const card = gw.invoke(owner, {
+    command: 'social.update_card',
+    input: { party_id: raviId, org_title: 'Design lead, Acme Studio' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(card.status).toBe('executed');
+  const row = db.vault
+    .prepare('SELECT org_title FROM social_contact_card WHERE party_id = ?')
+    .get(raviId) as { org_title: string };
+  expect(row.org_title).toBe('Design lead, Acme Studio');
+  // …while the claim itself is a typed, temporal core.link.
+  const link = gw.invoke(owner, {
+    command: 'core.link_entities',
+    input: {
+      from_type: 'core.party',
+      from_id: raviId,
+      to_type: 'core.party',
+      to_id: orgId,
+      relation: 'works-for',
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(link.status).toBe('executed');
+  const stored = db.vault
+    .prepare(
+      `SELECT l.asserted_by, l.valid_to FROM core_link l
+         JOIN core_concept c ON c.concept_id = l.relation_concept_id
+        WHERE l.from_id = ? AND l.to_id = ? AND c.notation = 'works-for'`,
+    )
+    .get(raviId, orgId) as { asserted_by: string; valid_to: string | null };
+  expect(stored).toMatchObject({ asserted_by: 'owner', valid_to: null });
+});
+
+test('the running memo replaces on edit and clears on empty — one memo per author per entity', () => {
+  const setNote = (note: string) =>
+    gw.invoke(owner, {
+      command: 'social.update_card',
+      input: { party_id: raviId, note },
+      purpose: 'dpv:ServiceProvision',
+    });
+  expect(setNote('met at the wedding').status).toBe('executed');
+  expect(setNote('now works at Acme').status).toBe('executed');
+  const memos = db.vault
+    .prepare(
+      `SELECT body_text FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .all(raviId) as { body_text: string }[];
+  expect(memos).toEqual([{ body_text: 'now works at Acme' }]);
+  expect(setNote('').status).toBe('executed');
+  const cleared = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .get(raviId) as { n: number };
+  expect(cleared.n).toBe(0);
 });

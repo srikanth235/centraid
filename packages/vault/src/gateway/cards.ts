@@ -74,8 +74,8 @@ const CARD_SQL: Record<string, string> = {
                       FROM schedule_task WHERE task_id = ?`,
   'knowledge.note': `SELECT title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
                        FROM knowledge_note WHERE note_id = ?`,
-  'knowledge.notebook': `SELECT name AS title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
-                           FROM knowledge_notebook WHERE notebook_id = ?`,
+  'core.collection': `SELECT name AS title, NULL AS subtitle, cover_content_id AS thumb, 0 AS trashed
+                        FROM core_collection WHERE collection_id = ?`,
   'social.thread': `SELECT coalesce(subject, channel) AS title, channel AS subtitle,
                            NULL AS thumb, 0 AS trashed
                       FROM social_thread WHERE thread_id = ?`,
@@ -111,7 +111,7 @@ export const CARD_PK: Readonly<Record<string, string>> = {
   'core.content_item': 'content_id',
   'schedule.task': 'task_id',
   'knowledge.note': 'note_id',
-  'knowledge.notebook': 'notebook_id',
+  'core.collection': 'collection_id',
   'social.thread': 'thread_id',
   'media.media_asset': 'asset_id',
   'home.asset_item': 'item_id',

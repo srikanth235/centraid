@@ -137,7 +137,6 @@ CREATE TABLE core_activity (
   ended_at          TEXT CHECK (ended_at IS NULL OR ended_at >= started_at),
   location_place_id TEXT REFERENCES core_place(place_id),
   source_app_id     TEXT REFERENCES consent_app(app_id),
-  note              TEXT,
   created_at        TEXT NOT NULL
 ) STRICT;
 
@@ -208,5 +207,30 @@ CREATE TABLE core_tag (
   confidence         REAL CHECK (confidence BETWEEN 0 AND 1),
   tagged_at          TEXT NOT NULL,
   UNIQUE (target_type, target_id, concept_id)
+) STRICT;
+
+-- One curation mechanism (issue #274): an owner-curated, ordered, typed
+-- container. Albums and notebooks are surface views over this one table —
+-- "Paris trip" may hold photos, the lease PDF and a packing note together.
+-- Audiences (social.circle) and classification (folders-scheme tags) pass
+-- the same test and deliberately stay separate mechanisms.
+CREATE TABLE core_collection (
+  collection_id        TEXT PRIMARY KEY,
+  owner_party_id       TEXT NOT NULL REFERENCES core_party(party_id),
+  name                 TEXT NOT NULL,
+  cover_content_id     TEXT REFERENCES core_content_item(content_id),
+  parent_collection_id TEXT REFERENCES core_collection(collection_id),
+  sort_order           INTEGER NOT NULL,
+  created_at           TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE core_collection_entry (
+  entry_id      TEXT PRIMARY KEY,
+  collection_id TEXT NOT NULL REFERENCES core_collection(collection_id),
+  target_type   TEXT NOT NULL,
+  target_id     TEXT NOT NULL,
+  position      INTEGER NOT NULL,
+  added_at      TEXT NOT NULL,
+  UNIQUE (collection_id, target_type, target_id)
 ) STRICT;
 `;

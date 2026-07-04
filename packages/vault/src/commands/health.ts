@@ -7,6 +7,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { annotate } from './annotations.js';
 import { sha256Hex } from '../ids.js';
 
 /** FHIR vital-signs mapping: type → Open mHealth code + LOINC + UCUM unit. */
@@ -269,8 +270,8 @@ function importWorkout(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO core_activity
-         (activity_id, actor_party_id, kind_concept_id, started_at, ended_at, location_place_id, source_app_id, note, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+         (activity_id, actor_party_id, kind_concept_id, started_at, ended_at, location_place_id, source_app_id, created_at)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     )
     .run(
       activityId,
@@ -279,10 +280,12 @@ function importWorkout(ctx: HandlerCtx): Record<string, unknown> {
       input.started_at,
       input.ended_at,
       ctx.identity.kind === 'app' ? ctx.identity.callerId : null,
-      input.note ?? null,
       ctx.now,
     );
   ctx.wrote('core.activity', activityId);
+  // The workout remark is a memo annotation on the canonical activity
+  // (issue #274) — never an activity column.
+  if (input.note) annotate(ctx, 'core.activity', activityId, input.note);
   const workoutId = ctx.newId();
   ctx.db
     .prepare(

@@ -886,6 +886,13 @@ button {
   margin-top: 5px;
 }
 
+/* The vault-canonical star (issue #274) riding a row or card title. */
+.d-star-ind {
+  color: var(--_accent);
+  font-size: 0.85em;
+  margin-left: 5px;
+}
+
 /* ---------- List ---------- */
 
 .d-listwrap {

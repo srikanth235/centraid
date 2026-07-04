@@ -474,13 +474,14 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <section id="principles" class="dark">
   <div class="wrap">
     <p class="eyebrow">§04 · Modeling principles</p>
-    <h2>Four commitments the model never breaks</h2>
-    <p class="lede">Everything in §03 is a consequence of these four decisions.</p>
+    <h2>Five commitments the model never breaks</h2>
+    <p class="lede">Everything in §03 is a consequence of these five decisions.</p>
     <div class="cards4">
       <article class="pcard rv"><span class="pn">P1</span><h3>Shared where meaning is stable, local where behavior differs</h3><p>“A person,” “a place,” “money moved,” “something was measured” — these mean the same thing in every app, so they live once, in the core, carrying identity and history. What differs per domain is behavior: a workout’s training load, an invoice’s dunning rules. Domains add thin typed extensions — a <span class="k">workout</span> holds a FK to the <span class="k">activity</span> it <em>is</em> — and never fork identity into a parallel copy.</p></article>
       <article class="pcard rv"><span class="pn">P2</span><h3>Own the meaning, rent the bytes</h3><p>The durable asset is the graph: rows, relationships, provenance, classifications. Pixels, PDFs and audio sit behind <span class="k">content_uri</span> with a <span class="k">sha256</span> integrity hash — storable on any disk, NAS or object store, and re-homeable without touching a single relationship. Losing a blob store loses bytes you can re-fetch; losing the model would lose the meaning. So the model is what you own.</p></article>
       <article class="pcard rv"><span class="pn">P3</span><h3>Consent travels with the data</h3><p>Sovereignty is a plane, not a settings page. Apps hold scoped, expiring grants (purpose-bound per W3C DPV, expressed as ODRL-style rules); shares, retention and residency are policy rows; every access decision leaves a Kantara-style receipt chained to W3C PROV provenance. A grant is evaluated on <em>every</em> read and action — consent is data the data carries.</p></article>
       <article class="pcard rv"><span class="pn">P4</span><h3>Agents act through commands, never tables</h3><p>The agent plane exposes one uniform surface — discover, query, reason, act, verify, explain, learn — where every action is a typed command (an MCP tool) with declared pre- and postconditions. Agents never hold a write handle to a table: they invoke <span class="k">agent.command</span>s that are consent-checked, executed transactionally, provenance-stamped and receipted. Corrections feed back as durable judgment rows, not vibes.</p></article>
+      <article class="pcard rv"><span class="pn">P5</span><h3>Entity-scoped meaning joins, surface-scoped state rides</h3><p>An owner judgment <em>about an entity</em> — starred, a memo, a relationship — means the same thing in every app that renders the entity, so it lives in the universal joins (<span class="k">core.tag</span>, <span class="k">knowledge.annotation</span>, <span class="k">core.link</span>), keyed to the <em>canonical</em> row. State that only means something inside one surface — pinned-to-top, sort order, a cover image — rides the domain’s own rows. A flag never mints a column, a row or a table: Gmail stars ≠ Drive stars ≠ Photos favorites is a fragmentation artifact of separate databases, not a design to copy. Reference products are evidence, not authority.</p></article>
     </div>
   </div>
 </section>
@@ -598,7 +599,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <section id="rules">
   <div class="wrap">
     <p class="eyebrow">§11 · Implementation rules</p>
-    <h2>Nine hard rules, then a first boundary</h2>
+    <h2>Ten hard rules, then a first boundary</h2>
     <p class="lede">The stance in §01 survives contact with engineering only if these are enforced in code review, not aspiration.</p>
     <div class="rules">
       <article class="rule rv"><h3>IDs are immutable and meaningless</h3><p>UUIDv7 <span class="k">TEXT</span> keys, minted once, never recycled, carrying no semantics. Merges keep both rows and record a <span class="k">core.link</span> of relation <em>same-as</em> with provenance — history is never rewritten.</p></article>
@@ -609,6 +610,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
       <article class="rule rv"><h3>Consent travels with the data</h3><p>Every read path and every command execution evaluates <span class="k">consent.grant_scope</span> (purpose, verbs, row filter, field mask, expiry) in the gateway and emits a <span class="k">consent.receipt</span>. A share or export carries its policy with it.</p></article>
       <article class="rule rv"><h3>Version the ontology explicitly</h3><p>Every row stamps <span class="k">ontology_version</span>; migrations are forward-only scripts registered per version. An agent must refuse a command whose schema version it doesn’t recognize rather than guess.</p></article>
       <article class="rule rv"><h3>Corrections become durable judgment</h3><p>When the owner fixes the agent — recategorizes a transaction, un-tags a face — the diff is stored as <span class="k">agent.correction</span> and distilled into a scoped <span class="k">agent.judgment</span> rule the agent consults before acting again. Learning is rows, auditable and revocable.</p></article>
+      <article class="rule rv"><h3>One judgment, one mechanism</h3><p>Entity-scoped meaning goes through a universal join; surface-scoped state rides the domain row. Starred is a flags-scheme <span class="k">core.tag</span> on the canonical entity; an owner memo is a <span class="k">knowledge.annotation</span>; employment is a <span class="k">core.link</span>. A <span class="k">favorite</span> boolean on a domain table is a rejected review — it silently discards who judged and when, and re-imports the app-silo fragmentation the vault exists to dissolve.</p></article>
       <article class="rule rv"><h3>Generated apps ride the paved road</h3><p>Vibecoded apps are untrusted code by construction, so they get no special path: a manifest becomes a grant (<span class="k">origin=generated</span>, explicit <span class="k">risk_ceiling</span>), reads go through registered <span class="k">consent.app_view</span> definitions the gateway clamps to scope, writes go through existing typed commands, and custom data lives in <span class="k">core.attribute</span>/<span class="k">concept</span>/<span class="k">link</span> or a per-app extension file that may point <em>into</em> the canonical model but is never referenced <em>by</em> it. Uninstall = revoke grant + delete file; when apps are cheap to generate, projections become disposable and the model becomes everything.</p></article>
     </div>
     <div class="cta rv">
@@ -791,7 +793,7 @@ cols:[
 ['creator_party_id','TEXT','FK','core.party','schema.org creator as identity.'],
 ['origin_device_id','TEXT','FK','consent.device','Which enrolled device produced the bytes.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Trash is a state, not a row loss.'],
-['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion (GDPR storage limitation); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
+['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion (GDPR storage limitation); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL). This deleted_at + purge_at pair is the model-wide soft-delete convention (issue #274): owner-deletable rows adopt it as they are touched — one trash, one ~30-day grace, everywhere.'],
 ['created_at','TEXT (iso8601)','NN','', 'Capture/creation instant.'],
 ]},
 { n:'attachment', std:'Homebox attachments · Joplin note_resources · Firefly-III attachments', p:'Files-on-anything, once: the receipt on a transaction, the manual on an appliance, the photo on a place, the contract on a client — one polymorphic pattern instead of a per-domain junction each time.',
@@ -813,7 +815,6 @@ cols:[
 ['ended_at','TEXT (iso8601)','CK','', 'CHECK(ended_at IS NULL OR ended_at >= started_at).'],
 ['location_place_id','TEXT','FK','core.place','Where it happened.'],
 ['source_app_id','TEXT','FK','consent.app','Which grant-holding app recorded it.'],
-['note','TEXT','','', 'Free-text annotation by the owner.'],
 ['created_at','TEXT (iso8601)','NN','', 'Record creation instant.'],
 ]},
 { n:'observation', std:'HL7 FHIR Observation · Open mHealth · UCUM', p:'A measured or asserted data point about a subject at a moment: heart rate, weight, meter reading, mood. One shape for every sensor in a life.',
@@ -872,7 +873,7 @@ cols:[
 ['broader_concept_id','TEXT','FK','core.concept','skos:broader — hierarchy without a second taxonomy system.'],
 ['definition','TEXT','','', 'skos:definition for agents and humans alike.'],
 ]},
-{ n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join.',
+{ n:'tag', std:'SKOS + schema.org about', p:'Applies a concept to any entity — the universal classification join. Owner flags ride here too: starred/favorite is one flags-scheme tag on the canonical entity, the same star in every surface that renders it.',
 cols:[
 ['tag_id','TEXT (uuidv7)','PK NN','', 'Immutable tag identity.'],
 ['target_type','TEXT','NN','', 'Logical table of the tagged row.'],
@@ -881,6 +882,25 @@ cols:[
 ['tagged_by_party_id','TEXT','FK','core.party','Owner or agent identity that applied it.'],
 ['confidence','REAL','CK','', 'CHECK(confidence BETWEEN 0 AND 1); 1.0 for human assertions.'],
 ['tagged_at','TEXT (iso8601)','NN','', 'When applied.'],
+]},
+{ n:'collection', std:'Dublin Core Collection · IPTC collection practice', p:'The one owner-curation mechanism (issue #274): an ordered, optionally nested container whose members are typed refs. Albums and notebooks are surface views over this table — “Paris trip” may hold photos, the lease PDF and a packing note together. Audiences (social.circle) and classification (folders-scheme tags) pass the same test and deliberately stay separate.',
+cols:[
+['collection_id','TEXT (uuidv7)','PK NN','', 'Collection identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Curator.'],
+['name','TEXT','NN','', 'Display name.'],
+['cover_content_id','TEXT','FK','core.content_item','Optional cover — canonical bytes, not a domain row.'],
+['parent_collection_id','TEXT','FK','core.collection','Optional nesting (the notebook shelf).'],
+['sort_order','INTEGER','NN','', 'Manual ordering among siblings.'],
+['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
+]},
+{ n:'collection_entry', std:'—', p:'Ordered, typed membership: one list per collection, across member types.',
+cols:[
+['entry_id','TEXT (uuidv7)','PK NN','', 'Entry identity.'],
+['collection_id','TEXT','FK NN','core.collection','Container; UNIQUE(collection_id,target_type,target_id).'],
+['target_type','TEXT','NN','', 'Logical table of the member row.'],
+['target_id','TEXT','NN','', 'Member row id (gateway-validated polymorphic ref).'],
+['position','INTEGER','NN','', 'Order within the collection.'],
+['added_at','TEXT (iso8601)','NN','', 'Curation instant.'],
 ]},
 ]},
 
@@ -1273,15 +1293,12 @@ cols:[
 
 { id:'social', label:'social', desc:'Contact cards, circles, threads, messages. People are core parties; relationships are core links. This schema owns address-book decoration and conversation.',
 tables:[
-{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname, org/title, notes, favorite. Decoration over identity — deleting a card never deletes the person.',
+{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname and an org/title display label. Starring is a flags-scheme core.tag on the party and the running “met at Ravi’s wedding” memo is a knowledge.annotation on the party (one judgment, one mechanism). Decoration over identity — deleting a card never deletes the person.',
 cols:[
 ['card_id','TEXT (uuidv7)','PK NN','', 'Card identity.'],
 ['party_id','TEXT','FK UQ NN','core.party','The party this card decorates (1:1).'],
 ['nickname','TEXT','','', 'vCard NICKNAME.'],
-['org_title','TEXT','','', 'vCard ORG + TITLE, denormalized for display.'],
-['related_org_party_id','TEXT','FK','core.party','Employer as a party (schema.org worksFor).'],
-['note','TEXT','','', 'vCard NOTE — the “met at Ravi’s wedding” field.'],
-['favorite','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
+['org_title','TEXT','','', 'vCard ORG + TITLE, denormalized for display only. The employment claim itself is a core.link (works-for) with provenance — never a card field.'],
 ['vcard_rev','TEXT (iso8601)','','', 'vCard REV for sync round-trips.'],
 ]},
 { n:'circle', std:'FOAF Group · vCard MEMBER', p:'A named grouping (Family, Clients, Book club). Circles are also the natural grain for shares and grants.',
@@ -1330,7 +1347,7 @@ cols:[
 ]},
 ]},
 
-{ id:'knowledge', label:'knowledge', desc:'Notes, notebooks, annotations. A note’s body is core content; its links to people, events and things are core links — so notes join the graph instead of floating beside it.',
+{ id:'knowledge', label:'knowledge', desc:'Notes and annotations. A note’s body is core content; its links to people, events and things are core links — so notes join the graph instead of floating beside it. Notebooks are core.collection views (issue #274).',
 tables:[
 { n:'note', std:'schema.org/Article · CommonMark · Joplin/Obsidian conventions', p:'A knowledge item. Text lives in content_item (markdown bytes); this row owns note behavior: pinning, format, revision.',
 cols:[
@@ -1343,22 +1360,7 @@ cols:[
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last edit; every edit also writes provenance.'],
 ]},
-{ n:'notebook', std:'hierarchical collections (Dublin Core relation)', p:'Organizational containers — projections of order, cheap to restructure.',
-cols:[
-['notebook_id','TEXT (uuidv7)','PK NN','', 'Notebook identity.'],
-['owner_party_id','TEXT','FK NN','core.party','Whose shelf.'],
-['name','TEXT','NN','', 'Display name.'],
-['parent_notebook_id','TEXT','FK','knowledge.notebook','Nesting.'],
-['sort_order','INTEGER','NN','', 'Manual ordering.'],
-]},
-{ n:'note_placement', std:'—', p:'A note may sit in several notebooks without copies.',
-cols:[
-['placement_id','TEXT (uuidv7)','PK NN','', 'Placement identity.'],
-['note_id','TEXT','FK NN','knowledge.note','Placed note; UNIQUE(note_id,notebook_id).'],
-['notebook_id','TEXT','FK NN','knowledge.notebook','Container.'],
-['position','INTEGER','NN','', 'Order within the notebook.'],
-]},
-{ n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo — with a standards-shaped selector.',
+{ n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo, the running memo on a person, the remark on a workout — with a standards-shaped selector. The one owner-memo mechanism (issue #274): free-text about an entity never mints a prose column.',
 cols:[
 ['annotation_id','TEXT (uuidv7)','PK NN','', 'Annotation identity.'],
 ['author_party_id','TEXT','FK NN','core.party','Annotator.'],
@@ -1370,7 +1372,7 @@ cols:[
 ]},
 ]},
 
-{ id:'media', label:'media', desc:'Photos, video, audio, scans. An asset extends core content with capture context; albums are projections; face regions link pixels back to identity.',
+{ id:'media', label:'media', desc:'Photos, video, audio, scans. An asset extends core content with capture context; albums are core.collection views (issue #274); face regions link pixels back to identity.',
 tables:[
 { n:'media_asset', std:'EXIF/XMP · IPTC Photo Metadata · Immich asset model', p:'Capture context for a content item: when, where, with what. Extends core.content_item.',
 cols:[
@@ -1384,22 +1386,8 @@ cols:[
 ['height','INTEGER','CK','', 'CHECK(height > 0); pixels.'],
 ['duration_s','REAL','CK','', 'CHECK(duration_s >= 0); AV only.'],
 ['exif_json','TEXT (json1)','CK','', 'Full EXIF/XMP bag; CHECK(json_valid(exif_json)).'],
-]},
-{ n:'album', std:'IPTC collection practice', p:'A curated set. Smart albums are saved queries (projections); this table is only for human curation.',
-cols:[
-['album_id','TEXT (uuidv7)','PK NN','', 'Album identity.'],
-['owner_party_id','TEXT','FK NN','core.party','Curator.'],
-['title','TEXT','NN','', 'Display title.'],
-['cover_asset_id','TEXT','FK','media.media_asset','Cover image.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-]},
-{ n:'album_entry', std:'—', p:'Ordered membership of assets in albums.',
-cols:[
-['entry_id','TEXT (uuidv7)','PK NN','', 'Entry identity.'],
-['album_id','TEXT','FK NN','media.album','Album; UNIQUE(album_id,asset_id).'],
-['asset_id','TEXT','FK NN','media.media_asset','Member asset.'],
-['position','INTEGER','NN','', 'Sort order.'],
-['added_at','TEXT (iso8601)','NN','', 'Curation instant.'],
+['deleted_at','TEXT (iso8601)','','', 'Soft delete — the trash shelf.'],
+['purge_at','TEXT (iso8601)','CK','', 'Own grace window (the standard soft-delete pair); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
 { n:'face_region', std:'IPTC Image Region · MWG Regions', p:'A detected face box, optionally resolved to a party. Agent suggestions stay unconfirmed until the owner confirms — confirmations flow through corrections.',
 cols:[
@@ -1566,8 +1554,8 @@ const DOM_INFO = [
 {id:'finance',prod:'YNAB · Firefly-III · Actual',t:'Finance',refs:['core.account · core.transaction (the ledger)','core.party (merchants, institutions)','core.concept (category scheme)'],owns:['txn_split','budget','holding','recurring_series','fx_rate'],state:'core.transaction: pending → posted → (void) — append-mostly; recategorization is a tag change with provenance, never an amount edit.',aff:['finance.categorize_txn','finance.split_txn','finance.set_budget','finance.flag_anomaly'],boundary:'Finance owns no identity: a merchant is a core party shared with contacts and home. Balances and budget progress are projections — storing them as facts is a rejected review.'},
 {id:'schedule',prod:'Google Calendar · Fastmail · Things',t:'Schedule',refs:['core.event (all time blocks)','core.party (attendees, owners)','core.place (locations → travel buffers)'],owns:['calendar','event_ext','attendee','task','availability_rule'],state:'attendee.partstat: needs-action → accepted | declined | tentative (RFC 5545); task: needs-action → in-process → completed | cancelled (VTODO).',aff:['schedule.propose_event','schedule.reschedule_event','schedule.respond_rsvp','schedule.complete_task'],boundary:'Schedule decorates time; it does not define what events mean. A medication reminder belongs to health, a maintenance window to home — schedule renders them and negotiates conflicts, nothing more. Habits need no new tables: a completion is a core activity or observation, and a streak is a projection over them.'},
 {id:'social',prod:'Contacts · Monica · Nextcloud Talk',t:'Social',refs:['core.party (everyone)','core.content_item (message bodies)','core.link (relationships)'],owns:['contact_card','circle','circle_member','thread','thread_participant','message'],state:'message.delivery: draft → sent → delivered → read | failed — outbound transitions only via social.send_message (risk=high, confirmation required).',aff:['social.resolve_identity','social.draft_message','social.send_message','social.update_card'],boundary:'Social resolves raw addresses to parties; it never creates duplicate people per channel. Kinship and employment claims are core links with provenance, not card fields. The personal-CRM “interaction history” is a projection over messages and activities — never a parallel store. Sending is the highest-risk command in the model.'},
-{id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','notebook','note_placement','annotation'],state:'note lifecycle is intentionally flat (edit history = provenance chain + content versions); annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.annotate','knowledge.link_mentions','knowledge.summarize'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
-{id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','consent.device (camera)'],owns:['media_asset','album','album_entry','face_region'],state:'face_region: detected → suggested → confirmed | rejected — confirmation flows through agent.correction so recognition learns as judgment.',aff:['media.import_assets','media.suggest_faces','media.curate_album','media.find_by_context'],boundary:'Media may not confirm identity on its own: a suggested face becomes a party link only after owner confirmation. Albums are curation; “smart albums” are saved queries and live in projections.'},
+{id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','annotation'],state:'note lifecycle is intentionally flat (edit history = provenance chain + content versions); annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.annotate','knowledge.link_mentions','knowledge.summarize'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
+{id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','consent.device (camera)'],owns:['media_asset','face_region'],state:'face_region: detected → suggested → confirmed | rejected — confirmation flows through agent.correction so recognition learns as judgment.',aff:['media.import_assets','media.suggest_faces','media.curate_album','media.find_by_context'],boundary:'Media may not confirm identity on its own: a suggested face becomes a party link only after owner confirmation. Albums are curation; “smart albums” are saved queries and live in projections.'},
 {id:'home',prod:'Homebox · Grocy · vehicle logs',t:'Home',refs:['core.place (rooms, buildings)','core.transaction (purchases)','core.observation (meter readings)','schedule.task (upkeep)'],owns:['asset_item','warranty','maintenance_plan','utility_meter','meter_reading'],state:'asset_item: owned → (disposed_on set) — with warranty windows and maintenance cadences hanging off the owned span.',aff:['home.register_item','home.log_reading','home.schedule_maintenance','home.prepare_claim'],boundary:'Home joins, it does not copy: the purchase is the finance transaction, the manual is a content item, the chore is a schedule task. Its power is being the join table of the household.'},
 {id:'business',prod:'Invoice Ninja · Kimai · Akaunting',t:'Business',refs:['core.party (clients)','core.activity (billable time)','core.transaction (settlement)','core.event (sessions, deadlines)'],owns:['client','project','time_entry','invoice','invoice_line'],state:'invoice: draft → sent → paid | overdue → void — “paid” requires paid_txn_id (a settling core transaction); overdue is derived from due_on, never stored.',aff:['business.track_time','business.draft_invoice','business.send_invoice','business.reconcile_payment'],boundary:'The studio is a lens: it may bill an activity, never own the actor. Settlement is an allocation — paid_txn_id binds the invoice to a canonical transaction (the Invoice Ninja paymentables pattern), so the studio never keeps its own shadow ledger. Rates and terms are business columns; the client’s birthday, address and threads remain core/social property visible under its grant only if scoped.'},
 ];

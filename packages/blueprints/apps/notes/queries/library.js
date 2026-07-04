@@ -89,17 +89,20 @@ export default async ({ input, ctx }) => {
         limit: 200,
         purpose,
       }),
-      ctx.vault.read({ entity: 'knowledge.notebook', purpose }),
+      // Notebooks are collections (issue #274) — the one curation mechanism.
+      ctx.vault.read({ entity: 'core.collection', purpose }),
     ]);
     const byId = new Map();
     for (const n of [...(recent.rows ?? []), ...(pinnedNotes.rows ?? [])]) {
       byId.set(n.note_id, n);
     }
+    // Keep the app's notebook row shape over collection rows: a collection
+    // may also hold photos and documents; this surface renders its notes.
+    const books = (notebooks.rows ?? [])
+      .map((c) => ({ notebook_id: c.collection_id, name: c.name, sort_order: c.sort_order }))
+      .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     const windowed = [...byId.values()];
     if (windowed.length === 0) {
-      const books = (notebooks.rows ?? []).toSorted(
-        (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-      );
       return { notes: [], notebooks: books, truncated: false, window };
     }
     const noteIds = windowed.map((n) => n.note_id);
@@ -109,8 +112,11 @@ export default async ({ input, ctx }) => {
     // bodies and attachment bytes.
     const [placements, attachments, links] = await Promise.all([
       ctx.vault.read({
-        entity: 'knowledge.note_placement',
-        where: [{ column: 'note_id', op: 'in', value: noteIds }],
+        entity: 'core.collection_entry',
+        where: [
+          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'target_id', op: 'in', value: noteIds },
+        ],
         purpose,
       }),
       ctx.vault.read({
@@ -178,11 +184,11 @@ export default async ({ input, ctx }) => {
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByNote = attachmentsBySubject('knowledge.note', attachments.rows ?? [], contentById);
-    const nameByNotebook = new Map((notebooks.rows ?? []).map((nb) => [nb.notebook_id, nb.name]));
+    const nameByNotebook = new Map(books.map((nb) => [nb.notebook_id, nb.name]));
     const notebooksByNote = new Map();
     for (const p of placements.rows ?? []) {
-      if (!notebooksByNote.has(p.note_id)) notebooksByNote.set(p.note_id, []);
-      notebooksByNote.get(p.note_id).push(p.notebook_id);
+      if (!notebooksByNote.has(p.target_id)) notebooksByNote.set(p.target_id, []);
+      notebooksByNote.get(p.target_id).push(p.collection_id);
     }
     const rows = windowed
       .map((n) => {
@@ -206,10 +212,6 @@ export default async ({ input, ctx }) => {
           (b.pinned ?? 0) - (a.pinned ?? 0) ||
           String(b.updated_at).localeCompare(String(a.updated_at)),
       );
-
-    const books = (notebooks.rows ?? []).toSorted(
-      (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
-    );
 
     // A full window means there may be older notes beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
