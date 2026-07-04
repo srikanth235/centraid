@@ -686,14 +686,17 @@ for (const chip of $('channelFilter').querySelectorAll('.chip')) {
 
 // ---------- New conversation ----------
 // The write path always supported this (draft accepts recipient_party_id /
-// channel / subject); the picker searches the party directory the inbox
-// query already reads.
+// channel / subject). The picker's zero-term state is the capped shortlist
+// the inbox query already ships; a typed term asks the vault's find-people
+// search (FTS over the whole party directory), so anyone older than the
+// shortlist cap is still reachable.
 
 function closeNewMsgForm() {
   $('newMsgForm').hidden = true;
   $('newMsgForm').reset();
   $('recipientList').innerHTML = '';
   selectedRecipient = null;
+  recipientResults = null;
   setNewMsgChannel('dm');
   updateStartEnabled();
 }
@@ -729,6 +732,13 @@ function updateStartEnabled() {
   $('startThreadBtn').disabled = !selectedRecipient || !$('newMsgBody').value.trim();
 }
 
+// find-people matches while a term is active; null = no vault answer yet
+// (or none coming), so the shortlist filter stands in and keystrokes never
+// blank the list. `recipientSeq` drops stale replies when the owner types
+// faster than the vault answers — same guard as the inbox search.
+let recipientResults = null;
+let recipientSeq = 0;
+
 function renderRecipients() {
   const listEl = $('recipientList');
   if ($('newMsgForm').hidden) return;
@@ -738,15 +748,19 @@ function renderRecipients() {
     $('recipientSearch').setAttribute('aria-expanded', 'false');
     return; // picked — keep the list closed
   }
-  const matches = inboxParties
-    .filter(
-      (p) =>
-        !q ||
-        String(p.display_name ?? '')
-          .toLowerCase()
-          .includes(q),
-    )
-    .slice(0, 8);
+  // Zero term: the inbox's shipped shortlist, alphabetical. A term with a
+  // vault answer: find-people's rows, kept in rank order (best match first).
+  const matches = (
+    q && recipientResults
+      ? recipientResults
+      : inboxParties.filter(
+          (p) =>
+            !q ||
+            String(p.display_name ?? '')
+              .toLowerCase()
+              .includes(q),
+        )
+  ).slice(0, 8);
   $('recipientSearch').setAttribute('aria-expanded', String(matches.length > 0));
   for (const p of matches) {
     const row = document.createElement('button');
@@ -769,13 +783,30 @@ function renderRecipients() {
 
 $('recipientSearch').addEventListener(
   'input',
-  debounce(() => {
+  debounce(async () => {
     if (selectedRecipient && $('recipientSearch').value !== selectedRecipient.display_name) {
       selectedRecipient = null;
     }
-    renderRecipients();
     updateStartEnabled();
-  }, 120),
+    const term = $('recipientSearch').value.trim();
+    if (!term) {
+      recipientResults = null;
+      renderRecipients();
+      return;
+    }
+    renderRecipients(); // interim render while the vault answers
+    const seq = ++recipientSeq;
+    let rows = null;
+    try {
+      const data = await window.centraid.read({ query: 'find-people', input: { term } });
+      rows = data?.people ?? [];
+    } catch {
+      rows = null; // the shortlist filter keeps standing in
+    }
+    if (seq !== recipientSeq) return;
+    recipientResults = rows;
+    renderRecipients();
+  }, 250),
 );
 
 $('newMsgBody').addEventListener('input', updateStartEnabled);

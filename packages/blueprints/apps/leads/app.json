@@ -368,6 +368,31 @@
           }
         }
       }
+    },
+    {
+      "name": "find-candidates",
+      "description": "Full-text party lookup for the add-lead picker through the vault's FTS5 index over core.party — parties already enrolled as clients are dropped via one in-bounded business.client read over the hits, so every non-enrolled person is reachable without growing the pipeline's 300-party candidate shortlist.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": {
+            "type": "string"
+          }
+        },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "candidates": {
+            "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
     }
   ],
   "knobs": [

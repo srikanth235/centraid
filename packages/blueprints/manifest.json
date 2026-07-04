@@ -486,6 +486,7 @@
         "kit.css",
         "kit.js",
         "package.json",
+        "queries/find-people.js",
         "queries/inbox.js",
         "queries/search.js",
         "queries/thread.js",
@@ -1247,6 +1248,7 @@
         "kit.css",
         "kit.js",
         "package.json",
+        "queries/find-candidates.js",
         "queries/pipeline.js",
         "queries/search.js",
         "wall.css"
