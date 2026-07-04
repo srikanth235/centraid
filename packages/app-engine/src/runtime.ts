@@ -19,7 +19,7 @@ import { readAppSchema } from './data/schema.js';
 import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './http/cloud-routes.js';
 import { ChangeBus } from './changes/change-bus.js';
 import { handleAppChanges } from './http/changes-sse.js';
-import type { UserStore } from './stores/user-store.js';
+import type { PrefsStore } from './stores/prefs-store.js';
 import type { ConversationHistoryStore } from './conversation/history.js';
 import { readAppSettings } from './settings/app-settings.js';
 import { buildSettingsInject } from './settings/settings-merge.js';
@@ -35,8 +35,13 @@ export interface RuntimeLogger {
 }
 
 export interface RuntimeOptions {
-  /** Absolute path of the directory holding app folders + `_registry.json`. */
-  appsDir: string;
+  /**
+   * Directory holding app folders + `_registry.json` — or a provider that
+   * resolves it per call. The gateway wires "the ACTIVE vault's workspace
+   * apps dir" (#280: apps are vault assets), so a vault switch re-roots the
+   * whole app surface; the runtime keeps one `Registry` per resolved dir.
+   */
+  appsDir: string | (() => string);
   /**
    * Optional canonical dir for assets shared verbatim by every app
    * (`kit.js` / `kit.css`). Apps no longer ship their own copy; a request
@@ -53,21 +58,22 @@ export interface RuntimeOptions {
    */
   changeBus?: ChangeBus;
   /**
-   * Optional user-prefs store. When provided, the runtime reads the
-   * gateway-wide user preferences during `app-index` and bakes them into
-   * the served HTML (merged with the app's own `__centraid_settings`
-   * table and any URL-query overrides). Without it, app-index falls back
-   * to URL-query-only injection so single-app/standalone setups still
-   * work. Hosts (openclaw plugin, desktop local-runtime) construct the
-   * store themselves and additionally mount `/_centraid-user/*` for the
-   * desktop to read/write prefs.
+   * Optional device-prefs store (a JSON file — #280 killed the identity
+   * DB). When provided, the runtime reads the gateway-wide prefs during
+   * `app-index` and bakes them into the served HTML (merged with the app's
+   * own `__centraid_settings` table and any URL-query overrides). Without
+   * it, app-index falls back to URL-query-only injection so
+   * single-app/standalone setups still work. Hosts (openclaw plugin,
+   * desktop local-runtime) construct the store themselves and additionally
+   * mount `/_centraid-user/*` for the desktop to read/write prefs.
    */
-  userStore?: UserStore;
+  userStore?: PrefsStore;
   /**
-   * Optional conversation-history store backing the chat surface. Conversations
-   * live in each app's per-app `runtime.sqlite` (`conversations.user_id` is
-   * application-enforced — no cross-file FK). When provided,
-   * `startRuntimeHttpServer` mounts `/_centraid-conversations/*` against it.
+   * Optional conversation-history store backing the chat surface.
+   * Conversations live in the ACTIVE vault's `transcripts.db` (#280;
+   * `conversations.user_id` is application-enforced — no cross-file FK).
+   * When provided, `startRuntimeHttpServer` mounts
+   * `/_centraid-conversations/*` against it.
    */
   conversationHistoryStore?: ConversationHistoryStore;
   /**
@@ -83,11 +89,13 @@ export interface RuntimeOptions {
    */
   conversationRunner?: ConversationRunner;
   /**
-   * Central scratch base dir for runner-owned chat session files. The
-   * `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl` as
-   * `ConversationTurnInput.sessionFile`. Defaults to an OS-tmpdir path when omitted.
+   * Scratch base dir for runner-owned chat session files — or a provider
+   * (the gateway wires the ACTIVE vault's `runner-sessions/` dir, #280).
+   * The `POST /centraid/<id>/_turn` route passes `<dir>/<conversationId>.jsonl`
+   * as `ConversationTurnInput.sessionFile`. Defaults to an OS-tmpdir path
+   * when omitted.
    */
-  conversationRunnerSessionDir?: string;
+  conversationRunnerSessionDir?: string | (() => string);
   /**
    * Optional reader for per-app metadata (name, description). The chat
    * route uses it to populate the `extraSystemPrompt` it hands to the
@@ -229,7 +237,6 @@ const noopLogger: RuntimeLogger = {
  * the scheduler reports a job state transition.
  */
 export class Runtime {
-  readonly registry: Registry;
   /**
    * Three-tool dispatcher (issue #107). Exposed so the OpenClaw plugin
    * can register `centraid_write`/`_read`/`_describe` tools that
@@ -245,22 +252,27 @@ export class Runtime {
    */
   readonly changeBus: ChangeBus;
   /**
-   * Optional user-prefs store. Hosts mount it both here (so app-index can
+   * Optional device-prefs store. Hosts mount it both here (so app-index can
    * bake prefs into HTML) and on their own HTTP surface as `/_centraid-user/*`
    * (so the desktop can read/write prefs over HTTP).
    */
-  readonly userStore?: UserStore;
+  readonly userStore?: PrefsStore;
   /** Optional conversation-history store. See `RuntimeOptions.conversationHistoryStore`. */
   readonly conversationHistoryStore?: ConversationHistoryStore;
   /** Optional per-app chat runner. See `RuntimeOptions.conversationRunner`. */
   readonly conversationRunner?: ConversationRunner;
-  /** Central scratch base dir for runner-owned chat session files. */
-  readonly conversationRunnerSessionDir: string;
   /** Optional app-metadata reader for chat extra-system-prompt. */
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
   readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
-  private readonly appsDir: string;
+  private readonly appsDirProvider: () => string;
+  private readonly sessionDirProvider: () => string;
+  /**
+   * One `Registry` per resolved apps dir (#280: the dir follows the active
+   * vault, so a switch lands on a different registry; each is loaded by the
+   * host's post-switch `bootstrap()` call before requests hit it).
+   */
+  private readonly registries = new Map<string, Registry>();
   private readonly sharedAssetsDir?: string;
   private readonly logger: RuntimeLogger;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
@@ -275,27 +287,53 @@ export class Runtime {
   private readonly conversationLocks = new Map<string, Promise<void>>();
 
   constructor(opts: RuntimeOptions) {
-    this.appsDir = opts.appsDir;
+    this.appsDirProvider =
+      typeof opts.appsDir === 'string'
+        ? (
+            (dir) => () =>
+              dir
+          )(opts.appsDir)
+        : opts.appsDir;
     if (opts.sharedAssetsDir) this.sharedAssetsDir = opts.sharedAssetsDir;
     this.logger = opts.logger ?? noopLogger;
-    this.registry = new Registry(opts.appsDir);
     this.changeBus = opts.changeBus ?? new ChangeBus({ logger: this.logger });
     this.userStore = opts.userStore;
     this.conversationHistoryStore = opts.conversationHistoryStore;
     this.conversationRunner = opts.conversationRunner;
-    this.conversationRunnerSessionDir =
+    const sessionDir =
       opts.conversationRunnerSessionDir ??
       path.join(os.tmpdir(), 'centraid-conversation-runner-sessions');
+    this.sessionDirProvider = typeof sessionDir === 'string' ? () => sessionDir : sessionDir;
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
     this.dispatcher = new Dispatcher({
-      registry: this.registry,
+      registry: () => this.registry,
       onWriteFor: (appId) => this.emitForApp(appId, 'handler'),
       ...(this.codeDirOverride ? { codeDirOverride: this.codeDirOverride } : {}),
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
     });
+  }
+
+  /** The current apps dir — follows the active vault when a provider was given. */
+  private get appsDir(): string {
+    return this.appsDirProvider();
+  }
+
+  /** The registry of the CURRENT apps dir (one cached instance per dir). */
+  get registry(): Registry {
+    const dir = this.appsDir;
+    const cached = this.registries.get(dir);
+    if (cached) return cached;
+    const fresh = new Registry(dir);
+    this.registries.set(dir, fresh);
+    return fresh;
+  }
+
+  /** Scratch base dir for runner-owned chat session files (per active vault). */
+  get conversationRunnerSessionDir(): string {
+    return this.sessionDirProvider();
   }
 
   /**

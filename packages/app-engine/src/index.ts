@@ -211,36 +211,35 @@ export {
   type TurnNode,
   type ConversationTurnAttachment,
   type RecordTurnInput,
-  type UserIdProvider,
 } from './conversation/history.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
 
-// Per-app blob content-addressed store for attachment bytes (issue #190).
-// Bytes live at `<appsDir>/<appId>/blobs/<hash>`, deduped by sha256; the
-// `attachments` rows in `runtime.sqlite` carry the metadata. GC is
-// refcount-by-hash off `ConversationStore.referencedHashes`.
+// Blob content-addressed store for attachment bytes (issue #190). Bytes live
+// at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
+// sha256; the `attachments` rows in the vault's `transcripts.db` carry the
+// metadata. GC is refcount-by-hash off `ConversationStore.referencedHashes`.
 export { BlobStore, blobUrl, hashBytes, type PutResult } from './data/blob-store.js';
 
-// SQLite state — app-engine owns two migration ladders, each its own file +
-// connection:
-//   - gateway (`centraid-gateway.sqlite`):  users, user_prefs
-//   - runtime (`<appRoot>/runtime.sqlite`): conversations, turns, items,
-//                                           attachments, automation_state
-// `UserStore` ← gateway; `ConversationHistoryStore` + the per-app conversation
-// ledger ← each app's runtime.sqlite. Cross-file FKs aren't possible in SQLite, so
-// `conversations.user_id` is application-enforced. The third (analytics)
-// ladder lives in the `insights/` sub-module, built through `makeMigratedDbProvider`.
+// SQLite state — app-engine owns ONE migration ladder (#280):
+//   - transcripts (`<vaultDir>/<vaultId>/transcripts.db`): conversations,
+//     turns, items, attachments, automation_state, run_summary — the
+//     per-vault ledger + rollup. The old identity.sqlite (users/user_prefs)
+//     and central analytics.sqlite are gone.
+// Cross-file FKs aren't possible in SQLite, so `conversations.user_id` (the
+// vault owner's party id) is application-enforced.
 export {
-  openGatewayDb,
-  makeGatewayDbProvider,
-  openRuntimeDb,
-  makeRuntimeDbProvider,
+  openTranscriptsDb,
+  makeTranscriptsDbProvider,
   openMigratedDb,
   makeMigratedDbProvider,
-  GATEWAY_MIGRATIONS,
-  RUNTIME_MIGRATIONS,
+  TRANSCRIPTS_MIGRATIONS,
   type DatabaseProvider,
 } from './stores/gateway-db.js';
+
+// The per-vault workspace view app-engine operates in (#280): the gateway
+// resolves the ACTIVE vault and injects this shape; stores re-resolve per
+// call so a vault switch lands without reconstruction.
+export type { VaultWorkspace, WorkspaceProvider } from './stores/vault-workspace.js';
 
 // Run-summary seam — the ledger emits one `RunSummary` per finished run
 // through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in the
@@ -249,9 +248,9 @@ export {
 // reporting dependency and the boundary one-way (#151).
 export type { RunSummary, RunSummarySink } from './conversation/run-summary-sink.js';
 
-// User-prefs store + HTTP route dispatcher. Wraps the gateway DB; mounted
-// by both hosts at `/_centraid-user`.
-export { UserStore, makeUserStoreRouteHandler } from './stores/user-store.js';
+// Device-prefs store + HTTP route dispatcher (a JSON file — #280 killed the
+// identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
+export { PrefsStore, makeUserStoreRouteHandler } from './stores/prefs-store.js';
 
 // Per-app `__centraid_settings` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into

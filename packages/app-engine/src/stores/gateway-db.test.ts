@@ -4,12 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
-  GATEWAY_MIGRATIONS,
-  RUNTIME_MIGRATIONS,
-  openGatewayDb,
-  openRuntimeDb,
-  makeGatewayDbProvider,
-  makeRuntimeDbProvider,
+  TRANSCRIPTS_MIGRATIONS,
+  openTranscriptsDb,
+  makeTranscriptsDbProvider,
 } from './gateway-db.js';
 
 function freshDbPath(): string {
@@ -42,82 +39,32 @@ function tableNames(path: string): string[] {
   }
 }
 
-describe('openGatewayDb (users + user_prefs)', () => {
-  it('advances PRAGMA user_version to GATEWAY_MIGRATIONS.length on a fresh DB', () => {
+describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)', () => {
+  it('advances PRAGMA user_version to TRANSCRIPTS_MIGRATIONS.length on a fresh DB', () => {
     const path = freshDbPath();
-    openGatewayDb(path).close();
-    expect(userVersion(path)).toBe(GATEWAY_MIGRATIONS.length);
+    openTranscriptsDb(path).close();
+    expect(userVersion(path)).toBe(TRANSCRIPTS_MIGRATIONS.length);
+    expect(TRANSCRIPTS_MIGRATIONS.length).toBe(1);
   });
 
-  it('creates exactly the users + user_prefs tables', () => {
+  it('creates the ledger tables PLUS run_summary in ONE file (no legacy tables)', () => {
     const path = freshDbPath();
-    openGatewayDb(path).close();
-    expect(tableNames(path)).toEqual(['user_prefs', 'users']);
-  });
-
-  it('re-opening an already-migrated DB is a no-op', () => {
-    const path = freshDbPath();
-    openGatewayDb(path).close();
-    const before = userVersion(path);
-    openGatewayDb(path).close();
-    expect(userVersion(path)).toBe(before);
-  });
-
-  it('throws when the DB is at a newer version than this build supports', () => {
-    const path = freshDbPath();
-    openGatewayDb(path).close();
-    const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${GATEWAY_MIGRATIONS.length + 1}`);
-    db.close();
-    expect(() => openGatewayDb(path)).toThrow(/newer|update centraid/i);
-  });
-
-  it('FK cascade deletes a user’s prefs when the user is removed', () => {
-    // Confirms `PRAGMA foreign_keys=ON` is in effect — without it sqlite
-    // ignores the FK clause. user_prefs lives in the same file as users,
-    // so this cascade is a real foreign key.
-    const path = freshDbPath();
-    const db = openGatewayDb(path);
-    try {
-      db.prepare(`INSERT INTO users (id, created_at) VALUES (?, ?)`).run('u1', Date.now());
-      db.prepare(`INSERT INTO user_prefs (user_id, key, value) VALUES (?, ?, ?)`).run(
-        'u1',
-        'theme',
-        JSON.stringify('dark'),
-      );
-      db.prepare(`DELETE FROM users WHERE id = ?`).run('u1');
-      const prefs = db.prepare(`SELECT COUNT(*) AS n FROM user_prefs`).get() as { n: number };
-      expect(Number(prefs.n)).toBe(0);
-    } finally {
-      db.close();
-    }
-  });
-});
-
-describe('openRuntimeDb (per-app conversation ledger)', () => {
-  it('advances PRAGMA user_version to RUNTIME_MIGRATIONS.length on a fresh DB', () => {
-    const path = freshDbPath();
-    openRuntimeDb(path).close();
-    expect(userVersion(path)).toBe(RUNTIME_MIGRATIONS.length);
-    expect(RUNTIME_MIGRATIONS.length).toBe(1);
-  });
-
-  it('creates conversations/turns/items/attachments + automation_state (no legacy tables)', () => {
-    const path = freshDbPath();
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     expect(tableNames(path)).toEqual([
       'attachments',
       'automation_state',
       'conversations',
       'items',
+      'run_summary',
       'turns',
     ]);
   });
 
-  it('conversations has NO foreign key (user_id is application-enforced)', () => {
-    // `users` lives in the separate gateway file; SQLite has no cross-file FKs.
+  it('conversations has NO foreign key (user_id carries the vault owner party id)', () => {
+    // The owner's party row lives in the vault's separate vault.db file;
+    // SQLite has no cross-file FKs, so the scoping is application-enforced.
     const path = freshDbPath();
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     const db = new DatabaseSync(path);
     try {
       expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length).toBe(0);
@@ -128,7 +75,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
 
   it('turns→conversations and items→turns and attachments→items are CASCADE FKs', () => {
     const path = freshDbPath();
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const fk = (table: string, parent: string) =>
@@ -141,7 +88,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
       expect(fk('turns', 'conversations')?.on_delete).toBe('CASCADE');
       expect(fk('items', 'turns')?.on_delete).toBe('CASCADE');
       expect(fk('attachments', 'items')?.on_delete).toBe('CASCADE');
-      // parent_turn_id is FK-free (cross-app sub-runs span files).
+      // parent_turn_id is FK-free (a sub-run's parent may land in the same batch).
       const turnFks = db.prepare(`PRAGMA foreign_key_list('turns')`).all() as Array<{
         from: string;
       }>;
@@ -153,7 +100,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
 
   it('deleting a conversation cascades to its turns, items, and attachments', () => {
     const path = freshDbPath();
-    const db = openRuntimeDb(path);
+    const db = openTranscriptsDb(path);
     try {
       const now = Date.now();
       db.prepare(
@@ -185,7 +132,7 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
 
   it('CHECK constraints reject unknown conversation kind / turn trigger / item kind', () => {
     const path = freshDbPath();
-    const db = openRuntimeDb(path);
+    const db = openTranscriptsDb(path);
     try {
       const now = Date.now();
       expect(() =>
@@ -222,38 +169,34 @@ describe('openRuntimeDb (per-app conversation ledger)', () => {
 
   it('re-opening an already-migrated DB is a no-op', () => {
     const path = freshDbPath();
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     const before = userVersion(path);
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     expect(userVersion(path)).toBe(before);
   });
 
   it('throws when the DB is at a newer version than this build supports', () => {
     const path = freshDbPath();
-    openRuntimeDb(path).close();
+    openTranscriptsDb(path).close();
     const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${RUNTIME_MIGRATIONS.length + 1}`);
+    db.exec(`PRAGMA user_version = ${TRANSCRIPTS_MIGRATIONS.length + 1}`);
     db.close();
-    expect(() => openRuntimeDb(path)).toThrow(/newer|update centraid/i);
+    expect(() => openTranscriptsDb(path)).toThrow(/newer|update centraid/i);
   });
 });
 
-describe('lazy providers', () => {
+describe('lazy provider', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    for (const make of [makeGatewayDbProvider, makeRuntimeDbProvider]) {
-      const provider = make(freshDbPath());
-      const a = provider();
-      const b = provider();
-      expect(a).toBe(b);
-      a.close();
-    }
+    const provider = makeTranscriptsDbProvider(freshDbPath());
+    const a = provider();
+    const b = provider();
+    expect(a).toBe(b);
+    a.close();
   });
 
   it('does not touch the filesystem until the first call', () => {
-    for (const make of [makeGatewayDbProvider, makeRuntimeDbProvider]) {
-      const path = freshDbPath();
-      make(path);
-      expect(existsSync(path)).toBe(false);
-    }
+    const path = freshDbPath();
+    makeTranscriptsDbProvider(path);
+    expect(existsSync(path)).toBe(false);
   });
 });

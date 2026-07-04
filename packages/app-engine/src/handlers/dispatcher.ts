@@ -109,7 +109,11 @@ export interface CentraidDescribeInput {
 // ----------------------------------------------------------------------------
 
 export interface DispatcherOptions {
-  readonly registry: Registry;
+  /**
+   * The app registry, or a resolver for it. The gateway wires "the ACTIVE
+   * vault's registry" (#280) so the dispatch surface follows a vault switch.
+   */
+  readonly registry: Registry | (() => Registry);
   /** Write-notification callback per app — feeds the `_changes` SSE stream. */
   readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   /**
@@ -140,17 +144,22 @@ interface ManifestCacheEntry {
 }
 
 export class Dispatcher {
-  private readonly registry: Registry;
+  private readonly registryProvider: () => Registry;
   private readonly onWriteFor?: (appId: string) => (tables: string[]) => void;
   private readonly codeDirOverride?: (appId: string) => Promise<string | undefined>;
   private readonly vaultFor?: (appId: string) => VaultBridge;
   private readonly manifestCache = new Map<string, ManifestCacheEntry>();
 
   constructor(opts: DispatcherOptions) {
-    this.registry = opts.registry;
+    const reg = opts.registry;
+    this.registryProvider = typeof reg === 'function' ? reg : () => reg;
     if (opts.onWriteFor) this.onWriteFor = opts.onWriteFor;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.vaultFor) this.vaultFor = opts.vaultFor;
+  }
+
+  private get registry(): Registry {
+    return this.registryProvider();
   }
 
   // --------- resolution helpers ---------

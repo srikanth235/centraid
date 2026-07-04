@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { tmpdir } from 'node:os';
 import { mkdtempSync } from 'node:fs';
 import path from 'node:path';
-import { makeRuntimeDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
+import { makeTranscriptsDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from './store.js';
 
 function newProvider(): DatabaseProvider {
   const dir = mkdtempSync(path.join(tmpdir(), 'centraid-conv-store-'));
-  return makeRuntimeDbProvider(path.join(dir, 'runtime.sqlite'));
+  return makeTranscriptsDbProvider(path.join(dir, 'transcripts.db'));
 }
 
 function newStore(): ConversationStore {

@@ -1,16 +1,18 @@
 /*
  * Centraid conversation-history facade — the conversation-container API +
- * transcript fold, over the per-app `ConversationStore` (issue #98, reshaped
- * by #190). This is the read/write API the interactive chat surface uses; the
- * store is conversation-first (it spans `kind='chat'` and `'build'`), while the
- * HTTP route it's exposed over stays the `/_centraid-conversations` wire surface.
+ * transcript fold, over the per-vault `ConversationStore` (issue #98, reshaped
+ * by #190, vault-scoped by #280). This is the read/write API the interactive
+ * chat surface uses; the store is conversation-first (it spans `kind='chat'`
+ * and `'build'`), while the HTTP route it's exposed over stays the
+ * `/_centraid-conversations` wire surface.
  *
- * A chat session IS a `conversations` row (`kind='chat'` | `'build'`). Chat is
- * app-scoped: conversations + their turns/items/attachments live in the owning
- * app's per-app `runtime.sqlite`. One `ConversationHistoryStore` fronts every
- * app; each method takes the `appId` and resolves `<appsDir>/<appId>/runtime.sqlite`
- * lazily, caching one `ConversationStore` per app. Conversations are scoped by
- * the gateway-side user UUID (`UserStore.getUserId`).
+ * A chat session IS a `conversations` row (`kind='chat'` | `'build'`).
+ * Conversations + their turns/items/attachments live in the ACTIVE vault's
+ * `transcripts.db` — a conversation binds to its vault at creation, so
+ * switching vaults switches the visible history, and a mid-thread switch
+ * fails closed (the thread's row isn't in the new vault's file). App scoping
+ * is the `app_id` column. Conversations are stamped with the vault owner's
+ * party id — the vault owner IS the user (#280).
  *
  * The transcript is NOT its own table. A chat turn is a `turns` row; the
  * turn's inbound message is its ordinal-0 `message_in` item, and the
@@ -19,9 +21,8 @@
  * transcript uniformly from items. Exposed over HTTP at `/_centraid-conversations`.
  */
 
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { makeRuntimeDbProvider } from '../stores/gateway-db.js';
+import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
 import type { RunKind } from './schema.js';
 import type { RunSummarySink } from './run-summary-sink.js';
@@ -118,50 +119,51 @@ export interface RecordTurnInput {
   nodes: TurnNode[];
 }
 
-/** Provides the gateway-side single user UUID. Wired to `UserStore.getUserId`. */
-export type UserIdProvider = () => string;
-
-/** Per-app lazily-opened conversation store — one entry per app touched. */
-interface AppConversation {
-  store: ConversationStore;
-}
-
 export class ConversationHistoryStore {
-  private readonly appsDir: string;
-  private readonly userIdProvider: UserIdProvider;
-  private readonly analytics: RunSummarySink | undefined;
-  /** Per-app blob CAS for attachment bytes — shares `appsDir` (issue #190). */
+  private readonly workspace: WorkspaceProvider;
+  /**
+   * ONE ledger store over "the ACTIVE vault's transcripts.db" — the provider
+   * resolves the workspace per call and the store re-prepares on handle
+   * change, so a vault switch needs no reconstruction here.
+   */
+  private readonly store: ConversationStore;
+  /** Blob CAS for attachment bytes — rooted at the active workspace (#190/#280). */
   private readonly blobs: BlobStore;
-  private readonly perApp = new Map<string, AppConversation>();
 
   /**
-   * `analytics`, when set, threads into each app's `ConversationStore` so a
-   * chat turn's `finishTurn` write-throughs a summary.
+   * `analytics`, when set, threads into the `ConversationStore` so a chat
+   * turn's `finishTurn` write-throughs a `run_summary` row (same file).
    */
-  constructor(appsDir: string, userIdProvider: UserIdProvider, analytics?: RunSummarySink) {
-    this.appsDir = appsDir;
-    this.userIdProvider = userIdProvider;
-    this.analytics = analytics;
-    this.blobs = new BlobStore(appsDir);
+  constructor(workspace: WorkspaceProvider, analytics?: RunSummarySink) {
+    this.workspace = workspace;
+    this.store = new ConversationStore(() => workspace().transcripts(), analytics);
+    this.blobs = new BlobStore(() => workspace().appsDir);
   }
 
-  private appConversation(appId: string): AppConversation {
-    const cached = this.perApp.get(appId);
-    if (cached) return cached;
+  private appConversation(appId: string): { store: ConversationStore } {
     if (!isValidAppId(appId)) throw new Error(`conversation-history: invalid app id "${appId}"`);
-    const provider = makeRuntimeDbProvider(path.join(this.appsDir, appId, 'runtime.sqlite'));
-    const entry: AppConversation = { store: new ConversationStore(provider, this.analytics) };
-    this.perApp.set(appId, entry);
-    return entry;
+    return { store: this.store };
   }
 
+  /** The vault owner's party id — the one user identity that exists (#280). */
   private currentUserId(): string {
-    return this.userIdProvider();
+    return this.workspace().ownerPartyId;
+  }
+
+  /**
+   * Resolve a conversation ONLY when `appId` owns it. The ledger file is
+   * per-vault now (#280), so the per-app isolation the file boundary used
+   * to give is enforced here: a cross-app id lookup reads as not-found.
+   */
+  private ownedMeta(appId: string, id: string): ConversationMeta | undefined {
+    const meta = this.store.getConversationMeta(id, this.currentUserId());
+    if (!meta || meta.appId !== appId) return undefined;
+    return meta;
   }
 
   listSessions(appId: string): ConversationSummary[] {
     const { store } = this.appConversation(appId);
-    return store.listConversationsMeta(this.currentUserId()).map(toMeta);
+    return store.listConversationsMeta(this.currentUserId(), appId).map(toMeta);
   }
 
   /** Create a fresh chat session in `appId`. */
@@ -187,7 +189,7 @@ export class ConversationHistoryStore {
     id: string,
   ): (ConversationSummary & { messages: ConversationMessageRow[] }) | undefined {
     const { store } = this.appConversation(appId);
-    const meta = store.getConversationMeta(id, this.currentUserId());
+    const meta = this.ownedMeta(appId, id);
     if (!meta) return undefined;
 
     const messages: ConversationMessageRow[] = [];
@@ -263,13 +265,13 @@ export class ConversationHistoryStore {
   }
 
   getSessionMeta(appId: string, id: string): ConversationSummary | undefined {
-    const { store } = this.appConversation(appId);
-    const meta = store.getConversationMeta(id, this.currentUserId());
+    const meta = this.ownedMeta(appId, id);
     return meta ? toMeta(meta) : undefined;
   }
 
   renameSession(appId: string, id: string, title: string): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return undefined;
     if (!store.renameConversation(id, this.currentUserId(), title)) return undefined;
     return this.getSessionMeta(appId, id);
   }
@@ -278,6 +280,7 @@ export class ConversationHistoryStore {
     // Real FK CASCADE drops the conversation's turns, items, and attachment
     // rows; a follow-up blob GC reclaims now-unreferenced bytes (issue #190).
     const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, id)) return false;
     const ok = store.deleteConversation(id, this.currentUserId());
     if (ok) void this.blobs.gc(appId, store.referencedHashes()).catch(() => undefined);
     return ok;
@@ -285,13 +288,16 @@ export class ConversationHistoryStore {
 
   /**
    * Persist one completed chat turn: a `turns` row, its ordinal-0 `message_in`
-   * item (plus any attachments), and the assistant/tool `items`, in `appId`'s
-   * `runtime.sqlite`. Returns `undefined` when the conversation doesn't exist
-   * or is owned by another user. The first turn names the conversation.
+   * item (plus any attachments), and the assistant/tool `items`, in the active
+   * vault's `transcripts.db`. Returns `undefined` when the conversation doesn't
+   * exist there — including the mid-turn vault-switch case, which thereby fails
+   * closed (#280) — or is owned by another user. The first turn names the
+   * conversation.
    */
   recordTurn(appId: string, input: RecordTurnInput): { turnId: string } | undefined {
     const { store } = this.appConversation(appId);
     const userId = this.currentUserId();
+    if (!this.ownedMeta(appId, input.conversationId)) return undefined;
     const existingTitle = store.titleOf(input.conversationId, userId);
     if (existingTitle === undefined) return undefined;
 
@@ -350,6 +356,7 @@ export class ConversationHistoryStore {
     adapter?: { kind: string; sessionId?: string },
   ): ConversationSummary | undefined {
     const { store } = this.appConversation(appId);
+    if (!this.ownedMeta(appId, sessionId)) return undefined;
     if (!store.noteTurn(sessionId, this.currentUserId(), adapter)) return undefined;
     return this.getSessionMeta(appId, sessionId);
   }

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { AddressInfo } from 'node:net';
 import { timingSafeEqual } from './security.js';
 import { makeConversationRouteHandler } from './conversation-routes.js';
-import { makeUserStoreRouteHandler } from '../stores/user-store.js';
+import { makeUserStoreRouteHandler } from '../stores/prefs-store.js';
 import type { Runtime } from '../runtime.js';
 
 export interface RuntimeHttpServerOptions {
@@ -24,6 +24,11 @@ export interface RuntimeHttpServerOptions {
    * mount their own equivalent route, e.g. the openclaw plugin).
    */
   exposeUserStoreRoute?: boolean;
+  /**
+   * Backs `GET /_centraid-user/id` with the ACTIVE vault's owner party id —
+   * the one user identity that exists (#280). Without it the sub-route 404s.
+   */
+  ownerIdProvider?: () => string;
   /**
    * Whether to mount `/_centraid-conversations/*` against `runtime.conversationHistoryStore`.
    * Defaults to true when `runtime.conversationHistoryStore` is set; same opt-out
@@ -103,7 +108,7 @@ export async function startRuntimeHttpServer(
   const userStore = opts.runtime.userStore;
   const exposeUserStore = opts.exposeUserStoreRoute !== false && userStore !== undefined;
   const userStoreHandler = exposeUserStore
-    ? makeUserStoreRouteHandler(() => userStore!)
+    ? makeUserStoreRouteHandler(() => userStore!, opts.ownerIdProvider)
     : undefined;
 
   const conversationHistoryStore = opts.runtime.conversationHistoryStore;

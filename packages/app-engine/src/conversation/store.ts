@@ -2,11 +2,14 @@
 // ConversationStore class; its SQL + row mappers are already split into
 // store-sql.ts and the row types into schema.ts.
 /*
- * ConversationStore — the per-app conversation ledger + automation KV
- * (issue #90, reshaped by #190).
+ * ConversationStore — the per-vault conversation ledger + automation KV
+ * (issue #90, reshaped by #190; moved from per-app `runtime.sqlite` into
+ * the vault's `transcripts.db` by #280 — a conversation binds to its vault
+ * at creation, and app scoping is the `app_id` column, not a file).
  *
- * Five tables — `conversations`, `turns`, `items`, `attachments`,
- * `automation_state` — the `RUNTIME_MIGRATIONS` shape in `gateway-db.ts`.
+ * Five ledger tables — `conversations`, `turns`, `items`, `attachments`,
+ * `automation_state` — the `TRANSCRIPTS_MIGRATIONS` shape in `gateway-db.ts`
+ * (which also carries the `run_summary` rollup `AnalyticsStore` owns).
  *
  *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
@@ -24,11 +27,13 @@
  *                      webhook/email file), CASCADE off `items`.
  *   automation_state — per-(automation_id, key) KV.
  *
- * Constructed over one app's `runtime.sqlite` `DatabaseProvider`. Runtime-
- * owned: never reachable from the handler `db` proxy or the `centraid_sql_*`
- * agent tools. When a `RunSummarySink` is supplied, `finishTurn` write-throughs
- * a one-row summary (sourcing `kind`/`app_id`/`automation_ref` from the
- * owning conversation) to the central analytics DB.
+ * Constructed over a vault's `transcripts.db` `DatabaseProvider` (which may
+ * resolve "the ACTIVE vault" — the store re-prepares when the handle
+ * changes). Runtime-owned: never reachable from the handler `db` proxy or
+ * the `centraid_sql_*` agent tools. When a `RunSummarySink` is supplied,
+ * `finishTurn` write-throughs a one-row summary (sourcing `kind`/`app_id`/
+ * `automation_ref` from the owning conversation) to the `run_summary`
+ * table in the same file.
  *
  * Row types live in `schema.ts`; the prepared-statement block +
  * raw-row mappers live in `store-sql.ts`.
@@ -192,8 +197,11 @@ export class ConversationStore {
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
-    if (this.db && this.stmts) return { db: this.db, stmts: this.stmts };
+    // The provider may resolve a different handle across calls (the gateway
+    // wires "the ACTIVE vault's transcripts.db") — re-prepare on change so a
+    // vault switch lands without reconstructing the store.
     const db = this.provider();
+    if (this.db === db && this.stmts) return { db, stmts: this.stmts };
     const stmts = prepare(db);
     this.db = db;
     this.stmts = stmts;
@@ -280,9 +288,18 @@ export class ConversationStore {
     return { ...conversationFromRaw(raw), messageCount: Number(raw.msg_count) };
   }
 
-  listConversationsMeta(userId: string): ConversationMeta[] {
+  /**
+   * Chat/build threads for a user, newest-first. `appId` scopes to one app —
+   * the ledger file is per VAULT (#280), so app scoping is a column filter
+   * now, not a file boundary.
+   */
+  listConversationsMeta(userId: string, appId?: string): ConversationMeta[] {
     const { stmts } = this.ensureReady();
-    const rows = stmts.listConversations.all(userId) as unknown as (RawConversation & {
+    const rows = stmts.listConversations.all(
+      userId,
+      appId ?? null,
+      appId ?? null,
+    ) as unknown as (RawConversation & {
       msg_count: number;
     })[];
     return rows.map((r) => ({ ...conversationFromRaw(r), messageCount: Number(r.msg_count) }));
@@ -598,10 +615,11 @@ export class ConversationStore {
   }
 
   /**
-   * Write-through this turn's one-row summary to the central analytics DB,
-   * sourcing `kind` / `app_id` / `automation_ref` from the owning conversation
-   * (issue #190). Best-effort — an analytics-DB failure is swallowed so it
-   * never fails the turn; this per-app ledger stays authoritative.
+   * Write-through this turn's one-row summary to the `run_summary` rollup
+   * (same per-vault file, #280), sourcing `kind` / `app_id` /
+   * `automation_ref` from the owning conversation (issue #190). Best-effort
+   * — a rollup failure is swallowed so it never fails the turn; the ledger
+   * tables stay authoritative.
    */
   private writeRunSummary(turnId: string): void {
     if (!this.analytics) return;
