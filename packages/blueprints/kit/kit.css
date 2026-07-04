@@ -836,3 +836,148 @@
     opacity: 0.5;
   }
 }
+
+/* ── Entity picker (issue #272) ─────────────────────────────────────────────
+   The shell-owned "link from your vault" surface. Same overlay language as
+   the Ask panel: hairline borders, soft depth, instrument-grade calm. */
+
+.kit-pick-ov {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--text, #1c1a17) 32%, transparent);
+  backdrop-filter: blur(2px);
+}
+@media (min-width: 720px) {
+  .kit-pick-ov {
+    align-items: center;
+  }
+}
+
+.kit-pick-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(34rem, 100%);
+  max-height: min(80dvh, 34rem);
+  padding: 1rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: var(--kit-radius) var(--kit-radius) 0 0;
+  background: var(--surface, #fff);
+  box-shadow: var(--shadow-md, 0 12px 40px rgba(0, 0, 0, 0.18));
+}
+@media (min-width: 720px) {
+  .kit-pick-panel {
+    border-radius: var(--kit-radius);
+  }
+}
+
+.kit-pick-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.kit-pick-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  flex: 1;
+}
+.kit-pick-x {
+  border: 0;
+  background: none;
+  color: var(--muted, #777);
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+.kit-pick-search {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: calc(var(--kit-radius) * 0.75);
+  background: var(--surface-2, var(--surface, #fff));
+  color: var(--text, #1c1a17);
+  font: inherit;
+}
+.kit-pick-search:focus-visible {
+  outline: 2px solid var(--accent, #4e68dd);
+  outline-offset: 1px;
+}
+
+.kit-pick-list {
+  flex: 1;
+  min-height: 8rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.kit-pick-list[data-state='loading'] {
+  opacity: 0.55;
+}
+
+.kit-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--kit-radius) * 0.75);
+  background: none;
+  color: var(--text, #1c1a17);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms var(--kit-ease);
+}
+.kit-pick-row:hover,
+.kit-pick-row:focus-visible {
+  background: var(--accent-soft, rgba(0, 0, 0, 0.05));
+}
+
+.kit-pick-kind {
+  flex: none;
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 999px;
+  font-family: var(--kit-mono, ui-monospace, monospace);
+  font-size: 0.68rem;
+  color: var(--muted, #777);
+  text-transform: lowercase;
+}
+
+.kit-pick-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.kit-pick-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-pick-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--muted, #777);
+}
+
+.kit-pick-empty,
+.kit-pick-note {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted, #777);
+}
+.kit-pick-empty {
+  padding: 1.25rem 0.25rem;
+  text-align: center;
+}

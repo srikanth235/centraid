@@ -879,6 +879,72 @@ input.chip-rename-input {
   align-items: center;
 }
 
+/* ---------- Cross-references (issue #272) -------------------------------- */
+
+.ref-block {
+  margin-top: 0.75rem;
+}
+.ref-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.ref-strip:empty {
+  display: none;
+}
+.ref-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.3rem 0.35rem 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.8rem;
+}
+.ref-kind {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: lowercase;
+}
+.ref-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ref-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.ref-gone .ref-title {
+  color: var(--muted);
+  font-style: italic;
+}
+.ref-remove {
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ref-remove:hover {
+  background: var(--line);
+}
+
 .lightbox {
   position: fixed;
   inset: 0;

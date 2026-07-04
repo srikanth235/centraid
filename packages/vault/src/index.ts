@@ -49,6 +49,13 @@ export {
   type SweepResult,
 } from './gateway/duties.js';
 export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
+export {
+  CARDED_ENTITIES,
+  CARD_PK,
+  type RefRequest,
+  type RefCard,
+  type ResolveResult,
+} from './gateway/cards.js';
 
 export {
   bootstrapVault,
@@ -90,6 +97,7 @@ export { registerHealthCommands } from './commands/health.js';
 export { registerKnowledgeCommands } from './commands/knowledge.js';
 export { registerBusinessCommands } from './commands/business.js';
 export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
+export { registerLinkCommands, RELATIONS_SCHEME_URI } from './commands/links.js';
 export { registerBookingCommands } from './commands/bookings.js';
 export { registerSubscriptionCommands } from './commands/subscriptions.js';
 export { registerPartyCommands } from './commands/parties.js';

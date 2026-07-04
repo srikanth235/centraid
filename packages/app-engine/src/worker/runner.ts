@@ -42,7 +42,7 @@ interface DbReplyMessage {
 interface VaultCallMessage {
   type: 'vault';
   id: number;
-  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve';
   payload: unknown;
 }
 
@@ -159,6 +159,15 @@ const vault = {
    */
   parked(): Promise<unknown> {
     return vaultCall('parked', {});
+  },
+  /**
+   * The card resolver (issue #272): `{refs: [{type, id}], purpose}` →
+   * `{cards, receiptId}` — minimal renderable cards for cross-domain
+   * references, resolvable when a live core.link connects them to something
+   * this caller reads. Denials arrive as per-ref `status: 'denied'` cards.
+   */
+  resolve(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('resolve', request);
   },
 };
 

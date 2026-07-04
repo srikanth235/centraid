@@ -8,7 +8,17 @@
 // consent-checked per command and receipted. Revoke the grant and this
 // page goes dark while the model, history and receipts remain the owner's.
 
-import { armConfirm, readFailed, relTime, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  createReference,
+  entityKindLabel,
+  openEntityPicker,
+  readFailed,
+  relTime,
+  removeReference,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -160,6 +170,75 @@ function wireAttachInput(inputEl, getSubjectId) {
     inputEl.value = '';
     await refresh();
   });
+}
+
+// ---------- Cross-references (issue #272) ----------
+// A note can point at ANY vault entity — a photo, a person, a booking —
+// without this app holding read scopes on those domains. The link is picked
+// and asserted through the shell (pick-is-consent); the library query
+// renders the far end via the resolver's cards.
+
+function renderReferences(stripEl, list) {
+  stripEl.innerHTML = '';
+  for (const ref of list ?? []) {
+    const card = ref.card ?? {};
+    const tile = document.createElement('div');
+    tile.className = 'ref-tile';
+    const kind = document.createElement('span');
+    kind.className = 'ref-kind';
+    kind.textContent = entityKindLabel(card.type);
+    tile.appendChild(kind);
+    const label = document.createElement('span');
+    label.className = 'ref-title';
+    if (card.status === 'missing') {
+      tile.classList.add('ref-gone');
+      label.textContent = 'removed from the vault';
+    } else {
+      label.textContent = card.title ?? `${entityKindLabel(card.type)}`;
+      if (card.status === 'trashed') {
+        tile.classList.add('ref-gone');
+        label.textContent += ' (in trash)';
+      }
+    }
+    tile.appendChild(label);
+    if (card.subtitle && card.status === 'live') {
+      const sub = document.createElement('span');
+      sub.className = 'ref-sub';
+      sub.textContent = card.subtitle;
+      tile.appendChild(sub);
+    }
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.className = 'ref-remove';
+    rm.textContent = '×';
+    rm.title = 'Remove reference';
+    rm.addEventListener('click', async () => {
+      const outcome = await removeReference(ref.link_id);
+      if (outcome?.status !== 'executed') {
+        notice(`Could not remove the reference: ${outcome?.reason ?? 'unknown error'}.`);
+      }
+      await refresh();
+    });
+    tile.appendChild(rm);
+    stripEl.appendChild(tile);
+  }
+}
+
+async function addReference() {
+  const noteId = viewingId;
+  if (!noteId) return;
+  const picked = await openEntityPicker({
+    title: 'Link this note to…',
+    exclude: { type: 'knowledge.note', id: noteId },
+  });
+  if (!picked) return;
+  const outcome = await createReference({ type: 'knowledge.note', id: noteId }, picked);
+  if (outcome?.status === 'executed') {
+    toast(`Linked to ${picked.title ?? entityKindLabel(picked.type)}.`);
+  } else {
+    notice(`The vault refused the link: ${outcome?.reason ?? outcome?.predicate ?? ''}.`);
+  }
+  await refresh();
 }
 
 // ---------- Lightbox ----------
@@ -756,6 +835,7 @@ function renderNoteView(note) {
   renderNoteBody(note);
   renderMoveSelect(note);
   renderAttachments($('attachStrip'), note.attachments, removeAttachment);
+  renderReferences($('refStrip'), note.references);
 }
 
 function renderNoteBody(note) {
@@ -1096,6 +1176,8 @@ async function removeAttachment(attachmentId) {
 }
 
 wireAttachInput($('attachInput'), () => viewingId);
+
+$('addRefButton').addEventListener('click', addReference);
 
 $('pinButton').addEventListener('click', async () => {
   const note = currentNote();

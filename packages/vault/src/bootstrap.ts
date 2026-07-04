@@ -42,6 +42,10 @@ const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: 'relations', notation: 'about', label: 'About' },
   { scheme: 'relations', notation: 'works-for', label: 'Works for' },
   { scheme: 'relations', notation: 'duplicate-of', label: 'Duplicate of' },
+  // Cross-referencing relations (issue #272) — also seeded into existing
+  // vaults by the v3 migration, which must stay in step with these two.
+  { scheme: 'relations', notation: 'references', label: 'References' },
+  { scheme: 'relations', notation: 'attachment-of', label: 'Attachment of' },
   { scheme: 'activity-kinds', notation: 'meeting', label: 'Meeting' },
   { scheme: 'activity-kinds', notation: 'run', label: 'Run' },
   { scheme: 'activity-kinds', notation: 'sleep', label: 'Sleep' },

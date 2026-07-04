@@ -53,6 +53,49 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
   return rows.find((r) => r.pk === 1)?.name ?? 'rowid';
 }
 
+/**
+ * §10 S4 + issue #272: hard-deleting an entity end-dates every live link
+ * touching it, in exactly one place — no delete command carries its own
+ * sweep, and no projection ever sees a live link to a vanished row. Soft
+ * deletes keep their links (the row remains; the card resolver reports it
+ * as trashed). Swept link ids are appended to `writes` so S5 stamps
+ * provenance for them like any other write. History is never rewritten:
+ * the link row survives with `valid_to` set (rule R3).
+ */
+export function sweepDanglingLinks(
+  vault: DatabaseSync,
+  writes: { entityType: string; entityId: string }[],
+  now: string,
+): void {
+  // Index over the handler's own writes only — the loop appends the swept
+  // link ids to the same array, and those must not be re-scanned.
+  const handlerWrites = writes.length;
+  for (let i = 0; i < handlerWrites; i += 1) {
+    const write = writes[i];
+    if (!write || write.entityType === 'core.link') continue;
+    const ref = resolveEntity(write.entityType);
+    if (!ref || ref.file !== 'vault') continue;
+    const pk = pkColumn(vault, ref.physical);
+    const live = vault
+      .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
+      .get(write.entityId);
+    if (live) continue;
+    const dangling = vault
+      .prepare(
+        `SELECT link_id FROM core_link
+          WHERE valid_to IS NULL
+            AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
+      )
+      .all(write.entityType, write.entityId, write.entityType, write.entityId) as {
+      link_id: string;
+    }[];
+    for (const row of dangling) {
+      vault.prepare('UPDATE core_link SET valid_to = ? WHERE link_id = ?').run(now, row.link_id);
+      writes.push({ entityType: 'core.link', entityId: row.link_id });
+    }
+  }
+}
+
 /** Validate every polymorphic row this invocation wrote. Throws to roll back. */
 export function validatePolymorphicWrites(
   vault: DatabaseSync,
@@ -210,6 +253,7 @@ export function runContractAndExecute(
     db: db.vault,
     identity,
     input: request.input,
+    purpose: request.purpose,
     now: nowIso(),
     newId: uuidv7,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
@@ -221,6 +265,10 @@ export function runContractAndExecute(
     output = handler(ctx);
     // §10 S4: polymorphic refs validated before the transaction may commit.
     validatePolymorphicWrites(db.vault, writes);
+    // Then the temporal lifecycle duty: rows this command hard-deleted
+    // end-date their inbound/outbound links (after validation — a swept
+    // link points at the deleted row by design).
+    sweepDanglingLinks(db.vault, writes, ctx.now);
     const postSpecs = JSON.parse(command.postconditions_json) as ConditionSpec[];
     const postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
     const failedPost = postResults.find((r) => !r.passed);

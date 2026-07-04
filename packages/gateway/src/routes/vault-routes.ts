@@ -17,6 +17,9 @@
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
+ *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
+ *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent)
+ *   DELETE /centraid/_vault/links/<linkId>             — end a link (temporal, never deletes)
  *
  * Per-vault routes (everything below `vaults`) answer for the ACTIVE vault
  * unless `?vault=<vaultId>` names another one. Deny-by-default is structural:
@@ -128,6 +131,55 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
 
       if (method === 'GET' && segments[0] === 'parked' && segments.length === 1) {
         return sendJson(res, 200, { parked: plane.listParked() });
+      }
+
+      // The cross-referencing shell surface (issue #272): the picker is an
+      // owner-trust search/browse, and link writes ride the owner-device
+      // credential — the pick itself is the consent, scoped to one row.
+      if (method === 'GET' && segments[0] === 'picker' && segments.length === 1) {
+        const term = url.searchParams.get('term') ?? undefined;
+        const kindsParam = url.searchParams.get('kinds');
+        const kinds = kindsParam
+          ? kindsParam
+              .split(',')
+              .map((k) => k.trim())
+              .filter(Boolean)
+          : undefined;
+        const limitParam = Number(url.searchParams.get('limit'));
+        return sendJson(
+          res,
+          200,
+          plane.pickEntities({
+            ...(term !== undefined ? { term } : {}),
+            ...(kinds ? { kinds } : {}),
+            ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
+          }),
+        );
+      }
+
+      if (method === 'POST' && segments[0] === 'links' && segments.length === 1) {
+        const body = await readJson(req);
+        const fields = ['from_type', 'from_id', 'to_type', 'to_id'] as const;
+        if (fields.some((f) => typeof body[f] !== 'string' || body[f] === '')) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'link body needs {from_type, from_id, to_type, to_id, relation?}',
+          });
+        }
+        const outcome = plane.linkAsOwner({
+          from_type: body.from_type as string,
+          from_id: body.from_id as string,
+          to_type: body.to_type as string,
+          to_id: body.to_id as string,
+          ...(typeof body.relation === 'string' && body.relation !== ''
+            ? { relation: body.relation }
+            : {}),
+        });
+        return sendJson(res, 200, outcome);
+      }
+
+      if (method === 'DELETE' && segments[0] === 'links' && segments.length === 2) {
+        return sendJson(res, 200, plane.unlinkAsOwner(segments[1] ?? ''));
       }
 
       if (method === 'POST' && segments[0] === 'parked' && segments.length === 2) {

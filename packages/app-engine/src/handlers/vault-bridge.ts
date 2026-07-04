@@ -18,9 +18,18 @@
  * Operations `ctx.vault` exposes to handlers. `parked` (the caller's
  * invocations awaiting owner confirmation) and `changes` (the consented
  * journal feed) are agent-plane ops — automation bridges implement them;
- * app bridges may reject them.
+ * app bridges may reject them. `resolve` (issue #272) turns (type, id)
+ * references into renderable cards under the resolvable-if-linked rule.
  */
-export type VaultOp = 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+export type VaultOp =
+  | 'read'
+  | 'search'
+  | 'invoke'
+  | 'query'
+  | 'describe'
+  | 'parked'
+  | 'changes'
+  | 'resolve';
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

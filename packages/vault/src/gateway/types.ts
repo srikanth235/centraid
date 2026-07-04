@@ -211,6 +211,10 @@ export interface HandlerCtx {
   db: DatabaseSync;
   identity: Identity;
   input: Record<string, unknown>;
+  /** Declared DPV purpose of the invocation — for handlers that must make
+   * further consent checks (e.g. core.link_entities requires read of both
+   * endpoints under the same purpose the act rode in on). */
+  purpose: string;
   now: string;
   newId(): string;
   /** Record a write so the gateway stamps consent.provenance for it. */

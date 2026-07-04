@@ -105,8 +105,9 @@ export default async ({ input, ctx }) => {
     const noteIds = windowed.map((n) => n.note_id);
 
     // Joins are `in`-bounded by the window — placements, attachment edges,
-    // then one content pull covering both bodies and attachment bytes.
-    const [placements, attachments] = await Promise.all([
+    // live outbound links (issue #272), then one content pull covering both
+    // bodies and attachment bytes.
+    const [placements, attachments, links] = await Promise.all([
       ctx.vault.read({
         entity: 'knowledge.note_placement',
         where: [{ column: 'note_id', op: 'in', value: noteIds }],
@@ -120,7 +121,46 @@ export default async ({ input, ctx }) => {
         ],
         purpose,
       }),
+      ctx.vault.read({
+        entity: 'core.link',
+        where: [
+          { column: 'from_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'from_id', op: 'in', value: noteIds },
+          { column: 'valid_to', op: 'is-null' },
+        ],
+        purpose,
+      }),
     ]);
+
+    // Cross-domain reference cards: the resolver renders what the owner
+    // linked in (resolvable-if-linked) — this app holds no media/finance/…
+    // read scopes, and needs none to show the far end of its own links.
+    const linkRows = links.rows ?? [];
+    const uniqueRefs = [
+      ...new Map(
+        linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
+      ).values(),
+    ];
+    const resolved =
+      uniqueRefs.length > 0
+        ? await ctx.vault.resolve({ refs: uniqueRefs, purpose })
+        : { cards: [] };
+    const cardByRef = new Map((resolved.cards ?? []).map((c) => [`${c.type}/${c.id}`, c]));
+    const referencesByNote = new Map();
+    for (const l of linkRows) {
+      if (!referencesByNote.has(l.from_id)) referencesByNote.set(l.from_id, []);
+      referencesByNote.get(l.from_id).push({
+        link_id: l.link_id,
+        card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
+          type: l.to_type,
+          id: l.to_id,
+          status: 'unknown',
+          title: null,
+          subtitle: null,
+          thumbnail_content_id: null,
+        },
+      });
+    }
     const contentIds = [
       ...new Set([
         ...windowed.map((n) => n.body_content_id),
@@ -158,6 +198,7 @@ export default async ({ input, ctx }) => {
           notebook_ids: notebookIds,
           notebook_names: notebookIds.map((id) => nameByNotebook.get(id) ?? 'Notebook'),
           attachments: attByNote.get(n.note_id) ?? [],
+          references: referencesByNote.get(n.note_id) ?? [],
         };
       })
       .toSorted(

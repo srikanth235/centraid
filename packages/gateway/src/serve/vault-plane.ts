@@ -44,6 +44,7 @@ import {
   registerHealthCommands,
   registerHomeCommands,
   registerKnowledgeCommands,
+  registerLinkCommands,
   registerMediaCommands,
   registerPartyCommands,
   registerScheduleCommands,
@@ -61,6 +62,7 @@ import {
   type InvokeRequest,
   type ParkedSummary,
   type ReadRequest,
+  type RefRequest,
   type RevocationResult,
   type ScopeSpec,
   type SearchRequest,
@@ -68,6 +70,14 @@ import {
   type VaultDb,
 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultCallResult } from '@centraid/app-engine';
+import {
+  linkAsOwner,
+  pickEntities,
+  unlinkAsOwner,
+  type LinkInput,
+  type PickerHit,
+  type PickerRequest,
+} from './vault-picker.js';
 
 export interface VaultPlaneOptions {
   /** Directory holding `vault.db` + `journal.db`. Created if absent. */
@@ -142,6 +152,7 @@ export class VaultPlane {
     registerKnowledgeCommands(this.gateway);
     registerBusinessCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
+    registerLinkCommands(this.gateway);
     registerBookingCommands(this.gateway);
     registerSubscriptionCommands(this.gateway);
     registerPartyCommands(this.gateway);
@@ -292,6 +303,30 @@ export class VaultPlane {
     return this.gateway.listParked();
   }
 
+  /**
+   * The shell entity picker (issue #272): an OWNER-trust search/browse over
+   * the carded entities (implemented in vault-picker.ts), so an app can let
+   * the user reference a foreign entity without ever holding browse scopes on
+   * that domain — the act of picking is the consent.
+   */
+  pickEntities(request: PickerRequest): { cards: PickerHit[] } {
+    return pickEntities(this.gateway, this.ownerCredential, this.logger, request);
+  }
+
+  /**
+   * Assert (or end) a link as the owner — the write half of the picker flow
+   * (both in vault-picker.ts). The pick already carried the owner's intent,
+   * so the shell invokes the link commands with the owner-device credential;
+   * the app never needs read scopes on the far domain.
+   */
+  linkAsOwner(input: LinkInput): InvokeOutcome {
+    return linkAsOwner(this.gateway, this.ownerCredential, input);
+  }
+
+  unlinkAsOwner(linkId: string): InvokeOutcome {
+    return unlinkAsOwner(this.gateway, this.ownerCredential, linkId);
+  }
+
   confirmParked(invocationId: string, approve: boolean): InvokeOutcome {
     return this.gateway.confirm(this.ownerCredential, invocationId, approve);
   }
@@ -339,6 +374,10 @@ export class VaultPlane {
             return this.gateway
               .listParked()
               .filter((p) => p.callerKind === 'app' && p.caller === appId);
+          case 'resolve':
+            // Cross-domain reference cards (issue #272) — resolvable when a
+            // live core.link ties the ref to something this app reads.
+            return this.gateway.resolveRefs(cred, call.payload as unknown as RefRequest);
           case 'changes':
             throw new GatewayError(
               'consent',
@@ -391,6 +430,8 @@ export class VaultPlane {
             return this.gateway
               .listParked()
               .filter((p) => p.callerKind === 'agent' && p.caller === appId);
+          case 'resolve':
+            return this.gateway.resolveRefs(cred, call.payload as unknown as RefRequest);
           case 'changes':
             // The consented provenance feed data triggers ride; also callable
             // from handlers that want to catch up since a stored cursor.
