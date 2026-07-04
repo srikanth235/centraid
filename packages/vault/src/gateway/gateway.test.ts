@@ -433,6 +433,33 @@ describe('confirmation routing + revocation + sweeps', () => {
     expect(tagGone.n).toBe(0);
   });
 
+  test('sweep purges a lapsed trashed asset on its own clock while its rented bytes live on', () => {
+    // Live content (an avatar also rents it) + an asset whose grace window
+    // has passed: the asset row purges, the bytes stay (issue #274).
+    db.vault
+      .prepare(
+        `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+         VALUES ('c-live', 'image/png', 'data:image/png;base64,xx', 'h2', 2, '2019-12-31T00:00:00Z')`,
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO media_media_asset (asset_id, content_id, kind, deleted_at, purge_at)
+         VALUES ('a-lapsed', 'c-live', 'photo', '2020-01-01T00:00:00Z', '2020-01-31T00:00:00Z')`,
+      )
+      .run();
+    const result = gw.sweep(owner);
+    expect(result.assetsPurged).toBe(1);
+    const assetGone = db.vault
+      .prepare(`SELECT count(*) AS n FROM media_media_asset WHERE asset_id='a-lapsed'`)
+      .get() as { n: number };
+    expect(assetGone.n).toBe(0);
+    const contentStays = db.vault
+      .prepare(`SELECT count(*) AS n FROM core_content_item WHERE content_id='c-live'`)
+      .get() as { n: number };
+    expect(contentStays.n).toBe(1);
+  });
+
   test('readonly device may read but never act', () => {
     const ro = enrollDevice(db, boot.ownerPartyId, 'readonly-tablet', 'readonly');
     const cred: Credential = { kind: 'device', deviceId: ro.deviceId, deviceKey: ro.deviceKey };

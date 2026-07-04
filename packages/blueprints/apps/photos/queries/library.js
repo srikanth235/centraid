@@ -12,8 +12,9 @@
  *
  * Trash is a first-class shelf, not a filter the UI must remember: the
  * `assets` array is live rows only, and trashed assets ride separately in
- * `trash` with days-until-purge derived from the content item's purge_at
- * (absent when the bytes are still rented elsewhere and never soft-deleted).
+ * `trash` with days-until-purge from the asset's own purge_at (issue #274:
+ * the standard soft-delete pair — the shelf empties even when the bytes
+ * stay rented elsewhere).
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
@@ -146,7 +147,9 @@ export default async ({ input, ctx }) => {
     live.sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')));
 
     const trash = (trashedAssets.rows ?? []).map((asset) => {
-      const purgeAt = contentById.get(asset.content_id)?.purge_at ?? null;
+      // The asset carries its own grace window (issue #274); the content
+      // fallback covers vaults trashed before the pair landed.
+      const purgeAt = asset.purge_at ?? contentById.get(asset.content_id)?.purge_at ?? null;
       const ms = purgeAt == null ? NaN : Date.parse(purgeAt) - Date.now();
       return {
         ...join(asset),

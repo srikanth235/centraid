@@ -78,6 +78,7 @@ export interface SweepResult {
   grantsExpired: number;
   sharesExpired: number;
   contentPurged: number;
+  assetsPurged: number;
   retentionDeleted: number;
   receiptId: string;
 }
@@ -191,6 +192,22 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     dropTags.run('core.content_item', row.content_id);
     dropEntries.run('core.content_item', row.content_id);
   }
+  // The standard soft-delete pair on domain rows (issue #274): a trashed
+  // asset whose own grace window lapsed purges even while its bytes stay
+  // rented elsewhere (an attachment, an avatar) — asset meaning and byte
+  // custody have independent lifecycles. Assets already removed alongside
+  // their purged content above are gone and don't reappear here.
+  const lapsedAssets = db.vault
+    .prepare('SELECT asset_id FROM media_media_asset WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .all(now) as { asset_id: string }[];
+  for (const a of lapsedAssets) {
+    writeProvenance(db.journal, owner, 'media.media_asset', a.asset_id, 'sweep.purge');
+    db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(a.asset_id);
+    dropEntries.run('media.media_asset', a.asset_id);
+    db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(a.asset_id);
+    endDateLinks.run(now, 'media.media_asset', a.asset_id, 'media.media_asset', a.asset_id);
+    dropTags.run('media.media_asset', a.asset_id);
+  }
   const retentionDeleted = enforceRetention(db, now);
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
@@ -204,6 +221,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       grantsExpired: Number(grants.changes),
       sharesExpired: Number(shares.changes),
       contentPurged: purgeable.length,
+      assetsPurged: lapsedAssets.length,
       retentionDeleted,
     },
   });
@@ -211,6 +229,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     grantsExpired: Number(grants.changes),
     sharesExpired: Number(shares.changes),
     contentPurged: purgeable.length,
+    assetsPurged: lapsedAssets.length,
     retentionDeleted,
     receiptId,
   };

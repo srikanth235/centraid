@@ -99,7 +99,10 @@ CREATE TABLE media_media_asset (
   height           INTEGER CHECK (height > 0),
   duration_s       REAL CHECK (duration_s >= 0),
   exif_json        TEXT CHECK (exif_json IS NULL OR json_valid(exif_json)),
-  deleted_at       TEXT
+  -- The standard soft-delete pair (issue #274): every owner-deletable row
+  -- carries its own grace window, not just the drive's content items.
+  deleted_at       TEXT,
+  purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
 
 CREATE TABLE media_face_region (

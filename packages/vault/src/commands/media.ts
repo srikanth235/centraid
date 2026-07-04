@@ -210,7 +210,9 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   if (existingAsset) {
     if (existingAsset.deleted_at !== null) {
       ctx.db
-        .prepare('UPDATE media_media_asset SET deleted_at = NULL WHERE asset_id = ?')
+        .prepare(
+          'UPDATE media_media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?',
+        )
         .run(existingAsset.asset_id);
       ctx.wrote('media.media_asset', existingAsset.asset_id);
     }
@@ -357,9 +359,11 @@ const DELETE_ASSET: CommandDefinition = {
   ],
   postconditions: [
     {
+      // The standard soft-delete pair (issue #274): the asset carries its
+      // own grace window even when its bytes stay rented elsewhere.
       name: 'asset_trashed',
       sql: `SELECT count(*) AS n FROM media_media_asset
-             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL`,
+             WHERE asset_id = :asset_id AND deleted_at IS NOT NULL AND purge_at IS NOT NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -401,8 +405,8 @@ function deleteAsset(ctx: HandlerCtx): Record<string, unknown> {
   // same bytes) brings it back with its metadata; the lifecycle sweep purges
   // it alongside its content once the purge date passes.
   ctx.db
-    .prepare('UPDATE media_media_asset SET deleted_at = ? WHERE asset_id = ?')
-    .run(ctx.now, input.asset_id);
+    .prepare('UPDATE media_media_asset SET deleted_at = ?, purge_at = ? WHERE asset_id = ?')
+    .run(ctx.now, purgeAt(ctx.now), input.asset_id);
   ctx.wrote('media.media_asset', input.asset_id);
   const released = releaseContentIfUnreferenced(ctx, asset.content_id);
   ctx.cite({
@@ -443,7 +447,8 @@ const RESTORE_ASSET: CommandDefinition = {
       name: 'asset_live_with_live_content',
       sql: `SELECT count(*) AS n FROM media_media_asset a
              JOIN core_content_item c ON c.content_id = a.content_id
-            WHERE a.asset_id = :asset_id AND a.deleted_at IS NULL AND c.deleted_at IS NULL`,
+            WHERE a.asset_id = :asset_id AND a.deleted_at IS NULL AND a.purge_at IS NULL
+              AND c.deleted_at IS NULL`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -461,7 +466,7 @@ function restoreAsset(ctx: HandlerCtx): Record<string, unknown> {
     .get(input.asset_id) as { content_id: string } | undefined;
   if (!asset) throw new Error('asset vanished between check and execute');
   ctx.db
-    .prepare('UPDATE media_media_asset SET deleted_at = NULL WHERE asset_id = ?')
+    .prepare('UPDATE media_media_asset SET deleted_at = NULL, purge_at = NULL WHERE asset_id = ?')
     .run(input.asset_id);
   ctx.wrote('media.media_asset', input.asset_id);
   // Un-soft-delete the bytes too — same path the re-upload restore takes.

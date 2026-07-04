@@ -793,7 +793,7 @@ cols:[
 ['creator_party_id','TEXT','FK','core.party','schema.org creator as identity.'],
 ['origin_device_id','TEXT','FK','consent.device','Which enrolled device produced the bytes.'],
 ['deleted_at','TEXT (iso8601)','','', 'Soft-delete tombstone; NULL = live. Trash is a state, not a row loss.'],
-['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion (GDPR storage limitation); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
+['purge_at','TEXT (iso8601)','CK','', 'Scheduled permanent deletion (GDPR storage limitation); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL). This deleted_at + purge_at pair is the model-wide soft-delete convention (issue #274): owner-deletable rows adopt it as they are touched — one trash, one ~30-day grace, everywhere.'],
 ['created_at','TEXT (iso8601)','NN','', 'Capture/creation instant.'],
 ]},
 { n:'attachment', std:'Homebox attachments · Joplin note_resources · Firefly-III attachments', p:'Files-on-anything, once: the receipt on a transaction, the manual on an appliance, the photo on a place, the contract on a client — one polymorphic pattern instead of a per-domain junction each time.',
@@ -1386,6 +1386,8 @@ cols:[
 ['height','INTEGER','CK','', 'CHECK(height > 0); pixels.'],
 ['duration_s','REAL','CK','', 'CHECK(duration_s >= 0); AV only.'],
 ['exif_json','TEXT (json1)','CK','', 'Full EXIF/XMP bag; CHECK(json_valid(exif_json)).'],
+['deleted_at','TEXT (iso8601)','','', 'Soft delete — the trash shelf.'],
+['purge_at','TEXT (iso8601)','CK','', 'Own grace window (the standard soft-delete pair); CHECK(purge_at IS NULL OR deleted_at IS NOT NULL).'],
 ]},
 { n:'face_region', std:'IPTC Image Region · MWG Regions', p:'A detected face box, optionally resolved to a party. Agent suggestions stay unconfirmed until the owner confirms — confirmations flow through corrections.',
 cols:[

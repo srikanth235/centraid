@@ -135,11 +135,13 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
     .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
     .get(albumId) as { cover_content_id: string | null };
   expect(album.cover_content_id).toBeNull();
-  // The asset row survives in the trash — restore can bring it back whole.
+  // The asset row survives in the trash with its own grace window (issue
+  // #274) — restore can bring it back whole.
   const asset = db.vault
-    .prepare('SELECT deleted_at FROM media_media_asset WHERE asset_id = ?')
-    .get(asset_id) as { deleted_at: string | null };
+    .prepare('SELECT deleted_at, purge_at FROM media_media_asset WHERE asset_id = ?')
+    .get(asset_id) as { deleted_at: string | null; purge_at: string | null };
   expect(asset.deleted_at).not.toBeNull();
+  expect(asset.purge_at).not.toBeNull();
   const content = db.vault
     .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
     .get(content_id) as { deleted_at: string | null; purge_at: string | null };
