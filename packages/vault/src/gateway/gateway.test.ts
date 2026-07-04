@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one pipeline suite over a single bootstrapped vault fixture — identity/consent/contract/execution/evidence stages are asserted against shared state
 import { beforeEach, describe, expect, test } from 'vitest';
 import { registerScheduleCommands } from '../commands/schedule.js';
 import {

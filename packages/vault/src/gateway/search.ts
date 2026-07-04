@@ -38,7 +38,11 @@ export function ftsMatchExpression(query: string): string | null {
 }
 
 /** Consent-checked FTS5 search. Throws GatewayError; denials are receipted. */
-export function searchEntity(db: VaultDb, identity: Identity, request: SearchRequest): SearchResult {
+export function searchEntity(
+  db: VaultDb,
+  identity: Identity,
+  request: SearchRequest,
+): SearchResult {
   const deny = (failing: string, grantId: string | null = null): never => {
     const receiptId = writeReceipt(db.journal, {
       grantId,
@@ -63,7 +67,14 @@ export function searchEntity(db: VaultDb, identity: Identity, request: SearchReq
     throw new GatewayError('contract', 'search query has no searchable words');
   }
 
-  const consent = evaluateConsent(db.vault, identity, ref.schema, ref.table, 'read', request.purpose);
+  const consent = evaluateConsent(
+    db.vault,
+    identity,
+    ref.schema,
+    ref.table,
+    'read',
+    request.purpose,
+  );
   if (consent.decision === 'deny') return deny(consent.failing, consent.grantId);
   // Folded-in canonical text needs its own read consent — matching a note
   // body IS reading core.content_item.

@@ -300,7 +300,32 @@ the app's existing expo-modules setup):
   binding touchpoints isolated for vendoring).
 - Media-heavy transfer optimization (iroh-blobs) — issue's later item.
 - Pre-existing `oxfmt --check` failures in three `packages/vault` FTS files
-  from #261 (untouched here; flagged for a separate chore).
+  from #261 — initially left untouched, then cleared in the follow-up CI
+  debt commit below at the owner's request.
+
+## Inherited CI debt cleared (follow-up commit, owner request)
+
+Fixes for gate failures that pre-dated this branch, so the branch runs
+`bun run ci` and the governance hook fully green:
+
+- Formatted `packages/vault/src/gateway/search.test.ts`,
+  `packages/vault/src/gateway/search.ts`, and
+  `packages/vault/src/schema/fts.ts` (oxfmt debt from #261).
+- `packages/blueprints/scripts/sync-kit.mjs` — console.log → a stdout
+  helper (script output is the interface).
+- Head-of-file `file-size-limit` waivers on six files that exceeded the
+  500-line cap before this branch:
+  `packages/automation/src/manifest/manifest.ts`,
+  `packages/gateway/src/serve/vault-plane.test.ts`,
+  `packages/vault/src/commands/health.ts`,
+  `packages/vault/src/commands/knowledge.ts`,
+  `packages/vault/src/gateway/gateway.test.ts`,
+  `packages/vault/src/gateway/gateway.ts`.
+- Receipt-gate repairs to two historical receipts:
+  `receipts/issue-256-publish-draft-promotion.md` (wrapped checklist item
+  now cited in What changed) and
+  `receipts/issue-260-blueprint-ux-parity.md` (gained the literal
+  `## What changed` section citing its six commits; wave detail kept).
 
 ## Verification
 
@@ -313,9 +338,10 @@ bun run test                  # all packages green: tunnel 8, blueprints 94, gat
 node packages/tunnel/scripts/spike-pipe.mjs --local   # SPIKE OK
 ```
 
-(`bun run ci`'s format:check stage fails only on the three pre-existing
-`packages/vault` files from #261 named under Out of scope; every file in
-this change is oxfmt-clean.)
+(`bun run ci` initially failed its format:check stage on the three
+pre-existing `packages/vault` files from #261; after the follow-up CI debt
+commit the whole pipeline — format, lint, typecheck, type-aware lint —
+runs green end to end, and `packages/vault` tests still pass 178/178.)
 
 - **Phase 0 spike** validated under Node 22, Bun, and the Electron 37 main
   process (NAPI binding binds, dials, streams): HTML, ES-module
@@ -368,3 +394,6 @@ this change is oxfmt-clean.)
 | claude-code-0084fa83-151-1783117815-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 8 | 2409 | 1456833 | 3450 | 5867 | 1.6595 | 230488 | 2696570 | 73994465 | 464225 | feat(mobile): iroh tunnel bridges the phone to the desktop gateway (#263)Issue:  |
 | claude-code-0084fa83-151-1783117980-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 1012 | 25770 | 8550237 | 15506 | 42288 | 9.6578 | 231500 | 2722340 | 82544702 | 479731 | feat(mobile): iroh tunnel bridges the phone to the desktop gateway (#263)Publish |
 | claude-code-0084fa83-151-1783118003-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 3893 | 1305 | 378832 | 427 | 5625 | 0.4554 | 235393 | 2723645 | 82923534 | 480158 | x (#263) |
+| claude-code-0084fa83-151-1783128683-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 3483 | 2276592 | 19622032 | 41547 | 2321622 | 50.1916 | 238876 | 5000237 | 102545566 | 521705 | chore(repo): clear inherited CI debt so every gate runs green (#263)Pre-existing |
+| claude-code-0084fa83-151-1783128783-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 13138 | 26512 | 4585900 | 9389 | 49039 | 5.5181 | 252014 | 5026749 | 107131466 | 531094 | chore(repo): clear inherited CI debt so every gate runs green (#263)Pre-existing |
+| claude-code-0084fa83-151-1783128830-1 | claude-code | 0084fa83-151d-48fb-b8d4-f22bb604b552 | #263 | claude-fable-5 | 10 | 5737 | 2118785 | 3135 | 8882 | 2.3473 | 252024 | 5032486 | 109250251 | 534229 | chore(repo): clear inherited CI debt so every gate runs green (#263)Pre-existing |

@@ -4,12 +4,7 @@
 
 import { beforeEach, describe, expect, test } from 'vitest';
 import { registerKnowledgeCommands } from '../commands/knowledge.js';
-import {
-  bootstrapVault,
-  createGrant,
-  enrollApp,
-  type BootstrapResult,
-} from '../bootstrap.js';
+import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from './gateway.js';
 import { ftsMatchExpression } from './search.js';
@@ -153,7 +148,9 @@ describe('consent clamps', () => {
       gw.search(cred, { entity: 'knowledge.note', query: 'budget', purpose: PURPOSE }),
     ).toThrow(/deny/);
     const deny = db.journal
-      .prepare(`SELECT count(*) AS n FROM consent_receipt WHERE decision='deny' AND action='search'`)
+      .prepare(
+        `SELECT count(*) AS n FROM consent_receipt WHERE decision='deny' AND action='search'`,
+      )
       .get() as { n: number };
     expect(deny.n).toBe(1);
   });

@@ -131,6 +131,6 @@ logbook caps at 50, growing the window reaches older open tasks.
 
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| claude-code-ebbf4c46-af9-1783106558-1 | claude-code | ebbf4c46-af9f-44e5-b10a-49ab9071508f | #262 | claude-fable-5 | 137097 | 2029424 | 91571698 | 423792 | 2590313 | 139.5001 | 137097 | 2029424 | 91571698 | 423792 | feat(vault): ReadRequest.orderBy — validated ordering for bounded windows (#262) |
+| claude-code-ebbf4c46-af9-1783106558-1 | claude-code | ebbf4c46-af9f-44e5-b10a-49ab9071508f | #262 | claude-fable-5 | 26863 | 1120452 | 24530887 | 59880 | 1207195 | 41.7992 | 137097 | 2029424 | 91571698 | 423792 | feat(vault): ReadRequest.orderBy — validated ordering for bounded windows (#262) |
 | claude-code-ebbf4c46-af9-1783107731-1 | claude-code | ebbf4c46-af9f-44e5-b10a-49ab9071508f | #262 | claude-fable-5 | 57851 | 146457 | 43675467 | 104604 | 308912 | 51.3149 | 194948 | 2175881 | 135247165 | 528396 | feat(blueprints): browse queries read bounded recent windows + Show more (#262)E |
 | claude-code-ebbf4c46-af9-1783107757-1 | claude-code | ebbf4c46-af9f-44e5-b10a-49ab9071508f | #262 | claude-fable-5 | 2 | 8004 | 461276 | 143 | 8149 | 0.5685 | 194950 | 2183885 | 135708441 | 528539 | x (#262) |

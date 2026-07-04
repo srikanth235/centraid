@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the one-door pipeline (§10) — identity → consent → contract → execution → evidence must stay one auditable unit
 // The gateway (§10): one door, every request, no exceptions. Sole holder of
 // connections; every read and typed command walks identity → consent →
 // contract → execution → evidence. It stays a thin, mostly declarative

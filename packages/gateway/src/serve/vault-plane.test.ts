@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one end-to-end suite over a single served gateway+vault fixture — the scenarios intentionally share state to test the plane as one surface
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';

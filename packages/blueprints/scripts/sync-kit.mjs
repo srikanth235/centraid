@@ -9,6 +9,9 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const kitDir = path.join(root, 'kit');
 const appsDir = path.join(root, 'apps');
 
+// Script output is the interface — plain stdout, no logger.
+const log = (line) => process.stdout.write(`${line}\n`);
+
 const files = ['kit.js', 'kit.css'];
 let copied = 0;
 for (const entry of await readdir(appsDir)) {
@@ -18,6 +21,6 @@ for (const entry of await readdir(appsDir)) {
     await copyFile(path.join(kitDir, file), path.join(appDir, file));
     copied += 1;
   }
-  console.log(`synced kit → apps/${entry}`);
+  log(`synced kit → apps/${entry}`);
 }
-console.log(`${copied} files copied`);
+log(`${copied} files copied`);

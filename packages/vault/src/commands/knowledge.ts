@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one file per life domain (§08) — the knowledge commands share the note-over-content-item mechanism and its dedup invariants
 // Knowledge domain commands (§08): notes are references over canonical
 // content — a knowledge_note row points at a core_content_item body, it
 // never stores prose itself. Bodies follow the social.draft_message

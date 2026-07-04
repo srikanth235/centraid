@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit manifest schema + validator are one closed vocabulary — the trigger/step/analytics shapes validate each other, so splitting scatters the invariants
 /**
  * Automation manifest schema + validator.
  *

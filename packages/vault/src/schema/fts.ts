@@ -180,9 +180,11 @@ function entityDdl(spec: FtsEntitySpec): string {
   const ftsColumns = [`${spec.idColumn} UNINDEXED`, ...spec.columns.map((c) => c.name)];
   const insertColumns = ['rowid', spec.idColumn, ...spec.columns.map((c) => c.name)].join(', ');
   const values = (prefix: string) =>
-    [`${prefix}.rowid`, `${prefix}."${spec.idColumn}"`, ...spec.columns.map((c) => valueExpr(c, prefix))].join(
-      ', ',
-    );
+    [
+      `${prefix}.rowid`,
+      `${prefix}."${spec.idColumn}"`,
+      ...spec.columns.map((c) => valueExpr(c, prefix)),
+    ].join(', ');
   // Soft-deleted rows leave the index; INSERT … SELECT … WHERE carries the
   // guard for both the insert and update triggers.
   const liveGuard = (prefix: string) =>
