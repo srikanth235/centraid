@@ -8,11 +8,13 @@
 
 package expo.modules.centraidtunnel
 
-import iroh.Connection
-import iroh.Endpoint
-import iroh.EndpointTicket
-import iroh.RecvStream
-import iroh.SendStream
+import computer.iroh.Connection
+import computer.iroh.Endpoint
+import computer.iroh.EndpointOptions
+import computer.iroh.EndpointTicket
+import computer.iroh.RecvStream
+import computer.iroh.SendStream
+import computer.iroh.presetN0
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONArray
@@ -199,10 +201,9 @@ class TunnelTransport private constructor(
 
 object IrohAdapter {
   suspend fun bindEndpoint(secretKey: ByteArray): Endpoint {
-    val builder = Endpoint.builder()
-    builder.applyN0()
-    builder.secretKey(secretKey)
-    return builder.bind()
+    // iroh-ffi 1.0: no builder — Endpoint.bind(EndpointOptions(...)). The
+    // preset carries the n0 relay/discovery defaults; secretKey is raw bytes.
+    return Endpoint.bind(EndpointOptions(preset = presetN0(), secretKey = secretKey))
   }
 
   suspend fun dial(endpoint: Endpoint, ticket: String, alpn: String): Connection {
@@ -229,10 +230,12 @@ object IrohAdapter {
   suspend fun readExact(recv: RecvStream, count: Int): ByteArray = recv.readExact(count.toUInt())
 
   fun closeConnection(connection: Connection) {
-    connection.close(0uL, byteArrayOf())
+    // Connection.close(errorCode: i64, reason: &[u8]) — errorCode is signed.
+    connection.close(0L, byteArrayOf())
   }
 
   suspend fun closeEndpoint(endpoint: Endpoint) {
-    runCatching { endpoint.close() }
+    // uniffi renames Endpoint.close -> shutdown in Kotlin (AutoCloseable clash).
+    runCatching { endpoint.shutdown() }
   }
 }

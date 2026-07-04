@@ -6,6 +6,8 @@
 package expo.modules.centraidtunnel
 
 import android.util.Base64
+import computer.iroh.IrohAndroid
+import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import expo.modules.kotlin.records.Field
@@ -31,6 +33,15 @@ class CentraidTunnelModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("CentraidTunnel")
     Events("onStatusChange")
+
+    OnCreate {
+      // iroh's Android DNS resolver reads LinkProperties via JNI, so the
+      // process JavaVM + Application context must be installed before any
+      // Endpoint is constructed. Idempotent — subsequent calls are no-ops.
+      appContext.reactContext?.applicationContext?.let {
+        IrohAndroid.installAndroidContext(it)
+      }
+    }
 
     AsyncFunction("generateSecretKey") {
       val bytes = ByteArray(32)
