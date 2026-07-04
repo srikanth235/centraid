@@ -10,6 +10,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
+import { replaceMemo } from './annotations.js';
 import { setStarred, starredExistsSql } from './flags.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
@@ -330,6 +331,9 @@ const UPDATE_CARD: CommandDefinition = {
       // is a core.link (works-for) asserted via core.link_entities — the
       // card never carries the relationship (issue #274).
       org_title: { type: 'string' },
+      // The contract keeps its `note` input; storage is the caller's memo
+      // annotation on the canonical core.party (issue #274) — "everything
+      // I've written about Ravi" is one query. Empty string clears it.
       note: { type: 'string' },
       // The contract keeps its `favorite` input; storage is a starred tag on
       // the canonical core.party (issue #274) — the same star every surface
@@ -355,6 +359,20 @@ const UPDATE_CARD: CommandDefinition = {
     {
       name: 'card_decorates_party',
       sql: 'SELECT count(*) AS n FROM social_contact_card WHERE party_id = :party_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // A non-empty note reads back as an annotation on the party; an empty
+      // one as its absence; an untouched note binds NULL and passes.
+      name: 'note_reflected_as_annotation',
+      sql: `SELECT (CASE WHEN :note IS NULL THEN 1
+                 WHEN :note = '' THEN NOT EXISTS(SELECT 1 FROM knowledge_annotation
+                        WHERE target_type = 'core.party' AND target_id = :party_id)
+                 ELSE EXISTS(SELECT 1 FROM knowledge_annotation
+                        WHERE target_type = 'core.party' AND target_id = :party_id
+                          AND body_text = :note) END) AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -395,26 +413,21 @@ function updateCard(ctx: HandlerCtx): Record<string, unknown> {
         `UPDATE social_contact_card SET
            nickname = COALESCE(?, nickname),
            org_title = COALESCE(?, org_title),
-           note = COALESCE(?, note),
            vcard_rev = ?
          WHERE card_id = ?`,
       )
-      .run(input.nickname ?? null, input.org_title ?? null, input.note ?? null, ctx.now, cardId);
+      .run(input.nickname ?? null, input.org_title ?? null, ctx.now, cardId);
   } else {
     cardId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, note, vcard_rev)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, vcard_rev)
+         VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(
-        cardId,
-        input.party_id,
-        input.nickname ?? null,
-        input.org_title ?? null,
-        input.note ?? null,
-        ctx.now,
-      );
+      .run(cardId, input.party_id, input.nickname ?? null, input.org_title ?? null, ctx.now);
+  }
+  if (input.note !== undefined) {
+    replaceMemo(ctx, 'core.party', input.party_id, input.note);
   }
   if (input.favorite !== undefined) {
     setStarred(ctx, 'core.party', input.party_id, input.favorite === 1);

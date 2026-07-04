@@ -815,7 +815,6 @@ cols:[
 ['ended_at','TEXT (iso8601)','CK','', 'CHECK(ended_at IS NULL OR ended_at >= started_at).'],
 ['location_place_id','TEXT','FK','core.place','Where it happened.'],
 ['source_app_id','TEXT','FK','consent.app','Which grant-holding app recorded it.'],
-['note','TEXT','','', 'Free-text annotation by the owner.'],
 ['created_at','TEXT (iso8601)','NN','', 'Record creation instant.'],
 ]},
 { n:'observation', std:'HL7 FHIR Observation · Open mHealth · UCUM', p:'A measured or asserted data point about a subject at a moment: heart rate, weight, meter reading, mood. One shape for every sensor in a life.',
@@ -1294,13 +1293,12 @@ cols:[
 
 { id:'social', label:'social', desc:'Contact cards, circles, threads, messages. People are core parties; relationships are core links. This schema owns address-book decoration and conversation.',
 tables:[
-{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname, org/title, notes. Starring is a flags-scheme core.tag on the party, not a card field (one judgment, one mechanism). Decoration over identity — deleting a card never deletes the person.',
+{ n:'contact_card', std:'vCard 4.0 (NICKNAME, ORG, TITLE, NOTE, REV)', p:'The owner’s view of a party: nickname and an org/title display label. Starring is a flags-scheme core.tag on the party and the running “met at Ravi’s wedding” memo is a knowledge.annotation on the party (one judgment, one mechanism). Decoration over identity — deleting a card never deletes the person.',
 cols:[
 ['card_id','TEXT (uuidv7)','PK NN','', 'Card identity.'],
 ['party_id','TEXT','FK UQ NN','core.party','The party this card decorates (1:1).'],
 ['nickname','TEXT','','', 'vCard NICKNAME.'],
 ['org_title','TEXT','','', 'vCard ORG + TITLE, denormalized for display only. The employment claim itself is a core.link (works-for) with provenance — never a card field.'],
-['note','TEXT','','', 'vCard NOTE — the “met at Ravi’s wedding” field.'],
 ['vcard_rev','TEXT (iso8601)','','', 'vCard REV for sync round-trips.'],
 ]},
 { n:'circle', std:'FOAF Group · vCard MEMBER', p:'A named grouping (Family, Clients, Book club). Circles are also the natural grain for shares and grants.',
@@ -1362,7 +1360,7 @@ cols:[
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last edit; every edit also writes provenance.'],
 ]},
-{ n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo — with a standards-shaped selector.',
+{ n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo, the running memo on a person, the remark on a workout — with a standards-shaped selector. The one owner-memo mechanism (issue #274): free-text about an entity never mints a prose column.',
 cols:[
 ['annotation_id','TEXT (uuidv7)','PK NN','', 'Annotation identity.'],
 ['author_party_id','TEXT','FK NN','core.party','Annotator.'],

@@ -23,6 +23,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { annotate } from './annotations.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -347,8 +348,8 @@ function logTime(ctx: HandlerCtx): Record<string, unknown> {
   const activityId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO core_activity (activity_id, actor_party_id, kind_concept_id, started_at, ended_at, location_place_id, source_app_id, note, created_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+      `INSERT INTO core_activity (activity_id, actor_party_id, kind_concept_id, started_at, ended_at, location_place_id, source_app_id, created_at)
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
     )
     .run(
       activityId,
@@ -357,10 +358,12 @@ function logTime(ctx: HandlerCtx): Record<string, unknown> {
       input.started_at,
       input.ended_at,
       ctx.identity.kind === 'app' ? ctx.identity.callerId : null,
-      input.note ?? null,
       ctx.now,
     );
   ctx.wrote('core.activity', activityId);
+  // The session remark is a memo annotation on the canonical activity
+  // (issue #274) — never an activity column.
+  if (input.note) annotate(ctx, 'core.activity', activityId, input.note);
   // Rate defaults from the client so an entry is billable the moment it
   // lands, not after a back-fill pass.
   const entryId = ctx.newId();

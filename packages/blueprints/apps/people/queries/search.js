@@ -49,6 +49,29 @@ async function starredParties(ctx, partyIds, purpose) {
   return new Set((tags.rows ?? []).map((t) => t.target_id));
 }
 
+/**
+ * The running memo per party (issue #274): the newest knowledge.annotation
+ * targeting each canonical core.party — "met at Ravi's wedding" lives on
+ * the person, not in a card column. One bounded read.
+ */
+async function partyMemos(ctx, partyIds, purpose) {
+  if (partyIds.length === 0) return new Map();
+  const annotations = await ctx.vault.read({
+    entity: 'knowledge.annotation',
+    where: [
+      { column: 'target_type', op: 'eq', value: 'core.party' },
+      { column: 'target_id', op: 'in', value: partyIds },
+    ],
+    orderBy: { column: 'created_at', dir: 'desc' },
+    purpose,
+  });
+  const memoByParty = new Map();
+  for (const a of annotations.rows ?? []) {
+    if (!memoByParty.has(a.target_id)) memoByParty.set(a.target_id, a.body_text);
+  }
+  return memoByParty;
+}
+
 /** The shared attachment projection — see directory.js for the shape's home. */
 function attachmentsBySubject(subjectType, attachments, contentById) {
   const bySubject = new Map();
@@ -78,15 +101,21 @@ export default async ({ input, ctx }) => {
   const term = String(input?.term ?? '').trim();
   if (!term) return { people: [] };
   try {
-    const [partyHits, cardHits] = await Promise.all([
+    const [partyHits, cardHits, memoHits] = await Promise.all([
       ctx.vault.search({ entity: 'core.party', query: term, limit: 100, purpose }),
       ctx.vault.search({ entity: 'social.contact_card', query: term, limit: 100, purpose }),
+      // The running memo lives as an annotation on the party (issue #274),
+      // so "wedding" still finds the person it was written about.
+      ctx.vault.search({ entity: 'knowledge.annotation', query: term, limit: 100, purpose }),
     ]);
-    // Union in rank order: name matches first, then card-only matches. A
-    // party hit by both keeps its best (name) position — and that snippet.
+    // Union in rank order: name matches first, then card matches, then memo
+    // matches. A party hit more than once keeps its best position/snippet.
     const hitPartyIds = [];
     const snippetByParty = new Map();
-    for (const row of [...(partyHits.rows ?? []), ...(cardHits.rows ?? [])]) {
+    const memoRows = (memoHits.rows ?? [])
+      .filter((a) => a.target_type === 'core.party')
+      .map((a) => ({ party_id: a.target_id, _snippet: a._snippet }));
+    for (const row of [...(partyHits.rows ?? []), ...(cardHits.rows ?? []), ...memoRows]) {
       if (!row.party_id || snippetByParty.has(row.party_id)) continue;
       snippetByParty.set(row.party_id, typeof row._snippet === 'string' ? row._snippet : '');
       hitPartyIds.push(row.party_id);
@@ -143,6 +172,7 @@ export default async ({ input, ctx }) => {
     }
     const attByParty = attachmentsBySubject('core.party', attachmentRows, contentById);
     const starredIds = await starredParties(ctx, partyIds, purpose);
+    const memoByParty = await partyMemos(ctx, partyIds, purpose);
 
     // Vault order is rank order (best match first) — keep it, no name sort.
     const partyById = new Map((parties.rows ?? []).map((p) => [p.party_id, p]));
@@ -154,6 +184,7 @@ export default async ({ input, ctx }) => {
         identifiers: idsByParty.get(party.party_id) ?? [],
         card: cardByParty.get(party.party_id) ?? null,
         favorite: starredIds.has(party.party_id) ? 1 : 0,
+        note: memoByParty.get(party.party_id) ?? null,
         attachments: attByParty.get(party.party_id) ?? [],
         snippet: snippetByParty.get(party.party_id) ?? '',
       }));

@@ -467,7 +467,7 @@ function renderDetail() {
   const meta = [
     detail.card?.org_title,
     detail.card?.nickname ? `“${detail.card.nickname}”` : null,
-    detail.card?.note,
+    detail.note,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -561,7 +561,7 @@ function openCardForm() {
   $('cardFormTitle').textContent = `Card for ${detail.display_name}`;
   $('displayNameInput').value = detail.display_name ?? '';
   $('nicknameInput').value = detail.card?.nickname ?? '';
-  $('noteInput').value = detail.card?.note ?? '';
+  $('noteInput').value = detail.note ?? '';
   $('birthdayInput').value = String(detail.birth_date ?? '').slice(0, 10);
   $('cardForm').hidden = false;
   $('nicknameInput').focus();
@@ -832,7 +832,7 @@ function toVcf(list) {
     lines.push(`N:${vName(person)}`);
     if (person.card?.nickname) lines.push(`NICKNAME:${vEscape(person.card.nickname)}`);
     if (person.card?.org_title) lines.push(`TITLE:${vEscape(person.card.org_title)}`);
-    if (person.card?.note) lines.push(`NOTE:${vEscape(person.card.note)}`);
+    if (person.note) lines.push(`NOTE:${vEscape(person.note)}`);
     const bday = String(person.birth_date ?? '').slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(bday)) lines.push(`BDAY:${bday}`);
     for (const id of person.identifiers ?? []) {

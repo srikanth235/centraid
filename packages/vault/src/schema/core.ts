@@ -137,7 +137,6 @@ CREATE TABLE core_activity (
   ended_at          TEXT CHECK (ended_at IS NULL OR ended_at >= started_at),
   location_place_id TEXT REFERENCES core_place(place_id),
   source_app_id     TEXT REFERENCES consent_app(app_id),
-  note              TEXT,
   created_at        TEXT NOT NULL
 ) STRICT;
 

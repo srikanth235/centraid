@@ -242,11 +242,22 @@ test('update_card upserts decoration without touching identity', () => {
   });
   expect(second.status).toBe('executed');
   const card = db.vault
-    .prepare('SELECT nickname, note FROM social_contact_card WHERE party_id = ?')
+    .prepare('SELECT nickname FROM social_contact_card WHERE party_id = ?')
     .get(raviId);
-  expect(card).toMatchObject({ nickname: 'Rav', note: 'met at the wedding' });
-  // The favorite input landed as a starred tag on the canonical party — and
-  // the untouched second call left it alone.
+  expect(card).toMatchObject({ nickname: 'Rav' });
+  // The note landed as the caller's memo annotation on the canonical party…
+  const memo = db.vault
+    .prepare(
+      `SELECT body_text, author_party_id FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .get(raviId) as { body_text: string; author_party_id: string };
+  expect(memo).toMatchObject({
+    body_text: 'met at the wedding',
+    author_party_id: boot.ownerPartyId,
+  });
+  // …and the favorite input as a starred tag — the untouched second call
+  // left the star alone.
   expect(starredTags('core.party', raviId)).toHaveLength(1);
   const cards = db.vault.prepare('SELECT count(*) AS n FROM social_contact_card').get() as {
     n: number;
@@ -375,4 +386,30 @@ test('employment is a works-for link with provenance; the card keeps only a disp
     )
     .get(raviId, orgId) as { asserted_by: string; valid_to: string | null };
   expect(stored).toMatchObject({ asserted_by: 'owner', valid_to: null });
+});
+
+test("the running memo replaces on edit and clears on empty — one memo per author per entity", () => {
+  const setNote = (note: string) =>
+    gw.invoke(owner, {
+      command: 'social.update_card',
+      input: { party_id: raviId, note },
+      purpose: 'dpv:ServiceProvision',
+    });
+  expect(setNote('met at the wedding').status).toBe('executed');
+  expect(setNote('now works at Acme').status).toBe('executed');
+  const memos = db.vault
+    .prepare(
+      `SELECT body_text FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .all(raviId) as { body_text: string }[];
+  expect(memos).toEqual([{ body_text: 'now works at Acme' }]);
+  expect(setNote('').status).toBe('executed');
+  const cleared = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM knowledge_annotation
+        WHERE target_type = 'core.party' AND target_id = ?`,
+    )
+    .get(raviId) as { n: number };
+  expect(cleared.n).toBe(0);
 });

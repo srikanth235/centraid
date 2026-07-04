@@ -10,7 +10,6 @@ CREATE TABLE social_contact_card (
   -- core.link (party -works-for-> org) with provenance, never a card field
   -- (issue #274 kink 4; the social boundary always said so).
   org_title            TEXT,
-  note                 TEXT,
   vcard_rev            TEXT
 ) STRICT;
 

@@ -154,11 +154,20 @@ test('log_time lands a canonical work activity plus an unbilled entry with the c
   });
   const activity = db.vault
     .prepare(
-      `SELECT a.started_at, a.ended_at, a.note, c.notation FROM core_activity a
+      `SELECT a.started_at, a.ended_at, c.notation FROM core_activity a
         JOIN core_concept c ON c.concept_id = a.kind_concept_id WHERE a.activity_id = ?`,
     )
     .get(activity_id);
-  expect(activity).toMatchObject({ notation: 'work', note: 'wireframes' });
+  expect(activity).toMatchObject({ notation: 'work' });
+  // The session remark is a memo annotation on the canonical activity
+  // (issue #274), never an activity column.
+  const memo = db.vault
+    .prepare(
+      `SELECT body_text FROM knowledge_annotation
+        WHERE target_type = 'core.activity' AND target_id = ?`,
+    )
+    .get(activity_id) as { body_text: string };
+  expect(memo.body_text).toBe('wireframes');
 });
 
 test('log_time refuses inactive projects and inverted intervals', () => {

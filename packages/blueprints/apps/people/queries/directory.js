@@ -48,6 +48,29 @@ async function starredParties(ctx, partyIds, purpose) {
 }
 
 /**
+ * The running memo per party (issue #274): the newest knowledge.annotation
+ * targeting each canonical core.party — "met at Ravi's wedding" lives on
+ * the person, not in a card column. One bounded read.
+ */
+async function partyMemos(ctx, partyIds, purpose) {
+  if (partyIds.length === 0) return new Map();
+  const annotations = await ctx.vault.read({
+    entity: 'knowledge.annotation',
+    where: [
+      { column: 'target_type', op: 'eq', value: 'core.party' },
+      { column: 'target_id', op: 'in', value: partyIds },
+    ],
+    orderBy: { column: 'created_at', dir: 'desc' },
+    purpose,
+  });
+  const memoByParty = new Map();
+  for (const a of annotations.rows ?? []) {
+    if (!memoByParty.has(a.target_id)) memoByParty.set(a.target_id, a.body_text);
+  }
+  return memoByParty;
+}
+
+/**
  * Group the owner's attachments for one subject type into a map keyed by
  * subject_id, each value a UI-ready list joined to its content item. This is
  * the shared attachment-projection shape every app copies — polymorphic edges
@@ -135,6 +158,7 @@ export default async ({ input, ctx }) => {
     }
     const attByParty = attachmentsBySubject('core.party', attachmentRows, contentById);
     const starredIds = await starredParties(ctx, partyIds, purpose);
+    const memoByParty = await partyMemos(ctx, partyIds, purpose);
     const sortKey = (p) => String(p.sort_name ?? p.display_name);
     const people = windowed
       .toSorted((a, b) => sortKey(a).localeCompare(sortKey(b)))
@@ -143,6 +167,7 @@ export default async ({ input, ctx }) => {
         identifiers: idsByParty.get(party.party_id) ?? [],
         card: cardByParty.get(party.party_id) ?? null,
         favorite: starredIds.has(party.party_id) ? 1 : 0,
+        note: memoByParty.get(party.party_id) ?? null,
         attachments: attByParty.get(party.party_id) ?? [],
       }));
 

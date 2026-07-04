@@ -45,6 +45,11 @@
         "verbs": "read"
       },
       {
+        "schema": "knowledge",
+        "table": "annotation",
+        "verbs": "read"
+      },
+      {
         "schema": "core",
         "table": "attachment",
         "verbs": "read"
