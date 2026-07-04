@@ -10,6 +10,7 @@ import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential, InvokeOutcome } from '../gateway/types.js';
 import { uuidv7 } from '../ids.js';
+import { registerLinkCommands } from './links.js';
 import { registerSocialCommands } from './social.js';
 
 let db: VaultDb;
@@ -330,4 +331,48 @@ test('mark_thread_read stamps only the owner cursor and moves it forward', () =>
     purpose: 'dpv:ServiceProvision',
   });
   expect(ghost.status).toBe('failed');
+});
+
+test('employment is a works-for link with provenance; the card keeps only a display label', () => {
+  const orgId = uuidv7();
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES (?, 'org', 'Acme Studio', ?, ?, '1.1')`,
+    )
+    .run(orgId, now, now);
+  registerLinkCommands(gw);
+  // The display label rides the card…
+  const card = gw.invoke(owner, {
+    command: 'social.update_card',
+    input: { party_id: raviId, org_title: 'Design lead, Acme Studio' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(card.status).toBe('executed');
+  const row = db.vault
+    .prepare('SELECT org_title FROM social_contact_card WHERE party_id = ?')
+    .get(raviId) as { org_title: string };
+  expect(row.org_title).toBe('Design lead, Acme Studio');
+  // …while the claim itself is a typed, temporal core.link.
+  const link = gw.invoke(owner, {
+    command: 'core.link_entities',
+    input: {
+      from_type: 'core.party',
+      from_id: raviId,
+      to_type: 'core.party',
+      to_id: orgId,
+      relation: 'works-for',
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(link.status).toBe('executed');
+  const stored = db.vault
+    .prepare(
+      `SELECT l.asserted_by, l.valid_to FROM core_link l
+         JOIN core_concept c ON c.concept_id = l.relation_concept_id
+        WHERE l.from_id = ? AND l.to_id = ? AND c.notation = 'works-for'`,
+    )
+    .get(raviId, orgId) as { asserted_by: string; valid_to: string | null };
+  expect(stored).toMatchObject({ asserted_by: 'owner', valid_to: null });
 });

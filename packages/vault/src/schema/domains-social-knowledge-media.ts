@@ -6,8 +6,10 @@ CREATE TABLE social_contact_card (
   card_id              TEXT PRIMARY KEY,
   party_id             TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
   nickname             TEXT,
+  -- Display label only (vCard ORG + TITLE). The employment CLAIM is a
+  -- core.link (party -works-for-> org) with provenance, never a card field
+  -- (issue #274 kink 4; the social boundary always said so).
   org_title            TEXT,
-  related_org_party_id TEXT REFERENCES core_party(party_id),
   note                 TEXT,
   vcard_rev            TEXT
 ) STRICT;

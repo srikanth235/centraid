@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); social owns the whole conversation-and-card loop (5 commands with their contracts), so it is large by design.
 // Social domain commands (§07): the domain resolves raw addresses to parties
 // (never a duplicate person per channel) and owns conversation state. The
 // message state machine — draft → sent → delivered → read | failed — moves
@@ -325,6 +326,10 @@ const UPDATE_CARD: CommandDefinition = {
     properties: {
       party_id: { type: 'string', minLength: 1 },
       nickname: { type: 'string' },
+      // Display label only (vCard ORG + TITLE). The employment claim itself
+      // is a core.link (works-for) asserted via core.link_entities — the
+      // card never carries the relationship (issue #274).
+      org_title: { type: 'string' },
       note: { type: 'string' },
       // The contract keeps its `favorite` input; storage is a starred tag on
       // the canonical core.party (issue #274) — the same star every surface
@@ -375,6 +380,7 @@ function updateCard(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     party_id: string;
     nickname?: string;
+    org_title?: string;
     note?: string;
     favorite?: number;
   };
@@ -388,19 +394,27 @@ function updateCard(ctx: HandlerCtx): Record<string, unknown> {
       .prepare(
         `UPDATE social_contact_card SET
            nickname = COALESCE(?, nickname),
+           org_title = COALESCE(?, org_title),
            note = COALESCE(?, note),
            vcard_rev = ?
          WHERE card_id = ?`,
       )
-      .run(input.nickname ?? null, input.note ?? null, ctx.now, cardId);
+      .run(input.nickname ?? null, input.org_title ?? null, input.note ?? null, ctx.now, cardId);
   } else {
     cardId = ctx.newId();
     ctx.db
       .prepare(
-        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, related_org_party_id, note, vcard_rev)
-         VALUES (?, ?, ?, NULL, NULL, ?, ?)`,
+        `INSERT INTO social_contact_card (card_id, party_id, nickname, org_title, note, vcard_rev)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(cardId, input.party_id, input.nickname ?? null, input.note ?? null, ctx.now);
+      .run(
+        cardId,
+        input.party_id,
+        input.nickname ?? null,
+        input.org_title ?? null,
+        input.note ?? null,
+        ctx.now,
+      );
   }
   if (input.favorite !== undefined) {
     setStarred(ctx, 'core.party', input.party_id, input.favorite === 1);
