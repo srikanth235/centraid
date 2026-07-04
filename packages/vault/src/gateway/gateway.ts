@@ -9,6 +9,7 @@ import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
+import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
 import { evaluateConsent, type ConsentAllow } from './consent.js';
 import { lookupCommand, type CommandRow } from './contract.js';
 import {
@@ -222,6 +223,18 @@ export class Gateway {
   search(cred: Credential, request: SearchRequest): SearchResult {
     const identity = this.identify(cred);
     return searchEntity(this.db, identity, request);
+  }
+
+  /**
+   * The card resolver (issue #272): (type, id) references → minimal
+   * renderable cards, under the resolvable-if-linked consent rule — so a
+   * projection renders what the owner linked into its view without holding
+   * read scopes on the foreign domain. Receipted per batch; per-ref denials
+   * come back as 'denied' cards, never as an exception.
+   */
+  resolveRefs(cred: Credential, request: RefRequest): ResolveResult {
+    const identity = this.identify(cred);
+    return resolveRefCards(this.db.vault, this.db.journal, identity, request);
   }
 
   /**

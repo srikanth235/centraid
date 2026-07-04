@@ -78,7 +78,7 @@ type WorkerMessage =
   | {
       type: 'vault';
       id: number;
-      op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes';
+      op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve';
       payload: Record<string, unknown>;
     }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
@@ -251,7 +251,7 @@ const runs = {
 // (this agent's invocations awaiting owner confirmation) and `changes`
 // (the consented journal feed data triggers ride).
 function vaultCall(
-  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes',
+  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
   return rpcCall({ type: 'vault', op, payload });
@@ -279,6 +279,10 @@ const vault = {
   },
   changes(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('changes', request);
+  },
+  /** Reference cards for cross-domain (type, id) refs (issue #272). */
+  resolve(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('resolve', request);
   },
 };
 

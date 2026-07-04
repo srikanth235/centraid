@@ -908,3 +908,199 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
+
+// ============================================================================
+// Cross-referencing (issue #272) — the shell-owned entity picker + owner
+// link writes. Referencing is a SHELL capability, not an app capability:
+// the picker browses/searches the vault at owner trust (via the gateway's
+// /_vault/picker surface, every read receipted), the user picks ONE row,
+// and the app receives only that row's card. The link itself is asserted
+// with the owner-device credential (POST /_vault/links → core.link_entities,
+// asserted_by='owner') — the pick is the consent, scoped to one row, so the
+// app never needs read scopes on the foreign domain. Rendering the linked
+// entity later rides ctx.vault.resolve's resolvable-if-linked rule.
+// ============================================================================
+
+const PICK_KIND_LABELS = {
+  'core.party': 'Person',
+  'core.place': 'Place',
+  'core.event': 'Event',
+  'core.transaction': 'Transaction',
+  'core.content_item': 'File',
+  'schedule.task': 'Task',
+  'knowledge.note': 'Note',
+  'knowledge.notebook': 'Notebook',
+  'social.thread': 'Thread',
+  'media.media_asset': 'Photo',
+  'home.asset_item': 'Belonging',
+  'business.client': 'Client',
+  'business.project': 'Project',
+  'business.invoice': 'Invoice',
+};
+
+/** Human label for an entity kind — falls back to the table name. */
+export function entityKindLabel(type) {
+  if (PICK_KIND_LABELS[type]) return PICK_KIND_LABELS[type];
+  const table = String(type).split('.')[1] ?? String(type);
+  return table.replace(/_/g, ' ');
+}
+
+/**
+ * Open the shell entity picker. Resolves with the picked card
+ * ({type, id, title, subtitle, thumbnail_content_id, snippet?}) or null on
+ * cancel. Options: {kinds?: string[], title?: string, exclude?: {type, id}}.
+ */
+export function openEntityPicker(options = {}) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'kit-pick-ov';
+    const panel = document.createElement('div');
+    panel.className = 'kit-pick-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', options.title ?? 'Link from your vault');
+
+    const head = document.createElement('div');
+    head.className = 'kit-pick-head';
+    const h = document.createElement('h2');
+    h.textContent = options.title ?? 'Link from your vault';
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'kit-pick-x';
+    x.setAttribute('aria-label', 'Close');
+    x.textContent = '✕';
+    head.appendChild(h);
+    head.appendChild(x);
+
+    const input = document.createElement('input');
+    input.className = 'kit-pick-search';
+    input.placeholder = 'Search your vault…';
+    input.setAttribute('aria-label', 'Search entities');
+
+    const list = document.createElement('div');
+    list.className = 'kit-pick-list';
+    list.setAttribute('role', 'listbox');
+
+    const note = document.createElement('p');
+    note.className = 'kit-pick-note';
+    note.textContent = 'Picking shares only the picked item with this app — receipted.';
+
+    panel.appendChild(head);
+    panel.appendChild(input);
+    panel.appendChild(list);
+    panel.appendChild(note);
+    ov.appendChild(panel);
+    document.body.appendChild(ov);
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') done(null);
+    };
+    document.addEventListener('keydown', onKey);
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov) done(null);
+    });
+    x.addEventListener('click', () => done(null));
+
+    function done(card) {
+      document.removeEventListener('keydown', onKey);
+      ov.remove();
+      resolve(card);
+    }
+
+    let seq = 0;
+    async function load(term) {
+      const mine = ++seq;
+      list.dataset.state = 'loading';
+      const params = new URLSearchParams();
+      if (term) params.set('term', term);
+      if (options.kinds && options.kinds.length) params.set('kinds', options.kinds.join(','));
+      let cards = [];
+      try {
+        const r = await fetch('/centraid/_vault/picker?' + params.toString());
+        const body = r.ok ? await r.json() : null;
+        cards = (body && body.cards) || [];
+      } catch {
+        cards = [];
+      }
+      if (mine !== seq) return; // a newer keystroke superseded this load
+      delete list.dataset.state;
+      list.innerHTML = '';
+      const excluded = options.exclude
+        ? (c) => c.type === options.exclude.type && c.id === options.exclude.id
+        : () => false;
+      const visible = cards.filter((c) => !excluded(c));
+      if (visible.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'kit-pick-empty';
+        empty.textContent = term ? 'Nothing in your vault matches that.' : 'Nothing to link yet.';
+        list.appendChild(empty);
+        return;
+      }
+      for (const card of visible) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'kit-pick-row';
+        row.setAttribute('role', 'option');
+        const kind = document.createElement('span');
+        kind.className = 'kit-pick-kind';
+        kind.textContent = entityKindLabel(card.type);
+        const body = document.createElement('span');
+        body.className = 'kit-pick-body';
+        const title = document.createElement('span');
+        title.className = 'kit-pick-title';
+        title.textContent = card.title ?? `${entityKindLabel(card.type)} ${card.id.slice(-6)}`;
+        body.appendChild(title);
+        const subline = card.snippet
+          ? String(card.snippet).replace(/[⟦⟧]/g, '')
+          : (card.subtitle ?? '');
+        if (subline) {
+          const sub = document.createElement('span');
+          sub.className = 'kit-pick-sub';
+          sub.textContent = subline;
+          body.appendChild(sub);
+        }
+        row.appendChild(kind);
+        row.appendChild(body);
+        row.addEventListener('click', () => done(card));
+        list.appendChild(row);
+      }
+    }
+
+    let debounceTimer = 0;
+    input.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => load(input.value.trim()), 250);
+    });
+
+    load('');
+    setTimeout(() => input.focus(), 60);
+  });
+}
+
+/**
+ * Assert a link as the owner (the pick already carried the intent):
+ * `from`/`to` are `{type, id}`; relation defaults to `references`.
+ * Returns the vault's InvokeOutcome — `{status: 'executed', …}` on success.
+ */
+export async function createReference(from, to, relation) {
+  const r = await fetch('/centraid/_vault/links', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      from_type: from.type,
+      from_id: from.id,
+      to_type: to.type,
+      to_id: to.id,
+      relation: relation || 'references',
+    }),
+  });
+  return r.json();
+}
+
+/** End a link (temporal — the row survives with valid_to set). */
+export async function removeReference(linkId) {
+  const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
+    method: 'DELETE',
+  });
+  return r.json();
+}

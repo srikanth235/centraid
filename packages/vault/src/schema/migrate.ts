@@ -16,6 +16,29 @@ import { JOURNAL_DDL } from './journal.js';
 /** Ontology contract version stamped on rows (rule R07). */
 export const ONTOLOGY_VERSION = '1.1';
 
+// v3: cross-referencing relations (issue #272). Fresh vaults get these from
+// the bootstrap seed; this backfills vaults created before the notations
+// existed. Ids are randomblob hex rather than uuidv7 — ids are immutable and
+// meaningless, and migrations are static SQL. On a fresh file the scheme row
+// does not exist yet (bootstrap runs after migrations), so this inserts
+// nothing and the seed provides both.
+const RELATION_BACKFILL_DDL = [
+  ['references', 'References'],
+  ['attachment-of', 'Attachment of'],
+]
+  .map(
+    ([notation, label]) => `
+INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
+SELECT lower(hex(randomblob(16))), s.scheme_id, '${notation}', '${label}', NULL, NULL, NULL
+  FROM core_concept_scheme s
+ WHERE s.uri = 'urn:duaility:relations'
+   AND NOT EXISTS (
+     SELECT 1 FROM core_concept c
+      WHERE c.scheme_id = s.scheme_id AND c.notation = '${notation}'
+   );`,
+  )
+  .join('\n');
+
 export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,
@@ -33,6 +56,8 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // v2: the text-search plane — FTS5 shadow tables + sync triggers, with a
   // backfill so a pre-index vault becomes searchable on first open.
   FTS_DDL,
+  // v3: backfill the cross-referencing relation concepts (issue #272).
+  RELATION_BACKFILL_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

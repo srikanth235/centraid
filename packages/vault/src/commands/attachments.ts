@@ -7,6 +7,12 @@
 // arbitrary media, size-capped, because a vault with no blob store shouldn't
 // swallow a 4K video into a SQLite row. Large-file custody stays the
 // deferred seam; everyday attachments do not need to wait for it.
+//
+// Issue #272: attach also accepts an EXISTING content item by `content_id`
+// (exactly one of data_uri / content_id per call) — "embed these bytes in my
+// thing" without shipping them through the caller again. The edge counts as
+// a reference in the shared GC rule (media.ts CONTENT_REFERENCES), so an
+// embedded photo survives the photo being trashed in its own app.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
@@ -97,12 +103,16 @@ const ATTACH: CommandDefinition = {
   ownerSchema: 'core',
   inputSchema: {
     type: 'object',
-    required: ['subject_type', 'subject_id', 'data_uri'],
+    required: ['subject_type', 'subject_id'],
     additionalProperties: false,
     properties: {
       subject_type: { type: 'string', enum: Object.keys(SUBJECT_PK) },
       subject_id: { type: 'string', minLength: 1 },
+      /** New bytes, inline. Exactly one of data_uri / content_id (issue #272). */
       data_uri: { type: 'string', minLength: 6 },
+      /** An existing canonical content item — attach without re-uploading. */
+      content_id: { type: 'string', minLength: 1 },
+      /** Only meaningful when minting new bytes; an existing item keeps its title. */
       title: { type: 'string' },
       role: { type: 'string', enum: [...ROLES] },
     },
@@ -118,9 +128,17 @@ const ATTACH: CommandDefinition = {
   },
   preconditions: [
     {
+      // Two sources, one per call: fresh bytes OR an existing content item.
+      name: 'exactly_one_source',
+      sql: 'SELECT ((:data_uri IS NOT NULL) + (:content_id IS NOT NULL)) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
       // Inline bytes only: the app read a File as a data: URL client-side.
       name: 'is_data_uri',
-      sql: "SELECT (:data_uri LIKE 'data:%') AS n",
+      sql: "SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (:data_uri LIKE 'data:%') END AS n",
       column: 'n',
       op: 'eq',
       value: 1,
@@ -128,7 +146,17 @@ const ATTACH: CommandDefinition = {
     {
       // Cap the row: a vault with no blob store must not swallow a huge file.
       name: 'within_size_cap',
-      sql: `SELECT (length(:data_uri) <= ${MAX_DATA_URI_CHARS}) AS n`,
+      sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_DATA_URI_CHARS}) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // An existing item must be live — trashed bytes are not attachable.
+      name: 'content_exists',
+      sql: `SELECT CASE WHEN :content_id IS NULL THEN 1 ELSE
+              (SELECT count(*) FROM core_content_item
+                WHERE content_id = :content_id AND deleted_at IS NULL) END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -154,7 +182,8 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
     subject_type: string;
     subject_id: string;
-    data_uri: string;
+    data_uri?: string;
+    content_id?: string;
     title?: string;
     role?: string;
   };
@@ -168,10 +197,32 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     .get(input.subject_id) as { n: number };
   if (subject.n !== 1) throw new Error(`no ${input.subject_type} with id ${input.subject_id}`);
 
-  const parsed = parseDataUri(input.data_uri);
-  const contentId = contentItemFor(ctx, input.data_uri, parsed, input.title);
+  // Two sources (issue #272): fresh bytes mint-or-dedupe a content item;
+  // an existing content_id just gains one more edge — no re-upload, and the
+  // extra reference keeps the bytes alive through the shared GC rule.
+  let contentId: string;
+  let mediaType: string;
+  let byteSize: number;
+  if (input.data_uri !== undefined) {
+    const parsed = parseDataUri(input.data_uri);
+    contentId = contentItemFor(ctx, input.data_uri, parsed, input.title);
+    mediaType = parsed.mediaType;
+    byteSize = parsed.byteSize;
+  } else if (input.content_id !== undefined) {
+    const existing = ctx.db
+      .prepare(
+        'SELECT media_type, byte_size FROM core_content_item WHERE content_id = ? AND deleted_at IS NULL',
+      )
+      .get(input.content_id) as { media_type: string; byte_size: number } | undefined;
+    if (!existing) throw new Error(`no live content item ${input.content_id}`);
+    contentId = input.content_id;
+    mediaType = existing.media_type;
+    byteSize = existing.byte_size;
+  } else {
+    throw new Error('attach needs a data_uri or a content_id'); // precondition guards this
+  }
   // Role defaults from the media type; images read as photos.
-  const role = input.role ?? (parsed.mediaType.startsWith('image/') ? 'photo' : 'other');
+  const role = input.role ?? (mediaType.startsWith('image/') ? 'photo' : 'other');
   // The first file on a subject is its cover; the rest ride along.
   const existing = ctx.db
     .prepare('SELECT count(*) AS n FROM core_attachment WHERE subject_type = ? AND subject_id = ?')
@@ -186,7 +237,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     .run(attachmentId, input.subject_type, input.subject_id, contentId, role, isPrimary, ctx.now);
   ctx.wrote('core.attachment', attachmentId);
   ctx.cite({
-    claim: `${parsed.mediaType} (${parsed.byteSize} bytes) attached to ${input.subject_type} ${input.subject_id}`,
+    claim: `${mediaType} (${byteSize} bytes) attached to ${input.subject_type} ${input.subject_id}`,
     entityType: input.subject_type,
     entityId: input.subject_id,
   });

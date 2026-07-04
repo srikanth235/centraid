@@ -142,6 +142,14 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
     )
     .all(now) as { content_id: string }[];
+  // Purges are the one hard delete outside the command pipeline, so the
+  // temporal link duty runs here too: live links onto a purged row end-date
+  // rather than dangle (issue #272).
+  const endDateLinks = db.vault.prepare(
+    `UPDATE core_link SET valid_to = ?
+      WHERE valid_to IS NULL
+        AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
+  );
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
     // A trashed media asset over these bytes goes with them — the asset row
@@ -157,9 +165,17 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
         .prepare('UPDATE media_album SET cover_asset_id = NULL WHERE cover_asset_id = ?')
         .run(asset.asset_id);
       db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
+      endDateLinks.run(
+        now,
+        'media.media_asset',
+        asset.asset_id,
+        'media.media_asset',
+        asset.asset_id,
+      );
     }
     writeProvenance(db.journal, owner, 'core.content_item', row.content_id, 'sweep.purge');
     db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
+    endDateLinks.run(now, 'core.content_item', row.content_id, 'core.content_item', row.content_id);
   }
   const retentionDeleted = enforceRetention(db, now);
   const receiptId = writeReceipt(db.journal, {
