@@ -6,7 +6,7 @@
  * table, because every photo's bytes ride inline as a data: URI and a full
  * content read ships the entire library on every refresh (issue #264).
  * Content items and album entries are joined only for the windowed rows;
- * albums stay a full read (an album list is small). Media has no text
+ * albums stay a full read (a collection list is small). Media has no text
  * index, so anything older is reachable only by growing the window
  * (`truncated` tells the UI to offer that).
  *
@@ -45,7 +45,8 @@ export default async ({ input, ctx }) => {
         limit: 200,
         purpose,
       }),
-      ctx.vault.read({ entity: 'media.album', purpose }),
+      // Albums are collections (issue #274) — the one curation mechanism.
+      ctx.vault.read({ entity: 'core.collection', purpose }),
     ]);
 
     // Joins are `in`-bounded by the windows — THIS is the point of the
@@ -57,8 +58,11 @@ export default async ({ input, ctx }) => {
     const [entries, contents] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
-            entity: 'media.album_entry',
-            where: [{ column: 'asset_id', op: 'in', value: assetIds }],
+            entity: 'core.collection_entry',
+            where: [
+              { column: 'target_type', op: 'eq', value: 'media.media_asset' },
+              { column: 'target_id', op: 'in', value: assetIds },
+            ],
             purpose,
           })
         : { rows: [] },
@@ -101,11 +105,18 @@ export default async ({ input, ctx }) => {
       });
       for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
     }
-    const albumsById = new Map((albums.rows ?? []).map((a) => [a.album_id, a]));
+    // Keep the app's album row shape over collection rows: a collection may
+    // also hold notes and documents; this surface renders its photo side.
+    const albumRows = (albums.rows ?? []).map((c) => ({
+      album_id: c.collection_id,
+      title: c.name,
+      cover_content_id: c.cover_content_id ?? null,
+    }));
+    const albumsById = new Map(albumRows.map((a) => [a.album_id, a]));
     const albumIdsByAsset = new Map();
     for (const entry of entries.rows ?? []) {
-      if (!albumIdsByAsset.has(entry.asset_id)) albumIdsByAsset.set(entry.asset_id, []);
-      albumIdsByAsset.get(entry.asset_id).push(entry.album_id);
+      if (!albumIdsByAsset.has(entry.target_id)) albumIdsByAsset.set(entry.target_id, []);
+      albumIdsByAsset.get(entry.target_id).push(entry.collection_id);
     }
 
     const join = (asset) => {
@@ -152,7 +163,7 @@ export default async ({ input, ctx }) => {
     const truncated = (liveAssets.rows ?? []).length >= window;
     return {
       assets: live,
-      albums: albums.rows ?? [],
+      albums: albumRows,
       trash,
       truncated,
       window,

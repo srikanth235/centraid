@@ -884,6 +884,25 @@ cols:[
 ['confidence','REAL','CK','', 'CHECK(confidence BETWEEN 0 AND 1); 1.0 for human assertions.'],
 ['tagged_at','TEXT (iso8601)','NN','', 'When applied.'],
 ]},
+{ n:'collection', std:'Dublin Core Collection · IPTC collection practice', p:'The one owner-curation mechanism (issue #274): an ordered, optionally nested container whose members are typed refs. Albums and notebooks are surface views over this table — “Paris trip” may hold photos, the lease PDF and a packing note together. Audiences (social.circle) and classification (folders-scheme tags) pass the same test and deliberately stay separate.',
+cols:[
+['collection_id','TEXT (uuidv7)','PK NN','', 'Collection identity.'],
+['owner_party_id','TEXT','FK NN','core.party','Curator.'],
+['name','TEXT','NN','', 'Display name.'],
+['cover_content_id','TEXT','FK','core.content_item','Optional cover — canonical bytes, not a domain row.'],
+['parent_collection_id','TEXT','FK','core.collection','Optional nesting (the notebook shelf).'],
+['sort_order','INTEGER','NN','', 'Manual ordering among siblings.'],
+['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
+]},
+{ n:'collection_entry', std:'—', p:'Ordered, typed membership: one list per collection, across member types.',
+cols:[
+['entry_id','TEXT (uuidv7)','PK NN','', 'Entry identity.'],
+['collection_id','TEXT','FK NN','core.collection','Container; UNIQUE(collection_id,target_type,target_id).'],
+['target_type','TEXT','NN','', 'Logical table of the member row.'],
+['target_id','TEXT','NN','', 'Member row id (gateway-validated polymorphic ref).'],
+['position','INTEGER','NN','', 'Order within the collection.'],
+['added_at','TEXT (iso8601)','NN','', 'Curation instant.'],
+]},
 ]},
 
 { id:'consent', label:'consent plane', desc:'Sovereignty as first-class tables: apps, scoped expiring grants, shares, policy, provenance, receipts, devices, export. The gateway evaluates these on every read and every command.',
@@ -1330,7 +1349,7 @@ cols:[
 ]},
 ]},
 
-{ id:'knowledge', label:'knowledge', desc:'Notes, notebooks, annotations. A note’s body is core content; its links to people, events and things are core links — so notes join the graph instead of floating beside it.',
+{ id:'knowledge', label:'knowledge', desc:'Notes and annotations. A note’s body is core content; its links to people, events and things are core links — so notes join the graph instead of floating beside it. Notebooks are core.collection views (issue #274).',
 tables:[
 { n:'note', std:'schema.org/Article · CommonMark · Joplin/Obsidian conventions', p:'A knowledge item. Text lives in content_item (markdown bytes); this row owns note behavior: pinning, format, revision.',
 cols:[
@@ -1342,21 +1361,6 @@ cols:[
 ['pinned','INTEGER (bool)','NN CK','', 'CHECK in (0,1).'],
 ['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
 ['updated_at','TEXT (iso8601)','NN','', 'Last edit; every edit also writes provenance.'],
-]},
-{ n:'notebook', std:'hierarchical collections (Dublin Core relation)', p:'Organizational containers — projections of order, cheap to restructure.',
-cols:[
-['notebook_id','TEXT (uuidv7)','PK NN','', 'Notebook identity.'],
-['owner_party_id','TEXT','FK NN','core.party','Whose shelf.'],
-['name','TEXT','NN','', 'Display name.'],
-['parent_notebook_id','TEXT','FK','knowledge.notebook','Nesting.'],
-['sort_order','INTEGER','NN','', 'Manual ordering.'],
-]},
-{ n:'note_placement', std:'—', p:'A note may sit in several notebooks without copies.',
-cols:[
-['placement_id','TEXT (uuidv7)','PK NN','', 'Placement identity.'],
-['note_id','TEXT','FK NN','knowledge.note','Placed note; UNIQUE(note_id,notebook_id).'],
-['notebook_id','TEXT','FK NN','knowledge.notebook','Container.'],
-['position','INTEGER','NN','', 'Order within the notebook.'],
 ]},
 { n:'annotation', std:'W3C Web Annotation Data Model', p:'A highlight or comment anchored to any entity — a note about a transaction, a comment on a photo — with a standards-shaped selector.',
 cols:[
@@ -1370,7 +1374,7 @@ cols:[
 ]},
 ]},
 
-{ id:'media', label:'media', desc:'Photos, video, audio, scans. An asset extends core content with capture context; albums are projections; face regions link pixels back to identity.',
+{ id:'media', label:'media', desc:'Photos, video, audio, scans. An asset extends core content with capture context; albums are core.collection views (issue #274); face regions link pixels back to identity.',
 tables:[
 { n:'media_asset', std:'EXIF/XMP · IPTC Photo Metadata · Immich asset model', p:'Capture context for a content item: when, where, with what. Extends core.content_item.',
 cols:[
@@ -1384,22 +1388,6 @@ cols:[
 ['height','INTEGER','CK','', 'CHECK(height > 0); pixels.'],
 ['duration_s','REAL','CK','', 'CHECK(duration_s >= 0); AV only.'],
 ['exif_json','TEXT (json1)','CK','', 'Full EXIF/XMP bag; CHECK(json_valid(exif_json)).'],
-]},
-{ n:'album', std:'IPTC collection practice', p:'A curated set. Smart albums are saved queries (projections); this table is only for human curation.',
-cols:[
-['album_id','TEXT (uuidv7)','PK NN','', 'Album identity.'],
-['owner_party_id','TEXT','FK NN','core.party','Curator.'],
-['title','TEXT','NN','', 'Display title.'],
-['cover_asset_id','TEXT','FK','media.media_asset','Cover image.'],
-['created_at','TEXT (iso8601)','NN','', 'Creation instant.'],
-]},
-{ n:'album_entry', std:'—', p:'Ordered membership of assets in albums.',
-cols:[
-['entry_id','TEXT (uuidv7)','PK NN','', 'Entry identity.'],
-['album_id','TEXT','FK NN','media.album','Album; UNIQUE(album_id,asset_id).'],
-['asset_id','TEXT','FK NN','media.media_asset','Member asset.'],
-['position','INTEGER','NN','', 'Sort order.'],
-['added_at','TEXT (iso8601)','NN','', 'Curation instant.'],
 ]},
 { n:'face_region', std:'IPTC Image Region · MWG Regions', p:'A detected face box, optionally resolved to a party. Agent suggestions stay unconfirmed until the owner confirms — confirmations flow through corrections.',
 cols:[
@@ -1566,8 +1554,8 @@ const DOM_INFO = [
 {id:'finance',prod:'YNAB · Firefly-III · Actual',t:'Finance',refs:['core.account · core.transaction (the ledger)','core.party (merchants, institutions)','core.concept (category scheme)'],owns:['txn_split','budget','holding','recurring_series','fx_rate'],state:'core.transaction: pending → posted → (void) — append-mostly; recategorization is a tag change with provenance, never an amount edit.',aff:['finance.categorize_txn','finance.split_txn','finance.set_budget','finance.flag_anomaly'],boundary:'Finance owns no identity: a merchant is a core party shared with contacts and home. Balances and budget progress are projections — storing them as facts is a rejected review.'},
 {id:'schedule',prod:'Google Calendar · Fastmail · Things',t:'Schedule',refs:['core.event (all time blocks)','core.party (attendees, owners)','core.place (locations → travel buffers)'],owns:['calendar','event_ext','attendee','task','availability_rule'],state:'attendee.partstat: needs-action → accepted | declined | tentative (RFC 5545); task: needs-action → in-process → completed | cancelled (VTODO).',aff:['schedule.propose_event','schedule.reschedule_event','schedule.respond_rsvp','schedule.complete_task'],boundary:'Schedule decorates time; it does not define what events mean. A medication reminder belongs to health, a maintenance window to home — schedule renders them and negotiates conflicts, nothing more. Habits need no new tables: a completion is a core activity or observation, and a streak is a projection over them.'},
 {id:'social',prod:'Contacts · Monica · Nextcloud Talk',t:'Social',refs:['core.party (everyone)','core.content_item (message bodies)','core.link (relationships)'],owns:['contact_card','circle','circle_member','thread','thread_participant','message'],state:'message.delivery: draft → sent → delivered → read | failed — outbound transitions only via social.send_message (risk=high, confirmation required).',aff:['social.resolve_identity','social.draft_message','social.send_message','social.update_card'],boundary:'Social resolves raw addresses to parties; it never creates duplicate people per channel. Kinship and employment claims are core links with provenance, not card fields. The personal-CRM “interaction history” is a projection over messages and activities — never a parallel store. Sending is the highest-risk command in the model.'},
-{id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','notebook','note_placement','annotation'],state:'note lifecycle is intentionally flat (edit history = provenance chain + content versions); annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.annotate','knowledge.link_mentions','knowledge.summarize'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
-{id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','consent.device (camera)'],owns:['media_asset','album','album_entry','face_region'],state:'face_region: detected → suggested → confirmed | rejected — confirmation flows through agent.correction so recognition learns as judgment.',aff:['media.import_assets','media.suggest_faces','media.curate_album','media.find_by_context'],boundary:'Media may not confirm identity on its own: a suggested face becomes a party link only after owner confirmation. Albums are curation; “smart albums” are saved queries and live in projections.'},
+{id:'knowledge',prod:'Obsidian · Joplin · Notion',t:'Knowledge',refs:['core.content_item (note bodies)','core.link (backlinks, mentions)','core.concept (topic tags)'],owns:['note','annotation'],state:'note lifecycle is intentionally flat (edit history = provenance chain + content versions); annotation: open → resolved for actionable comments.',aff:['knowledge.create_note','knowledge.annotate','knowledge.link_mentions','knowledge.summarize'],boundary:'Notes join the graph — “note about Tuesday’s appointment” is a link to the core event, not a text coincidence. Knowledge never stores facts other domains own; it cites them.'},
+{id:'media',prod:'Immich · Apple Photos · Google Photos',t:'Media',refs:['core.content_item (the bytes contract)','core.place (capture location)','core.party (faces)','consent.device (camera)'],owns:['media_asset','face_region'],state:'face_region: detected → suggested → confirmed | rejected — confirmation flows through agent.correction so recognition learns as judgment.',aff:['media.import_assets','media.suggest_faces','media.curate_album','media.find_by_context'],boundary:'Media may not confirm identity on its own: a suggested face becomes a party link only after owner confirmation. Albums are curation; “smart albums” are saved queries and live in projections.'},
 {id:'home',prod:'Homebox · Grocy · vehicle logs',t:'Home',refs:['core.place (rooms, buildings)','core.transaction (purchases)','core.observation (meter readings)','schedule.task (upkeep)'],owns:['asset_item','warranty','maintenance_plan','utility_meter','meter_reading'],state:'asset_item: owned → (disposed_on set) — with warranty windows and maintenance cadences hanging off the owned span.',aff:['home.register_item','home.log_reading','home.schedule_maintenance','home.prepare_claim'],boundary:'Home joins, it does not copy: the purchase is the finance transaction, the manual is a content item, the chore is a schedule task. Its power is being the join table of the household.'},
 {id:'business',prod:'Invoice Ninja · Kimai · Akaunting',t:'Business',refs:['core.party (clients)','core.activity (billable time)','core.transaction (settlement)','core.event (sessions, deadlines)'],owns:['client','project','time_entry','invoice','invoice_line'],state:'invoice: draft → sent → paid | overdue → void — “paid” requires paid_txn_id (a settling core transaction); overdue is derived from due_on, never stored.',aff:['business.track_time','business.draft_invoice','business.send_invoice','business.reconcile_payment'],boundary:'The studio is a lens: it may bill an activity, never own the actor. Settlement is an allocation — paid_txn_id binds the invoice to a canonical transaction (the Invoice Ninja paymentables pattern), so the studio never keeps its own shadow ledger. Rates and terms are business columns; the client’s birthday, address and threads remain core/social property visible under its grant only if scoped.'},
 ];

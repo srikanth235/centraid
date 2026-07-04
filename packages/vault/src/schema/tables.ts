@@ -23,6 +23,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'concept_scheme',
     'concept',
     'tag',
+    'collection',
+    'collection_entry',
   ],
   consent: [
     'app',
@@ -39,8 +41,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   finance: ['txn_split', 'budget', 'holding', 'recurring_series', 'fx_rate'],
   schedule: ['calendar', 'event_ext', 'attendee', 'task', 'availability_rule'],
   social: ['contact_card', 'circle', 'circle_member', 'thread', 'thread_participant', 'message'],
-  knowledge: ['note', 'notebook', 'note_placement', 'annotation'],
-  media: ['media_asset', 'album', 'album_entry', 'face_region'],
+  knowledge: ['note', 'annotation'],
+  media: ['media_asset', 'face_region'],
   home: ['asset_item', 'warranty', 'maintenance_plan', 'utility_meter', 'meter_reading'],
   business: ['client', 'project', 'time_entry', 'invoice', 'invoice_line'],
 };

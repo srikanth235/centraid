@@ -3,11 +3,12 @@
 // content — a knowledge_note row points at a core_content_item body, it
 // never stores prose itself. Bodies follow the social.draft_message
 // mechanism exactly: sha256-deduped, inlined as data: URIs (rent the bytes,
-// own the reference). Notebooks are one-per-note in v1: the placement join
-// table allows many-to-many, but move_note keeps a single placement until
-// a real multi-notebook surface asks for more. knowledge_annotation stays
-// commandless for now — no consuming UI exists, and a command nobody can
-// exercise is untestable surface area.
+// own the reference). A notebook is a surface view over core_collection,
+// the one owner-curation mechanism (issue #274) — these commands keep their
+// contracts while storage unifies, so a collection may also hold photos and
+// documents. Notebooks stay one-per-note in v1: the entry table allows
+// many-to-many, but move_note keeps a single placement until a real
+// multi-notebook surface asks for more.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
@@ -83,7 +84,7 @@ const CREATE_NOTE: CommandDefinition = {
       // bind as NULL, so an unfiled create passes trivially.
       name: 'notebook_exists_if_given',
       sql: `SELECT CASE WHEN :notebook_id IS NULL THEN 1
-                 ELSE (SELECT count(*) FROM knowledge_notebook WHERE notebook_id = :notebook_id)
+                 ELSE (SELECT count(*) FROM core_collection WHERE collection_id = :notebook_id)
             END AS n`,
       column: 'n',
       op: 'eq',
@@ -97,9 +98,11 @@ const CREATE_NOTE: CommandDefinition = {
       sql: `SELECT (
               (SELECT count(*) FROM knowledge_note WHERE note_id = :note_id AND pinned = 0)
               AND (SELECT CASE WHEN :notebook_id IS NULL
-                     THEN NOT EXISTS(SELECT 1 FROM knowledge_note_placement WHERE note_id = :note_id)
-                     ELSE EXISTS(SELECT 1 FROM knowledge_note_placement
-                                  WHERE note_id = :note_id AND notebook_id = :notebook_id) END)
+                     THEN NOT EXISTS(SELECT 1 FROM core_collection_entry
+                                      WHERE target_type = 'knowledge.note' AND target_id = :note_id)
+                     ELSE EXISTS(SELECT 1 FROM core_collection_entry
+                                  WHERE target_type = 'knowledge.note' AND target_id = :note_id
+                                    AND collection_id = :notebook_id) END)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -134,16 +137,16 @@ function createNote(ctx: HandlerCtx): Record<string, unknown> {
   return { note_id: noteId, body_content_id: contentId };
 }
 
-/** File a note at the end of a notebook (position = MAX+1 among siblings). */
+/** File a note at the end of a collection (one ordered list, all types). */
 function placeNote(ctx: HandlerCtx, noteId: string, notebookId: string): void {
-  const placementId = ctx.newId();
+  const entryId = ctx.newId();
   ctx.db
     .prepare(
-      `INSERT INTO knowledge_note_placement (placement_id, note_id, notebook_id, position)
-       VALUES (?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM knowledge_note_placement WHERE notebook_id = ?))`,
+      `INSERT INTO core_collection_entry (entry_id, collection_id, target_type, target_id, position, added_at)
+       VALUES (?, ?, 'knowledge.note', ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM core_collection_entry WHERE collection_id = ?), ?)`,
     )
-    .run(placementId, noteId, notebookId, notebookId);
-  ctx.wrote('knowledge.note_placement', placementId);
+    .run(entryId, notebookId, noteId, notebookId, ctx.now);
+  ctx.wrote('core.collection_entry', entryId);
 }
 
 const EDIT_NOTE: CommandDefinition = {
@@ -271,7 +274,7 @@ const MOVE_NOTE: CommandDefinition = {
     {
       name: 'notebook_exists_if_given',
       sql: `SELECT CASE WHEN :notebook_id IS NULL THEN 1
-                 ELSE (SELECT count(*) FROM knowledge_notebook WHERE notebook_id = :notebook_id)
+                 ELSE (SELECT count(*) FROM core_collection WHERE collection_id = :notebook_id)
             END AS n`,
       column: 'n',
       op: 'eq',
@@ -283,10 +286,13 @@ const MOVE_NOTE: CommandDefinition = {
       // One placement in the target notebook, or none at all if unfiled.
       name: 'note_singly_placed',
       sql: `SELECT CASE WHEN :notebook_id IS NULL
-                 THEN NOT EXISTS(SELECT 1 FROM knowledge_note_placement WHERE note_id = :note_id)
-                 ELSE (SELECT count(*) FROM knowledge_note_placement WHERE note_id = :note_id) = 1
-                      AND EXISTS(SELECT 1 FROM knowledge_note_placement
-                                  WHERE note_id = :note_id AND notebook_id = :notebook_id)
+                 THEN NOT EXISTS(SELECT 1 FROM core_collection_entry
+                                  WHERE target_type = 'knowledge.note' AND target_id = :note_id)
+                 ELSE (SELECT count(*) FROM core_collection_entry
+                        WHERE target_type = 'knowledge.note' AND target_id = :note_id) = 1
+                      AND EXISTS(SELECT 1 FROM core_collection_entry
+                                  WHERE target_type = 'knowledge.note' AND target_id = :note_id
+                                    AND collection_id = :notebook_id)
             END AS n`,
       column: 'n',
       op: 'eq',
@@ -300,7 +306,11 @@ const MOVE_NOTE: CommandDefinition = {
 
 function moveNote(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { note_id: string; notebook_id?: string };
-  ctx.db.prepare('DELETE FROM knowledge_note_placement WHERE note_id = ?').run(input.note_id);
+  ctx.db
+    .prepare(
+      `DELETE FROM core_collection_entry WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
+    .run(input.note_id);
   if (input.notebook_id) {
     placeNote(ctx, input.note_id, input.notebook_id);
   }
@@ -329,7 +339,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
     {
       name: 'parent_exists_if_given',
       sql: `SELECT CASE WHEN :parent_notebook_id IS NULL THEN 1
-                 ELSE (SELECT count(*) FROM knowledge_notebook WHERE notebook_id = :parent_notebook_id)
+                 ELSE (SELECT count(*) FROM core_collection WHERE collection_id = :parent_notebook_id)
             END AS n`,
       column: 'n',
       op: 'eq',
@@ -339,7 +349,7 @@ const CREATE_NOTEBOOK: CommandDefinition = {
   postconditions: [
     {
       name: 'notebook_created',
-      sql: 'SELECT count(*) AS n FROM knowledge_notebook WHERE notebook_id = :notebook_id',
+      sql: 'SELECT count(*) AS n FROM core_collection WHERE collection_id = :notebook_id',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -356,9 +366,9 @@ function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       // sort_order is sibling-scoped; IS (not =) so NULL parents group too.
-      `INSERT INTO knowledge_notebook (notebook_id, owner_party_id, name, parent_notebook_id, sort_order)
-       VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM knowledge_notebook
-                             WHERE parent_notebook_id IS ?))`,
+      `INSERT INTO core_collection (collection_id, owner_party_id, name, cover_content_id, parent_collection_id, sort_order, created_at)
+       VALUES (?, ?, ?, NULL, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM core_collection
+                             WHERE parent_collection_id IS ?), ?)`,
     )
     .run(
       notebookId,
@@ -366,8 +376,9 @@ function createNotebook(ctx: HandlerCtx): Record<string, unknown> {
       input.name,
       input.parent_notebook_id ?? null,
       input.parent_notebook_id ?? null,
+      ctx.now,
     );
-  ctx.wrote('knowledge.notebook', notebookId);
+  ctx.wrote('core.collection', notebookId);
   return { notebook_id: notebookId };
 }
 
@@ -391,7 +402,7 @@ const RENAME_NOTEBOOK: CommandDefinition = {
   preconditions: [
     {
       name: 'notebook_exists',
-      sql: 'SELECT count(*) AS n FROM knowledge_notebook WHERE notebook_id = :notebook_id',
+      sql: 'SELECT count(*) AS n FROM core_collection WHERE collection_id = :notebook_id',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -402,10 +413,10 @@ const RENAME_NOTEBOOK: CommandDefinition = {
       // here. Scoped to the same owner, and excluding the notebook itself so
       // a rename to its current name is an idempotent no-op.
       name: 'name_unused_by_owner',
-      sql: `SELECT count(*) AS n FROM knowledge_notebook
-             WHERE name = :name AND notebook_id <> :notebook_id
-               AND owner_party_id = (SELECT owner_party_id FROM knowledge_notebook
-                                      WHERE notebook_id = :notebook_id)`,
+      sql: `SELECT count(*) AS n FROM core_collection
+             WHERE name = :name AND collection_id <> :notebook_id
+               AND owner_party_id = (SELECT owner_party_id FROM core_collection
+                                      WHERE collection_id = :notebook_id)`,
       column: 'n',
       op: 'eq',
       value: 0,
@@ -414,8 +425,8 @@ const RENAME_NOTEBOOK: CommandDefinition = {
   postconditions: [
     {
       name: 'name_updated',
-      sql: `SELECT count(*) AS n FROM knowledge_notebook
-             WHERE notebook_id = :notebook_id AND name = :name`,
+      sql: `SELECT count(*) AS n FROM core_collection
+             WHERE collection_id = :notebook_id AND name = :name`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -429,9 +440,9 @@ const RENAME_NOTEBOOK: CommandDefinition = {
 function renameNotebook(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { notebook_id: string; name: string };
   ctx.db
-    .prepare('UPDATE knowledge_notebook SET name = ? WHERE notebook_id = ?')
+    .prepare('UPDATE core_collection SET name = ? WHERE collection_id = ?')
     .run(input.name, input.notebook_id);
-  ctx.wrote('knowledge.notebook', input.notebook_id);
+  ctx.wrote('core.collection', input.notebook_id);
   return { notebook_id: input.notebook_id };
 }
 
@@ -455,7 +466,7 @@ const DELETE_NOTEBOOK: CommandDefinition = {
   preconditions: [
     {
       name: 'notebook_exists',
-      sql: 'SELECT count(*) AS n FROM knowledge_notebook WHERE notebook_id = :notebook_id',
+      sql: 'SELECT count(*) AS n FROM core_collection WHERE collection_id = :notebook_id',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -465,8 +476,8 @@ const DELETE_NOTEBOOK: CommandDefinition = {
       // by hand) first, mirroring how create_notebook refuses a missing
       // parent on the way in.
       name: 'notebook_has_no_children',
-      sql: `SELECT count(*) AS n FROM knowledge_notebook
-             WHERE parent_notebook_id = :notebook_id`,
+      sql: `SELECT count(*) AS n FROM core_collection
+             WHERE parent_collection_id = :notebook_id`,
       column: 'n',
       op: 'eq',
       value: 0,
@@ -474,12 +485,12 @@ const DELETE_NOTEBOOK: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The notebook and every placement onto it are gone together; member
-      // notes survive as unfiled rows (placements are the only edge).
+      // The collection and every entry onto it are gone together; members
+      // survive as unfiled rows (entries are the only edge).
       name: 'notebook_and_placements_removed',
       sql: `SELECT (
-              (SELECT count(*) FROM knowledge_notebook WHERE notebook_id = :notebook_id)
-              + (SELECT count(*) FROM knowledge_note_placement WHERE notebook_id = :notebook_id)
+              (SELECT count(*) FROM core_collection WHERE collection_id = :notebook_id)
+              + (SELECT count(*) FROM core_collection_entry WHERE collection_id = :notebook_id)
             ) AS n`,
       column: 'n',
       op: 'eq',
@@ -497,16 +508,19 @@ const DELETE_NOTEBOOK: CommandDefinition = {
 function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { notebook_id: string };
   const filed = ctx.db
-    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE notebook_id = ?')
+    .prepare(
+      `SELECT count(*) AS n FROM core_collection_entry
+        WHERE collection_id = ? AND target_type = 'knowledge.note'`,
+    )
     .get(input.notebook_id) as { n: number };
   ctx.db
-    .prepare('DELETE FROM knowledge_note_placement WHERE notebook_id = ?')
+    .prepare('DELETE FROM core_collection_entry WHERE collection_id = ?')
     .run(input.notebook_id);
-  ctx.db.prepare('DELETE FROM knowledge_notebook WHERE notebook_id = ?').run(input.notebook_id);
-  ctx.wrote('knowledge.notebook', input.notebook_id);
+  ctx.db.prepare('DELETE FROM core_collection WHERE collection_id = ?').run(input.notebook_id);
+  ctx.wrote('core.collection', input.notebook_id);
   ctx.cite({
     claim: `notebook ${input.notebook_id} deleted; ${filed.n} member notes unfiled, none destroyed`,
-    entityType: 'knowledge.notebook',
+    entityType: 'core.collection',
     entityId: input.notebook_id,
   });
   return { notebook_id: input.notebook_id, notes_unfiled: filed.n };
@@ -544,7 +558,7 @@ const DELETE_NOTE: CommandDefinition = {
       name: 'note_and_edges_removed',
       sql: `SELECT (
               (SELECT count(*) FROM knowledge_note WHERE note_id = :note_id)
-              + (SELECT count(*) FROM knowledge_note_placement WHERE note_id = :note_id)
+              + (SELECT count(*) FROM core_collection_entry WHERE target_type = 'knowledge.note' AND target_id = :note_id)
               + (SELECT count(*) FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = :note_id)
             ) AS n`,
       column: 'n',
@@ -563,7 +577,11 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
     .prepare('SELECT body_content_id FROM knowledge_note WHERE note_id = ?')
     .get(input.note_id) as { body_content_id: string } | undefined;
   if (!note) throw new Error('note vanished between check and execute');
-  ctx.db.prepare('DELETE FROM knowledge_note_placement WHERE note_id = ?').run(input.note_id);
+  ctx.db
+    .prepare(
+      `DELETE FROM core_collection_entry WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
+    .run(input.note_id);
   ctx.db
     .prepare(
       `DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`,

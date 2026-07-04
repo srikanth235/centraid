@@ -4,6 +4,7 @@ import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';
 import { registerKnowledgeCommands } from './knowledge.js';
+import { registerMediaCommands } from './media.js';
 
 let db: VaultDb;
 let gw: Gateway;
@@ -71,10 +72,11 @@ test('create_note files into a notebook at the end; a missing notebook is refuse
   const b = createNote({ title: 'B', body_text: 'b', notebook_id: nb });
   const placements = db.vault
     .prepare(
-      'SELECT note_id, position FROM knowledge_note_placement WHERE notebook_id = ? ORDER BY position',
+      `SELECT target_id, position FROM core_collection_entry
+        WHERE collection_id = ? AND target_type = 'knowledge.note' ORDER BY position`,
     )
-    .all(nb) as { note_id: string; position: number }[];
-  expect(placements.map((p) => p.note_id)).toEqual([a.note_id, b.note_id]);
+    .all(nb) as { target_id: string; position: number }[];
+  expect(placements.map((p) => p.target_id)).toEqual([a.note_id, b.note_id]);
   expect(placements[1]!.position).toBeGreaterThan(placements[0]!.position);
 
   const orphan = invoke('knowledge.create_note', {
@@ -119,14 +121,20 @@ test('move_note refiles, is single-placement, and omitting notebook_id unfiles',
   const moved = invoke('knowledge.move_note', { note_id, notebook_id: work });
   expect(moved.status).toBe('executed');
   const placements = db.vault
-    .prepare('SELECT notebook_id FROM knowledge_note_placement WHERE note_id = ?')
-    .all(note_id) as { notebook_id: string }[];
-  expect(placements).toEqual([{ notebook_id: work }]);
+    .prepare(
+      `SELECT collection_id FROM core_collection_entry
+        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
+    .all(note_id) as { collection_id: string }[];
+  expect(placements).toEqual([{ collection_id: work }]);
 
   const unfiled = invoke('knowledge.move_note', { note_id });
   expect(unfiled.status).toBe('executed');
   const none = db.vault
-    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE note_id = ?')
+    .prepare(
+      `SELECT count(*) AS n FROM core_collection_entry
+        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
     .get(note_id) as { n: number };
   expect(none.n).toBe(0);
 
@@ -138,15 +146,15 @@ test('create_notebook orders siblings and refuses a missing parent', () => {
   const first = createNotebook('Alpha');
   const second = createNotebook('Beta');
   const rows = db.vault
-    .prepare('SELECT notebook_id, sort_order FROM knowledge_notebook ORDER BY sort_order')
-    .all() as { notebook_id: string; sort_order: number }[];
-  expect(rows.map((r) => r.notebook_id)).toEqual([first, second]);
+    .prepare('SELECT collection_id, sort_order FROM core_collection ORDER BY sort_order')
+    .all() as { collection_id: string; sort_order: number }[];
+  expect(rows.map((r) => r.collection_id)).toEqual([first, second]);
 
   const child = createNotebook('Alpha / Nested', first);
   const childRow = db.vault
-    .prepare('SELECT parent_notebook_id FROM knowledge_notebook WHERE notebook_id = ?')
-    .get(child) as { parent_notebook_id: string | null };
-  expect(childRow.parent_notebook_id).toBe(first);
+    .prepare('SELECT parent_collection_id FROM core_collection WHERE collection_id = ?')
+    .get(child) as { parent_collection_id: string | null };
+  expect(childRow.parent_collection_id).toBe(first);
 
   const orphan = invoke('knowledge.create_notebook', {
     name: 'Lost',
@@ -181,7 +189,10 @@ test('delete_note removes the note, its placements and edges', () => {
     .get(note_id) as { n: number };
   expect(note.n).toBe(0);
   const placements = db.vault
-    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE note_id = ?')
+    .prepare(
+      `SELECT count(*) AS n FROM core_collection_entry
+        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
     .get(note_id) as { n: number };
   expect(placements.n).toBe(0);
   // The body was rented by this note alone, so its bytes soft-delete.
@@ -213,7 +224,7 @@ test('rename_notebook updates the name and refuses a collision with a sibling', 
     'executed',
   );
   const row = db.vault
-    .prepare('SELECT name FROM knowledge_notebook WHERE notebook_id = ?')
+    .prepare('SELECT name FROM core_collection WHERE collection_id = ?')
     .get(a) as { name: string };
   expect(row.name).toBe('Cooking');
   // Renaming onto another notebook's name is a receipted refusal.
@@ -243,10 +254,42 @@ test('delete_notebook unfiles member notes without destroying them; children blo
     .get(note_id) as { n: number };
   expect(note.n).toBe(1);
   const placements = db.vault
-    .prepare('SELECT count(*) AS n FROM knowledge_note_placement WHERE note_id = ?')
+    .prepare(
+      `SELECT count(*) AS n FROM core_collection_entry
+        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
     .get(note_id) as { n: number };
   expect(placements.n).toBe(0);
   // Now childless, the parent deletes cleanly; a re-delete is refused.
   expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('executed');
   expect(invoke('knowledge.delete_notebook', { notebook_id: parent }).status).toBe('failed');
+});
+
+test('one collection holds a photo and a note together — the "Paris trip" the silos forbade', () => {
+  registerMediaCommands(gw);
+  const PIXEL =
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  // Created through the album surface…
+  const album = invoke('media.create_album', { title: 'Paris trip' });
+  expect(album.status).toBe('executed');
+  const collectionId = (album as { output: { album_id: string } }).output.album_id;
+  const photo = invoke('media.add_asset', { data_uri: PIXEL });
+  expect(photo.status).toBe('executed');
+  const assetId = (photo as { output: { asset_id: string } }).output.asset_id;
+  expect(
+    invoke('media.add_to_album', { album_id: collectionId, asset_id: assetId }).status,
+  ).toBe('executed');
+  // …and filed into from the notebook surface: same collection, mixed types.
+  const note = createNote({ title: 'Packing list', body_text: 'adapters, coats' });
+  expect(
+    invoke('knowledge.move_note', { note_id: note.note_id, notebook_id: collectionId }).status,
+  ).toBe('executed');
+  const members = db.vault
+    .prepare(
+      'SELECT target_type, position FROM core_collection_entry WHERE collection_id = ? ORDER BY position',
+    )
+    .all(collectionId) as { target_type: string; position: number }[];
+  expect(members.map((m) => m.target_type)).toEqual(['media.media_asset', 'knowledge.note']);
+  // One ordered list across types.
+  expect(members[1]!.position).toBeGreaterThan(members[0]!.position);
 });

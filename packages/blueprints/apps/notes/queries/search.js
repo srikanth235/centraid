@@ -71,11 +71,15 @@ export default async ({ input, ctx }) => {
     const noteIds = hits.map((n) => n.note_id);
     const [placements, notebooks, attachments] = await Promise.all([
       ctx.vault.read({
-        entity: 'knowledge.note_placement',
-        where: [{ column: 'note_id', op: 'in', value: noteIds }],
+        entity: 'core.collection_entry',
+        where: [
+          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'target_id', op: 'in', value: noteIds },
+        ],
         purpose,
       }),
-      ctx.vault.read({ entity: 'knowledge.notebook', purpose }),
+      // Notebooks are collections (issue #274) — the one curation mechanism.
+      ctx.vault.read({ entity: 'core.collection', purpose }),
       ctx.vault.read({
         entity: 'core.attachment',
         where: [
@@ -99,11 +103,11 @@ export default async ({ input, ctx }) => {
     });
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByNote = attachmentsBySubject('knowledge.note', attachments.rows ?? [], contentById);
-    const nameByNotebook = new Map((notebooks.rows ?? []).map((nb) => [nb.notebook_id, nb.name]));
+    const nameByNotebook = new Map((notebooks.rows ?? []).map((nb) => [nb.collection_id, nb.name]));
     const notebooksByNote = new Map();
     for (const p of placements.rows ?? []) {
-      if (!notebooksByNote.has(p.note_id)) notebooksByNote.set(p.note_id, []);
-      notebooksByNote.get(p.note_id).push(p.notebook_id);
+      if (!notebooksByNote.has(p.target_id)) notebooksByNote.set(p.target_id, []);
+      notebooksByNote.get(p.target_id).push(p.collection_id);
     }
     // Vault order is rank order (best match first) — keep it.
     const notes = hits.map((n) => {

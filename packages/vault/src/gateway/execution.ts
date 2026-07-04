@@ -42,6 +42,7 @@ const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
   },
   'core.attachment': { pk: 'attachment_id', refs: [['subject_type', 'subject_id']] },
   'core.tag': { pk: 'tag_id', refs: [['target_type', 'target_id']] },
+  'core.collection_entry': { pk: 'entry_id', refs: [['target_type', 'target_id']] },
   'knowledge.annotation': { pk: 'annotation_id', refs: [['target_type', 'target_id']] },
 };
 

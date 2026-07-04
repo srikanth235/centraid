@@ -87,9 +87,9 @@ test('albums: entries keep positions, first photo becomes cover, cover hands off
     'executed',
   );
   let album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string };
-  expect(album.cover_asset_id).toBe(a.asset_id);
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string };
+  expect(album.cover_content_id).toBe(a.content_id);
   // Twice into the same album is a receipted refusal, not a UNIQUE throw.
   const dup = invoke('media.add_to_album', { album_id: albumId, asset_id: a.asset_id });
   expect(dup.status).toBe('failed');
@@ -97,9 +97,9 @@ test('albums: entries keep positions, first photo becomes cover, cover hands off
     invoke('media.remove_from_album', { album_id: albumId, asset_id: a.asset_id }).status,
   ).toBe('executed');
   album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string };
-  expect(album.cover_asset_id).toBe(b.asset_id);
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string };
+  expect(album.cover_content_id).toBe(b.content_id);
 });
 
 test('rename_album and delete_album curate without touching assets', () => {
@@ -110,7 +110,9 @@ test('rename_album and delete_album curate without touching assets', () => {
     'executed',
   );
   expect(invoke('media.delete_album', { album_id: albumId }).status).toBe('executed');
-  const albums = db.vault.prepare('SELECT count(*) AS n FROM media_album').get() as { n: number };
+  const albums = db.vault.prepare('SELECT count(*) AS n FROM core_collection').get() as {
+    n: number;
+  };
   expect(albums.n).toBe(0);
   const assets = db.vault.prepare('SELECT count(*) AS n FROM media_media_asset').get() as {
     n: number;
@@ -125,14 +127,14 @@ test('delete_asset trashes the asset, leaves albums, and soft-deletes unreferenc
   const outcome = invoke('media.delete_asset', { asset_id });
   expect(outcome.status).toBe('executed');
   expect((outcome as { output: { content_released: number } }).output.content_released).toBe(1);
-  const entries = db.vault.prepare('SELECT count(*) AS n FROM media_album_entry').get() as {
+  const entries = db.vault.prepare('SELECT count(*) AS n FROM core_collection_entry').get() as {
     n: number;
   };
   expect(entries.n).toBe(0);
   const album = db.vault
-    .prepare('SELECT cover_asset_id FROM media_album WHERE album_id = ?')
-    .get(albumId) as { cover_asset_id: string | null };
-  expect(album.cover_asset_id).toBeNull();
+    .prepare('SELECT cover_content_id FROM core_collection WHERE collection_id = ?')
+    .get(albumId) as { cover_content_id: string | null };
+  expect(album.cover_content_id).toBeNull();
   // The asset row survives in the trash — restore can bring it back whole.
   const asset = db.vault
     .prepare('SELECT deleted_at FROM media_media_asset WHERE asset_id = ?')
