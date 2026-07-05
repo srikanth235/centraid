@@ -51,6 +51,7 @@ import {
   registerLinkCommands,
   registerMediaCommands,
   registerPartyCommands,
+  registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
   registerSubscriptionCommands,
@@ -175,6 +176,7 @@ export class VaultPlane {
     registerMediaCommands(this.gateway);
     registerDocumentCommands(this.gateway);
     registerHomeCommands(this.gateway);
+    registerPeopleCommands(this.gateway);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`

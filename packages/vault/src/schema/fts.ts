@@ -136,6 +136,14 @@ const SPECS: readonly FtsEntitySpec[] = [
       { name: 'serial_no', kind: 'column' },
     ],
   },
+  {
+    // The CRM person's role line ("Eng lead · Portland") — the third search
+    // surface People folds in beyond the party's name (core.party) and the
+    // owner's running notes (knowledge.annotation).
+    entity: 'people.profile',
+    idColumn: 'profile_id',
+    columns: [{ name: 'role', kind: 'column' }],
+  },
 ];
 
 /** What the gateway needs to run (and consent-clamp) a search. */
