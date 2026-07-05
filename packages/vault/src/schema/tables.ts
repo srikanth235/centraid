@@ -56,6 +56,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'debt',
     'journal_entry',
   ],
+  locker: ['item', 'item_tag'],
+  tally: ['friend', 'group', 'group_member', 'expense', 'expense_split', 'settlement'],
 };
 
 /** journal.db tables — the append-only audit stream. */

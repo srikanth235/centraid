@@ -46,6 +46,7 @@ import {
   registerFinanceCommands,
   registerHealthCommands,
   registerHomeCommands,
+  registerLockerCommands,
   registerKnowledgeCommands,
   registerLinkCommands,
   registerMediaCommands,
@@ -53,6 +54,7 @@ import {
   registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
+  registerTallyCommands,
   registerTaskCommands,
   type AgentSummary,
   type AppSummary,
@@ -173,6 +175,8 @@ export class VaultPlane {
     registerDocumentCommands(this.gateway);
     registerHomeCommands(this.gateway);
     registerPeopleCommands(this.gateway);
+    registerLockerCommands(this.gateway);
+    registerTallyCommands(this.gateway);
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`

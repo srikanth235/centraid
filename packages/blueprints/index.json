@@ -50,6 +50,22 @@
       "version": "0.1.0"
     },
     {
+      "id": "locker",
+      "name": "Locker",
+      "desc": "Everything, locked up — a password manager for logins, cards, notes and secrets, with Watchtower and a generator.",
+      "colorKey": "indigo",
+      "iconKey": "Lock",
+      "version": "0.1.0"
+    },
+    {
+      "id": "tally",
+      "name": "Tally",
+      "desc": "Split, settled — track shared expenses across groups and friends, see who owes whom, and settle up.",
+      "colorKey": "forest",
+      "iconKey": "Receipt",
+      "version": "0.1.0"
+    },
+    {
       "id": "briefing",
       "name": "Briefing",
       "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",

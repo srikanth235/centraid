@@ -62,14 +62,7 @@ describe('bundled blueprint manifests', () => {
     });
     // The §01 projection band, as blueprints.
     expect(projections).toEqual(
-      [
-        'agenda',
-        'docs',
-        'notes',
-        'people',
-        'photos',
-        'tasks',
-      ].toSorted(),
+      ['agenda', 'docs', 'locker', 'notes', 'people', 'photos', 'tally', 'tasks'].toSorted(),
     );
     for (const id of projections) {
       const manifest = readManifest('apps', id);
