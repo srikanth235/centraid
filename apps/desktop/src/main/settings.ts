@@ -41,6 +41,15 @@ export interface PersistedSettings {
    */
   chatModelByRunner?: Record<string, string>;
   /**
+   * The active vault the client addresses on each gateway (issue #289),
+   * keyed by gateway id. The server no longer holds an active-vault
+   * pointer — the client owns it and sends it as `x-centraid-vault`.
+   * Switching vaults is a pure client-side pointer flip; a missing entry
+   * means "let the gateway pick" (the device's sole enrollment, or the
+   * default vault for the shared-bearer local transport).
+   */
+  activeVaultByGateway?: Record<string, string>;
+  /**
    * ISO timestamp the user finished the first-run onboarding (set their
    * own profile name + avatar color). Absent on a fresh install — the
    * renderer reads this as the gate for showing the onboarding view
@@ -68,6 +77,12 @@ export interface DesktopSettings {
   gatewayToken?: string;
   /** Persisted — the gateway the renderer is currently pointing at. */
   activeGatewayId: string;
+  /**
+   * The vault the renderer is addressing on the active gateway (issue
+   * #289), or `undefined` to let the gateway pick. Sent as the
+   * `x-centraid-vault` header on every request.
+   */
+  activeVaultId?: string;
   /** Derived — `<userData>/gateways/<active>/apps/` (per-app data storage). */
   /**
    * Derived — kind of the active gateway. `'local'` means the
@@ -151,10 +166,27 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     // safely attributed to a specific runner anyway. It's dropped; the picker
     // falls back to each runner's gateway default until the user re-picks.
     ...sanitizeModelMap(raw.chatModelByRunner),
+    ...sanitizeVaultMap(raw.activeVaultByGateway),
     ...(typeof raw.onboardingCompletedAt === 'string'
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
       : {}),
   };
+}
+
+/**
+ * Defensive parse of `activeVaultByGateway` (issue #289): keep only
+ * `string → non-empty-string` entries. Malformed-write hygiene, not
+ * migration.
+ */
+function sanitizeVaultMap(
+  raw: unknown,
+): { activeVaultByGateway: Record<string, string> } | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Record<string, string> = {};
+  for (const [gatewayId, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.length > 0) out[gatewayId] = value;
+  }
+  return Object.keys(out).length ? { activeVaultByGateway: out } : undefined;
 }
 
 async function readPersisted(): Promise<PersistedSettings> {
@@ -209,6 +241,9 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
       token: handle.token,
     };
   }
+  // The vault the client addresses on this gateway (#289) — client-owned,
+  // keyed by gateway id. Undefined = let the gateway pick.
+  const activeVaultId = p.activeVaultByGateway?.[resolved.profile.id];
   return {
     activeGatewayId: resolved.profile.id,
     activeGatewayKind: resolved.profile.kind,
@@ -218,6 +253,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     activeProfileAvatarColor: resolved.profile.avatarColor ?? '#5B8DEF',
     gatewayUrl: resolved.url,
     gatewayToken: resolved.token,
+    ...(activeVaultId !== undefined ? { activeVaultId } : {}),
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
     ...(p.chatModelByRunner !== undefined ? { chatModelByRunner: p.chatModelByRunner } : {}),
     ...(p.onboardingCompletedAt !== undefined
@@ -279,6 +315,29 @@ export async function setActiveGatewayId(id: string): Promise<DesktopSettings> {
     throw new Error(`Cannot activate unknown gateway: ${id}`);
   }
   return saveSettings({ activeGatewayId: id });
+}
+
+/**
+ * Point the client at another vault ON THE ACTIVE GATEWAY (issue #289).
+ * This is a pure client-side pointer flip — no server call, no re-root:
+ * every subsequent request just carries a different `x-centraid-vault`
+ * header. Pass `undefined` to clear (let the gateway pick). Keyed by
+ * gateway id, so switching gateways restores each one's last vault.
+ */
+export async function setActiveVaultId(vaultId: string | undefined): Promise<DesktopSettings> {
+  const persisted = await readPersisted();
+  const activeGatewayId = persisted.activeGatewayId;
+  const map = { ...persisted.activeVaultByGateway };
+  if (vaultId === undefined || vaultId.length === 0) delete map[activeGatewayId];
+  else map[activeGatewayId] = vaultId;
+  const next: PersistedSettings = {
+    ...persisted,
+    ...(Object.keys(map).length ? { activeVaultByGateway: map } : {}),
+  };
+  if (!Object.keys(map).length)
+    delete (next as { activeVaultByGateway?: unknown }).activeVaultByGateway;
+  await writePersisted(next);
+  return resolveEffective(next);
 }
 
 /**

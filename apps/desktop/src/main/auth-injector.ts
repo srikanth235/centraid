@@ -23,6 +23,8 @@ import { loadSettings } from './settings.js';
 interface State {
   gatewayOrigin: string;
   gatewayToken: string;
+  /** The vault the client addresses (issue #289) — `x-centraid-vault`. */
+  gatewayVaultId: string;
 }
 
 let state: State | null = null;
@@ -36,8 +38,15 @@ async function readState(): Promise<State> {
   } catch {
     /* invalid URL — leave empty so the filter no-ops */
   }
-  return { gatewayOrigin, gatewayToken: settings.gatewayToken ?? '' };
+  return {
+    gatewayOrigin,
+    gatewayToken: settings.gatewayToken ?? '',
+    gatewayVaultId: settings.activeVaultId ?? '',
+  };
 }
+
+/** The vault-addressing header (mirrors the gateway's constant, #289). */
+const VAULT_HEADER = 'x-centraid-vault';
 
 export async function installAuthInjector(targetSession?: Session): Promise<void> {
   state = await readState();
@@ -60,6 +69,13 @@ export async function installAuthInjector(targetSession?: Session): Promise<void
     const hasAuth = Object.keys(headers).some((k) => k.toLowerCase() === 'authorization');
     if (!hasAuth) {
       headers.Authorization = `Bearer ${snapshot.gatewayToken}`;
+    }
+    // Address the client's vault (issue #289) so an iframed app's own
+    // requests land on the same vault the shell does. Don't override a
+    // header the app somehow set itself.
+    if (snapshot.gatewayVaultId) {
+      const hasVault = Object.keys(headers).some((k) => k.toLowerCase() === VAULT_HEADER);
+      if (!hasVault) headers[VAULT_HEADER] = snapshot.gatewayVaultId;
     }
     callback({ requestHeaders: headers });
   });

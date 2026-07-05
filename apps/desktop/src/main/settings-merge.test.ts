@@ -79,3 +79,27 @@ test('activeGatewayId falls back to current when patch omits/blanks it', () => {
       .activeGatewayId,
   ).toBe('remote-1');
 });
+
+test('activeVaultByGateway is carried through an unrelated save (issue #289)', () => {
+  const next = mergePersistedSettings(
+    { activeGatewayId: 'local', activeVaultByGateway: { local: 'v-1', 'gw-2': 'v-9' } },
+    { chatModelByRunner: { codex: 'gpt-5.5' } },
+  );
+  expect(next.activeVaultByGateway).toEqual({ local: 'v-1', 'gw-2': 'v-9' });
+});
+
+test('activeVaultByGateway is replaced wholesale when the patch sets it', () => {
+  const next = mergePersistedSettings(
+    { activeGatewayId: 'local', activeVaultByGateway: { local: 'v-1' } },
+    { activeVaultByGateway: { local: 'v-2', 'gw-2': 'v-9' } },
+  );
+  expect(next.activeVaultByGateway).toEqual({ local: 'v-2', 'gw-2': 'v-9' });
+});
+
+test('an emptied vault map is dropped, not persisted empty', () => {
+  const next = mergePersistedSettings(
+    { activeGatewayId: 'local', activeVaultByGateway: { local: 'v-1' } },
+    { activeVaultByGateway: {} },
+  );
+  expect(next.activeVaultByGateway).toBeUndefined();
+});

@@ -15,10 +15,16 @@
  * for the `file://` renderer origin).
  */
 
-/** Auth resolved from main: normalized base URL + optional bearer token. */
+/**
+ * Auth resolved from main: normalized base URL + optional bearer token +
+ * the vault this client addresses on the active gateway (issue #289 — the
+ * client owns its vault pointer; the gateway no longer holds one).
+ */
 export interface GatewayAuth {
   baseUrl: string;
   token?: string;
+  /** The `x-centraid-vault` header value; undefined = let the gateway pick. */
+  vaultId?: string;
 }
 
 let cachedAuth: Promise<GatewayAuth> | undefined;
@@ -37,6 +43,10 @@ export function resetGatewayAuthCache(): void {
 // so the next request must re-resolve. Registered once at module load;
 // `window.CentraidApi` is always present before renderer scripts run.
 window.CentraidApi.onGatewayChanged(() => resetGatewayAuthCache());
+// A vault switch (issue #289) keeps the gateway but changes the addressed
+// vault — the URL + token are unchanged, only the `x-centraid-vault` header,
+// so re-resolving auth is all that's needed (no wholesale reload).
+window.CentraidApi.onVaultChanged?.(() => resetGatewayAuthCache());
 
 /** Error carrying a coarse `code` the UI can branch on, like HarnessError. */
 export class GatewayClientError extends Error {
@@ -62,19 +72,40 @@ export function href(baseUrl: string, pathname: string): string {
   return new URL(pathname, `${baseUrl}/`).toString();
 }
 
+/** The canonical vault-addressing header (mirrors the gateway's constant). */
+export const VAULT_HEADER = 'x-centraid-vault';
+
 export async function doFetch(
   baseUrl: string,
   pathname: string,
   init: RequestInit,
 ): Promise<Response> {
+  // Stamp the addressed vault on every request (issue #289). The caller
+  // resolved `auth()` just above, so the cached promise is settled — read
+  // the vault id off it and add the header unless the caller set one. This
+  // one choke point saves threading the id through every call site.
+  const finalInit = await withVaultHeader(init);
   try {
-    return await fetch(href(baseUrl, pathname), init);
+    return await fetch(href(baseUrl, pathname), finalInit);
   } catch (err) {
     throw new GatewayClientError(
       'gateway_unreachable',
       `Could not reach gateway at ${baseUrl}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+async function withVaultHeader(init: RequestInit): Promise<RequestInit> {
+  let vaultId: string | undefined;
+  try {
+    vaultId = (await auth()).vaultId;
+  } catch {
+    vaultId = undefined;
+  }
+  if (!vaultId) return init;
+  const headers = new Headers(init.headers as HeadersInit | undefined);
+  if (!headers.has(VAULT_HEADER)) headers.set(VAULT_HEADER, vaultId);
+  return { ...init, headers };
 }
 
 export async function readJson<T>(res: Response, op: string): Promise<T> {

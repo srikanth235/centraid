@@ -15,7 +15,7 @@ seam #280 deliberately deferred.
 - [x] Commit 2 (gateway) — per-request vault resolution; the active pointer dies
 - [x] Commit 3 (gateway) — device enrollment ACL + pairing tickets + admin CLI + daemon endpoint
 - [x] Commit 4 (desktop) — transport tiers, iroh dialer, version handshake
-- [ ] Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
+- [x] Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
 
 ## What changed
 
@@ -192,7 +192,11 @@ seam #280 deliberately deferred.
   `apps/desktop/src/main/version-handshake.test.ts` (new),
   `apps/desktop/src/main/gateway-store.ts`.
 
-### Commit 5 (desktop) — vault addressing, client-side switch, keyed active-vault
+### Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
+
+The flat switcher already lists vaults + connections and its head is the
+ambient identity strip (vault name + color); this commit makes switching a
+client-side pointer flip and keys the active-vault state by gateway.
 
 - The active vault is CLIENT state now (#289): `activeVaultByGateway`
   (keyed by gateway id) in `PersistedSettings`, surfaced as
@@ -370,6 +374,9 @@ The session ran autonomously from a single `/goal` directive (enqueued 2026-07-0
 | claude-code-a8d0b6fa-89f-1783278830-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 854 | 6019 | 3474219 | 8423 | 15296 | 1.9896 | 159973 | 1031847 | 68827350 | 433644 | feat(gateway): per-request vault resolution — the active-vault pointer dies (#28 |
 | claude-code-a8d0b6fa-89f-1783278877-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7450 | 6652 | 1406604 | 1459 | 15561 | 0.8186 | 167423 | 1038499 | 70233954 | 435103 | feat(gateway): device enrollment ACL + pairing tickets + admin CLI + iroh daemon |
 | claude-code-a8d0b6fa-89f-1783280108-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 29233 | 568043 | 72534828 | 120775 | 718051 | 42.9832 | 196656 | 1606542 | 142768782 | 555878 | feat(desktop): transport tiers, iroh dialer, version handshake (#289)A gateway p |
+| claude-code-a8d0b6fa-89f-1783280160-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7726 | 7110 | 2949845 | 2209 | 17045 | 1.6132 | 204382 | 1613652 | 145718627 | 558087 | feat(desktop): vault addressing, client-side switch, keyed active-vault (#289)Th |
+| claude-code-a8d0b6fa-89f-1783280183-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7440 | 1212 | 989998 | 424 | 9076 | 0.5504 | 211822 | 1614864 | 146708625 | 558511 | feat(desktop): vault addressing, client-side switch, keyed active-vault (#289)Is |
+| claude-code-a8d0b6fa-89f-1783280250-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 290 | 18178 | 3494995 | 5458 | 23926 | 1.9990 | 212112 | 1633042 | 150203620 | 563969 | feat(desktop): flat (gateway, vault) switcher, keyed state, identity strip (#289 |
 
 ### Steering
 

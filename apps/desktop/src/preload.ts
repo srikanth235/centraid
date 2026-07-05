@@ -32,6 +32,11 @@ const Channel = {
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
+  // Vault addressing (issue #289): client-side active vault per gateway.
+  VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
+  VAULT_CHANGED: 'centraid:vaults:changed',
+  VAULTS_CREATE: 'centraid:vaults:create',
+  VAULTS_DELETE: 'centraid:vaults:delete',
 
   // Phone link (issue #263)
   PHONE_STATUS: 'centraid:phone:status',
@@ -109,7 +114,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   listGateways: () => ipcRenderer.invoke(Channel.GATEWAYS_LIST),
   addGateway: (input: {
     label: string;
-    url: string;
+    /** `direct` transport: an https/http URL (plain http to a public host is refused). */
+    url?: string;
+    /** `iroh` transport: an EndpointTicket redeemed from a pairing ticket. */
+    endpointTicket?: string;
+    endpointId?: string;
     token: string;
     displayName?: string;
     avatarColor?: string;
@@ -148,6 +157,20 @@ contextBridge.exposeInMainWorld('CentraidApi', {
       );
     ipcRenderer.on(Channel.GATEWAY_CHANGED, handler);
     return () => ipcRenderer.off(Channel.GATEWAY_CHANGED, handler);
+  },
+
+  // Vault addressing (issue #289): switch the vault this client addresses on
+  // the active gateway. A pure client-side pointer flip — no server call.
+  setActiveVault: (input: { vaultId?: string }) =>
+    ipcRenderer.invoke(Channel.VAULTS_SET_ACTIVE, input),
+  // Vault create/delete — local gateway only (admin plane; remote is server CLI).
+  createVault: (input: { name?: string }) => ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
+  deleteVault: (input: { vaultId: string }) => ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
+  onVaultChanged: (cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void =>
+      cb(msg as { activeGatewayId: string; activeVaultId?: string });
+    ipcRenderer.on(Channel.VAULT_CHANGED, handler);
+    return () => ipcRenderer.off(Channel.VAULT_CHANGED, handler);
   },
 
   // Templates: list + clone moved to the renderer's direct HTTP client —

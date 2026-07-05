@@ -70,6 +70,12 @@ export interface CentraidSettings {
   /** Effective bearer token; companion to `gatewayUrl`. Read-only. */
   gatewayToken?: string;
   /**
+   * The vault this client addresses on the active gateway (issue #289),
+   * or absent to let the gateway pick. Client-owned, keyed by gateway;
+   * flip it with `setActiveVault`, not `saveSettings`. Read-only here.
+   */
+  activeVaultId?: string;
+  /**
    * Per-runner chat-model selection for the app-view agentic chat, keyed by
    * runner kind (`'codex'` | `'claude-code'` | …). The model is scoped to its
    * runner so switching agents never leaves a foreign id selected; a missing
@@ -102,8 +108,16 @@ export interface CentraidGatewayProfile {
    * always populated on receive.
    */
   avatarColor: string;
-  /** Defined for remote gateways only. */
+  /**
+   * Transport tier (issue #289): `local` (in-process), `iroh` (EndpointId
+   * over the QUIC tunnel), or `direct` (URL + token). Absent on pre-#289
+   * profiles — derived from kind + url.
+   */
+  transport?: 'local' | 'iroh' | 'direct';
+  /** Defined for `direct` remote gateways only. */
   url?: string;
+  /** The gateway's iroh EndpointId (`iroh` transport) — shown for `devices add`. */
+  endpointId?: string;
   createdAt: string;
 }
 
@@ -355,7 +369,18 @@ interface CentraidApi {
    */
   addGateway(input: {
     label: string;
-    url: string;
+    /**
+     * `direct` transport — an https/http URL + token. Plain http:// to a
+     * public host is refused (issue #289): the bearer would travel in
+     * cleartext. Omit when adding an `iroh` gateway.
+     */
+    url?: string;
+    /**
+     * `iroh` transport — the gateway's EndpointTicket (EndpointId + relay
+     * hint), redeemed from a pairing ticket. Omit for a `direct` gateway.
+     */
+    endpointTicket?: string;
+    endpointId?: string;
     token: string;
     displayName?: string;
     avatarColor?: string;
@@ -403,7 +428,28 @@ interface CentraidApi {
    * lives in keychain-backed settings on main; this is the only path it
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
-  getGatewayAuth(): Promise<{ baseUrl: string; token?: string }>;
+  getGatewayAuth(): Promise<{ baseUrl: string; token?: string; vaultId?: string }>;
+  /**
+   * Switch the vault this client addresses on the active gateway (issue
+   * #289). A pure client-side pointer flip — no server call, no re-root:
+   * subsequent requests carry a different `x-centraid-vault` header. Pass
+   * `undefined` to clear (let the gateway pick). The renderer keeps its
+   * per-(gateway,vault) state and re-renders on `onVaultChanged`.
+   */
+  setActiveVault(input: { vaultId?: string }): Promise<CentraidSettings>;
+  /**
+   * Create a vault on the active gateway (issue #289). Admin act: works for
+   * the desktop's own LOCAL gateway (the desktop is its landlord); rejects
+   * for a remote gateway (its vault lifecycle is the server CLI over SSH).
+   * The new vault does NOT become active implicitly — call `setActiveVault`.
+   */
+  createVault(input: { name?: string }): Promise<{ vaultId: string }>;
+  /**
+   * Delete a vault on the active LOCAL gateway (issue #289). Rejects for a
+   * remote gateway. Clears the client's active-vault pointer first if it
+   * names the vault being deleted.
+   */
+  deleteVault(input: { vaultId: string }): Promise<{ deleted: true }>;
   // ----- Phone link (issue #263) -----
   /** Tunnel status + the paired-device allowlist. */
   getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
@@ -427,6 +473,16 @@ interface CentraidApi {
       activeProfileDisplayName: string;
       activeProfileAvatarColor: string;
     }) => void,
+  ): () => void;
+
+  /**
+   * Subscribe to vault-address changes on the active gateway (issue #289).
+   * Fires on `setActiveVault`; the renderer re-reads its gateway auth (new
+   * vault header) and re-renders the vault's world WITHOUT the wholesale
+   * wipe a gateway switch triggers. Returns the unsubscribe.
+   */
+  onVaultChanged(
+    cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void,
   ): () => void;
 
   // listTemplates + cloneTemplate moved to the renderer's direct HTTP client

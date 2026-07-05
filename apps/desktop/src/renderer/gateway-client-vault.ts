@@ -11,21 +11,23 @@
 
 import { auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
 
-/** Plane presence + the ACTIVE vault's identity, from `GET /_vault/status`. */
+/** Presence + the ADDRESSED vault's identity, from `GET /_vault/status`. */
 export interface VaultStatus {
-  active: boolean;
   vaultId: string;
   name: string;
   ownerPartyId: string;
   fresh: boolean;
 }
 
-/** One vault of the registry, from `GET /_vault/vaults`. */
+/**
+ * One vault of the registry, from `GET /_vault/vaults` (filtered to the
+ * caller's enrollments, #289). There is no server-side "active" flag any
+ * more — the client owns its vault pointer; the switcher compares each
+ * `vaultId` against `getGatewayAuth().vaultId`.
+ */
 export interface VaultListEntry {
   vaultId: string;
   name: string;
-  /** Whether this vault is the gateway's active one (`ctx.vault` target). */
-  active: boolean;
   ownerPartyId: string;
   /**
    * Presentation out of `core_vault.settings_json` (#280: profiles are
@@ -109,26 +111,17 @@ export async function listVaults(): Promise<VaultListEntry[] | undefined> {
   return body.vaults;
 }
 
-/** Create a fresh vault. It does NOT become active implicitly. */
-export async function createVault(input: { name?: string }): Promise<VaultListEntry> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, '/centraid/_vault/vaults', {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify(input.name ? { name: input.name } : {}),
-  });
-  return readJson<VaultListEntry>(res, 'create vault');
-}
-
 /**
- * Rename a vault, update its presentation (color/icon/blurb — #280:
- * profiles are vaults), and/or make it the active one. Activation
- * re-roots the gateway's whole workspace before the response lands.
+ * Rename a vault and/or update its presentation (color/icon/blurb — #280:
+ * profiles are vaults). Switching which vault is ACTIVE is NOT done here
+ * any more (#289) — it is a pure client-side pointer flip via
+ * `window.CentraidApi.setActiveVault`; the server holds no active pointer.
+ * Vault create/delete are admin acts (server CLI over SSH) and no longer
+ * have an HTTP surface — a POST/DELETE here answers 405.
  */
 export async function updateVault(input: {
   vaultId: string;
   name?: string;
-  active?: true;
   color?: string | null;
   icon?: string | null;
   blurb?: string | null;
@@ -142,23 +135,9 @@ export async function updateVault(input: {
       ...(input.color !== undefined ? { color: input.color } : {}),
       ...(input.icon !== undefined ? { icon: input.icon } : {}),
       ...(input.blurb !== undefined ? { blurb: input.blurb } : {}),
-      ...(input.active ? { active: true } : {}),
     }),
   });
   return readJson<VaultListEntry>(res, 'update vault');
-}
-
-/**
- * Delete a vault — its two SQLite files are removed for good. The gateway
- * refuses to delete the ACTIVE vault (409): switch to another vault first.
- */
-export async function deleteVault(input: { vaultId: string }): Promise<{ deleted: boolean }> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_vault/vaults/${enc(input.vaultId)}`, {
-    method: 'DELETE',
-    headers: authHeaders(token),
-  });
-  return readJson<{ deleted: boolean }>(res, 'delete vault');
 }
 
 /** Enrolled apps with their active grants. */
