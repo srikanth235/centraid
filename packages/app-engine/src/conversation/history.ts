@@ -119,6 +119,14 @@ export interface RecordTurnInput {
   nodes: TurnNode[];
 }
 
+/**
+ * The vault assistant's reserved conversation scope. Real app ids can never
+ * start with `_` (see `isValidAppId`), so this namespace is structurally
+ * collision-free: the assistant's threads ride the same per-vault ledger,
+ * blob CAS and HTTP surface as app chats, scoped under this id.
+ */
+export const ASSISTANT_APP_ID = '_assistant';
+
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
   /**
@@ -141,7 +149,9 @@ export class ConversationHistoryStore {
   }
 
   private appConversation(appId: string): { store: ConversationStore } {
-    if (!isValidAppId(appId)) throw new Error(`conversation-history: invalid app id "${appId}"`);
+    if (appId !== ASSISTANT_APP_ID && !isValidAppId(appId)) {
+      throw new Error(`conversation-history: invalid app id "${appId}"`);
+    }
     return { store: this.store };
   }
 

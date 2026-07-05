@@ -55,6 +55,9 @@ export type {
   TurnResult,
   TurnAttachment,
   RunTurnFn,
+  VaultInvokeRunner,
+  VaultSqlRunner,
+  VaultSqlToolResult,
 } from './conversation/turn.js';
 
 export {
@@ -204,6 +207,7 @@ export { ChangeBus, type AppChange, type ChangeListener } from './changes/change
 // The store is conversation-first (spans kind=chat|build); the DTO types it
 // returns keep the chat-surface vocabulary the renderer speaks.
 export {
+  ASSISTANT_APP_ID,
   ConversationHistoryStore,
   deriveTitle,
   type ConversationSummary,
@@ -213,6 +217,15 @@ export {
   type RecordTurnInput,
 } from './conversation/history.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
+// The shared SSE turn driver (stream framing + run-ledger fold) — the
+// per-app `_turn` route and the gateway's vault-assistant route both ride it.
+export {
+  driveTurnOverSse,
+  withConversationLock,
+  type DriveTurnOptions,
+  type TurnAttachmentRef,
+} from './http/turn-sse.js';
+export { isValidConversationId } from './http/turn-routes.js';
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by

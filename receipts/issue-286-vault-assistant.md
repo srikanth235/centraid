@@ -227,6 +227,7 @@ No non-steering messages were recorded: the initial task brief, the answers to t
 | claude-code-c0bf538c-2f5-1783266085-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 149141 | 5030988 | 132342802 | 577111 | 5757240 | 225.5771 | 149141 | 5030988 | 132342802 | 577111 | feat(vault): owner-only whole-model SQL read + the assistant's vault map (#286)G |
 | claude-code-c0bf538c-2f5-1783266124-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 3773 | 4584 | 996027 | 351 | 8708 | 1.1086 | 152914 | 5035572 | 133338829 | 577462 | feat(vault): owner-only whole-model SQL read + the assistant's vault map (#286)I |
 | claude-code-c0bf538c-2f5-1783266203-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 532 | 8162 | 4028688 | 9510 | 18204 | 4.6115 | 153446 | 5043734 | 137367517 | 586972 | feat(vault): owner-only whole-model SQL read + the assistant's vault map (#286)G |
+| claude-code-c0bf538c-2f5-1783266240-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 11373 | 1683 | 1520943 | 2739 | 15795 | 1.7927 | 164819 | 5045417 | 138888460 | 589711 | feat(app-engine): vault-register seams, shared SSE turn driver, reserved _assist |
 
 ### Steering
 

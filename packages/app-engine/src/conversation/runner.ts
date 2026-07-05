@@ -114,6 +114,14 @@ export interface ConversationTurnInput {
   sessionFile: string;
   message: string;
   /**
+   * Which chat register the turn belongs to (issue #286 phase 2). `'ask'`
+   * marks the user-facing app copilot ("operate/ask about my data") —
+   * hosts may route vault-backed apps' ask turns onto the vault register
+   * (vault_sql/vault_invoke with an app lens). Absent/`'build'` keeps the
+   * builder-capable unified runner. Threaded from the `_turn` POST body.
+   */
+  register?: 'ask' | 'build';
+  /**
    * Files attached to this turn's inbound message — already landed in the
    * per-app blob CAS; `path` is the absolute blob path (issue #190). The
    * route resolves these from the turn POST body's attachment refs; the
