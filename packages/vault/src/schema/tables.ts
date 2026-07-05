@@ -20,6 +20,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'observation',
     'observation_component',
     'link',
+    'link_anchor',
     'concept_scheme',
     'concept',
     'tag',

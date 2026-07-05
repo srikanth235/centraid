@@ -26,6 +26,16 @@
         "verbs": "read"
       },
       {
+        "schema": "core",
+        "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_anchor",
+        "verbs": "read"
+      },
+      {
         "schema": "schedule",
         "table": "add_task",
         "verbs": "act"

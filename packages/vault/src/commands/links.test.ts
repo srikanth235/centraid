@@ -294,3 +294,104 @@ test('the v3 migration backfills relation notations into a pre-existing vault', 
     .get() as { n: number };
   expect(n.n).toBe(2);
 });
+
+// ---------- Standoff anchors (issue #282) ----------
+
+const SELECTOR = { exact: 'Priya Menon', prefix: 'paperwork with ', suffix: ' today.', start: 21 };
+
+function anchorOf(linkId: string) {
+  return db.vault
+    .prepare('SELECT anchor_id, selector_json FROM core_link_anchor WHERE link_id = ?')
+    .get(linkId) as { anchor_id: string; selector_json: string } | undefined;
+}
+
+function linkNoteToTask(selector?: Record<string, unknown>): string {
+  const noteId = addNote('Anchored');
+  const taskId = addTask('Target');
+  const out = invoke(owner, 'core.link_entities', {
+    from_type: 'knowledge.note',
+    from_id: noteId,
+    to_type: 'schedule.task',
+    to_id: taskId,
+    relation: 'references',
+    ...(selector ? { selector } : {}),
+  });
+  expect(out.status).toBe('executed');
+  return (out as { output: { link_id: string } }).output.link_id;
+}
+
+test('link_entities with a selector writes the anchor atomically with the link', () => {
+  const linkId = linkNoteToTask(SELECTOR);
+  const anchor = anchorOf(linkId);
+  expect(anchor).toBeDefined();
+  expect(JSON.parse(anchor?.selector_json ?? '{}')).toEqual(SELECTOR);
+});
+
+test('a malformed selector is refused at the input schema, link unwritten', () => {
+  const noteId = addNote('A');
+  const taskId = addTask('B');
+  const out = invoke(owner, 'core.link_entities', {
+    from_type: 'knowledge.note',
+    from_id: noteId,
+    to_type: 'schedule.task',
+    to_id: taskId,
+    relation: 'references',
+    selector: { exact: '', prefix: '', suffix: '', start: -1 },
+  });
+  expect(out.status).not.toBe('executed');
+  const n = db.vault.prepare('SELECT count(*) AS n FROM core_link_anchor').get() as { n: number };
+  expect(n.n).toBe(0);
+});
+
+test('anchor_link upserts the one anchor a link carries — a re-baseline moves it in place', () => {
+  const linkId = linkNoteToTask(SELECTOR);
+  const first = anchorOf(linkId);
+  const moved = { ...SELECTOR, start: 40, prefix: 'met ' };
+  const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: moved });
+  expect(out.status).toBe('executed');
+  const after = anchorOf(linkId);
+  expect(after?.anchor_id).toBe(first?.anchor_id); // moved, not multiplied
+  expect(JSON.parse(after?.selector_json ?? '{}')).toEqual(moved);
+  const n = db.vault.prepare('SELECT count(*) AS n FROM core_link_anchor').get() as { n: number };
+  expect(n.n).toBe(1);
+});
+
+test('anchor_link can attach an anchor to a link created without one (re-anchor an orphaned edge)', () => {
+  const linkId = linkNoteToTask();
+  expect(anchorOf(linkId)).toBeUndefined();
+  const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: SELECTOR });
+  expect(out.status).toBe('executed');
+  expect((out as { output: { anchor_id?: string } }).output.anchor_id).toBeTruthy();
+  expect(anchorOf(linkId)).toBeDefined();
+});
+
+test('anchor_link without a selector clears the anchor — the edge demotes to strip-only', () => {
+  const linkId = linkNoteToTask(SELECTOR);
+  const out = invoke(owner, 'core.anchor_link', { link_id: linkId });
+  expect(out.status).toBe('executed');
+  expect(anchorOf(linkId)).toBeUndefined();
+  expect(liveLink(linkId)?.valid_to).toBeNull(); // the judgment is untouched
+});
+
+test('an ended link takes no new locator', () => {
+  const linkId = linkNoteToTask(SELECTOR);
+  expect(invoke(owner, 'core.unlink_entities', { link_id: linkId }).status).toBe('executed');
+  const out = invoke(owner, 'core.anchor_link', { link_id: linkId, selector: SELECTOR });
+  expect(out.status).toBe('failed');
+  if (out.status === 'failed') expect(out.predicate).toContain('link_live');
+});
+
+test('a link_anchor is not a linkable endpoint — locators are not entities', () => {
+  const linkId = linkNoteToTask(SELECTOR);
+  const anchor = anchorOf(linkId);
+  const noteId = addNote('Meta');
+  const out = invoke(owner, 'core.link_entities', {
+    from_type: 'knowledge.note',
+    from_id: noteId,
+    to_type: 'core.link_anchor',
+    to_id: anchor?.anchor_id ?? '',
+    relation: 'about',
+  });
+  expect(out.status).toBe('failed');
+  if (out.status === 'failed') expect(out.reason).toContain('links do not link links');
+});

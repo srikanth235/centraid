@@ -9,13 +9,15 @@
 // page goes dark while the model, history and receipts remain the owner's.
 
 import {
+  appendWithChips,
   armConfirm,
-  createReference,
-  entityKindLabel,
-  openEntityPicker,
+  attachMentionField,
+  inlineLinkIds,
   readFailed,
   relTime,
   removeReference,
+  renderReferenceStrip,
+  resolveInlineSpans,
   showSkeleton,
   toast,
 } from './kit.js';
@@ -178,67 +180,48 @@ function wireAttachInput(inputEl, getSubjectId) {
 // and asserted through the shell (pick-is-consent); the library query
 // renders the far end via the resolver's cards.
 
-function renderReferences(stripEl, list) {
-  stripEl.innerHTML = '';
-  for (const ref of list ?? []) {
-    const card = ref.card ?? {};
-    const tile = document.createElement('div');
-    tile.className = 'ref-tile';
-    const kind = document.createElement('span');
-    kind.className = 'ref-kind';
-    kind.textContent = entityKindLabel(card.type);
-    tile.appendChild(kind);
-    const label = document.createElement('span');
-    label.className = 'ref-title';
-    if (card.status === 'missing') {
-      tile.classList.add('ref-gone');
-      label.textContent = 'removed from the vault';
-    } else {
-      label.textContent = card.title ?? `${entityKindLabel(card.type)}`;
-      if (card.status === 'trashed') {
-        tile.classList.add('ref-gone');
-        label.textContent += ' (in trash)';
-      }
-    }
-    tile.appendChild(label);
-    if (card.subtitle && card.status === 'live') {
-      const sub = document.createElement('span');
-      sub.className = 'ref-sub';
-      sub.textContent = card.subtitle;
-      tile.appendChild(sub);
-    }
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'ref-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove reference';
-    rm.addEventListener('click', async () => {
+// The strip renderer is the kit's canonical primitive (issues #272 + #282);
+// this app supplies only the removal behaviour — the vault unlink plus a
+// re-read — and the set of link_ids currently resolved inline so tiles flag
+// themselves "in text" vs "in strip".
+function renderReferences(stripEl, list, inlineSet) {
+  renderReferenceStrip(stripEl, list, {
+    inlineIds: inlineSet,
+    onRemove: async (ref) => {
       const outcome = await removeReference(ref.link_id);
       if (outcome?.status !== 'executed') {
         notice(`Could not remove the reference: ${outcome?.reason ?? 'unknown error'}.`);
       }
       await refresh();
-    });
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
+    },
+  });
 }
 
-async function addReference() {
-  const noteId = viewingId;
-  if (!noteId) return;
-  const picked = await openEntityPicker({
-    title: 'Link this note to…',
-    exclude: { type: 'knowledge.note', id: noteId },
-  });
-  if (!picked) return;
-  const outcome = await createReference({ type: 'knowledge.note', id: noteId }, picked);
-  if (outcome?.status === 'executed') {
-    toast(`Linked to ${picked.title ?? entityKindLabel(picked.type)}.`);
-  } else {
-    notice(`The vault refused the link: ${outcome?.reason ?? outcome?.predicate ?? ''}.`);
-  }
-  await refresh();
+// Inline @-mentions (issues #272 + #282) are the one way to create a
+// reference. The kit's shared field owns the caret popover, the
+// pick→insert→assert (re-anchor-don't-duplicate) and the 4b reconcile; this
+// app supplies only the subject note, its live reference list, and how to
+// re-render. The body stays plain bytes; the reference stays a receipted edge.
+const bodyField = attachMentionField($('noteBodyInput'), {
+  from: () => (viewingId ? { type: 'knowledge.note', id: viewingId } : null),
+  references: () => currentNote()?.references ?? [],
+  onError: (outcome) => narrate(outcome, refresh),
+  onChange: () => {
+    const note = currentNote();
+    if (!note) return;
+    const body = draft?.body ?? note.body;
+    renderReferences($('refStrip'), note.references, inlineLinkIds(body, note.references));
+    if (!editingBody) renderNoteBody(note);
+  },
+});
+
+// The strip button is a discoverability shim (mobile especially, where typing
+// `@` mid-text isn't obvious): drop into the body editor and let the field's
+// popover take over.
+function startMention() {
+  if (!draft) return;
+  if (!editingBody) enterBodyEdit(draft.body.length);
+  bodyField.startMention();
 }
 
 // ---------- Lightbox ----------
@@ -295,11 +278,16 @@ function appendInline(el, text) {
   if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
+// Inline anchored references in the read view (issue #282) are rendered with
+// the kit's shared helpers: resolveInlineSpans(body, references) → spans, and
+// appendWithChips(...) swaps each resolved span for a live-card chip. This
+// app owns only its block/markdown layout below.
+
 const CHECK_RE = /^\s*[-*] \[( |x|X)\] ?(.*)$/;
 
 // One `- [ ]` / `- [x]` source line as a live checkbox row. Works in every
 // format: a checklist is a checklist even in a plain-text note.
-function checkLine(match, lineIndex, markdown) {
+function checkLine(match, lineIndex, chunkStart, inline, renderPlain) {
   const row = document.createElement('div');
   row.className = `check-line${/x/i.test(match[1]) ? ' done' : ''}`;
   row.dataset.line = String(lineIndex);
@@ -314,8 +302,7 @@ function checkLine(match, lineIndex, markdown) {
   box.appendChild(input);
   const text = document.createElement('span');
   text.className = 'check-text';
-  if (markdown) appendInline(text, match[2]);
-  else text.textContent = match[2];
+  appendWithChips(text, match[2], chunkStart, inline, renderPlain);
   row.append(box, text);
   return row;
 }
@@ -323,17 +310,26 @@ function checkLine(match, lineIndex, markdown) {
 // Line-oriented block renderer. Markdown gets headings (#/##/###), `- ` lists
 // and inline spans; plain/html bodies render as literal lines. Checklists
 // render live in every format. Each block carries data-line so a click can
-// drop the caret on the right source line.
-function renderBodyInto(container, body, format) {
+// drop the caret on the right source line. `inline` is the kit's resolved
+// anchor spans; `renderPlain` renders the non-chip text (markdown inline
+// spans, or a plain text node) — both threaded through kit.appendWithChips.
+function renderBodyInto(container, body, format, inline = []) {
   container.innerHTML = '';
   const markdown = format === 'markdown';
+  const renderPlain = markdown ? (node, seg) => appendInline(node, seg) : undefined;
   const lines = String(body ?? '').split('\n');
   let list = null;
+  let offset = 0;
   lines.forEach((line, i) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    // Rendered chunks strip a syntax prefix; since every capture group runs
+    // to end-of-line, its body offset is lineStart + (prefix length).
+    const chunkStart = (group) => lineStart + line.length - group.length;
     const check = CHECK_RE.exec(line);
     if (check) {
       list = null;
-      container.appendChild(checkLine(check, i, markdown));
+      container.appendChild(checkLine(check, i, chunkStart(check[2]), inline, renderPlain));
       return;
     }
     if (markdown) {
@@ -343,7 +339,7 @@ function renderBodyInto(container, body, format) {
         const h = document.createElement(`h${heading[1].length + 2}`);
         h.className = `md-h${heading[1].length}`;
         h.dataset.line = String(i);
-        appendInline(h, heading[2]);
+        appendWithChips(h, heading[2], chunkStart(heading[2]), inline, renderPlain);
         container.appendChild(h);
         return;
       }
@@ -356,7 +352,7 @@ function renderBodyInto(container, body, format) {
         }
         const li = document.createElement('li');
         li.dataset.line = String(i);
-        appendInline(li, item[1]);
+        appendWithChips(li, item[1], chunkStart(item[1]), inline, renderPlain);
         list.appendChild(li);
         return;
       }
@@ -366,8 +362,7 @@ function renderBodyInto(container, body, format) {
     p.dataset.line = String(i);
     if (line.trim()) {
       p.className = 'md-p';
-      if (markdown) appendInline(p, line);
-      else p.textContent = line;
+      appendWithChips(p, line, lineStart, inline, renderPlain);
     } else {
       p.className = 'md-gap';
     }
@@ -835,7 +830,7 @@ function renderNoteView(note) {
   renderNoteBody(note);
   renderMoveSelect(note);
   renderAttachments($('attachStrip'), note.attachments, removeAttachment);
-  renderReferences($('refStrip'), note.references);
+  renderReferences($('refStrip'), note.references, inlineLinkIds(draft.body, note.references));
 }
 
 function renderNoteBody(note) {
@@ -849,7 +844,12 @@ function renderNoteBody(note) {
   } else {
     input.hidden = true;
     render.hidden = false;
-    renderBodyInto(render, draft.body, note?.format);
+    renderBodyInto(
+      render,
+      draft.body,
+      note?.format,
+      resolveInlineSpans(draft.body, note?.references ?? []),
+    );
   }
 }
 
@@ -962,6 +962,16 @@ async function performSave() {
     note.title = input.title ?? note.title;
     note.body = snapBody;
     note.updated_at = new Date().toISOString();
+    // The saved body is the settled truth — the kit field re-baselines the
+    // standoff anchors against it and retracts orphaned mentions (issue #282,
+    // 4b). Capture this note as the subject so a navigation mid-reconcile
+    // can't retarget it.
+    if (input.body_text) {
+      bodyField.reconcile(snapBody, {
+        from: { type: 'knowledge.note', id: note.note_id },
+        references: note.references,
+      });
+    }
     if (dirty) scheduleSave();
   } else {
     narrate(outcome, refresh);
@@ -1177,7 +1187,7 @@ async function removeAttachment(attachmentId) {
 
 wireAttachInput($('attachInput'), () => viewingId);
 
-$('addRefButton').addEventListener('click', addReference);
+$('addRefButton').addEventListener('click', startMention);
 
 $('pinButton').addEventListener('click', async () => {
   const note = currentNote();

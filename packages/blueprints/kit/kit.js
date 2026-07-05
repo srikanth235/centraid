@@ -910,12 +910,13 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
 })();
 
 // ============================================================================
-// Cross-referencing (issue #272) — the shell-owned entity picker + owner
-// link writes. Referencing is a SHELL capability, not an app capability:
-// the picker browses/searches the vault at owner trust (via the gateway's
-// /_vault/picker surface, every read receipted), the user picks ONE row,
-// and the app receives only that row's card. The link itself is asserted
-// with the owner-device credential (POST /_vault/links → core.link_entities,
+// Cross-referencing (issues #272 + #282) — owner link writes + the reference
+// strip. Referencing is a SHELL capability, not an app capability: the sole
+// creation gesture is the inline `@`-mention (attachMentionPopover, below),
+// which browses/searches the vault at owner trust (via the gateway's
+// /_vault/picker surface, every read receipted); the user picks ONE row and
+// the app receives only that row's card. The link is asserted with the
+// owner-device credential (POST /_vault/links → core.link_entities,
 // asserted_by='owner') — the pick is the consent, scoped to one row, so the
 // app never needs read scopes on the foreign domain. Rendering the linked
 // entity later rides ctx.vault.resolve's resolvable-if-linked rule.
@@ -946,143 +947,13 @@ export function entityKindLabel(type) {
 }
 
 /**
- * Open the shell entity picker. Resolves with the picked card
- * ({type, id, title, subtitle, thumbnail_content_id, snippet?}) or null on
- * cancel. Options: {kinds?: string[], title?: string, exclude?: {type, id}}.
- */
-export function openEntityPicker(options = {}) {
-  return new Promise((resolve) => {
-    const ov = document.createElement('div');
-    ov.className = 'kit-pick-ov';
-    const panel = document.createElement('div');
-    panel.className = 'kit-pick-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'true');
-    panel.setAttribute('aria-label', options.title ?? 'Link from your vault');
-
-    const head = document.createElement('div');
-    head.className = 'kit-pick-head';
-    const h = document.createElement('h2');
-    h.textContent = options.title ?? 'Link from your vault';
-    const x = document.createElement('button');
-    x.type = 'button';
-    x.className = 'kit-pick-x';
-    x.setAttribute('aria-label', 'Close');
-    x.textContent = '✕';
-    head.appendChild(h);
-    head.appendChild(x);
-
-    const input = document.createElement('input');
-    input.className = 'kit-pick-search';
-    input.placeholder = 'Search your vault…';
-    input.setAttribute('aria-label', 'Search entities');
-
-    const list = document.createElement('div');
-    list.className = 'kit-pick-list';
-    list.setAttribute('role', 'listbox');
-
-    const note = document.createElement('p');
-    note.className = 'kit-pick-note';
-    note.textContent = 'Picking shares only the picked item with this app — receipted.';
-
-    panel.appendChild(head);
-    panel.appendChild(input);
-    panel.appendChild(list);
-    panel.appendChild(note);
-    ov.appendChild(panel);
-    document.body.appendChild(ov);
-
-    const onKey = (e) => {
-      if (e.key === 'Escape') done(null);
-    };
-    document.addEventListener('keydown', onKey);
-    ov.addEventListener('click', (e) => {
-      if (e.target === ov) done(null);
-    });
-    x.addEventListener('click', () => done(null));
-
-    function done(card) {
-      document.removeEventListener('keydown', onKey);
-      ov.remove();
-      resolve(card);
-    }
-
-    let seq = 0;
-    async function load(term) {
-      const mine = ++seq;
-      list.dataset.state = 'loading';
-      const params = new URLSearchParams();
-      if (term) params.set('term', term);
-      if (options.kinds && options.kinds.length) params.set('kinds', options.kinds.join(','));
-      let cards = [];
-      try {
-        const r = await fetch('/centraid/_vault/picker?' + params.toString());
-        const body = r.ok ? await r.json() : null;
-        cards = (body && body.cards) || [];
-      } catch {
-        cards = [];
-      }
-      if (mine !== seq) return; // a newer keystroke superseded this load
-      delete list.dataset.state;
-      list.innerHTML = '';
-      const excluded = options.exclude
-        ? (c) => c.type === options.exclude.type && c.id === options.exclude.id
-        : () => false;
-      const visible = cards.filter((c) => !excluded(c));
-      if (visible.length === 0) {
-        const empty = document.createElement('p');
-        empty.className = 'kit-pick-empty';
-        empty.textContent = term ? 'Nothing in your vault matches that.' : 'Nothing to link yet.';
-        list.appendChild(empty);
-        return;
-      }
-      for (const card of visible) {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'kit-pick-row';
-        row.setAttribute('role', 'option');
-        const kind = document.createElement('span');
-        kind.className = 'kit-pick-kind';
-        kind.textContent = entityKindLabel(card.type);
-        const body = document.createElement('span');
-        body.className = 'kit-pick-body';
-        const title = document.createElement('span');
-        title.className = 'kit-pick-title';
-        title.textContent = card.title ?? `${entityKindLabel(card.type)} ${card.id.slice(-6)}`;
-        body.appendChild(title);
-        const subline = card.snippet
-          ? String(card.snippet).replace(/[⟦⟧]/g, '')
-          : (card.subtitle ?? '');
-        if (subline) {
-          const sub = document.createElement('span');
-          sub.className = 'kit-pick-sub';
-          sub.textContent = subline;
-          body.appendChild(sub);
-        }
-        row.appendChild(kind);
-        row.appendChild(body);
-        row.addEventListener('click', () => done(card));
-        list.appendChild(row);
-      }
-    }
-
-    let debounceTimer = 0;
-    input.addEventListener('input', () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => load(input.value.trim()), 250);
-    });
-
-    load('');
-    setTimeout(() => input.focus(), 60);
-  });
-}
-
-/**
  * Assert a link as the owner (the pick already carried the intent):
- * `from`/`to` are `{type, id}`; relation defaults to `references`.
+ * `from`/`to` are `{type, id}`; relation defaults to `references`. An
+ * optional `selector` ({exact, prefix, suffix, start}, issue #282) writes an
+ * inline standoff anchor atomically with the link.
  * Returns the vault's InvokeOutcome — `{status: 'executed', …}` on success.
  */
-export async function createReference(from, to, relation) {
+export async function createReference(from, to, relation, selector) {
   const r = await fetch('/centraid/_vault/links', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1092,6 +963,7 @@ export async function createReference(from, to, relation) {
       to_type: to.type,
       to_id: to.id,
       relation: relation || 'references',
+      ...(selector ? { selector } : {}),
     }),
   });
   return r.json();
@@ -1103,4 +975,755 @@ export async function removeReference(linkId) {
     method: 'DELETE',
   });
   return r.json();
+}
+
+/**
+ * Render the reference strip — the durable home of a note/doc's cross-refs
+ * and the landing zone an inline anchor degrades to (issues #272 + #282).
+ * This is the ONE canonical strip renderer: every consumer of references
+ * (Notes now, Docs when it adopts) calls it so the strip, its card states,
+ * and the anchored/orphaned distinction render identically everywhere.
+ *
+ * Presentation-only — it never writes. The app owns persistence: pass
+ * `onRemove(ref)` to show a remove control (the app runs removeReference +
+ * whatever refresh it needs); omit it for a read-only strip.
+ *
+ * Each `ref` is `{link_id, card, selector?}` where `card` is a resolver card
+ * ({type, title, subtitle, status: live|trashed|missing|denied}). `selector`
+ * present ⇒ the reference is anchored; pass `inlineIds` (a Set of link_ids
+ * currently resolved inline in the body) and the tile flags itself "in text"
+ * vs "in strip". Plain picker links (no selector) wear no flag.
+ *
+ * Options: {inlineIds?: Set<string>, onRemove?: (ref) => void, emptyText?: string}.
+ */
+export function renderReferenceStrip(stripEl, refs, options = {}) {
+  const { inlineIds, onRemove, emptyText } = options;
+  stripEl.classList.add('kit-ref-strip');
+  stripEl.innerHTML = '';
+  const list = refs ?? [];
+  if (list.length === 0) {
+    if (emptyText) {
+      const empty = document.createElement('p');
+      empty.className = 'kit-ref-empty';
+      empty.textContent = emptyText;
+      stripEl.appendChild(empty);
+    }
+    return;
+  }
+  for (const ref of list) {
+    const card = ref.card ?? {};
+    const tile = document.createElement('div');
+    tile.className = 'kit-ref-tile';
+
+    const kind = document.createElement('span');
+    kind.className = 'kit-ref-kind';
+    kind.textContent = entityKindLabel(card.type);
+    tile.appendChild(kind);
+
+    // Anchored references wear their state: resolved inline in the body, or
+    // orphaned to the strip (their words left the text). Plain links don't.
+    if (ref.selector) {
+      const flag = document.createElement('span');
+      const inline = inlineIds?.has(ref.link_id);
+      flag.className = `kit-ref-flag${inline ? ' is-inline' : ''}`;
+      flag.textContent = inline ? 'in text' : 'in strip';
+      flag.title = inline
+        ? 'Shown inline in the text above'
+        : "This reference's words are no longer in the text";
+      tile.appendChild(flag);
+    }
+
+    const label = document.createElement('span');
+    label.className = 'kit-ref-title';
+    if (card.status === 'missing') {
+      tile.classList.add('is-gone');
+      label.textContent = 'removed from the vault';
+    } else if (card.status === 'denied') {
+      tile.classList.add('is-gone');
+      label.textContent = 'access not granted';
+    } else {
+      label.textContent = card.title ?? entityKindLabel(card.type);
+      if (card.status === 'trashed') {
+        tile.classList.add('is-gone');
+        label.textContent += ' (in trash)';
+      }
+    }
+    tile.appendChild(label);
+
+    if (card.subtitle && card.status === 'live') {
+      const sub = document.createElement('span');
+      sub.className = 'kit-ref-sub';
+      sub.textContent = card.subtitle;
+      tile.appendChild(sub);
+    }
+
+    if (onRemove) {
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'kit-ref-remove';
+      rm.textContent = '×';
+      rm.title = 'Remove reference';
+      rm.setAttribute('aria-label', `Remove reference to ${label.textContent}`);
+      rm.addEventListener('click', () => onRemove(ref));
+      tile.appendChild(rm);
+    }
+
+    stripEl.appendChild(tile);
+  }
+}
+
+/**
+ * Move (selector object) or clear (selector null) the standoff anchor of a
+ * live link — the re-anchor / re-baseline half of inline references (issue
+ * #282). A locator write: the link judgment itself is untouched, so clearing
+ * demotes the reference to strip-only.
+ */
+export async function reanchorReference(linkId, selector) {
+  const r = await fetch('/centraid/_vault/links/' + encodeURIComponent(linkId), {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ selector: selector ?? null }),
+  });
+  return r.json();
+}
+
+// ============================================================================
+// Inline anchored references (issue #282) — the standoff-anchor half of
+// cross-referencing. A reference stays a core.link edge; these helpers give
+// it an inline presentation over a PLAIN text body: a W3C-style selector
+// points into the words from outside, the read view resolves selectors to
+// spans, and a broken selector degrades to the strip — never a wrong chip.
+// Anchor resolution runs here in the kit (one implementation for every
+// consumer) and is presentation-only: it never writes.
+// ============================================================================
+
+/** Context window captured either side of a mention (chars). */
+const MENTION_CONTEXT = 24;
+
+/**
+ * Build the standoff selector for the words at [start, end) of `text`:
+ * TextQuoteSelector (exact + surrounding context) belt, TextPositionSelector
+ * (start, in UTF-16 code units) suspenders.
+ */
+export function computeMentionSelector(text, start, end) {
+  return {
+    exact: text.slice(start, end),
+    prefix: text.slice(Math.max(0, start - MENTION_CONTEXT), start),
+    suffix: text.slice(end, end + MENTION_CONTEXT),
+    start,
+  };
+}
+
+// Deterministic normalization for the last resolution rung: collapse
+// whitespace runs, fold smart quotes. Zero fuzzy risk — every normalized hit
+// is still an exact hit modulo these two classes. The map carries normalized
+// indices back to raw ones.
+function normalizeWithMap(text) {
+  let out = '';
+  const map = [];
+  let lastWasSpace = false;
+  for (let i = 0; i < text.length; i += 1) {
+    let ch = text[i];
+    if (/\s/.test(ch)) {
+      if (lastWasSpace) continue;
+      out += ' ';
+      map.push(i);
+      lastWasSpace = true;
+      continue;
+    }
+    lastWasSpace = false;
+    if (ch === '‘' || ch === '’') ch = "'";
+    else if (ch === '“' || ch === '”') ch = '"';
+    out += ch;
+    map.push(i);
+  }
+  return { text: out, map };
+}
+
+// How much of the stored context survives around an occurrence — matching
+// outward from the boundary, so nearby identical quotes separate cleanly.
+function contextScore(body, occStart, occEnd, sel) {
+  const prefix = sel.prefix ?? '';
+  const suffix = sel.suffix ?? '';
+  let score = 0;
+  for (let k = 1; k <= prefix.length; k += 1) {
+    if (body[occStart - k] === prefix[prefix.length - k]) score += 1;
+    else break;
+  }
+  for (let k = 0; k < suffix.length; k += 1) {
+    if (body[occEnd + k] === suffix[k]) score += 1;
+    else break;
+  }
+  return score;
+}
+
+function occurrencesOf(haystack, needle) {
+  const out = [];
+  let at = haystack.indexOf(needle);
+  while (at !== -1) {
+    out.push(at);
+    at = haystack.indexOf(needle, at + 1);
+  }
+  return out;
+}
+
+/**
+ * Resolve standoff anchors to text spans — the global one-span-per-anchor
+ * assignment (issue #282, Q2's layered ladder). `anchors` is a list of
+ * `{link_id, selector: {exact, prefix, suffix, start}}`; the result maps
+ * link_id → {start, end} in raw body offsets. An anchor that wins no span is
+ * simply absent — an ORPHAN, rendered in the strip only.
+ *
+ * Ladder per anchor: exact occurrences (context-scored, nearest-to-stored-
+ * position tiebreak; a position-verified match is just the perfect score) →
+ * whitespace/smart-quote-normalized occurrences → orphan. NO fuzzy matching:
+ * a wrong chip is a lie, a strip chip is honest. Arbitration is global —
+ * each occurrence goes to at most one anchor and spans never overlap, so an
+ * irreducibly ambiguous pair (same quote, same context) yields one inline
+ * chip and one strip entry instead of a double render.
+ */
+export function assignAnchors(body, anchors) {
+  const candidates = [];
+  let norm = null;
+  for (const anchor of anchors) {
+    const sel = anchor.selector;
+    if (!sel || typeof sel.exact !== 'string' || sel.exact.length === 0) continue;
+    let spans = occurrencesOf(body, sel.exact).map((at) => ({
+      start: at,
+      end: at + sel.exact.length,
+      normalized: 0,
+    }));
+    if (spans.length === 0) {
+      norm = norm ?? normalizeWithMap(body);
+      const needle = normalizeWithMap(sel.exact).text;
+      if (needle.length > 0) {
+        spans = occurrencesOf(norm.text, needle).map((at) => ({
+          start: norm.map[at],
+          end: norm.map[at + needle.length - 1] + 1,
+          normalized: 1,
+        }));
+      }
+    }
+    for (const span of spans) {
+      candidates.push({
+        linkId: anchor.link_id,
+        start: span.start,
+        end: span.end,
+        normalized: span.normalized,
+        score: contextScore(body, span.start, span.end, sel),
+        posDist: Math.abs(span.start - (Number.isFinite(sel.start) ? sel.start : 0)),
+      });
+    }
+  }
+  // Best claims first: exact before normalized, most context, nearest to the
+  // stored position, then document order for full determinism.
+  candidates.sort(
+    (a, b) =>
+      a.normalized - b.normalized ||
+      b.score - a.score ||
+      a.posDist - b.posDist ||
+      a.start - b.start,
+  );
+  const assigned = new Map();
+  const claimed = [];
+  for (const c of candidates) {
+    if (assigned.has(c.linkId)) continue;
+    if (claimed.some(([s, e]) => c.start < e && s < c.end)) continue;
+    assigned.set(c.linkId, { start: c.start, end: c.end });
+    claimed.push([c.start, c.end]);
+  }
+  return assigned;
+}
+
+// Caret pixel position inside a textarea, via the classic mirror-div
+// technique: clone the metrics that shape line wrapping, lay out the text up
+// to `index`, and read where a marker span lands.
+const MIRROR_STYLES = [
+  'boxSizing',
+  'width',
+  'paddingTop',
+  'paddingRight',
+  'paddingBottom',
+  'paddingLeft',
+  'borderTopWidth',
+  'borderRightWidth',
+  'borderBottomWidth',
+  'borderLeftWidth',
+  'fontFamily',
+  'fontSize',
+  'fontWeight',
+  'fontStyle',
+  'letterSpacing',
+  'lineHeight',
+  'textTransform',
+  'wordSpacing',
+  'textIndent',
+];
+
+function caretRect(textarea, index) {
+  const mirror = document.createElement('div');
+  const style = getComputedStyle(textarea);
+  for (const prop of MIRROR_STYLES) mirror.style[prop] = style[prop];
+  mirror.style.position = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.overflowWrap = 'break-word';
+  mirror.textContent = textarea.value.slice(0, index);
+  const marker = document.createElement('span');
+  marker.textContent = '​';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const top = marker.offsetTop;
+  const left = marker.offsetLeft;
+  const lineHeight = marker.offsetHeight || parseFloat(style.lineHeight) || 20;
+  mirror.remove();
+  const box = textarea.getBoundingClientRect();
+  return {
+    top: box.top + top - textarea.scrollTop,
+    left: box.left + left - textarea.scrollLeft,
+    height: lineHeight,
+  };
+}
+
+/**
+ * The inline `@`-mention gesture over a plain textarea (issue #282). Typing
+ * `@` at a word boundary opens a caret-anchored popover of pickable entity
+ * cards; typing filters it CLIENT-SIDE over one batch fetched when the
+ * popover opened — one receipted owner read per gesture, never per
+ * keystroke (the receipt stays legible as "the owner opened the picker").
+ *
+ * The kit only runs the gesture: on pick it calls `onPick(card, range)` with
+ * `range = {start, end}` covering `@token` in the textarea's value, and the
+ * APP inserts the plain words and asserts the (anchored) link — text stays
+ * plain, the reference stays structural.
+ *
+ * Options: {kinds?: string[], exclude?: {type, id}, onPick(card, range)}.
+ * Returns a detach() that removes every listener.
+ */
+export function attachMentionPopover(textarea, options = {}) {
+  let pop = null;
+  let cards = null; // the one batch fetched for this popover
+  let fetchSeq = 0;
+  let atIndex = -1;
+  let selected = 0;
+
+  function close() {
+    if (pop) pop.remove();
+    pop = null;
+    cards = null;
+    atIndex = -1;
+    selected = 0;
+    fetchSeq += 1; // orphan any in-flight fetch
+  }
+
+  function tokenAtCaret() {
+    const caret = textarea.selectionStart;
+    if (caret !== textarea.selectionEnd) return null;
+    const upto = textarea.value.slice(0, caret);
+    const at = upto.lastIndexOf('@');
+    if (at === -1) return null;
+    const before = at === 0 ? '' : upto[at - 1];
+    if (before && !/[\s(]/.test(before)) return null;
+    const token = upto.slice(at + 1);
+    if (token.length > 40 || token.includes('\n')) return null;
+    return { at, caret, token };
+  }
+
+  function filtered() {
+    const gesture = tokenAtCaret();
+    const term = (gesture?.token ?? '').trim().toLowerCase();
+    const excluded = options.exclude
+      ? (c) => c.type === options.exclude.type && c.id === options.exclude.id
+      : () => false;
+    return (cards ?? [])
+      .filter((c) => !excluded(c))
+      .filter((c) => {
+        if (!term) return true;
+        const hay = `${c.title ?? ''} ${c.subtitle ?? ''} ${entityKindLabel(c.type)}`.toLowerCase();
+        return hay.includes(term);
+      })
+      .slice(0, 8);
+  }
+
+  function pick(card) {
+    const gesture = tokenAtCaret();
+    close();
+    if (!gesture || !options.onPick) return;
+    options.onPick(card, { start: gesture.at, end: gesture.caret });
+  }
+
+  function renderList() {
+    if (!pop) return;
+    const list = pop.firstChild;
+    list.innerHTML = '';
+    const visible = filtered();
+    if (selected >= visible.length) selected = Math.max(0, visible.length - 1);
+    if (cards && visible.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'kit-mention-empty';
+      empty.textContent = 'Nothing in your vault matches that.';
+      list.appendChild(empty);
+      return;
+    }
+    visible.forEach((card, i) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'kit-mention-row';
+      row.setAttribute('role', 'option');
+      row.setAttribute('aria-selected', i === selected ? 'true' : 'false');
+      const kind = document.createElement('span');
+      kind.className = 'kit-mention-kind';
+      kind.textContent = entityKindLabel(card.type);
+      const title = document.createElement('span');
+      title.className = 'kit-mention-title';
+      title.textContent = card.title ?? `${entityKindLabel(card.type)} ${card.id.slice(-6)}`;
+      row.append(kind, title);
+      // pointerdown, not click: keep the textarea focused through the pick.
+      row.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        pick(card);
+      });
+      list.appendChild(row);
+    });
+  }
+
+  function place() {
+    if (!pop || atIndex < 0) return;
+    const rect = caretRect(textarea, atIndex);
+    const width = Math.min(320, window.innerWidth - 16);
+    pop.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+    pop.style.top = `${Math.min(rect.top + rect.height + 4, window.innerHeight - 60)}px`;
+    pop.style.width = `${width}px`;
+  }
+
+  async function open(gesture) {
+    atIndex = gesture.at;
+    selected = 0;
+    if (!pop) {
+      pop = document.createElement('div');
+      pop.className = 'kit-mention-pop';
+      pop.setAttribute('role', 'listbox');
+      pop.setAttribute('aria-label', 'Mention an entity from your vault');
+      const list = document.createElement('div');
+      list.className = 'kit-mention-list';
+      list.dataset.state = 'loading';
+      pop.appendChild(list);
+      const note = document.createElement('p');
+      note.className = 'kit-mention-note';
+      note.textContent = 'Picking links only the picked item — receipted.';
+      pop.appendChild(note);
+      document.body.appendChild(pop);
+    }
+    place();
+    if (cards === null) {
+      const mine = ++fetchSeq;
+      const params = new URLSearchParams();
+      params.set('limit', '25');
+      if (options.kinds && options.kinds.length) params.set('kinds', options.kinds.join(','));
+      let batch = [];
+      try {
+        const r = await fetch('/centraid/_vault/picker?' + params.toString());
+        const body = r.ok ? await r.json() : null;
+        batch = (body && body.cards) || [];
+      } catch {
+        batch = [];
+      }
+      if (mine !== fetchSeq || !pop) return; // closed while loading
+      cards = batch;
+      delete pop.firstChild.dataset.state;
+    }
+    renderList();
+  }
+
+  function onInput() {
+    const gesture = tokenAtCaret();
+    if (!gesture) {
+      close();
+      return;
+    }
+    if (pop && gesture.at === atIndex) renderList();
+    else open(gesture);
+  }
+
+  function onKeydown(e) {
+    if (!pop) return;
+    const visible = filtered();
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.key === 'ArrowDown' ? 1 : -1;
+      selected = (selected + delta + Math.max(1, visible.length)) % Math.max(1, visible.length);
+      renderList();
+    } else if ((e.key === 'Enter' || e.key === 'Tab') && visible.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      pick(visible[selected]);
+    }
+  }
+
+  function onBlur() {
+    // pointerdown picks already ran preventDefault, so a real blur means the
+    // gesture is over — but a programmatic open (a button that inserts `@`
+    // and re-focuses the textarea) blurs then immediately refocuses, so only
+    // close if focus actually left the field.
+    setTimeout(() => {
+      if (document.activeElement !== textarea) close();
+    }, 80);
+  }
+
+  textarea.addEventListener('input', onInput);
+  // Capture phase: while the popover is open its Enter/Arrows must win over
+  // the app's own editor keydown handlers (e.g. checklist continuation).
+  textarea.addEventListener('keydown', onKeydown, true);
+  textarea.addEventListener('blur', onBlur);
+  textarea.addEventListener('click', onInput);
+  return function detach() {
+    close();
+    textarea.removeEventListener('input', onInput);
+    textarea.removeEventListener('keydown', onKeydown, true);
+    textarea.removeEventListener('blur', onBlur);
+    textarea.removeEventListener('click', onInput);
+  };
+}
+
+// ---------- Inline-chip rendering (shared read-view helpers, issue #282) ----------
+// A resolved standoff anchor renders the mentioned words as a chip showing the
+// resolver's LIVE card title — rename the target and the chip follows, while
+// the body bytes stay the plain words that were typed. These are the pieces a
+// read view reuses; the app supplies its own block/markdown layout and calls
+// appendWithChips for each rendered text chunk.
+
+/** The live-card chip for one resolved anchor span (`{card}` on the span). */
+export function mentionChip(ref) {
+  const card = ref.card ?? {};
+  const chip = document.createElement('span');
+  chip.className = 'kit-mention-chip';
+  if (card.status === 'missing') {
+    chip.classList.add('ref-gone');
+    chip.textContent = 'removed from the vault';
+  } else {
+    chip.textContent = card.title ?? entityKindLabel(card.type);
+    if (card.status === 'trashed') chip.classList.add('ref-gone');
+  }
+  chip.title = `${entityKindLabel(card.type)} — linked reference`;
+  return chip;
+}
+
+/**
+ * Resolve a body's anchored references to inline spans (issue #282). `refs` is
+ * the app's live reference list (`{link_id, selector, card}`); returns
+ * `[{start, end, link_id, card}]` for the anchors that currently resolve, via
+ * the global one-span-per-anchor assignment. Pure presentation — no writes.
+ */
+export function resolveInlineSpans(body, refs) {
+  const anchored = (refs ?? []).filter((r) => r.selector);
+  if (anchored.length === 0) return [];
+  const assigned = assignAnchors(String(body ?? ''), anchored);
+  return anchored
+    .filter((r) => assigned.has(r.link_id))
+    .map((r) => ({ ...assigned.get(r.link_id), link_id: r.link_id, card: r.card }));
+}
+
+/** The set of link_ids currently resolved inline in `body` (strip flagging). */
+export function inlineLinkIds(body, refs) {
+  return new Set(resolveInlineSpans(body, refs).map((r) => r.link_id));
+}
+
+/**
+ * Append one rendered chunk of body text to `el`, swapping any anchor span
+ * that falls fully inside it for its chip. `absStart` is the chunk's offset
+ * in the whole decoded body — the space assignAnchors speaks. `renderPlain(el,
+ * seg)` renders the non-chip text (default: a text node; a markdown app passes
+ * its inline renderer). A span straddling a chunk boundary renders as plain
+ * text — the chip is presentation, degrading is free.
+ */
+export function appendWithChips(el, text, absStart, spans, renderPlain) {
+  const plain = renderPlain || ((node, seg) => node.appendChild(document.createTextNode(seg)));
+  const absEnd = absStart + text.length;
+  const inside = (spans ?? [])
+    .filter((r) => r.start >= absStart && r.end <= absEnd)
+    .toSorted((a, b) => a.start - b.start);
+  const literal = (seg) => {
+    if (seg) plain(el, seg);
+  };
+  if (inside.length === 0) {
+    literal(text);
+    return;
+  }
+  let cursor = absStart;
+  for (const r of inside) {
+    literal(text.slice(cursor - absStart, r.start - absStart));
+    el.appendChild(mentionChip(r));
+    cursor = r.end;
+  }
+  literal(text.slice(cursor - absStart));
+}
+
+// ---------- The @-mention field (turnkey cross-references, issues #272/#282) ----------
+// Bundles the whole "@ works" behaviour so ANY app's <textarea> gains inline
+// cross-references in a few lines: the caret popover, the pick→insert→assert
+// (re-anchor-don't-duplicate), and the 4b reconcile-on-save (re-baseline live
+// selectors, temporal-retract orphans, reversible Undo). Presentation +
+// gesture only — the app still owns the body bytes, persistence, and the
+// reference list (which it reads from its own core.link + core.link_anchor
+// query). Everything below is a projection of that list.
+//
+// options:
+//   from        () => {type,id} | {type,id} | null   — the entity mentions attach to
+//   references  () => Array<{link_id, selector, card}> (live, mutated in place)
+//   onChange    () => void                            — re-render strip/read-view after a mutation
+//   relation    string = 'references'
+//   kinds       string[]?                             — restrict the picker
+//   onError     (outcome) => void?                    — vault refusal (default: a toast)
+// returns { detach(), reconcile(body): Promise, startMention() }.
+export function attachMentionField(textarea, options = {}) {
+  const relation = options.relation || 'references';
+  const getFrom = () =>
+    (typeof options.from === 'function' ? options.from() : options.from) || null;
+  const getRefs = () => {
+    const r = typeof options.references === 'function' ? options.references() : options.references;
+    return r || [];
+  };
+  const changed = () => options.onChange && options.onChange();
+  const fail = (outcome, label) => {
+    if (options.onError) options.onError(outcome);
+    else toast(`Couldn’t link ${label}.`);
+  };
+
+  async function onPick(card, range) {
+    const from = getFrom();
+    if (!from) return;
+    if (card.type === from.type && card.id === from.id) {
+      toast('You can’t reference this record from itself.');
+      return;
+    }
+    const refs = getRefs();
+    const anchored = refs.filter((r) => r.selector);
+    // Re-anchor, don't duplicate: an edge to this entity whose words were
+    // edited away (orphaned BEFORE this insertion) takes the new selector
+    // instead of minting a second judgment.
+    const preAssigned = assignAnchors(textarea.value, anchored);
+    const orphan = refs.find(
+      (r) =>
+        r.selector &&
+        !preAssigned.has(r.link_id) &&
+        r.card?.type === card.type &&
+        r.card?.id === card.id,
+    );
+    const label = card.title ?? entityKindLabel(card.type);
+    textarea.setRangeText(label, range.start, range.end, 'end');
+    textarea.focus();
+    // One synthetic input event lets the app's own handler sync its draft and
+    // schedule its save — no duplicated bookkeeping here.
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    const selector = computeMentionSelector(
+      textarea.value,
+      range.start,
+      range.start + label.length,
+    );
+    const outcome = orphan
+      ? await reanchorReference(orphan.link_id, selector)
+      : await createReference(from, card, relation, selector);
+    if (outcome?.status !== 'executed') {
+      fail(outcome, label);
+      return;
+    }
+    if (orphan) orphan.selector = selector;
+    else refs.push({ link_id: outcome.output?.link_id, selector, card });
+    toast(`${orphan ? 'Re-linked' : 'Linked'} ${label}.`);
+    changed();
+  }
+
+  const detachPopover = attachMentionPopover(textarea, {
+    ...(options.kinds ? { kinds: options.kinds } : {}),
+    onPick,
+  });
+
+  // Reconcile runs when a save lands (the app's debounce is the "settled"
+  // signal). Serialized so two quick saves can't race the same edge. The
+  // subject is captured at call time (opts.from / opts.references) so a
+  // navigation during the async window can't retarget it at the wrong record.
+  let chain = Promise.resolve();
+  function reconcile(body, opts = {}) {
+    const from = opts.from ?? getFrom();
+    const refs = opts.references ?? getRefs();
+    chain = chain.then(() => doReconcile(body, from, refs)).catch(() => {});
+    return chain;
+  }
+  async function doReconcile(body, from, refs) {
+    const anchored = refs.filter((r) => r.selector);
+    if (anchored.length === 0) return;
+    const assigned = assignAnchors(body, anchored);
+    const orphans = [];
+    for (const ref of anchored) {
+      const span = assigned.get(ref.link_id);
+      if (!span) {
+        orphans.push(ref);
+        continue;
+      }
+      // Re-baseline: keep the stored selector current with the saved body so
+      // drift never accumulates and resolution needs no fuzzy rung.
+      const fresh = computeMentionSelector(body, span.start, span.end);
+      const cur = ref.selector;
+      if (
+        cur.exact !== fresh.exact ||
+        cur.prefix !== fresh.prefix ||
+        cur.suffix !== fresh.suffix ||
+        cur.start !== fresh.start
+      ) {
+        const outcome = await reanchorReference(ref.link_id, fresh);
+        if (outcome?.status === 'executed') ref.selector = fresh;
+      }
+    }
+    if (orphans.length === 0) return;
+    const retracted = [];
+    for (const ref of orphans) {
+      const outcome = await removeReference(ref.link_id);
+      if (outcome?.status === 'executed') retracted.push(ref);
+    }
+    if (retracted.length === 0) return;
+    for (const ref of retracted) {
+      const i = refs.indexOf(ref);
+      if (i >= 0) refs.splice(i, 1);
+    }
+    changed();
+    const names = retracted.map((r) => r.card?.title ?? entityKindLabel(r.card?.type)).join(', ');
+    toast(
+      retracted.length === 1
+        ? `Unlinked ${names} — its mention left the text.`
+        : `Unlinked ${retracted.length} references whose mentions left the text.`,
+      {
+        undoLabel: 'Undo',
+        // Undo re-asserts a FRESH, anchorless edge (history is never rewritten;
+        // an anchorless link lives in the strip, exempt from re-retraction —
+        // so it can't oscillate against the still-missing words).
+        onUndo: async () => {
+          if (!from) return;
+          for (const ref of retracted) {
+            const outcome = await createReference(from, ref.card, relation);
+            if (outcome?.status === 'executed') {
+              refs.push({ link_id: outcome.output?.link_id, selector: null, card: ref.card });
+            }
+          }
+          changed();
+        },
+      },
+    );
+  }
+
+  // Drop an `@` at the caret and open the popover (a discoverability shim for
+  // a button). The app makes the textarea visible/editable first.
+  function startMention() {
+    textarea.focus();
+    const pos = textarea.selectionStart ?? textarea.value.length;
+    const prev = pos > 0 ? textarea.value[pos - 1] : '';
+    textarea.setRangeText(prev && !/[\s(]/.test(prev) ? ' @' : '@', pos, pos, 'end');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  return { detach: detachPopover, reconcile, startMention };
 }

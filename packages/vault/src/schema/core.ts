@@ -234,3 +234,23 @@ CREATE TABLE core_collection_entry (
   UNIQUE (collection_id, target_type, target_id)
 ) STRICT;
 `;
+
+// Standoff anchor for inline references (issue #282). An anchor is a LOCATOR
+// for an existing core.link judgment, not a second judgment (rule 10): it
+// points into the from-endpoint's plain body text with a W3C-style selector
+// {exact, prefix, suffix, start} so the read view can render the edge as an
+// inline chip. Bodies stay canonical deduped bytes — the anchor lives outside
+// them. One anchor per link (an inline mention IS one edge); no independent
+// lifecycle: resolution only considers live links, so anchors of ended links
+// are simply never resolved, and the dangling-link sweep needs no extension.
+// Ships as its own migration step — CORE_DDL is v1 and already applied.
+// IF NOT EXISTS keeps the step re-runnable (the v3 test rewinds and replays
+// the ladder), matching v3's guarded-insert style.
+export const LINK_ANCHOR_DDL = `
+CREATE TABLE IF NOT EXISTS core_link_anchor (
+  anchor_id     TEXT PRIMARY KEY,
+  link_id       TEXT NOT NULL UNIQUE REFERENCES core_link(link_id),
+  selector_json TEXT NOT NULL CHECK (json_valid(selector_json)),
+  created_at    TEXT NOT NULL
+) STRICT;
+`;

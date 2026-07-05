@@ -3,7 +3,7 @@
   "id": "notes",
   "name": "Notes",
   "description": "Your notebooks as a projection of the vault: notes live in knowledge.note over canonical content_item bodies, nothing stored here. Creating, editing, filing, pinning and deleting all run through the knowledge domain's typed commands — consent-checked, contract-checked and receipted, with act consent granted per command. Revoke the grant and the app goes dark while the notes and receipts remain the owner's.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "iconKey": "Book",
   "colorKey": "forest",
   "vault": {
@@ -27,6 +27,11 @@
       {
         "schema": "core",
         "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_anchor",
         "verbs": "read"
       },
       {

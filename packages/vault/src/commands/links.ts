@@ -44,7 +44,7 @@ function requireEndpoint(ctx: HandlerCtx, role: 'from' | 'to', type: string, id:
   if (!ref || ref.file !== 'vault') {
     throw new Error(`${role}_type names unknown entity "${type}"`);
   }
-  if (ref.schema === 'core' && ref.table === 'link') {
+  if (ref.schema === 'core' && (ref.table === 'link' || ref.table === 'link_anchor')) {
     throw new Error('links do not link links');
   }
   const pk = pkOf(ctx, ref.physical);
@@ -54,6 +54,57 @@ function requireEndpoint(ctx: HandlerCtx, role: 'from' | 'to', type: string, id:
   if (consent.decision === 'deny') {
     throw new Error(`grant does not cover read of ${type}: ${consent.failing}`);
   }
+}
+
+// The standoff anchor selector (issue #282): a W3C-style text-quote selector
+// plus a position hint, pointing into the from-endpoint's decoded body text.
+// `start` is a char offset in UTF-16 code units (the JS-string convention the
+// projections decode to). The anchor is a locator for the link, never a
+// second judgment — resolution is presentation-side and best-effort.
+const SELECTOR_SCHEMA = {
+  type: 'object',
+  required: ['exact', 'prefix', 'suffix', 'start'],
+  additionalProperties: false,
+  properties: {
+    exact: { type: 'string', minLength: 1 },
+    prefix: { type: 'string' },
+    suffix: { type: 'string' },
+    start: { type: 'integer', minimum: 0 },
+  },
+} as const;
+
+interface AnchorSelector {
+  exact: string;
+  prefix: string;
+  suffix: string;
+  start: number;
+}
+
+/** Upsert the one anchor a link may carry; returns the anchor row id. */
+function writeAnchor(ctx: HandlerCtx, linkId: string, selector: AnchorSelector): string {
+  const existing = ctx.db
+    .prepare('SELECT anchor_id FROM core_link_anchor WHERE link_id = ?')
+    .get(linkId) as { anchor_id: string } | undefined;
+  const json = JSON.stringify({
+    exact: selector.exact,
+    prefix: selector.prefix,
+    suffix: selector.suffix,
+    start: selector.start,
+  });
+  if (existing) {
+    ctx.db
+      .prepare('UPDATE core_link_anchor SET selector_json = ? WHERE anchor_id = ?')
+      .run(json, existing.anchor_id);
+    return existing.anchor_id;
+  }
+  const anchorId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_link_anchor (anchor_id, link_id, selector_json, created_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(anchorId, linkId, json, ctx.now);
+  return anchorId;
 }
 
 const LINK: CommandDefinition = {
@@ -70,6 +121,8 @@ const LINK: CommandDefinition = {
       to_id: { type: 'string', minLength: 1 },
       /** Notation into the relations scheme, e.g. `references`, `about`. */
       relation: { type: 'string', minLength: 1 },
+      /** Optional inline anchor written atomically with the link (issue #282). */
+      selector: SELECTOR_SCHEMA,
     },
   },
   outputSchema: {
@@ -127,6 +180,7 @@ function linkEntities(ctx: HandlerCtx): Record<string, unknown> {
     to_type: string;
     to_id: string;
     relation: string;
+    selector?: AnchorSelector;
   };
   if (input.from_type === input.to_type && input.from_id === input.to_id) {
     throw new Error('an entity cannot link to itself');
@@ -161,6 +215,10 @@ function linkEntities(ctx: HandlerCtx): Record<string, unknown> {
       assertedBy,
     );
   ctx.wrote('core.link', linkId);
+  if (input.selector) {
+    const anchorId = writeAnchor(ctx, linkId, input.selector);
+    ctx.wrote('core.link_anchor', anchorId);
+  }
   ctx.cite({
     claim: `${input.from_type} ${input.from_id} —${input.relation}→ ${input.to_type} ${input.to_id}`,
     entityType: 'core.link',
@@ -215,8 +273,79 @@ function unlinkEntities(ctx: HandlerCtx): Record<string, unknown> {
   return { link_id: input.link_id };
 }
 
+// Re-anchor / re-baseline (issue #282): move (or clear) the standoff anchor
+// an existing live link carries. This is a locator write, not a new judgment
+// — the link's endpoints, relation and validity are untouched. With a
+// selector it upserts the anchor (the @-gesture re-anchoring an orphaned
+// edge, or the editor re-baselining after a save); without one it clears the
+// anchor, demoting the reference to strip-only — which also makes it exempt
+// from the editor's orphan auto-retract by construction.
+const ANCHOR: CommandDefinition = {
+  name: 'core.anchor_link',
+  ownerSchema: 'core',
+  inputSchema: {
+    type: 'object',
+    required: ['link_id'],
+    additionalProperties: false,
+    properties: {
+      link_id: { type: 'string', minLength: 1 },
+      selector: SELECTOR_SCHEMA,
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['link_id'],
+    properties: {
+      link_id: { type: 'string' },
+      anchor_id: { type: 'string' },
+    },
+  },
+  preconditions: [
+    {
+      // Anchors ride live judgments only — an ended link keeps its history
+      // but takes no new locator.
+      name: 'link_live',
+      sql: 'SELECT count(*) AS n FROM core_link WHERE link_id = :link_id AND valid_to IS NULL',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'link_still_live',
+      sql: 'SELECT count(*) AS n FROM core_link WHERE link_id = :link_id AND valid_to IS NULL',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: anchorLink,
+};
+
+function anchorLink(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { link_id: string; selector?: AnchorSelector };
+  if (input.selector) {
+    const anchorId = writeAnchor(ctx, input.link_id, input.selector);
+    ctx.wrote('core.link_anchor', anchorId);
+    return { link_id: input.link_id, anchor_id: anchorId };
+  }
+  const existing = ctx.db
+    .prepare('SELECT anchor_id FROM core_link_anchor WHERE link_id = ?')
+    .get(input.link_id) as { anchor_id: string } | undefined;
+  if (existing) {
+    // A locator is presentation, not history — clearing it is a hard delete.
+    ctx.db.prepare('DELETE FROM core_link_anchor WHERE anchor_id = ?').run(existing.anchor_id);
+    ctx.wrote('core.link_anchor', existing.anchor_id);
+  }
+  return { link_id: input.link_id };
+}
+
 /** Register the core link commands on a gateway. */
 export function registerLinkCommands(gateway: Gateway): void {
   gateway.registerCommand(LINK);
   gateway.registerCommand(UNLINK);
+  gateway.registerCommand(ANCHOR);
 }

@@ -1080,3 +1080,21 @@ span.note-glyph {
     max-width: 42rem;
   }
 }
+
+/* @-mention affordance inside the notes popover (issues #272 + #282). */
+.pop-refs {
+  margin-top: 0.1rem;
+}
+.pop-mention {
+  align-self: flex-start;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.pop-mention:hover {
+  background: var(--surface-2);
+}

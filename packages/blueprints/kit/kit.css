@@ -837,112 +837,57 @@
   }
 }
 
-/* ── Entity picker (issue #272) ─────────────────────────────────────────────
-   The shell-owned "link from your vault" surface. Same overlay language as
-   the Ask panel: hairline borders, soft depth, instrument-grade calm. */
+/* ── Inline anchored references (issue #282) ────────────────────────────────
+   The `@`-mention popover — the SOLE cross-reference creation gesture
+   (caret-anchored) — and the inline chip a resolved anchor renders as. The
+   chip shows the resolver's LIVE card title, never a byte snapshot. */
 
-.kit-pick-ov {
+.kit-mention-pop {
   position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  background: color-mix(in srgb, var(--text, #1c1a17) 32%, transparent);
-  backdrop-filter: blur(2px);
-}
-@media (min-width: 720px) {
-  .kit-pick-ov {
-    align-items: center;
-  }
-}
-
-.kit-pick-panel {
+  z-index: 72;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  width: min(34rem, 100%);
-  max-height: min(80dvh, 34rem);
-  padding: 1rem;
-  border: 1px solid var(--line, #ddd);
-  border-radius: var(--kit-radius) var(--kit-radius) 0 0;
-  background: var(--surface, #fff);
-  box-shadow: var(--shadow-md, 0 12px 40px rgba(0, 0, 0, 0.18));
-}
-@media (min-width: 720px) {
-  .kit-pick-panel {
-    border-radius: var(--kit-radius);
-  }
-}
-
-.kit-pick-head {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-.kit-pick-head h2 {
-  margin: 0;
-  font-size: 1rem;
-  flex: 1;
-}
-.kit-pick-x {
-  border: 0;
-  background: none;
-  color: var(--muted, #777);
-  font-size: 0.9rem;
-  cursor: pointer;
-  min-width: 2.5rem;
-  min-height: 2.5rem;
-}
-
-.kit-pick-search {
-  width: 100%;
-  padding: 0.55rem 0.75rem;
+  gap: 0.35rem;
+  padding: 0.5rem;
   border: 1px solid var(--line, #ddd);
   border-radius: calc(var(--kit-radius) * 0.75);
-  background: var(--surface-2, var(--surface, #fff));
-  color: var(--text, #1c1a17);
-  font: inherit;
-}
-.kit-pick-search:focus-visible {
-  outline: 2px solid var(--accent, #4e68dd);
-  outline-offset: 1px;
+  background: var(--surface, #fff);
+  box-shadow: var(--kit-shadow);
 }
 
-.kit-pick-list {
-  flex: 1;
-  min-height: 8rem;
-  overflow-y: auto;
+.kit-mention-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.15rem;
+  max-height: 16rem;
+  overflow-y: auto;
 }
-.kit-pick-list[data-state='loading'] {
+.kit-mention-list[data-state='loading'] {
+  min-height: 2.5rem;
   opacity: 0.55;
 }
 
-.kit-pick-row {
+.kit-mention-row {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
   width: 100%;
-  min-height: 2.75rem;
-  padding: 0.45rem 0.55rem;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.45rem;
   border: 1px solid transparent;
-  border-radius: calc(var(--kit-radius) * 0.75);
+  border-radius: calc(var(--kit-radius) * 0.6);
   background: none;
   color: var(--text, #1c1a17);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 160ms var(--kit-ease);
 }
-.kit-pick-row:hover,
-.kit-pick-row:focus-visible {
+.kit-mention-row:hover,
+.kit-mention-row[aria-selected='true'] {
   background: var(--accent-soft, rgba(0, 0, 0, 0.05));
 }
 
-.kit-pick-kind {
+.kit-mention-kind {
   flex: none;
   padding: 0.15rem 0.45rem;
   border: 1px solid var(--line, #ddd);
@@ -953,31 +898,129 @@
   text-transform: lowercase;
 }
 
-.kit-pick-body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.kit-pick-title {
+.kit-mention-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.kit-pick-sub {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  color: var(--muted, #777);
 }
 
-.kit-pick-empty,
-.kit-pick-note {
+.kit-mention-empty,
+.kit-mention-note {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--muted, #777);
+}
+.kit-mention-empty {
+  padding: 0.6rem 0.25rem;
+  text-align: center;
+}
+
+.kit-mention-chip {
+  display: inline;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--kit-line-strong);
+  border-radius: 0.45rem;
+  background: var(--kit-accent-soft);
+  color: var(--kit-accent-deep, var(--text, #1c1a17));
+  white-space: normal;
+  cursor: default;
+}
+.kit-mention-chip.ref-gone {
+  border-style: dashed;
+  background: none;
+  color: var(--muted, #777);
+  text-decoration: line-through;
+}
+
+/* ── Reference strip (issues #272 + #282) ───────────────────────────────────
+   The canonical strip renderer's styling. The durable home of a note/doc's
+   cross-references and the landing zone an orphaned inline anchor degrades
+   to. Same token idiom as the picker/mention surfaces. */
+
+.kit-ref-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.kit-ref-strip:empty {
+  display: none;
+}
+
+.kit-ref-tile {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.3rem 0.35rem 0.3rem 0.5rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 999px;
+  background: var(--surface-2, var(--surface, #fff));
+  font-size: 0.8rem;
+}
+
+.kit-ref-kind {
+  flex: none;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  color: var(--muted, #777);
+  text-transform: lowercase;
+}
+
+/* Anchored-reference state: resolved inline vs orphaned to the strip. */
+.kit-ref-flag {
+  flex: none;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-soft, rgba(0, 0, 0, 0.06));
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.6rem;
+  color: var(--muted, #777);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kit-ref-flag.is-inline {
+  color: var(--kit-accent-deep, var(--accent, #4553c4));
+}
+
+.kit-ref-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ref-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9rem;
+  font-size: 0.7rem;
+  color: var(--muted, #777);
+}
+.kit-ref-tile.is-gone .kit-ref-title {
+  color: var(--muted, #777);
+  font-style: italic;
+}
+
+.kit-ref-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted, #777);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.kit-ref-remove:hover,
+.kit-ref-remove:focus-visible {
+  background: var(--line, #ddd);
+}
+
+.kit-ref-empty {
   margin: 0;
   font-size: 0.78rem;
   color: var(--muted, #777);
-}
-.kit-pick-empty {
-  padding: 1.25rem 0.25rem;
-  text-align: center;
 }

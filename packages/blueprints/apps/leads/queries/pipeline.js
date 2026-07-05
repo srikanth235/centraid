@@ -156,6 +156,66 @@ export default async ({ input, ctx }) => {
     }
     const attByClient = attachmentsBySubject('business.client', attachmentRows, contentById);
 
+    // Cross-references (issues #272 + #282): a lead's running note can @-mention
+    // any vault entity. Anchors ride core.party (the stable identity the note's
+    // card enriches). Read live outbound links + standoff anchors and resolve
+    // the far-end cards (resolvable-if-linked). Same shape as notes/library.js.
+    const links =
+      partyIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.link',
+            where: [
+              { column: 'from_type', op: 'eq', value: 'core.party' },
+              { column: 'from_id', op: 'in', value: partyIds },
+              { column: 'valid_to', op: 'is-null' },
+            ],
+            purpose,
+          })
+        : { rows: [] };
+    const linkRows = links.rows ?? [];
+    const uniqueRefs = [
+      ...new Map(
+        linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
+      ).values(),
+    ];
+    const [resolved, anchors] = await Promise.all([
+      uniqueRefs.length > 0
+        ? ctx.vault.resolve({ refs: uniqueRefs, purpose })
+        : Promise.resolve({ cards: [] }),
+      linkRows.length > 0
+        ? ctx.vault.read({
+            entity: 'core.link_anchor',
+            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+    ]);
+    const cardByRef = new Map((resolved.cards ?? []).map((c) => [`${c.type}/${c.id}`, c]));
+    const selectorByLink = new Map();
+    for (const a of anchors.rows ?? []) {
+      try {
+        selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
+      } catch {
+        // an unreadable selector is just an unanchored reference
+      }
+    }
+    const refsByParty = new Map();
+    for (const l of linkRows) {
+      if (!refsByParty.has(l.from_id)) refsByParty.set(l.from_id, []);
+      refsByParty.get(l.from_id).push({
+        link_id: l.link_id,
+        selector: selectorByLink.get(l.link_id) ?? null,
+        card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
+          type: l.to_type,
+          id: l.to_id,
+          status: 'unknown',
+          title: null,
+          subtitle: null,
+          thumbnail_content_id: null,
+        },
+      });
+    }
+
     const leads = clientRows
       .map((c) => ({
         client_id: c.client_id,
@@ -168,6 +228,7 @@ export default async ({ input, ctx }) => {
         email: bestHandle(c.party_id, 'email'),
         tel: bestHandle(c.party_id, 'tel'),
         attachments: attByClient.get(c.client_id) ?? [],
+        references: refsByParty.get(c.party_id) ?? [],
       }))
       .toSorted((a, b) => a.name.localeCompare(b.name));
 
