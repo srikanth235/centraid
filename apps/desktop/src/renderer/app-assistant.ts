@@ -631,6 +631,16 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
             renderChat();
             return;
           }
+          case 'assistant.start':
+          case 'reasoning.delta':
+          case 'phase':
+          case 'usage':
+          case 'webhooks':
+          case 'aborted':
+            // Stream telemetry the assistant page does not surface —
+            // reasoning/usage/phase/webhook signals and the abort marker
+            // carry no UI here.
+            return;
           default:
             break;
         }
