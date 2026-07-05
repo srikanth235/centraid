@@ -188,3 +188,85 @@ describe('handleCentraidToolCall', () => {
     expect(noAction.response.result.contentItems[0]!.text).toContain('action argument required');
   });
 });
+
+describe('the vault register (issue #286)', () => {
+  const vaultCtx = (over: Partial<ToolContext> = {}): ToolContext =>
+    ({
+      appId: '_assistant',
+      dispatcher: null as unknown as Dispatcher,
+      turnId: 't',
+      vaultSql: (sql: string) => ({
+        columns: ['n'],
+        rows: [{ n: 1, sql }],
+        totalRows: 1,
+        truncated: false,
+        durationMs: 1,
+      }),
+      ...over,
+    }) as ToolContext;
+
+  it('swaps the trio for vault_sql (and vault_invoke when wired)', () => {
+    const readOnly = centraidDynamicToolSpecs(vaultCtx());
+    expect(readOnly.map((t) => t.name)).toEqual(['vault_sql']);
+    const withWrites = centraidDynamicToolSpecs(
+      vaultCtx({ vaultInvoke: () => ({ status: 'executed' }) }),
+    );
+    expect(withWrites.map((t) => t.name)).toEqual(['vault_sql', 'vault_invoke']);
+    // No vault register → the app-scoped trio, unchanged.
+    expect(centraidDynamicToolSpecs().map((t) => t.name)).toEqual([
+      'centraid_describe',
+      'centraid_read',
+      'centraid_write',
+    ]);
+  });
+
+  it('dispatches vault_sql through the owner runner and surfaces the sql on tool.start', async () => {
+    const out = await handleCentraidToolCall(
+      1,
+      { tool: 'vault_sql', callId: 'c1', arguments: { sql: 'SELECT 1' } },
+      vaultCtx(),
+    );
+    expect(out.response.result.success).toBe(true);
+    const start = out.events[0] as Extract<TurnStreamEvent, { type: 'tool.start' }>;
+    expect(start.sql).toBe('SELECT 1');
+    const result = out.events[1] as Extract<TurnStreamEvent, { type: 'tool.result' }>;
+    expect(result.ok).toBe(true);
+  });
+
+  it('dispatches vault_invoke and hands the outcome back verbatim', async () => {
+    const calls: unknown[] = [];
+    const ctx = vaultCtx({
+      vaultInvoke: (call) => {
+        calls.push(call);
+        return { status: 'parked', invocationId: 'i1', reason: 'risk high exceeds ceiling' };
+      },
+    });
+    const out = await handleCentraidToolCall(
+      2,
+      {
+        tool: 'vault_invoke',
+        callId: 'c2',
+        arguments: { command: 'social.send_message', input: { message_id: 'm1' } },
+      },
+      ctx,
+    );
+    expect(calls).toEqual([{ command: 'social.send_message', input: { message_id: 'm1' } }]);
+    expect(out.response.result.success).toBe(true);
+    expect(out.response.result.contentItems[0]?.text).toContain('"parked"');
+  });
+
+  it('a runner throw comes back as a tool error, not an exception', async () => {
+    const ctx = vaultCtx({
+      vaultSql: () => {
+        throw new Error('sql failed: no such table nope');
+      },
+    });
+    const out = await handleCentraidToolCall(
+      3,
+      { tool: 'vault_sql', callId: 'c3', arguments: { sql: 'SELECT * FROM nope' } },
+      ctx,
+    );
+    expect(out.response.result.success).toBe(false);
+    expect(out.response.result.contentItems[0]?.text).toContain('no such table');
+  });
+});

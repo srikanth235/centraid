@@ -1,13 +1,25 @@
 /*
- * Claude-side wiring for the three first-class centraid tools.
+ * Claude-side wiring for the first-class centraid tools.
  *
  * Split out of `backend.ts` to keep that file focused on the SDK drive
  * loop and event translation. This module owns the in-process MCP server
  * that exposes `centraid_describe` / `centraid_read` / `centraid_write`,
  * mirroring codex's `host-tools.ts`. Both backends delegate to the shared
  * app-engine `Dispatcher` so the model sees an identical tool surface.
+ *
+ * The vault-assistant register (ToolContext.vaultSql) swaps the app-scoped
+ * trio for ONE tool — `vault_sql`, owner-side read-only SQL over the whole
+ * vault. An assistant turn has no app to describe or write, so the
+ * registers swap rather than mix; the description text is shared with the
+ * codex spec via `VAULT_SQL_TOOL` below.
  */
 import type { ToolContext } from '../../runtime.js';
+import {
+  VAULT_INVOKE_TOOL,
+  VAULT_SQL_TOOL,
+  runVaultInvokeTool,
+  runVaultSqlTool,
+} from '../../vault-sql-tool.js';
 
 /**
  * Build the in-process MCP server that exposes the three structured
@@ -42,6 +54,36 @@ export async function buildCentraidMcpServer(
     }
     return okText(result.structuredContent);
   };
+
+  // The vault register: whole-vault SQL reads plus (when wired) typed
+  // command writes — instead of the app-scoped trio.
+  if (ctx.vaultSql) {
+    const vaultSql = mod.tool(
+      VAULT_SQL_TOOL.name,
+      VAULT_SQL_TOOL.description,
+      { sql: z.string().describe('One read-only statement: SELECT / WITH … SELECT / EXPLAIN.') },
+      async ({ sql }) => {
+        const out = await runVaultSqlTool(ctx, sql);
+        return out.ok ? okText(out.result) : errText(out.errorText);
+      },
+    );
+    const vaultInvoke = mod.tool(
+      VAULT_INVOKE_TOOL.name,
+      VAULT_INVOKE_TOOL.description,
+      {
+        command: z.string().describe('Registered command name.'),
+        input: z.record(z.string(), z.unknown()).describe('Input matching the command schema.'),
+      },
+      async ({ command, input }) => {
+        const out = await runVaultInvokeTool(ctx, { command, input });
+        return out.ok ? okText(out.result) : errText(out.errorText);
+      },
+    );
+    return mod.createSdkMcpServer({
+      name: 'centraid',
+      tools: ctx.vaultInvoke ? [vaultSql, vaultInvoke] : [vaultSql],
+    });
+  }
 
   const describe = mod.tool(
     'centraid_describe',

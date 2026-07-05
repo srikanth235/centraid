@@ -388,7 +388,7 @@ export async function runCodexTurn(
         approvalPolicy: 'never',
         sandbox: 'workspace-write',
         ...(input.extraSystemPrompt ? { developerInstructions: input.extraSystemPrompt } : {}),
-        ...(input.toolContext ? { dynamicTools: centraidDynamicToolSpecs() } : {}),
+        ...(input.toolContext ? { dynamicTools: centraidDynamicToolSpecs(input.toolContext) } : {}),
       })) as { thread?: { id?: string } } | undefined;
       if (startResult?.thread?.id) threadId = startResult.thread.id;
     }

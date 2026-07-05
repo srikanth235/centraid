@@ -13,17 +13,43 @@
  */
 import type { TurnStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
+import {
+  VAULT_INVOKE_TOOL,
+  VAULT_SQL_TOOL,
+  runVaultInvokeTool,
+  runVaultSqlTool,
+} from '../../vault-sql-tool.js';
 
 /**
- * Codex `dynamicTools` spec for the three structured centraid tools.
- * Schemas mirror the documented surface; codex's `DynamicToolSpec.inputSchema`
- * accepts standard JSON Schema.
+ * Codex `dynamicTools` spec for the structured centraid tools. Schemas
+ * mirror the documented surface; codex's `DynamicToolSpec.inputSchema`
+ * accepts standard JSON Schema. The vault-assistant register
+ * (`ToolContext.vaultSql`) swaps the app-scoped trio for the one
+ * `vault_sql` tool — an assistant turn has no app to describe or write.
  */
-export function centraidDynamicToolSpecs(): Array<{
+export function centraidDynamicToolSpecs(ctx?: ToolContext): Array<{
   name: string;
   description: string;
   inputSchema: unknown;
 }> {
+  if (ctx?.vaultSql) {
+    return [
+      {
+        name: VAULT_SQL_TOOL.name,
+        description: VAULT_SQL_TOOL.description,
+        inputSchema: VAULT_SQL_TOOL.inputSchema,
+      },
+      ...(ctx.vaultInvoke
+        ? [
+            {
+              name: VAULT_INVOKE_TOOL.name,
+              description: VAULT_INVOKE_TOOL.description,
+              inputSchema: VAULT_INVOKE_TOOL.inputSchema as unknown,
+            },
+          ]
+        : []),
+    ];
+  }
   return [
     {
       name: 'centraid_describe',
@@ -111,6 +137,54 @@ export async function handleCentraidToolCall(
   const events: TurnStreamEvent[] = [
     { type: 'tool.start', toolCallId: callId, toolName, args, ...sqlOf(args) },
   ];
+
+  // The vault register: dispatched through the turn's owner/assistant
+  // runners instead of the app dispatcher.
+  if (toolName === VAULT_SQL_TOOL.name || toolName === VAULT_INVOKE_TOOL.name) {
+    const out =
+      toolName === VAULT_SQL_TOOL.name
+        ? await runVaultSqlTool(ctx, (p.arguments as { sql?: unknown } | undefined)?.sql)
+        : await runVaultInvokeTool(ctx, p.arguments);
+    if (out.ok) {
+      events.push({
+        type: 'tool.result',
+        toolCallId: callId,
+        toolName,
+        ok: true,
+        result: out.result,
+      });
+      return {
+        response: {
+          jsonrpc: '2.0',
+          id,
+          result: {
+            success: true,
+            contentItems: [{ type: 'inputText', text: JSON.stringify(out.result) }],
+          },
+        },
+        events,
+      };
+    }
+    events.push({
+      type: 'tool.result',
+      toolCallId: callId,
+      toolName,
+      ok: false,
+      result: null,
+      errorText: out.errorText,
+    });
+    return {
+      response: {
+        jsonrpc: '2.0',
+        id,
+        result: {
+          success: false,
+          contentItems: [{ type: 'inputText', text: out.errorText }],
+        },
+      },
+      events,
+    };
+  }
 
   try {
     let result;
@@ -212,8 +286,14 @@ export async function handleCentraidToolCall(
   }
 }
 
-/** Surface the SQL string on a tool.start event when the agent used `_sql`. */
-function sqlOf(args: { action?: string; query?: string; input?: unknown }): { sql?: string } {
+/**
+ * Surface the SQL string on a tool.start event when the agent used `_sql`
+ * (nested under `input`) or `vault_sql` (top-level `sql` argument).
+ */
+function sqlOf(args: { action?: string; query?: string; input?: unknown; sql?: unknown }): {
+  sql?: string;
+} {
+  if (typeof args.sql === 'string') return { sql: args.sql };
   if (args.action !== '_sql' && args.query !== '_sql') return {};
   if (!args.input || typeof args.input !== 'object') return {};
   const sql = (args.input as { sql?: unknown }).sql;
