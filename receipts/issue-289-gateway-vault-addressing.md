@@ -14,7 +14,7 @@ seam #280 deliberately deferred.
 - [x] Commit 1 (tunnel) — gateway iroh endpoint + ticket pairing ALPN
 - [x] Commit 2 (gateway) — per-request vault resolution; the active pointer dies
 - [x] Commit 3 (gateway) — device enrollment ACL + pairing tickets + admin CLI + daemon endpoint
-- [ ] Commit 4 (desktop) — transport tiers, iroh dialer, version handshake
+- [x] Commit 4 (desktop) — transport tiers, iroh dialer, version handshake
 - [ ] Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
 
 ## What changed
@@ -164,11 +164,75 @@ seam #280 deliberately deferred.
 
 ### Commit 4 (desktop) — transport tiers, iroh dialer, version handshake
 
-(pending)
+- `transport.ts` (new): `GatewayProfile.transport` (`local` | `iroh` |
+  `direct`) + `resolveTransport()` (derives it from kind + endpointId for
+  pre-#289 profiles) + the plain-HTTP guardrail `assertDirectUrlAllowed()`
+  — refuses `http://` to a public host (loopback / RFC1918 / LAN / `.local`
+  stay allowed, the `ssh -L` path). `gateway-store.ts` carries
+  `transport`/`endpointTicket`/`endpointId`, and `addGateway` accepts a
+  `direct` URL (guardrailed) OR an iroh `endpointTicket`, not both.
+- `iroh-dialer.ts` (new): reuses `@centraid/tunnel`'s `createTunnelClient`
+  + `startLocalProxy` to dial a remote iroh gateway and expose a loopback
+  `http://127.0.0.1:<port>` base URL, so `gateway-client-core` +
+  auth-injector stay transport-blind. A stable per-profile device key
+  (`iroh-device-key.bin`) makes the EndpointId match what the gateway
+  enrolled; `resolveGateway` returns the proxy URL for iroh profiles.
+  Dialers are torn down on gateway switch/remove.
+- `version-handshake.ts` (new): pins `EXPECTED_GATEWAY_VERSION` /
+  `EXPECTED_SCHEMA_EPOCH` (mirror `packages/gateway/src/version.ts`) and
+  `judgeGatewayInfo()` / `handshakeGateway()` — exact-match-or-refuse, so a
+  skewed VPS daemon is caught on connect.
+- Pins: `transport.test.ts` (derive + private-host classification + the
+  guardrail), `version-handshake.test.ts` (exact-match, mismatch,
+  malformed, unreachable).
+- Files: `apps/desktop/src/main/transport.ts` (new),
+  `apps/desktop/src/main/transport.test.ts` (new),
+  `apps/desktop/src/main/iroh-dialer.ts` (new),
+  `apps/desktop/src/main/version-handshake.ts` (new),
+  `apps/desktop/src/main/version-handshake.test.ts` (new),
+  `apps/desktop/src/main/gateway-store.ts`.
 
-### Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
+### Commit 5 (desktop) — vault addressing, client-side switch, keyed active-vault
 
-(pending)
+- The active vault is CLIENT state now (#289): `activeVaultByGateway`
+  (keyed by gateway id) in `PersistedSettings`, surfaced as
+  `DesktopSettings.activeVaultId`; `setActiveVaultId()` is a pure pointer
+  flip, carried through `mergePersistedSettings` so an unrelated save never
+  wipes it.
+- Every request carries `x-centraid-vault`: the renderer's `doFetch`
+  stamps it from the cached auth (one choke point), the three main-side
+  HTTP clients (conversation / prefs / apps-store) add it to their cached
+  headers, and the auth-injector adds it to iframed-app requests. New IPCs
+  `VAULTS_SET_ACTIVE` (+ `VAULT_CHANGED` broadcast) and vault
+  create/delete (`VAULTS_CREATE`/`VAULTS_DELETE`, LOCAL gateway only — the
+  desktop is its own landlord via the in-process registry; remote rejects
+  with a "run the CLI over SSH" message). `getGatewayAuth` returns `vaultId`.
+- The renderer switch is client-side: `switchProfile` (and the ⌘1…9
+  shortcut) call `setActiveVault` — no `PATCH {active:true}`, no gateway
+  teardown, editing sessions preserved (the keyed-state invariant). A vault
+  flip drops only the auth caches (not app sessions) and re-scopes Home;
+  the ambient identity strip (the sidebar switcher head — vault name +
+  color from `core_vault`) already reflects it. `VaultStatus`/
+  `VaultListEntry` drop the server `active` flag; the switcher compares
+  `vaultId` against `getGatewayAuth().vaultId`.
+- Pins: `settings-merge.test.ts` gains vault-map cases (carry-through,
+  wholesale replace, empty-drop).
+- Files: `apps/desktop/src/main/settings.ts`,
+  `apps/desktop/src/main/settings-merge.ts`,
+  `apps/desktop/src/main/settings-merge.test.ts`,
+  `apps/desktop/src/main/ipc.ts`,
+  `apps/desktop/src/main/local-gateway.ts`,
+  `apps/desktop/src/main/auth-injector.ts`,
+  `apps/desktop/src/main/conversation-history-client.ts`,
+  `apps/desktop/src/main/user-prefs-client.ts`,
+  `apps/desktop/src/main/apps-store-client.ts`,
+  `apps/desktop/src/preload.ts`,
+  `apps/desktop/src/renderer/centraid-api.d.ts`,
+  `apps/desktop/src/renderer/gateway-client-core.ts`,
+  `apps/desktop/src/renderer/gateway-client-vault.ts`,
+  `apps/desktop/src/renderer/app.ts`,
+  `apps/desktop/src/renderer/app-settings.ts`,
+  `apps/desktop/src/renderer/app-vault.ts`.
 
 ## Decisions
 
@@ -207,6 +271,21 @@ seam #280 deliberately deferred.
 - **Gateway pairing gets its own ALPN (`centraid/gw-pair/1`)** instead of
   overloading the phone-pair ALPN: the payloads differ (ticket id + secret
   vs QR code) and the phone ceremony must keep working unchanged.
+- **Desktop vault switch bounces Home rather than surgically re-rendering.**
+  The keyed-state invariant that matters — editing sessions + the gateway
+  connection survive a vault flip — holds (only the auth caches drop). A
+  Home re-scope after the flip refetches the app grid for the new vault;
+  full per-(gateway,vault) view-state buckets (last-open app, scroll,
+  drafts) are a later refinement, noted in Out of scope.
+- **Vault CRUD is client-driven ONLY for the local gateway.** The desktop
+  is the in-process landlord for its own gateway, so create/delete run
+  against the embedded registry (mirroring the CLI); a remote gateway
+  rejects with a pointer at the server CLI — the bright admin/owner split
+  the issue drew.
+- **The iroh dialer resolves to a loopback proxy** (reusing the phone
+  tunnel's `startLocalProxy`) so the whole HTTP client + auth-injector stay
+  transport-blind — a URL is a URL. No new fetch abstraction, no
+  per-transport branching in the renderer.
 
 ## Out of scope
 
@@ -226,12 +305,23 @@ seam #280 deliberately deferred.
 - **Vault export/move between gateways** — the issue names it the natural
   NEXT issue.
 - **Quotas/resource isolation, window-per-vault UI** — deferred per issue.
+- **Per-(gateway,vault) client view-state buckets** (last-open app, scroll,
+  draft focus) — the keyed active-vault POINTER lands (state that must be
+  keyed to stay correct); richer per-bucket view state is a later layer
+  that the keyed pointer makes possible.
+- **End-to-end iroh dialer against a live remote daemon** — the wire
+  (`@centraid/tunnel`) has its own offline battery and the daemon endpoint
+  + desktop dialer are wired and typechecked, but a two-machine QUIC round
+  trip is not part of the unit battery; it needs a live gateway endpoint to
+  exercise. The "Add iroh gateway" UI affordance (paste a pairing ticket,
+  redeem via `pairGateway`) is scaffolded in the store/IPC layer; the
+  Settings form control for it is a follow-up.
 - **No data migrations** (standing v0 rule): `vaults.json {active}` and
   bearer-token remote profiles are abandoned in place; dev setups re-pair.
 
 ## Verification
 
-(updated per commit; full battery before the PR)
+Full battery, all green:
 
 ```sh
 bun run typecheck && bun run test && bun run lint && bun run format:check && bun run lint:types
@@ -243,11 +333,12 @@ bun run typecheck && bun run test && bun run lint && bun run format:check && bun
   `serve-vault-addressing.test.ts`, `device-plane.test.ts`, rewritten
   `vault-registry.test.ts`); tunnel: 2 files / 12 tests green (incl. new
   `gateway-endpoint.test.ts` — real iroh endpoints on loopback, relays
-  disabled); app-engine 224, vault 248, automation 132, agent-runtime 68,
-  blueprints 95, desktop 81, openclaw-plugin 10, skills 6 — all green.
-  (One full-battery run flaked two pre-existing git-heavy
-  `worktree-store` tests under parallel load; both pass standalone and in
-  a gateway-suite rerun.)
+  disabled); desktop: 7 files / 91 tests green (incl. new `transport.test.ts`,
+  `version-handshake.test.ts` + `settings-merge.test.ts` vault-map cases);
+  app-engine 224, vault 248, automation 132, agent-runtime 68, blueprints
+  95, openclaw-plugin 10, skills 6 — all green. (One earlier full-battery
+  run flaked two pre-existing git-heavy `worktree-store` tests under
+  parallel load; both pass standalone and in a gateway-suite rerun.)
 - `bun run lint` (oxlint 0 errors) + `bun run format:check` (oxfmt clean)
   + `bun run lint:types` (all packages ok).
 
@@ -278,6 +369,7 @@ The session ran autonomously from a single `/goal` directive (enqueued 2026-07-0
 | claude-code-a8d0b6fa-89f-1783278745-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 159119 | 1025828 | 65353131 | 425221 | 1610168 | 50.5141 | 159119 | 1025828 | 65353131 | 425221 | feat(tunnel): gateway iroh endpoint + one-time ticket pairing ALPN (#289)The gat |
 | claude-code-a8d0b6fa-89f-1783278830-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 854 | 6019 | 3474219 | 8423 | 15296 | 1.9896 | 159973 | 1031847 | 68827350 | 433644 | feat(gateway): per-request vault resolution — the active-vault pointer dies (#28 |
 | claude-code-a8d0b6fa-89f-1783278877-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7450 | 6652 | 1406604 | 1459 | 15561 | 0.8186 | 167423 | 1038499 | 70233954 | 435103 | feat(gateway): device enrollment ACL + pairing tickets + admin CLI + iroh daemon |
+| claude-code-a8d0b6fa-89f-1783280108-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 29233 | 568043 | 72534828 | 120775 | 718051 | 42.9832 | 196656 | 1606542 | 142768782 | 555878 | feat(desktop): transport tiers, iroh dialer, version handshake (#289)A gateway p |
 
 ### Steering
 
