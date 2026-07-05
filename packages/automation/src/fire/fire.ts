@@ -74,8 +74,9 @@ export interface RunFireOptions {
    */
   runId?: string;
   /**
-   * Directory holding the per-app *data* folders (`data.sqlite`). Survives
-   * version swaps (it is never inside a git worktree). Per-vault since #280.
+   * Directory holding the per-app *state* folders (logs, settings.json).
+   * Survives version swaps (it is never inside a git worktree). Per-vault
+   * since #280.
    */
   appsDir: string;
   /**

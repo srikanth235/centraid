@@ -1,6 +1,6 @@
 # @centraid/openclaw-plugin
 
-OpenClaw plugin — a thin shim over `@centraid/gateway`. The whole store / runtime / route graph is built by `buildGateway()` (the same host-agnostic core the desktop embed and the standalone daemon mount); this package only adapts it to the OpenClaw host. It mounts the gateway's auth-bearing route prefixes and dispatches to **user-generated apps**. Each app is a folder of static assets + a sqlite database + JS handlers; app **code** is backed by the gateway-owned git store, app **data** by a per-app `data.sqlite`.
+OpenClaw plugin — a thin shim over `@centraid/gateway`. The whole store / runtime / route graph is built by `buildGateway()` (the same host-agnostic core the desktop embed and the standalone daemon mount); this package only adapts it to the OpenClaw host. It mounts the gateway's auth-bearing route prefixes and dispatches to **user-generated apps**. Each app is a folder of static assets + JS handlers; app **code** is backed by the gateway-owned git store, app **data** by the owner's vault (issue #286 phase 2 — apps are projections; there is no per-app database).
 
 ## Mounted routes
 
@@ -37,7 +37,7 @@ App **creation, clone, and publish** do not live here — they go through the ga
 
 ### Three-tool invocation surface (issue #107)
 
-All handler invocations flow through three generic tools, available both as OpenClaw agent tools and as an HTTP shim:
+All handler invocations flow through three generic tools, available as an HTTP shim (the app UI's door to declared handlers; the matching OpenClaw *agent* tools died with the per-app silo — issue #286 phase 2):
 
 | Tool | HTTP | Purpose |
 | --- | --- | --- |
@@ -58,12 +58,12 @@ Either way, every client — the desktop renderer, the mobile companion — sees
 
 ## App layout on disk
 
-App **code** is backed by the gateway-owned git store (issue #137), not a per-app `versions/` tree. `buildGateway` is constructed with `appsStoreRoot` (`<dbDir>/centraid-code`); the store keeps `apps.git` + `worktrees/`, and the runtime serves handlers + static assets from the live `main` worktree's `apps/` dir (`gw.codeAppsDir()`, a stable symlink repointed atomically on each publish). App **data** stays under `appsDir`:
+App **code** is backed by the gateway-owned git store (issue #137), not a per-app `versions/` tree. `buildGateway` is constructed with `appsStoreRoot` (`<dbDir>/centraid-code`); the store keeps `apps.git` + `worktrees/`, and the runtime serves handlers + static assets from the live `main` worktree's `apps/` dir (`gw.codeAppsDir()`, a stable symlink repointed atomically on each publish). App **state** stays under `appsDir`:
 
 ```
 <appsDir>/<id>/
-  data.sqlite        ← persistent app data, never moved on publish
-  runtime.sqlite     ← run ledgers / runtime bookkeeping
+  logs.jsonl         ← handler logs, never moved on publish
+  settings.json      ← per-app settings (knobs, automation toggles)
 ```
 
 ```
@@ -81,7 +81,6 @@ Publishing replaces the legacy tarball-upload + version-flip flow: a draft sessi
 <appsDir>/<app_id>/
   index.html
   app.css, app.js, …       # static — see allowlist below
-  data.sqlite              # never served as a static file
   queries/<name>.js        # dispatched by centraid_read against queries[name]
   actions/<name>.js        # dispatched by centraid_write against actions[name]
   app.json                 # the app manifest (manifestVersion, actions[], queries[], …)
@@ -137,9 +136,9 @@ The handler-arg types are exported from `@centraid/openclaw-plugin`:
 | `QueryHandler` | `satisfies QueryHandler` on a query default export |
 | `ActionHandler` | `satisfies ActionHandler` on an action default export |
 | `QueryHandlerArgs`, `ActionHandlerArgs` | Args type if you prefer explicit destructuring annotations |
-| `ScopedDb`, `ScopedLog`, `AppRef` | Sub-surfaces of the args object |
+| `ScopedVault`, `ScopedLog`, `AppRef` | Sub-surfaces of the args object |
 
-`db` is a proxy: each call round-trips to the plugin process which owns the `data.sqlite` connection — the worker never sees a path to another app's database. `ctx.fetch` is a timeout-bound `fetch`. There is no `fs`, `child_process`, or `process.env` provided.
+`ctx.vault` is a proxy: each call round-trips to the plugin process which holds the vault credential — the worker never sees a key or file handle. `ctx.fetch` is a timeout-bound `fetch`. There is no `fs`, `child_process`, or `process.env` provided.
 
 ## Configuration (`configSchema`)
 

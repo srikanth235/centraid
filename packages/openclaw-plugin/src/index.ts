@@ -38,7 +38,6 @@ import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/p
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { makeWebhookRouteHandler } from '@centraid/automation';
 import { buildGateway, type BuiltGateway } from '@centraid/gateway';
-import { registerCentraidTools } from './lib/tools.js';
 import { makeOpenClawConversationRunner } from './lib/openclaw-conversation-runner.js';
 import { runOpenclawFire } from './lib/openclaw-fire.js';
 import { resolveOpenClawModels } from './lib/openclaw-models.js';
@@ -53,16 +52,9 @@ export type {
   QueryHandlerArgs,
   ActionHandlerArgs,
   ActionResult,
-  ScopedDb,
+  ScopedVault,
   ScopedLog,
   AppRef,
-  AppSchema,
-  AppSchemaTable,
-  AppSchemaColumn,
-  AppSchemaIndex,
-  AppSchemaView,
-  AppTableRows,
-  RunQueryResult,
   LogEntry,
   LogLevel,
 } from '@centraid/app-engine';
@@ -97,12 +89,12 @@ export default definePluginEntry({
     const dbDir = path.dirname(appsDir);
 
     // Build the gateway core once per process. `register()` also runs in
-    // OpenClaw worker subprocesses (which execute the centraid_* agent tools
-    // but never serve HTTP) — `lazyStoreInit` keeps the git-store `init()` +
-    // the in-process scheduler off them; both run only from `gw.start()`,
-    // driven by `gateway_start` in the single HTTP-serving process. The
-    // construction itself is cheap (no git I/O, lazy DB handles), so doing it
-    // in every process is safe and gives the worker's tools a live runtime.
+    // OpenClaw worker subprocesses (which never serve HTTP) —
+    // `lazyStoreInit` keeps the git-store `init()` + the in-process
+    // scheduler off them; both run only from `gw.start()`, driven by
+    // `gateway_start` in the single HTTP-serving process. The construction
+    // itself is cheap (no git I/O, lazy DB handles), so doing it in every
+    // process is safe.
     const gwPromise: Promise<BuiltGateway> = buildGateway({
       paths: {
         vaultDir: path.join(dbDir, 'centraid-vault'),
@@ -177,14 +169,10 @@ export default definePluginEntry({
       });
     }
 
-    // Agent tools — let the OpenClaw agent read a single app's data via SELECT
-    // only. Scope is enforced by the before_tool_call hook inside
-    // registerCentraidTools (sessionKey = "centraid-conversation:<appId>"). The runtime
-    // is resolved lazily so the worker's tools get the per-process instance.
-    registerCentraidTools(
-      api,
-      gwPromise.then((gw) => gw.runtime),
-    );
+    // The pre-vault centraid_* agent tools died with the per-app silo
+    // (issue #286 phase 2). The OpenClaw agent gets vault-register tools
+    // when the OpenClaw re-platform wires the runners; until then its
+    // turns carry no data tools.
 
     // Webhook-trigger route (issue #96). Not part of `composedHandler`: one
     // prefix route fronts every automation with a `webhook` trigger — the path
