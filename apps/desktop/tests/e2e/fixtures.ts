@@ -71,16 +71,6 @@ export interface MockState {
   nodesByRun: Record<string, Array<Record<string, unknown>>>;
   /** GET /centraid/_apps/:id/git-versions (undefined → 404 = never published) */
   versions: Record<string, GitVersion[]>;
-  /** GET /centraid/_apps/:id/schema */
-  schemaById: Record<string, Record<string, unknown>>;
-  /** POST /centraid/_apps/:id/query result */
-  queryResult: Record<string, unknown>;
-  /**
-   * GET /centraid/_apps/:id/data/:table → one page of rows.
-   * Keyed by table name; the route slices by ?limit/&offset and reports
-   * `totalCount` from the full `rows` array so the pager has something to do.
-   */
-  tableRows: Record<string, { columns: string[]; rows: Array<Record<string, unknown>> }>;
   /** GET /centraid/_apps/:id/logs → { entries } */
   logsById: Record<string, Array<Record<string, unknown>>>;
   /** GET /centraid/_apps/:id/files → { files } */
@@ -145,9 +135,6 @@ function defaultState(): MockState {
     runsById: {},
     nodesByRun: {},
     versions: {},
-    schemaById: {},
-    queryResult: { kind: 'rows', columns: ['ok'], rows: [{ ok: 1 }], durationMs: 1 },
-    tableRows: {},
     logsById: {},
     filesById: {},
     prefs: {},
@@ -325,29 +312,6 @@ function route(
         return json(res, s.deleteStatus, { error: s.deleteStatus === 404 ? 'not_found' : 'error' });
       }
     }
-    if (sub === 'schema' && method === 'GET') {
-      const sch = s.schemaById[id];
-      if (!sch) return json(res, 404, { error: 'not_found' });
-      return json(res, 200, sch);
-    }
-    if (sub === 'data' && method === 'GET') {
-      // /centraid/_apps/:id/data/:table — one page of rows. seg[4] is the
-      // (encoded) table name. Slice by ?limit/&offset and report the full
-      // length as totalCount so the row-browser pager activates.
-      const table = decodeURIComponent(seg[4] ?? '');
-      const limit = Number(url.searchParams.get('limit') ?? '50');
-      const offset = Number(url.searchParams.get('offset') ?? '0');
-      const data = s.tableRows[table];
-      if (!data) return json(res, 200, { columns: ['id'], rows: [], totalCount: 0, limit, offset });
-      return json(res, 200, {
-        columns: data.columns,
-        rows: data.rows.slice(offset, offset + limit),
-        totalCount: data.rows.length,
-        limit,
-        offset,
-      });
-    }
-    if (sub === 'query' && method === 'POST') return json(res, 200, s.queryResult);
     if (sub === 'logs' && method === 'GET')
       return json(res, 200, { entries: s.logsById[id] ?? [] });
     if (sub === 'files') {

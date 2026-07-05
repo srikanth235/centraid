@@ -1,8 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit app-chat-widget pending split into mount / history-view / message-renderer modules
 // App-scoped agentic chat widget. Floating button at the bottom-right of
 // the app view; click opens a slide-out panel with multi-turn conversation.
-// The agent runs in the desktop main process over openclaw WS and can only
-// read/write this app's data.sqlite — see `apps/desktop/src/main/chat.ts`.
+// The agent runs gateway-side and operates the app's vault data through the
+// vault register (vault_sql / vault_invoke).
 //
 // Rendering mirrors the builder chat (apps/desktop/src/renderer/builder.ts):
 // a typed `AppConversationMsg[]` is fully re-rendered on every update, with adjacent
@@ -127,24 +127,16 @@ import {
       `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
 
     function toolVerb(tool: string): string {
-      switch (tool) {
-        case 'centraid_sql_read':
-          return 'Querying';
-        case 'centraid_sql_write':
-          return 'Writing';
-        case 'centraid_sql_describe':
-          return 'Reading schema';
-        default:
-          return tool.charAt(0).toUpperCase() + tool.slice(1);
-      }
+      return tool.charAt(0).toUpperCase() + tool.slice(1);
     }
 
-    function summarizeToolArgs(tool: string, sql?: string, args?: unknown): string | undefined {
-      if ((tool === 'centraid_sql_read' || tool === 'centraid_sql_write') && sql) {
+    function summarizeToolArgs(sql?: string, args?: unknown): string | undefined {
+      // SQL-carrying tools (vault_sql) surface the statement's first line;
+      // everything else falls back to a short string arg.
+      if (sql) {
         const firstLine = sql.split('\n').find((l) => l.trim().length > 0) ?? sql;
         return firstLine.trim().replace(/\s+/g, ' ').slice(0, 90);
       }
-      if (tool === 'centraid_sql_describe') return undefined;
       if (args && typeof args === 'object') {
         for (const k of ['name', 'path', 'query']) {
           const v = (args as Record<string, unknown>)[k];
@@ -1020,7 +1012,7 @@ import {
             tool: payload.tool,
             sql: payload.sql,
             args: payload.args,
-            summary: summarizeToolArgs(payload.tool, payload.sql, payload.args),
+            summary: summarizeToolArgs(payload.sql, payload.args),
             state: payload.state,
             result: payload.result,
             errorText: payload.errorText,
@@ -1509,7 +1501,7 @@ import {
             tool: event.toolName,
             sql: event.sql,
             args: event.args,
-            summary: summarizeToolArgs(event.toolName, event.sql, event.args),
+            summary: summarizeToolArgs(event.sql, event.args),
             state: 'running',
           });
           renderChat();

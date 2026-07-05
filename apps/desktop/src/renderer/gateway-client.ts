@@ -13,8 +13,9 @@
  *
  * This module ports the pure `fetch` methods that previously lived in
  * `main/*-client.ts` + `@centraid/agent-harness`'s `gateway-client`.
- * It covers the app read surface (schema / table-rows / query / logs /
- * deregister / live URL), version history (list / activate), the
+ * It covers the app read surface (logs / settings / deregister / live
+ * URL — the schema/table-rows/query trio died with the per-app
+ * data.sqlite, issue #286 phase 2), version history (list / activate), the
  * `/_centraid-user` identity + prefs surface, and the automation
  * read/run/analytics + insights surface. The shared fetch infrastructure
  * lives in `gateway-client-core.ts`; the app-editing + lifecycle surface
@@ -30,57 +31,6 @@ export * from './gateway-client-core.js';
 export async function appLiveUrl(input: { id: string }): Promise<{ url: string }> {
   const { baseUrl } = await auth();
   return { url: href(baseUrl, `/centraid/${enc(input.id)}/`) };
-}
-
-/**
- * Live `data.sqlite` schema for the Cloud → Database panel. `undefined`
- * when the app isn't registered (404) or has no active version (503).
- */
-export async function appSchema(input: { id: string }): Promise<CentraidAppSchema | undefined> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/schema`, {
-    method: 'GET',
-    headers: authHeaders(token),
-  });
-  if (res.status === 404 || res.status === 503) {
-    await res.body?.cancel().catch(() => {});
-    return undefined;
-  }
-  return readJson<CentraidAppSchema>(res, 'fetch app schema');
-}
-
-/** One page of rows from a table/view; gateway caps `limit` at 200. */
-export async function appTableRows(input: {
-  id: string;
-  table: string;
-  limit?: number;
-  offset?: number;
-}): Promise<CentraidAppTableRows> {
-  const { baseUrl, token } = await auth();
-  const params = new URLSearchParams();
-  if (input.limit !== undefined) params.set('limit', String(input.limit));
-  if (input.offset !== undefined) params.set('offset', String(input.offset));
-  const qs = params.toString();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_apps/${enc(input.id)}/data/${enc(input.table)}${qs ? `?${qs}` : ''}`,
-    { method: 'GET', headers: authHeaders(token) },
-  );
-  return readJson<CentraidAppTableRows>(res, 'fetch table rows');
-}
-
-/** Run one SQL statement against the app's `data.sqlite`. */
-export async function appQuery(input: {
-  id: string;
-  sql: string;
-}): Promise<CentraidRunQueryResult> {
-  const { baseUrl, token } = await auth();
-  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/query`, {
-    method: 'POST',
-    headers: authHeaders(token, 'application/json'),
-    body: JSON.stringify({ sql: input.sql }),
-  });
-  return readJson<CentraidRunQueryResult>(res, 'run query');
 }
 
 /** Newest-first tail of persistent handler logs. */
@@ -101,6 +51,42 @@ export async function appLogs(input: {
     headers: authHeaders(token),
   });
   return readJson<{ entries: CentraidLogEntry[] }>(res, 'fetch app logs');
+}
+
+/**
+ * All app-owned `settings.json` values for the app (issue #286 phase 2:
+ * the per-app data.sqlite's `__centraid_settings` table became this
+ * file). Knob keys are the manifest's camelCase `app*` names.
+ */
+export async function appSettings(input: { id: string }): Promise<CentraidAppSettings> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/settings`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const out = await readJson<{ settings: CentraidAppSettings }>(res, 'fetch app settings');
+  return out.settings ?? {};
+}
+
+/**
+ * Write one app-owned settings key; `value: null` deletes it. Keys are
+ * sent verbatim (camelCase `app*` — the runtime kebab-cases at bake
+ * time); `__`-prefixed keys are runtime-owned and refused gateway-side.
+ * Returns the full settings map after the write.
+ */
+export async function appSettingWrite(input: {
+  id: string;
+  key: string;
+  value: unknown;
+}): Promise<CentraidAppSettings> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_apps/${enc(input.id)}/settings`, {
+    method: 'PUT',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ key: input.key, value: input.value ?? null }),
+  });
+  const out = await readJson<{ settings: CentraidAppSettings }>(res, 'write app setting');
+  return out.settings ?? {};
 }
 
 /** Remove an app from the registry. */
