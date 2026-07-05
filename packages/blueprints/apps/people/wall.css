@@ -7,7 +7,9 @@
    template's index.html. (Each template's index.html also embeds an inline live-settings <script> for theme/bgL postMessage updates from the shell.)
    Keep that copy in sync with this file.
 
-   Uses `var(--bg-l)` so it retunes from the host's "Dark shade" knob. */
+   People retunes the light branch to the warm blush base its rose
+   identity sits on; the dark branch keeps the shared formula so the
+   host's "Dark shade" knob still retunes it. */
 
 :root[data-theme='dark'] {
   --bg-wall: linear-gradient(
@@ -18,7 +20,7 @@
 }
 
 :root[data-theme='light'] {
-  --bg-wall: #fcfcfc;
+  --bg-wall: hsl(18 40% 98%);
 }
 
 /* Standalone fallback — template opened outside the shell with system

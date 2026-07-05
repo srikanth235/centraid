@@ -1,12 +1,12 @@
 /**
- * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a circle. Runs through people.add_person — consent-checked and receipted, risk low.
+ * Create a circle (a SKOS concept in your circles scheme), like a Docs folder. Runs through people.create_circle — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.add_person',
+      command: 'people.create_circle',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

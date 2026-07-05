@@ -109,6 +109,7 @@ export { registerMediaCommands } from './commands/media.js';
 export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';
 export { FLAGS_SCHEME_URI, STARRED_NOTATION } from './commands/flags.js';
 export { registerHomeCommands } from './commands/home.js';
+export { registerPeopleCommands, CIRCLE_SCHEME_URI } from './commands/people.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
 export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';

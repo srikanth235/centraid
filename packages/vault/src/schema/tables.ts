@@ -46,6 +46,16 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   media: ['media_asset', 'face_region'],
   home: ['asset_item', 'warranty', 'maintenance_plan', 'utility_meter', 'meter_reading'],
   business: ['client', 'project', 'time_entry', 'invoice', 'invoice_line'],
+  people: [
+    'profile',
+    'interaction',
+    'task',
+    'important_date',
+    'relationship',
+    'gift',
+    'debt',
+    'journal_entry',
+  ],
 };
 
 /** journal.db tables — the append-only audit stream. */
