@@ -291,6 +291,17 @@ Phase-2 details:
   `apps/desktop/tests/e2e/fixtures.ts`,
   `apps/desktop/tests/e2e/builder.spec.ts`,
   `apps/desktop/tests/e2e/appview-templates-insights.spec.ts`.
+- Post-merge CI reconciliation (PR #288, after main advanced by PR #287):
+  merged `origin/main` (two hand-resolved conflicts —
+  `packages/gateway/src/serve/vault-plane.ts` kept both the locker/tally
+  command registrations and the ext re-arm;
+  `packages/blueprints/src/app-manifests.test.ts` took the projection-list
+  superset); ran `oxfmt` on the phase-2 sources that predated CI's
+  `format:check`; and dropped two phase-2 leftovers CI's test-file
+  typecheck caught — a removed `schema` arg in
+  `packages/app-engine/src/handlers/vault-bridge.test.ts` and the removed
+  `tables` manifest key in `packages/app-engine/src/registry/manifest.test.ts`
+  (retargeted at the optional `ext` band).
 
 ## Decisions
 
@@ -491,6 +502,9 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783274279-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 2 | 665 | 86041 | 172 | 839 | 0.0515 | 398076 | 8384592 | 355368921 | 1301050 |  |
 | claude-code-c0bf538c-2f5-1783274305-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 957 | 690 | 260118 | 1530 | 3177 | 0.1774 | 399033 | 8385282 | 355629039 | 1302580 |  |
 | claude-code-c0bf538c-2f5-1783274639-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 3169 | 39429 | 2811777 | 12753 | 55351 | 1.9870 | 402202 | 8424711 | 358440816 | 1315333 | style(vault,gateway): oxfmt the ext-band sources to satisfy CI format:check (#28 |
+| claude-code-c0bf538c-2f5-1783274813-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 1964 | 28697 | 3310291 | 12140 | 42801 | 2.1478 | 404166 | 8453408 | 361751107 | 1327473 | test(app-engine): drop stale schema/tables refs from tests for CI typecheck (#28 |
+| claude-code-c0bf538c-2f5-1783274834-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 2 | 485 | 112430 | 253 | 740 | 0.0656 | 404168 | 8453893 | 361863537 | 1327726 | test(app-engine): drop stale schema/tables refs (#286)Issue: #286 |
+| claude-code-c0bf538c-2f5-1783274896-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 339 | 11205 | 1262148 | 4581 | 16125 | 0.8173 | 404507 | 8465098 | 363125685 | 1332307 | test(app-engine): drop stale schema/tables refs from tests for CI typecheck (#28 |
 
 ### Steering
 
