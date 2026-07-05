@@ -1,0 +1,414 @@
+{
+  "manifestVersion": 1,
+  "id": "tally",
+  "name": "Tally",
+  "description": "Split, settled — a personal expense splitter as a projection of the vault. Track shared costs across groups and friends, see who owes whom, and settle up. A friend is a canonical core.party; a group is a tally.group with an emoji icon and one member row per party (you included); an expense stores its resolved splits (equally, exact amounts or percentages), re-validated server-side to sum to the amount; a settlement is a real cash payment. Balances are NEVER stored — they are derived at read time by the balance engine. Adding, editing and deleting expenses, settling up, and managing groups and friends all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "iconKey": "Receipt",
+  "colorKey": "forest",
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Keeps your shared expenses split, balanced and settled.",
+    "scopes": [
+      { "schema": "core", "table": "vault", "verbs": "read" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "tally", "table": "friend", "verbs": "read" },
+      { "schema": "tally", "table": "group", "verbs": "read" },
+      { "schema": "tally", "table": "group_member", "verbs": "read" },
+      { "schema": "tally", "table": "expense", "verbs": "read" },
+      { "schema": "tally", "table": "expense_split", "verbs": "read" },
+      { "schema": "tally", "table": "settlement", "verbs": "read" },
+      { "schema": "tally", "table": "add_friend", "verbs": "act" },
+      { "schema": "tally", "table": "create_group", "verbs": "act" },
+      { "schema": "tally", "table": "rename_group", "verbs": "act" },
+      { "schema": "tally", "table": "add_group_member", "verbs": "act" },
+      { "schema": "tally", "table": "remove_group_member", "verbs": "act" },
+      { "schema": "tally", "table": "delete_group", "verbs": "act" },
+      { "schema": "tally", "table": "add_expense", "verbs": "act" },
+      { "schema": "tally", "table": "edit_expense", "verbs": "act" },
+      { "schema": "tally", "table": "delete_expense", "verbs": "act" },
+      { "schema": "tally", "table": "settle_up", "verbs": "act" }
+    ]
+  },
+  "actions": [
+    {
+      "name": "add-expense",
+      "description": "Add an expense through tally.add_expense. The split method (equally / exact / percent) is resolved to a splits map client-side; the command re-validates it sums to the amount and every participant is a group member.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "amount_minor": { "type": "integer", "minimum": 1 },
+          "paid_by": { "type": "string", "minLength": 1 },
+          "spent_on": { "type": "string" },
+          "category": { "type": "string" },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": { "type": "string" },
+                "share_minor": { "type": "integer" }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["group_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-expense",
+      "description": "Rewrite an expense through tally.edit_expense — same fields as add, re-validated the same way.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "expense_id": { "type": "string", "minLength": 1 },
+          "description": { "type": "string", "minLength": 1 },
+          "amount_minor": { "type": "integer", "minimum": 1 },
+          "paid_by": { "type": "string", "minLength": 1 },
+          "spent_on": { "type": "string" },
+          "category": { "type": "string" },
+          "splits": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "party_id": { "type": "string" },
+                "share_minor": { "type": "integer" }
+              },
+              "required": ["party_id", "share_minor"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["expense_id", "description", "amount_minor", "paid_by", "category", "splits"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-expense",
+      "description": "Delete an expense through tally.delete_expense.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "expense_id": { "type": "string", "minLength": 1 } },
+        "required": ["expense_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "settle-up",
+      "description": "Record a cash payment through tally.settle_up (from → to), paying balances down.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "from_party": { "type": "string", "minLength": 1 },
+          "to_party": { "type": "string", "minLength": 1 },
+          "amount_minor": { "type": "integer", "minimum": 1 },
+          "group_id": { "type": "string", "minLength": 1 },
+          "paid_on": { "type": "string" }
+        },
+        "required": ["from_party", "to_party", "amount_minor"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-friend",
+      "description": "Add a friend through tally.add_friend — mints a canonical person party plus its avatar hue.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "avatar_color": { "type": "string" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "create-group",
+      "description": "Create a group through tally.create_group — name, icon and member party ids (you are added automatically).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "icon": { "type": "string", "minLength": 1 },
+          "color": { "type": "string" },
+          "member_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["name", "icon", "member_ids"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "rename-group",
+      "description": "Rename a group through tally.rename_group.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "required": ["group_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-group-member",
+      "description": "Add a member to a group through tally.add_group_member.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": { "type": "string", "minLength": 1 },
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["group_id", "party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-group-member",
+      "description": "Remove a member from a group through tally.remove_group_member — refused while they are on the ledger.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "group_id": { "type": "string", "minLength": 1 },
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["group_id", "party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-group",
+      "description": "Delete an empty group through tally.delete_group — refused while it still holds expenses.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "group_id": { "type": "string", "minLength": 1 } },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "dashboard",
+      "description": "The home view: the owner party id (`me`), the base currency, per-friend net balances (positive = they owe you), the you-owe / you-are-owed totals, and each group's net for the owner. All balances are derived from expenses and settlements — never stored.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": { "type": ["string", "null"] },
+          "currency": { "type": "string" },
+          "friends": { "type": "array" },
+          "groups": { "type": "array" },
+          "owe_total_minor": { "type": "integer" },
+          "owed_total_minor": { "type": "integer" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "group",
+      "description": "One group: its meta, members with their net balances, and the expense ledger (newest first), each row decorated with the owner's lent/borrowed amount and its per-person splits.",
+      "input": {
+        "type": "object",
+        "properties": { "group_id": { "type": "string", "minLength": 1 } },
+        "required": ["group_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": { "type": ["string", "null"] },
+          "currency": { "type": "string" },
+          "group": { "type": ["object", "null"] },
+          "members": { "type": "array" },
+          "ledger": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "friend",
+      "description": "One friend: the net balance with them and the expenses you both took part in (newest first), decorated the same way as a group ledger.",
+      "input": {
+        "type": "object",
+        "properties": { "party_id": { "type": "string", "minLength": 1 } },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": { "type": ["string", "null"] },
+          "currency": { "type": "string" },
+          "friend": { "type": ["object", "null"] },
+          "ledger": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "activity",
+      "description": "Expenses and settlements interleaved, newest first, each carrying the owner's role and the display names needed to render a one-line entry.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": { "type": ["string", "null"] },
+          "currency": { "type": "string" },
+          "activity": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Match expenses by description, newest first, in the same decorated ledger row shape (with group context).",
+      "input": {
+        "type": "object",
+        "properties": { "term": { "type": "string" } },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "me": { "type": ["string", "null"] },
+          "currency": { "type": "string" },
+          "results": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "mono", "label": "Mono" }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#0FA678",
+      "options": [
+        { "value": "#0FA678", "label": "Emerald" },
+        { "value": "#2EA098", "label": "Teal" },
+        { "value": "#4E68DD", "label": "Indigo" },
+        { "value": "#E8923C", "label": "Amber" },
+        { "value": "#E0567A", "label": "Rose" }
+      ]
+    }
+  ]
+}
