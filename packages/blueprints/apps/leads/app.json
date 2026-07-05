@@ -41,6 +41,16 @@
       },
       {
         "schema": "core",
+        "table": "link",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "link_anchor",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "add_party",
         "verbs": "act"
       },

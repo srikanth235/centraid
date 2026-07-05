@@ -7,7 +7,18 @@
 // grant and this page goes dark while the tasks, history and receipts
 // remain the owner's.
 
-import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  attachMentionField,
+  debounce,
+  inlineLinkIds,
+  outcomeMessage,
+  readFailed,
+  removeReference,
+  renderReferenceStrip,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -419,8 +430,11 @@ function renderLogbook(logbook) {
 // ---------- Popovers (one shared host: reschedule, priority, effort & notes) ----------
 
 let popoverEl = null;
+let popoverCleanup = null; // teardown for the open popover (e.g. detach a mention field)
 
 function closePopover() {
+  popoverCleanup?.();
+  popoverCleanup = null;
   popoverEl?.remove();
   popoverEl = null;
 }
@@ -533,13 +547,47 @@ function openEditPopover(anchor, task) {
     notesLabel.textContent = 'Notes';
     const notes = document.createElement('textarea');
     notes.rows = 3;
-    notes.placeholder = 'Add a note… (⌘↵ saves)';
+    notes.placeholder = 'Add a note… (@ to mention, ⌘↵ saves)';
     notes.setAttribute('aria-label', 'Notes');
     if (task.description) notes.value = String(task.description);
     notesLabel.appendChild(notes);
     pop.appendChild(notesLabel);
 
-    const doSave = () => {
+    // @-mentions on the note (issues #272 + #282): the kit field owns the
+    // popover, the pick→insert→assert, and (on save) the reconcile. The
+    // reference strip is the durable home; a note has no read-view render, so
+    // the strip is where a reference shows.
+    const refsOf = () => (task.references ||= []);
+    const strip = document.createElement('div');
+    strip.className = 'kit-ref-strip pop-refs';
+    const renderStrip = () =>
+      renderReferenceStrip(strip, refsOf(), {
+        inlineIds: inlineLinkIds(notes.value, refsOf()),
+        onRemove: async (ref) => {
+          const outcome = await removeReference(ref.link_id);
+          if (outcome?.status === 'executed') {
+            task.references = refsOf().filter((r) => r.link_id !== ref.link_id);
+          }
+          renderStrip();
+        },
+      });
+    const field = attachMentionField(notes, {
+      from: () => ({ type: 'schedule.task', id: task.task_id }),
+      references: refsOf,
+      onChange: renderStrip,
+    });
+    popoverCleanup = field.detach;
+    pop.appendChild(strip);
+    renderStrip();
+
+    const mention = document.createElement('button');
+    mention.type = 'button';
+    mention.className = 'pop-mention';
+    mention.textContent = '＋ Mention';
+    mention.addEventListener('click', () => field.startMention());
+    pop.appendChild(mention);
+
+    const doSave = async () => {
       const input = { task_id: task.task_id, priority: Number(sel.value) };
       const minutes = Number(eff.value);
       if (minutes > 0) input.effort_min = Math.round(minutes);
@@ -547,10 +595,20 @@ function openEditPopover(anchor, task) {
       // textarea clears; untouched notes stay out of the command.
       const note = notes.value.trim();
       const prev = String(task.description ?? '');
+      const changed = (note && note !== prev) || (!note && prev);
       if (note && note !== prev) input.description = note;
       if (!note && prev) input.clear_description = true;
+      const subject = { type: 'schedule.task', id: task.task_id };
+      const references = refsOf();
       closePopover();
-      write('edit', input);
+      await write('edit', input);
+      // The saved note is the settled text — reconcile the anchors against it
+      // (re-baseline live selectors, retract orphaned mentions with Undo),
+      // then re-read so the board reflects any retraction.
+      if (changed) {
+        await field.reconcile(note, { from: subject, references });
+        await refresh();
+      }
     };
 
     // Keyboard flow inside the textarea: Cmd/Ctrl+Enter saves (Escape

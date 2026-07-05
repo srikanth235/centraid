@@ -9,10 +9,14 @@
 
 import {
   armConfirm,
+  attachMentionField,
   debounce,
   fmtMoney,
+  inlineLinkIds,
   letterAvatar,
   readFailed,
+  removeReference,
+  renderReferenceStrip,
   showSkeleton,
   toast,
 } from './kit.js';
@@ -599,6 +603,32 @@ function openNoteEditor(card, lead, { lostTo } = {}) {
   ta.rows = 3;
   ta.value = lostTo ? `${lead.note ? `${lead.note}\n` : ''}Lost because ` : (lead.note ?? '');
   ta.setAttribute('aria-label', lostTo ? 'Why was this lead lost?' : 'Note');
+
+  // @-mentions on the running note (issues #272 + #282): the kit field owns
+  // the popover, the pick→insert→assert, and (on save) the reconcile. Anchors
+  // ride core.party; the strip is where a reference shows (a note has no
+  // read-view render). reconcile only touches anchored links, so any
+  // employment (works-for) links on the party are left untouched.
+  const refsOf = () => (lead.references ||= []);
+  const strip = document.createElement('div');
+  strip.className = 'kit-ref-strip lead-refs';
+  const renderStrip = () =>
+    renderReferenceStrip(strip, refsOf(), {
+      inlineIds: inlineLinkIds(ta.value, refsOf()),
+      onRemove: async (ref) => {
+        const outcome = await removeReference(ref.link_id);
+        if (outcome?.status === 'executed') {
+          lead.references = refsOf().filter((r) => r.link_id !== ref.link_id);
+        }
+        renderStrip();
+      },
+    });
+  const field = attachMentionField(ta, {
+    from: () => ({ type: 'core.party', id: lead.party_id }),
+    references: refsOf,
+    onChange: renderStrip,
+  });
+
   const row = document.createElement('div');
   row.className = 'card-actions';
   const save = document.createElement('button');
@@ -606,8 +636,15 @@ function openNoteEditor(card, lead, { lostTo } = {}) {
   save.className = 'ghost';
   save.textContent = lostTo ? 'Save & mark lost' : 'Save';
   save.addEventListener('click', async () => {
-    const outcome = await act('save-note', { party_id: lead.party_id, note: ta.value.trim() });
+    const note = ta.value.trim();
+    const subject = { type: 'core.party', id: lead.party_id };
+    const references = refsOf();
+    const outcome = await act('save-note', { party_id: lead.party_id, note });
     if (!narrate(outcome)) return;
+    // The saved note is the settled text — reconcile the anchors against it
+    // (re-baseline live selectors, retract orphaned mentions with Undo).
+    await field.reconcile(note, { from: subject, references });
+    field.detach();
     if (lostTo) {
       await moveLead(lead, lostTo);
       return;
@@ -618,10 +655,19 @@ function openNoteEditor(card, lead, { lostTo } = {}) {
   cancel.type = 'button';
   cancel.className = 'ghost';
   cancel.textContent = 'Cancel';
-  cancel.addEventListener('click', () => editor.remove());
-  row.append(save, cancel);
-  editor.append(ta, row);
+  cancel.addEventListener('click', () => {
+    field.detach();
+    editor.remove();
+  });
+  const mention = document.createElement('button');
+  mention.type = 'button';
+  mention.className = 'ghost';
+  mention.textContent = '＋ Mention';
+  mention.addEventListener('click', () => field.startMention());
+  row.append(save, cancel, mention);
+  editor.append(ta, strip, row);
   card.appendChild(editor);
+  renderStrip();
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
 }

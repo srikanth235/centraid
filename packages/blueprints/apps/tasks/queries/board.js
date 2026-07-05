@@ -134,6 +134,66 @@ export default async ({ input, ctx }) => {
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByTask = attachmentsBySubject('schedule.task', attachments.rows ?? [], contentById);
 
+    // Cross-references (issues #272 + #282): a task's description can @-mention
+    // any vault entity. Read the live outbound links + their standoff anchors
+    // and resolve the far-end cards (resolvable-if-linked — this app holds no
+    // read scope on those domains). Mirrors the notes/library.js shape.
+    const links =
+      taskIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.link',
+            where: [
+              { column: 'from_type', op: 'eq', value: 'schedule.task' },
+              { column: 'from_id', op: 'in', value: taskIds },
+              { column: 'valid_to', op: 'is-null' },
+            ],
+            purpose,
+          })
+        : { rows: [] };
+    const linkRows = links.rows ?? [];
+    const uniqueRefs = [
+      ...new Map(
+        linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
+      ).values(),
+    ];
+    const [resolved, anchors] = await Promise.all([
+      uniqueRefs.length > 0
+        ? ctx.vault.resolve({ refs: uniqueRefs, purpose })
+        : Promise.resolve({ cards: [] }),
+      linkRows.length > 0
+        ? ctx.vault.read({
+            entity: 'core.link_anchor',
+            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+    ]);
+    const cardByRef = new Map((resolved.cards ?? []).map((c) => [`${c.type}/${c.id}`, c]));
+    const selectorByLink = new Map();
+    for (const a of anchors.rows ?? []) {
+      try {
+        selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
+      } catch {
+        // an unreadable selector is just an unanchored reference
+      }
+    }
+    const refsByTask = new Map();
+    for (const l of linkRows) {
+      if (!refsByTask.has(l.from_id)) refsByTask.set(l.from_id, []);
+      refsByTask.get(l.from_id).push({
+        link_id: l.link_id,
+        selector: selectorByLink.get(l.link_id) ?? null,
+        card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
+          type: l.to_type,
+          id: l.to_id,
+          status: 'unknown',
+          title: null,
+          subtitle: null,
+          thumbnail_content_id: null,
+        },
+      });
+    }
+
     const childrenOf = new Map();
     for (const task of rows) {
       if (!task.parent_task_id) continue;
@@ -156,6 +216,7 @@ export default async ({ input, ctx }) => {
     const withAttachments = (task) => ({
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],
+      references: refsByTask.get(task.task_id) ?? [],
     });
 
     const withChildren = (task) => {

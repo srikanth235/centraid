@@ -653,3 +653,8 @@ select {
 :root[data-app-font='mono'] {
   font-family: var(--mono);
 }
+
+/* Reference strip inside the note editor (issues #272 + #282). */
+.lead-refs {
+  margin: 0.35rem 0;
+}

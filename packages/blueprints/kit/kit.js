@@ -1489,3 +1489,241 @@ export function attachMentionPopover(textarea, options = {}) {
     textarea.removeEventListener('click', onInput);
   };
 }
+
+// ---------- Inline-chip rendering (shared read-view helpers, issue #282) ----------
+// A resolved standoff anchor renders the mentioned words as a chip showing the
+// resolver's LIVE card title — rename the target and the chip follows, while
+// the body bytes stay the plain words that were typed. These are the pieces a
+// read view reuses; the app supplies its own block/markdown layout and calls
+// appendWithChips for each rendered text chunk.
+
+/** The live-card chip for one resolved anchor span (`{card}` on the span). */
+export function mentionChip(ref) {
+  const card = ref.card ?? {};
+  const chip = document.createElement('span');
+  chip.className = 'kit-mention-chip';
+  if (card.status === 'missing') {
+    chip.classList.add('ref-gone');
+    chip.textContent = 'removed from the vault';
+  } else {
+    chip.textContent = card.title ?? entityKindLabel(card.type);
+    if (card.status === 'trashed') chip.classList.add('ref-gone');
+  }
+  chip.title = `${entityKindLabel(card.type)} — linked reference`;
+  return chip;
+}
+
+/**
+ * Resolve a body's anchored references to inline spans (issue #282). `refs` is
+ * the app's live reference list (`{link_id, selector, card}`); returns
+ * `[{start, end, link_id, card}]` for the anchors that currently resolve, via
+ * the global one-span-per-anchor assignment. Pure presentation — no writes.
+ */
+export function resolveInlineSpans(body, refs) {
+  const anchored = (refs ?? []).filter((r) => r.selector);
+  if (anchored.length === 0) return [];
+  const assigned = assignAnchors(String(body ?? ''), anchored);
+  return anchored
+    .filter((r) => assigned.has(r.link_id))
+    .map((r) => ({ ...assigned.get(r.link_id), link_id: r.link_id, card: r.card }));
+}
+
+/** The set of link_ids currently resolved inline in `body` (strip flagging). */
+export function inlineLinkIds(body, refs) {
+  return new Set(resolveInlineSpans(body, refs).map((r) => r.link_id));
+}
+
+/**
+ * Append one rendered chunk of body text to `el`, swapping any anchor span
+ * that falls fully inside it for its chip. `absStart` is the chunk's offset
+ * in the whole decoded body — the space assignAnchors speaks. `renderPlain(el,
+ * seg)` renders the non-chip text (default: a text node; a markdown app passes
+ * its inline renderer). A span straddling a chunk boundary renders as plain
+ * text — the chip is presentation, degrading is free.
+ */
+export function appendWithChips(el, text, absStart, spans, renderPlain) {
+  const plain = renderPlain || ((node, seg) => node.appendChild(document.createTextNode(seg)));
+  const absEnd = absStart + text.length;
+  const inside = (spans ?? [])
+    .filter((r) => r.start >= absStart && r.end <= absEnd)
+    .toSorted((a, b) => a.start - b.start);
+  const literal = (seg) => {
+    if (seg) plain(el, seg);
+  };
+  if (inside.length === 0) {
+    literal(text);
+    return;
+  }
+  let cursor = absStart;
+  for (const r of inside) {
+    literal(text.slice(cursor - absStart, r.start - absStart));
+    el.appendChild(mentionChip(r));
+    cursor = r.end;
+  }
+  literal(text.slice(cursor - absStart));
+}
+
+// ---------- The @-mention field (turnkey cross-references, issues #272/#282) ----------
+// Bundles the whole "@ works" behaviour so ANY app's <textarea> gains inline
+// cross-references in a few lines: the caret popover, the pick→insert→assert
+// (re-anchor-don't-duplicate), and the 4b reconcile-on-save (re-baseline live
+// selectors, temporal-retract orphans, reversible Undo). Presentation +
+// gesture only — the app still owns the body bytes, persistence, and the
+// reference list (which it reads from its own core.link + core.link_anchor
+// query). Everything below is a projection of that list.
+//
+// options:
+//   from        () => {type,id} | {type,id} | null   — the entity mentions attach to
+//   references  () => Array<{link_id, selector, card}> (live, mutated in place)
+//   onChange    () => void                            — re-render strip/read-view after a mutation
+//   relation    string = 'references'
+//   kinds       string[]?                             — restrict the picker
+//   onError     (outcome) => void?                    — vault refusal (default: a toast)
+// returns { detach(), reconcile(body): Promise, startMention() }.
+export function attachMentionField(textarea, options = {}) {
+  const relation = options.relation || 'references';
+  const getFrom = () =>
+    (typeof options.from === 'function' ? options.from() : options.from) || null;
+  const getRefs = () => {
+    const r = typeof options.references === 'function' ? options.references() : options.references;
+    return r || [];
+  };
+  const changed = () => options.onChange && options.onChange();
+  const fail = (outcome, label) => {
+    if (options.onError) options.onError(outcome);
+    else toast(`Couldn’t link ${label}.`);
+  };
+
+  async function onPick(card, range) {
+    const from = getFrom();
+    if (!from) return;
+    if (card.type === from.type && card.id === from.id) {
+      toast('You can’t reference this record from itself.');
+      return;
+    }
+    const refs = getRefs();
+    const anchored = refs.filter((r) => r.selector);
+    // Re-anchor, don't duplicate: an edge to this entity whose words were
+    // edited away (orphaned BEFORE this insertion) takes the new selector
+    // instead of minting a second judgment.
+    const preAssigned = assignAnchors(textarea.value, anchored);
+    const orphan = refs.find(
+      (r) =>
+        r.selector &&
+        !preAssigned.has(r.link_id) &&
+        r.card?.type === card.type &&
+        r.card?.id === card.id,
+    );
+    const label = card.title ?? entityKindLabel(card.type);
+    textarea.setRangeText(label, range.start, range.end, 'end');
+    textarea.focus();
+    // One synthetic input event lets the app's own handler sync its draft and
+    // schedule its save — no duplicated bookkeeping here.
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    const selector = computeMentionSelector(
+      textarea.value,
+      range.start,
+      range.start + label.length,
+    );
+    const outcome = orphan
+      ? await reanchorReference(orphan.link_id, selector)
+      : await createReference(from, card, relation, selector);
+    if (outcome?.status !== 'executed') {
+      fail(outcome, label);
+      return;
+    }
+    if (orphan) orphan.selector = selector;
+    else refs.push({ link_id: outcome.output?.link_id, selector, card });
+    toast(`${orphan ? 'Re-linked' : 'Linked'} ${label}.`);
+    changed();
+  }
+
+  const detachPopover = attachMentionPopover(textarea, {
+    ...(options.kinds ? { kinds: options.kinds } : {}),
+    onPick,
+  });
+
+  // Reconcile runs when a save lands (the app's debounce is the "settled"
+  // signal). Serialized so two quick saves can't race the same edge. The
+  // subject is captured at call time (opts.from / opts.references) so a
+  // navigation during the async window can't retarget it at the wrong record.
+  let chain = Promise.resolve();
+  function reconcile(body, opts = {}) {
+    const from = opts.from ?? getFrom();
+    const refs = opts.references ?? getRefs();
+    chain = chain.then(() => doReconcile(body, from, refs)).catch(() => {});
+    return chain;
+  }
+  async function doReconcile(body, from, refs) {
+    const anchored = refs.filter((r) => r.selector);
+    if (anchored.length === 0) return;
+    const assigned = assignAnchors(body, anchored);
+    const orphans = [];
+    for (const ref of anchored) {
+      const span = assigned.get(ref.link_id);
+      if (!span) {
+        orphans.push(ref);
+        continue;
+      }
+      // Re-baseline: keep the stored selector current with the saved body so
+      // drift never accumulates and resolution needs no fuzzy rung.
+      const fresh = computeMentionSelector(body, span.start, span.end);
+      const cur = ref.selector;
+      if (
+        cur.exact !== fresh.exact ||
+        cur.prefix !== fresh.prefix ||
+        cur.suffix !== fresh.suffix ||
+        cur.start !== fresh.start
+      ) {
+        const outcome = await reanchorReference(ref.link_id, fresh);
+        if (outcome?.status === 'executed') ref.selector = fresh;
+      }
+    }
+    if (orphans.length === 0) return;
+    const retracted = [];
+    for (const ref of orphans) {
+      const outcome = await removeReference(ref.link_id);
+      if (outcome?.status === 'executed') retracted.push(ref);
+    }
+    if (retracted.length === 0) return;
+    for (const ref of retracted) {
+      const i = refs.indexOf(ref);
+      if (i >= 0) refs.splice(i, 1);
+    }
+    changed();
+    const names = retracted.map((r) => r.card?.title ?? entityKindLabel(r.card?.type)).join(', ');
+    toast(
+      retracted.length === 1
+        ? `Unlinked ${names} — its mention left the text.`
+        : `Unlinked ${retracted.length} references whose mentions left the text.`,
+      {
+        undoLabel: 'Undo',
+        // Undo re-asserts a FRESH, anchorless edge (history is never rewritten;
+        // an anchorless link lives in the strip, exempt from re-retraction —
+        // so it can't oscillate against the still-missing words).
+        onUndo: async () => {
+          if (!from) return;
+          for (const ref of retracted) {
+            const outcome = await createReference(from, ref.card, relation);
+            if (outcome?.status === 'executed') {
+              refs.push({ link_id: outcome.output?.link_id, selector: null, card: ref.card });
+            }
+          }
+          changed();
+        },
+      },
+    );
+  }
+
+  // Drop an `@` at the caret and open the popover (a discoverability shim for
+  // a button). The app makes the textarea visible/editable first.
+  function startMention() {
+    textarea.focus();
+    const pos = textarea.selectionStart ?? textarea.value.length;
+    const prev = pos > 0 ? textarea.value[pos - 1] : '';
+    textarea.setRangeText(prev && !/[\s(]/.test(prev) ? ' @' : '@', pos, pos, 'end');
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  return { detach: detachPopover, reconcile, startMention };
+}
