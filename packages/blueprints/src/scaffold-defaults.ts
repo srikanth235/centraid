@@ -233,7 +233,7 @@ them directly. Type-check via JSDoc annotations:
 
 \`\`\`js
 /** @type {import('@centraid/openclaw-plugin').QueryHandler} */
-export default async ({ query, db }) => { /* ... */ };
+export default async ({ input, ctx }) => { /* ... */ };
 \`\`\`
 
 For editor IntelliSense, run \`bun install\` once so the type package
@@ -247,21 +247,29 @@ bun install   # or: npm install
 
 - \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
 - \`queries/<name>.js\` — pure function bodies invoked via
-  \`window.centraid.read({ query: '<name>', input })\` → dispatches as
-  \`centraid_read\` against the \`queries[]\` entry in \`app.json\`.
+  \`window.centraid.read({ query: '<name>', input })\` → dispatched
+  against the \`queries[]\` entry in \`app.json\`.
 - \`actions/<name>.js\` — pure function bodies invoked via
-  \`window.centraid.write({ action: '<name>', input })\` → dispatches as
-  \`centraid_write\` against the \`actions[]\` entry in \`app.json\`.
+  \`window.centraid.write({ action: '<name>', input })\` → dispatched
+  against the \`actions[]\` entry in \`app.json\`.
 - \`automations/<id>/\` — one folder per automation the app owns:
   \`automation.json\` (the manifest) + \`handler.js\` (fired by the host
   scheduler, no page open). See \`automations/README.md\`.
-- \`migrations/NNNN_<slug>.sql\` — schema migrations applied on publish
 - \`app.json\` — the **app manifest** (issue #107). Lists every
   action/query along with its JSON Schema for \`input\`/\`output\`. The
   dispatcher validates input against these schemas before invoking the
   handler. Required top-level fields: \`manifestVersion: 1\`, \`id\`,
   \`name\`, \`version\`. Every new handler file needs a matching entry —
   the dispatcher refuses to invoke a file that isn't declared.
+
+## Data
+
+The app owns no database. All data lives in the owner's vault; handlers
+reach it through \`ctx.vault\` (read/search/invoke). Declare the app's
+data story in \`app.json\`: a \`vault\` block requesting canonical scopes
+(the default lane), and/or an \`ext.tables\` block for extension tables
+the gateway hosts inside the vault (the justified escape hatch). The
+gateway applies ext-table DDL on publish — never run DDL from code.
 
 ## Phone-readiness
 

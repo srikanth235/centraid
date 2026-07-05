@@ -51,8 +51,8 @@ export interface ScaffoldAppOpts {
  * app.json (the manifest), index.html, tokens.css (a frozen
  * design-tokens snapshot), app.css, app.js, README.md, and the
  * automations/ brief. The git store tracks files, so empty canonical
- * subdirs (queries/actions/migrations) are not emitted — they appear
- * once the agent writes the first handler.
+ * subdirs (queries/actions) are not emitted — they appear once the
+ * agent writes the first handler.
  */
 export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): ScaffoldFile[] {
   validateAppId(id);

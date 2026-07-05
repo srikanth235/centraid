@@ -485,6 +485,7 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783272106-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 408 | 633088 | 463 | 873 | 0.6614 | 337134 | 8222865 | 340508515 | 1256016 | feat(gateway): ext-band lifecycle — publish applies declared DDL, drafts branch, |
 | claude-code-c0bf538c-2f5-1783272139-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 610 | 633496 | 438 | 1050 | 0.6630 | 337136 | 8223475 | 341142011 | 1256454 | feat(gateway): ext-band lifecycle — publish applies DDL, drafts branch, ask ever |
 | claude-code-c0bf538c-2f5-1783272172-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 557 | 634106 | 564 | 1123 | 0.6693 | 337138 | 8224032 | 341776117 | 1257018 | feat(openclaw-plugin): drop the trio's OpenClaw agent tools; sweep silo docs (#2 |
+| claude-code-c0bf538c-2f5-1783272193-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 337138 | 8224032 | 341776117 | 1257018 | feat(blueprints,skills): builder scaffolds Lane 1 — no migrations dir, the two-l |
 
 ### Steering
 

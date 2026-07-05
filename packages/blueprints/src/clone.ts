@@ -433,7 +433,7 @@ async function readAppMeta(
  * Idempotent — `mkdir { recursive: true }` is a no-op on existing dirs,
  * so re-cloning or cloning an already-canonical template is fine.
  */
-const CANONICAL_SUBDIRS = ['queries', 'actions', 'migrations', 'automations'] as const;
+const CANONICAL_SUBDIRS = ['queries', 'actions', 'automations'] as const;
 
 async function ensureCanonicalSubdirs(appDir: string): Promise<void> {
   await Promise.all(

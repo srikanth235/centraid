@@ -34,10 +34,10 @@ export async function scaffoldApp(
     await fs.mkdir(path.dirname(dest), { recursive: true });
     await fs.writeFile(dest, file.content);
   }
-  // Empty canonical subdirs the file map can't carry (queries/actions/
-  // migrations start empty; the builder agent fills them in). `automations/`
+  // Empty canonical subdirs the file map can't carry (queries/ and
+  // actions/ start empty; the builder agent fills them in). `automations/`
   // already exists from its seeded README.
-  for (const sub of ['queries', 'actions', 'migrations']) {
+  for (const sub of ['queries', 'actions']) {
     await fs.mkdir(path.join(dir, sub), { recursive: true });
   }
 

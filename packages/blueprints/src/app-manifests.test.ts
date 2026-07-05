@@ -55,31 +55,31 @@ describe('bundled blueprint manifests', () => {
     },
   );
 
-  it('vault projections declare a vault block and hold no tables of their own', () => {
+  it('vault projections declare a vault block and no ext band of their own', () => {
     const projections = apps.filter((id) => {
       const manifest = readManifest('apps', id);
       return manifest.vault !== undefined;
     });
     // The §01 projection band, as blueprints.
     expect(projections).toEqual(
-      [
-        'agenda',
-        'docs',
-        'notes',
-        'people',
-        'photos',
-        'tasks',
-      ].toSorted(),
+      ['agenda', 'docs', 'notes', 'people', 'photos', 'tasks'].toSorted(),
     );
     for (const id of projections) {
       const manifest = readManifest('apps', id);
-      expect(manifest.tables ?? [], `${id} must not declare private tables`).toEqual([]);
+      expect(manifest.ext, `${id} must not declare ext tables — it is a pure projection`)
+        .toBeUndefined();
       expect(manifest.vault?.scopes.length, `${id} needs at least one scope`).toBeGreaterThan(0);
-      expect(
-        existsSync(path.join(PACKAGE_ROOT, 'apps', id, 'migrations')),
-        `${id} must not ship migrations — it is a pure projection`,
-      ).toBe(false);
     }
+  });
+
+  it.each([
+    ...apps.map((id) => ['apps', id] as const),
+    ...automations.map((id) => ['automations', id] as const),
+  ])('%s/%s ships no migrations folder — the vault is the only store', (kind, id) => {
+    expect(
+      existsSync(path.join(PACKAGE_ROOT, kind, id, 'migrations')),
+      `${kind}/${id} must not ship migrations — the migrations mechanism is gone (#286)`,
+    ).toBe(false);
   });
 
   it('the gallery index and the template dirs agree', () => {

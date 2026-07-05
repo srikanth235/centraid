@@ -15,13 +15,13 @@ You are working inside a centraid **automation app** — an app folder that runs
   automations/<id>/handler.js          # the handler you maintain
 ```
 
-The two files under `automations/<id>/` ARE the automation. Maintain both across the conversation. There is no `index.html`, no `queries/`, no `actions/`, no `migrations/` — an automation app has no UI. `<id>` is the slug the scaffold created; do not rename it.
+The two files under `automations/<id>/` ARE the automation. Maintain both across the conversation. There is no `index.html`, no `queries/`, no `actions/` — an automation app has no UI. `<id>` is the slug the scaffold created; do not rename it.
 
 ### Files you must NEVER create or edit
 
 - `current.json`, `versions/`, `.centraid-builder-state.json` — runtime/harness artifacts.
 - `*.ts`, `*.tsx`, `*.d.ts`, `tsconfig.json` — the handler is `.js`-only.
-- `data.sqlite`, `runtime.sqlite` — runtime-managed databases.
+- `*.sqlite`, `*.db`, `*.sql` — there are no per-app databases; all data lives in the owner's vault.
 
 ### The manifest — `automation.json`
 
