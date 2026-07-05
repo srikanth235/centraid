@@ -127,6 +127,12 @@ export interface StreamTurnInput {
   /** The chat session id the gateway keys the turn on. */
   conversationId: string;
   message: string;
+  /**
+   * Chat register (issue #286 phase 2): 'ask' = the app copilot ("operate/
+   * ask about my data") — the gateway routes vault-backed apps' ask turns
+   * onto the vault register. Absent = builder chat (unchanged).
+   */
+  register?: 'ask' | 'build';
   model?: string;
   thinking?: string;
   /** Files uploaded ahead of the turn (issue #190). */
@@ -177,6 +183,7 @@ export async function streamTurn(
     body: JSON.stringify({
       conversationId: input.conversationId,
       message: input.message,
+      ...(input.register ? { register: input.register } : {}),
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
       ...(input.attachments?.length ? { attachments: input.attachments } : {}),
@@ -198,15 +205,23 @@ export async function streamTurn(
   }
   if (!res.body)
     throw new GatewayClientError('gateway_error', 'chat: gateway returned no stream body.');
+  await consumeSse(res.body, onEvent);
+}
 
-  const reader = res.body.getReader();
+/**
+ * Parse a `_turn` SSE body into `TurnStreamEvent`s. Frames are separated by
+ * a blank line; each may carry an `event:` line (ignored — `type` is inside
+ * the JSON), `:` heartbeat comments, and one or more `data:` lines. The
+ * closing `event: end\ndata: {}` frame parses to an object with no `type`,
+ * so it falls through harmlessly.
+ */
+async function consumeSse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (event: TurnStreamEvent) => void,
+): Promise<void> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
-  // SSE frames are separated by a blank line. Each frame may carry an
-  // `event:` line (ignored — `type` is inside the JSON), comment lines
-  // (`:` heartbeats), and one or more `data:` lines. The closing
-  // `event: end\ndata: {}` frame parses to an object with no `type`, so it
-  // falls through harmlessly.
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -229,6 +244,72 @@ export async function streamTurn(
       }
     }
   }
+}
+
+// ───────────────────────── vault assistant ─────────────────────
+
+/**
+ * The vault assistant's reserved conversation scope (mirrors app-engine's
+ * `ASSISTANT_APP_ID`). Its threads ride the same `/_centraid-conversations`
+ * CRUD as app chats — list/create/load/rename/delete all take this id.
+ */
+export const ASSISTANT_APP_ID = '_assistant';
+
+/** A minimal renderable entity card resolved from an answer's @-ref. */
+export interface AssistantRefCard {
+  type: string;
+  id: string;
+  status: 'live' | 'trashed' | 'missing' | 'denied' | 'unknown';
+  title: string | null;
+  subtitle: string | null;
+}
+
+/**
+ * Drive one vault-assistant turn against the shell-level
+ * `POST /centraid/_vault/assistant/_turn` (same SSE grammar as app chat).
+ */
+export async function streamAssistantTurn(
+  input: StreamTurnInput,
+  onEvent: (event: TurnStreamEvent) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/_turn`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({
+      conversationId: input.conversationId,
+      message: input.message,
+      ...(input.model ? { model: input.model } : {}),
+      ...(input.thinking ? { thinking: input.thinking } : {}),
+    }),
+    signal,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new GatewayClientError(
+      res.status === 401 || res.status === 403 ? 'auth_required' : 'gateway_error',
+      `assistant turn failed (HTTP ${res.status}): ${text || res.statusText}`,
+    );
+  }
+  if (!res.body)
+    throw new GatewayClientError('gateway_error', 'assistant: gateway returned no stream body.');
+  await consumeSse(res.body, onEvent);
+}
+
+/** Resolve answer refs (`ref:type/id`) to renderable entity cards. */
+export async function resolveAssistantRefs(
+  refs: Array<{ type: string; id: string }>,
+): Promise<AssistantRefCard[]> {
+  if (refs.length === 0) return [];
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/assistant/resolve`, {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify({ refs }),
+  });
+  const out = await readJson<{ cards: AssistantRefCard[] }>(res, 'resolve assistant refs');
+  return out.cards ?? [];
 }
 
 // ───────────────────────── chat history ─────────────────────

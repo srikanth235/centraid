@@ -235,6 +235,7 @@ No non-steering messages were recorded: the initial task brief, the answers to t
 | claude-code-c0bf538c-2f5-1783266441-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 14 | 6680 | 3610070 | 2698 | 9392 | 3.8286 | 165230 | 5062322 | 145057198 | 594541 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
 | claude-code-c0bf538c-2f5-1783266462-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 165230 | 5062322 | 145057198 | 594541 | feat(desktop): Assistant page — threads, streaming chat, typed blocks, ref chips |
 | claude-code-c0bf538c-2f5-1783266510-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 8011 | 17128 | 2590758 | 4272 | 29411 | 3.0986 | 173241 | 5079450 | 147647956 | 598813 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
+| claude-code-c0bf538c-2f5-1783266530-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 173241 | 5079450 | 147647956 | 598813 | feat(desktop): Assistant page — threads, streaming chat, typed blocks, ref chips |
 
 ### Steering
 

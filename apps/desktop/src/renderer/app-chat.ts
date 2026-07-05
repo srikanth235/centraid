@@ -1630,6 +1630,10 @@ import {
           {
             conversationId: currentSessionId,
             message: text,
+            // The copilot is the ASK register (issue #286 phase 2): the
+            // gateway routes vault-backed apps onto the vault tools. The
+            // builder pane sends no register and keeps the unified runner.
+            register: 'ask',
             ...(model ? { model } : {}),
             ...(pendingAttachments.length ? { attachments: pendingAttachments } : {}),
           },

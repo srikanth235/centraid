@@ -236,7 +236,14 @@ declare global {
     onToggleChat?: () => void;
   }
 
-  type SidebarPage = 'home' | 'insights' | 'discover' | 'starred' | 'automations' | 'settings';
+  type SidebarPage =
+    | 'home'
+    | 'assistant'
+    | 'insights'
+    | 'discover'
+    | 'starred'
+    | 'automations'
+    | 'settings';
 
   interface ChromeBuildSidebarOpts {
     /** App id of the app/builder currently in focus — highlights its row. */
@@ -258,6 +265,7 @@ declare global {
      *  `onNewApp` when there is no dedicated chat-creation entry point. */
     onNewChat?: () => void;
     onSearch?: () => void;
+    onAssistant?: () => void;
     onInsights?: () => void;
     onDiscover?: () => void;
     onStarred?: () => void;

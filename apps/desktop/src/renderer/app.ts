@@ -44,6 +44,7 @@ import type {
   ShellRoute,
   ThemeName,
 } from './app-shell-context.js';
+import { createAssistantModule } from './app-assistant.js';
 import { createInsightsModule } from './app-insights.js';
 import { createAutomationsModule, type AutomationFeedEntry } from './app-automations.js';
 import { createPaletteModule } from './app-palette.js';
@@ -303,6 +304,7 @@ import { createAppViewModule } from './app-appview.js';
   function routeKey(route: ShellRoute): string {
     if (route.kind === 'home') return 'home';
     if (route.kind === 'settings') return 'settings';
+    if (route.kind === 'assistant') return 'assistant';
     if (route.kind === 'insights') return 'insights';
     if (route.kind === 'discover') return 'discover';
     if (route.kind === 'starred') return 'starred';
@@ -351,6 +353,8 @@ import { createAppViewModule } from './app-appview.js';
         renderHome();
       } else if (route.kind === 'settings') {
         renderSettings();
+      } else if (route.kind === 'assistant') {
+        renderAssistant();
       } else if (route.kind === 'insights') {
         renderInsights();
       } else if (route.kind === 'discover') {
@@ -434,6 +438,7 @@ import { createAppViewModule } from './app-appview.js';
       onHome: renderHome,
       onNewApp: openNewAppSheet,
       onSearch: openCommandPalette,
+      onAssistant: renderAssistant,
       onInsights: renderInsights,
       onDiscover: renderDiscover,
       onStarred: renderStarred,
@@ -684,6 +689,7 @@ import { createAppViewModule } from './app-appview.js';
     }
     if (route.kind === 'home') renderHome();
     else if (route.kind === 'settings') renderSettings(lastSettingsPage);
+    else if (route.kind === 'assistant') renderAssistant();
     else if (route.kind === 'insights') renderInsights();
     else if (route.kind === 'discover') renderDiscover();
     else if (route.kind === 'starred') renderStarred();
@@ -1577,6 +1583,8 @@ import { createAppViewModule } from './app-appview.js';
   // entry points. The bound `const renderX = …Mod.renderX` shadows the name
   // the function had while it lived in app.ts, so applyRoute / window.Centraid
   // / shellEntries keep referring to it unchanged.
+  const renderAssistant = createAssistantModule(ctx).renderAssistant;
+
   const renderInsights = createInsightsModule(ctx).renderInsights;
 
   const discoverMod = createDiscoverModule(ctx);
@@ -1629,6 +1637,7 @@ import { createAppViewModule } from './app-appview.js';
   // still-local) is initialized. `satisfies` keeps it exhaustive.
   Object.assign(shellEntries, {
     renderHome,
+    renderAssistant,
     renderInsights,
     renderDiscover,
     renderStarred,
