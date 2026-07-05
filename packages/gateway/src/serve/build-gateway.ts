@@ -31,6 +31,7 @@
 
 import crypto from 'node:crypto';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
@@ -77,6 +78,9 @@ import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
+import { makeAssistantConversationRunner } from '../runs/assistant-conversation-runner.js';
+import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
+import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
 import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
 import type { GatewayPaths } from '../paths.js';
@@ -683,9 +687,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     conversationHistoryStore,
     conversationRunner: options.conversationRunner ?? {
       // Facade over the ACTIVE vault's unified runner (#280) — builder-
-      // capable, so turns persist as `kind='build'` (issue #181).
+      // capable, so turns persist as `kind='build'` (issue #181). Ask
+      // turns on vault-backed apps peel off onto the vault register
+      // (issue #286 phase 2) — vault_sql/vault_invoke with the app lens.
       runKind: 'build',
-      run: async (input) => (await activeHost()).runner.run(input),
+      run: async (input) => {
+        if (input.register === 'ask' && (await askAppMeta(input.appId)).vaultBacked) {
+          return askRunner.run(input);
+        }
+        return (await activeHost()).runner.run(input);
+      },
     },
     conversationRunnerSessionDir: () => activeWorkspace().runnerSessionDir,
     runnerStatus:
@@ -721,10 +732,74 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   runtimeRef = runtime;
 
+  // The vault assistant (shell-level Q&A over the whole vault): one
+  // runner for the gateway's lifetime — every turn resolves the ACTIVE
+  // vault (prompt, vault_sql credential, scratch cwd) at call time.
+  const assistantRunner = makeAssistantConversationRunner({
+    prefsLoader,
+    getDispatcher,
+    vaults: vaultRegistry,
+  });
+
+  // Ask-register manifest probe (issue #286 phase 2): the app copilot's
+  // `register: 'ask'` turns ride the vault register when the app is
+  // vault-backed — its data lives in the vault, so the app-silo trio
+  // could only stare at an empty file. Resolved per turn off the live
+  // `main` manifest so a publish that adds/drops the vault block lands
+  // without a restart.
+  const askAppMeta = async (
+    appId: string,
+  ): Promise<{ vaultBacked: boolean; name?: string; description?: string }> => {
+    try {
+      const host = await activeHost();
+      const dir = await host.store.resolveActiveAppDir(appId);
+      if (!dir) return { vaultBacked: false };
+      const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
+        name?: unknown;
+        description?: unknown;
+        vault?: unknown;
+      };
+      return {
+        vaultBacked: !!raw.vault && typeof raw.vault === 'object',
+        ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
+        ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
+      };
+    } catch {
+      return { vaultBacked: false };
+    }
+  };
+
+  // The per-app ask register: the same assistant runner wearing the app
+  // lens — prompt-level bias, never a permission boundary (it is still
+  // the owner asking their own vault).
+  const askRunner = makeAssistantConversationRunner({
+    prefsLoader,
+    getDispatcher,
+    vaults: vaultRegistry,
+    buildPrompt: async (input) => {
+      const plane = vaultRegistry.active();
+      const meta = await askAppMeta(input.appId);
+      return buildAssistantPrompt(plane.name, plane.assistantContext(), {
+        appId: input.appId,
+        ...(meta.name ? { appName: meta.name } : {}),
+        ...(meta.description ? { appDescription: meta.description } : {}),
+      });
+    },
+  });
+
   // ── Route chain ───────────────────────────────────────────────────────
   const extraHandlers: RouteHandler[] = [
+    // The assistant's `_turn`/`resolve` surface — mounted BEFORE the
+    // generic `_vault` handler, which answers 404 for any sub-route it
+    // doesn't know (same prefix family).
+    makeAssistantRouteHandler({
+      vaults: vaultRegistry,
+      conversationStore: conversationHistoryStore,
+      runner: assistantRunner,
+      conversationLocks: new Map(),
+    }),
     // Owner consent surface for the vault plane (grants, parked
-    // confirmations, vault lifecycle). Mounted first — its `_vault` prefix
+    // confirmations, vault lifecycle). Its `_vault` prefix
     // is disjoint from every other route family.
     makeVaultRouteHandler(vaultRegistry),
     // Template catalog (issue #141): the gateway owns it, so the renderer

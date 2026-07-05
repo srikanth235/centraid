@@ -98,7 +98,7 @@ Details:
   route mount + `askAppMeta` manifest probe + `askRunner` + the facade
   routing `register: 'ask'` turns on vault-backed apps onto the vault
   register), `packages/gateway/src/routes/assistant-routes.ts` +
-  `.test.ts` (new),
+  `packages/gateway/src/routes/assistant-routes.test.ts` (new),
   `packages/gateway/src/runs/assistant-conversation-runner.ts` (new;
   vaultInvoke + `buildPrompt` seam),
   `packages/gateway/src/runs/assistant-prompt.ts` (new; write guidance +
@@ -229,6 +229,12 @@ No non-steering messages were recorded: the initial task brief, the answers to t
 | claude-code-c0bf538c-2f5-1783266203-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 532 | 8162 | 4028688 | 9510 | 18204 | 4.6115 | 153446 | 5043734 | 137367517 | 586972 | feat(vault): owner-only whole-model SQL read + the assistant's vault map (#286)G |
 | claude-code-c0bf538c-2f5-1783266240-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 11373 | 1683 | 1520943 | 2739 | 15795 | 1.7927 | 164819 | 5045417 | 138888460 | 589711 | feat(app-engine): vault-register seams, shared SSE turn driver, reserved _assist |
 | claude-code-c0bf538c-2f5-1783266261-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 164819 | 5045417 | 138888460 | 589711 | feat(agent-runtime): vault_sql + vault_invoke tools on both backends (#286)One s |
+| claude-code-c0bf538c-2f5-1783266300-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 4819 | 507542 | 973 | 5794 | 0.6164 | 164821 | 5050236 | 139396002 | 590684 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
+| claude-code-c0bf538c-2f5-1783266318-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 164821 | 5050236 | 139396002 | 590684 | feat(desktop): Assistant page — threads, streaming chat, typed blocks, ref chips |
+| claude-code-c0bf538c-2f5-1783266362-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 395 | 5406 | 2051126 | 1159 | 6960 | 2.1806 | 165216 | 5055642 | 141447128 | 591843 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
+| claude-code-c0bf538c-2f5-1783266441-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 14 | 6680 | 3610070 | 2698 | 9392 | 3.8286 | 165230 | 5062322 | 145057198 | 594541 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
+| claude-code-c0bf538c-2f5-1783266462-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 165230 | 5062322 | 145057198 | 594541 | feat(desktop): Assistant page — threads, streaming chat, typed blocks, ref chips |
+| claude-code-c0bf538c-2f5-1783266510-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 8011 | 17128 | 2590758 | 4272 | 29411 | 3.0986 | 173241 | 5079450 | 147647956 | 598813 | feat(gateway): assistant register — routes, runner, prompt, parked writes, ask s |
 
 ### Steering
 

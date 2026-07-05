@@ -20,6 +20,7 @@
  */
 
 import {
+  buildAssistantContext,
   createGateway,
   createGrant,
   ensureAgentEnrolled,
@@ -71,6 +72,8 @@ import {
   type SearchRequest,
   type SweepResult,
   type VaultDb,
+  type VaultSqlResult,
+  type ResolveResult,
 } from '@centraid/vault';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -403,6 +406,74 @@ export class VaultPlane {
 
   confirmParked(invocationId: string, approve: boolean): InvokeOutcome {
     return this.gateway.confirm(this.ownerCredential, invocationId, approve);
+  }
+
+  /**
+   * The vault assistant's WRITE tool (issue #286 phase 2): typed commands
+   * riding an enrolled `_assistant` agent — NOT the owner-device
+   * credential, deliberately: agents carry a structural `medium` risk
+   * ceiling, so high-risk commands park for the owner's explicit say-so
+   * in the existing approval surface. Reads bypass the keyhole (sql);
+   * writes keep the contract + parking asymmetry.
+   *
+   * The standing act grant is minted idempotently on first use: the
+   * assistant is the owner's own hands, so using it IS the consent —
+   * scoped to `act` (never widens reads, which don't ride grants here).
+   */
+  invokeAsAssistant(request: InvokeRequest): InvokeOutcome {
+    const agent = ensureAgentEnrolled(this.db, '_assistant', { modelRef: 'centraid-assistant' });
+    if (listActiveAgentGrants(this.db, agent.partyId).length === 0) {
+      const purpose = purposeConceptId(this.db, 'dpv:ServiceProvision');
+      if (!purpose) throw new Error('vault vocabulary missing dpv:ServiceProvision');
+      const schemas = this.db.vault
+        .prepare(`SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`)
+        .all() as { owner_schema: string }[];
+      createGrant(this.db, {
+        granteePartyId: agent.partyId,
+        purposeConceptId: purpose,
+        grantedByPartyId: this.boot.ownerPartyId,
+        scopes: schemas.map((s) => ({ schema: s.owner_schema, verbs: 'act' as const })),
+      });
+      this.logger.info(`vault plane: enrolled the _assistant agent with a standing act grant`);
+    }
+    const cred: Credential = {
+      kind: 'agent',
+      agentId: agent.agentId,
+      deviceId: this.boot.deviceId,
+      deviceKey: this.boot.deviceKey,
+    };
+    return this.gateway.invoke(cred, request);
+  }
+
+  /**
+   * The vault assistant's read tool (owner register): one read-only SQL
+   * statement over the whole canonical model, receipted. Rides the
+   * owner-device credential — the assistant IS the owner asking their own
+   * vault, so no grant keyhole applies (single-tenant by design).
+   */
+  sqlAsOwner(sql: string, maxRows?: number): VaultSqlResult {
+    return this.gateway.sql(this.ownerCredential, {
+      sql,
+      ...(maxRows !== undefined ? { maxRows } : {}),
+      purpose: 'owner-assistant',
+    });
+  }
+
+  /** The assistant's schema + ontology map, built live from this vault. */
+  assistantContext(): string {
+    return buildAssistantContext(this.db);
+  }
+
+  /**
+   * Resolve (type, id) refs to renderable cards as the owner — the
+   * assistant UI turns answer citations (`@[…](ref:type/id)`) into entity
+   * cards through this.
+   */
+  resolveAsOwner(refs: { type: string; id: string }[]): ResolveResult {
+    return this.gateway.resolveRefs(this.ownerCredential, {
+      refs,
+      purpose: 'owner-assistant',
+    });
   }
 
   sweep(): SweepResult {
