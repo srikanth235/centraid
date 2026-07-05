@@ -1,12 +1,12 @@
 /**
- * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a circle. Runs through people.add_person — consent-checked and receipted, risk low.
+ * Log a touch (message, call, met up, note); stamps last-contacted so they drop off Reconnect. Runs through people.log_interaction — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.add_person',
+      command: 'people.log_interaction',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

@@ -1,12 +1,12 @@
 /**
- * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a circle. Runs through people.add_person — consent-checked and receipted, risk low.
+ * Toggle a person task between open and done. Runs through people.toggle_task — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.add_person',
+      command: 'people.toggle_task',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

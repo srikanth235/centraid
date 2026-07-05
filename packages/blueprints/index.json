@@ -36,10 +36,10 @@
     {
       "id": "people",
       "name": "People",
-      "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
-      "colorKey": "violet",
+      "desc": "Your circle, remembered — a personal CRM that keeps light records on the people you care about and nudges you to stay in touch.",
+      "colorKey": "rose",
       "iconKey": "Users",
-      "version": "0.4.0"
+      "version": "0.1.0"
     },
     {
       "id": "threads",

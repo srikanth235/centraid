@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>People</title>
     <script>
-      // Centraid live settings bridge — see the todos blueprint for the
-      // full story: runtime bakes theme server-side; this handles the
-      // no-bake preview path and live pref flips over postMessage.
+      // Centraid live settings bridge — the runtime bakes theme/knobs
+      // server-side; this handles the no-bake preview path and live pref
+      // flips (theme, accent, font, width, default view) over postMessage.
       (function () {
         var h = document.documentElement;
         function applyTheme(t, b) {
@@ -39,185 +39,268 @@
     <link rel="stylesheet" href="kit.css" />
   </head>
   <body>
-    <main>
-      <header class="head" data-ask-mount>
-        <div>
-          <h1>People</h1>
-          <p id="subtitle" class="muted">A projection of your vault — nothing stored here.</p>
-        </div>
-      </header>
-
-      <div id="consentBanner" class="banner" hidden>
-        <strong>No vault access yet.</strong>
-        <span id="consentDetail"
-          >Ask the owner to approve this app's requested scopes in vault settings.</span
-        >
-      </div>
-      <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
-
-      <div id="listView">
-        <div class="toolbar">
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Search people…"
-            aria-label="Search people"
-            aria-keyshortcuts="/"
-          />
-          <button type="button" id="exportBtn" class="ghost" title="Download everyone as a .vcf">
-            Export
-          </button>
-          <button type="button" id="addPersonBtn" class="ghost">＋ Add person</button>
-        </div>
-
-        <form id="personForm" class="card-form" autocomplete="off" hidden>
-          <p class="muted small">New person — lands in the vault as a core.party.</p>
-          <input id="personNameInput" type="text" placeholder="Name" aria-label="Name" />
-          <input
-            id="personEmailInput"
-            type="email"
-            placeholder="Email (optional)"
-            aria-label="Email"
-          />
-          <input id="personTelInput" type="tel" placeholder="Phone (optional)" aria-label="Phone" />
-          <input
-            id="personHandleInput"
-            type="text"
-            placeholder="Handle (optional)"
-            aria-label="Handle"
-          />
-          <div class="card-form-actions">
-            <button type="button" id="cancelPerson" class="ghost">Cancel</button>
-            <button type="submit" class="primary">Add person</button>
+    <div class="docs" id="root" data-people-root>
+      <!-- ░░ SIDEBAR ░░ -->
+      <aside class="d-side" id="sidebar" aria-label="People navigation">
+        <div class="d-brand">
+          <span class="d-brand-mark" aria-hidden="true">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M20.8 8.6a4.6 4.6 0 00-8-3.1 4.6 4.6 0 00-8 3.1c0 5 8 10 8 10s8-5 8-10z" />
+            </svg>
+          </span>
+          <div class="d-brand-text">
+            <div class="d-brand-name">People</div>
+            <div class="d-brand-tag">your circle, remembered</div>
           </div>
-        </form>
+          <button type="button" class="d-side-close" id="sideClose" aria-label="Close menu">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+            >
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
 
-        <section id="peopleList" aria-label="People"></section>
-        <nav id="letterRail" aria-label="Jump to letter" hidden></nav>
-        <p id="empty" class="empty" hidden>
-          No people yet. Add someone above, resolve a handle, or import contacts through the vault's
-          ingest.
-        </p>
-      </div>
-
-      <section id="detailPanel" aria-label="Contact details" hidden>
-        <div class="detail-top">
-          <button type="button" id="backBtn" class="ghost">← All people</button>
+        <div class="d-new-wrap">
           <button
             type="button"
-            id="detailStarBtn"
-            class="star-btn"
-            aria-pressed="false"
-            aria-label="Toggle favorite"
+            class="d-new"
+            id="newBtn"
+            aria-haspopup="menu"
+            aria-expanded="false"
           >
-            ☆
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>New</span>
+            <svg
+              class="d-new-chev"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.9"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
           </button>
-        </div>
-        <div class="detail-hero">
-          <span id="detailAvatar" class="detail-avatar-slot"></span>
-          <div class="detail-hero-text">
-            <h2 id="detailName"></h2>
-            <p id="detailMeta" class="muted"></p>
-            <p id="detailBirthday" class="muted" hidden></p>
-          </div>
-        </div>
-        <div class="detail-chips">
-          <button type="button" id="chipMessage" class="chip">✉ Message</button>
-          <button type="button" id="chipEdit" class="chip">✎ Edit</button>
-          <label class="chip chip-label">
-            <input id="photoInput" type="file" accept="image/*" hidden />
-            <span>◉ Set photo</span>
-          </label>
+          <div class="d-new-menu" id="newMenu" role="menu" hidden></div>
         </div>
 
-        <form id="composeForm" class="card-form" autocomplete="off" hidden>
-          <p id="composeTitle" class="muted small"></p>
-          <textarea
-            id="composeBody"
-            rows="3"
-            placeholder="Write a message…"
-            aria-label="Message body"
-          ></textarea>
-          <div class="card-form-actions">
-            <select id="channelInput" aria-label="Channel">
-              <option value="dm">DM</option>
-              <option value="sms">SMS</option>
-              <option value="email">Email</option>
-            </select>
-            <button type="button" id="cancelCompose" class="ghost">Cancel</button>
-            <button type="button" id="saveDraftBtn" class="ghost">Save draft</button>
-            <button type="submit" class="primary">Send</button>
-          </div>
-          <p class="muted small compose-hint">
-            Sending is high-risk in the vault: it waits for the owner's confirmation before the
-            draft is released.
-          </p>
-        </form>
+        <nav class="d-nav" id="smartNav" aria-label="Views"></nav>
 
-        <form id="cardForm" class="card-form" autocomplete="off" hidden>
-          <p id="cardFormTitle" class="muted small"></p>
-          <div class="identity-row">
+        <div class="d-section-label">Circles</div>
+        <div class="d-folders" id="circleList"></div>
+
+        <nav
+          class="d-nav"
+          id="journalNav"
+          style="margin-top: 8px"
+          aria-label="Journal and activity"
+        ></nav>
+
+        <div class="d-side-foot">
+          <div class="d-storage" id="storage"></div>
+          <div class="d-consent-line">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
+              <path d="m9.5 12 2 2 3.5-3.5" />
+            </svg>
+            <span>Private to you — nothing leaves this device</span>
+          </div>
+        </div>
+      </aside>
+
+      <div class="d-scrim" id="scrim"></div>
+
+      <!-- ░░ MAIN ░░ -->
+      <main class="d-main">
+        <div class="d-topbar">
+          <button type="button" class="d-hamburger" id="hamburger" aria-label="Open menu">
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+            >
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <div class="d-search">
+            <svg
+              class="d-search-icon"
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             <input
-              id="displayNameInput"
-              type="text"
-              placeholder="Display name"
-              aria-label="Display name"
+              id="searchInput"
+              type="search"
+              placeholder="Search people, roles, notes…"
+              aria-label="Search people"
+              autocomplete="off"
             />
-            <button type="button" id="renamePartyBtn" class="ghost">Rename</button>
           </div>
-          <input id="nicknameInput" type="text" placeholder="Nickname" aria-label="Nickname" />
-          <input id="noteInput" type="text" placeholder="Note" aria-label="Note" />
-          <label class="field-label" for="birthdayInput">Birthday</label>
-          <input id="birthdayInput" type="date" aria-label="Birthday" />
-          <div class="card-form-actions">
-            <button type="button" id="cancelCard" class="ghost">Cancel</button>
-            <button type="submit" class="primary">Save card</button>
+          <div class="d-topbar-tools">
+            <div class="d-viewtoggle" role="group" aria-label="View">
+              <button type="button" class="d-viewbtn" id="viewGrid" aria-label="Grid view">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+              </button>
+              <button type="button" class="d-viewbtn" id="viewList" aria-label="List view">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                </svg>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="d-themebtn"
+              id="themeBtn"
+              aria-label="Toggle light/dark"
+            ></button>
+            <div class="d-ask-mount" data-ask-mount></div>
           </div>
-        </form>
-
-        <h3 class="detail-section-head">Contact info</h3>
-        <section id="idList" aria-label="Identifiers"></section>
-        <div class="handle-row">
-          <select id="schemeInput" aria-label="Handle kind">
-            <option value="email">Email</option>
-            <option value="tel">Phone</option>
-            <option value="handle">Handle</option>
-          </select>
-          <select id="handleLabelInput" aria-label="Handle label">
-            <option value="">No label</option>
-            <option value="home">Home</option>
-            <option value="work">Work</option>
-            <option value="other">Other</option>
-          </select>
-          <input
-            id="handleValueInput"
-            type="text"
-            placeholder="Link a handle…"
-            aria-label="Handle value"
-          />
-          <button type="button" id="linkHandleBtn" class="ghost">Link</button>
         </div>
 
-        <h3 class="detail-section-head">Files</h3>
-        <div id="attachBlock" class="attach-block">
-          <div id="attachStrip" class="attach-strip"></div>
-          <label class="attach-add">
-            <input id="attachInput" type="file" multiple hidden />
-            <span class="ghost small-btn">＋ Attach file</span>
-          </label>
+        <div id="consentBanner" class="d-banner" hidden>
+          <strong>No vault access yet.</strong>
+          <span id="consentDetail"
+            >Ask the owner to approve this app's requested scopes in vault settings.</span
+          >
         </div>
-      </section>
-    </main>
+        <div
+          id="noticeBanner"
+          class="d-banner notice"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
+
+        <div class="d-toolbar">
+          <div class="d-toolbar-title">
+            <div class="d-title" id="activeTitle">All people</div>
+            <div class="d-sub" id="activeSub"></div>
+          </div>
+          <div class="d-toolbar-tools" id="peopleTools" hidden>
+            <div class="d-chips" id="statusChips" role="group" aria-label="Filter by status"></div>
+            <span class="d-toolbar-div" aria-hidden="true"></span>
+            <button type="button" class="d-sort" id="sortBtn">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M7 4v16m0 0-3-3m3 3 3-3M17 20V4m0 0-3 3m3-3 3 3" />
+              </svg>
+              <span id="sortLabel">Last spoke ↓</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="d-bulk" id="bulkBar" role="toolbar" aria-label="Selection actions" hidden></div>
+
+        <div class="d-scroll" id="scroll">
+          <div class="d-grid" id="grid" hidden></div>
+          <div class="d-listwrap" id="listWrap" hidden>
+            <div class="d-list-head" id="listHead" hidden></div>
+            <div class="d-list" id="list"></div>
+          </div>
+          <div id="journalView" hidden></div>
+          <div id="activityView" hidden></div>
+          <div class="d-empty" id="empty" hidden></div>
+          <div class="d-window-foot" id="windowFoot" hidden></div>
+        </div>
+      </main>
+
+      <div id="detailsRoot"></div>
+      <div id="modalRoot"></div>
+    </div>
+
     <script>
       window.KIT_ASK = {
         scope: 'people',
-        placeholder: 'Ask your contacts…',
+        placeholder: 'Ask about your people…',
         intro:
-          'Ask me to add a contact, find someone, or draft a message. Messages and edits show for your approval before they touch the vault.',
+          'Ask me to add someone, log a call, or find who you owe a reply. Writes show for your approval before they touch the vault.',
         suggest: [
-          'Add Dana Whitfield, PM at Northwind',
-          'Who works at Northwind?',
-          'Draft a message to Alex',
+          'Who should I reconnect with?',
+          'Log a call with Maya',
+          'Whose birthday is next?',
         ],
       };
     </script>

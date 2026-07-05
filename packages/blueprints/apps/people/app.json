@@ -2,142 +2,62 @@
   "manifestVersion": 1,
   "id": "people",
   "name": "People",
-  "description": "The vault's single identity anchor rendered as a contacts app: every person, org, and agent is a core.party, their handles live in core.party_identifier, and enrichment (nickname, note, favorite) sits in social.contact_card. People are minted through core.add_party and renamed through core.update_party, handles bind through resolve_identity, and composing runs the full draft-then-send lifecycle — sending is risk-high, so it parks for the owner's confirmation. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.5.0",
+  "description": "Your circle, remembered — a personal CRM as a projection of the vault. Each person is a canonical core.party (kind='person') enriched by a 1:1 people_profile carrying the keep-in-touch facts: role, avatar hue, how-often-to-reach-out cadence, and when you last spoke. Circles are SKOS concepts in your circles scheme, filed one tag per person exactly like Docs folders; favorites are the one canonical flags-scheme star every surface shares; notes are annotations on the party. Logging a touch stamps last-contacted so they drop off Reconnect. Interactions, tasks, important dates (birthdays auto-remind), relationships, gift ideas, debts and an owner journal each hang off the party. Every write runs through a typed vault command — consent-checked and receipted, all risk low. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
   "iconKey": "Users",
-  "colorKey": "violet",
+  "colorKey": "rose",
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Shows the people in your life and keeps their cards current.",
+    "why": "Keeps light records on the people you care about and nudges you to stay in touch.",
     "scopes": [
-      {
-        "schema": "social",
-        "verbs": "read+act"
-      },
-      {
-        "schema": "core",
-        "table": "party",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "party_identifier",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "content_item",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "tag",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "concept_scheme",
-        "verbs": "read"
-      },
-      {
-        "schema": "knowledge",
-        "table": "annotation",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "attachment",
-        "verbs": "read"
-      },
-      {
-        "schema": "core",
-        "table": "attach",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "detach",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "add_party",
-        "verbs": "act"
-      },
-      {
-        "schema": "core",
-        "table": "update_party",
-        "verbs": "act"
-      }
+      { "schema": "people", "verbs": "read+act" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "core", "table": "party_identifier", "verbs": "read" },
+      { "schema": "core", "table": "tag", "verbs": "read" },
+      { "schema": "core", "table": "concept", "verbs": "read" },
+      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
+      { "schema": "knowledge", "table": "annotation", "verbs": "read" }
     ]
   },
   "actions": [
     {
       "name": "add-person",
-      "description": "Create a new person through core.add_party, binding optional email, tel, or handle identifiers in the same stroke. Risk low; the vault refuses when a handle is already claimed by another party.",
+      "description": "Add a person to your circle through people.add_person — mints a canonical core.party plus its people_profile, optionally filed into a circle. Risk low.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "display_name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "email": {
-            "type": "string"
-          },
-          "tel": {
-            "type": "string"
-          },
-          "handle": {
-            "type": "string"
-          }
+          "display_name": { "type": "string", "minLength": 1 },
+          "role": { "type": "string" },
+          "avatar_color": { "type": "string" },
+          "cadence_days": { "type": "integer", "minimum": 1 },
+          "circle_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["display_name"],
+        "required": ["display_name", "cadence_days"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
       "name": "edit-person",
-      "description": "Rename a party or revise its sort name and birth date through core.update_party — identity edits on the party row itself, distinct from contact-card enrichment.",
+      "description": "Revise a person's name, role line, avatar hue or how-you-met note through people.edit_person.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "display_name": {
-            "type": "string",
-            "minLength": 1
-          },
-          "sort_name": {
-            "type": "string"
-          },
-          "birth_date": {
-            "type": "string"
-          }
+          "party_id": { "type": "string", "minLength": 1 },
+          "display_name": { "type": "string", "minLength": 1 },
+          "role": { "type": "string" },
+          "avatar_color": { "type": "string" },
+          "met": { "type": "string" }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -145,41 +65,109 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "update-card",
-      "description": "Upsert a party's contact card (nickname, note, favorite) through the vault's typed command.",
+      "name": "set-cadence",
+      "description": "Set how often you want to reach out to a person through people.set_cadence.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "nickname": {
-            "type": "string"
-          },
-          "note": {
-            "type": "string"
-          },
-          "favorite": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 1
-          }
+          "party_id": { "type": "string", "minLength": 1 },
+          "cadence_days": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["party_id", "cadence_days"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "log-interaction",
+      "description": "Log a touch (message, call, met up, note) through people.log_interaction; stamps last-contacted so they drop off Reconnect.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "text": { "type": "string" }
+        },
+        "required": ["party_id", "kind"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "star-person",
+      "description": "Favorite a person through people.star_person — the one canonical flags-scheme star, shared across your vault.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "party_id": { "type": "string", "minLength": 1 } },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "unstar-person",
+      "description": "Remove a person's favorite star through people.unstar_person.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "party_id": { "type": "string", "minLength": 1 } },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "move-person",
+      "description": "Move a person into a circle through people.move_person — omit circle_id to un-circle them.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "circle_id": { "type": "string", "minLength": 1 }
         },
         "required": ["party_id"],
         "additionalProperties": false
@@ -187,206 +175,320 @@
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "resolve-identity",
-      "description": "Bind an email, tel, or handle to a party through social.resolve_identity — one identity per handle, with retroactive backfill of unresolved thread participants and messages.",
+      "name": "add-note",
+      "description": "Add a note about a person through people.add_note — kept as a searchable annotation on their party.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "party_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "scheme": {
-            "type": "string",
-            "enum": ["email", "tel", "handle"]
-          },
-          "value": {
-            "type": "string",
-            "minLength": 1
-          },
-          "label": {
-            "type": "string"
-          }
+          "party_id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 }
         },
-        "required": ["party_id", "scheme", "value"],
+        "required": ["party_id", "text"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "draft-message",
-      "description": "Compose a draft to a party through social.draft_message — opens (or reuses) a thread and stores the body as a deduped content item; delivery stays 'draft' until send-message releases it. Risk medium: under the app's default low risk ceiling this parks for owner confirmation too.",
+      "name": "add-task",
+      "description": "Add a follow-up task tied to a person through people.add_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "recipient_party_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "body_text": {
-            "type": "string",
-            "minLength": 1
-          },
-          "channel": {
-            "type": "string",
-            "enum": ["sms", "email", "dm", "group"]
-          },
-          "subject": {
-            "type": "string"
-          }
+          "party_id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 }
         },
-        "required": ["recipient_party_id", "body_text"],
+        "required": ["party_id", "text"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "send-message",
-      "description": "Release a draft for delivery through social.send_message. Risk-high: invoked by an app it parks for the owner's confirmation, so the returned status is 'parked' with the invocation id, not 'executed'.",
+      "name": "toggle-task",
+      "description": "Toggle a person task between open and done through people.toggle_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": {
-          "message_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["message_id"],
+        "properties": { "task_id": { "type": "string", "minLength": 1 } },
+        "required": ["task_id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "invocationId": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "attach",
-      "description": "Pin a file (image, PDF, any media) to a person through core.attach; bytes are stored as a deduped canonical content item.",
+      "name": "add-important-date",
+      "description": "Add an important date (birthday, anniversary…) through people.add_important_date; birthdays auto-create their reminder. month_day is MM-DD.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "subject_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "data_uri": {
-            "type": "string",
-            "minLength": 6
-          },
-          "title": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string",
-            "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
-          }
+          "party_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 },
+          "month_day": { "type": "string", "pattern": "^\\d{2}-\\d{2}$" },
+          "reminder_on": { "type": "boolean" }
         },
-        "required": ["subject_id", "data_uri"],
+        "required": ["party_id", "label", "month_day"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
     },
     {
-      "name": "detach",
-      "description": "Remove a file from a person through core.detach; the canonical content item is kept.",
+      "name": "toggle-reminder",
+      "description": "Turn a date's reminder on or off through people.toggle_reminder.",
       "confirmation": "none",
       "input": {
         "type": "object",
-        "properties": {
-          "attachment_id": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": ["attachment_id"],
+        "properties": { "date_id": { "type": "string", "minLength": 1 } },
+        "required": ["date_id"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string"
-          },
-          "output": {
-            "type": "object"
-          },
-          "reason": {
-            "type": "string"
-          }
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-relationship",
+      "description": "Record a relationship (partner, child, pet…) for a person through people.add_relationship.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "pet": { "type": "string" }
+        },
+        "required": ["party_id", "name", "kind"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-gift",
+      "description": "Add a gift idea for a person through people.add_gift.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 }
+        },
+        "required": ["party_id", "text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "toggle-gift",
+      "description": "Flip a gift between idea and given through people.toggle_gift.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "gift_id": { "type": "string", "minLength": 1 } },
+        "required": ["gift_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-debt",
+      "description": "Record a debt you owe a person or they owe you through people.add_debt, in minor units.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "party_id": { "type": "string", "minLength": 1 },
+          "direction": { "type": "string", "enum": ["owe", "owed"] },
+          "amount_minor": { "type": "integer", "minimum": 0 },
+          "reason": { "type": "string" }
+        },
+        "required": ["party_id", "direction", "amount_minor"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "settle-debt",
+      "description": "Settle a debt through people.settle_debt (marks it closed, kept as history).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "debt_id": { "type": "string", "minLength": 1 } },
+        "required": ["debt_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "create-circle",
+      "description": "Create a circle (a SKOS concept in your circles scheme) through people.create_circle, like a Docs folder.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "name": { "type": "string", "minLength": 1 } },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "rename-circle",
+      "description": "Rename a circle through people.rename_circle.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "circle_id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 }
+        },
+        "required": ["circle_id", "name"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "delete-circle",
+      "description": "Delete an empty circle through people.delete_circle (move its people out first).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "circle_id": { "type": "string", "minLength": 1 } },
+        "required": ["circle_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "add-journal-entry",
+      "description": "Add an owner-level journal entry with a mood and a line about your day through people.add_journal_entry.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "mood": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "entry_date": { "type": "string" }
+        },
+        "required": ["mood", "text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
         }
       },
       "writes": []
@@ -394,59 +496,82 @@
   ],
   "queries": [
     {
-      "name": "directory",
-      "description": "A bounded recent window of parties (most recently touched by updated_at, caller-sized) sorted by name within the window, each with its identifiers (scheme + value), contact card, and attachments — never a whole-table pull; `truncated` says more people exist beyond the window.",
+      "name": "people",
+      "description": "The circle as a bounded recent window: people.profile rows (each a 1:1 enrichment of a core.party), newest first, decorated with name, circle, favorite star and active reminder dates, plus the circle list. `truncated` means older people exist beyond the window.",
       "input": {
         "type": "object",
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "minimum": 20,
-            "maximum": 2000
-          }
-        },
+        "properties": { "limit": { "type": "integer", "minimum": 20, "maximum": 2000 } },
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "people": {
-            "type": "array"
-          },
-          "truncated": {
-            "type": "boolean"
-          },
-          "window": {
-            "type": "integer"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
+          "people": { "type": "array" },
+          "circles": { "type": "array" },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "person",
+      "description": "One person's full profile: name, role, cadence, last-contacted, how-you-met, circle, favorite, contact identifiers, relationships, important dates, notes, tasks, gift ideas, open debts and interaction history.",
+      "input": {
+        "type": "object",
+        "properties": { "party_id": { "type": "string", "minLength": 1 } },
+        "required": ["party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "person": { "type": ["object", "null"] },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "dashboard",
+      "description": "The keep-in-touch summary: who is overdue to reconnect with, upcoming reminders (nearest first), recent logged touches, and the headline counts (all / reconnect / upcoming / favorites).",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "reconnect": { "type": "array" },
+          "upcoming": { "type": "array" },
+          "recent": { "type": "array" },
+          "counts": { "type": "object" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "journal",
+      "description": "The journal newest first: owner entries (mood + a line) folded together with logged interactions as automatic entries.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "entries": { "type": "array" },
+          "vaultDenied": { "type": "object" }
         }
       }
     },
     {
       "name": "search",
-      "description": "Full-text people search through the vault's FTS5 index (party name plus contact-card nickname, org line, and note) — returns only the ranked matches in the directory row shape plus a hit snippet, never a whole-table pull.",
+      "description": "Full-text people search across three vault FTS5 indexes — the party's name, the role line, and the owner's notes — returning ranked matches in the people row shape plus a hit snippet.",
       "input": {
         "type": "object",
-        "properties": {
-          "term": {
-            "type": "string"
-          }
-        },
+        "properties": { "term": { "type": "string" } },
         "required": ["term"],
         "additionalProperties": false
       },
       "output": {
         "type": "object",
         "properties": {
-          "people": {
-            "type": "array"
-          },
-          "vaultDenied": {
-            "type": "object"
-          }
+          "people": { "type": "array" },
+          "vaultDenied": { "type": "object" }
         }
       }
     }
@@ -458,62 +583,43 @@
       "type": "segmented",
       "default": "sans",
       "options": [
-        {
-          "value": "sans",
-          "label": "Sans"
-        },
-        {
-          "value": "serif",
-          "label": "Serif"
-        },
-        {
-          "value": "mono",
-          "label": "Mono"
-        }
+        { "value": "sans", "label": "Sans" },
+        { "value": "serif", "label": "Serif" },
+        { "value": "mono", "label": "Mono" }
       ]
     },
     {
       "key": "appWidth",
       "label": "Width",
       "type": "segmented",
-      "default": "narrow",
+      "default": "wide",
       "options": [
-        {
-          "value": "narrow",
-          "label": "Narrow"
-        },
-        {
-          "value": "wide",
-          "label": "Wide"
-        }
+        { "value": "narrow", "label": "Narrow" },
+        { "value": "wide", "label": "Wide" }
       ]
     },
     {
       "key": "appColor",
       "label": "Color",
       "type": "swatch",
-      "default": "#7C5BD9",
+      "default": "#DD4F6B",
       "options": [
-        {
-          "value": "#4E68DD",
-          "label": "Indigo"
-        },
-        {
-          "value": "#2EA098",
-          "label": "Teal"
-        },
-        {
-          "value": "#7C5BD9",
-          "label": "Violet"
-        },
-        {
-          "value": "#E55772",
-          "label": "Rose"
-        },
-        {
-          "value": "#B47B3F",
-          "label": "Ochre"
-        }
+        { "value": "#DD4F6B", "label": "Rose" },
+        { "value": "#7C5BD9", "label": "Violet" },
+        { "value": "#4E68DD", "label": "Indigo" },
+        { "value": "#2EA098", "label": "Teal" },
+        { "value": "#C9803A", "label": "Amber" },
+        { "value": "#5C677D", "label": "Slate" }
+      ]
+    },
+    {
+      "key": "appView",
+      "label": "Default view",
+      "type": "segmented",
+      "default": "grid",
+      "options": [
+        { "value": "grid", "label": "Grid" },
+        { "value": "list", "label": "List" }
       ]
     }
   ]

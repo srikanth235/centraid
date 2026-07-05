@@ -1,16 +1,13 @@
 /**
- * Remove a file from a party through core.detach. The edge goes; the canonical
- * content item stays (it is deduped and may back other attachments). Same
- * handler shape across every app.
+ * Settle a debt (marks it closed, kept as history). Runs through people.settle_debt — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
 export default async ({ body, ctx }) => {
-  const input = body ?? {};
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'core.detach',
-      input: { attachment_id: String(input.attachment_id ?? '') },
+      command: 'people.settle_debt',
+      input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });
     return { status: 200, body: outcome };

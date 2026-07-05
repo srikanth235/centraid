@@ -1,12 +1,12 @@
 /**
- * Add a person to your circle: mints a canonical core.party plus its people_profile, optionally filed into a circle. Runs through people.add_person — consent-checked and receipted, risk low.
+ * Move a person into a circle, or omit the circle to un-circle them. Runs through people.move_person — consent-checked and receipted, risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'people.add_person',
+      command: 'people.move_person',
       input: body ?? {},
       purpose: 'dpv:ServiceProvision',
     });

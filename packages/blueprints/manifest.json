@@ -365,26 +365,42 @@
     {
       "id": "people",
       "name": "People",
-      "desc": "Everyone in your life, one identity each — link handles, compose, send with consent.",
-      "colorKey": "violet",
+      "desc": "Your circle, remembered — a personal CRM that keeps light records on the people you care about and nudges you to stay in touch.",
+      "colorKey": "rose",
       "iconKey": "Users",
-      "version": "0.4.0",
+      "version": "0.1.0",
       "kind": "app",
       "files": [
+        "actions/add-debt.js",
+        "actions/add-gift.js",
+        "actions/add-important-date.js",
+        "actions/add-journal-entry.js",
+        "actions/add-note.js",
         "actions/add-person.js",
-        "actions/attach.js",
-        "actions/detach.js",
-        "actions/draft-message.js",
+        "actions/add-relationship.js",
+        "actions/add-task.js",
+        "actions/create-circle.js",
+        "actions/delete-circle.js",
         "actions/edit-person.js",
-        "actions/resolve-identity.js",
-        "actions/send-message.js",
-        "actions/update-card.js",
+        "actions/log-interaction.js",
+        "actions/move-person.js",
+        "actions/rename-circle.js",
+        "actions/set-cadence.js",
+        "actions/settle-debt.js",
+        "actions/star-person.js",
+        "actions/toggle-gift.js",
+        "actions/toggle-reminder.js",
+        "actions/toggle-task.js",
+        "actions/unstar-person.js",
         "app.css",
         "app.js",
         "app.json",
         "index.html",
         "package.json",
-        "queries/directory.js",
+        "queries/dashboard.js",
+        "queries/journal.js",
+        "queries/people.js",
+        "queries/person.js",
         "queries/search.js",
         "wall.css"
       ],
@@ -413,7 +429,7 @@
           "key": "appWidth",
           "label": "Width",
           "type": "segmented",
-          "default": "narrow",
+          "default": "wide",
           "options": [
             {
               "value": "narrow",
@@ -429,8 +445,16 @@
           "key": "appColor",
           "label": "Color",
           "type": "swatch",
-          "default": "#7C5BD9",
+          "default": "#DD4F6B",
           "options": [
+            {
+              "value": "#DD4F6B",
+              "label": "Rose"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
+            },
             {
               "value": "#4E68DD",
               "label": "Indigo"
@@ -440,16 +464,28 @@
               "label": "Teal"
             },
             {
-              "value": "#7C5BD9",
-              "label": "Violet"
+              "value": "#C9803A",
+              "label": "Amber"
             },
             {
-              "value": "#E55772",
-              "label": "Rose"
+              "value": "#5C677D",
+              "label": "Slate"
+            }
+          ]
+        },
+        {
+          "key": "appView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "grid",
+          "options": [
+            {
+              "value": "grid",
+              "label": "Grid"
             },
             {
-              "value": "#B47B3F",
-              "label": "Ochre"
+              "value": "list",
+              "label": "List"
             }
           ]
         }
