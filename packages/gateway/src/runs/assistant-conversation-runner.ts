@@ -53,23 +53,37 @@ export function assistantCwd(vaults: VaultRegistry): string {
   return path.join(vaults.activeWorkspace().runnerSessionDir, 'assistant-cwd');
 }
 
+/**
+ * The vault-register tool runners, shared by every register that carries
+ * them (assistant, ask, and — issue #286 phase 2 — the builder): reads are
+ * the owner's `vault_sql`; writes ride the enrolled `_assistant` agent
+ * (medium risk ceiling), so high-risk commands park for the owner instead
+ * of executing.
+ */
+export function makeVaultToolRunners(vaults: VaultRegistry): {
+  vaultSql: () => VaultSqlRunner;
+  vaultInvoke: () => VaultInvokeRunner;
+} {
+  return {
+    vaultSql: () => (sql: string) => {
+      const result = vaults.active().sqlAsOwner(sql);
+      // The receipt id stays gateway-side; the model gets rows + caps only.
+      const { receiptId: _receiptId, ...rows } = result;
+      return rows;
+    },
+    vaultInvoke: () => (call) =>
+      vaults.active().invokeAsAssistant({
+        command: call.command,
+        input: call.input,
+        purpose: 'dpv:ServiceProvision',
+      }),
+  };
+}
+
 export function makeAssistantConversationRunner(
   opts: AssistantConversationRunnerOptions,
 ): ConversationRunner {
-  const vaultSql: () => VaultSqlRunner = () => (sql: string) => {
-    const result = opts.vaults.active().sqlAsOwner(sql);
-    // The receipt id stays gateway-side; the model gets rows + caps only.
-    const { receiptId: _receiptId, ...rows } = result;
-    return rows;
-  };
-  // Writes ride the enrolled `_assistant` agent (medium risk ceiling), so
-  // high-risk commands park for the owner instead of executing.
-  const vaultInvoke: () => VaultInvokeRunner = () => (call) =>
-    opts.vaults.active().invokeAsAssistant({
-      command: call.command,
-      input: call.input,
-      purpose: 'dpv:ServiceProvision',
-    });
+  const { vaultSql, vaultInvoke } = makeVaultToolRunners(opts.vaults);
 
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,

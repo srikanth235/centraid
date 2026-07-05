@@ -72,13 +72,16 @@ import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import type { VaultPlane } from './vault-plane.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
-import { makeDraftCodeDirResolver } from '../lifecycle/draft-data.js';
+import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
-import { makeAssistantConversationRunner } from '../runs/assistant-conversation-runner.js';
+import {
+  makeAssistantConversationRunner,
+  makeVaultToolRunners,
+} from '../runs/assistant-conversation-runner.js';
 import { buildAssistantPrompt } from '../runs/assistant-prompt.js';
 import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
 import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
@@ -180,7 +183,6 @@ interface VaultHost {
   vaultId: string;
   store: WorktreeStore;
   codeAppsDir: () => string;
-  liveDataFile: (appId: string) => string;
   draftCodeDir: (appId: string, sessionId: string) => Promise<string | undefined>;
   runner: ConversationRunner;
   /** Store-backed route handlers (apps-store / lifecycle / automations). */
@@ -442,8 +444,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   // Drop an app from the registry AND delete its wrapper dir under the
-  // active vault (`<apps>/<id>/` — data.sqlite + blobs), then run the
-  // vault-side uninstall cascade (§11: revoke + retire enrollment).
+  // active vault (`<apps>/<id>/` — logs, settings, blobs), then run the
+  // vault-side uninstall cascade (§11: revoke + retire enrollment — the
+  // ext band is RETAINED there; the owner purges it separately, #286).
   const deregisterAndCleanup = async (appId: string): Promise<void> => {
     const removed = await requireRuntime().registry.deregister(appId);
     if (removed) await cleanupDeregisteredApp(activeWorkspace().appsDir, removed, logger);
@@ -460,19 +463,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const store = new WorktreeStore({ root: plane.codeStoreRoot });
     await store.init();
     const codeAppsDir = (): string => path.join(store.getActiveMainLink(), 'apps');
-    // Stable live data file — injected so a publish migrates live data and a
-    // draft seeds from it (issue #144). Rooted in THIS vault's workspace.
-    const liveDataFile = (appId: string): string =>
-      path.join(workspace.appsDir, appId, 'data.sqlite');
-    // Draft preview (#141 + #144): resolve an app's code dir to its OPEN
-    // session worktree and lazily seed the worktree's branched `data.sqlite`
-    // from live there.
-    const draftCodeDir = makeDraftCodeDirResolver(store, liveDataFile);
+    // The ext band (issue #286 phase 2): publish applies an app's declared
+    // extension tables to THIS vault; drafts branch a scratch band there.
+    const ext: ExtBandOps = {
+      applyAppExt: (appId, tables) => plane.applyAppExt(appId, tables),
+      seedAppExtDraft: (appId, tables, seedOpts) =>
+        plane.gateway.seedAppExtDraft(plane.ownerCredential, appId, tables, seedOpts),
+      dropAppExtDraft: (appId) => plane.dropAppExtDraft(appId),
+    };
+    // Draft preview (#141, reshaped by #286): resolve an app's code dir to
+    // its OPEN session worktree and keep the vault's draft band in step
+    // with the draft manifest there.
+    const draftCodeDir = makeDraftCodeDirResolver(store, ext);
 
     // Unified chat (issue #141, Phase 3): every chat turn runs in the app's
-    // draft worktree with the union of native file tools + the `centraid_*`
-    // dispatcher — one surface that both tweaks the app's code and operates
-    // its data. A host-injected runner (Plane B) bypasses this per-vault one.
+    // draft worktree with the union of native file tools + the vault
+    // register (`vault_sql`/`vault_invoke`, #286 phase 2) — one surface
+    // that both tweaks the app's code and looks at the real data it
+    // projects. A host-injected runner (Plane B) bypasses this per-vault one.
     const runner: ConversationRunner =
       options.conversationRunner ??
       makeUnifiedConversationRunner({
@@ -480,7 +488,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         prefsLoader,
         getDispatcher,
         publicBaseUrl: () => serverUrl,
-        liveDataFile,
+        ext,
+        ...makeVaultToolRunners(vaultRegistry),
         ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
         ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
       });
@@ -498,7 +507,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           await deregisterAndCleanup(appId);
           reconcileScheduler();
         },
-        liveDataFile,
+        ext,
       }),
       // App lifecycle over HTTP (issue #141, Phase 2): the gateway owns
       // scaffold / clone / update-meta / automation create+toggle+delete.
@@ -512,7 +521,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         },
         deregister: deregisterAndCleanup,
         reconcile: reconcileScheduler,
-        liveDataFile,
+        ext,
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights — all over THIS
@@ -536,7 +545,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       vaultId: workspace.vaultId,
       store,
       codeAppsDir,
-      liveDataFile,
       draftCodeDir,
       runner,
       handlers,
@@ -687,14 +695,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     conversationHistoryStore,
     conversationRunner: options.conversationRunner ?? {
       // Facade over the ACTIVE vault's unified runner (#280) — builder-
-      // capable, so turns persist as `kind='build'` (issue #181). Ask
-      // turns on vault-backed apps peel off onto the vault register
-      // (issue #286 phase 2) — vault_sql/vault_invoke with the app lens.
+      // capable, so turns persist as `kind='build'` (issue #181). EVERY
+      // ask turn rides the vault register (issue #286 phase 2: the vault
+      // is the only store) — the owner assistant wearing the app lens.
       runKind: 'build',
       run: async (input) => {
-        if (input.register === 'ask' && (await askAppMeta(input.appId)).vaultBacked) {
-          return askRunner.run(input);
-        }
+        if (input.register === 'ask') return askRunner.run(input);
         return (await activeHost()).runner.run(input);
       },
     },
@@ -741,31 +747,28 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     vaults: vaultRegistry,
   });
 
-  // Ask-register manifest probe (issue #286 phase 2): the app copilot's
-  // `register: 'ask'` turns ride the vault register when the app is
-  // vault-backed — its data lives in the vault, so the app-silo trio
-  // could only stare at an empty file. Resolved per turn off the live
-  // `main` manifest so a publish that adds/drops the vault block lands
+  // Ask-register lens metadata (issue #286 phase 2): the app copilot's
+  // `register: 'ask'` turns ARE the owner assistant wearing the app lens —
+  // name + description bias the prompt, never a permission boundary.
+  // Resolved per turn off the live `main` manifest so a publish lands
   // without a restart.
   const askAppMeta = async (
     appId: string,
-  ): Promise<{ vaultBacked: boolean; name?: string; description?: string }> => {
+  ): Promise<{ name?: string; description?: string }> => {
     try {
       const host = await activeHost();
       const dir = await host.store.resolveActiveAppDir(appId);
-      if (!dir) return { vaultBacked: false };
+      if (!dir) return {};
       const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
         name?: unknown;
         description?: unknown;
-        vault?: unknown;
       };
       return {
-        vaultBacked: !!raw.vault && typeof raw.vault === 'object',
         ...(typeof raw.name === 'string' ? { name: raw.name } : {}),
         ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
       };
     } catch {
-      return { vaultBacked: false };
+      return {};
     }
   };
 

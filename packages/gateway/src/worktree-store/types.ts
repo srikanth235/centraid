@@ -31,19 +31,18 @@ export interface PublishInput {
   /** Commit message body (the subject gets `<appId>:` prepended). */
   message: string;
   /**
-   * Optional data-migration step, run inside the publish mutex AFTER the
-   * session is rebased onto current `main` and BEFORE the ff-merge (#144).
-   * Receives the post-rebase worktree app dir (`<worktree>/apps/<appId>/`,
-   * carrying the final, merged `migrations/`) and returns the ids applied.
+   * Optional pre-merge hook, run inside the publish mutex AFTER the
+   * session is rebased onto current `main` and BEFORE the ff-merge (#144,
+   * reshaped by #286 phase 2). Receives the post-rebase worktree app dir
+   * (`<worktree>/apps/<appId>/`, carrying the final merged `app.json`).
    * Throwing aborts the publish: `main` never advances, no tag is minted.
    *
-   * The store stays data-agnostic — the gateway injects the SQLite runner
-   * (against live `data.sqlite`). Running it post-rebase ensures migrations
-   * are validated/applied against the exact tree about to go live, not the
-   * session's stale pre-rebase tree (which could skip or duplicate a
-   * migration when `main` advanced under the session).
+   * The store stays data-agnostic — the gateway injects the vault-side
+   * ext-band DDL apply here. Running it post-rebase ensures the declared
+   * specs are the exact tree about to go live, not the session's stale
+   * pre-rebase tree.
    */
-  migrate?: (worktreeAppDir: string) => Promise<number[]>;
+  beforeMerge?: (worktreeAppDir: string) => Promise<void>;
 }
 
 export interface PublishResult {
@@ -53,20 +52,18 @@ export interface PublishResult {
   sha: string;
   /** Absolute path to the freshly-materialized main worktree. */
   materializedMainDir: string;
-  /** Migration ids the `migrate` step applied to live data, if any (#144). */
-  migrationsApplied: number[];
 }
 
 export interface RollbackInput {
   appId: string;
   /** Existing tag to roll back to — e.g. `todo/v1`. */
   versionTag: string;
-  // By design there is NO `migrate` hook here (the asymmetry with
-  // `PublishInput.migrate` is deliberate — issue #160 / #144): rollback is
-  // CODE-ONLY. It swaps the live `apps/<appId>/` tree back to an older tag
-  // but does NOT touch live `data.sqlite`. centraid migrations are
-  // forward-only, so there is no down-migration to run; the live schema
-  // stays at its current (forward) version, ahead of the rolled-back code.
+  // By design there is NO pre-merge hook here (the asymmetry with
+  // `PublishInput.beforeMerge` is deliberate — issue #160 / #144): rollback
+  // is CODE-ONLY. It swaps the live `apps/<appId>/` tree back to an older
+  // tag but does NOT touch the app's ext band in the vault. Ext DDL is
+  // applied additively on publish; the band stays at its current (forward)
+  // shape, ahead of the rolled-back code.
   // A subsequent re-publish re-applies the forward migration and heals any
   // drift. See `rollbackCritical`.
 }

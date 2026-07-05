@@ -482,6 +482,8 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783272006-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 605 | 631348 | 399 | 1006 | 0.6589 | 337126 | 8220756 | 337979002 | 1254371 | feat(app-engine): the silo dies — no data.sqlite, no _sql; ext manifest block, s |
 | claude-code-c0bf538c-2f5-1783272039-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 4 | 1132 | 1263906 | 874 | 2010 | 1.3218 | 337130 | 8221888 | 339242908 | 1255245 | feat(app-engine): the silo dies — no data.sqlite, no _sql; ext block, settings.j |
 | claude-code-c0bf538c-2f5-1783272073-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 569 | 632519 | 308 | 879 | 0.6551 | 337132 | 8222457 | 339875427 | 1255553 | feat(agent-runtime): delete the centraid_* trio — the vault register is the one  |
+| claude-code-c0bf538c-2f5-1783272106-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 408 | 633088 | 463 | 873 | 0.6614 | 337134 | 8222865 | 340508515 | 1256016 | feat(gateway): ext-band lifecycle — publish applies declared DDL, drafts branch, |
+| claude-code-c0bf538c-2f5-1783272139-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 610 | 633496 | 438 | 1050 | 0.6630 | 337136 | 8223475 | 341142011 | 1256454 | feat(gateway): ext-band lifecycle — publish applies DDL, drafts branch, ask ever |
 
 ### Steering
 

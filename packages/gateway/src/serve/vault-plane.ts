@@ -20,6 +20,7 @@
  */
 
 import {
+  assertExtSchemaOwnership,
   buildAssistantContext,
   createGateway,
   createGrant,
@@ -74,6 +75,8 @@ import {
   type VaultDb,
   type VaultSqlResult,
   type ResolveResult,
+  type ExtApplyOutcome,
+  type ExtTableSpec,
 } from '@centraid/vault';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -176,6 +179,10 @@ export class VaultPlane {
     registerDocumentCommands(this.gateway);
     registerHomeCommands(this.gateway);
     registerPeopleCommands(this.gateway);
+    // Re-arm the ext-band write trios for every installed app that
+    // declared extension tables (issue #286 phase 2) — command handlers
+    // live in gateway memory, the contract rows in the vault.
+    this.gateway.registerAllExtCommands();
     this.logger.info(
       this.boot.fresh
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`
@@ -274,8 +281,9 @@ export class VaultPlane {
 
   /**
    * Uninstall cascade: revoke every active grant (views invalidated, parked
-   * invocations dropped, appext file deleted on the last one), then retire
-   * the enrollment row. Covers both planes of the app's identity — its
+   * invocations dropped, the ext band RETAINED on the last one — the data
+   * is the owner's; purge is a separate explicit act), then retire the
+   * enrollment row. Covers both planes of the app's identity — its
    * `consent.app` row and, for automation apps, its `agent.agent` row.
    * Model rows and receipts remain — §11's success test.
    */
@@ -311,13 +319,15 @@ export class VaultPlane {
   /**
    * Owner approval of a requested grant. `purpose` is a DPV notation the
    * vault's seed vocabulary knows; unknown purposes are refused rather
-   * than silently minted.
+   * than silently minted. An app may request `ext.*` scopes only on its
+   * OWN band — `ext.<appId>` — never a sibling's.
    */
   approveGrant(appId: string, request: GrantRequest): string {
     const app = ensureAppEnrolled(this.db, appId, { origin: 'generated' });
     const purpose = purposeConceptId(this.db, request.purpose);
     if (!purpose) throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0) throw new Error('a grant needs at least one scope');
+    for (const scope of request.scopes) assertExtSchemaOwnership(appId, scope.schema);
     return createGrant(this.db, {
       appId: app.appId,
       purposeConceptId: purpose,
@@ -422,19 +432,37 @@ export class VaultPlane {
    */
   invokeAsAssistant(request: InvokeRequest): InvokeOutcome {
     const agent = ensureAgentEnrolled(this.db, '_assistant', { modelRef: 'centraid-assistant' });
-    if (listActiveAgentGrants(this.db, agent.partyId).length === 0) {
+    // Self-healing standing grant: cover every command owner_schema not
+    // already scoped by an active grant — a later-installed app's ext band
+    // (a NEW schema namespace) joins the assistant's write surface without
+    // any re-enrollment ceremony.
+    const schemas = this.db.vault
+      .prepare(`SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`)
+      .all() as { owner_schema: string }[];
+    const covered = new Set(
+      (
+        this.db.vault
+          .prepare(
+            `SELECT DISTINCT s.schema_name FROM consent_grant_scope s
+               JOIN consent_access_grant g ON g.grant_id = s.grant_id
+              WHERE g.grantee_party_id = ? AND g.status = 'active' AND g.revoked_at IS NULL`,
+          )
+          .all(agent.partyId) as { schema_name: string }[]
+      ).map((r) => r.schema_name),
+    );
+    const missing = schemas.filter((s) => !covered.has(s.owner_schema));
+    if (missing.length > 0) {
       const purpose = purposeConceptId(this.db, 'dpv:ServiceProvision');
       if (!purpose) throw new Error('vault vocabulary missing dpv:ServiceProvision');
-      const schemas = this.db.vault
-        .prepare(`SELECT DISTINCT owner_schema FROM agent_command ORDER BY owner_schema`)
-        .all() as { owner_schema: string }[];
       createGrant(this.db, {
         granteePartyId: agent.partyId,
         purposeConceptId: purpose,
         grantedByPartyId: this.boot.ownerPartyId,
-        scopes: schemas.map((s) => ({ schema: s.owner_schema, verbs: 'act' as const })),
+        scopes: missing.map((s) => ({ schema: s.owner_schema, verbs: 'act' as const })),
       });
-      this.logger.info(`vault plane: enrolled the _assistant agent with a standing act grant`);
+      this.logger.info(
+        `vault plane: extended the _assistant standing act grant (+${missing.length} schema(s))`,
+      );
     }
     const cred: Credential = {
       kind: 'agent',
@@ -478,6 +506,41 @@ export class VaultPlane {
 
   sweep(): SweepResult {
     return this.gateway.sweep(this.ownerCredential);
+  }
+
+  /**
+   * The ext band (issue #286 phase 2) — the host applies an app's DECLARED
+   * extension tables (manifest `ext.tables`) to the live band; the vault
+   * gateway diffs, validates and receipts. Idempotent: same specs → no-op.
+   */
+  applyAppExt(appId: string, tables: ExtTableSpec[]): ExtApplyOutcome {
+    const outcome = this.gateway.applyAppExt(this.ownerCredential, appId, tables);
+    if (outcome.created.length + outcome.dropped.length + outcome.altered.length > 0) {
+      this.logger.info(
+        `vault plane: ext band for "${appId}" — created [${outcome.created.join(', ')}] ` +
+          `dropped [${outcome.dropped.join(', ')}] altered [${outcome.altered.join(', ')}]`,
+      );
+    }
+    return outcome;
+  }
+
+  /** Rebuild the app's DRAFT band from specs, seeded with live rows. */
+  seedAppExtDraft(appId: string, tables: ExtTableSpec[]): ExtApplyOutcome {
+    return this.gateway.seedAppExtDraft(this.ownerCredential, appId, tables);
+  }
+
+  /** Discard the app's draft band (builder session close / reset). */
+  dropAppExtDraft(appId: string): { dropped: string[] } {
+    return this.gateway.dropAppExtDraft(this.ownerCredential, appId);
+  }
+
+  /** Owner purge of a retained band — the explicit second half of uninstall. */
+  purgeAppExt(appId: string): { purged: string[] } {
+    const out = this.gateway.purgeAppExt(this.ownerCredential, appId);
+    if (out.purged.length > 0) {
+      this.logger.info(`vault plane: purged ext band for "${appId}" [${out.purged.join(', ')}]`);
+    }
+    return out;
   }
 
   /**

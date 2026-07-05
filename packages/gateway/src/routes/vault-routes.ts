@@ -12,6 +12,7 @@
  *   DELETE /centraid/_vault/vaults/<vaultId>           — delete (409 while active)
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
+ *   POST   /centraid/_vault/apps/<appId>/purge-ext     — drop a retained ext band (issue #286)
  *   GET    /centraid/_vault/agents                     — enrolled automation agents + grants
  *   POST   /centraid/_vault/agents/<appId>/grants      — approve an automation's agent grant
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
@@ -90,6 +91,26 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
         } catch (err) {
           return sendJson(res, 400, {
             error: 'grant_refused',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
+      // The explicit second half of uninstall (issue #286 phase 2):
+      // uninstall RETAINS the app's ext band (the data is the owner's);
+      // this drops its tables + registry rows for good.
+      if (
+        method === 'POST' &&
+        segments[0] === 'apps' &&
+        segments[2] === 'purge-ext' &&
+        segments.length === 3
+      ) {
+        const appId = segments[1] ?? '';
+        try {
+          return sendJson(res, 200, plane.purgeAppExt(appId));
+        } catch (err) {
+          return sendJson(res, 400, {
+            error: 'purge_failed',
             message: err instanceof Error ? err.message : String(err),
           });
         }
