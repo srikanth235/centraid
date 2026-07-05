@@ -138,7 +138,9 @@ export function validateExtSpecs(
             `table ${spec.name}.${col.name}: ext references must stay within app "${appId}"`,
           );
         }
-        const ok = target ? names.has(target.table) || canReference(col.references) : canReference(col.references);
+        const ok = target
+          ? names.has(target.table) || canReference(col.references)
+          : canReference(col.references);
         if (!ok) {
           throw new ExtSpecError(
             `table ${spec.name}.${col.name}: references unknown entity "${col.references}"`,
@@ -155,7 +157,8 @@ export function validateExtSpecs(
     }
     for (const c of spec.searchable ?? []) {
       const col = spec.columns.find((x) => x.name === c);
-      if (!col) throw new ExtSpecError(`table ${spec.name}: searchable names unknown column "${c}"`);
+      if (!col)
+        throw new ExtSpecError(`table ${spec.name}: searchable names unknown column "${c}"`);
       if (col.type !== 'text') {
         throw new ExtSpecError(`table ${spec.name}: searchable column "${c}" must be text`);
       }

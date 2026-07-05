@@ -292,7 +292,9 @@ test('file custody: checkpoint, verifiable backup; ext band retained through rev
   const revocation = gw2.revokeGrant(owner2, grantId);
   expect(revocation.extRetained).toEqual(['scratch']);
   const row = fileDb.vault
-    .prepare(`SELECT status FROM consent_app_ext WHERE app_id = 'gen-app' AND table_name = 'scratch'`)
+    .prepare(
+      `SELECT status FROM consent_app_ext WHERE app_id = 'gen-app' AND table_name = 'scratch'`,
+    )
     .get() as { status: string };
   expect(row.status).toBe('retained'); // table + rows survive uninstall
 });

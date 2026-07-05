@@ -82,7 +82,9 @@ function pkColumn(vault: DatabaseSync, physical: string): string {
  */
 function referencable(logical: string): boolean {
   const ref = resolveEntity(logical);
-  return ref !== undefined && ref.file === 'vault' && ref.schema !== 'consent' && ref.schema !== 'agent';
+  return (
+    ref !== undefined && ref.file === 'vault' && ref.schema !== 'consent' && ref.schema !== 'agent'
+  );
 }
 
 /** Band-aware FK target resolver for DDL generation. */
@@ -98,7 +100,8 @@ function fkResolver(
       const inBatch = batch.get(ext.table);
       if (inBatch) return { physical: extPhysical(appId, ext.table, band), pk: extPk(inBatch) };
       const existing = resolveEntity(extLogical(appId, ext.table, band), db.vault);
-      if (existing) return { physical: existing.physical, pk: pkColumn(db.vault, existing.physical) };
+      if (existing)
+        return { physical: existing.physical, pk: pkColumn(db.vault, existing.physical) };
       throw new ExtSpecError(`references unknown ext table "${logical}"`);
     }
     const ref = resolveEntity(logical);
@@ -346,7 +349,9 @@ export function retainExtBand(db: VaultDb, appId: string): string[] {
   const rows = registryRows(db.vault, appId, 'live');
   if (rows.length > 0) {
     db.vault
-      .prepare(`UPDATE consent_app_ext SET status = 'retained', updated_at = ? WHERE app_id = ? AND band = 'live'`)
+      .prepare(
+        `UPDATE consent_app_ext SET status = 'retained', updated_at = ? WHERE app_id = ? AND band = 'live'`,
+      )
       .run(nowIso(), appId);
   }
   return rows.map((r) => r.table_name);
@@ -411,11 +416,10 @@ function requireBandRow(
       `SELECT physical, spec_json, status FROM consent_app_ext
         WHERE app_id = ? AND band = ? AND table_name = ?`,
     )
-    .get(appId, band, table) as
-    | { physical: string; spec_json: string; status: string }
-    | undefined;
+    .get(appId, band, table) as { physical: string; spec_json: string; status: string } | undefined;
   if (!row) throw new Error(`no ${band} ext table "${table}" for app ${appId}`);
-  if (row.status !== 'active') throw new Error(`ext table "${table}" is retained (app uninstalled)`);
+  if (row.status !== 'active')
+    throw new Error(`ext table "${table}" is retained (app uninstalled)`);
   return { physical: row.physical, spec: JSON.parse(row.spec_json) as ExtTableSpec };
 }
 
@@ -530,9 +534,7 @@ export function extCommandDefinitions(appId: string): CommandDefinition[] {
       const band = input.band ?? 'live';
       const { physical } = requireBandRow(ctx, appId, band, input.table);
       const pk = pkColumnOf(ctx.db, physical);
-      const result = ctx.db
-        .prepare(`DELETE FROM "${physical}" WHERE "${pk}" = ?`)
-        .run(input.id);
+      const result = ctx.db.prepare(`DELETE FROM "${physical}" WHERE "${pk}" = ?`).run(input.id);
       if (Number(result.changes) === 0) throw new Error(`${input.table}: no row ${input.id}`);
       // The deleted row's links end-date via the gateway's dangling-link
       // sweep — record the write so S4/S5 see it.

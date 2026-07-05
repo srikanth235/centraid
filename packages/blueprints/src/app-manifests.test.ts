@@ -66,8 +66,10 @@ describe('bundled blueprint manifests', () => {
     );
     for (const id of projections) {
       const manifest = readManifest('apps', id);
-      expect(manifest.ext, `${id} must not declare ext tables — it is a pure projection`)
-        .toBeUndefined();
+      expect(
+        manifest.ext,
+        `${id} must not declare ext tables — it is a pure projection`,
+      ).toBeUndefined();
       expect(manifest.vault?.scopes.length, `${id} needs at least one scope`).toBeGreaterThan(0);
     }
   });

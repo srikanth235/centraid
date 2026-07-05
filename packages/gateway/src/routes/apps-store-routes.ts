@@ -220,7 +220,6 @@ async function handleSessions(
   return false;
 }
 
-
 async function handlePublish(
   store: WorktreeStore,
   req: IncomingMessage,

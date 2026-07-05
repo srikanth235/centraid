@@ -627,7 +627,11 @@ export class Gateway {
    * is non-empty, and receipt the change. Owner-only: DDL comes from the
    * manifest through the host, never from the app.
    */
-  applyAppExt(cred: Credential, appId: string, tables: ExtTableSpec[]): ExtApplyOutcome & {
+  applyAppExt(
+    cred: Credential,
+    appId: string,
+    tables: ExtTableSpec[],
+  ): ExtApplyOutcome & {
     receiptId: string;
   } {
     const owner = this.requireOwner(cred, 'only the owner applies ext bands');

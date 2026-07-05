@@ -305,9 +305,7 @@ describe('drafts', () => {
     expect(
       gw.read(owner, { entity: `extdraft.${APP}.workout`, purpose: PURPOSE }).rows,
     ).toHaveLength(2);
-    expect(gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows).toHaveLength(
-      1,
-    ); // live untouched
+    expect(gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows).toHaveLength(1); // live untouched
 
     gw.dropAppExtDraft(owner, APP);
     expect(resolveEntity(`extdraft.${APP}.workout`, db.vault)).toBeUndefined();
@@ -350,9 +348,7 @@ describe('uninstall and purge', () => {
     // Re-apply (reinstall) revives band + commands over the same data.
     gw.applyAppExt(owner, APP, specs());
     expect(gw.discover(owner).map((c) => c.name)).toContain(`ext.${APP}.insert`);
-    expect(
-      gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows,
-    ).toHaveLength(1);
+    expect(gw.read(owner, { entity: `ext.${APP}.workout`, purpose: PURPOSE }).rows).toHaveLength(1);
 
     const purge = gw.purgeAppExt(owner, APP);
     expect(purge.purged.sort()).toEqual(['gear', 'workout']);

@@ -228,4 +228,3 @@ test('6.6 — Cloud Logs renders entries and filters by level + search', async (
     await app.close();
   }
 });
-

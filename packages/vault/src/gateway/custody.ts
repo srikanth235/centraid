@@ -64,4 +64,3 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   });
   return { vaultPath, journalPath, vaultSha256, journalSha256, receiptId };
 }
-

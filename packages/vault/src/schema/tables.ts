@@ -113,7 +113,12 @@ export function resolveEntity(logical: string, vault?: DatabaseSync): EntityRef 
         )
         .get(ext.appId, ext.band, ext.table) as { physical: string } | undefined;
       if (row) {
-        return { schema: `ext.${ext.appId}`, table: ext.table, physical: row.physical, file: 'vault' };
+        return {
+          schema: `ext.${ext.appId}`,
+          table: ext.table,
+          physical: row.physical,
+          file: 'vault',
+        };
       }
     } catch {
       // Pre-v5 file or a non-vault handle: no dynamic half to consult.
@@ -134,7 +139,9 @@ export function listVaultEntities(vault?: DatabaseSync): string[] {
   if (!vault) return canonical;
   try {
     const rows = vault
-      .prepare(`SELECT app_id, table_name FROM consent_app_ext WHERE band = 'live' ORDER BY app_id, table_name`)
+      .prepare(
+        `SELECT app_id, table_name FROM consent_app_ext WHERE band = 'live' ORDER BY app_id, table_name`,
+      )
       .all() as { app_id: string; table_name: string }[];
     return [...canonical, ...rows.map((r) => `ext.${r.app_id}.${r.table_name}`)];
   } catch {

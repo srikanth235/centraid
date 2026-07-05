@@ -490,6 +490,7 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783274257-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 60615 | 159131 | 12872100 | 43511 | 263257 | 8.8215 | 398074 | 8383927 | 355282880 | 1300878 |  |
 | claude-code-c0bf538c-2f5-1783274279-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 2 | 665 | 86041 | 172 | 839 | 0.0515 | 398076 | 8384592 | 355368921 | 1301050 |  |
 | claude-code-c0bf538c-2f5-1783274305-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 957 | 690 | 260118 | 1530 | 3177 | 0.1774 | 399033 | 8385282 | 355629039 | 1302580 |  |
+| claude-code-c0bf538c-2f5-1783274639-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 3169 | 39429 | 2811777 | 12753 | 55351 | 1.9870 | 402202 | 8424711 | 358440816 | 1315333 | style(vault,gateway): oxfmt the ext-band sources to satisfy CI format:check (#28 |
 
 ### Steering
 

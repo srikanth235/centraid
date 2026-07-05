@@ -752,9 +752,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // name + description bias the prompt, never a permission boundary.
   // Resolved per turn off the live `main` manifest so a publish lands
   // without a restart.
-  const askAppMeta = async (
-    appId: string,
-  ): Promise<{ name?: string; description?: string }> => {
+  const askAppMeta = async (appId: string): Promise<{ name?: string; description?: string }> => {
     try {
       const host = await activeHost();
       const dir = await host.store.resolveActiveAppDir(appId);

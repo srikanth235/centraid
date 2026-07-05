@@ -582,4 +582,3 @@ test('app ids are validated', async () => {
     await rmTempRoot(root);
   }
 });
-
