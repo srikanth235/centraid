@@ -50,7 +50,7 @@ export interface AssistantConversationRunnerOptions {
 
 /** The active vault's scratch cwd for assistant turns. */
 export function assistantCwd(vaults: VaultRegistry): string {
-  return path.join(vaults.activeWorkspace().runnerSessionDir, 'assistant-cwd');
+  return path.join(vaults.currentWorkspace().runnerSessionDir, 'assistant-cwd');
 }
 
 /**
@@ -66,13 +66,13 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
 } {
   return {
     vaultSql: () => (sql: string) => {
-      const result = vaults.active().sqlAsOwner(sql);
+      const result = vaults.current().sqlAsOwner(sql);
       // The receipt id stays gateway-side; the model gets rows + caps only.
       const { receiptId: _receiptId, ...rows } = result;
       return rows;
     },
     vaultInvoke: () => (call) =>
-      vaults.active().invokeAsAssistant({
+      vaults.current().invokeAsAssistant({
         command: call.command,
         input: call.input,
         purpose: 'dpv:ServiceProvision',

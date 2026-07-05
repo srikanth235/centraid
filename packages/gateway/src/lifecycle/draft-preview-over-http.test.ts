@@ -77,9 +77,9 @@ afterEach(async () => {
 
 test('serves a staged draft (static + handlers) while live keeps the published version', async () => {
   handle = await serve({ paths: pathsUnder(dataDir) });
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await seedApp(store, 'app');
-  await handle.vaults.settleActivation();
+  await handle.syncApps();
 
   // Open a session and stage a draft: new HTML + a changed query handler.
   await store.openSession('draft1');
@@ -124,8 +124,8 @@ test('serves a staged draft (static + handlers) while live keeps the published v
 
 test('an unknown draft session yields 503 (no live fallback)', async () => {
   handle = await serve({ paths: pathsUnder(dataDir) });
-  await seedApp(await handle.activeAppsStore(), 'app');
-  await handle.vaults.settleActivation();
+  await seedApp(await handle.appsStore(), 'app');
+  await handle.syncApps();
 
   const res = await fetch(`${handle.url}/centraid/_draft/ghost/app/`, {
     headers: { Authorization: `Bearer ${handle.token}` },

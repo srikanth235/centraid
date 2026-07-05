@@ -12,7 +12,7 @@ seam #280 deliberately deferred.
 ## Checklist
 
 - [x] Commit 1 (tunnel) — gateway iroh endpoint + ticket pairing ALPN
-- [ ] Commit 2 (gateway) — per-request vault resolution; the active pointer dies
+- [x] Commit 2 (gateway) — per-request vault resolution; the active pointer dies
 - [ ] Commit 3 (gateway) — device enrollment ACL + pairing tickets + admin CLI + daemon endpoint
 - [ ] Commit 4 (desktop) — transport tiers, iroh dialer, version handshake
 - [ ] Commit 5 (desktop) — flat (gateway, vault) switcher, keyed state, identity strip
@@ -276,6 +276,7 @@ The session ran autonomously from a single `/goal` directive (enqueued 2026-07-0
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-a8d0b6fa-89f-1783278745-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 159119 | 1025828 | 65353131 | 425221 | 1610168 | 50.5141 | 159119 | 1025828 | 65353131 | 425221 | feat(tunnel): gateway iroh endpoint + one-time ticket pairing ALPN (#289)The gat |
+| claude-code-a8d0b6fa-89f-1783278830-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 854 | 6019 | 3474219 | 8423 | 15296 | 1.9896 | 159973 | 1031847 | 68827350 | 433644 | feat(gateway): per-request vault resolution — the active-vault pointer dies (#28 |
 
 ### Steering
 

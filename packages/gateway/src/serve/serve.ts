@@ -3,9 +3,10 @@
  *
  * A thin wrapper over `buildGateway()` (which constructs the whole
  * host-agnostic graph without a socket — see `build-gateway.ts`). `serve()`
- * adds the loopback bind + bearer auth via `startRuntimeHttpServer`, then
- * drives the post-listener lifecycle. Behavior is identical to the
- * pre-split `serve()`, so the two callers that ship today are unchanged:
+ * adds the loopback bind + bearer auth via `startRuntimeHttpServer` and
+ * mounts the gateway's `composedHandler` — which resolves the vault every
+ * request is addressed to (issue #289) before the chain runs — then drives
+ * the post-listener lifecycle. Two callers ship today:
  *
  *   - `apps/desktop` embeds it in the Electron main process (paths under
  *     `<userData>/gateways/<id>/`).
@@ -47,12 +48,15 @@ export interface GatewayServeHandle extends Omit<
 export async function serve(options: ServeOptions): Promise<GatewayServeHandle> {
   const gateway = await buildGateway(options);
 
+  // The composed handler owns the whole post-auth chain — including the
+  // conversation/prefs routes `startRuntimeHttpServer` would otherwise
+  // mount itself — because the request's vault scope (#289) must wrap
+  // every one of them.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: gateway.extraHandlers,
-    // `/_centraid-user/id` answers with the ACTIVE vault's owner party id —
-    // the vault owner IS the user (#280).
-    ownerIdProvider: () => gateway.vaults.active().boot.ownerPartyId,
+    extraHandlers: [gateway.composedHandler],
+    exposeUserStoreRoute: false,
+    exposeConversationRoute: false,
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
@@ -63,7 +67,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   return {
     url: server.url,
     token: server.token,
-    // Stop the cron timer before the HTTP server so no fire is dispatched
+    // Stop the cron timers before the HTTP server so no fire is dispatched
     // mid-teardown.
     close: async () => {
       await gateway.stop();
@@ -74,7 +78,8 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     analyticsStore: gateway.analyticsStore,
     conversationHistoryStore: gateway.conversationHistoryStore,
     vaults: gateway.vaults,
-    activeAppsStore: gateway.activeAppsStore,
+    appsStore: gateway.appsStore,
+    syncApps: gateway.syncApps,
     codeAppsDir: gateway.codeAppsDir,
   } satisfies GatewayServeHandle;
 }

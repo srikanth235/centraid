@@ -5,6 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { openVaultRegistry, VaultRegistryError, type VaultRegistry } from './vault-registry.js';
+import { runWithVaultContext } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 
 const silentLogger = { info: () => undefined, warn: () => undefined, error: () => undefined };
@@ -26,47 +27,44 @@ function openRegistry(rootDir: string): VaultRegistry {
   return registry;
 }
 
-test('a fresh root bootstraps one default vault, active, in its own directory', async () => {
+test('a fresh root bootstraps one default vault in its own directory — and no pointer file', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
   const vaults = registry.list();
   expect(vaults).toHaveLength(1);
-  expect(vaults[0]).toMatchObject({ active: true, name: "Priya's vault" });
-  // Layout: <root>/<vaultId>/vault.db + the active pointer beside it.
+  expect(vaults[0]).toMatchObject({ name: "Priya's vault" });
   expect(existsSync(path.join(root, vaults[0]!.vaultId, 'vault.db'))).toBe(true);
-  expect(existsSync(path.join(root, 'vaults.json'))).toBe(true);
+  // Issue #289: the server-global active pointer is dead — the client owns it.
+  expect(existsSync(path.join(root, 'vaults.json'))).toBe(false);
+  expect(registry.defaultVaultId()).toBe(vaults[0]!.vaultId);
 });
 
-test('create / rename / switch / delete — and the active vault is undeletable', async () => {
+test('create / rename / delete — and the LAST vault is undeletable', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
   const first = registry.list()[0]!;
 
   const family = registry.create('Family');
-  expect(family).toMatchObject({ name: 'Family', active: false });
+  expect(family).toMatchObject({ name: 'Family' });
   expect(registry.list()).toHaveLength(2);
 
   const renamed = registry.rename(family.vaultId, 'Sharma family');
   expect(renamed.name).toBe('Sharma family');
   expect(() => registry.rename(family.vaultId, '   ')).toThrow(VaultRegistryError);
 
-  // The active vault is protected — so one vault always remains.
-  expect(() => registry.delete(first.vaultId)).toThrow(VaultRegistryError);
-
-  registry.setActive(family.vaultId);
-  expect(registry.active().boot.vaultId).toBe(family.vaultId);
-
   registry.delete(first.vaultId);
   expect(registry.list()).toHaveLength(1);
   expect(existsSync(path.join(root, first.vaultId))).toBe(false);
   expect(registry.get(first.vaultId)).toBeUndefined();
+
+  // A gateway always hosts at least one vault.
+  expect(() => registry.delete(family.vaultId)).toThrow(VaultRegistryError);
 });
 
-test('the registry survives a restart: same vaults, same names, same active pointer', async () => {
+test('the registry survives a restart: same vaults, same names', async () => {
   const root = await tempDir();
   const first = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
-  const work = first.create('Work');
-  first.setActive(work.vaultId);
+  first.create('Work');
   const ids = first
     .list()
     .map((v) => v.vaultId)
@@ -80,17 +78,18 @@ test('the registry survives a restart: same vaults, same names, same active poin
       .map((v) => v.vaultId)
       .sort(),
   ).toEqual(ids);
-  expect(second.active().boot.vaultId).toBe(work.vaultId);
-  expect(second.active().name).toBe('Work');
-  expect(second.active().boot.fresh).toBe(false);
+  expect(second.list().map((v) => v.name)).toContain('Work');
+  expect(second.current().boot.fresh).toBe(false);
 });
 
-test('ctx.vault follows the active vault; grants stay per vault', async () => {
+test('current() resolves per request context; grants stay per vault (issue #289)', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
   const personal = registry.list()[0]!;
+  const work = registry.create('Work');
+
   registry.enrollApp('planner');
-  registry.active().approveGrant('planner', {
+  registry.current().approveGrant('planner', {
     purpose: 'dpv:ServiceProvision',
     scopes: [{ schema: 'schedule', verbs: 'read' }],
   });
@@ -100,29 +99,50 @@ test('ctx.vault follows the active vault; grants stay per vault', async () => {
     op: 'read' as const,
     payload: { entity: 'schedule.task', purpose: 'dpv:ServiceProvision' },
   };
+
+  // Unscoped call rides the default vault, where the grant lives.
   const allowed = await bridge(readReq);
   expect(allowed.ok).toBe(true);
 
-  // Switch to a fresh vault: the SAME bridge lands there, the app's identity
-  // is ensured on first call, but no grant exists — a receipted deny.
-  const work = registry.create('Work');
-  registry.setActive(work.vaultId);
-  const denied = await bridge(readReq);
+  // The SAME bridge, addressed to the other vault: the app's identity is
+  // ensured on first call, but no grant exists — a receipted deny.
+  const denied = await runWithVaultContext({ vaultId: work.vaultId }, () => bridge(readReq));
   expect(denied.ok).toBe(false);
   expect(denied.code).toBe('VAULT_CONSENT');
 
-  // Switching back restores access — the grant lived in the first vault all along.
-  registry.setActive(personal.vaultId);
-  const restored = await bridge(readReq);
-  expect(restored.ok).toBe(true);
+  // Two "clients" on two vaults, concurrently — neither disturbs the other.
+  const [a, b] = await Promise.all([
+    runWithVaultContext({ vaultId: personal.vaultId }, () => bridge(readReq)),
+    runWithVaultContext({ vaultId: work.vaultId }, () => bridge(readReq)),
+  ]);
+  expect(a.ok).toBe(true);
+  expect(b.ok).toBe(false);
 });
 
-test('owner routes: vault list / create / update / delete + per-vault selection', async () => {
+test('a vault created out of band (admin CLI) mounts on first lookup', async () => {
+  const root = await tempDir();
+  const registry = openRegistry(root);
+
+  // Second process (the admin CLI) creates a vault in the same root.
+  const cli = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });
+  const fresh = cli.create('Guest');
+  cli.stop();
+
+  // The running registry picks it up on the miss — no restart.
+  expect(registry.get(fresh.vaultId)?.name).toBe('Guest');
+  expect(registry.list().map((v) => v.vaultId)).toContain(fresh.vaultId);
+});
+
+test('owner routes: list + rename/presentation; create/delete are admin-plane (405)', async () => {
   const root = await tempDir();
   const registry = openRegistry(root);
   const handler = makeVaultRouteHandler(registry);
   const server = http.createServer((req, res) => {
-    void handler(req, res).then((owned) => {
+    // Stand-in for the composed handler: scope each request to the vault
+    // named by the addressing header, default vault otherwise.
+    const requested = req.headers['x-centraid-vault'];
+    const vaultId = typeof requested === 'string' ? requested : registry.defaultVaultId();
+    void runWithVaultContext({ vaultId }, () => handler(req, res)).then((owned) => {
       if (!owned) {
         res.statusCode = 404;
         res.end('{}');
@@ -135,46 +155,43 @@ test('owner routes: vault list / create / update / delete + per-vault selection'
   if (!addr || typeof addr === 'string') throw new Error('no address');
   const base = `http://127.0.0.1:${addr.port}/centraid/_vault`;
 
-  // Status names the active vault.
+  // Status names the request's vault.
   const status = (await (await fetch(`${base}/status`)).json()) as Record<string, unknown>;
-  expect(status).toMatchObject({ active: true, name: "Priya's vault" });
+  expect(status).toMatchObject({ name: "Priya's vault" });
 
-  // Create over HTTP; it does not steal the active seat.
-  const created = (await (
-    await fetch(`${base}/vaults`, { method: 'POST', body: JSON.stringify({ name: 'Family' }) })
-  ).json()) as { vaultId: string; name: string; active: boolean };
-  expect(created).toMatchObject({ name: 'Family', active: false });
+  // Vault create left the HTTP surface (#289): admin plane only.
+  const created = await fetch(`${base}/vaults`, {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Family' }),
+  });
+  expect(created.status).toBe(405);
 
+  // The admin creates one out of band; the list shows it.
+  const family = registry.create('Family');
   const listed = (await (await fetch(`${base}/vaults`)).json()) as { vaults: unknown[] };
   expect(listed.vaults).toHaveLength(2);
 
-  // Per-vault selection: enroll an app only in the new vault, then read
+  // Per-vault addressing: enroll an app only in the new vault, then read
   // both consent surfaces — they are disjoint.
-  registry.get(created.vaultId)!.enrollApp('planner');
-  const activeApps = (await (await fetch(`${base}/apps`)).json()) as { apps: unknown[] };
-  expect(activeApps.apps).toHaveLength(0);
-  const familyApps = (await (await fetch(`${base}/apps?vault=${created.vaultId}`)).json()) as {
-    apps: Array<{ name: string }>;
-  };
+  registry.get(family.vaultId)!.enrollApp('planner');
+  const defaultApps = (await (await fetch(`${base}/apps`)).json()) as { apps: unknown[] };
+  expect(defaultApps.apps).toHaveLength(0);
+  const familyApps = (await (
+    await fetch(`${base}/apps`, { headers: { 'x-centraid-vault': family.vaultId } })
+  ).json()) as { apps: Array<{ name: string }> };
   expect(familyApps.apps).toMatchObject([{ name: 'planner' }]);
-  const unknown = await fetch(`${base}/apps?vault=nope`);
-  expect(unknown.status).toBe(404);
 
-  // Update: rename, then activate.
+  // Rename + presentation ride PATCH; activation is not a server concept.
   const patched = (await (
-    await fetch(`${base}/vaults/${created.vaultId}`, {
+    await fetch(`${base}/vaults/${family.vaultId}`, {
       method: 'PATCH',
-      body: JSON.stringify({ name: 'Sharma family', active: true }),
+      body: JSON.stringify({ name: 'Sharma family', color: '#aa3355' }),
     })
-  ).json()) as { name: string; active: boolean };
-  expect(patched).toMatchObject({ name: 'Sharma family', active: true });
-  expect(registry.active().boot.vaultId).toBe(created.vaultId);
+  ).json()) as { name: string; color?: string };
+  expect(patched).toMatchObject({ name: 'Sharma family', color: '#aa3355' });
 
-  // Delete: the active vault 409s; a parked one goes, files and all.
-  const veto = await fetch(`${base}/vaults/${created.vaultId}`, { method: 'DELETE' });
-  expect(veto.status).toBe(409);
-  const original = registry.list().find((v) => !v.active)!;
-  const gone = await fetch(`${base}/vaults/${original.vaultId}`, { method: 'DELETE' });
-  expect(gone.status).toBe(200);
-  expect(existsSync(path.join(root, original.vaultId))).toBe(false);
+  // Vault delete left the HTTP surface too.
+  const veto = await fetch(`${base}/vaults/${family.vaultId}`, { method: 'DELETE' });
+  expect(veto.status).toBe(405);
+  expect(registry.list()).toHaveLength(2);
 });

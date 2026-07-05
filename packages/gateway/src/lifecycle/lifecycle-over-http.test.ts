@@ -31,7 +31,7 @@ function pathsUnder(dir: string): GatewayPaths {
 }
 /** The ACTIVE vault's per-app data dir (#280 — apps live inside the vault). */
 function vaultAppsDir(): string {
-  const vaultId = handle.vaults.active().boot.vaultId;
+  const vaultId = handle.vaults.current().boot.vaultId;
   return path.join(dataDir, 'vault', vaultId, 'apps');
 }
 

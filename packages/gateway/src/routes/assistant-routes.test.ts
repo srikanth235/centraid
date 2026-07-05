@@ -59,15 +59,15 @@ function fakeRegistry(): VaultRegistry {
     }),
   };
   return {
-    active: () => plane,
-    activeWorkspace: () => workspace,
+    current: () => plane,
+    currentWorkspace: () => workspace,
   } as unknown as VaultRegistry;
 }
 
 async function bootstrap(runner: ConversationRunner): Promise<string> {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), `assistant-routes-${crypto.randomUUID()}-`));
   const registry = fakeRegistry();
-  store = new ConversationHistoryStore(() => registry.activeWorkspace());
+  store = new ConversationHistoryStore(() => registry.currentWorkspace());
   const handler = makeAssistantRouteHandler({
     vaults: registry,
     conversationStore: store,

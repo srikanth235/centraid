@@ -1,27 +1,33 @@
 /*
- * The vault registry — the gateway's set of personal vaults under one root.
+ * The vault registry — the gateway's set of sovereign vaults under one root.
  *
  * Each vault is a `VaultPlane` in its own directory (`<root>/<vaultId>/`,
  * holding that vault's `vault.db` + `journal.db`); the vault's identity and
  * owner-facing name live inside its own `core_vault` row, so the registry
- * persists nothing but the ACTIVE pointer (`<root>/vaults.json`). Owner acts
- * (create / rename / switch / delete) land here; per-vault acts (grants,
- * parked confirmations) resolve a plane first and run unchanged.
+ * persists NOTHING at the root (issue #289 killed the `vaults.json` active
+ * pointer — the client owns its pointer now).
  *
- * `ctx.vault` follows the active vault: the app/agent bridges resolve the
- * active plane per call and ensure the caller's identity is enrolled there,
- * so switching vaults never strands a handler — deny-by-default still holds,
- * because enrollment is identity only and grants are per vault.
+ * The registry is a warm map of mounted planes keyed by vaultId. Every
+ * request resolves its vault via `current()` from the ambient request
+ * context (see `vault-context.ts`); there is no server-global active seat,
+ * so two clients on two vaults never disturb each other. Outside a scoped
+ * request (tests, boot paths that predate scoping) `current()` falls back
+ * to the default vault — the oldest one.
+ *
+ * Vault lifecycle is split across two planes (issue #289): create/delete are
+ * ADMIN acts (the server CLI, guarded by shell access — they no longer ride
+ * HTTP); rename/presentation are owner acts on an enrolled vault.
  */
 
-import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { uuidv7 } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane } from './vault-plane.js';
+import { vaultContext } from './vault-context.js';
 
 export interface VaultRegistryOptions {
-  /** Root directory: one subdirectory per vault, plus `vaults.json`. */
+  /** Root directory: one subdirectory per vault. */
   rootDir: string;
   logger: RuntimeLogger;
   /** Owner display name used when bootstrapping fresh vaults. */
@@ -30,11 +36,10 @@ export interface VaultRegistryOptions {
   sweepIntervalMs?: number;
 }
 
-/** One row of the owner's vault list. */
+/** One row of the vault list. */
 export interface VaultInfo {
   vaultId: string;
   name: string;
-  active: boolean;
   ownerPartyId: string;
   /** Presentation out of `core_vault.settings_json` (#280: profiles are vaults). */
   color?: string;
@@ -43,10 +48,10 @@ export interface VaultInfo {
 }
 
 /* eslint-disable max-classes-per-file -- error class is colocated with its module (#247) */
-/** A refused registry act (delete the active vault, unknown id, …). */
+/** A refused registry act (delete the last vault, unknown id, …). */
 export class VaultRegistryError extends Error {
   constructor(
-    readonly code: 'vault_not_found' | 'vault_active' | 'bad_name',
+    readonly code: 'vault_not_found' | 'vault_last' | 'bad_name',
     message: string,
   ) {
     super(message);
@@ -54,22 +59,15 @@ export class VaultRegistryError extends Error {
   }
 }
 
-const POINTER_FILE = 'vaults.json';
-
 export class VaultRegistry {
   private readonly rootDir: string;
   private readonly logger: RuntimeLogger;
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
   private readonly planes = new Map<string, VaultPlane>();
-  private activeId!: string;
+  /** Directories already mounted (or skipped) — lets `scan()` re-run cheaply. */
+  private readonly scannedDirs = new Set<string>();
   private started = false;
-  /**
-   * Host hook run after the active pointer moves (#280): the gateway
-   * re-roots its workspace here (registry sync, scheduler reconcile).
-   * Assigned post-construction — the registry opens before the runtime.
-   */
-  private activationHook: (() => Promise<void>) | undefined;
 
   constructor(options: VaultRegistryOptions) {
     this.rootDir = options.rootDir;
@@ -87,15 +85,20 @@ export class VaultRegistry {
     }
     this.scan();
     if (this.planes.size === 0) this.create();
-    this.activeId = this.resolveActivePointer();
   }
 
-  /** Mount every `<root>/<dir>/vault.db` found on disk. */
+  /**
+   * Mount every `<root>/<dir>/vault.db` found on disk. Re-runnable: a vault
+   * created by the admin CLI while the daemon is up is picked up on the
+   * first request that names it (see `get()`).
+   */
   private scan(): void {
     for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const dir = path.join(this.rootDir, entry.name);
+      if (this.scannedDirs.has(dir)) continue;
       if (!existsSync(path.join(dir, 'vault.db'))) continue;
+      this.scannedDirs.add(dir);
       try {
         const plane = this.openPlane(dir, {});
         if (this.planes.has(plane.boot.vaultId)) {
@@ -106,6 +109,7 @@ export class VaultRegistry {
           continue;
         }
         this.planes.set(plane.boot.vaultId, plane);
+        if (this.started) plane.start();
       } catch (err) {
         this.logger.warn(
           `vault registry: could not mount vault at ${dir}: ` +
@@ -125,37 +129,11 @@ export class VaultRegistry {
     });
   }
 
-  /**
-   * Load the active pointer, repairing it (oldest vault wins — ids are
-   * UUIDv7, so lexicographic order is creation order) when it is missing
-   * or names a vault that no longer exists.
-   */
-  private resolveActivePointer(): string {
-    const pointerPath = path.join(this.rootDir, POINTER_FILE);
-    let active: string | undefined;
-    try {
-      const raw = JSON.parse(readFileSync(pointerPath, 'utf8')) as { active?: unknown };
-      if (typeof raw.active === 'string') active = raw.active;
-    } catch {
-      // Missing or unreadable — repaired below.
-    }
-    if (active && this.planes.has(active)) return active;
-    const oldest = [...this.planes.keys()].sort()[0];
-    if (oldest === undefined) throw new Error('vault registry: no vault to activate');
-    this.writeActivePointer(oldest);
-    return oldest;
-  }
-
-  private writeActivePointer(vaultId: string): void {
-    writeFileSync(path.join(this.rootDir, POINTER_FILE), JSON.stringify({ active: vaultId }));
-  }
-
   private info(plane: VaultPlane): VaultInfo {
     const presentation = plane.presentation;
     return {
       vaultId: plane.boot.vaultId,
       name: plane.name,
-      active: plane.boot.vaultId === this.activeId,
       ownerPartyId: plane.boot.ownerPartyId,
       ...(presentation.color ? { color: presentation.color } : {}),
       ...(presentation.icon ? { icon: presentation.icon } : {}),
@@ -163,53 +141,67 @@ export class VaultRegistry {
     };
   }
 
-  /** The ACTIVE vault's workspace — the world app-engine operates in (#280). */
-  activeWorkspace(): VaultWorkspace {
-    return this.active().workspace;
-  }
-
-  /** Register the host's post-switch re-root hook (#280). */
-  setActivationHook(hook: () => Promise<void>): void {
-    this.activationHook = hook;
+  /**
+   * The default vault — the oldest one (ids are UUIDv7, so lexicographic
+   * order is creation order). The fallback for unscoped callers only; a
+   * scoped request always names its vault.
+   */
+  defaultVaultId(): string {
+    const oldest = [...this.planes.keys()].sort()[0];
+    if (oldest === undefined) throw new Error('vault registry: no vault mounted');
+    return oldest;
   }
 
   /**
-   * Run the host's activation hook (after `setActive`, and once at boot).
-   * The vault-routes PATCH awaits this so the renderer sees the new
-   * workspace fully mounted when the response lands.
+   * The vault the CURRENT request (or background fire) is addressed to,
+   * resolved from the ambient context (issue #289). Falls back to the
+   * default vault outside a scoped request.
    */
-  async settleActivation(): Promise<void> {
-    if (this.activationHook) await this.activationHook();
-  }
-
-  /** The active vault's plane — where `ctx.vault` and default owner acts land. */
-  active(): VaultPlane {
-    const plane = this.planes.get(this.activeId);
-    if (!plane) throw new Error(`vault registry: active vault ${this.activeId} is not mounted`);
+  current(): VaultPlane {
+    const ctx = vaultContext();
+    const vaultId = ctx?.vaultId ?? this.defaultVaultId();
+    const plane = this.get(vaultId);
+    if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
     return plane;
   }
 
-  /** Resolve one vault by id — `undefined` when unknown. */
+  /** The current request's workspace — the world app-engine operates in. */
+  currentWorkspace(): VaultWorkspace {
+    return this.current().workspace;
+  }
+
+  /** Resolve one vault by id — `undefined` when unknown. Rescans once on miss. */
   get(vaultId: string): VaultPlane | undefined {
+    const mounted = this.planes.get(vaultId);
+    if (mounted) return mounted;
+    // Miss → the admin CLI may have created it while we run; rescan once.
+    this.scan();
     return this.planes.get(vaultId);
   }
 
-  /** Every mounted vault, oldest first, active flagged. */
+  /** Every mounted vault, oldest first. */
   list(): VaultInfo[] {
     return [...this.planes.keys()].sort().map((id) => this.info(this.planes.get(id)!));
   }
 
-  /** Create (and mount) a fresh vault; it does NOT become active implicitly. */
+  /** Every mounted plane, oldest first (boot activation iterates these). */
+  planesList(): VaultPlane[] {
+    return [...this.planes.keys()].sort().map((id) => this.planes.get(id)!);
+  }
+
+  /** Create (and mount) a fresh vault. ADMIN act — CLI/host only, never HTTP. */
   create(name?: string): VaultInfo {
     const trimmed = name?.trim();
     if (trimmed !== undefined && trimmed.length === 0) {
       throw new VaultRegistryError('bad_name', 'a vault name cannot be empty');
     }
     const vaultId = uuidv7();
-    const plane = this.openPlane(path.join(this.rootDir, vaultId), {
+    const dir = path.join(this.rootDir, vaultId);
+    const plane = this.openPlane(dir, {
       vaultId,
       ...(trimmed ? { vaultName: trimmed } : {}),
     });
+    this.scannedDirs.add(dir);
     this.planes.set(plane.boot.vaultId, plane);
     if (this.started) plane.start();
     this.logger.info(`vault registry: created vault ${plane.boot.vaultId} ("${plane.name}")`);
@@ -236,48 +228,40 @@ export class VaultRegistry {
     return this.info(plane);
   }
 
-  /** Point the gateway's single active-vault seat at another vault. */
-  setActive(vaultId: string): VaultInfo {
-    const plane = this.require(vaultId);
-    this.activeId = vaultId;
-    this.writeActivePointer(vaultId);
-    this.logger.info(`vault registry: active vault is now ${vaultId} ("${plane.name}")`);
-    return this.info(plane);
-  }
-
   /**
    * Delete a vault: plane stopped, its directory (both SQLite files and the
-   * appext exports under it) removed. The ACTIVE vault is protected — switch
-   * first — which also guarantees at least one vault always remains.
+   * appext exports under it) removed. ADMIN act — CLI/host only, never HTTP.
+   * The LAST vault is protected so a gateway always has something to serve.
    */
   delete(vaultId: string): void {
     const plane = this.require(vaultId);
-    if (vaultId === this.activeId) {
+    if (this.planes.size === 1) {
       throw new VaultRegistryError(
-        'vault_active',
-        'cannot delete the active vault — switch to another vault first',
+        'vault_last',
+        'cannot delete the last vault — a gateway always hosts at least one',
       );
     }
     plane.stop();
     this.planes.delete(vaultId);
+    this.scannedDirs.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });
     this.logger.info(`vault registry: deleted vault ${vaultId} ("${plane.name}")`);
   }
 
   private require(vaultId: string): VaultPlane {
-    const plane = this.planes.get(vaultId);
+    const plane = this.get(vaultId);
     if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
     return plane;
   }
 
   /**
-   * The app-plane `ctx.vault` executor: every call rides the vault that is
-   * active WHEN IT RUNS, with the app's identity ensured there first (identity
-   * only — grants stay per vault, deny-by-default).
+   * The app-plane `ctx.vault` executor: every call rides the vault the
+   * CURRENT request is addressed to, with the app's identity ensured there
+   * first (identity only — grants stay per vault, deny-by-default).
    */
   bridgeFor(appId: string): VaultBridge {
     return async (call) => {
-      const plane = this.active();
+      const plane = this.current();
       plane.enrollApp(appId);
       return plane.bridgeFor(appId)(call);
     };
@@ -286,29 +270,29 @@ export class VaultRegistry {
   /** The agent-plane mirror of `bridgeFor` for automation fires. */
   agentBridgeFor(appId: string): VaultBridge {
     return async (call) => {
-      const plane = this.active();
+      const plane = this.current();
       plane.enrollAutomationAgent(appId);
       return plane.agentBridgeFor(appId)(call);
     };
   }
 
   /**
-   * Enroll a live app in the ACTIVE vault (identity only). Post-#280 an app
-   * is a vault asset — it lives in one vault's code store and is enrolled
-   * there alone, so `consent.app` now governs the vault's OWN apps.
+   * Enroll a live app in the current request's vault (identity only).
+   * Post-#280 an app is a vault asset — it lives in one vault's code store
+   * and is enrolled there alone, so `consent.app` governs the vault's OWN apps.
    */
   enrollApp(appId: string): void {
-    this.active().enrollApp(appId);
+    this.current().enrollApp(appId);
   }
 
-  /** Enroll an automation's acting identity in the ACTIVE vault. */
+  /** Enroll an automation's acting identity in the current request's vault. */
   enrollAutomationAgent(appId: string): void {
-    this.active().enrollAutomationAgent(appId);
+    this.current().enrollAutomationAgent(appId);
   }
 
-  /** Uninstall cascade in the ACTIVE vault (the app lives nowhere else, #280). */
+  /** Uninstall cascade in the current request's vault (the app lives nowhere else). */
   revokeApp(appId: string): { grantsRevoked: number } {
-    return this.active().revokeApp(appId);
+    return this.current().revokeApp(appId);
   }
 
   /** Start every plane's standing-duty clock; new vaults start on creation. */

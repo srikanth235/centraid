@@ -66,7 +66,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
             message: 'resolve body needs {refs: [{type, id}]}',
           });
         }
-        return sendJson(res, 200, opts.vaults.active().resolveAsOwner(refs));
+        return sendJson(res, 200, opts.vaults.current().resolveAsOwner(refs));
       }
 
       if (method === 'POST' && rest === '_turn') {
@@ -87,7 +87,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           return sendJson(res, 404, { error: 'not_found', message: 'No such assistant thread.' });
         }
 
-        const plane = opts.vaults.active();
+        const plane = opts.vaults.current();
         const extraSystemPrompt = buildAssistantPrompt(plane.name, plane.assistantContext());
 
         await driveTurnOverSse({
@@ -100,7 +100,7 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           extraSystemPrompt,
           runner: opts.runner,
           conversationStore: opts.conversationStore,
-          conversationRunnerSessionDir: opts.vaults.activeWorkspace().runnerSessionDir,
+          conversationRunnerSessionDir: opts.vaults.currentWorkspace().runnerSessionDir,
           conversationLocks: opts.conversationLocks,
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
           model: typeof body.model === 'string' ? body.model : undefined,

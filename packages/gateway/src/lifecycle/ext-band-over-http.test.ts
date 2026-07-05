@@ -66,7 +66,7 @@ afterEach(async () => {
 });
 
 async function writeWorktreeFiles(sessionId: string, files: Record<string, string>): Promise<void> {
-  const appDir = await (await handle.activeAppsStore()).snapshotSessionAppDir(sessionId, 'gym');
+  const appDir = await (await handle.appsStore()).snapshotSessionAppDir(sessionId, 'gym');
   for (const [rel, content] of Object.entries(files)) {
     const abs = path.join(appDir, rel);
     await fs.mkdir(path.dirname(abs), { recursive: true });
@@ -84,11 +84,11 @@ async function publish(sessionId: string, message: string): Promise<Response> {
 
 /** Owner-side vault SQL — the assertion window into the band. */
 function ownerSql(sql: string): Record<string, unknown>[] {
-  return handle.vaults.active().sqlAsOwner(sql).rows;
+  return handle.vaults.current().sqlAsOwner(sql).rows;
 }
 
 test('publish applies the declared ext band to the vault; re-publish diffs', async () => {
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await store.openSession('s1');
   await writeWorktreeFiles('s1', {
     'app.json': manifest(EXT_V1),
@@ -131,7 +131,7 @@ test('publish applies the declared ext band to the vault; re-publish diffs', asy
 });
 
 test('a draft session branches a scratch band seeded from live; reset re-snapshots', async () => {
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await store.openSession('s1');
   await writeWorktreeFiles('s1', {
     'app.json': manifest(EXT_V1),
@@ -139,7 +139,7 @@ test('a draft session branches a scratch band seeded from live; reset re-snapsho
   });
   expect((await publish('s1', 'v1')).status).toBe(201);
   // A live row the draft copy must carry.
-  const plane = handle.vaults.active();
+  const plane = handle.vaults.current();
   const live = plane.invokeAsAssistant({
     command: 'ext.gym.insert',
     input: { table: 'workout', values: { notes: 'live row' } },
@@ -186,7 +186,7 @@ test('a draft session branches a scratch band seeded from live; reset re-snapsho
 });
 
 test('a spec the vault refuses aborts the publish; main never advances', async () => {
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await store.openSession('s1');
   await writeWorktreeFiles('s1', {
     'app.json': manifest({
@@ -212,7 +212,7 @@ test('a spec the vault refuses aborts the publish; main never advances', async (
 });
 
 test('purge-ext over HTTP drops the app ext band and its data', async () => {
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await store.openSession('s1');
   await writeWorktreeFiles('s1', {
     'app.json': manifest(EXT_V1),
@@ -221,7 +221,7 @@ test('purge-ext over HTTP drops the app ext band and its data', async () => {
   expect((await publish('s1', 'v1')).status).toBe(201);
 
   // Seed a live row so the purge has something to reclaim.
-  const plane = handle.vaults.active();
+  const plane = handle.vaults.current();
   expect(
     plane.invokeAsAssistant({
       command: 'ext.gym.insert',
