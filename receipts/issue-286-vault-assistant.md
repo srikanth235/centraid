@@ -487,6 +487,9 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783272172-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 557 | 634106 | 564 | 1123 | 0.6693 | 337138 | 8224032 | 341776117 | 1257018 | feat(openclaw-plugin): drop the trio's OpenClaw agent tools; sweep silo docs (#2 |
 | claude-code-c0bf538c-2f5-1783272193-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 0 | 0 | 0 | 0 | 0 | 0.0000 | 337138 | 8224032 | 341776117 | 1257018 | feat(blueprints,skills): builder scaffolds Lane 1 — no migrations dir, the two-l |
 | claude-code-c0bf538c-2f5-1783272224-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 321 | 764 | 634663 | 349 | 1434 | 0.6649 | 337459 | 8224796 | 342410780 | 1257367 | feat(desktop): remove the silo browser; knobs ride the settings route (#286)The  |
+| claude-code-c0bf538c-2f5-1783274257-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 60615 | 159131 | 12872100 | 43511 | 263257 | 8.8215 | 398074 | 8383927 | 355282880 | 1300878 |  |
+| claude-code-c0bf538c-2f5-1783274279-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 2 | 665 | 86041 | 172 | 839 | 0.0515 | 398076 | 8384592 | 355368921 | 1301050 |  |
+| claude-code-c0bf538c-2f5-1783274305-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 957 | 690 | 260118 | 1530 | 3177 | 0.1774 | 399033 | 8385282 | 355629039 | 1302580 |  |
 
 ### Steering
 

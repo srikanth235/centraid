@@ -1,0 +1,312 @@
+{
+  "manifestVersion": 1,
+  "id": "locker",
+  "name": "Locker",
+  "description": "Everything, locked up — a personal password manager as a projection of the vault. Logins, cards, secure notes, identities, Wi-Fi and standalone passwords, each an owner-only locker.item. Copy and reveal are the only ways a secret leaves a field; secrets never ride a list payload and are never logged. One-time codes are real RFC-6238 TOTP computed client-side after the seed is read; the password generator runs entirely in the browser. Watchtower flags weak, reused and compromised passwords — weak and reused are derived server-side from the passwords it holds, compromised is a stored breach flag. Favorites are the canonical flags-scheme star (a photo favorited in Photos shows in Starred here too); tags are free-form. Adding, editing, trashing, restoring, purging and starring all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.1.0",
+  "iconKey": "Lock",
+  "colorKey": "indigo",
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Keeps your passwords, cards and secrets locked up, revealable and restorable.",
+    "scopes": [
+      { "schema": "locker", "table": "item", "verbs": "read" },
+      { "schema": "locker", "table": "item_tag", "verbs": "read" },
+      { "schema": "core", "table": "tag", "verbs": "read" },
+      { "schema": "core", "table": "concept", "verbs": "read" },
+      { "schema": "core", "table": "concept_scheme", "verbs": "read" },
+      { "schema": "locker", "table": "add_item", "verbs": "act" },
+      { "schema": "locker", "table": "edit_item", "verbs": "act" },
+      { "schema": "locker", "table": "trash_item", "verbs": "act" },
+      { "schema": "locker", "table": "restore_item", "verbs": "act" },
+      { "schema": "locker", "table": "purge_item", "verbs": "act" },
+      { "schema": "locker", "table": "star_item", "verbs": "act" },
+      { "schema": "locker", "table": "unstar_item", "verbs": "act" }
+    ]
+  },
+  "actions": [
+    {
+      "name": "add-item",
+      "description": "Save a new item through locker.add_item — a login, card, secure note, identity, Wi-Fi or standalone password. Secret fields not belonging to the chosen type are dropped, never stored.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["login", "card", "note", "identity", "wifi", "password"]
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "username": { "type": "string" },
+          "password": { "type": "string" },
+          "url": { "type": "string" },
+          "otp_seed": { "type": "string" },
+          "notes": { "type": "string" },
+          "cardholder": { "type": "string" },
+          "card_number": { "type": "string" },
+          "expiry": { "type": "string" },
+          "cvv": { "type": "string" },
+          "brand": { "type": "string" },
+          "content": { "type": "string" },
+          "fullname": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "address": { "type": "string" },
+          "network": { "type": "string" }
+        },
+        "required": ["type", "title"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "edit-item",
+      "description": "Rewrite an item's fields and tags through locker.edit_item. Refuses trashed items.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "item_id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "username": { "type": "string" },
+          "password": { "type": "string" },
+          "url": { "type": "string" },
+          "otp_seed": { "type": "string" },
+          "notes": { "type": "string" },
+          "cardholder": { "type": "string" },
+          "card_number": { "type": "string" },
+          "expiry": { "type": "string" },
+          "cvv": { "type": "string" },
+          "brand": { "type": "string" },
+          "content": { "type": "string" },
+          "fullname": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "address": { "type": "string" },
+          "network": { "type": "string" }
+        },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "trash-item",
+      "description": "Move an item to the trash through locker.trash_item; it keeps its star and auto-purges about 30 days later.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-item",
+      "description": "Bring an item back from the trash through locker.restore_item.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "purge-item",
+      "description": "Erase an item for good through locker.purge_item — permanent and irreversible, so it is confirmed.",
+      "confirmation": "required",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "star-item",
+      "description": "Star an item through locker.star_item — one flags-scheme tag on the item, the same star every other surface reads. Idempotent; refuses trashed items.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "unstar-item",
+      "description": "Remove an item's star through locker.unstar_item. Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    }
+  ],
+  "queries": [
+    {
+      "name": "items",
+      "description": "A bounded window of non-trashed items (caller-sized via limit, default 300), newest-updated first, each decorated with its favorite star, free-form tags, a safe subtitle and derived Watchtower status (weak / reused / compromised). Secrets are NEVER in this payload — passwords, card numbers, CVVs, OTP seeds and note bodies stay out; open a single item to read them. truncated=true means older items exist beyond the window.",
+      "input": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 20, "maximum": 2000 } },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "items": { "type": "array" },
+          "truncated": { "type": "boolean" },
+          "window": { "type": "integer" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "item",
+      "description": "One item's full decrypted fields for the detail pane — the only query that returns secrets, and only for the single item the owner opened.",
+      "input": {
+        "type": "object",
+        "properties": { "item_id": { "type": "string", "minLength": 1 } },
+        "required": ["item_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "item": { "type": ["object", "null"] },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Match items by title, username or url within the bounded window, returning the same secret-free row shape as items. Matching happens server-side over fields the payload never returns.",
+      "input": {
+        "type": "object",
+        "properties": { "term": { "type": "string" } },
+        "required": ["term"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": { "items": { "type": "array" }, "vaultDenied": { "type": "object" } }
+      }
+    },
+    {
+      "name": "watchtower",
+      "description": "The security review: compromised / weak / reused counts plus the needs-attention items (secret-free row shape), derived server-side from the passwords the vault holds.",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": {
+          "compromised": { "type": "integer" },
+          "weak": { "type": "integer" },
+          "reused": { "type": "integer" },
+          "items": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "trash",
+      "description": "Trashed items with their purge dates (secret-free row shape).",
+      "input": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output": {
+        "type": "object",
+        "properties": { "items": { "type": "array" }, "vaultDenied": { "type": "object" } }
+      }
+    }
+  ],
+  "knobs": [
+    {
+      "key": "appFont",
+      "label": "Font",
+      "type": "segmented",
+      "default": "sans",
+      "options": [
+        { "value": "sans", "label": "Sans" },
+        { "value": "mono", "label": "Mono" }
+      ]
+    },
+    {
+      "key": "appColor",
+      "label": "Color",
+      "type": "swatch",
+      "default": "#2F63E6",
+      "options": [
+        { "value": "#2F63E6", "label": "Steel" },
+        { "value": "#4E68DD", "label": "Indigo" },
+        { "value": "#2FA36B", "label": "Green" },
+        { "value": "#7C5BD9", "label": "Violet" },
+        { "value": "#3AA6B9", "label": "Cyan" }
+      ]
+    }
+  ]
+}

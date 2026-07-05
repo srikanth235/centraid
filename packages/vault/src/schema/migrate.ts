@@ -12,6 +12,8 @@ import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
 import { PEOPLE_DDL } from './domains-people.js';
+import { LOCKER_DDL } from './domains-locker.js';
+import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
 
@@ -55,6 +57,8 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     HOME_DDL,
     BUSINESS_DDL,
     PEOPLE_DDL,
+    LOCKER_DDL,
+    TALLY_DDL,
   ].join('\n'),
   // v2: the text-search plane — FTS5 shadow tables + sync triggers, with a
   // backfill so a pre-index vault becomes searchable on first open.

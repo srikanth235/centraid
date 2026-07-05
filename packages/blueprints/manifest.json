@@ -618,6 +618,157 @@
       ]
     },
     {
+      "id": "locker",
+      "name": "Locker",
+      "desc": "Everything, locked up — a password manager for logins, cards, notes and secrets, with Watchtower and a generator.",
+      "colorKey": "indigo",
+      "iconKey": "Lock",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/add-item.js",
+        "actions/edit-item.js",
+        "actions/purge-item.js",
+        "actions/restore-item.js",
+        "actions/star-item.js",
+        "actions/trash-item.js",
+        "actions/unstar-item.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/item.js",
+        "queries/items.js",
+        "queries/search.js",
+        "queries/trash.js",
+        "queries/watchtower.js"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#2F63E6",
+          "options": [
+            {
+              "value": "#2F63E6",
+              "label": "Steel"
+            },
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#2FA36B",
+              "label": "Green"
+            },
+            {
+              "value": "#7C5BD9",
+              "label": "Violet"
+            },
+            {
+              "value": "#3AA6B9",
+              "label": "Cyan"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tally",
+      "name": "Tally",
+      "desc": "Split, settled — track shared expenses across groups and friends, see who owes whom, and settle up.",
+      "colorKey": "forest",
+      "iconKey": "Receipt",
+      "version": "0.1.0",
+      "kind": "app",
+      "files": [
+        "actions/add-expense.js",
+        "actions/add-friend.js",
+        "actions/add-group-member.js",
+        "actions/create-group.js",
+        "actions/delete-expense.js",
+        "actions/delete-group.js",
+        "actions/edit-expense.js",
+        "actions/remove-group-member.js",
+        "actions/rename-group.js",
+        "actions/settle-up.js",
+        "app.css",
+        "app.js",
+        "app.json",
+        "index.html",
+        "package.json",
+        "queries/activity.js",
+        "queries/dashboard.js",
+        "queries/friend.js",
+        "queries/group.js",
+        "queries/search.js"
+      ],
+      "appKnobs": [
+        {
+          "key": "appFont",
+          "label": "Font",
+          "type": "segmented",
+          "default": "sans",
+          "options": [
+            {
+              "value": "sans",
+              "label": "Sans"
+            },
+            {
+              "value": "mono",
+              "label": "Mono"
+            }
+          ]
+        },
+        {
+          "key": "appColor",
+          "label": "Color",
+          "type": "swatch",
+          "default": "#0FA678",
+          "options": [
+            {
+              "value": "#0FA678",
+              "label": "Emerald"
+            },
+            {
+              "value": "#2EA098",
+              "label": "Teal"
+            },
+            {
+              "value": "#4E68DD",
+              "label": "Indigo"
+            },
+            {
+              "value": "#E8923C",
+              "label": "Amber"
+            },
+            {
+              "value": "#E0567A",
+              "label": "Rose"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "id": "briefing",
       "name": "Briefing",
       "desc": "A scannable catch-up on your calendar, inbox, and messages — waiting for you each evening.",

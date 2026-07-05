@@ -48,6 +48,7 @@ import {
   registerFinanceCommands,
   registerHealthCommands,
   registerHomeCommands,
+  registerLockerCommands,
   registerKnowledgeCommands,
   registerLinkCommands,
   registerMediaCommands,
@@ -55,6 +56,7 @@ import {
   registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
+  registerTallyCommands,
   registerTaskCommands,
   type AgentSummary,
   type AppSummary,
@@ -179,6 +181,8 @@ export class VaultPlane {
     registerDocumentCommands(this.gateway);
     registerHomeCommands(this.gateway);
     registerPeopleCommands(this.gateway);
+    registerLockerCommands(this.gateway);
+    registerTallyCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
