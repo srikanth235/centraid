@@ -51,8 +51,8 @@ export interface OpenclawFireOptions {
   /** `<appId>/<automationId>` handle of the automation to fire. */
   automationRef: string;
   /**
-   * Directory holding the gateway's per-app DATA folders
-   * (`<appsDir>/<id>/data.sqlite`). Stable across version
+   * Directory holding the gateway's per-app STATE folders
+   * (logs, settings.json). Stable across version
    * swaps — this is NOT where code lives (issue #137).
    */
   appsDir: string;

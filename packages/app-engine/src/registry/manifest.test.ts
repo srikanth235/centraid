@@ -156,10 +156,10 @@ describe('validateManifest', () => {
     expect(out.queries.length).toBe(2);
   });
 
-  it('treats tables as optional', () => {
+  it('treats the ext band as optional', () => {
     const m = baseManifest();
     const out = validateManifest(m);
-    expect(out.tables).toBe(undefined);
+    expect(out.ext).toBe(undefined);
   });
 
   it('omits kind when absent and carries an automation kind through', () => {

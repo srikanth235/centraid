@@ -80,8 +80,8 @@ test('7.3 — a chat turn streams an assistant reply and a SQL tool result', asy
       data: {
         type: 'tool.start',
         toolCallId: 't1',
-        toolName: 'centraid_sql_read',
-        sql: 'SELECT count(*) FROM notes',
+        toolName: 'vault_sql',
+        sql: 'SELECT count(*) FROM notes_note',
       },
       delayMs: 20,
     },
@@ -89,7 +89,7 @@ test('7.3 — a chat turn streams an assistant reply and a SQL tool result', asy
       data: {
         type: 'tool.result',
         toolCallId: 't1',
-        toolName: 'centraid_sql_read',
+        toolName: 'vault_sql',
         ok: true,
         result: { rows: [[3]] },
       },

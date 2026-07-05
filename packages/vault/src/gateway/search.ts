@@ -15,6 +15,7 @@ import { nowIso } from '../ids.js';
 import { SEARCHABLE } from '../schema/fts.js';
 import { resolveEntity } from '../schema/tables.js';
 import { evaluateConsent } from './consent.js';
+import { extSearchable } from './ext.js';
 import { writeReceipt } from './evidence.js';
 import { applyFieldMask, compileFilters } from './filters.js';
 import type { Identity, SearchRequest, SearchResult } from './types.js';
@@ -56,9 +57,12 @@ export function searchEntity(
     });
     throw new GatewayError('consent', `deny (receipt ${receiptId}): ${failing}`);
   };
-  const ref = resolveEntity(request.entity);
+  const ref = resolveEntity(request.entity, db.vault);
   if (!ref) return deny(`unknown entity ${request.entity}`);
-  const spec = ref.file === 'vault' ? SEARCHABLE[request.entity] : undefined;
+  const spec =
+    ref.file === 'vault'
+      ? (SEARCHABLE[request.entity] ?? extSearchable(db.vault, request.entity))
+      : undefined;
   if (!spec) {
     throw new GatewayError('contract', `entity ${request.entity} is not text-searchable`);
   }
@@ -79,7 +83,7 @@ export function searchEntity(
   // Folded-in canonical text needs its own read consent — matching a note
   // body IS reading core.content_item.
   for (const extra of spec.alsoConsent) {
-    const extraRef = resolveEntity(extra);
+    const extraRef = resolveEntity(extra, db.vault);
     if (!extraRef) return deny(`search index folds in unknown entity ${extra}`, consent.grantId);
     const extraConsent = evaluateConsent(
       db.vault,

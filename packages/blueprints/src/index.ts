@@ -12,8 +12,8 @@
  * "clone and deploy" starting points. Each template folder lives under a
  * kind-segment directory — `apps/<id>/` for full UI apps (`apps/agenda/`,
  * `apps/notes/`, `apps/vitals/`, …) and `automations/<id>/` for automation
- * apps — and is a fully-formed app (HTML/CSS/JS + queries/ + actions/ +
- * migrations/) — identical in shape to an app the user authors themselves.
+ * apps — and is a fully-formed app (HTML/CSS/JS + queries/ + actions/) —
+ * identical in shape to an app the user authors themselves.
  * Two layers stack on top of the bundle:
  *   - A user-data cache that can hold newer copies pulled from a remote URL.
  *   - A resolver that picks bundle-or-cache per template, preferring the

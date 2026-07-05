@@ -31,12 +31,40 @@ export interface RunnerPrefs {
   extraArgs?: string[];
 }
 
+/** What one `vault_sql` tool call returns to the model (rows + caps). */
+export interface VaultSqlToolResult {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  totalRows: number;
+  truncated: boolean;
+  durationMs: number;
+}
+
 /**
- * Per-turn binding that lets adapters register the three structured
- * centraid tools (`centraid_describe`, `centraid_read`, `centraid_write`)
- * and emit precise, provenanced change-bus events. Optional — when
- * absent (builder mode, tests), adapters fall back to no tool registration
- * and the legacy `centraid` CLI is the only SQL surface available.
+ * The vault assistant's read tool: one read-only SELECT over the ACTIVE
+ * vault's whole canonical model. The gateway threads an owner-credentialed
+ * runner in here; a refused/broken statement throws with the message the
+ * model needs to self-correct.
+ */
+export type VaultSqlRunner = (sql: string) => Promise<VaultSqlToolResult> | VaultSqlToolResult;
+
+/**
+ * The vault assistant's write tool (issue #286 phase 2): one typed vault
+ * command. The gateway executes it as the enrolled `_assistant` agent, so
+ * high-risk commands PARK for owner confirmation — the returned outcome
+ * (`executed` / `parked` / `denied` / `failed`) is handed back to the
+ * model verbatim so it can relay what happened.
+ */
+export type VaultInvokeRunner = (call: {
+  command: string;
+  input: Record<string, unknown>;
+}) => Promise<unknown> | unknown;
+
+/**
+ * Per-turn binding that lets adapters register the vault-register tools
+ * (`vault_sql` / `vault_invoke`, when the runners below are threaded in)
+ * and emit provenanced change-bus events. Optional — when absent (tests),
+ * adapters register no data tools.
  */
 export interface ToolContext {
   /**
@@ -63,6 +91,17 @@ export interface ToolContext {
    * data without touching live rows. Absent on the data-only chat backend.
    */
   overrideCodeDir?: string;
+  /**
+   * The vault-assistant register: when set, the adapters expose the vault
+   * tools — `vault_sql` (owner-side read-only SQL over the whole vault)
+   * and, when `vaultInvoke` is also set, `vault_invoke` (typed commands,
+   * parked when high-risk) — instead of the app-scoped `centraid_*` trio.
+   * A vault-register turn is not scoped to an app silo, so the trio would
+   * only error; the registers swap, never mix.
+   */
+  vaultSql?: VaultSqlRunner;
+  /** The write half of the vault register — only read when `vaultSql` is set. */
+  vaultInvoke?: VaultInvokeRunner;
 }
 
 /**

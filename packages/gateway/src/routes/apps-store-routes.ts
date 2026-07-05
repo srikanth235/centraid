@@ -23,8 +23,8 @@
 //          → { sessionId, message }
 //   POST   /centraid/_apps/<appId>/rollback          forward-only rollback
 //          → { versionTag }
-//   POST   /centraid/_apps/<appId>/reset-data        re-seed draft data
-//          → { sessionId } — VACUUM live + replay pending migrations (#144)
+//   POST   /centraid/_apps/<appId>/reset-data        re-seed the draft band
+//          → { sessionId } — fresh live snapshot of the app's ext tables (#286)
 //   GET    /centraid/_apps/<appId>/git-versions      tag-driven history
 //   DELETE /centraid/_apps/<appId>                   remove app from main
 //
@@ -36,12 +36,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { MigrationError } from '@centraid/app-engine';
+import { ExtSpecError } from '@centraid/vault';
 import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { readBody, readJson, sendJson } from './route-helpers.js';
 import { validateManifestAt } from '../validate-manifest.js';
-import { runPublishMigrations } from '../lifecycle/publish-migrations.js';
-import { seedDraftData } from '../lifecycle/draft-data.js';
+import { applyExtOnPublish, readExtSpecs, type ExtBandOps } from '../lifecycle/ext-band.js';
 
 // Re-exported so existing importers (lifecycle-shared) keep their path; the
 // implementation moved to validate-manifest.ts (issue #167, file-size hygiene).
@@ -77,12 +76,13 @@ export interface AppsStoreRouteOptions {
    */
   onAppDeleted?: (appId: string) => Promise<void>;
   /**
-   * Resolve an app's LIVE `data.sqlite` path (`<appsDir>/<appId>/data.sqlite`).
-   * Injected so publish can run the session's committed migrations against
-   * live data before the ff-merge (issue #144) — the store itself stays
-   * data-agnostic. Omitted on backends without a live data tree.
+   * The vault plane's ext-band operations (issue #286 phase 2). Injected
+   * so publish applies the session's declared extension tables to the
+   * vault before the ff-merge, and reset-data re-snapshots the draft band —
+   * the store itself stays data-agnostic. Omitted on hosts without a
+   * vault plane.
    */
-  liveDataFile?: (appId: string) => string;
+  ext?: ExtBandOps;
 }
 
 /**
@@ -117,7 +117,7 @@ export function makeAppsStoreRouteHandler(
 
       // ---- session lifecycle: /_apps/_sessions[/<id>] ----
       if (segments[1] === '_sessions') {
-        return await handleSessions(store, req, res, method, segments);
+        return await handleSessions(store, req, res, method, segments, opts.ext);
       }
 
       // Everything else is /_apps/<appId>[/<verb>]
@@ -150,13 +150,13 @@ export function makeAppsStoreRouteHandler(
       }
 
       if (verb === 'publish' && method === 'POST') {
-        return await handlePublish(store, req, res, appId, opts.onAppLive, opts.liveDataFile);
+        return await handlePublish(store, req, res, appId, opts.onAppLive, opts.ext);
       }
       if (verb === 'rollback' && method === 'POST') {
         return await handleRollback(store, req, res, appId, opts.onAppLive);
       }
       if (verb === 'reset-data' && method === 'POST') {
-        return await handleResetData(store, req, res, appId, opts.liveDataFile);
+        return await handleResetData(store, req, res, appId, opts.ext);
       }
       if (verb === 'git-versions' && method === 'GET') {
         const versions = await store.listVersions(appId);
@@ -180,6 +180,7 @@ async function handleSessions(
   res: ServerResponse,
   method: string,
   segments: string[],
+  ext?: ExtBandOps,
 ): Promise<boolean> {
   if (segments.length === 2) {
     if (method === 'POST') {
@@ -200,6 +201,18 @@ async function handleSessions(
   }
   if (segments.length === 3 && method === 'DELETE') {
     const sessionId = decodeURIComponent(segments[2] ?? '');
+    // Discard the session's scratch ext bands with its worktree — a closed
+    // draft leaves no data residue (best-effort: the worktree may already
+    // be gone, and an app may have no band at all).
+    if (ext) {
+      for (const appId of await store.sessionAppIds(sessionId)) {
+        try {
+          ext.dropAppExtDraft(appId);
+        } catch {
+          /* draft cleanup must never block a session close */
+        }
+      }
+    }
     await store.closeSession(sessionId);
     sendJson(res, 200, { sessionId });
     return true;
@@ -213,7 +226,7 @@ async function handlePublish(
   res: ServerResponse,
   appId: string,
   onAppLive?: (appId: string) => Promise<void>,
-  liveDataFile?: (appId: string) => string,
+  ext?: ExtBandOps,
 ): Promise<boolean> {
   const body = await readJson(req);
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -234,28 +247,28 @@ async function handlePublish(
     return true;
   }
 
-  // Migrate LIVE data as part of publish (#144): the `migrate` hook fires
-  // inside the store's mutex, post-rebase + pre-ff-merge, so migrations apply
-  // against the exact tree going live. A failure aborts the publish untouched.
+  // Apply the declared ext band to the vault as part of publish (#286
+  // phase 2): the `beforeMerge` hook fires inside the store's mutex,
+  // post-rebase + pre-ff-merge, so the specs applied are the exact tree
+  // going live. A refused spec aborts the publish, vault untouched.
   let result;
+  let extOutcome: { created: string[]; dropped: string[]; altered: string[] } | undefined;
   try {
     result = await store.publish({
       sessionId,
       appId,
       message,
-      ...(liveDataFile
-        ? { migrate: (dir: string) => runPublishMigrations(dir, liveDataFile(appId)) }
+      ...(ext
+        ? {
+            beforeMerge: async (dir: string) => {
+              extOutcome = await applyExtOnPublish(ext, appId, dir);
+            },
+          }
         : {}),
     });
   } catch (err) {
-    if (err instanceof MigrationError) {
-      const status = err.code === 'sql_failed' ? 422 : 400;
-      sendJson(res, status, {
-        error: err.code,
-        message: err.message,
-        file: err.file,
-        sqlError: err.sqlError,
-      });
+    if (err instanceof ExtSpecError) {
+      sendJson(res, 400, { error: 'invalid_ext_spec', message: err.message });
       return true;
     }
     throw err;
@@ -266,7 +279,7 @@ async function handlePublish(
     versionTag: result.versionTag,
     sha: result.sha,
     activated: true,
-    migrationsApplied: result.migrationsApplied,
+    ...(extOutcome ? { ext: extOutcome } : {}),
   });
   return true;
 }
@@ -291,18 +304,18 @@ async function handleRollback(
 }
 
 /**
- * Re-seed a draft session's branched `data.sqlite` from a fresh prod snapshot
- * + replay its pending migrations (issue #144). Doubles as a dress rehearsal
- * of the publish migration against real prod data: a migration incompatible
- * with live rows fails here and the SQL error surfaces inline (422), letting
- * the author hit it in preview before publishing.
+ * Re-snapshot a draft session's ext band from live (issue #286 phase 2) —
+ * the preview "Reset data" control. Reads the DRAFT manifest's declared
+ * tables and rebuilds the scratch band with a fresh copy of live rows.
+ * Doubles as a dress rehearsal of the publish DDL: a spec the vault
+ * refuses surfaces inline (400) before the author publishes.
  */
 async function handleResetData(
   store: WorktreeStore,
   req: IncomingMessage,
   res: ServerResponse,
   appId: string,
-  liveDataFile?: (appId: string) => string,
+  ext?: ExtBandOps,
 ): Promise<boolean> {
   const body = await readJson(req);
   const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
@@ -310,29 +323,23 @@ async function handleResetData(
     sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs { sessionId }' });
     return true;
   }
-  if (!liveDataFile) {
-    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs a live data backend' });
+  if (!ext) {
+    sendJson(res, 400, { error: 'bad_request', message: 'reset-data needs a vault plane' });
     return true;
   }
   // Throws `session_missing` (→ 404) via the outer handler when the worktree
   // isn't open.
   const worktreeAppDir = await store.snapshotSessionAppDir(sessionId, appId);
   try {
-    const out = await seedDraftData({
-      liveDataFile: liveDataFile(appId),
-      worktreeAppDir,
-      force: true,
-    });
-    sendJson(res, 200, { id: appId, seeded: out.seeded, migrationsApplied: out.migrationsApplied });
+    const specs = await readExtSpecs(worktreeAppDir);
+    const out =
+      specs.length === 0
+        ? { ...ext.dropAppExtDraft(appId), created: [], altered: [] }
+        : ext.seedAppExtDraft(appId, specs, { reset: true });
+    sendJson(res, 200, { id: appId, ext: out });
   } catch (err) {
-    if (err instanceof MigrationError) {
-      const status = err.code === 'sql_failed' ? 422 : 400;
-      sendJson(res, status, {
-        error: err.code,
-        message: err.message,
-        file: err.file,
-        sqlError: err.sqlError,
-      });
+    if (err instanceof ExtSpecError) {
+      sendJson(res, 400, { error: 'invalid_ext_spec', message: err.message });
       return true;
     }
     throw err;

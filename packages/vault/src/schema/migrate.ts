@@ -6,6 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { CONSENT_DDL } from './consent.js';
+import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
@@ -66,6 +67,9 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   RELATION_BACKFILL_DDL,
   // v4: standoff anchors for inline references (issue #282) — backfills empty.
   LINK_ANCHOR_DDL,
+  // v5: the ext-band registry (issue #286 phase 2) — app-declared extension
+  // tables live inside vault.db; this table tracks their declared specs.
+  APP_EXT_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

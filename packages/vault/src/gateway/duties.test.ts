@@ -256,7 +256,7 @@ async function fileBackedVault(): Promise<{ gw2: Gateway; owner2: Credential }> 
   return { gw2, owner2: { kind: 'device', deviceId: boot2.deviceId, deviceKey: boot2.deviceKey } };
 }
 
-test('file custody: checkpoint, verifiable backup, appext lifecycle through revocation', async () => {
+test('file custody: checkpoint, verifiable backup; ext band retained through revocation', async () => {
   const { gw2, owner2 } = await fileBackedVault();
   expect(gw2.checkpoint(owner2)).toEqual({ vault: 'truncated', journal: 'truncated' });
 
@@ -267,7 +267,8 @@ test('file custody: checkpoint, verifiable backup, appext lifecycle through revo
   expect(existsSync(backup.journalPath)).toBe(true);
   expect(backup.vaultSha256).toMatch(/^[0-9a-f]{64}$/);
 
-  // appext: created for the app, deleted when its last grant is revoked.
+  // ext band: applied for the app, RETAINED (not dropped) when its last
+  // grant is revoked — the data is the owner's; purging is a separate act.
   if (!fileDb) throw new Error('vault gone');
   const app = enrollApp(fileDb, { name: 'gen-app', origin: 'generated' });
   const bootRow = fileDb.vault.prepare('SELECT owner_party_id FROM core_vault').get() as {
@@ -282,11 +283,20 @@ test('file custody: checkpoint, verifiable backup, appext lifecycle through revo
     grantedByPartyId: bootRow.owner_party_id,
     scopes: [{ schema: 'schedule', verbs: 'read' }],
   });
-  const extPath = gw2.createAppExt(owner2, app.appId);
-  expect(existsSync(extPath)).toBe(true);
+  gw2.applyAppExt(owner2, 'gen-app', [
+    {
+      name: 'scratch',
+      columns: [{ name: 'scratch_id', type: 'text', primaryKey: true }],
+    },
+  ]);
   const revocation = gw2.revokeGrant(owner2, grantId);
-  expect(revocation.appExtDeleted).toBe(true);
-  expect(existsSync(extPath)).toBe(false); // uninstall = revoke + delete, zero residue
+  expect(revocation.extRetained).toEqual(['scratch']);
+  const row = fileDb.vault
+    .prepare(
+      `SELECT status FROM consent_app_ext WHERE app_id = 'gen-app' AND table_name = 'scratch'`,
+    )
+    .get() as { status: string };
+  expect(row.status).toBe('retained'); // table + rows survive uninstall
 });
 
 test('file custody refuses in-memory vaults', () => {

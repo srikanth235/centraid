@@ -29,8 +29,26 @@ import {
 import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
 import { authenticate } from './identity.js';
 import { searchEntity } from './search.js';
+import {
+  runReadOnlySql,
+  VAULT_SQL_DEFAULT_ROWS,
+  type VaultSqlRequest,
+  type VaultSqlResult,
+} from './sql.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
-import { backupVault, checkpointVault, createAppExt, type BackupResult } from './custody.js';
+import { backupVault, checkpointVault, type BackupResult } from './custody.js';
+import {
+  applyExtBand,
+  dropExtBand,
+  extAppIds,
+  extCommandDefinitions,
+  extCommandNames,
+  purgeExtBand,
+  retainExtBand,
+  seedExtDraft,
+  type ExtApplyOutcome,
+} from './ext.js';
+import type { ExtTableSpec } from '../schema/ext.js';
 import { exportVault, type VaultExport } from './portability.js';
 import { queryAppView, registerAppView, type ViewDefinition, type ViewResult } from './views.js';
 import type {
@@ -136,7 +154,7 @@ export class Gateway {
   /** Consent-checked read: row filters and field masks applied, receipted. */
   read(cred: Credential, request: ReadRequest): ReadResult {
     const identity = this.identify(cred);
-    const ref = resolveEntity(request.entity);
+    const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref) {
       const receiptId = writeReceipt(this.db.journal, {
         grantId: null,
@@ -216,6 +234,50 @@ export class Gateway {
   }
 
   /**
+   * The owner's whole-model SQL read (the vault assistant's primary tool):
+   * one read-only statement over the full canonical schema — joins, window
+   * functions, recursive CTEs over core_link. Owner-device credential only;
+   * no consent clamping applies because there is no third party in the
+   * loop, but every run is receipted like any other read.
+   */
+  sql(cred: Credential, request: VaultSqlRequest): VaultSqlResult {
+    const identity = this.identify(cred);
+    const purpose = request.purpose ?? 'owner-assistant';
+    if (identity.kind !== 'owner-device') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: null,
+        invocationId: null,
+        action: 'read',
+        objectType: 'vault.sql',
+        objectId: null,
+        purpose,
+        decision: 'deny',
+        detail: { failing: 'whole-model sql is owner-only' },
+      });
+      throw new GatewayError(
+        'consent',
+        `deny (receipt ${receiptId}): whole-model sql is the owner's surface`,
+      );
+    }
+    const result = runReadOnlySql(this.db, request.sql, request.maxRows ?? VAULT_SQL_DEFAULT_ROWS);
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: null,
+      invocationId: null,
+      action: 'read',
+      objectType: 'vault.sql',
+      objectId: null,
+      purpose,
+      decision: 'allow',
+      detail: {
+        sql: request.sql.length > 400 ? `${request.sql.slice(0, 400)}…` : request.sql,
+        rowCount: result.totalRows,
+        durationMs: result.durationMs,
+      },
+    });
+    return { ...result, receiptId };
+  }
+
+  /**
    * Consent-checked full-text search over a text-indexed entity: matching
    * runs inside SQLite's FTS5 shadow tables (schema/fts.ts), so a caller
    * gets its LIMIT of ranked matches instead of a whole table to grep.
@@ -251,7 +313,7 @@ export class Gateway {
       throw new GatewayError('contract', 'changes needs at least one entity to watch');
     }
     for (const entity of request.entities) {
-      const ref = resolveEntity(entity);
+      const ref = resolveEntity(entity, this.db.vault);
       const consent = ref
         ? evaluateConsent(this.db.vault, identity, ref.schema, ref.table, 'read', request.purpose)
         : ({ decision: 'deny', failing: `unknown entity ${entity}`, grantId: null } as const);
@@ -472,7 +534,7 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner revokes grants');
-    return revokeGrantCascade(this.db, owner, grantId, (revoked) => {
+    const result = revokeGrantCascade(this.db, owner, grantId, (revoked) => {
       let dropped = 0;
       for (const [invocationId, entry] of this.parked) {
         if (entry.grantId === revoked) {
@@ -483,6 +545,11 @@ export class Gateway {
       }
       return dropped;
     });
+    // A retained band's write trio goes with the app's access.
+    if (result.extRetained.length > 0 && result.appId) {
+      this.deregisterExtCommands(result.appId);
+    }
+    return result;
   }
 
   /** Standing duty: lifecycle sweep — purge_at deletions, grant/share expiry. */
@@ -553,12 +620,129 @@ export class Gateway {
     return backupVault(this.db, destDir);
   }
 
-  /** Standing duty: file custody — create an app's extension file. */
-  createAppExt(cred: Credential, appId: string): string {
+  /**
+   * The ext band (issue #286 phase 2). Diff-apply an app's declared
+   * extension tables to the live band, keep the typed write trio
+   * (`ext.<appId>.insert|update|delete`) registered exactly when the band
+   * is non-empty, and receipt the change. Owner-only: DDL comes from the
+   * manifest through the host, never from the app.
+   */
+  applyAppExt(
+    cred: Credential,
+    appId: string,
+    tables: ExtTableSpec[],
+  ): ExtApplyOutcome & {
+    receiptId: string;
+  } {
+    const owner = this.requireOwner(cred, 'only the owner applies ext bands');
+    const outcome = applyExtBand(this.db, appId, tables, 'live');
+    if (tables.length > 0) this.registerExtCommands(appId);
+    else this.deregisterExtCommands(appId);
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_apply', {
+      band: 'live',
+      ...outcome,
+    });
+    return { ...outcome, receiptId };
+  }
+
+  /**
+   * Ensure the app's draft band matches the specs: first call seeds from
+   * live rows, later calls diff-apply and keep draft rows. `reset` drops
+   * the band first for a fresh live snapshot.
+   */
+  seedAppExtDraft(
+    cred: Credential,
+    appId: string,
+    tables: ExtTableSpec[],
+    opts?: { reset?: boolean },
+  ): ExtApplyOutcome & {
+    receiptId: string;
+  } {
+    const owner = this.requireOwner(cred, 'only the owner seeds draft bands');
+    if (opts?.reset) dropExtBand(this.db, appId, 'draft');
+    const outcome = seedExtDraft(this.db, appId, tables);
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_draft_seed', {
+      band: 'draft',
+      ...outcome,
+    });
+    return { ...outcome, receiptId };
+  }
+
+  /** Discard the app's draft band (session close / reset). */
+  dropAppExtDraft(cred: Credential, appId: string): { dropped: string[]; receiptId: string } {
+    const owner = this.requireOwner(cred, 'only the owner drops draft bands');
+    const dropped = dropExtBand(this.db, appId, 'draft');
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_draft_drop', { dropped });
+    return { dropped, receiptId };
+  }
+
+  /** Uninstall default: data retained, commands deregistered, draft gone. */
+  retainAppExt(cred: Credential, appId: string): { retained: string[]; receiptId: string } {
+    const owner = this.requireOwner(cred, 'only the owner retires ext bands');
+    const retained = retainExtBand(this.db, appId);
+    this.deregisterExtCommands(appId);
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_retain', { retained });
+    return { retained, receiptId };
+  }
+
+  /** Owner purge: both bands dropped, registry rows gone, refs swept. */
+  purgeAppExt(cred: Credential, appId: string): { purged: string[]; receiptId: string } {
+    const owner = this.requireOwner(cred, 'only the owner purges ext bands');
+    const purged = purgeExtBand(this.db, appId);
+    this.deregisterExtCommands(appId);
+    const receiptId = this.receiptExt(owner, appId, 'consent.app_ext_purge', { purged });
+    return { purged, receiptId };
+  }
+
+  /** Re-arm the write trios for every app with an active band (host boot). */
+  registerAllExtCommands(): void {
+    for (const appId of extAppIds(this.db.vault)) this.registerExtCommands(appId);
+  }
+
+  private registerExtCommands(appId: string): void {
+    for (const def of extCommandDefinitions(appId)) this.registerCommand(def);
+  }
+
+  private deregisterExtCommands(appId: string): void {
+    for (const name of extCommandNames(appId)) this.deregisterCommand(name);
+  }
+
+  /** Remove a command's contract row, capability and handler. */
+  deregisterCommand(name: string): void {
+    const existing = lookupCommand(this.db.vault, name);
+    if (existing) {
+      this.db.vault
+        .prepare('DELETE FROM agent_capability WHERE command_id = ?')
+        .run(existing.command_id);
+      this.db.vault
+        .prepare('DELETE FROM agent_command WHERE command_id = ?')
+        .run(existing.command_id);
+    }
+    this.handlers.delete(name);
+  }
+
+  private requireOwner(cred: Credential, refusal: string): Identity {
     const owner = this.identify(cred);
-    if (owner.kind !== 'owner-device')
-      throw new GatewayError('consent', 'only the owner creates appext files');
-    return createAppExt(this.db, appId);
+    if (owner.kind !== 'owner-device') throw new GatewayError('consent', refusal);
+    return owner;
+  }
+
+  private receiptExt(
+    owner: Identity,
+    appId: string,
+    action: string,
+    detail: Record<string, unknown>,
+  ): string {
+    return writeReceipt(this.db.journal, {
+      grantId: null,
+      invocationId: null,
+      action: `act ${action}`,
+      objectType: 'consent.app',
+      objectId: appId,
+      purpose: null,
+      decision: 'allow',
+      detail: { ...detail, by: owner.partyId },
+    });
   }
 
   /** Standing duty: ingest customs — ICS events enter through the border post. */

@@ -9,8 +9,8 @@
  *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
  *     dispatches plugin-registered tools server-side.
  *   - `@centraid/agent-runtime`'s `makeConversationRunner` — drives codex
- *     app-server / Claude SDK locally with the three structured tools
- *     declared inline (`centraid_describe` / `centraid_read` / `centraid_write`).
+ *     app-server / Claude SDK locally; hosts thread the vault-register
+ *     tools (`vault_sql` / `vault_invoke`) in per turn.
  *
  * Either way, the route handler in app-engine never implements a model
  * loop itself; it just translates the runner's `TurnStreamEvent`s into SSE
@@ -113,6 +113,14 @@ export interface ConversationTurnInput {
    */
   sessionFile: string;
   message: string;
+  /**
+   * Which chat register the turn belongs to (issue #286 phase 2). `'ask'`
+   * marks the user-facing app copilot ("operate/ask about my data") —
+   * hosts may route vault-backed apps' ask turns onto the vault register
+   * (vault_sql/vault_invoke with an app lens). Absent/`'build'` keeps the
+   * builder-capable unified runner. Threaded from the `_turn` POST body.
+   */
+  register?: 'ask' | 'build';
   /**
    * Files attached to this turn's inbound message — already landed in the
    * per-app blob CAS; `path` is the absolute blob path (issue #190). The

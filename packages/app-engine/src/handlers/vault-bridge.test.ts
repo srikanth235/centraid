@@ -176,16 +176,13 @@ describe('manifest vault block', () => {
   });
 
   it('build prompt documents ctx.vault only when the manifest declares access', () => {
-    const schema = { schemaVersion: 0, tables: [], indexes: [], views: [] };
     const without = buildExtraPrompt({
       appId: 'a',
-      schema,
       manifest: parseManifest(JSON.stringify(base)),
     });
     expect(without).not.toContain('ctx.vault');
     const withVault = buildExtraPrompt({
       appId: 'a',
-      schema,
       manifest: parseManifest(
         JSON.stringify({
           ...base,

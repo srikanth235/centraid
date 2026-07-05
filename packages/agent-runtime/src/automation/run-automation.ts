@@ -40,8 +40,8 @@ export interface RunAutomationOptions {
    */
   runId?: string;
   /**
-   * Directory holding the per-app *data* folders (`data.sqlite`), inside the
-   * vault's workspace. Survives version swaps.
+   * Directory holding the per-app *state* folders (logs, settings.json),
+   * inside the vault's workspace. Survives version swaps.
    */
   appsDir: string;
   /**

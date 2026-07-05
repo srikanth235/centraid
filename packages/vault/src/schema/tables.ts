@@ -4,6 +4,14 @@
 // underscore-joined (`core_party`). The gateway translates through this
 // registry only, which doubles as an allow-list: unknown entity names never
 // reach SQL.
+//
+// The registry has a static half (the canonical ontology below) and a
+// dynamic half (issue #286 phase 2): app-declared ext-band tables recorded
+// in `consent_app_ext`. Callers that pass their vault handle resolve both;
+// without a handle only the canonical model resolves.
+
+import type { DatabaseSync } from 'node:sqlite';
+import { parseExtLogical } from './ext.js';
 
 export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   core: [
@@ -29,6 +37,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   ],
   consent: [
     'app',
+    'app_ext',
     'app_view',
     'access_grant',
     'grant_scope',
@@ -78,8 +87,13 @@ export interface EntityRef {
 /**
  * Resolve a logical `schema.table` name. Returns undefined for anything not
  * in the registry — callers treat that as a denial, never as SQL.
+ *
+ * Ext-band names (`ext.<appId>.<table>`, draft twin `extdraft.…`) resolve
+ * only when the caller passes its vault handle — the dynamic half lives in
+ * `consent_app_ext`. Both bands report the consent schema `ext.<appId>`:
+ * the draft copy is the same data class under the same grant.
  */
-export function resolveEntity(logical: string): EntityRef | undefined {
+export function resolveEntity(logical: string, vault?: DatabaseSync): EntityRef | undefined {
   const dot = logical.indexOf('.');
   if (dot <= 0) return undefined;
   const schema = logical.slice(0, dot);
@@ -90,12 +104,47 @@ export function resolveEntity(logical: string): EntityRef | undefined {
   if (JOURNAL_TABLES[schema]?.includes(table)) {
     return { schema, table, physical: `${schema}_${table}`, file: 'journal' };
   }
+  const ext = parseExtLogical(logical);
+  if (ext && vault) {
+    try {
+      const row = vault
+        .prepare(
+          `SELECT physical FROM consent_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`,
+        )
+        .get(ext.appId, ext.band, ext.table) as { physical: string } | undefined;
+      if (row) {
+        return {
+          schema: `ext.${ext.appId}`,
+          table: ext.table,
+          physical: row.physical,
+          file: 'vault',
+        };
+      }
+    } catch {
+      // Pre-v5 file or a non-vault handle: no dynamic half to consult.
+    }
+  }
   return undefined;
 }
 
-/** All logical vault-file entity names, `schema.table`. */
-export function listVaultEntities(): string[] {
-  return Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
+/**
+ * All logical vault-file entity names, `schema.table`. With a handle, the
+ * live ext band is enumerated too (retained tables included — export covers
+ * everything); the draft band is scratch and never enumerated.
+ */
+export function listVaultEntities(vault?: DatabaseSync): string[] {
+  const canonical = Object.entries(VAULT_TABLES).flatMap(([schema, tables]) =>
     tables.map((t) => `${schema}.${t}`),
   );
+  if (!vault) return canonical;
+  try {
+    const rows = vault
+      .prepare(
+        `SELECT app_id, table_name FROM consent_app_ext WHERE band = 'live' ORDER BY app_id, table_name`,
+      )
+      .all() as { app_id: string; table_name: string }[];
+    return [...canonical, ...rows.map((r) => `ext.${r.app_id}.${r.table_name}`)];
+  } catch {
+    return canonical;
+  }
 }

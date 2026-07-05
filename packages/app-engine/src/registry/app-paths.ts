@@ -18,10 +18,10 @@ export function isValidAppId(id: string): boolean {
 }
 
 /**
- * Resolve where an app's persistent data file lives.
- *
- * Every app's data file is at `<appsDir>/<id>/data.sqlite` — the stable
- * per-app data dir, kept separate from the git-store code worktree (#137).
+ * Resolve where an app's persistent runtime state lives: logs.jsonl,
+ * settings.json, and the attachment blob CAS at `<appsDir>/<id>/` — the
+ * stable per-app dir, kept separate from the git-store code worktree
+ * (#137). App DATA lives in the vault (issue #286 phase 2).
  */
 export function appDataDir(entry: RegistryEntry): string {
   return entry.path;

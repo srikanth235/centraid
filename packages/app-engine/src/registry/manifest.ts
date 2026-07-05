@@ -1,13 +1,15 @@
+// governance: allow-repo-hygiene file-size-limit the manifest types + their one JSON meta-schema + the validator must move together — the ext block (#286) grew all three in lockstep
 /**
- * App manifest — the per-app machine-readable contract that the
- * three-tool invocation surface (`centraid_write`/`_read`/`_describe`)
- * dispatches against (issue #107).
+ * App manifest — the per-app machine-readable contract the dispatcher
+ * routes declared handlers against (issue #107, narrowed by #286 phase 2).
  *
  * The manifest lives on disk as `app.json` inside each app's code dir
  * (alongside `actions/`, `queries/`). It is the single source of truth
  * for "what handlers exist, what input do they accept, what do they
  * return" — handler files themselves are pure function bodies, no
- * JSDoc-driven validation.
+ * JSDoc-driven validation — plus the app's whole data declaration: the
+ * `vault` block (requested canonical scopes) and the `ext` block
+ * (extension tables the gateway hosts inside vault.db).
  *
  * Schemas in `input` / `output` are arbitrary JSON Schema (draft
  * 2020-12) — that's what Anthropic tool-use, OpenAI functions, MCP and
@@ -40,11 +42,10 @@ export type ManifestValidationCode =
   | 'reserved_handler_name';
 
 /**
- * Names starting with `_` are reserved for built-in handlers dispatched
- * by the runtime (e.g. `_sql`). App authors cannot declare an action or
- * query with such a name — `validateManifest` refuses it explicitly so
- * the conflict surfaces at load time rather than as a silent shadowing
- * at call time.
+ * Names starting with `_` are reserved (they once addressed built-ins
+ * like `_sql`; the builtins are gone but the namespace stays reserved).
+ * App authors cannot declare an action or query with such a name —
+ * `validateManifest` refuses it explicitly at load time.
  */
 export const RESERVED_HANDLER_PREFIX = '_';
 
@@ -65,16 +66,6 @@ export class ManifestError extends Error {
 
 /** A JSON Schema fragment — kept as an opaque record. Validated by Ajv at use. */
 export type JsonSchema = Record<string, unknown>;
-
-export interface ManifestColumn {
-  readonly name: string;
-  readonly type?: string;
-}
-
-export interface ManifestTable {
-  readonly name: string;
-  readonly columns?: readonly ManifestColumn[];
-}
 
 export type HandlerConfirmation = 'none' | 'required';
 
@@ -145,6 +136,41 @@ export interface ManifestVaultBlock {
   readonly scopes: readonly ManifestVaultScope[];
 }
 
+/**
+ * The ext band (issue #286 phase 2, Lane 2 of the two-lane rule): tables
+ * the app declares and the GATEWAY creates inside vault.db as
+ * `ext_<appId>_<table>` — for shapes the canonical ontology genuinely
+ * doesn't cover. Structurally mirrors the vault package's `ExtTableSpec`
+ * (app-engine stays vault-agnostic; the gateway host validates the specs
+ * with the vault's own validator before applying).
+ */
+export interface ManifestExtColumn {
+  readonly name: string;
+  readonly type: 'text' | 'integer' | 'real' | 'blob';
+  readonly primaryKey?: boolean;
+  readonly notNull?: boolean;
+  readonly default?: string | number;
+  /** FK into the vault (`core.party`) or a same-app ext table. */
+  readonly references?: string;
+}
+
+export interface ManifestExtIndex {
+  readonly columns: readonly string[];
+  readonly unique?: boolean;
+}
+
+export interface ManifestExtTable {
+  readonly name: string;
+  readonly columns: readonly ManifestExtColumn[];
+  readonly indexes?: readonly ManifestExtIndex[];
+  /** Text columns to FTS-index (opt-in search). */
+  readonly searchable?: readonly string[];
+}
+
+export interface ManifestExtBlock {
+  readonly tables: readonly ManifestExtTable[];
+}
+
 export interface Manifest {
   readonly manifestVersion: number;
   readonly id: string;
@@ -160,13 +186,14 @@ export interface Manifest {
    */
   readonly kind?: 'app' | 'automation';
   readonly description?: string;
-  readonly tables?: readonly ManifestTable[];
   readonly actions: readonly ManifestActionEntry[];
   readonly queries: readonly ManifestQueryEntry[];
   /** Per-app aesthetic knobs (font, width, radius, colour…). Optional. */
   readonly knobs?: readonly ManifestKnob[];
   /** Requested personal-vault access (duaility §12). Optional. */
   readonly vault?: ManifestVaultBlock;
+  /** Declared extension tables, hosted inside vault.db (#286). Optional. */
+  readonly ext?: ManifestExtBlock;
 }
 
 // ----------------------------------------------------------------------------
@@ -187,27 +214,6 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
     version: { type: 'string', minLength: 1 },
     kind: { type: 'string', enum: ['app', 'automation'] },
     description: { type: 'string' },
-    tables: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['name'],
-        properties: {
-          name: { type: 'string', minLength: 1 },
-          columns: {
-            type: 'array',
-            items: {
-              type: 'object',
-              required: ['name'],
-              properties: {
-                name: { type: 'string', minLength: 1 },
-                type: { type: 'string' },
-              },
-            },
-          },
-        },
-      },
-    },
     actions: {
       type: 'array',
       items: {
@@ -234,6 +240,50 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
           input: { type: 'object' },
           output: { type: 'object' },
           reads: { type: 'array', items: { type: 'string' } },
+        },
+      },
+    },
+    ext: {
+      type: 'object',
+      required: ['tables'],
+      properties: {
+        tables: {
+          type: 'array',
+          items: {
+            type: 'object',
+            required: ['name', 'columns'],
+            properties: {
+              name: { type: 'string', minLength: 1 },
+              columns: {
+                type: 'array',
+                minItems: 1,
+                items: {
+                  type: 'object',
+                  required: ['name', 'type'],
+                  properties: {
+                    name: { type: 'string', minLength: 1 },
+                    type: { type: 'string', enum: ['text', 'integer', 'real', 'blob'] },
+                    primaryKey: { type: 'boolean' },
+                    notNull: { type: 'boolean' },
+                    default: { type: ['string', 'number'] },
+                    references: { type: 'string', minLength: 1 },
+                  },
+                },
+              },
+              indexes: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['columns'],
+                  properties: {
+                    columns: { type: 'array', minItems: 1, items: { type: 'string' } },
+                    unique: { type: 'boolean' },
+                  },
+                },
+              },
+              searchable: { type: 'array', items: { type: 'string' } },
+            },
+          },
         },
       },
     },
@@ -460,11 +510,11 @@ export function validateManifest(raw: unknown): Manifest {
     version: r.version as string,
     ...(r.kind === 'automation' || r.kind === 'app' ? { kind: r.kind } : {}),
     ...(typeof r.description === 'string' ? { description: r.description } : {}),
-    ...(Array.isArray(r.tables) ? { tables: r.tables as ManifestTable[] } : {}),
     actions,
     queries,
     ...(Array.isArray(r.knobs) ? { knobs: r.knobs as ManifestKnob[] } : {}),
     ...(r.vault && typeof r.vault === 'object' ? { vault: r.vault as ManifestVaultBlock } : {}),
+    ...(r.ext && typeof r.ext === 'object' ? { ext: r.ext as ManifestExtBlock } : {}),
   };
 }
 

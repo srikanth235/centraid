@@ -74,7 +74,7 @@ export function sweepDanglingLinks(
   for (let i = 0; i < handlerWrites; i += 1) {
     const write = writes[i];
     if (!write || write.entityType === 'core.link') continue;
-    const ref = resolveEntity(write.entityType);
+    const ref = resolveEntity(write.entityType, vault);
     if (!ref || ref.file !== 'vault') continue;
     const pk = pkColumn(vault, ref.physical);
     const live = vault
@@ -105,7 +105,7 @@ export function validatePolymorphicWrites(
   for (const write of writes) {
     const rule = POLY_RULES[write.entityType];
     if (!rule) continue;
-    const table = resolveEntity(write.entityType);
+    const table = resolveEntity(write.entityType, vault);
     if (!table) continue;
     const row = vault
       .prepare(`SELECT * FROM "${table.physical}" WHERE "${rule.pk}" = ?`)
@@ -114,7 +114,7 @@ export function validatePolymorphicWrites(
     for (const [typeCol, idCol] of rule.refs) {
       const logical = String(row[typeCol]);
       const id = String(row[idCol]);
-      const target = resolveEntity(logical);
+      const target = resolveEntity(logical, vault);
       if (!target || target.file !== 'vault') {
         throw new Error(`${write.entityType}.${typeCol} names unknown entity "${logical}"`);
       }

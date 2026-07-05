@@ -737,3 +737,38 @@ test('owner routes (issue #272): picker searches, POST links asserts, DELETE end
     .get(linked.output.link_id) as { valid_to: string | null };
   expect(ended.valid_to).not.toBeNull();
 });
+
+test('invokeAsAssistant: low-risk executes under a standing grant, high-risk parks (#286 phase 2)', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+
+  // First use mints the `_assistant` agent + its standing act grant.
+  const created = plane.invokeAsAssistant({
+    command: 'knowledge.create_note',
+    input: { title: 'From the assistant', body_text: 'hello' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(created.status).toBe('executed');
+
+  // Second call reuses the enrollment — no duplicate agent/grant rows.
+  const again = plane.invokeAsAssistant({
+    command: 'knowledge.create_note',
+    input: { title: 'Second', body_text: 'again' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(again.status).toBe('executed');
+  const agents = plane.db.vault.prepare(`SELECT count(*) AS n FROM agent_agent`).get() as {
+    n: number;
+  };
+  expect(agents.n).toBe(1);
+
+  // High risk exceeds the agent's structural medium ceiling → parks for
+  // the owner in the existing approval surface.
+  const risky = plane.invokeAsAssistant({
+    command: 'social.send_message',
+    input: { message_id: 'not-yet-real' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(risky.status).toBe('parked');
+  expect(plane.listParked().some((p) => p.command === 'social.send_message')).toBe(true);
+});

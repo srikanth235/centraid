@@ -1,14 +1,12 @@
 /*
- * Chat adapter — the per-app data chat layer on top of the engine.
+ * Chat adapter — the plain per-app chat layer on top of the engine.
  *
- * This is the data-only `ConversationRunner`: the turn runs with cwd =
- * `input.dataDir` (the resolved `appDataDir(entry)` — `<appsDir>/<id>` for
- * uploaded apps, the external folder for path-registered ones), the three
- * first-class `centraid_sql_*` tools declared inline against the per-app
- * `data.sqlite`, and the route's app-context preamble passed through
- * verbatim (it already describes those tools + the `_sql` built-in). No
- * draft worktree, no authoring grounding, no post-turn side effects —
- * those are the builder chat's job (`makeUnifiedConversationRunner`).
+ * The turn runs with cwd = `input.dataDir` (the resolved
+ * `appDataDir(entry)`) and the route's app-context preamble passed through
+ * verbatim. It wires no vault runners, so the turn carries no data tools —
+ * hosts with a vault mount their own runner configs instead. No draft
+ * worktree, no authoring grounding, no post-turn side effects — those are
+ * the builder chat's job (`makeUnifiedConversationRunner`).
  *
  * It is a thin config over `makeConversationRunnerCore` (issue #147, Concern 1):
  * the shared per-turn spine lives there; this file only supplies the

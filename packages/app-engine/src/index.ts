@@ -55,6 +55,9 @@ export type {
   TurnResult,
   TurnAttachment,
   RunTurnFn,
+  VaultInvokeRunner,
+  VaultSqlRunner,
+  VaultSqlToolResult,
 } from './conversation/turn.js';
 
 export {
@@ -71,7 +74,7 @@ export type {
   QueryHandlerArgs,
   ActionHandlerArgs,
   ActionResult,
-  ScopedDb,
+  ScopedVault,
   ScopedLog,
   AppRef,
   AppId,
@@ -83,62 +86,24 @@ export type {
   CommonHandlerArgs,
 } from './types.js';
 
-// Live-schema and cloud-panel payload shapes — consumed by agent-harness
-// and the chat surface, and by the desktop cloud panel.
-export type {
-  AppSchema,
-  AppSchemaTable,
-  AppSchemaColumn,
-  AppSchemaIndex,
-  AppSchemaView,
-} from './data/schema.js';
-export type { AppTableRows } from './data/table-rows.js';
-export type { RunQueryResult } from './handlers/run-query.js';
 export { appendLogs } from './data/log-store.js';
 export type { LogEntry, LogLevel } from './data/log-store.js';
 
-// Low-level helpers the openclaw plugin uses to expose SQL + schema as
-// agent tools without round-tripping through the HTTP surface.
-export {
-  runQuery,
-  RunQueryError,
-  RUN_QUERY_ROW_CAP,
-  type RunQueryOptions,
-} from './handlers/run-query.js';
-
-// Shared SQL operations exposed as agent tools (`centraid_sql_*`). Used by
-// the codex / claude adapter tool registrations and by the legacy
-// `centraid` CLI bin in `@centraid/agent-runtime`.
-export {
-  describeOp,
-  readOp,
-  writeOp,
-  isSelectOnly,
-  isWriteDml,
-  SqlOpRefusal,
-  SELECT_ROW_CAP,
-  type DescribeResult,
-  type ReadResult,
-  type WriteResult,
-  type WriteOpOptions,
-} from './handlers/sql-ops.js';
-export { readAppSchema } from './data/schema.js';
 export { Registry } from './registry/registry.js';
 export { appDataDir, isValidAppId } from './registry/app-paths.js';
 
-// Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (data.sqlite
-// + run ledgers) after the registry entry is dropped. Hosts that delete apps
-// over their own surface (the gateway git-store DELETE) call this so a
-// deleted app's data doesn't linger and resurrect under a recreated id.
+// Wrapper-dir cleanup on app delete — removes `<appsDir>/<id>/` (logs,
+// settings.json, run blobs) after the registry entry is dropped. Hosts that
+// delete apps over their own surface (the gateway git-store DELETE) call
+// this so a deleted app's runtime state doesn't linger under a recreated id.
 export {
   cleanupDeregisteredApp,
   type CleanupOutcome,
   type DeregisterLogger,
 } from './registry/deregister-cleanup.js';
 
-// App manifest + three-tool dispatcher (issue #107). The dispatcher
-// replaces the per-handler HTTP routes; openclaw-plugin registers MCP
-// tools that delegate to `runtime.dispatcher.write/read/describe`.
+// App manifest + declared-handler dispatcher (issue #107, narrowed by
+// #286 phase 2: no `_sql` builtins, no live-schema reads).
 export {
   APP_MANIFEST_FILE,
   MANIFEST_VERSION,
@@ -154,8 +119,10 @@ export {
   type Manifest as AppManifest,
   type ManifestActionEntry,
   type ManifestQueryEntry,
-  type ManifestTable,
-  type ManifestColumn,
+  type ManifestExtBlock,
+  type ManifestExtTable,
+  type ManifestExtColumn,
+  type ManifestExtIndex,
   type ManifestVaultBlock,
   type ManifestVaultScope,
   type HandlerConfirmation,
@@ -188,12 +155,11 @@ export type { VaultBridge, VaultCall, VaultCallResult, VaultOp } from './handler
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)
 export { RegistryError } from './registry/registry.js';
-export { MigrationError, runPendingMigrations, type MigrationsApplied } from './data/migrate.js';
 
 // Per-app change notifications. Subscribed by the SSE endpoint at
-// /centraid/<appId>/_changes; emitted by any code path that writes to an
-// app's data.sqlite (HTTP query route, openclaw legacy tool, app handlers).
-// Hosts can subscribe from outside too — `runtime.changeBus.subscribe(...)`.
+// /centraid/<appId>/_changes; emitted after successful app writes so views
+// re-derive. Hosts can subscribe from outside too —
+// `runtime.changeBus.subscribe(...)`.
 export { ChangeBus, type AppChange, type ChangeListener } from './changes/change-bus.js';
 
 // Conversation-history store (the read/write facade backing the chat surface)
@@ -204,6 +170,7 @@ export { ChangeBus, type AppChange, type ChangeListener } from './changes/change
 // The store is conversation-first (spans kind=chat|build); the DTO types it
 // returns keep the chat-surface vocabulary the renderer speaks.
 export {
+  ASSISTANT_APP_ID,
   ConversationHistoryStore,
   deriveTitle,
   type ConversationSummary,
@@ -213,6 +180,15 @@ export {
   type RecordTurnInput,
 } from './conversation/history.js';
 export { makeConversationRouteHandler } from './http/conversation-routes.js';
+// The shared SSE turn driver (stream framing + run-ledger fold) — the
+// per-app `_turn` route and the gateway's vault-assistant route both ride it.
+export {
+  driveTurnOverSse,
+  withConversationLock,
+  type DriveTurnOptions,
+  type TurnAttachmentRef,
+} from './http/turn-sse.js';
+export { isValidConversationId } from './http/turn-routes.js';
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
@@ -252,7 +228,7 @@ export type { RunSummary, RunSummarySink } from './conversation/run-summary-sink
 // identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
 export { PrefsStore, makeUserStoreRouteHandler } from './stores/prefs-store.js';
 
-// Per-app `__centraid_settings` reader and the settings-merge pipeline that
+// Per-app `settings.json` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into
 // each app's index.html.
 export {
@@ -261,7 +237,7 @@ export {
   writeAppSetting,
   deleteAppSetting,
   automationEnabledKey,
-  APP_SETTINGS_TABLE,
+  APP_SETTINGS_FILE,
   RUNTIME_KEY_PREFIX,
 } from './settings/app-settings.js';
 export { buildSettingsInject, KNOWN_KEYS } from './settings/settings-merge.js';
@@ -269,8 +245,7 @@ export type { SettingsInject } from './http/static-server.js';
 
 // Conversation ledger + ctx.state store (issue #190). The five tables
 // (`conversations`, `turns`, `items`, `attachments`, `automation_state`)
-// live in the per-app runtime DB; the store is runtime-owned and never
-// reachable from handler `db` or the `centraid_sql_*` agent tools.
+// live in the runtime-owned conversation DB, never reachable from handlers.
 export {
   ConversationStore,
   type ConversationMeta,

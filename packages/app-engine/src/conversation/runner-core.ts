@@ -35,7 +35,14 @@ import type {
   ConversationTurnInput,
   ConversationTurnResult,
 } from './runner.js';
-import type { RunnerPrefs, RunTurnFn, ToolContext, TurnInput } from './turn.js';
+import type {
+  RunnerPrefs,
+  RunTurnFn,
+  ToolContext,
+  TurnInput,
+  VaultInvokeRunner,
+  VaultSqlRunner,
+} from './turn.js';
 
 /** Per-turn context handed to the injected `buildExtraSystemPrompt` /
  *  `onTurnComplete` seams once prefs are loaded and the cwd is resolved. */
@@ -87,6 +94,15 @@ export interface ConversationRunnerCoreOptions {
    * draft to override to).
    */
   cwdIsDraftWorktree?: boolean;
+  /**
+   * The vault-assistant register (issue: shell-level vault Q&A). When set,
+   * each turn's `ToolContext` carries this owner-side `vault_sql` runner and
+   * the adapters swap the app-scoped `centraid_*` trio for the one vault
+   * tool. Resolved per turn so it always rides the ACTIVE vault.
+   */
+  vaultSql?: () => VaultSqlRunner;
+  /** The write half of the vault register — resolved per turn like `vaultSql`. */
+  vaultInvoke?: () => VaultInvokeRunner;
   /**
    * The model turn driver. agent-runtime injects its codex/claude
    * `runTurn`; tests inject a stub. Required — this spine is
@@ -141,6 +157,8 @@ export function makeConversationRunnerCore(
         dispatcher: opts.getDispatcher(),
         turnId: randomUUID(),
         ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
+        ...(opts.vaultSql ? { vaultSql: opts.vaultSql() } : {}),
+        ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke() } : {}),
       };
 
       const turnInput: TurnInput = {

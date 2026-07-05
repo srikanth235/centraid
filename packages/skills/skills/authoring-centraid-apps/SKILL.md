@@ -1,6 +1,6 @@
 ---
 name: authoring-centraid-apps
-description: How to author or modify a centraid app — the canonical folder layout, the app.json manifest, the JavaScript-only handler contract, schema migrations, reactive data, in-app automations, and the security model. Use whenever creating or editing the files of a centraid UI app.
+description: How to author or modify a centraid app — the canonical folder layout, the app.json manifest, the JavaScript-only handler contract, the two-lane data rule (vault ontology + extension tables), reactive data, in-app automations, and the security model. Use whenever creating or editing the files of a centraid UI app.
 ---
 ## Centraid app authoring
 
@@ -14,18 +14,17 @@ You are working inside a centraid app app folder. Your job is to author or modif
   app.css, app.js, ...     # static assets (extension allowlist below)
   app.json                 # the APP MANIFEST — see "App manifest" below
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
-  queries/<name>.js        # dispatched by centraid_read against queries[name]
-  actions/<name>.js        # dispatched by centraid_write against actions[name]
+  queries/<name>.js        # dispatched against queries[name] in the manifest
+  actions/<name>.js        # dispatched against actions[name] in the manifest
   automations/<id>/automation.json  # a scheduled automation the app owns
   automations/<id>/handler.js       #   its handler (see "Automations" below)
-  migrations/NNNN_<slug>.sql  # schema migrations (numbered, plain DDL)
 ```
 
 Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/openclaw-plugin` (installed as a devDependency).
 
 ### App manifest — `app.json` (source of truth)
 
-Every app ships an `app.json` manifest. The runtime dispatches all handler invocations through three generic tools (`centraid_write`, `centraid_read`, `centraid_describe`) and uses the manifest to know what handlers exist and what input each accepts. A handler file with no matching manifest entry is unreachable; a manifest entry whose file is missing is rejected at publish time.
+Every app ships an `app.json` manifest. Every handler invocation is dispatched through it — the page calls `window.centraid.read({ query })` / `window.centraid.write({ action })` and the runtime validates the call against the matching manifest entry before running the file. A handler file with no matching manifest entry is unreachable; a manifest entry whose file is missing is rejected at publish time. The manifest also carries the app's **whole data declaration** — the `vault` block and/or the `ext` block (see "Data: the two-lane rule" below).
 
 ```json
 {
@@ -34,9 +33,6 @@ Every app ships an `app.json` manifest. The runtime dispatches all handler invoc
   "name": "Todos",
   "version": "0.1.0",
   "description": "Capture and clear small things.",
-  "tables": [
-    { "name": "todos", "columns": [{ "name": "id", "type": "INTEGER" }] }
-  ],
   "actions": [
     {
       "name": "add",
@@ -52,7 +48,7 @@ Every app ships an `app.json` manifest. The runtime dispatches all handler invoc
         "type": "object",
         "properties": { "id": { "type": "number" }, "text": { "type": "string" } }
       },
-      "writes": ["todos"]
+      "writes": ["ext.todos.todos"]
     }
   ],
   "queries": [
@@ -61,7 +57,7 @@ Every app ships an `app.json` manifest. The runtime dispatches all handler invoc
       "description": "All todos, newest first.",
       "input": { "type": "object", "properties": {}, "additionalProperties": false },
       "output": { "type": "array", "items": { "type": "object" } },
-      "reads": ["todos"]
+      "reads": ["ext.todos.todos"]
     }
   ]
 }
@@ -74,35 +70,47 @@ Rules:
 - Every `.js` file under `actions/` MUST have a matching entry in `actions[]`; every `.js` under `queries/` MUST have a matching entry in `queries[]`. Whenever you add, rename, or delete a handler, update the manifest in the same turn.
 - `input` and `output` are arbitrary **JSON Schema (draft 2020-12)** fragments. Write them strictly — `required`, `additionalProperties: false`, `minLength`, `pattern`, `enum`. The dispatcher validates input with Ajv and rejects mismatched calls before the handler runs.
 - `confirmation` (action-only) is `"none"` or `"required"`. Set `"required"` for destructive or irreversible actions (delete, send, charge); the chat surface honours this and asks the user to confirm.
-- `writes` / `reads` list the tables the handler touches. Optional but useful for documentation and chat permissions.
+- `writes` / `reads` list the vault entities the handler touches (canonical like `core.event`, or this app's own `ext.<appId>.<table>`). Optional but useful for documentation and chat permissions.
 - A name may appear in both `actions` and `queries` (different tools, different files). Duplicate names within the same array are rejected.
 
 ### Files you must NEVER create or commit
 
-- `data.sqlite`, `runtime.sqlite` — managed by the plugin at runtime; persist across versions and would be **rejected at upload**.
+- `*.sqlite`, `*.db`, `*.sql` — apps own **no database files and no DDL**. All data lives in the owner's vault (see "Data: the two-lane rule" below); any database or SQL file would be **rejected at upload**.
 - `current.json`, `_registry.json`, `versions/` — runtime artifacts owned by the plugin.
 - `tsconfig.json`, `*.ts`, `*.tsx`, `*.d.ts` — handlers are `.js`-only. If you find legacy `.ts` files in an existing app, do **not** add new ones; leave the old ones alone and write new handlers as `.js`.
 - Any binary executable, native module, or symlink.
 
 ### Static asset extension allowlist (anything else is rejected at upload)
 
-`.html .htm .css .js .mjs .json .md .txt .svg .sql .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
+`.html .htm .css .js .mjs .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
 
 ### Handler contract
 
 Handler files are **pure function bodies** — no input validation, no shape checks, no defensive coercion. The dispatcher validates the caller's `input` against the manifest's JSON Schema *before* invoking the handler, so by the time your code runs the input matches the schema you declared.
 
-Both handler kinds receive `{ db, log, app, ctx }` plus kind-specific fields:
+Both handler kinds receive `{ params, log, app, ctx }` plus kind-specific fields:
 
 - Action: `body` carries the validated input.
 - Query: `input` (preferred) and `query` (alias) both carry the validated input.
 
-Type the default export by pointing JSDoc `@type` at the alias in `@centraid/openclaw-plugin`. Declare row shapes with `@typedef` and cast `await db.prepare(...).get/all` results with a JSDoc `@type` cast.
+There is **no `db`** — apps have no private database. `ctx.vault` is the only data door:
 
-**Every db call is async.** `db.exec`, and `db.prepare(...).run / .get / .all` all return `Promise<...>` — always `await` them. Forgetting `await` is the #1 bug in handler code.
+- `await ctx.vault.read({ entity, where?, limit?, purpose })` — consent-checked read of an entity (canonical like `core.event`, or this app's own `ext.<appId>.<table>`). Returns `{ rows, receiptId }`.
+- `await ctx.vault.search({ entity, query, where?, limit?, purpose })` — full-text search over a text-indexed entity. `query` is the owner's typed words (matched as AND-ed prefixes; FTS operators are treated as literals). Returns `{ rows, receiptId }` ranked best-first; each row adds `_snippet` — the matched fragment with `⟦`/`⟧` around hits (escape the text FIRST, then turn markers into markup). ALWAYS search this way instead of reading a whole entity and filtering text in JS — vault data has no upper bound.
+- `await ctx.vault.invoke({ command, input, purpose })` — typed command (e.g. `schedule.propose_event`, or this app's `ext.<appId>.insert`). Returns an outcome: `{ status: 'executed' | 'denied' | 'parked' | 'failed', output?, … }` — check `status` before assuming the write landed; `parked` means the owner must confirm.
+- `await ctx.vault.query({ view, purpose })` — read a registered view.
+- `await ctx.vault.describe()` — the commands this app can discover (name, schema, risk).
+- `await ctx.vault.parked()` — this app's own invocations awaiting owner confirmation.
+- `await ctx.vault.resolve(...)` — turn cross-domain `(type, id)` references into renderable cards (resolvable-if-linked).
+
+Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the manifest's requested scopes, calls fail closed.
+
+Type the default export by pointing JSDoc `@type` at the alias in `@centraid/openclaw-plugin`. Declare row shapes with `@typedef` and cast `ctx.vault.read/search` rows with a JSDoc `@type` cast.
+
+**Every `ctx.vault` call is async** and returns a `Promise<...>` — always `await` it. Forgetting `await` is the #1 bug in handler code.
 
 ```js
-// queries/<name>.js — invoked as centraid_read({ app, query: '<name>', input })
+// queries/<name>.js — invoked from the page as window.centraid.read({ query: '<name>', input })
 /**
  * @typedef {Object} Thing
  * @property {string} id
@@ -110,20 +118,30 @@ Type the default export by pointing JSDoc `@type` at the alias in `@centraid/ope
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
-export default async ({ input, db }) => {
-  const rows = /** @type {Thing[]} */ (
-    await db.prepare('SELECT id, title FROM things WHERE owner = ?').all(input.owner)
-  );
-  return rows;
+export default async ({ input, ctx }) => {
+  const { rows } = await ctx.vault.read({
+    entity: 'ext.things.things',
+    where: { owner: input.owner },
+    limit: 200,
+    purpose: 'dpv:ServiceProvision',
+  });
+  return /** @type {Thing[]} */ (rows);
 };
 ```
 
 ```js
-// actions/<name>.js — invoked as centraid_write({ app, action: '<name>', input })
+// actions/<name>.js — invoked from the page as window.centraid.write({ action: '<name>', input })
 /** @type {import('@centraid/openclaw-plugin').ActionHandler} */
-export default async ({ body, db, log }) => {
-  // `body` is the validated input. Do work.
-  return { status: 200, body: { ok: true } };
+export default async ({ body, ctx, log }) => {
+  // `body` is the validated input. Do work through ctx.vault.invoke.
+  const outcome = await ctx.vault.invoke({
+    command: 'ext.things.insert',
+    input: { table: 'things', values: { title: body.title } },
+    purpose: 'dpv:ServiceProvision',
+  });
+  if (outcome.status === 'parked') return { parked: true };
+  if (outcome.status !== 'executed') throw new Error(`vault refused: ${outcome.status}`);
+  return outcome.output;
 };
 ```
 
@@ -137,58 +155,80 @@ Files run as JavaScript. The following are **syntax errors** in `.js` and must n
 - `x as Foo` and `<Foo>x` — use a JSDoc cast: `/** @type {Foo} */ (x)`.
 - `(...) satisfies Foo` — use `/** @type {Foo} */` on the export instead.
 - `interface Foo { ... }`, `type Foo = ...`, enums — declare shapes with `@typedef` in JSDoc.
-- Generic call type args like `db.prepare(sql).get<Row>(id)` — call `.get(id)` and cast: `/** @type {Row | undefined} */ (await db.prepare(sql).get(id))`. Generic call syntax is a parse error in JS.
-- Parameter type annotations like `({ db }: Args) => ...` — annotate via the `@type` on the export, which infers the parameter shape.
+- Generic call type args like `ctx.vault.read<Row>({ … })` — call it plain and cast the rows: `/** @type {Row[]} */ ((await ctx.vault.read({ … })).rows)`. Generic call syntax is a parse error in JS.
+- Parameter type annotations like `({ ctx }: Args) => ...` — annotate via the `@type` on the export, which infers the parameter shape.
 - Non-null assertions (`x!`) and definite-assignment markers — use a real guard or JSDoc cast.
 
 If you catch yourself reaching for any of the above, you've slipped into TS habits. Stop and use the JSDoc equivalent.
 
-### Db proxy semantics
+### Data: the two-lane rule
 
-`db.prepare(sql).run/get/all` round-trip through a worker boundary and return Promises. **Always `await`.** Use parameterized SQL — never interpolate untrusted strings. Wrap multi-row writes in `db.transaction(async () => { ... })` for atomicity; the transaction callback is async too.
+Apps own no database. There is no per-app data file, no raw SQL, and no DDL — the owner's **vault** (one gateway-owned store) holds everything, and an app is a *projection* over it. The app's whole data story is declared in `app.json` and travels one of two lanes:
 
-`db.exec` is reserved for DML on tables that already exist and also returns a Promise — `await db.exec(...)`. **Never run DDL inside a handler** — no `CREATE TABLE`, no `ALTER TABLE`, no `CREATE INDEX`, no `DROP …`. All schema lives in `migrations/` (see below).
+#### Lane 1 (default): map the domain onto the canonical vault ontology
 
-`await ...get(...)` resolves to `unknown | undefined` and `await ...all(...)` resolves to `unknown[]` at the JSDoc level — cast the awaited result to a `@typedef`'d row shape so subsequent property access is checked.
+Before inventing any shape of your own, map the app's domain onto entities the vault already has: `core.observation` + its typed components, `core.activity`, `core.collection`, `home.asset_item`, `knowledge.annotation`, and the concept / tag / link mechanisms. Most apps are pure projections — a habit tracker is observations, a reading list is a collection plus annotations, a planner is schedule events. Declare a `vault` block requesting the **narrowest scopes** that cover the app, and justify the request in `why` — the owner sees it in the approval UI:
 
-### Schema migrations
+```json
+"vault": {
+  "purpose": "dpv:ServiceProvision",
+  "why": "Reads and proposes calendar events so you can plan your week.",
+  "scopes": [
+    { "schema": "schedule", "table": "event", "verbs": "read+act" }
+  ]
+}
+```
 
-The plugin owns `data.sqlite` and persists it across versions. Schema changes ship as numbered SQL files under `migrations/`:
+Each scope names a `schema` (optionally narrowed to one `table`) and its `verbs`: `read`, `read+act`, or `act`. The block is a **request, not a grant** — access is deny-by-default until the owner approves it, and until then every `ctx.vault` call fails closed.
 
-- File names must match `NNNN_<slug>.sql` exactly (e.g. `0001_init.sql`, `0002_add_tags.sql`). Numbers are contiguous integers starting at `0001` — no gaps, no skips, no duplicates.
-- Plain SQLite DDL only. **Do not** include `BEGIN`, `COMMIT`, `ROLLBACK`, or `PRAGMA user_version` — the plugin wraps the whole batch in a single transaction and bumps `user_version` itself.
-- Each migration is applied **at most once per database**. The plugin tracks progress via `PRAGMA user_version`; on every publish it skips any migration whose id ≤ `user_version` and applies the rest in order.
-- A migration that fails (any SQL error) rolls back the whole batch, the publish is rejected with HTTP 422, and the previously active version keeps serving. Fix the file and re-publish.
+#### Lane 2 (escape hatch, must be justified): extension tables
 
-Rules:
+Only when the canonical ontology genuinely has no home for a shape, declare extension tables in `app.json#ext`. The GATEWAY creates them inside the vault as `ext_<appId>_<table>` — apps **never** run DDL:
 
-- **All schema lives in migrations.** Tables, indexes, and views are created exclusively by migration files. Handlers presume the schema is already there.
-- **Never edit a migration that has already been published.** If you need to change the schema, write the next-numbered file. Editing an applied file would silently diverge live databases from your code.
-- **Always re-ship every migration in every publish.** Don't delete old files — they're idempotent (skipped when already applied) and required for any fresh database.
-- **Ask before destructive ops.** `DROP TABLE`, `DROP COLUMN`, anything that deletes user data — confirm with the user in chat first and surface what will be lost.
+```json
+"ext": {
+  "tables": [
+    {
+      "name": "readings",
+      "columns": [
+        { "name": "id", "type": "text", "primaryKey": true },
+        { "name": "person", "type": "text", "references": "core.party" },
+        { "name": "value", "type": "real", "notNull": true },
+        { "name": "note", "type": "text", "default": "" }
+      ],
+      "indexes": [{ "columns": ["person"], "unique": false }],
+      "searchable": ["note"]
+    }
+  ]
+}
+```
 
-When a session begins on an app that has a live published version, the harness injects the live schema (a `### Live schema` block listing `PRAGMA user_version` and every `CREATE TABLE`/`CREATE INDEX`/`CREATE VIEW`) just below this section. Use it to decide what id the next migration must take and what the database currently looks like. If that block is absent, treat the database as empty and start at `0001`.
+- Column `type` is `text` | `integer` | `real` | `blob`. Exactly **one** column is `primaryKey: true`, and it must be `text`. `notNull` and `default` behave as in SQL. `references` names a *logical* entity — canonical like `core.party`, or a same-app sibling as `ext.<appId>.<table>`.
+- `indexes` is a list of `{ columns, unique? }`. `searchable` lists text columns to FTS-index (opt-in search via `ctx.vault.search`).
+- The gateway applies the DDL **on publish**, diffing the declared spec against the live band additively: new tables are created, columns are added or dropped. A type or primary-key change is **refused** — pick a new column/table name instead. To change schema, edit `ext.tables` and re-publish; never attempt `CREATE`/`ALTER`/`DROP` from code.
+- Read ext tables via `ctx.vault.read({ entity: 'ext.<appId>.<table>', … })` (and `ctx.vault.search` for `searchable` columns). Write them via the typed trio through `ctx.vault.invoke`: `ext.<appId>.insert` takes `{ table, values }` and returns `{ id }`; `ext.<appId>.update` takes `{ table, id, set }`; `ext.<appId>.delete` takes `{ table, id }`.
+
+Lane 1 first, always: an ext table is a claim that the ontology has no home for the shape — state that justification in the manifest's `why`, and prefer canonical entities plus tags/links over private shapes whenever the mapping is honest.
 
 ### Reactive data — keep the UI in sync with writes
 
-The runtime auto-injects a change-bus bridge into every served HTML page. The frontend should subscribe so writes that happen behind its back — chat-assistant SQL writes, edits from a second window, future cron jobs — propagate to the UI without a manual reload. The bridge auto-reconnects on transient drops, so you don't need retry logic.
+The runtime auto-injects a change-bus bridge into every served HTML page. The frontend should subscribe so writes that happen behind its back — assistant vault writes, edits from a second window, automations — propagate to the UI without a manual reload. The bridge auto-reconnects on transient drops, so you don't need retry logic.
 
 Two equivalent APIs:
 
 ```js
 // 1) Imperative API — what new templates should use. Returns an unsubscribe fn.
 const off = window.centraid.onChange((detail) => {
-  // detail.tables : string[] of mutated tables (precise — never ["*"])
   // detail.source : "agent" | "handler" | "external"
   // detail.toolCallId? : string — only when source === "agent"
-  // detail.agentTurnId? : string — only when source === "agent"
+  // detail.turnId? : string — only when source === "agent"
   // detail.ts     : number — ms since epoch
   void refresh();
 });
 
 // 2) DOM event — same detail shape.
 window.addEventListener('centraid:datachange', (e) => {
-  // e.detail.tables, e.detail.source, ...
+  // e.detail.source, e.detail.ts, ...
   void refresh();
 });
 ```
@@ -197,17 +237,16 @@ Call this once at startup, after `refresh()` (or your initial-load function) is 
 
 What fires the bus:
 
-- App handlers under `actions/` that INSERT/UPDATE/DELETE — `source: "handler"`.
-- The chat agent (`centraid_write` invoking a declared action or the `_sql` built-in) — `source: "agent"`. Carries a stable `agentTurnId` for the whole chat turn and a per-tool-call `toolCallId` matching the tool pill the user is looking at.
-- External SQL panels (cloud-style query editor) — `source: "external"`.
+- A **successful action handler** under `actions/` — `source: "handler"`. Query handlers never fire it.
+- The chat agent writing on the app's behalf — `source: "agent"`. Carries a stable `turnId` for the whole chat turn and a per-tool-call `toolCallId` matching the tool pill the user is looking at.
+- Any other write path without agent or handler context — `source: "external"`.
+
+The event carries **no table-level changeset** — with the app's data living in the shared vault, it simply means "this app acted; re-derive what you render". On any event, refetch the queries the page renders; don't try to diff which table moved.
 
 Practical patterns:
 
-- **Filter by `tables`.** Skip the refetch when none of `detail.tables` overlaps a table the page renders.
 - **Flash agent writes.** When `source === "agent"`, optionally pulse the affected rows to make the AI's edit visible. Other writes can stay silent.
 - **One sink, not many.** Apps usually subscribe once at startup; render loops read from the resulting derived state rather than each component opening its own `EventSource`.
-
-The runtime guarantees: every successful write (handler / agent / external) emits a single event with a precise non-empty `tables` array. Empty-table emissions are suppressed by the bus, so subscribers never see no-op events.
 
 ### Automations — scheduled background work inside an app
 

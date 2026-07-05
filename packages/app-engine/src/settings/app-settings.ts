@@ -1,46 +1,32 @@
 /*
  * Per-app settings reader/writer.
  *
- * Each app's `data.sqlite` may contain a `__centraid_settings` table:
+ * Settings live in `settings.json` at the app's persistent root
+ * (`<appsDir>/<id>/settings.json`) — runtime state beside `logs.jsonl`,
+ * NOT owner data (that's the vault's). The per-app `data.sqlite` silo is
+ * gone (issue #286 phase 2); this file is what remains of it: a flat
+ * `{ key: value }` JSON object with two writers, partitioned by prefix:
  *
- *   CREATE TABLE __centraid_settings (
- *     key   TEXT PRIMARY KEY,
- *     value TEXT NOT NULL  -- JSON-encoded scalar / object
- *   );
- *
- * The table is shared between two writers, partitioned by key prefix:
- *
- *   - **App-owned keys** (no reserved prefix): the app reads/writes
- *     these through its own SQL handlers, same as any other table.
- *     Used for per-instance customization the app exposes to the user.
- *     `readAppSettings` is the runtime's bulk reader, called during
- *     `app-index` to bake values into the served HTML.
+ *   - **App-owned keys** (no reserved prefix): per-instance customization
+ *     (aesthetic knob choices). `readAppSettings` is the runtime's bulk
+ *     reader, called during `app-index` to bake values into served HTML.
  *
  *   - **Runtime-owned keys** (prefix `__`): the runtime writes these
- *     directly via `writeAppSetting`; apps treat them as read-only.
- *     Currently only `__automation.<name>.enabled` lives here —
- *     user-facing automation toggle state, source-of-truth for the
- *     enabled flag (the gateway's `automations` mirror table reads it
- *     during sync and treats its own `enabled` column as a derived
- *     projection). This lets the toggle survive publish (data.sqlite
- *     is at the persistent app root, outside `versions/`), keeps it
- *     in one place, and makes "delete the app" wipe its toggles
- *     atomically.
+ *     directly via `writeAppSetting`. Currently only
+ *     `__automation.<name>.enabled` lives here — automation toggle state,
+ *     which must survive publish and die with "delete the app".
  *
  * Contract:
- *   - Table is OPTIONAL on read. Missing table = empty settings, no error.
- *   - On write, the table is created on demand.
- *   - Keys MUST be plain strings; values are JSON-encoded.
- *   - All operations are best-effort on read (never throw — a corrupt
- *     setting must not block the app from serving). Writes do throw on
- *     unexpected I/O errors so the caller can surface a failure to
- *     register/unregister.
+ *   - Missing file = empty settings, no error.
+ *   - Reads are best-effort (never throw — a corrupt file must not block
+ *     the app from serving). Writes throw on I/O errors so a failed
+ *     toggle surfaces.
  */
 
-import { DatabaseSync } from 'node:sqlite';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 
-export const APP_SETTINGS_TABLE = '__centraid_settings';
+export const APP_SETTINGS_FILE = 'settings.json';
 
 /** Reserved key prefix for runtime-owned settings. Apps must not write these. */
 export const RUNTIME_KEY_PREFIX = '__';
@@ -50,134 +36,61 @@ export function automationEnabledKey(name: string): string {
   return `__automation.${name}.enabled`;
 }
 
-/**
- * Read every `(key, value)` row from an app's `__centraid_settings` table.
- * Returns an empty object if the file or table is missing, or if the
- * underlying sqlite open fails — this lookup is best-effort and must never
- * cause the app's index.html to fail to serve.
- */
-export function readAppSettings(dataDbFile: string): Record<string, unknown> {
-  if (!existsSync(dataDbFile)) return {};
-  let db: DatabaseSync | undefined;
+function settingsFile(appDir: string): string {
+  return path.join(appDir, APP_SETTINGS_FILE);
+}
+
+function readAll(appDir: string): Record<string, unknown> {
+  const file = settingsFile(appDir);
+  if (!existsSync(file)) return {};
   try {
-    db = new DatabaseSync(dataDbFile, { readOnly: true });
-    db.exec('PRAGMA busy_timeout = 30000');
-    const tableRow = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
-      .get(APP_SETTINGS_TABLE);
-    if (!tableRow) return {};
-    const rows = db.prepare(`SELECT key, value FROM ${APP_SETTINGS_TABLE}`).all() as Array<{
-      key: string;
-      value: string;
-    }>;
-    const out: Record<string, unknown> = {};
-    for (const r of rows) {
-      try {
-        out[r.key] = JSON.parse(r.value) as unknown;
-      } catch {
-        /* skip malformed row */
-      }
-    }
-    return out;
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
     return {};
-  } finally {
-    try {
-      db?.close();
-    } catch {
-      /* nothing to do */
-    }
   }
 }
 
-/**
- * Read a single setting value. Returns `undefined` if the DB file,
- * table, or key is absent (or the row is malformed JSON). Best-effort
- * — never throws.
- */
-export function readAppSetting(dataDbFile: string, key: string): unknown | undefined {
-  if (!existsSync(dataDbFile)) return undefined;
-  let db: DatabaseSync | undefined;
-  try {
-    db = new DatabaseSync(dataDbFile, { readOnly: true });
-    db.exec('PRAGMA busy_timeout = 30000');
-    const tableRow = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
-      .get(APP_SETTINGS_TABLE);
-    if (!tableRow) return undefined;
-    const row = db.prepare(`SELECT value FROM ${APP_SETTINGS_TABLE} WHERE key = ?`).get(key) as
-      | { value: string }
-      | undefined;
-    if (!row) return undefined;
-    try {
-      return JSON.parse(row.value) as unknown;
-    } catch {
-      return undefined;
-    }
-  } catch {
-    return undefined;
-  } finally {
-    try {
-      db?.close();
-    } catch {
-      /* nothing to do */
-    }
-  }
+function writeAll(appDir: string, settings: Record<string, unknown>): void {
+  const file = settingsFile(appDir);
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+  renameSync(tmp, file);
 }
 
 /**
- * Write a single setting value. Creates `__centraid_settings` if
- * missing. Throws on unexpected I/O errors (caller surfaces — this is
- * the toggle-failed path the user needs to see).
- *
- * Writers race-tolerant via SQLite's standard locking; intended for
- * low-frequency runtime-owned writes (toggle flips, automation
- * registrations). Hot per-request paths should still go through the
- * regular sql-ops write surface.
+ * Read every setting of an app. Empty object when the file is missing or
+ * malformed — best-effort, must never block index.html from serving.
  */
-export function writeAppSetting(dataDbFile: string, key: string, value: unknown): void {
-  let db: DatabaseSync | undefined;
-  try {
-    db = new DatabaseSync(dataDbFile);
-    db.exec('PRAGMA busy_timeout = 30000');
-    db.exec(
-      `CREATE TABLE IF NOT EXISTS ${APP_SETTINGS_TABLE} (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
-    );
-    db.prepare(
-      `INSERT INTO ${APP_SETTINGS_TABLE} (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-    ).run(key, JSON.stringify(value));
-  } finally {
-    try {
-      db?.close();
-    } catch {
-      /* nothing to do */
-    }
-  }
+export function readAppSettings(appDir: string): Record<string, unknown> {
+  return readAll(appDir);
+}
+
+/** Read a single setting value; `undefined` when absent. Never throws. */
+export function readAppSetting(appDir: string, key: string): unknown | undefined {
+  return readAll(appDir)[key];
 }
 
 /**
- * Delete a single setting key. No-op when the DB, table, or row is
- * absent. Best-effort — never throws.
+ * Write a single setting value (file created on demand). Throws on I/O
+ * errors — this is the toggle-failed path the user needs to see.
  */
-export function deleteAppSetting(dataDbFile: string, key: string): void {
-  if (!existsSync(dataDbFile)) return;
-  let db: DatabaseSync | undefined;
+export function writeAppSetting(appDir: string, key: string, value: unknown): void {
+  const settings = readAll(appDir);
+  settings[key] = value;
+  writeAll(appDir, settings);
+}
+
+/** Delete a single setting key. No-op when absent. Best-effort. */
+export function deleteAppSetting(appDir: string, key: string): void {
   try {
-    db = new DatabaseSync(dataDbFile);
-    db.exec('PRAGMA busy_timeout = 30000');
-    const tableRow = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
-      .get(APP_SETTINGS_TABLE);
-    if (!tableRow) return;
-    db.prepare(`DELETE FROM ${APP_SETTINGS_TABLE} WHERE key = ?`).run(key);
+    const settings = readAll(appDir);
+    if (!(key in settings)) return;
+    delete settings[key];
+    writeAll(appDir, settings);
   } catch {
     // Best-effort — settings deletion failures shouldn't surface.
-  } finally {
-    try {
-      db?.close();
-    } catch {
-      /* nothing to do */
-    }
   }
 }

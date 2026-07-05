@@ -9,16 +9,19 @@
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
 import { resolveEntity } from '../schema/tables.js';
-import { deleteAppExt } from './custody.js';
+import { retainExtBand } from './ext.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
 import { tableColumns } from './filters.js';
 import type { Identity } from './types.js';
 
 export interface RevocationResult {
   grantId: string;
+  /** The grantee app's Centraid id (consent_app.name), when app-shaped. */
+  appId: string | null;
   viewsRevoked: number;
   parkedDropped: number;
-  appExtDeleted: boolean;
+  /** Live ext tables marked `retained` because the app's last grant died. */
+  extRetained: string[];
   receiptId: string;
 }
 
@@ -26,8 +29,10 @@ export interface RevocationResult {
  * Revocation cascade: revoking a grant is instant and total. The grant goes
  * dark, the grantee app's registered views are invalidated, parked
  * invocations under it are dropped, and once its last grant dies the app's
- * extension file is deleted (uninstall = revoke grant + delete file, R09) —
- * while the model, history and receipts remain (the §11 success test).
+ * ext band is RETAINED — the data stays in the vault (it is the owner's),
+ * app access is gone, and the owner purges explicitly when they mean it
+ * (issue #286 phase 2: uninstall = retain + purge policy) — while the
+ * model, history and receipts remain (the §11 success test).
  */
 export function revokeGrantCascade(
   db: VaultDb,
@@ -44,8 +49,15 @@ export function revokeGrantCascade(
     .prepare(`UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`)
     .run(now, grantId);
   let viewsRevoked = 0;
-  let appExtDeleted = false;
+  let extRetained: string[] = [];
+  let centraidAppId: string | null = null;
   if (grant.app_id !== null) {
+    // consent_app.app_id is a row uuid; the ext band (like the code store)
+    // keys on the Centraid app id, which enrollment carries as `name`.
+    const appRow = db.vault
+      .prepare('SELECT name FROM consent_app WHERE app_id = ?')
+      .get(grant.app_id) as { name: string } | undefined;
+    centraidAppId = appRow?.name ?? null;
     const stillGranted = db.vault
       .prepare(
         `SELECT count(*) AS n FROM consent_access_grant WHERE app_id = ? AND status = 'active' AND revoked_at IS NULL`,
@@ -56,7 +68,7 @@ export function revokeGrantCascade(
         .prepare(`UPDATE consent_app_view SET revoked_at=? WHERE app_id=? AND revoked_at IS NULL`)
         .run(now, grant.app_id);
       viewsRevoked = Number(res.changes);
-      appExtDeleted = deleteAppExt(db, grant.app_id);
+      if (centraidAppId) extRetained = retainExtBand(db, centraidAppId);
     }
   }
   const parkedDropped = dropParked(grantId);
@@ -68,10 +80,10 @@ export function revokeGrantCascade(
     objectId: grantId,
     purpose: null,
     decision: 'allow',
-    detail: { viewsRevoked, parkedDropped, appExtDeleted, revokedBy: owner.partyId },
+    detail: { viewsRevoked, parkedDropped, extRetained, revokedBy: owner.partyId },
   });
   writeProvenance(db.journal, owner, 'consent.access_grant', grantId, 'owner.revoke');
-  return { grantId, viewsRevoked, parkedDropped, appExtDeleted, receiptId };
+  return { grantId, appId: centraidAppId, viewsRevoked, parkedDropped, extRetained, receiptId };
 }
 
 export interface SweepResult {
@@ -105,7 +117,7 @@ function enforceRetention(db: VaultDb, now: string): number {
   }[];
   let deleted = 0;
   for (const policy of policies) {
-    const ref = resolveEntity(`${policy.applies_schema}.${policy.applies_table}`);
+    const ref = resolveEntity(`${policy.applies_schema}.${policy.applies_table}`, db.vault);
     if (!ref || ref.file !== 'vault') continue;
     const rule = JSON.parse(policy.rule_json) as { timestamp_column?: string };
     const tsColumn = rule.timestamp_column ?? 'created_at';

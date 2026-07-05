@@ -358,7 +358,14 @@
     status?: 'new' | 'draft' | 'live' | null;
   }
 
-  type SidebarPage = 'home' | 'insights' | 'discover' | 'starred' | 'automations' | 'settings';
+  type SidebarPage =
+    | 'home'
+    | 'assistant'
+    | 'insights'
+    | 'discover'
+    | 'starred'
+    | 'automations'
+    | 'settings';
 
   interface SidebarOpts {
     /** App id of the app/builder currently in focus — highlights its row. */
@@ -376,6 +383,7 @@
      *  `onNewApp` when there is no dedicated chat-creation entry point. */
     onNewChat?: () => void;
     onSearch?: () => void;
+    onAssistant?: () => void;
     onInsights?: () => void;
     onDiscover?: () => void;
     onStarred?: () => void;
@@ -517,7 +525,7 @@
       }),
     );
 
-    // Pages — Home / Discover / Starred (RefinedSidebar §G3).
+    // Pages — Home / Assistant / Discover / Starred (RefinedSidebar §G3).
     wrap.append(sbSection('Pages'));
     wrap.append(
       sbItem({
@@ -525,6 +533,15 @@
         label: 'Home',
         active: opts.activePage === 'home',
         onClick: opts.onHome,
+      }),
+    );
+    wrap.append(
+      sbItem({
+        icon: Glyph.sparkle(),
+        label: 'Assistant',
+        active: opts.activePage === 'assistant',
+        disabled: !opts.onAssistant,
+        onClick: opts.onAssistant,
       }),
     );
     wrap.append(

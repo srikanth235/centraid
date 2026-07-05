@@ -55,6 +55,7 @@ export interface AppearancePrefs {
 export type ShellRoute =
   | { kind: 'home' }
   | { kind: 'settings' }
+  | { kind: 'assistant' }
   | { kind: 'insights' }
   | { kind: 'discover' }
   | { kind: 'starred' }
@@ -106,6 +107,7 @@ export type AutomationRunState =
 // factory as it's extracted. Always fully populated before boot.
 export interface ShellEntries {
   renderHome(): void;
+  renderAssistant(): void;
   renderInsights(): void;
   renderDiscover(): void;
   renderStarred(): void;

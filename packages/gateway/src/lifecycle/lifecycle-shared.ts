@@ -6,11 +6,11 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/blueprints';
-import { MigrationError } from '@centraid/app-engine';
+import { ExtSpecError } from '@centraid/vault';
 import type * as automation from '@centraid/automation';
 import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { validateManifestAt } from '../routes/apps-store-routes.js';
-import { runPublishMigrations } from './publish-migrations.js';
+import { applyExtOnPublish, type ExtBandOps } from './ext-band.js';
 import { sendJson, writeFileMap, type FileMapEntry } from '../routes/route-helpers.js';
 
 export interface LifecycleRouteOptions {
@@ -27,22 +27,21 @@ export interface LifecycleRouteOptions {
    */
   ensureRegistered: (appId: string) => Promise<void>;
   /**
-   * Drop an app from the runtime registry AND delete its data dir
-   * (`<appsDir>/<id>/`) after the store removed its code — wires the
-   * gateway's deregister+cleanup path. Used when a whole automation app
-   * is deleted wholesale, so its data.sqlite + run ledgers don't linger.
+   * Drop an app from the runtime registry AND delete its state dir
+   * (`<appsDir>/<id>/` — logs, settings.json, blobs) after the store
+   * removed its code — wires the gateway's deregister+cleanup path.
    */
   deregister: (appId: string) => Promise<void>;
   /** Reconcile the gateway's in-process cron scheduler after a publish
    *  changed the live set (issue #149/#150). */
   reconcile: () => void;
   /**
-   * Resolve an app's LIVE `data.sqlite` path. Injected so a lifecycle
-   * publish runs the staged app's committed migrations against live data
-   * before the ff-merge (issue #144) — symmetric to the apps-store publish
-   * route.
+   * The vault plane's ext-band operations (issue #286 phase 2). Injected
+   * so a lifecycle publish applies the staged app's declared extension
+   * tables to the vault before the ff-merge — symmetric to the apps-store
+   * publish route. Omitted on hosts without a vault plane.
    */
-  liveDataFile?: (appId: string) => string;
+  ext?: ExtBandOps;
 }
 
 /** Build an app's absolute webhook URL from the inbound request's host. */
@@ -135,20 +134,21 @@ export async function publishAndReconcile(
 ): Promise<void> {
   const validationError = await validateManifestAt(input.appDir);
   if (validationError) throw new AppScaffoldError('invalid_manifest', validationError);
-  // Apply the staged app's committed migrations to live data as part of the
-  // publish (issue #144). The `migrate` hook runs inside the store's mutex,
-  // post-rebase + pre-ff-merge, against the final worktree tree. A failing
-  // migration throws and aborts the publish, live data untouched.
-  const liveDataFile = opts.liveDataFile;
+  // Apply the staged app's declared ext tables to the vault as part of the
+  // publish (issue #286 phase 2). The `beforeMerge` hook runs inside the
+  // store's mutex, post-rebase + pre-ff-merge, against the final worktree
+  // tree. A refused spec throws and aborts the publish, vault untouched.
+  const ext = opts.ext;
   const appId = input.appId;
   await opts.store.publish({
     sessionId: input.sessionId,
     appId,
     message: input.message,
-    ...(liveDataFile
+    ...(ext
       ? {
-          migrate: (worktreeAppDir: string) =>
-            runPublishMigrations(worktreeAppDir, liveDataFile(appId)),
+          beforeMerge: async (worktreeAppDir: string) => {
+            await applyExtOnPublish(ext, appId, worktreeAppDir);
+          },
         }
       : {}),
   });
@@ -159,9 +159,11 @@ export async function publishAndReconcile(
 
 /**
  * Delete a whole app wholesale and reconcile: drop its code from `main`,
- * deregister it (removing its data dir + run ledgers), then reconcile the
- * scheduler so its triggers stop firing. The delete-side counterpart to
+ * deregister it (removing its state dir), then reconcile the scheduler so
+ * its triggers stop firing. The delete-side counterpart to
  * {@link publishAndReconcile} — keeps `reconcile()` out of the route body.
+ * (The app's vault ext band is RETAINED by the grant-revocation cascade;
+ * purging it is the owner's separate act.)
  */
 export async function deleteAppAndReconcile(
   opts: LifecycleRouteOptions,
@@ -216,17 +218,10 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
     const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
-  if (err instanceof MigrationError) {
-    // A staged migration that fails against live data aborts the publish
-    // (issue #144) — `sql_failed` is a runtime conflict (422), a malformed
-    // migration set is a bad request (400).
-    const status = err.code === 'sql_failed' ? 422 : 400;
-    return sendJson(res, status, {
-      error: err.code,
-      message: err.message,
-      file: err.file,
-      sqlError: err.sqlError,
-    });
+  if (err instanceof ExtSpecError) {
+    // A declared ext table the vault refuses (bad shape, unsupported
+    // change) aborts the publish (issue #286 phase 2) — a bad request.
+    return sendJson(res, 400, { error: 'invalid_ext_spec', message: err.message });
   }
   if (err instanceof WorktreeStoreError) {
     const status =

@@ -50,6 +50,15 @@ export {
 } from './gateway/duties.js';
 export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
 export {
+  VAULT_SQL_DEFAULT_ROWS,
+  VAULT_SQL_MAX_ROWS,
+  readOnlySqlRefusal,
+  type VaultSqlRequest,
+  type VaultSqlResult,
+  type VaultSqlRows,
+} from './gateway/sql.js';
+export { buildAssistantContext } from './gateway/assistant-context.js';
+export {
   CARDED_ENTITIES,
   CARD_PK,
   type RefRequest,
@@ -116,4 +125,23 @@ export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from '
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
 export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { appExtPath, type BackupResult } from './gateway/custody.js';
+export { type BackupResult } from './gateway/custody.js';
+export {
+  validateExtSpecs,
+  canonicalSpecJson,
+  extLogical,
+  extPhysical,
+  parseExtLogical,
+  ExtSpecError,
+  type ExtTableSpec,
+  type ExtColumnSpec,
+  type ExtIndexSpec,
+  type ExtBand,
+} from './schema/ext.js';
+export {
+  extAppIds,
+  extCommandNames,
+  extSearchable,
+  assertExtSchemaOwnership,
+  type ExtApplyOutcome,
+} from './gateway/ext.js';

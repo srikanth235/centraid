@@ -69,7 +69,7 @@ export function registerAppView(
   db: VaultDb,
   options: { appId: string; name: string; baseEntity: string; definition: ViewDefinition },
 ): string {
-  const base = resolveEntity(options.baseEntity);
+  const base = resolveEntity(options.baseEntity, db.vault);
   if (!base || base.file !== 'vault') {
     throw new GatewayError('contract', `unknown base entity ${options.baseEntity}`);
   }
@@ -79,7 +79,7 @@ export function registerAppView(
   }
   const fks = declaredFks(db.vault, base.physical);
   for (const join of options.definition.joins ?? []) {
-    const joined = resolveEntity(join.entity);
+    const joined = resolveEntity(join.entity, db.vault);
     if (!joined || joined.file !== 'vault') {
       throw new GatewayError('contract', `unknown joined entity ${join.entity}`);
     }
@@ -149,7 +149,7 @@ export function queryAppView(
     throw new GatewayError('consent', `deny (receipt ${receiptId}): ${failing}`);
   };
   if (!view) return deny(`no registered view "${viewName}" for this app`);
-  const base = resolveEntity(view.base_entity);
+  const base = resolveEntity(view.base_entity, db.vault);
   if (!base) return deny(`view base entity ${view.base_entity} no longer resolves`);
   const definition = JSON.parse(view.definition_json) as ViewDefinition;
 
@@ -164,7 +164,7 @@ export function queryAppView(
   const selects = baseColumns.map((c) => `b."${c}" AS "${c}"`);
   const joins: string[] = [];
   for (const [i, join] of (definition.joins ?? []).entries()) {
-    const joined = resolveEntity(join.entity);
+    const joined = resolveEntity(join.entity, db.vault);
     if (!joined)
       return deny(`joined entity ${join.entity} no longer resolves`, baseConsent.grantId);
     const joinConsent = evaluateConsent(

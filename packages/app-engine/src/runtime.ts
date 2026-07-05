@@ -15,8 +15,7 @@ import { serveStatic } from './http/static-server.js';
 import { readBody, sendError, sendJson } from './http/http-utils.js';
 import { appDataDir } from './registry/app-paths.js';
 import { cleanupDeregisteredApp } from './registry/deregister-cleanup.js';
-import { readAppSchema } from './data/schema.js';
-import { handleTableRowsRoute, handleQueryRoute, handleLogsRoute } from './http/cloud-routes.js';
+import { handleLogsRoute, handleSettingsWrite } from './http/cloud-routes.js';
 import { ChangeBus } from './changes/change-bus.js';
 import { handleAppChanges } from './http/changes-sse.js';
 import type { PrefsStore } from './stores/prefs-store.js';
@@ -54,7 +53,7 @@ export interface RuntimeOptions {
   /**
    * Optional change bus. When omitted the runtime constructs an internal
    * one, exposed as `runtime.changeBus` for hosts that want to subscribe
-   * from outside (e.g. OpenClaw's `centraid_write` agent tool).
+   * from outside.
    */
   changeBus?: ChangeBus;
   /**
@@ -117,8 +116,8 @@ export interface RuntimeOptions {
    * app id — the gateway injects an apps-store-backed resolver pointing
    * at the live git worktree (`worktrees/main/<sha>/apps/<id>/`) instead
    * of the legacy `<appsDir>/<id>/versions/<active>/`. `entry.path` (the
-   * registry's per-app dir) is still where `data.sqlite` lives, so this
-   * cleanly separates code (git) from data (stable per-app dir).
+   * registry's per-app dir) still holds runtime state (logs, settings.json,
+   * blobs), so this cleanly separates code (git) from state (stable dir).
    */
   codeDirOverride?: (appId: string) => Promise<string | undefined>;
   /**
@@ -126,11 +125,10 @@ export interface RuntimeOptions {
    * provided, requests under `/centraid/_draft/<sessionId>/<appId>/…` serve
    * static files + run handlers from whatever dir this returns for
    * `(appId, sessionId)` — the gateway injects an apps-store-backed
-   * resolver pointing at the session worktree's `apps/<id>/`. Data still
-   * binds to the registry entry's dir, so a draft reads/writes the same
-   * `data.sqlite` the published app uses. Returns `undefined` for an
-   * unknown session/app (→ 404/503), so the live serving path is wholly
-   * unaffected when no draft resolver is configured.
+   * resolver pointing at the session worktree's `apps/<id>/`. Returns
+   * `undefined` for an unknown session/app (→ 404/503), so the live
+   * serving path is wholly unaffected when no draft resolver is
+   * configured.
    */
   draftCodeDir?: (appId: string, sessionId: string) => Promise<string | undefined>;
   /**
@@ -238,10 +236,9 @@ const noopLogger: RuntimeLogger = {
  */
 export class Runtime {
   /**
-   * Three-tool dispatcher (issue #107). Exposed so the OpenClaw plugin
-   * can register `centraid_write`/`_read`/`_describe` tools that
-   * delegate here rather than re-implementing the manifest + validation
-   * surface.
+   * Declared-handler dispatcher (issue #107). Exposed so hosts can
+   * delegate here (the `_tool` HTTP shim for app UIs does) rather than
+   * re-implementing the manifest + validation surface.
    */
   readonly dispatcher: Dispatcher;
   /**
@@ -343,8 +340,10 @@ export class Runtime {
    * the chat runner's own emit closure (see `agentEmitForApp`).
    */
   private emitForApp(appId: string, source: 'handler' | 'external'): (tables: string[]) => void {
+    // Empty `tables` still notifies — post-#286 handler writes ride
+    // ctx.vault, so "the app acted" is all the runtime knows (and all a
+    // view needs to re-derive).
     return (tables) => {
-      if (tables.length === 0) return;
       this.changeBus.emit({ appId, tables, ts: Date.now(), source });
     };
   }
@@ -358,7 +357,6 @@ export class Runtime {
     appId: string,
   ): (payload: { tables: string[]; toolCallId?: string; turnId?: string }) => void {
     return (payload) => {
-      if (payload.tables.length === 0) return;
       this.changeBus.emit({
         appId,
         tables: payload.tables,
@@ -547,43 +545,23 @@ export class Runtime {
           return;
         }
 
-        case 'app-schema': {
+        case 'app-settings-read': {
           const entry = this.registry.get(route.appId);
           if (!entry) {
             sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          // Gate on code-dir presence rather than current.json so the
-          // git-store backend (no current.json) works too. In draft mode
-          // data dir = code dir (the session worktree), so the schema read
-          // reflects the draft's branched data — incl. a pending migration
-          // the draft applied (#144). Live reads the per-app dir.
-          const codeDir = draftSessionId
-            ? await draftCodeDirFor(entry.id)
-            : await this.resolveCodeDir(entry);
-          if (!codeDir) {
-            sendError(res, 503, 'no_active_version', 'App has no active version yet.');
+          sendJson(res, 200, { settings: readAppSettings(entry.path) });
+          return;
+        }
+
+        case 'app-settings-write': {
+          const entry = this.registry.get(route.appId);
+          if (!entry) {
+            sendError(res, 404, 'not_found', 'App not registered.');
             return;
           }
-          const dataDbFile = path.join(draftSessionId ? codeDir : entry.path, 'data.sqlite');
-          const schema = readAppSchema(dataDbFile);
-          sendJson(res, 200, schema);
-          return;
-        }
-
-        case 'app-table-rows': {
-          await handleTableRowsRoute(res, this.registry, route.appId, route.tableName, route.query);
-          return;
-        }
-
-        case 'app-query': {
-          await handleQueryRoute(
-            req,
-            res,
-            this.registry,
-            route.appId,
-            this.emitForApp(route.appId, 'external'),
-          );
+          await handleSettingsWrite(req, res, entry.path);
           return;
         }
 
@@ -624,13 +602,11 @@ export class Runtime {
           const rel = route.kind === 'app-index' ? 'index.html' : route.rel;
           if (route.kind === 'app-index') {
             // Merge global prefs (gateway-side store) with this app's own
-            // `__centraid_settings` rows and any URL-query overrides, then
-            // bake the result into the served HTML so the iframe paints in
-            // the right shape before any script runs. Draft mode reads the
-            // branched settings from the worktree's data.sqlite (#144).
-            const dataDbFile = path.join(draftSessionId ? codeDir : entry.path, 'data.sqlite');
+            // settings.json and any URL-query overrides, then bake the
+            // result into the served HTML so the iframe paints in the
+            // right shape before any script runs.
             const globalPrefs = this.userStore?.getAllPrefs();
-            const appSettings = readAppSettings(dataDbFile);
+            const appSettings = readAppSettings(entry.path);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
             await serveStatic(res, codeDir, rel, { settingsInject, ...draftServe, ...sharedServe });

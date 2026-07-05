@@ -9,14 +9,8 @@
 export type Route =
   | { kind: 'registry-list' }
   | { kind: 'registry-deregister'; appId: string }
-  | { kind: 'app-schema'; appId: string }
-  | {
-      kind: 'app-table-rows';
-      appId: string;
-      tableName: string;
-      query: Record<string, string>;
-    }
-  | { kind: 'app-query'; appId: string }
+  | { kind: 'app-settings-read'; appId: string }
+  | { kind: 'app-settings-write'; appId: string }
   | { kind: 'app-logs'; appId: string; query: Record<string, string> }
   | { kind: 'app-index'; appId: string; query: Record<string, string> }
   | { kind: 'app-static'; appId: string; rel: string }
@@ -87,17 +81,12 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
     const sub = decodeURIComponent(segments[2] ?? '');
 
-    if (sub === 'schema' && segments.length === 3 && m === 'GET') {
-      return { kind: 'app-schema', appId };
-    }
-    if (sub === 'data' && segments.length === 4 && m === 'GET') {
-      const tableName = decodeURIComponent(segments[3] ?? '');
-      if (!tableName) return { kind: 'not-found' };
-      const query = Object.fromEntries(url.searchParams.entries());
-      return { kind: 'app-table-rows', appId, tableName, query };
-    }
-    if (sub === 'query' && segments.length === 3 && m === 'POST') {
-      return { kind: 'app-query', appId };
+    // Per-app settings.json (issue #286: the silo's `__centraid_settings`
+    // table became a file; the renderer reads/writes app-owned keys here).
+    if (sub === 'settings' && segments.length === 3) {
+      if (m === 'GET') return { kind: 'app-settings-read', appId };
+      if (m === 'PUT') return { kind: 'app-settings-write', appId };
+      return { kind: 'not-found' };
     }
     if (sub === 'logs' && segments.length === 3 && m === 'GET') {
       const query = Object.fromEntries(url.searchParams.entries());
@@ -143,8 +132,8 @@ export function parseRoute(method: string, rawUrl: string): Route {
 
   const second = decodeURIComponent(segments[1] ?? '');
 
-  // /centraid/<id>/_changes — Server-Sent Events stream of mutations to the
-  // app's data.sqlite. The connection stays open until the client closes.
+  // /centraid/<id>/_changes — Server-Sent Events stream of app writes (the
+  // change bus). The connection stays open until the client closes.
   if (second === '_changes') {
     if (m !== 'GET' || segments.length !== 2) return { kind: 'not-found' };
     return { kind: 'app-changes', appId };

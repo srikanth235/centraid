@@ -102,7 +102,7 @@ file — model/provider routing is the coding agent CLI's own config.
 
 ```
 <dataDir>/
-  apps/                          — registered apps + _registry.json + per-app data.sqlite
+  apps/                          — registered apps + _registry.json + per-app state (logs, settings)
   identity.sqlite                — users + per-user prefs
   analytics.sqlite               — one summary row per run
   conversation-runner-sessions/  — codex/claude thread state for in-app chat

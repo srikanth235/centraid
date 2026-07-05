@@ -3,7 +3,7 @@
  * here in `@centraid/skills` rather than at the call site (issue #147,
  * Concern 1).
  *
- * A builder turn's extra-system-prompt is: the route's data/schema preamble
+ * A builder turn's extra-system-prompt is: the route's app-context preamble
  * (`baseExtra`) first, then the authoring contract for the app `kind`
  * (`composeSkills`), then — for apps with a front end — the live UI grounding
  * (`buildUiGroundingBlocks`), then the host tool list (`buildToolsGroundingBlock`).
@@ -20,7 +20,7 @@ import { buildUiGroundingBlocks } from './ui-grounding.js';
 import { buildToolsGroundingBlock } from './dynamic.js';
 
 export interface AuthoringExtraPromptInput {
-  /** The route's data/schema preamble — kept first, carries the live schema. */
+  /** The route's app-context preamble — kept first; carries the app's identity, declared handler catalog, and vault/ext declaration. */
   baseExtra: string;
   /** App kind from the worktree `app.json`; an automation has no front end. */
   appKind: 'app' | 'automation';

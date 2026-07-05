@@ -12,22 +12,21 @@
  *     renderer's Code tab and the local builder agent share); the core
  *     defaults to a host-neutral `chat-<appId>`;
  *   - the UNION of tools: the codex/claude adapter's native file-edit +
- *     shell tools (workspace-write against cwd) PLUS the `centraid_*`
- *     dispatcher threaded via `toolContext`, so the same turn can author a
- *     migration and answer a data question;
+ *     shell tools (workspace-write against cwd) PLUS the vault register
+ *     (`vault_sql` / `vault_invoke`) threaded via `toolContext`, so the
+ *     same turn can author code and look at the real data it projects;
  *   - the unified system prompt: the data/schema preamble the chat route
  *     builds (`input.extraSystemPrompt`) followed by the builder authoring
  *     prompt + UI/tools grounding (composed by `@centraid/skills`).
  *
- * Both code edits AND data ops STAGE in the draft (issue #144): native file
- * edits land in the worktree, and the `centraid_*` tools dispatch with
- * `overrideCodeDir = cwd`, so they hit the draft's branched `data.sqlite`
- * (data dir = code dir in draft mode) — the agent can author a migration and
- * exercise it against prod-seeded draft data without touching live rows. The
- * user clicks Publish to flip the live version + apply the migration to live
- * data — explicit-publish holds. Webhook secrets are minted as a post-turn
- * step (the agent can't generate crypto-random credentials) and surfaced once
- * via a `webhooks` stream event.
+ * Code edits STAGE in the draft worktree; ext-table schema changes are
+ * DECLARED there (`app.json#ext.tables`) and mirrored into the vault's
+ * draft band each turn, so preview data ops stay scratch (issue #286
+ * phase 2). The user clicks Publish to flip the live version + apply the
+ * declared DDL diff to the live band — explicit-publish holds. Webhook
+ * secrets are minted as a post-turn step (the agent can't generate
+ * crypto-random credentials) and surfaced once via a `webhooks` stream
+ * event.
  *
  * Since issue #147 (Concern 1) this is a thin config over
  * `makeConversationRunnerCore` (`@centraid/app-engine`): the shared per-turn
@@ -57,12 +56,14 @@ import {
   type RunnerKind,
   type RunnerPrefs,
   type RunTurnFn,
+  type VaultInvokeRunner,
+  type VaultSqlRunner,
 } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { buildAuthoringExtraPrompt } from '@centraid/skills';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { ensureSession } from '../lifecycle/lifecycle-shared.js';
-import { seedDraftData } from '../lifecycle/draft-data.js';
+import { ensureDraftBand, type ExtBandOps } from '../lifecycle/ext-band.js';
 
 export type { RunTurnFn };
 
@@ -79,10 +80,18 @@ export interface UnifiedConversationRunnerOptions {
    *  URLs after minting. A thunk because the ephemeral port is only known
    *  after the server starts — and a turn only ever runs post-start. */
   publicBaseUrl: () => string;
-  /** Resolve an app's live `data.sqlite` path. When set, the turn's draft
-   *  worktree is seeded from it on first access (issue #144) so the agent
-   *  operates on prod-shaped data while testing. */
-  liveDataFile?: (appId: string) => string;
+  /** The vault plane's ext-band operations (issue #286 phase 2). When set,
+   *  each turn keeps the app's DRAFT ext band in step with the draft
+   *  manifest (first access seeds it from live rows) so the agent's
+   *  preview operates on prod-shaped data without touching live. */
+  ext?: ExtBandOps;
+  /** The builder's vault read tool (issue #286 phase 2): the same
+   *  owner-side `vault_sql` runner the assistant uses — looking at real
+   *  data while building IS the owner asking their own vault. */
+  vaultSql?: () => VaultSqlRunner;
+  /** The builder's typed-write tool — rides the `_assistant` agent, so
+   *  high-risk commands park exactly like assistant/ask turns. */
+  vaultInvoke?: () => VaultInvokeRunner;
   /** Session id for an app's shared draft worktree. Defaults to a
    *  host-neutral `chat-<appId>` scheme. Hosts that share the draft with
    *  another editing surface inject their own scheme — the desktop passes
@@ -180,21 +189,24 @@ export function makeUnifiedConversationRunner(
     // test injects a stub.
     runTurn: opts.runTurn ?? runTurn,
 
-    // cwd IS the draft session worktree, so the agent's centraid_* tools
-    // operate the draft's branched data.sqlite, not live (issue #144).
+    // cwd IS the draft session worktree (issue #144's draft-code framing
+    // survives; the branched data.sqlite did not — #286 phase 2).
     cwdIsDraftWorktree: true,
 
+    // The builder's data tools are the vault register — the same
+    // vault_sql/vault_invoke surface the assistant and ask turns ride.
+    ...(opts.vaultSql ? { vaultSql: opts.vaultSql } : {}),
+    ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke } : {}),
+
     // Open (or reuse) the app's shared draft worktree so native file edits
-    // stage in the draft, and run the turn from its app dir. Seed the draft's
-    // branched data.sqlite from live on first access (#144) so the agent's
-    // data tools operate prod-shaped data.
+    // stage in the draft, and run the turn from its app dir. Keep the
+    // vault's DRAFT ext band in step with the draft manifest (first access
+    // seeds from live rows) so preview writes stay scratch.
     resolveCwd: async (input) => {
       const sessionId = sessionIdFor(input.appId);
       await ensureSession(opts.store, sessionId);
       const worktreeAppDir = await opts.store.snapshotSessionAppDir(sessionId, input.appId);
-      if (opts.liveDataFile) {
-        await seedDraftData({ liveDataFile: opts.liveDataFile(input.appId), worktreeAppDir });
-      }
+      if (opts.ext) await ensureDraftBand(opts.ext, input.appId, worktreeAppDir);
       return worktreeAppDir;
     },
 

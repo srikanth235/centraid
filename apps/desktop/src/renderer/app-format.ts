@@ -278,24 +278,6 @@ export function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: s
   return parts.join(' · ') || 'Manual only';
 }
 
-// SQLite single-quote escape. Values come from a closed set (knob.value
-// strings declared by the template) — we still escape defensively so a
-// template author can introduce arbitrary value strings without rethinking
-// the write path.
-export function sqlString(s: string): string {
-  return `'${s.replace(/'/g, "''")}'`;
-}
-
-// Settings key (camelCase, e.g. `appFont`) → kebab name shared by the
-// data-attr and CSS-var paths. Mirrors `camelTailToKebab` in
-// `app-engine/src/settings-merge.ts` so the live update lands on the same
-// target the runtime will bake on next reload.
-export function appKnobKebab(key: string): string {
-  // Strip the `app` prefix, lowercase first letter, kebab the rest.
-  const tail = key.startsWith('app') ? key.slice(3) : key;
-  return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
-}
-
 // Duration in ms → "950ms" / "1.4s" / "2m 5s".
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;

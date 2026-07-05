@@ -67,11 +67,10 @@ export interface ClaudeTurnInput {
    */
   extraPath?: string;
   /**
-   * When provided, the SDK is configured with an in-process MCP server
-   * exposing the three structured centraid tools (`centraid_describe`,
-   * `centraid_read`, `centraid_write`) that delegate to the shared
-   * app-engine dispatcher. `_sql` lands as a built-in inside the
-   * dispatcher.
+   * When provided (and carrying a vault runner), the SDK is configured
+   * with an in-process MCP server exposing the vault-register tools
+   * (`vault_sql`, `vault_invoke`). A context without runners mounts no
+   * data tools — the trio died with the per-app silo (#286 phase 2).
    */
   toolContext?: ToolContext;
   /**
@@ -158,7 +157,7 @@ export async function runClaudeTurn(
     }
     if (input.toolContext) {
       const server = await buildCentraidMcpServer(mod, input.toolContext);
-      options.mcpServers = { centraid: server };
+      if (server) options.mcpServers = { centraid: server };
     }
 
     // With attachments, send a structured user message (text + image/document

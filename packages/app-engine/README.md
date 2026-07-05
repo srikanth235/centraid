@@ -16,12 +16,14 @@ embed + standalone daemon) and [`@centraid/openclaw-plugin`](../openclaw-plugin)
 - **Registry reads** — `GET /centraid/_apps`, `DELETE /centraid/_apps/<id>`.
   (Code publishing/versioning is the git-store surface in `@centraid/gateway`,
   not here.)
-- **Cloud-panel data** — `GET …/schema`, `…/data/<table>`, `POST …/query`,
-  `GET …/logs` ([cloud-routes.ts](src/http/cloud-routes.ts)).
-- **Three-tool dispatcher** — `POST /centraid/_tool/{centraid_describe,_read,_write}`
+- **Cloud-panel state** — `GET …/logs`, `GET/PUT …/settings`
+  ([cloud-routes.ts](src/http/cloud-routes.ts)). App DATA lives in the
+  vault (issue #286 phase 2) — there is no per-app database to browse.
+- **Declared-handler dispatcher** — `POST /centraid/_tool/{centraid_describe,_read,_write}`
   ([dispatcher.ts](src/handlers/dispatcher.ts)): reads `app.json`, validates
   `input` with Ajv, runs the handler in the worker. `centraid_read` → query,
-  `centraid_write` → action.
+  `centraid_write` → action. Declared handlers ONLY — the `_sql` builtin
+  died with the silo.
 - **Per-app** — `GET /centraid/<id>/` + `/<file>` (static, [security.ts](src/http/security.ts)
   allowlist), `GET /centraid/<id>/_changes` (SSE, [changes-sse.ts](src/http/changes-sse.ts)),
   `POST /centraid/<id>/_turn` (chat turn → SSE, [turn-routes.ts](src/http/turn-routes.ts)).
@@ -55,12 +57,9 @@ The standalone daemon (centraid#131) is the first deployment where
 multiple HTTP clients write to the same gateway state. The engine
 expects:
 
-- **Per-app `data.sqlite`** opens with `PRAGMA journal_mode = WAL`,
-  `PRAGMA foreign_keys = ON`, and `PRAGMA busy_timeout = 30000` on
-  every connection ([handler-runner.ts](src/handlers/handler-runner.ts),
-  [run-query.ts](src/handlers/run-query.ts), [sql-ops.ts](src/handlers/sql-ops.ts),
-  [schema.ts](src/data/schema.ts), [table-rows.ts](src/data/table-rows.ts),
-  [app-settings.ts](src/settings/app-settings.ts)).
+- **App data lives in the vault** (issue #286 phase 2) — there is no
+  per-app database; handlers reach data through `ctx.vault` and the
+  vault gateway owns the connection discipline.
 - **Identity / analytics DBs** ([gateway-db.ts](src/stores/gateway-db.ts))
   use the same trio in their opener.
 - **One writer at a time per file** — SQLite enforces this at the
@@ -73,10 +72,6 @@ expects:
 - **`_registry.json` writes** go through a tmp + atomic `rename`
   ([registry.ts](src/registry/registry.ts)) so a reader never sees a partial
   file even if the writer crashes mid-write.
-
-Covered by [concurrent-writers.test.ts](src/concurrent-writers.test.ts):
-50 parallel `writeOp` calls against the same file land deterministically;
-a polling reader concurrent with N writers never observes SQLITE_BUSY.
 
 ## Build / test
 

@@ -1,8 +1,8 @@
 // governance: allow-repo-hygiene file-size-limit route-module split out of app.ts (#227)
 // The app-view subsystem: opening a centraid app into the windowed view
 // (openApp → mountUserApp → sandboxed iframe + per-app agentic chat), plus the
-// per-app Settings drawer (knobs persisted to the app's SQLite, standing-order
-// automations with live run timelines). Extracted from app.ts.
+// per-app Settings drawer (knobs persisted to the app's settings.json,
+// standing-order automations with live run timelines). Extracted from app.ts.
 //
 // `appSettingsCleanup` is module-local. Shell state (prefs, userApps, the live
 // sidebar setter, currentCleanup, automationRunState) is reached through the
@@ -10,7 +10,8 @@
 // share, card actions) through ctx.shell.* and the ctx card-action forwarders.
 import {
   appLiveUrl,
-  appQuery,
+  appSettings,
+  appSettingWrite,
   listAutomationRunNodes,
   listAutomationRuns,
   listAutomations,
@@ -21,13 +22,7 @@ import {
   streamAutomationRun,
   updateAppMeta,
 } from './gateway-client.js';
-import {
-  appKnobKebab,
-  formatDuration,
-  prettyJson,
-  sqlString,
-  triggersSummary,
-} from './app-format.js';
+import { formatDuration, prettyJson, triggersSummary } from './app-format.js';
 import { manifestVaultBlock, renderVaultPane } from './app-vault.js';
 import type { ShellContext } from './app-shell-context.js';
 
@@ -186,7 +181,7 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
     try {
       mountUserApp(app, appId, inner);
       // Per-app agentic chat: only wire it up for centraid-backed apps,
-      // since the agent reads the app's data.sqlite via the gateway.
+      // since the agent operates the app's vault data via the gateway.
       if (appId) {
         ctx.setCurrentCleanup(
           window.AppChat.mount({
@@ -267,11 +262,14 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
   // controls match the app's CSS, not whatever the bundled template
   // might have evolved to since the clone.
   //
-  // Values persist in the per-app `__centraid_settings` SQLite table via
-  // `CentraidApi.appQuery` SQL writes. The runtime's settings-merge bakes
-  // them into `<html data-app-<key>="...">` on next load; the inline
-  // bridge in each template applies live `centraid:settings` postMessage
-  // updates from the shell so the change is visible immediately.
+  // Values persist in the app's `settings.json` via
+  // `PUT /centraid/_apps/<id>/settings` (issue #286 phase 2 — the old
+  // `__centraid_settings` SQL table died with the per-app data.sqlite).
+  // Keys stay camelCase (`appFont`) on the wire; the runtime's
+  // settings-merge kebab-cases them into `<html data-app-<key>="...">`
+  // on next load, and the inline bridge in each template applies live
+  // `centraid:settings` postMessage updates from the shell so the change
+  // is visible immediately.
 
   interface AppKnobOption {
     value: string;
@@ -312,31 +310,14 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
     openAppSettings(app, anchor, view, appId);
   }
 
-  async function ensureAppSettingsTable(appId: string): Promise<void> {
-    await appQuery({
-      id: appId,
-      sql: 'CREATE TABLE IF NOT EXISTS __centraid_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-    });
-  }
-
   async function fetchAppKnobValues(appId: string): Promise<Record<string, string>> {
     try {
-      await ensureAppSettingsTable(appId);
-      const result = await appQuery({
-        id: appId,
-        sql: 'SELECT key, value FROM __centraid_settings',
-      });
-      if (result.kind !== 'rows') return {};
+      const settings = await appSettings({ id: appId });
       const out: Record<string, string> = {};
-      for (const row of result.rows) {
-        const key = typeof row.key === 'string' ? row.key : String(row.key);
-        const raw = typeof row.value === 'string' ? row.value : String(row.value);
-        try {
-          const parsed = JSON.parse(raw) as unknown;
-          if (typeof parsed === 'string') out[key] = parsed;
-        } catch {
-          /* skip malformed row */
-        }
+      for (const [key, value] of Object.entries(settings)) {
+        // Knob values are plain strings; skip non-knob shapes (and any
+        // runtime-owned key the gateway might ever echo).
+        if (typeof value === 'string' && !key.startsWith('__')) out[key] = value;
       }
       return out;
     } catch {
@@ -345,10 +326,18 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
   }
 
   async function writeAppKnobValue(appId: string, key: string, value: string): Promise<void> {
-    const sql =
-      `INSERT INTO __centraid_settings (key, value) VALUES (${sqlString(key)}, ${sqlString(JSON.stringify(value))}) ` +
-      'ON CONFLICT(key) DO UPDATE SET value = excluded.value';
-    await appQuery({ id: appId, sql });
+    // camelCase key as-is — the runtime kebab-cases at bake time.
+    await appSettingWrite({ id: appId, key, value });
+  }
+
+  // Settings key (camelCase, e.g. `appFont`) → the kebab name shared by
+  // the data-attr and CSS-var paths. Mirrors `camelTailToKebab` in
+  // `app-engine/src/settings/settings-merge.ts` so the live update lands
+  // on the same target the runtime will bake on next reload.
+  function appKnobKebab(key: string): string {
+    // Strip the `app` prefix, lowercase first letter, kebab the rest.
+    const tail = key.startsWith('app') ? key.slice(3) : key;
+    return `app-${tail.charAt(0).toLowerCase()}${tail.slice(1).replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
   }
 
   function pushKnobToAppFrame(view: HTMLElement, key: string, value: string): void {
@@ -1170,8 +1159,8 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
       const current = stored[knob.key] ?? knob.default;
       const commit = (next: string): void => {
         // Live push first so the user sees the change immediately; then
-        // persist. If the SQL write fails, toast + revert to the prior
-        // value so the popover doesn't lie about what's saved.
+        // persist. If the settings write fails, toast + revert to the
+        // prior value so the popover doesn't lie about what's saved.
         pushKnobToAppFrame(view, knob.key, next);
         const prior = stored[knob.key] ?? knob.default;
         stored[knob.key] = next;

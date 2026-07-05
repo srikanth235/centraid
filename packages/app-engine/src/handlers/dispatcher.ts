@@ -1,11 +1,11 @@
 // governance: allow-repo-hygiene file-size-limit dispatcher gained the ctx.vault bridge threading (duaility §12); the follow-up split of validation + envelope helpers into a sibling module is tracked separately
 /**
- * Three-tool invocation dispatcher (issue #107). `centraid_{write,read,
- * describe}` replace the per-handler HTTP routes; every non-chat caller
- * (UI buttons, webhooks, automations) flows through here. Reads
- * `app.json`, validates `input` against the declared JSON Schema with
- * Ajv, then hands off to the `handler-runner` worker — or to a built-in
- * (`dispatcher-builtins.ts`) when the handler name starts with `_`.
+ * Declared-handler dispatcher (issue #107, narrowed by issue #286 phase 2).
+ * Every non-chat caller (UI buttons, webhooks, automations) flows through
+ * here: reads `app.json`, validates `input` against the declared JSON
+ * Schema with Ajv, then hands off to the `handler-runner` worker. That is
+ * ALL it routes — the `_sql` built-ins died with the per-app data.sqlite
+ * (apps are projections; handlers reach data via ctx.vault only).
  * Errors are MCP-shaped: `{ isError, content, structuredContent }`; the
  * HTTP shim maps `structuredContent.code` to a 4xx/5xx status.
  */
@@ -20,7 +20,6 @@ import {
   compileSchema,
   findAction,
   findQuery,
-  isReservedHandlerName,
   parseManifest,
   type Manifest,
   type ManifestActionEntry,
@@ -29,8 +28,6 @@ import {
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';
 import type { ValidateFunction } from 'ajv';
-import { readAppSchema, type AppSchema } from '../data/schema.js';
-import { runBuiltinRead, runBuiltinWrite } from './dispatcher-builtins.js';
 import type { VaultBridge } from './vault-bridge.js';
 
 // Result envelopes — MCP-shaped (see header comment).
@@ -257,11 +254,10 @@ export class Dispatcher {
     }
 
     if (action === undefined && query === undefined) {
-      // Whole-app describe: schema alongside the manifest so an agent has
-      // everything in one round-trip. Draft mode reads the branched schema
-      // (data dir = code dir), so a pending migration is visible (#144).
-      const schema = safeReadSchema(overrideCodeDir ?? appDataDir(entry));
-      return successResult({ manifest, schema });
+      // Whole-app describe: the manifest IS the app's shape — its declared
+      // handlers and its vault/ext declarations. There is no per-app
+      // SQLite schema to report any more.
+      return successResult({ manifest });
     }
     if (action !== undefined) {
       const a = findAction(manifest, action);
@@ -298,11 +294,8 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
     }
-    // Draft mode: data dir = code dir = the override worktree (#144).
+    // Draft mode: logs land in the override worktree beside the draft code.
     const dataDir = overrideCodeDir ?? appDataDir(entry);
-    if (isReservedHandlerName(actionName)) {
-      return runBuiltinWrite(entry, dataDir, actionName, handlerInput, this.builtinHelpers());
-    }
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
@@ -372,10 +365,7 @@ export class Dispatcher {
     if (!entry) {
       return errorResult('UNKNOWN_APP', `app "${appId}" is not registered`);
     }
-    const dataDir = overrideCodeDir ?? appDataDir(entry); // draft: data dir = code dir; see write
-    if (isReservedHandlerName(queryName)) {
-      return runBuiltinRead(entry, dataDir, queryName, handlerInput, this.builtinHelpers());
-    }
+    const dataDir = overrideCodeDir ?? appDataDir(entry); // draft: logs beside draft code; see write
     const codeDir = overrideCodeDir ?? (await this.resolveCodeDir(entry));
     if (!codeDir) {
       return errorResult('NO_ACTIVE_VERSION', `app "${appId}" has no active version`);
@@ -421,15 +411,6 @@ export class Dispatcher {
     return successResult(outcome.value ?? null);
   }
 
-  /** Helper bundle the built-in handlers use to envelope their results. */
-  private builtinHelpers() {
-    return {
-      errorResult,
-      successResult,
-      ...(this.onWriteFor ? { onWriteFor: this.onWriteFor } : {}),
-    };
-  }
-
   // --------- shared validation ---------
 
   private validateInput(
@@ -472,14 +453,6 @@ function manifestErrorToResult(appId: string, err: unknown): ToolErrorResult {
     'INVALID_MANIFEST',
     `app "${appId}" manifest: ${err instanceof Error ? err.message : String(err)}`,
   );
-}
-
-function safeReadSchema(dataDir: string): AppSchema {
-  try {
-    return readAppSchema(path.join(dataDir, 'data.sqlite'));
-  } catch {
-    return { schemaVersion: 0, tables: [], indexes: [], views: [] };
-  }
 }
 
 // ----------------------------------------------------------------------------

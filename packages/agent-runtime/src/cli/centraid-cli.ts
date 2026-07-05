@@ -1,47 +1,30 @@
 #!/usr/bin/env node
 /*
- * `centraid` CLI — still shipped as a human-facing binary so authors and
- * scripts can poke at an app's `data.sqlite` from a shell. Agents now call
- * the same operations via in-process tool registrations (`centraid_sql_*`)
- * declared by the codex / claude adapters; both paths share the underlying
- * implementation in `@centraid/app-engine`'s `sql-ops.ts`.
+ * `centraid` CLI — shipped as a binary the builder agent's shell can call
+ * by bare name (the session injects this package's dist dir onto PATH).
  *
- * AppId scoping: the CLI opens files relative to its cwd. There is no
- * `--workspace` flag — the caller must `cd` into the app's data dir.
+ * The `sql` subcommands died with the per-app data.sqlite (issue #286
+ * phase 2) — data questions ride the in-process vault-register tools
+ * (`vault_sql` / `vault_invoke`); there is no per-app database for a
+ * shell to poke.
  *
- * Output: JSON on stdout for tool results plus a short human-readable
- * summary on stderr.
+ * Output: JSON on stdout plus a short human-readable summary on stderr.
  *
  * Subcommands:
- *   centraid sql describe
- *   centraid sql read "SELECT ..."
- *   centraid sql write "INSERT ..." | "UPDATE ..." | "DELETE ..." | "REPLACE ..."
  *   centraid preview snapshot
  *   centraid --help
  *
  * Exit codes:
  *   0  — success
- *   1  — runtime / SQL error
+ *   1  — runtime error
  *   2  — bad usage (missing arg, unknown subcommand)
- *   64 — refused (e.g. write SQL passed to `sql read`)
  */
 
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import { describeOp, readOp, writeOp, SqlOpRefusal, RunQueryError } from '@centraid/app-engine';
-
-function dataFile(): string {
-  if (process.env.CENTRAID_DATA_FILE) return process.env.CENTRAID_DATA_FILE;
-  return path.resolve(process.cwd(), 'data.sqlite');
-}
 
 function printJson(value: unknown): void {
   process.stdout.write(JSON.stringify(value) + '\n');
-}
-
-function refuse(message: string): never {
-  process.stderr.write(`centraid: refused — ${message}\n`);
-  process.exit(64);
 }
 
 function fail(message: string, code = 1): never {
@@ -53,38 +36,13 @@ function usage(): never {
   process.stderr.write(
     [
       'Usage:',
-      '  centraid sql describe',
-      '  centraid sql read "SELECT ..."',
-      '  centraid sql write "INSERT/UPDATE/DELETE/REPLACE ..."',
       '  centraid preview snapshot',
       '',
       'The CLI operates relative to the current working directory.',
-      'DDL (CREATE/ALTER/DROP) and PRAGMA are not allowed in `sql` subcommands.',
       '',
     ].join('\n'),
   );
   process.exit(2);
-}
-
-function commandDescribe(): void {
-  try {
-    printJson(describeOp({ dataFile: dataFile() }));
-  } catch (err) {
-    fail(err instanceof Error ? err.message : String(err));
-  }
-}
-
-function commandRead(sql: string): void {
-  try {
-    printJson(readOp({ dataFile: dataFile(), sql }));
-  } catch (err) {
-    if (err instanceof SqlOpRefusal) {
-      // CLI surface phrasing mirrors the historical error message format.
-      refuse('only SELECT (or EXPLAIN) statements are allowed in `sql read`.');
-    }
-    if (err instanceof RunQueryError) fail(`${err.code}: ${err.message}`);
-    fail(err instanceof Error ? err.message : String(err));
-  }
 }
 
 const PREVIEW_SNAPSHOT_REL = path.join('.preview', 'snapshot.png');
@@ -109,20 +67,6 @@ function commandPreviewSnapshot(): void {
   }
 }
 
-function commandWrite(sql: string): void {
-  try {
-    printJson(writeOp({ dataFile: dataFile(), sql }));
-  } catch (err) {
-    if (err instanceof SqlOpRefusal) {
-      refuse(
-        'only INSERT/UPDATE/DELETE/REPLACE are allowed in `sql write`; DDL and PRAGMA are refused.',
-      );
-    }
-    if (err instanceof RunQueryError) fail(`${err.code}: ${err.message}`);
-    fail(err instanceof Error ? err.message : String(err));
-  }
-}
-
 function main(argv: string[]): void {
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') usage();
   const top = argv[0];
@@ -139,39 +83,7 @@ function main(argv: string[]): void {
     commandPreviewSnapshot();
     return;
   }
-  if (top !== 'sql') {
-    process.stderr.write(`centraid: unknown command "${top}"\n`);
-    usage();
-  }
-  const sub = argv[1];
-  if (!sub) usage();
-  if (sub === 'describe') {
-    if (argv.length > 2) {
-      process.stderr.write('centraid: `sql describe` takes no arguments\n');
-      process.exit(2);
-    }
-    commandDescribe();
-    return;
-  }
-  if (sub === 'read') {
-    const sql = argv[2];
-    if (!sql) {
-      process.stderr.write('centraid: `sql read` requires a SQL statement\n');
-      process.exit(2);
-    }
-    commandRead(sql);
-    return;
-  }
-  if (sub === 'write') {
-    const sql = argv[2];
-    if (!sql) {
-      process.stderr.write('centraid: `sql write` requires a SQL statement\n');
-      process.exit(2);
-    }
-    commandWrite(sql);
-    return;
-  }
-  process.stderr.write(`centraid: unknown subcommand "${sub}"\n`);
+  process.stderr.write(`centraid: unknown command "${top}"\n`);
   usage();
 }
 

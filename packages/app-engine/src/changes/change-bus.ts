@@ -1,17 +1,11 @@
 /*
  * Per-app change notification bus.
  *
- * The runtime emits an `AppChange` whenever an app's `data.sqlite` is
- * mutated — INSERT/UPDATE/DELETE/REPLACE — regardless of which code path
- * triggered the write. Today three call sites participate:
- *
- *   1. `runQuery()` — used by the HTTP `/centraid/_apps/{id}/query` route
- *      (the chat write tool in both desktop modes) AND by openclaw's
- *      `centraid_write` agent tool (via its `_sql` built-in).
- *   2. `handler-runner.ts` — wraps every user-authored action / query
- *      handler with a session, so anything an app's own JS does to its
- *      database is observed.
- *   3. (room for more — e.g. future direct DB tools)
+ * The runtime emits an `AppChange` after an app acts — a successful
+ * action handler (whose writes ride ctx.vault) or an agent write on the
+ * app's behalf. With the per-app silo gone there is no table-level
+ * changeset: the event means "this app's data may have moved; re-derive
+ * what you render".
  *
  * Subscribers come and go via `subscribe()`. The HTTP SSE endpoint at
  * `GET /centraid/<appId>/_changes` is the main consumer; other in-process
@@ -32,10 +26,9 @@ export interface AppChange {
   ts: number;
   /**
    * Who initiated the write:
-   *  - `'agent'`     — an in-process agent tool call (centraid_write via _sql).
+   *  - `'agent'`     — an in-process agent tool call on the app's behalf.
    *  - `'handler'`   — a user-authored action / query handler.
-   *  - `'external'`  — a cloud-panel SQL write or any other path that does
-   *    not have agent or handler context.
+   *  - `'external'`  — any other path without agent or handler context.
    *
    * Subscribers can use this to render differently (e.g. flash agent-driven
    * rows) without needing to listen on a separate bus.
@@ -92,11 +85,11 @@ export class ChangeBus {
   }
 
   /**
-   * Emit a change. No-op if the table list is empty (read-only writers will
-   * still call us — that's fine, we filter here so callers don't have to).
+   * Emit a change. An EMPTY table list is meaningful post-#286: handler
+   * writes ride ctx.vault, so there is no table-level changeset — the
+   * event says "this app acted; re-derive what you render".
    */
   emit(change: AppChange): void {
-    if (change.tables.length === 0) return;
     const set = this.listeners.get(change.appId);
     if (!set || set.size === 0) return;
     // Set iteration is safe under concurrent delete in JS (the deleted

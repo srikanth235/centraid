@@ -198,69 +198,14 @@ export interface CentraidAppFile {
 }
 
 /**
- * Live `data.sqlite` schema for the Cloud → Database panel. Mirrors
- * `AppSchema` from `@centraid/openclaw-plugin` — kept independent so the
- * renderer typings don't pull the gateway plugin as a build-time dep.
+ * App-owned `settings.json` map (`GET`/`PUT /centraid/_apps/:id/settings`,
+ * issue #286 phase 2 — the per-app data.sqlite's `__centraid_settings`
+ * table became this file). Knob keys are the manifest's camelCase `app*`
+ * names (e.g. `appFont`) sent verbatim; the runtime kebab-cases them into
+ * `data-app-*` / `--app-*` when baking the served HTML. Runtime-owned
+ * keys (`__` prefix) never cross this surface.
  */
-export interface CentraidAppSchemaColumn {
-  name: string;
-  type: string;
-  notnull: boolean;
-  pk: boolean;
-  dflt_value: string | null;
-}
-export interface CentraidAppSchemaTable {
-  name: string;
-  sql: string | null;
-  columns: CentraidAppSchemaColumn[];
-}
-export interface CentraidAppSchemaIndex {
-  name: string;
-  tbl_name: string;
-  sql: string;
-}
-export interface CentraidAppSchemaView {
-  name: string;
-  sql: string;
-}
-export interface CentraidAppSchema {
-  schemaVersion: number;
-  tables: CentraidAppSchemaTable[];
-  indexes: CentraidAppSchemaIndex[];
-  views: CentraidAppSchemaView[];
-}
-
-/**
- * One page of rows from a table or view in the app's `data.sqlite`. SQLite
- * native values pass through verbatim — numbers, strings, `null`, and
- * `Buffer` (serialised by `JSON.stringify` as `{ type: 'Buffer', data: [] }`).
- */
-export interface CentraidAppTableRows {
-  columns: string[];
-  rows: Array<Record<string, unknown>>;
-  totalCount: number;
-  limit: number;
-  offset: number;
-}
-
-/**
- * Result of running one SQL statement via the Cloud → SQL editor.
- * Discriminated on `kind`: SELECT/PRAGMA/EXPLAIN/WITH/VALUES → `'rows'`;
- * INSERT/UPDATE/DELETE/DDL → `'exec'`.
- */
-export type CentraidRunQueryResult =
-  | {
-      kind: 'rows';
-      columns: string[];
-      rows: Array<Record<string, unknown>>;
-      durationMs: number;
-    }
-  | {
-      kind: 'exec';
-      rowsAffected: number;
-      lastInsertRowid: number | null;
-      durationMs: number;
-    };
+export type CentraidAppSettings = Record<string, unknown>;
 
 export type CentraidLogLevel = 'info' | 'warn' | 'error';
 
@@ -375,9 +320,11 @@ interface CentraidApi {
   // promptAgent / stopAgent / onAgentEvent IPC methods.
 
   // publish moved to the renderer's direct HTTP client. appLiveUrl /
-  // appSchema / appTableRows / appQuery / appLogs / deregisterApp /
-  // listVersions / activateVersion moved there too (pure git-store reads
-  // + the editing-session publish, no main-side state).
+  // appLogs / deregisterApp / listVersions / activateVersion moved there
+  // too (pure git-store reads + the editing-session publish, no main-side
+  // state). The appSchema / appTableRows / appQuery trio died with the
+  // per-app data.sqlite (issue #286 phase 2); per-app knob values now
+  // ride appSettings / appSettingWrite over the app's settings.json.
 
   /**
    * Snapshot of the auto-publish queue (issue #108). Every workspace
@@ -760,33 +707,6 @@ declare global {
   // Renderer scripts are IIFE-style (no imports) and reference these types
   // by bare name. The interfaces below mirror the module exports above so
   // the call sites stay tidy without `Awaited<ReturnType<…>>` boilerplate.
-  interface CentraidAppSchemaColumn {
-    name: string;
-    type: string;
-    notnull: boolean;
-    pk: boolean;
-    dflt_value: string | null;
-  }
-  interface CentraidAppSchemaTable {
-    name: string;
-    sql: string | null;
-    columns: CentraidAppSchemaColumn[];
-  }
-  interface CentraidAppSchemaIndex {
-    name: string;
-    tbl_name: string;
-    sql: string;
-  }
-  interface CentraidAppSchemaView {
-    name: string;
-    sql: string;
-  }
-  interface CentraidAppSchema {
-    schemaVersion: number;
-    tables: CentraidAppSchemaTable[];
-    indexes: CentraidAppSchemaIndex[];
-    views: CentraidAppSchemaView[];
-  }
   interface CentraidVersionRecord {
     versionId: string;
     sha256: string;
@@ -796,26 +716,7 @@ declare global {
     files: number;
     current?: boolean;
   }
-  interface CentraidAppTableRows {
-    columns: string[];
-    rows: Array<Record<string, unknown>>;
-    totalCount: number;
-    limit: number;
-    offset: number;
-  }
-  type CentraidRunQueryResult =
-    | {
-        kind: 'rows';
-        columns: string[];
-        rows: Array<Record<string, unknown>>;
-        durationMs: number;
-      }
-    | {
-        kind: 'exec';
-        rowsAffected: number;
-        lastInsertRowid: number | null;
-        durationMs: number;
-      };
+  type CentraidAppSettings = Record<string, unknown>;
   type CentraidLogLevel = 'info' | 'warn' | 'error';
   interface CentraidLogEntry {
     ts: number;

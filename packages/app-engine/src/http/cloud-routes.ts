@@ -1,86 +1,47 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import path from 'node:path';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
-import { readTableRows, TableRowsError } from '../data/table-rows.js';
-import { runQuery, RunQueryError } from '../handlers/run-query.js';
 import { readLogs, type LogLevel } from '../data/log-store.js';
+import {
+  deleteAppSetting,
+  readAppSettings,
+  RUNTIME_KEY_PREFIX,
+  writeAppSetting,
+} from '../settings/app-settings.js';
 import { readBody, sendError, sendJson } from './http-utils.js';
 
 /**
- * Handlers for the Cloud-panel HTTP routes (row browser, SQL editor, logs).
- *
- * Kept out of `index.ts` so the plugin entry stays under its governance
- * file-size cap. The routes share the registry + paths concerns of the
- * core dispatcher but don't need to know about versions/code dirs — they
- * only touch persistent app data (`<entry.path>/data.sqlite` and
- * `<entry.path>/logs.jsonl`), so they work in both uploaded and path mode.
+ * Handlers for the Cloud-panel logs route and the per-app settings.json
+ * surface. The row-browser and SQL-editor routes died with the per-app
+ * data.sqlite (issue #286 phase 2) — app data lives in the vault and is
+ * browsed through the vault surfaces; what remains per-app is runtime
+ * STATE (logs, settings).
  */
 
-export async function handleTableRowsRoute(
-  res: ServerResponse,
-  registry: Registry,
-  appId: string,
-  tableName: string,
-  query: Record<string, string>,
-): Promise<true> {
-  const entry = registry.get(appId);
-  if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
-
-  const dataDbFile = path.join(appDataDir(entry), 'data.sqlite');
-  const limit = parseIntOpt(query.limit);
-  const offset = parseIntOpt(query.offset);
-
-  try {
-    const rows = readTableRows(dataDbFile, tableName, { limit, offset });
-    return sendJson(res, 200, rows);
-  } catch (err) {
-    if (err instanceof TableRowsError) {
-      const status = err.code === 'unknown_table' ? 404 : 400;
-      return sendError(res, status, err.code, err.message);
-    }
-    throw err;
-  }
-}
-
-export async function handleQueryRoute(
+/**
+ * Write one app-owned settings key (`PUT …/settings`, body
+ * `{ key, value }`; `value: null` deletes). Runtime-owned keys (prefix
+ * `__`) are refused — those are the runtime's own (automation toggles).
+ */
+export async function handleSettingsWrite(
   req: IncomingMessage,
   res: ServerResponse,
-  registry: Registry,
-  appId: string,
-  /**
-   * Called once after a successful write statement with the list of touched
-   * tables. Skipped for read-style statements (which can't produce changes)
-   * and for failed writes. Optional so callers without a change bus can
-   * still use the route.
-   */
-  onWrite?: (tables: string[]) => void,
+  appDir: string,
 ): Promise<true> {
-  const entry = registry.get(appId);
-  if (!entry) return sendError(res, 404, 'not_found', 'App not registered.');
-
-  let body: { sql?: unknown };
+  let body: { key?: unknown; value?: unknown };
   try {
-    body = JSON.parse((await readBody(req)).toString('utf8')) as { sql?: unknown };
+    body = JSON.parse((await readBody(req)).toString('utf8')) as { key?: unknown; value?: unknown };
   } catch {
-    return sendError(res, 400, 'bad_request', 'Body must be JSON: { sql: string }.');
+    return sendError(res, 400, 'bad_request', 'Body must be JSON: { key, value }.');
   }
-  const sql = typeof body.sql === 'string' ? body.sql : '';
-  if (!sql.trim()) {
-    return sendError(res, 400, 'bad_request', 'Body must include non-empty `sql`.');
+  const key = typeof body.key === 'string' ? body.key : '';
+  if (!key) return sendError(res, 400, 'bad_request', 'Body must include a string `key`.');
+  if (key.startsWith(RUNTIME_KEY_PREFIX)) {
+    return sendError(res, 400, 'bad_request', 'Keys starting with "__" are runtime-owned.');
   }
-
-  const dataDbFile = path.join(appDataDir(entry), 'data.sqlite');
-  try {
-    const result = runQuery(dataDbFile, sql, onWrite ? { onWrite } : undefined);
-    return sendJson(res, 200, result);
-  } catch (err) {
-    if (err instanceof RunQueryError) {
-      const status = err.code === 'bad_request' ? 400 : 422;
-      return sendError(res, status, err.code, err.message);
-    }
-    throw err;
-  }
+  if (body.value === null || body.value === undefined) deleteAppSetting(appDir, key);
+  else writeAppSetting(appDir, key, body.value);
+  return sendJson(res, 200, { settings: readAppSettings(appDir) });
 }
 
 export async function handleLogsRoute(

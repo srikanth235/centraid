@@ -186,56 +186,6 @@ test('6.1 + 6.2 — switching to the Code tab lists files and opens one in the e
   }
 });
 
-test('6.4 — Cloud Database lists tables, browses rows, and paginates', async () => {
-  const id = 'journal';
-  gateway.state.apps = [appEntry({ id, name: 'Journal' })];
-  gateway.state.schemaById[id] = {
-    schemaVersion: 1,
-    tables: [
-      {
-        name: 'entries',
-        sql: 'CREATE TABLE entries (id INTEGER PRIMARY KEY, title TEXT)',
-        columns: [
-          { name: 'id', type: 'INTEGER', pk: true, notnull: true, dflt_value: null },
-          { name: 'title', type: 'TEXT', pk: false, notnull: false, dflt_value: null },
-        ],
-      },
-    ],
-    indexes: [],
-    views: [],
-  };
-  // 60 rows → two pages at the 50-row page size, so Next is enabled.
-  gateway.state.tableRows.entries = {
-    columns: ['id', 'title'],
-    rows: Array.from({ length: 60 }, (_, i) => ({ id: i + 1, title: `Entry ${i + 1}` })),
-  };
-  const { app, page } = await launchApp(env);
-  try {
-    await openEditor(page, id, 'Journal');
-    await page.locator('.mode-tab[aria-label="Cloud"]').click();
-    await page.locator('.cloud-rail-item', { hasText: 'Database' }).click();
-
-    // The table card renders; opening it kicks off the row browser.
-    await page.locator('.cloud-table-card', { hasText: 'entries' }).click();
-    await expect(page.locator('.cloud-rows-grid')).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator('.cloud-rows-pager-label')).toContainText('1–50 of 60');
-
-    // Page forward → offset advances, pager label shows the second page.
-    await page.locator('.cloud-rows-pager-btn', { hasText: 'Next' }).click();
-    await expect(page.locator('.cloud-rows-pager-label')).toContainText('51–60 of 60', {
-      timeout: 10_000,
-    });
-    expect(
-      gateway.calls.some(
-        (c) =>
-          c.method === 'GET' && /\/data\/entries/.test(c.pathname) && /offset=50/.test(c.search),
-      ),
-    ).toBe(true);
-  } finally {
-    await app.close();
-  }
-});
-
 test('6.6 — Cloud Logs renders entries and filters by level + search', async () => {
   const id = 'journal';
   gateway.state.apps = [appEntry({ id, name: 'Journal' })];
@@ -274,31 +224,6 @@ test('6.6 — Cloud Logs renders entries and filters by level + search', async (
     await page.locator('.cloud-logs-search').fill('cleanly');
     await expect(page.locator('.cloud-logs-row')).toHaveCount(1);
     await expect(page.locator('.cloud-logs-row')).toContainText('started up');
-  } finally {
-    await app.close();
-  }
-});
-
-test('6.5 — Cloud SQL runs a query and shows output', async () => {
-  const id = 'journal';
-  gateway.state.apps = [appEntry({ id, name: 'Journal' })];
-  gateway.state.schemaById[id] = {
-    tables: [{ name: 'entries', columns: [{ name: 'id', type: 'INTEGER' }] }],
-  };
-  gateway.state.queryResult = { kind: 'rows', columns: ['n'], rows: [{ n: 42 }], durationMs: 3 };
-  const { app, page } = await launchApp(env);
-  try {
-    await openEditor(page, id, 'Journal');
-    await page.locator('.mode-tab[aria-label="Cloud"]').click();
-    await page.locator('.cloud-rail-item', { hasText: 'SQL' }).click();
-    await page.locator('.cloud-sql-textarea').fill('SELECT 42 AS n');
-    await page.locator('.cloud-sql-run-btn').click();
-    await expect(page.locator('.cloud-sql-output')).toContainText('42', { timeout: 10_000 });
-    expect(
-      gateway.calls.some(
-        (c) => c.method === 'POST' && /\/centraid\/_apps\/.*\/query$/.test(c.pathname),
-      ),
-    ).toBe(true);
   } finally {
     await app.close();
   }

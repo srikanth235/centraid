@@ -1,5 +1,3 @@
-// governance: allow-repo-hygiene file-size-limit #190 — attachment ingestion
-// wiring (issue #190) tips this cohesive route handler just over the cap.
 /*
  * HTTP route handler for the per-app chat surface.
  *
@@ -15,25 +13,21 @@
  * configured, the chat route 503s with a clear error — that is the M1
  * stub behavior the issue calls out.
  *
- * Concurrency: each session has at most one in-flight turn at a time. A
- * second POST against the same conversationId is queued behind the first by a
- * per-session async lock. Within a single process this is the only correctness
- * gate; we don't try to coordinate across processes because the chat surface
- * is owned by one runtime per appsDir.
+ * The stream/ledger half of the turn — SSE framing, the event accumulator,
+ * the per-session lock, recordTurn/noteTurn — lives in `turn-sse.ts`
+ * (shared with the vault assistant's shell-level turn route). This module
+ * keeps what is app-shaped: registry lookup, manifest reads, the
+ * handler-catalog system-prompt preamble, and attachment blob resolution.
  */
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
-import { readAppSchema } from '../data/schema.js';
 import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
-import type {
-  ConversationTurnInput,
-  ConversationRunner,
-  TurnStreamEvent,
-} from '../conversation/runner.js';
-import type { ConversationHistoryStore, TurnNode } from '../conversation/history.js';
+import type { ConversationRunner } from '../conversation/runner.js';
+import type { ConversationHistoryStore } from '../conversation/history.js';
+import { driveTurnOverSse, type TurnAttachmentRef } from './turn-sse.js';
 import type { Registry } from '../registry/registry.js';
 import { appDataDir } from '../registry/app-paths.js';
 import type { RegistryEntry } from '../types.js';
@@ -118,56 +112,16 @@ export function parseTurnSubRoute(
   return undefined;
 }
 
-/**
- * Serialize work on `(appId, conversationId)` so a second POST queues behind the
- * first. The route handler awaits the previous tail before scheduling its
- * own. The lock entry is cleared lazily once the current task settles.
- *
- * The lock map is per-runtime — held on the `Runtime` instance and threaded
- * through `TurnRouteContext`. A module-level map would collide across
- * gateways that share an `appId` (two profiles can install the same
- * template). See issue #113.
- */
-async function withConversationLock<T>(
-  conversationLocks: Map<string, Promise<void>>,
-  appId: string,
-  conversationId: string,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const key = `${appId}::${conversationId}`;
-  const previous = conversationLocks.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const next = new Promise<void>((resolve) => (release = resolve));
-  // The map holds the *chained* tail (previous → next) so newer callers
-  // await everything ahead of them. Keep a reference to that exact promise
-  // so the cleanup branch can identify "nobody else queued after me".
-  const chained = previous.then(() => next);
-  conversationLocks.set(key, chained);
-  await previous;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (conversationLocks.get(key) === chained) conversationLocks.delete(key);
-  }
-}
-
-/** A file uploaded to the blob CAS before the turn, referenced by its hash. */
-interface AttachmentRef {
-  hash: string;
-  mime: string;
-  filename?: string;
-  sizeBytes?: number;
-}
-
 interface PostBody {
   conversationId?: string;
   message?: string;
+  /** Chat register: 'ask' = the app copilot; absent/'build' = builder chat. */
+  register?: string;
   model?: string;
   thinking?: string;
   idempotencyKey?: string;
   /** Attachments uploaded ahead of this turn (issue #190). */
-  attachments?: AttachmentRef[];
+  attachments?: TurnAttachmentRef[];
 }
 
 const HASH_RE = /^[a-f0-9]{64}$/;
@@ -231,9 +185,8 @@ async function handlePostTurn(
   }
 
   // Resolve runner-resume handles from the central session row when a
-  // chat store is wired. The chat surface is now one mode — the agent
-  // always has the three structured tools plus the `_sql` built-in — so
-  // there is no per-session mode toggle to read.
+  // chat store is wired. The chat surface is one mode — no per-session
+  // mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   if (ctx.conversationStore) {
@@ -250,9 +203,9 @@ async function handlePostTurn(
   // live in the per-app blob CAS, keyed by sha256. We resolve each to its
   // on-disk path so the adapter can build an image/document content block, and
   // keep the refs to record `attachments` rows on the turn's `message_in` item.
-  const attachmentRefs: AttachmentRef[] = Array.isArray(body.attachments)
+  const attachmentRefs: TurnAttachmentRef[] = Array.isArray(body.attachments)
     ? body.attachments.filter(
-        (a): a is AttachmentRef =>
+        (a): a is TurnAttachmentRef =>
           !!a && typeof a.hash === 'string' && HASH_RE.test(a.hash) && typeof a.mime === 'string',
       )
     : [];
@@ -266,274 +219,43 @@ async function handlePostTurn(
       : [];
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
-  const schema = safeReadSchema(entry);
   const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);
   const extraSystemPrompt = buildExtraPrompt({
     appId: entry.id,
     ...(appMeta?.name ? { appName: appMeta.name } : {}),
     ...(appMeta?.description ? { appDescription: appMeta.description } : {}),
-    schema,
     ...(manifest ? { manifest } : {}),
   });
 
-  // Start the SSE stream up-front so the harness sees `connected` even if
-  // the runner takes a while to spin up. Heartbeats every 30s keep proxies
-  // from timing out a long quiet stretch (model thinking, big tool call).
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive',
-    'X-Accel-Buffering': 'no',
-  });
-  res.write(`: chat ${entry.id} session ${conversationId}\n\n`);
-  const heartbeat = setInterval(() => {
-    if (!res.writableEnded) res.write(`: ping\n\n`);
-  }, 30_000);
-  heartbeat.unref?.();
-
-  const writeEvent = (event: TurnStreamEvent): void => {
-    if (res.writableEnded) return;
-    res.write(`event: ${event.type}\n`);
-    res.write(`data: ${JSON.stringify(event)}\n\n`);
-  };
-
-  // Turn accumulator — folds the runner's `TurnStreamEvent`s into the
-  // `runs` / `run_nodes` audit trace (issue #90). The runner's `usage`
-  // event (when emitted) is folded into the turn's `step` node so the
-  // ledger carries real token + cost accounting for chat turns.
-  const turnStartedAt = Date.now();
-  const acc = {
-    aiText: '',
-    finalText: undefined as string | undefined,
-    errorMessage: undefined as string | undefined,
-    pending: new Map<
-      string,
-      { toolName: string; sql?: string; args?: unknown; startedAt: number }
-    >(),
-    toolNodes: [] as TurnNode[],
-    usage: undefined as
-      | {
-          model?: string;
-          provider?: string;
-          inputTokens?: number;
-          outputTokens?: number;
-          cacheReadTokens?: number;
-          cacheWriteTokens?: number;
-        }
-      | undefined,
-  };
-  const accumulate = (event: TurnStreamEvent): void => {
-    switch (event.type) {
-      case 'assistant.delta':
-        acc.aiText += event.delta;
-        return;
-      case 'tool.start':
-        acc.pending.set(event.toolCallId, {
-          toolName: event.toolName,
-          ...(event.sql !== undefined ? { sql: event.sql } : {}),
-          ...(event.args !== undefined ? { args: event.args } : {}),
-          startedAt: Date.now(),
-        });
-        return;
-      case 'tool.result': {
-        const pending = acc.pending.get(event.toolCallId);
-        acc.pending.delete(event.toolCallId);
-        acc.toolNodes.push({
-          kind: 'tool',
-          toolName: event.toolName || pending?.toolName || 'tool',
-          ...(pending?.sql !== undefined ? { sql: pending.sql } : {}),
-          ...(pending?.args !== undefined ? { args: pending.args } : {}),
-          ok: event.ok,
-          ...(event.result !== undefined ? { result: event.result } : {}),
-          ...(!event.ok ? { errorText: event.errorText ?? 'Tool failed.' } : {}),
-          appId: entry.id,
-          startedAt: pending?.startedAt ?? Date.now(),
-          endedAt: Date.now(),
-        });
-        return;
-      }
-      case 'final':
-        acc.finalText = acc.aiText || event.text;
-        return;
-      case 'usage':
-        acc.usage = {
-          ...(event.model !== undefined ? { model: event.model } : {}),
-          ...(event.provider !== undefined ? { provider: event.provider } : {}),
-          ...(event.inputTokens !== undefined ? { inputTokens: event.inputTokens } : {}),
-          ...(event.outputTokens !== undefined ? { outputTokens: event.outputTokens } : {}),
-          ...(event.cacheReadTokens !== undefined
-            ? { cacheReadTokens: event.cacheReadTokens }
-            : {}),
-          ...(event.cacheWriteTokens !== undefined
-            ? { cacheWriteTokens: event.cacheWriteTokens }
-            : {}),
-        };
-        return;
-      case 'error':
-        acc.errorMessage = event.message;
-        break;
-      // No ledger state to fold for these; the SSE write still happens via
-      // `writeEvent`. Listed explicitly (not a default) so a newly added
-      // event type fails the exhaustiveness check instead of slipping through.
-      case 'assistant.start':
-      case 'reasoning.delta':
-      case 'phase':
-      case 'aborted':
-      case 'webhooks':
-        break;
-    }
-  };
-  const onEvent = (event: TurnStreamEvent): void => {
-    accumulate(event);
-    writeEvent(event);
-  };
-
-  const abortController = new AbortController();
-  const onClientClose = (): void => {
-    if (!abortController.signal.aborted) abortController.abort();
-  };
-  req.on('close', onClientClose);
-  req.on('error', onClientClose);
-
-  // Runner-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any runner writes — the OpenClaw runner hands
-  // this path to `runEmbeddedAgent` as its session file and silently no-ops
-  // if the parent dir is missing.
-  const sessionFile = path.join(ctx.conversationRunnerSessionDir, `${conversationId}.jsonl`);
-  await fs.mkdir(ctx.conversationRunnerSessionDir, { recursive: true }).catch(() => undefined);
-
-  const input: ConversationTurnInput = {
+  await driveTurnOverSse({
+    req,
+    res,
     appId: entry.id,
-    dataDir: appDataDir(entry),
     conversationId,
-    sessionFile,
     message,
-    ...(turnAttachments.length > 0 ? { attachments: turnAttachments } : {}),
+    dataDir: appDataDir(entry),
     extraSystemPrompt,
-    abortSignal: abortController.signal,
-    onEvent,
-    ...(body.model ? { model: body.model } : {}),
-    ...(body.thinking ? { thinking: body.thinking } : {}),
-    ...(body.idempotencyKey ? { idempotencyKey: body.idempotencyKey } : {}),
-    ...(prevAdapterSessionId ? { prevAdapterSessionId } : {}),
-    ...(prevAdapterKind ? { prevAdapterKind } : {}),
-  };
-
-  await withConversationLock(ctx.conversationLocks, entry.id, conversationId, async () => {
-    let runResult: { adapterSessionId?: string; adapterKind?: string } | undefined;
-    try {
-      const out = await ctx.runner!.run(input);
-      runResult = out ?? undefined;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      onEvent({ type: 'error', message: msg });
-    } finally {
-      clearInterval(heartbeat);
-      req.off('close', onClientClose);
-      req.off('error', onClientClose);
-      if (ctx.conversationStore) {
-        // Persist the turn as a `runs` row + its `run_nodes` trace. The
-        // assistant reply (or the turn error) is one `step` node ordered
-        // after the turn's `tool` nodes — matching the transcript shape
-        // `getSession` reconstructs.
-        try {
-          const endedAt = Date.now();
-          const nodes: TurnNode[] = [...acc.toolNodes];
-          // The turn consumed tokens whether it ended in a reply or an
-          // error, so the `usage` totals apply to either step node.
-          const usage = acc.usage ?? {};
-          if (acc.errorMessage !== undefined) {
-            nodes.push({
-              kind: 'step',
-              text: acc.errorMessage,
-              isError: true,
-              ...usage,
-              startedAt: turnStartedAt,
-              endedAt,
-            });
-          } else if (acc.finalText && acc.finalText.trim().length > 0) {
-            nodes.push({
-              kind: 'step',
-              text: acc.finalText,
-              ...usage,
-              startedAt: turnStartedAt,
-              endedAt,
-            });
-          }
-          ctx.conversationStore.recordTurn(entry.id, {
-            conversationId: conversationId,
-            // The runner's surface decides the ledger kind: the builder-capable
-            // unified runner reports `'build'`, the data-only runner leaves it
-            // unset → recorded as `'chat'` (issue #181). Read statically off the
-            // runner so an errored turn (no `ConversationTurnResult`) is still tagged.
-            ...(ctx.runner?.runKind ? { kind: ctx.runner.runKind } : {}),
-            userMessage: message,
-            ...(attachmentRefs.length > 0
-              ? {
-                  attachments: attachmentRefs.map((a) => ({
-                    hash: a.hash,
-                    mime: a.mime,
-                    sizeBytes: a.sizeBytes ?? 0,
-                    ...(a.filename !== undefined ? { filename: a.filename } : {}),
-                  })),
-                }
-              : {}),
-            startedAt: turnStartedAt,
-            endedAt,
-            ok: acc.errorMessage === undefined,
-            ...(acc.errorMessage !== undefined ? { error: acc.errorMessage } : {}),
-            ...(acc.finalText !== undefined ? { finalText: acc.finalText } : {}),
-            nodes,
-          });
-        } catch {
-          /* best-effort — a ledger miss never fails the turn */
-        }
-        // Persist the runner-resume handle. The resume-handle update only
-        // happens when the runner reported an `adapterKind` (codex /
-        // claude-code; the OpenClaw runner resumes via `sessionFile` and
-        // returns void).
-        try {
-          ctx.conversationStore.noteTurn(
-            entry.id,
-            conversationId,
-            runResult?.adapterKind
-              ? {
-                  kind: runResult.adapterKind,
-                  ...(runResult.adapterSessionId ? { sessionId: runResult.adapterSessionId } : {}),
-                }
-              : undefined,
-          );
-        } catch {
-          /* best-effort — a turn-count miss never fails the turn */
-        }
-      }
-      if (!res.writableEnded) {
-        res.write(`event: end\ndata: {}\n\n`);
-        res.end();
-      }
-    }
+    runner: ctx.runner,
+    conversationStore: ctx.conversationStore,
+    conversationRunnerSessionDir: ctx.conversationRunnerSessionDir,
+    conversationLocks: ctx.conversationLocks,
+    banner: `chat ${entry.id} session ${conversationId}`,
+    register: body.register === 'ask' ? 'ask' : body.register === 'build' ? 'build' : undefined,
+    model: body.model,
+    thinking: body.thinking,
+    idempotencyKey: body.idempotencyKey,
+    prevAdapterSessionId,
+    prevAdapterKind,
+    ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
+    ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
   });
-}
-
-/**
- * Read the live schema, falling back to an empty schema if the app has
- * no `data.sqlite` yet. The data file is created on first use elsewhere;
- * during chat-prompt assembly we want a no-throw read.
- */
-function safeReadSchema(entry: RegistryEntry): ReturnType<typeof readAppSchema> {
-  try {
-    return readAppSchema(path.join(entry.path, 'data.sqlite'));
-  } catch {
-    return { schemaVersion: 0, tables: [], indexes: [], views: [] };
-  }
 }
 
 /**
  * Read the app's manifest from disk, returning `undefined` when the app
  * has no live code dir or the file is unreadable. The system prompt still
- * works without it — agents are steered to `_sql` — but with the manifest
- * the prompt includes the declared catalog so the agent reaches for the
- * right handler.
+ * works without it — but with the manifest the prompt includes the
+ * declared catalog so the agent reaches for the right handler.
  *
  * Resolution goes through the runtime's code-dir resolver so it honors the
  * git-store override (issue #137): the materialized `main` worktree under

@@ -8,7 +8,8 @@ import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { listVaultEntities, resolveEntity } from '../schema/tables.js';
 import { writeReceipt } from './evidence.js';
-import { tableColumns } from './filters.js';
+import { recreateExtTables } from './ext.js';
+import { clearColumnCache, tableColumns } from './filters.js';
 import type { Identity } from './types.js';
 
 export interface VaultExport {
@@ -53,8 +54,8 @@ export function exportVault(
 ): { artifact: VaultExport; exportId: string; receiptId: string } {
   const requestedAt = nowIso();
   const tables: Record<string, Record<string, unknown>[]> = {};
-  for (const logical of listVaultEntities()) {
-    const ref = resolveEntity(logical);
+  for (const logical of listVaultEntities(db.vault)) {
+    const ref = resolveEntity(logical, db.vault);
     if (!ref) continue;
     const pk = primaryKeyColumn(db, ref.physical);
     tables[logical] = db.vault
@@ -115,19 +116,29 @@ export function importVaultExport(db: VaultDb, artifact: VaultExport): { importe
   db.vault.exec('PRAGMA foreign_keys = OFF');
   db.vault.exec('BEGIN');
   try {
-    for (const logical of listVaultEntities()) {
+    const load = (logical: string): number => {
       const rows = artifact.tables[logical];
-      if (!rows || rows.length === 0) continue;
-      const ref = resolveEntity(logical);
+      if (!rows || rows.length === 0) return 0;
+      const ref = resolveEntity(logical, db.vault);
       if (!ref) throw new Error(`unknown entity in artifact: ${logical}`);
+      clearColumnCache(ref.physical);
       const cols = tableColumns(db.vault, ref.physical);
+      let n = 0;
       for (const row of rows) {
         const names = Object.keys(row).filter((c) => cols.has(c));
         const sql = `INSERT INTO "${ref.physical}" (${names.map((c) => `"${c}"`).join(', ')})
                      VALUES (${names.map(() => '?').join(', ')})`;
         db.vault.prepare(sql).run(...names.map((c) => row[c] as string | number | null));
-        imported += 1;
+        n += 1;
       }
+      return n;
+    };
+    // Canonical entities first — that loads consent_app_ext, whose specs
+    // then plant the ext-band tables before their rows arrive.
+    for (const logical of listVaultEntities()) imported += load(logical);
+    recreateExtTables(db);
+    for (const logical of listVaultEntities(db.vault)) {
+      if (logical.startsWith('ext.')) imported += load(logical);
     }
     const violations = db.vault.prepare('PRAGMA foreign_key_check').all();
     if (violations.length > 0) {
