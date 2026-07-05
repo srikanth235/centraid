@@ -16,6 +16,10 @@
  *     model-catalog.json    — chat picker's per-runner model catalog
  *     token.bin             — persistent bearer token (mode 0o600)
  *     vault/                — vault registry root (one dir per vault)
+ *     devices.json          — device enrollments: device key ↔ vault (#289)
+ *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
+ *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
+ *     endpoint.json         — the live endpoint's id + dial ticket, for the pair CLI (#289)
  */
 
 import path from 'node:path';
@@ -24,6 +28,18 @@ import type { GatewayPaths } from '../paths.js';
 export interface DaemonLayout extends GatewayPaths {
   /** Persistent shared-bearer token file (`<dataDir>/token.bin`). */
   tokenFile: string;
+  /** Device enrollment registry — device key ↔ vault rows (issue #289). */
+  devicesFile: string;
+  /** One-time pairing tickets (secret hashes + TTLs, issue #289). */
+  pairingTicketsFile: string;
+  /** The gateway's persistent iroh secret key (32 bytes, mode 0o600). */
+  endpointKeyFile: string;
+  /**
+   * The running endpoint's public identity — `{endpointId, ticket}` —
+   * written by `serve` on boot so the `pair` CLI can pin it into tickets
+   * without joining the iroh network itself.
+   */
+  endpointStateFile: string;
 }
 
 export function daemonLayoutFor(dataDir: string): DaemonLayout {
@@ -33,8 +49,12 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     modelCatalogFile: path.join(abs, 'model-catalog.json'),
     tokenFile: path.join(abs, 'token.bin'),
     // Mounting the vault registry (duaility §12): the daemon hosts one
-    // gateway, which holds the owner's vaults (one subdirectory each,
-    // exactly one active) — and, post-#280, each vault's whole app world.
+    // gateway holding N sovereign vaults, one subdirectory each — and,
+    // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
+    devicesFile: path.join(abs, 'devices.json'),
+    pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
+    endpointKeyFile: path.join(abs, 'endpoint-key.bin'),
+    endpointStateFile: path.join(abs, 'endpoint.json'),
   };
 }

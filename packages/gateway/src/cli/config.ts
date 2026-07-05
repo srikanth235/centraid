@@ -33,6 +33,12 @@ export interface DaemonConfig {
   host?: string;
   port?: number;
   runner?: DaemonRunnerConfig;
+  /**
+   * Whether the daemon binds its iroh endpoint (issue #289). Defaults to
+   * true — the endpoint IS the remote story; set false for HTTP-only
+   * setups (tests, boxes fronted by their own transport).
+   */
+  endpoint?: boolean;
 }
 
 export class DaemonConfigError extends Error {
@@ -84,6 +90,12 @@ export function validateConfig(value: unknown): DaemonConfig {
   }
   if (value.runner !== undefined) {
     out.runner = validateRunner(value.runner);
+  }
+  if (value.endpoint !== undefined) {
+    if (typeof value.endpoint !== 'boolean') {
+      throw new DaemonConfigError('`endpoint` must be a boolean when set');
+    }
+    out.endpoint = value.endpoint;
   }
   return out;
 }
