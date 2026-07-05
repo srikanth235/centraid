@@ -50,6 +50,15 @@ export {
 } from './gateway/duties.js';
 export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
 export {
+  VAULT_SQL_DEFAULT_ROWS,
+  VAULT_SQL_MAX_ROWS,
+  readOnlySqlRefusal,
+  type VaultSqlRequest,
+  type VaultSqlResult,
+  type VaultSqlRows,
+} from './gateway/sql.js';
+export { buildAssistantContext } from './gateway/assistant-context.js';
+export {
   CARDED_ENTITIES,
   CARD_PK,
   type RefRequest,

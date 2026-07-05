@@ -29,6 +29,12 @@ import {
 import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
 import { authenticate } from './identity.js';
 import { searchEntity } from './search.js';
+import {
+  runReadOnlySql,
+  VAULT_SQL_DEFAULT_ROWS,
+  type VaultSqlRequest,
+  type VaultSqlResult,
+} from './sql.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
 import { backupVault, checkpointVault, createAppExt, type BackupResult } from './custody.js';
 import { exportVault, type VaultExport } from './portability.js';
@@ -213,6 +219,50 @@ export class Gateway {
       detail: { filter: request.where ?? [], rowCount: rows.length },
     });
     return { rows, receiptId };
+  }
+
+  /**
+   * The owner's whole-model SQL read (the vault assistant's primary tool):
+   * one read-only statement over the full canonical schema — joins, window
+   * functions, recursive CTEs over core_link. Owner-device credential only;
+   * no consent clamping applies because there is no third party in the
+   * loop, but every run is receipted like any other read.
+   */
+  sql(cred: Credential, request: VaultSqlRequest): VaultSqlResult {
+    const identity = this.identify(cred);
+    const purpose = request.purpose ?? 'owner-assistant';
+    if (identity.kind !== 'owner-device') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: null,
+        invocationId: null,
+        action: 'read',
+        objectType: 'vault.sql',
+        objectId: null,
+        purpose,
+        decision: 'deny',
+        detail: { failing: 'whole-model sql is owner-only' },
+      });
+      throw new GatewayError(
+        'consent',
+        `deny (receipt ${receiptId}): whole-model sql is the owner's surface`,
+      );
+    }
+    const result = runReadOnlySql(this.db, request.sql, request.maxRows ?? VAULT_SQL_DEFAULT_ROWS);
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: null,
+      invocationId: null,
+      action: 'read',
+      objectType: 'vault.sql',
+      objectId: null,
+      purpose,
+      decision: 'allow',
+      detail: {
+        sql: request.sql.length > 400 ? `${request.sql.slice(0, 400)}…` : request.sql,
+        rowCount: result.totalRows,
+        durationMs: result.durationMs,
+      },
+    });
+    return { ...result, receiptId };
   }
 
   /**
