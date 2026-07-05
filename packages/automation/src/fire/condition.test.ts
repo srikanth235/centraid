@@ -38,7 +38,7 @@ describe('evaluateConditionTrigger', () => {
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-cond-'));
-    await fs.mkdir(path.join(appsDir, 'studio'), { recursive: true });
+    await fs.mkdir(path.join(appsDir, 'billing'), { recursive: true });
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -46,7 +46,7 @@ describe('evaluateConditionTrigger', () => {
 
   const evaluate = (bridge: VaultBridge): ReturnType<typeof evaluateConditionTrigger> =>
     evaluateConditionTrigger({
-      automationRef: 'studio/invoice-chaser',
+      automationRef: 'billing/invoice-watch',
       trigger: TRIGGER,
       triggerIndex: 0,
       purpose: 'dpv:Billing',

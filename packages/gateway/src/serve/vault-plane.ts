@@ -41,7 +41,6 @@ import {
   updateVaultPresentation,
   type VaultPresentation,
   registerAttachmentCommands,
-  registerBookingCommands,
   registerBusinessCommands,
   registerDocumentCommands,
   registerFinanceCommands,
@@ -54,7 +53,6 @@ import {
   registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
-  registerSubscriptionCommands,
   registerTaskCommands,
   type AgentSummary,
   type AppSummary,
@@ -170,8 +168,6 @@ export class VaultPlane {
     registerBusinessCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
     registerLinkCommands(this.gateway);
-    registerBookingCommands(this.gateway);
-    registerSubscriptionCommands(this.gateway);
     registerPartyCommands(this.gateway);
     registerMediaCommands(this.gateway);
     registerDocumentCommands(this.gateway);

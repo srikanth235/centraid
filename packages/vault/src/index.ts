@@ -102,8 +102,6 @@ export { registerKnowledgeCommands } from './commands/knowledge.js';
 export { registerBusinessCommands } from './commands/business.js';
 export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
 export { registerLinkCommands, RELATIONS_SCHEME_URI } from './commands/links.js';
-export { registerBookingCommands } from './commands/bookings.js';
-export { registerSubscriptionCommands } from './commands/subscriptions.js';
 export { registerPartyCommands } from './commands/parties.js';
 export { registerMediaCommands } from './commands/media.js';
 export { registerDocumentCommands, FOLDER_SCHEME_URI } from './commands/documents.js';

@@ -10,22 +10,6 @@
       "version": "0.4.0"
     },
     {
-      "id": "vitals",
-      "name": "Vitals",
-      "desc": "Log and follow your vital signs.",
-      "colorKey": "rose",
-      "iconKey": "Activity",
-      "version": "0.3.0"
-    },
-    {
-      "id": "budgets",
-      "name": "Budgets",
-      "desc": "Categorize spending, keep budgets honest.",
-      "colorKey": "amber",
-      "iconKey": "Coin",
-      "version": "0.3.0"
-    },
-    {
       "id": "tasks",
       "name": "Tasks",
       "desc": "A Things-style task manager over your vault's canonical tasks.",
@@ -40,14 +24,6 @@
       "colorKey": "rose",
       "iconKey": "Users",
       "version": "0.1.0"
-    },
-    {
-      "id": "threads",
-      "name": "Threads",
-      "desc": "Messages that wait for your say-so to send.",
-      "colorKey": "indigo",
-      "iconKey": "Send",
-      "version": "0.3.0"
     },
     {
       "id": "notes",
@@ -72,46 +48,6 @@
       "colorKey": "slate",
       "iconKey": "Folder",
       "version": "0.1.0"
-    },
-    {
-      "id": "home-inventory",
-      "name": "Home inventory",
-      "desc": "What you own, where it lives, what covers it.",
-      "colorKey": "slate",
-      "iconKey": "Home",
-      "version": "0.3.0"
-    },
-    {
-      "id": "studio",
-      "name": "Studio",
-      "desc": "Run the whole freelance loop: clients, time, invoices, payment.",
-      "colorKey": "teal",
-      "iconKey": "Clock",
-      "version": "0.3.0"
-    },
-    {
-      "id": "bookings",
-      "name": "Bookings",
-      "desc": "Take and confirm client bookings against your availability.",
-      "colorKey": "indigo",
-      "iconKey": "Calendar",
-      "version": "0.1.0"
-    },
-    {
-      "id": "subscriptions",
-      "name": "Subscriptions",
-      "desc": "Every recurring charge and what it costs you per month.",
-      "colorKey": "ochre",
-      "iconKey": "Coin",
-      "version": "0.1.0"
-    },
-    {
-      "id": "leads",
-      "name": "Leads",
-      "desc": "A pipeline for your prospects — enrol, advance, note.",
-      "colorKey": "rose",
-      "iconKey": "Users",
-      "version": "0.2.0"
     },
     {
       "id": "briefing",
@@ -252,76 +188,6 @@
       "triggerKind": "cron",
       "triggerLabel": "Mondays · 9:30 AM",
       "integrations": ["GitHub"]
-    },
-    {
-      "id": "booking-prep",
-      "name": "Booking prep",
-      "desc": "When a confirmed booking is less than a day away, a prep task appears on your list — due when the meeting starts.",
-      "colorKey": "teal",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "📆",
-      "category": "Life admin",
-      "triggerKind": "condition",
-      "triggerLabel": "When a booking nears",
-      "integrations": ["Bookings", "Tasks"]
-    },
-    {
-      "id": "lead-follow-up",
-      "name": "Lead follow-up",
-      "desc": "Every new lead gets a follow-up task on your list the moment it lands — no lead goes cold in the pipeline.",
-      "colorKey": "amber",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🤝",
-      "category": "Life admin",
-      "triggerKind": "data",
-      "triggerLabel": "When a lead lands",
-      "integrations": ["Leads", "Tasks"]
-    },
-    {
-      "id": "invoice-chaser",
-      "name": "Invoice chaser",
-      "desc": "Sent invoices coming due within three days get a polite reminder drafted to the client — you review and send.",
-      "colorKey": "indigo",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🧾",
-      "category": "Life admin",
-      "triggerKind": "condition",
-      "triggerLabel": "When an invoice nears due",
-      "integrations": ["Studio", "Threads"]
-    },
-    {
-      "id": "renewals-digest",
-      "name": "Renewals digest",
-      "desc": "A Monday-morning note listing every active subscription and what it's expected to charge — surprises stay off your statement.",
-      "colorKey": "rose",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🔁",
-      "category": "Life admin",
-      "triggerKind": "cron",
-      "triggerLabel": "Mondays · 9:00 AM",
-      "integrations": ["Subscriptions", "Notes"]
-    },
-    {
-      "id": "vitals-nudge",
-      "name": "Vitals nudge",
-      "desc": "If no reading was logged all day, an evening task nudges you to log your vitals — streaks survive busy days.",
-      "colorKey": "emerald",
-      "iconKey": "Sparkle",
-      "version": "0.1.0",
-      "kind": "automation",
-      "emoji": "🩺",
-      "category": "Life admin",
-      "triggerKind": "cron",
-      "triggerLabel": "Daily · 8:00 PM",
-      "integrations": ["Vitals", "Tasks"]
     }
   ]
 }
