@@ -16,15 +16,14 @@
  * The stream/ledger half of the turn — SSE framing, the event accumulator,
  * the per-session lock, recordTurn/noteTurn — lives in `turn-sse.ts`
  * (shared with the vault assistant's shell-level turn route). This module
- * keeps what is app-shaped: registry lookup, manifest + schema reads, the
- * data/handler system-prompt preamble, and attachment blob resolution.
+ * keeps what is app-shaped: registry lookup, manifest reads, the
+ * handler-catalog system-prompt preamble, and attachment blob resolution.
  */
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendError, readBody, MAX_BODY_BYTES } from './http-utils.js';
-import { readAppSchema } from '../data/schema.js';
 import { buildExtraPrompt } from '../handlers/build-extra-prompt.js';
 import type { ConversationRunner } from '../conversation/runner.js';
 import type { ConversationHistoryStore } from '../conversation/history.js';
@@ -186,9 +185,8 @@ async function handlePostTurn(
   }
 
   // Resolve runner-resume handles from the central session row when a
-  // chat store is wired. The chat surface is now one mode — the agent
-  // always has the three structured tools plus the `_sql` built-in — so
-  // there is no per-session mode toggle to read.
+  // chat store is wired. The chat surface is one mode — no per-session
+  // mode toggle to read.
   let prevAdapterSessionId: string | undefined;
   let prevAdapterKind: string | undefined;
   if (ctx.conversationStore) {
@@ -221,13 +219,11 @@ async function handlePostTurn(
       : [];
 
   const appMeta = ctx.appMeta ? await ctx.appMeta(entry).catch(() => ({}) as never) : undefined;
-  const schema = safeReadSchema(entry);
   const manifest = await safeReadManifest(entry, ctx.resolveCodeDir);
   const extraSystemPrompt = buildExtraPrompt({
     appId: entry.id,
     ...(appMeta?.name ? { appName: appMeta.name } : {}),
     ...(appMeta?.description ? { appDescription: appMeta.description } : {}),
-    schema,
     ...(manifest ? { manifest } : {}),
   });
 
@@ -256,24 +252,10 @@ async function handlePostTurn(
 }
 
 /**
- * Read the live schema, falling back to an empty schema if the app has
- * no `data.sqlite` yet. The data file is created on first use elsewhere;
- * during chat-prompt assembly we want a no-throw read.
- */
-function safeReadSchema(entry: RegistryEntry): ReturnType<typeof readAppSchema> {
-  try {
-    return readAppSchema(path.join(entry.path, 'data.sqlite'));
-  } catch {
-    return { schemaVersion: 0, tables: [], indexes: [], views: [] };
-  }
-}
-
-/**
  * Read the app's manifest from disk, returning `undefined` when the app
  * has no live code dir or the file is unreadable. The system prompt still
- * works without it — agents are steered to `_sql` — but with the manifest
- * the prompt includes the declared catalog so the agent reaches for the
- * right handler.
+ * works without it — but with the manifest the prompt includes the
+ * declared catalog so the agent reaches for the right handler.
  *
  * Resolution goes through the runtime's code-dir resolver so it honors the
  * git-store override (issue #137): the materialized `main` worktree under

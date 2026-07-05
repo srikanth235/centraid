@@ -9,8 +9,8 @@
  *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
  *     dispatches plugin-registered tools server-side.
  *   - `@centraid/agent-runtime`'s `makeConversationRunner` — drives codex
- *     app-server / Claude SDK locally with the three structured tools
- *     declared inline (`centraid_describe` / `centraid_read` / `centraid_write`).
+ *     app-server / Claude SDK locally; hosts thread the vault-register
+ *     tools (`vault_sql` / `vault_invoke`) in per turn.
  *
  * Either way, the route handler in app-engine never implements a model
  * loop itself; it just translates the runner's `TurnStreamEvent`s into SSE

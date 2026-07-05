@@ -478,6 +478,9 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783271877-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 8702 | 14018 | 3741446 | 3880 | 26600 | 4.1977 | 337116 | 8217653 | 334826284 | 1252349 | feat(vault): the ext band — app-declared tables inside vault.db, diffed DDL, dra |
 | claude-code-c0bf538c-2f5-1783271908-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 974 | 629334 | 373 | 1349 | 0.6602 | 337118 | 8218627 | 335455618 | 1252722 | feat(vault): the ext band — app tables inside vault.db, diffed DDL, draft band,  |
 | claude-code-c0bf538c-2f5-1783271940-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 556 | 630308 | 374 | 932 | 0.6560 | 337120 | 8219183 | 336085926 | 1253096 | feat(vault): the ext band — app tables inside vault.db, diffed DDL, drafts, reta |
+| claude-code-c0bf538c-2f5-1783271974-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 4 | 968 | 1261728 | 876 | 1848 | 1.3177 | 337124 | 8220151 | 337347654 | 1253972 | feat(app-engine): the silo dies — no data.sqlite, no _sql; manifest ext block, s |
+| claude-code-c0bf538c-2f5-1783272006-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 2 | 605 | 631348 | 399 | 1006 | 0.6589 | 337126 | 8220756 | 337979002 | 1254371 | feat(app-engine): the silo dies — no data.sqlite, no _sql; ext manifest block, s |
+| claude-code-c0bf538c-2f5-1783272039-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-fable-5 | 4 | 1132 | 1263906 | 874 | 2010 | 1.3218 | 337130 | 8221888 | 339242908 | 1255245 | feat(app-engine): the silo dies — no data.sqlite, no _sql; ext block, settings.j |
 
 ### Steering
 

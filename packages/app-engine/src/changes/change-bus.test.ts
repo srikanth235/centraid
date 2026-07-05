@@ -24,12 +24,12 @@ describe('ChangeBus', () => {
     expect(app2Count).toBe(1);
   });
 
-  it('suppresses emits with empty table lists (no point waking subscribers)', () => {
+  it('delivers emits with empty table lists ("the app acted", #286)', () => {
     const bus = new ChangeBus();
     let count = 0;
     bus.subscribe('app1', () => count++);
     bus.emit({ appId: 'app1', tables: [], ts: 1, source: 'handler' });
-    expect(count).toBe(0);
+    expect(count).toBe(1);
   });
 
   it('unsubscribe stops delivery and removes the listener', () => {

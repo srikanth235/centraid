@@ -61,11 +61,10 @@ export type VaultInvokeRunner = (call: {
 }) => Promise<unknown> | unknown;
 
 /**
- * Per-turn binding that lets adapters register the three structured
- * centraid tools (`centraid_describe`, `centraid_read`, `centraid_write`)
- * and emit precise, provenanced change-bus events. Optional — when
- * absent (builder mode, tests), adapters fall back to no tool registration
- * and the legacy `centraid` CLI is the only SQL surface available.
+ * Per-turn binding that lets adapters register the vault-register tools
+ * (`vault_sql` / `vault_invoke`, when the runners below are threaded in)
+ * and emit provenanced change-bus events. Optional — when absent (tests),
+ * adapters register no data tools.
  */
 export interface ToolContext {
   /**

@@ -12,12 +12,9 @@ export type AppId = string;
  * A registered app's metadata persisted in `<appsDir>/_registry.json`.
  *
  * Every registered app is "uploaded" mode: a wrapper folder under
- * `<appsDir>/<id>/` containing `data.sqlite`, `current.json`, and
- * `versions/<v_...>/`. Code is resolved through
- * `current.json#activeVersion`. The legacy `path` mode (register an
- * external folder live for dev) was retired so the local gateway
- * behaves identically to the remote one — every change goes through
- * the upload + version-flip path.
+ * `<appsDir>/<id>/` holding runtime state (logs.jsonl, settings.json,
+ * attachment blobs). Code lives in the git store and is resolved through
+ * the code-dir override; app data lives in the vault (issue #286).
  */
 export interface RegistryEntry {
   id: AppId;
@@ -44,28 +41,31 @@ export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
  *
  * ```ts
  * import type { QueryHandler } from "@centraid/openclaw-plugin";
- * export default (async ({ db, query }) => {
- *   return await db
- *     .prepare("SELECT * FROM issues WHERE state = ?")
- *     .all(query.state ?? "open");
+ * export default (async ({ query, ctx }) => {
+ *   const out = await ctx.vault.read({
+ *     entity: 'schedule.task',
+ *     purpose: 'dpv:ServiceProvision',
+ *   });
+ *   return out;
  * }) satisfies QueryHandler;
  * ```
  *
- * The `ScopedDb` API is fully async — every `exec` / `run` / `get` / `all`
- * call round-trips through the worker boundary to the parent process. Always
- * `await` your db calls.
+ * The `ScopedVault` API is fully async — every call round-trips through
+ * the worker boundary to the parent process, which holds the app's vault
+ * credential and enforces consent. Always `await` your vault calls.
  */
 export type QueryHandler = HandlerFn<QueryHandlerArgs, unknown>;
 export type ActionHandler = HandlerFn<ActionHandlerArgs, ActionResult>;
 
-export interface ScopedDb {
-  exec(sql: string): Promise<void>;
-  prepare(sql: string): {
-    run(...params: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
-    get<T = unknown>(...params: unknown[]): Promise<T | undefined>;
-    all<T = unknown>(...params: unknown[]): Promise<T[]>;
-  };
-  transaction<Fn extends (...args: unknown[]) => Promise<unknown>>(fn: Fn): Fn;
+/** The handler-side `ctx.vault` surface (see worker/runner.ts). */
+export interface ScopedVault {
+  read(request: Record<string, unknown>): Promise<unknown>;
+  search(request: Record<string, unknown>): Promise<unknown>;
+  invoke(request: Record<string, unknown>): Promise<unknown>;
+  query(view: string, purpose: string): Promise<unknown>;
+  describe(): Promise<unknown>;
+  parked(): Promise<unknown>;
+  resolve(request: Record<string, unknown>): Promise<unknown>;
 }
 
 export interface ScopedLog {
@@ -82,12 +82,12 @@ export interface AppRef {
 }
 
 export interface CommonHandlerArgs {
-  db: ScopedDb;
   log: ScopedLog;
   app: AppRef;
   ctx: {
     fetch: ScopedFetch;
     abortSignal: AbortSignal;
+    vault: ScopedVault;
   };
 }
 

@@ -4,7 +4,7 @@
  *
  * Everything personal lives inside one vault's directory: the conversation
  * ledger (`transcripts.db`, which also carries the `run_summary` rollup),
- * the per-app data dirs (`apps/<id>/data.sqlite` + `blobs/`), and the chat
+ * the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
  * runner's per-conversation scratch files. The gateway resolves the ACTIVE
  * vault and hands app-engine this view of it; a vault switch makes the
  * provider return a different workspace on the next call, and every store
@@ -29,7 +29,7 @@ export interface VaultWorkspace {
   ownerPartyId: string;
   /**
    * Directory of the vault's per-app data folders — `<plane>/apps/<appId>/`
-   * holds `data.sqlite` and the attachment blob CAS. Survives code swaps.
+   * holds per-app runtime state + the attachment blob CAS. Survives code swaps.
    */
   appsDir: string;
   /**
