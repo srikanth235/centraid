@@ -123,4 +123,23 @@ export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from '
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
 export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { appExtPath, type BackupResult } from './gateway/custody.js';
+export { type BackupResult } from './gateway/custody.js';
+export {
+  validateExtSpecs,
+  canonicalSpecJson,
+  extLogical,
+  extPhysical,
+  parseExtLogical,
+  ExtSpecError,
+  type ExtTableSpec,
+  type ExtColumnSpec,
+  type ExtIndexSpec,
+  type ExtBand,
+} from './schema/ext.js';
+export {
+  extAppIds,
+  extCommandNames,
+  extSearchable,
+  assertExtSchemaOwnership,
+  type ExtApplyOutcome,
+} from './gateway/ext.js';

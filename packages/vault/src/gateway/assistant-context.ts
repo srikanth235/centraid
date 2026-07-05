@@ -12,6 +12,7 @@ import { FOLDER_SCHEME_URI } from '../commands/documents.js';
 import { CIRCLE_SCHEME_URI } from '../commands/people.js';
 import { SEARCHABLE } from '../schema/fts.js';
 import { VAULT_TABLES } from '../schema/tables.js';
+import { extPhysicalNames } from './ext.js';
 
 const CONVENTIONS = `## Conventions
 - Logical entities are schema-qualified (core.party); physical SQLite tables are underscore-joined (core_party). Polymorphic refs (core_link.from_type, core_tag.subject_type, …) store the LOGICAL name.
@@ -51,11 +52,12 @@ function schemeLines(db: VaultDb, uri: string): string[] {
   }
 }
 
-/** The live CREATE TABLE statements for every canonical vault table. */
+/** Live CREATE TABLE statements: every canonical table + the live ext band. */
 function ddl(db: VaultDb): string {
   const physical = new Set(
     Object.entries(VAULT_TABLES).flatMap(([schema, tables]) => tables.map((t) => `${schema}_${t}`)),
   );
+  for (const name of extPhysicalNames(db.vault)) physical.add(name);
   const rows = db.vault
     .prepare(
       `SELECT name, sql FROM sqlite_master
@@ -96,6 +98,16 @@ export function buildAssistantContext(db: VaultDb): string {
     .map((s) => `${s.fts} (id: ${s.idColumn}; text: ${s.maskColumns.join(', ')})`)
     .join('\n');
   sections.push(`${FTS_NOTE}\n${fts}`);
+
+  const extNames = extPhysicalNames(db.vault);
+  if (extNames.length > 0) {
+    sections.push(
+      `## App extension tables (the ext band)\n` +
+        `Tables named ext_<app>_<table> are app-declared extensions living beside the canonical model. ` +
+        `Logical names are ext.<appId>.<table> (write via the ext.<appId>.insert/update/delete commands; ` +
+        `link/tag them like any entity). Present: ${extNames.join(', ')}.`,
+    );
+  }
 
   const commands = registeredCommands(db);
   if (commands.length > 0) {

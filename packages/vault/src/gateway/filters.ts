@@ -17,6 +17,16 @@ const OPS: Record<string, string> = {
 
 const columnCache = new Map<string, Set<string>>();
 
+/**
+ * Forget cached columns. Ext-band applies (gateway/ext.ts) ALTER live
+ * tables, and tests open many same-named vaults per process — both would
+ * otherwise read stale shapes.
+ */
+export function clearColumnCache(physical?: string): void {
+  if (physical === undefined) columnCache.clear();
+  else columnCache.delete(physical);
+}
+
 /** Actual column names of a physical table (cached per process). */
 export function tableColumns(db: DatabaseSync, physical: string): Set<string> {
   let cols = columnCache.get(physical);

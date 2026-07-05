@@ -40,7 +40,7 @@ function pkOf(ctx: HandlerCtx, physical: string): string {
  * exactly when their scopes already cover both sides.
  */
 function requireEndpoint(ctx: HandlerCtx, role: 'from' | 'to', type: string, id: string): void {
-  const ref = resolveEntity(type);
+  const ref = resolveEntity(type, ctx.db);
   if (!ref || ref.file !== 'vault') {
     throw new Error(`${role}_type names unknown entity "${type}"`);
   }

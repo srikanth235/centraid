@@ -151,7 +151,7 @@ function linkedAndVisible(
     )
     .all(type, id, type, id) as { t: string }[];
   for (const other of others) {
-    const ref = resolveEntity(other.t);
+    const ref = resolveEntity(other.t, vault);
     if (!ref) continue;
     const consent = evaluateConsent(vault, identity, ref.schema, ref.table, 'read', purpose);
     if (consent.decision === 'allow') return true;
@@ -160,7 +160,7 @@ function linkedAndVisible(
 }
 
 function cardFor(vault: DatabaseSync, type: string, id: string): RefCard {
-  const ref = resolveEntity(type);
+  const ref = resolveEntity(type, vault);
   if (!ref || ref.file !== 'vault') {
     return { type, id, status: 'unknown', title: null, subtitle: null, thumbnail_content_id: null };
   }
@@ -226,7 +226,7 @@ export function resolveRefCards(
       });
       continue;
     }
-    const ref = resolveEntity(type);
+    const ref = resolveEntity(type, vault);
     if (!ref || ref.file !== 'vault') {
       cards.push({
         type,
