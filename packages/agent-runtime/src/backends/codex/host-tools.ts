@@ -1,13 +1,12 @@
 /*
- * Codex-side wiring for the three first-class centraid tools.
+ * Codex-side wiring for the vault-register tools — the ONE tool family
+ * (issue #286 phase 2). The pre-vault `centraid_describe/read/write` trio
+ * died with the per-app data.sqlite. This module owns two narrow things:
  *
- * Split out of `backend.ts` to keep that file focused on the
- * generic JSON-RPC drive loop. This module owns two narrow things:
- *
- *   1. The `dynamicTools` array we declare on `thread/start`.
- *   2. The synchronous `item/tool/call` dispatch that delegates to the
- *      shared app-engine `Dispatcher`. The dispatcher resolves declared
- *      handlers from the app's manifest and routes `_sql` to its built-in.
+ *   1. The `dynamicTools` array we declare on `thread/start` — the vault
+ *      register when the turn carries runners, else nothing.
+ *   2. The `item/tool/call` dispatch that delegates to the turn's
+ *      `ToolContext.vaultSql` / `vaultInvoke` runners.
  *
  * Schema reference: `codex-rs/app-server-protocol/src/protocol/v2/{thread,item}.rs`.
  */
@@ -21,77 +20,32 @@ import {
 } from '../../vault-sql-tool.js';
 
 /**
- * Codex `dynamicTools` spec for the structured centraid tools. Schemas
- * mirror the documented surface; codex's `DynamicToolSpec.inputSchema`
- * accepts standard JSON Schema. The vault-assistant register
- * (`ToolContext.vaultSql`) swaps the app-scoped trio for the one
- * `vault_sql` tool — an assistant turn has no app to describe or write.
+ * Codex `dynamicTools` spec. Names/descriptions/schemas are shared with
+ * the claude MCP server through `vault-sql-tool.ts` so the model sees an
+ * identical surface across backends. Empty when the turn carries no vault
+ * runner — there are no other data tools any more.
  */
 export function centraidDynamicToolSpecs(ctx?: ToolContext): Array<{
   name: string;
   description: string;
   inputSchema: unknown;
 }> {
-  if (ctx?.vaultSql) {
-    return [
-      {
-        name: VAULT_SQL_TOOL.name,
-        description: VAULT_SQL_TOOL.description,
-        inputSchema: VAULT_SQL_TOOL.inputSchema,
-      },
-      ...(ctx.vaultInvoke
-        ? [
-            {
-              name: VAULT_INVOKE_TOOL.name,
-              description: VAULT_INVOKE_TOOL.description,
-              inputSchema: VAULT_INVOKE_TOOL.inputSchema as unknown,
-            },
-          ]
-        : []),
-    ];
-  }
+  if (!ctx?.vaultSql) return [];
   return [
     {
-      name: 'centraid_describe',
-      description:
-        "Return the app's manifest plus live SQLite schema, or a single declared handler entry. Call without arguments to see the full catalog; pass `action` or `query` to narrow. Use this before centraid_read/centraid_write to know what handlers exist and what input each accepts.",
-      inputSchema: {
-        type: 'object',
-        properties: {
-          action: { type: 'string', description: 'Action name to narrow to.' },
-          query: { type: 'string', description: 'Query name to narrow to.' },
-        },
-        additionalProperties: false,
-      },
+      name: VAULT_SQL_TOOL.name,
+      description: VAULT_SQL_TOOL.description,
+      inputSchema: VAULT_SQL_TOOL.inputSchema,
     },
-    {
-      name: 'centraid_read',
-      description:
-        'Invoke a declared query, or the `_sql` built-in for an ad-hoc SELECT. For declared queries set `query` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc reads use `query: "_sql"` and `input: { sql: "<single SELECT or EXPLAIN>" }` — rows are capped at 200, use LIMIT for fewer; DDL/PRAGMA refused. Prefer declared queries when one fits the user\'s ask.',
-      inputSchema: {
-        type: 'object',
-        required: ['query'],
-        properties: {
-          query: { type: 'string', description: 'Declared query name, or "_sql".' },
-          input: { description: 'Input matching the query schema, or { sql } for _sql.' },
-        },
-        additionalProperties: false,
-      },
-    },
-    {
-      name: 'centraid_write',
-      description:
-        'Invoke a declared action, or the `_sql` built-in for an ad-hoc INSERT/UPDATE/DELETE/REPLACE. For declared actions set `action` to the name in the manifest and `input` to its JSON Schema shape. For ad-hoc writes use `action: "_sql"` and `input: { sql: "<single statement>" }` — DDL/PRAGMA refused. Prefer declared actions when one fits the user\'s ask. The runtime fires its change bus after a successful write so the app UI re-renders automatically.',
-      inputSchema: {
-        type: 'object',
-        required: ['action'],
-        properties: {
-          action: { type: 'string', description: 'Declared action name, or "_sql".' },
-          input: { description: 'Input matching the action schema, or { sql } for _sql.' },
-        },
-        additionalProperties: false,
-      },
-    },
+    ...(ctx.vaultInvoke
+      ? [
+          {
+            name: VAULT_INVOKE_TOOL.name,
+            description: VAULT_INVOKE_TOOL.description,
+            inputSchema: VAULT_INVOKE_TOOL.inputSchema as unknown,
+          },
+        ]
+      : []),
   ];
 }
 
@@ -107,14 +61,13 @@ export interface DynamicToolCallOutcome {
 }
 
 /**
- * Synchronously run one `item/tool/call` server request. Reads the
- * documented `DynamicToolCallParams { tool, callId, arguments }` shape
- * out of the codex payload, dispatches to the shared three-tool
- * dispatcher, and returns both the RPC reply and the `tool.start` /
- * `tool.result` events the driver should emit.
- *
- * Errors map to `success: false` with the message in `contentItems[0]`;
- * we never throw out of here so the JSON-RPC loop stays responsive.
+ * Run one `item/tool/call` server request. Reads the documented
+ * `DynamicToolCallParams { tool, callId, arguments }` shape out of the
+ * codex payload, dispatches to the turn's vault runners, and returns both
+ * the RPC reply and the `tool.start` / `tool.result` events the driver
+ * should emit. Errors map to `success: false` with the message in
+ * `contentItems[0]`; we never throw out of here so the JSON-RPC loop
+ * stays responsive.
  */
 export async function handleCentraidToolCall(
   id: number,
@@ -127,129 +80,27 @@ export async function handleCentraidToolCall(
     arguments?: Record<string, unknown>;
   };
   const toolName = String(p.tool ?? '');
-  const args = (p.arguments ?? {}) as {
-    action?: string;
-    query?: string;
-    input?: unknown;
-  };
+  const args = p.arguments ?? {};
   const callId = typeof p.callId === 'string' ? p.callId : `tool-${id}`;
 
   const events: TurnStreamEvent[] = [
     { type: 'tool.start', toolCallId: callId, toolName, args, ...sqlOf(args) },
   ];
 
-  // The vault register: dispatched through the turn's owner/assistant
-  // runners instead of the app dispatcher.
-  if (toolName === VAULT_SQL_TOOL.name || toolName === VAULT_INVOKE_TOOL.name) {
-    const out =
-      toolName === VAULT_SQL_TOOL.name
-        ? await runVaultSqlTool(ctx, (p.arguments as { sql?: unknown } | undefined)?.sql)
-        : await runVaultInvokeTool(ctx, p.arguments);
-    if (out.ok) {
-      events.push({
-        type: 'tool.result',
-        toolCallId: callId,
-        toolName,
-        ok: true,
-        result: out.result,
-      });
-      return {
-        response: {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            success: true,
-            contentItems: [{ type: 'inputText', text: JSON.stringify(out.result) }],
-          },
-        },
-        events,
-      };
-    }
-    events.push({
-      type: 'tool.result',
-      toolCallId: callId,
-      toolName,
-      ok: false,
-      result: null,
-      errorText: out.errorText,
-    });
-    return {
-      response: {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          success: false,
-          contentItems: [{ type: 'inputText', text: out.errorText }],
-        },
-      },
-      events,
-    };
-  }
+  const out =
+    toolName === VAULT_SQL_TOOL.name
+      ? await runVaultSqlTool(ctx, (args as { sql?: unknown }).sql)
+      : toolName === VAULT_INVOKE_TOOL.name
+        ? await runVaultInvokeTool(ctx, args)
+        : { ok: false as const, errorText: `unknown tool "${toolName}"` };
 
-  try {
-    let result;
-    if (toolName === 'centraid_describe') {
-      result = await ctx.dispatcher.describe(
-        {
-          app: ctx.appId,
-          ...(typeof args.action === 'string' ? { action: args.action } : {}),
-          ...(typeof args.query === 'string' ? { query: args.query } : {}),
-        },
-        ctx.overrideCodeDir,
-      );
-    } else if (toolName === 'centraid_read') {
-      if (typeof args.query !== 'string') throw new Error('query argument required');
-      result = await ctx.dispatcher.read(
-        {
-          app: ctx.appId,
-          query: args.query,
-          input: args.input,
-        },
-        ctx.overrideCodeDir,
-      );
-    } else if (toolName === 'centraid_write') {
-      if (typeof args.action !== 'string') throw new Error('action argument required');
-      result = await ctx.dispatcher.write(
-        {
-          app: ctx.appId,
-          action: args.action,
-          input: args.input,
-        },
-        ctx.overrideCodeDir,
-      );
-    } else {
-      throw new Error(`unknown tool "${toolName}"`);
-    }
-    if (result.isError) {
-      const { code, message } = result.structuredContent;
-      const msg = `[${code}] ${message}`;
-      events.push({
-        type: 'tool.result',
-        toolCallId: callId,
-        toolName,
-        ok: false,
-        result: null,
-        errorText: msg,
-      });
-      return {
-        response: {
-          jsonrpc: '2.0',
-          id,
-          result: {
-            success: false,
-            contentItems: [{ type: 'inputText', text: msg }],
-          },
-        },
-        events,
-      };
-    }
-    const payload = result.structuredContent;
+  if (out.ok) {
     events.push({
       type: 'tool.result',
       toolCallId: callId,
       toolName,
       ok: true,
-      result: payload,
+      result: out.result,
     });
     return {
       response: {
@@ -257,45 +108,34 @@ export async function handleCentraidToolCall(
         id,
         result: {
           success: true,
-          contentItems: [{ type: 'inputText', text: JSON.stringify(payload) }],
-        },
-      },
-      events,
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    events.push({
-      type: 'tool.result',
-      toolCallId: callId,
-      toolName,
-      ok: false,
-      result: null,
-      errorText: msg,
-    });
-    return {
-      response: {
-        jsonrpc: '2.0',
-        id,
-        result: {
-          success: false,
-          contentItems: [{ type: 'inputText', text: msg }],
+          contentItems: [{ type: 'inputText', text: JSON.stringify(out.result) }],
         },
       },
       events,
     };
   }
+  events.push({
+    type: 'tool.result',
+    toolCallId: callId,
+    toolName,
+    ok: false,
+    result: null,
+    errorText: out.errorText,
+  });
+  return {
+    response: {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        success: false,
+        contentItems: [{ type: 'inputText', text: out.errorText }],
+      },
+    },
+    events,
+  };
 }
 
-/**
- * Surface the SQL string on a tool.start event when the agent used `_sql`
- * (nested under `input`) or `vault_sql` (top-level `sql` argument).
- */
-function sqlOf(args: { action?: string; query?: string; input?: unknown; sql?: unknown }): {
-  sql?: string;
-} {
-  if (typeof args.sql === 'string') return { sql: args.sql };
-  if (args.action !== '_sql' && args.query !== '_sql') return {};
-  if (!args.input || typeof args.input !== 'object') return {};
-  const sql = (args.input as { sql?: unknown }).sql;
-  return typeof sql === 'string' ? { sql } : {};
+/** Surface the SQL string on a `vault_sql` tool.start event. */
+function sqlOf(args: { sql?: unknown }): { sql?: string } {
+  return typeof args.sql === 'string' ? { sql: args.sql } : {};
 }

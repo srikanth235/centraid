@@ -63,11 +63,12 @@ export interface CodexTurnInput {
    */
   extraPath?: string;
   /**
-   * When provided, codex receives `dynamicTools: [...]` on `thread/start`
-   * declaring three first-class tools — `centraid_describe`,
-   * `centraid_read`, `centraid_write` — and we dispatch the
-   * resulting `item/tool/call` server requests in-process against the
-   * supplied `dataFile`. Writes fire `emitChange` precisely.
+   * When provided (and carrying a vault runner), codex receives
+   * `dynamicTools: [...]` on `thread/start` declaring the vault-register
+   * tools (`vault_sql`, `vault_invoke`), and we dispatch the resulting
+   * `item/tool/call` server requests in-process through the runners. A
+   * context without runners declares no data tools — the trio died with
+   * the per-app silo (#286 phase 2).
    */
   toolContext?: ToolContext;
   abortSignal: AbortSignal;
@@ -187,8 +188,8 @@ export async function runCodexTurn(
       return;
     }
     if (method === 'item/tool/call' && input.toolContext) {
-      // Dispatcher calls are async (manifest IO, SQLite); fire-and-await
-      // off the synchronous event handler so the RPC loop stays responsive.
+      // Runner calls are async (vault IO); fire-and-await off the
+      // synchronous event handler so the RPC loop stays responsive.
       void (async () => {
         try {
           const outcome = await handleCentraidToolCall(id, params, input.toolContext!);
