@@ -356,6 +356,14 @@ bun run typecheck && bun run test && bun run lint && bun run format:check && bun
 
 3. **Checklist mirrors issue phasing**: The receipt's 5-item checklist mirrors issue #289's "Suggested phasing" exactly: (1) vault resolution, (2) device registry + tickets, (3) iroh endpoint, (4) transport tiers + handshake, (5) client switcher. Four future commits are correctly marked unticked `- [ ]`, following the established multi-commit receipt convention. The issue phasing is faithfully represented.
 
+**Verdict (commits 2–5):** PASS
+
+1. **"What changed" faithfulness**: All four sections accurately describe their diffs. Spot-checks confirm: vault-context + composedHandler vault resolution with 403/404 (commit 2); enrollment-store one-row-per-(key,vault), pairing-store with SHA-256+TTL, endpoint-host device-identity forwarding (commit 3); transport.ts guardrail refusing plain http:// to public hosts, iroh-dialer reusing tunnel client (commit 4); activeVaultByGateway keyed-by-gateway in PersistedSettings, renderer switch calls setActiveVault not PATCH (commit 5).
+
+2. **Checklist realization**: All ticked items confirmed: AsyncLocalStorage vault context, vault-registry keyed workspaces with no active pointer, 405 admin plane for vault CRUD, version handshake, enrollment rows, pairing tickets, CLI admin commands, endpoint host, transport tiers + guardrail, iroh dialer, keyed active-vault state, x-centraid-vault header stamping, vault-map test cases.
+
+3. **Phasing fidelity**: The 5-commit sequence maps faithfully to issue #289's 4-phase "Suggested phasing": phase 1 vault resolution (commit 2), phase 2 device registry (commit 3), phase 3 iroh endpoint + desktop dialer (commits 1+4), phase 4 client switcher (commit 5). The split of phase 3 across two commits is justified by package boundaries.
+
 ## Steering
 
 **Verdict (commit 1):** PASS
