@@ -506,6 +506,7 @@ Re-attesting the full phase-2 change set: commits 1–5 already on the branch (p
 | claude-code-c0bf538c-2f5-1783274834-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 2 | 485 | 112430 | 253 | 740 | 0.0656 | 404168 | 8453893 | 361863537 | 1327726 | test(app-engine): drop stale schema/tables refs (#286)Issue: #286 |
 | claude-code-c0bf538c-2f5-1783274896-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 339 | 11205 | 1262148 | 4581 | 16125 | 0.8173 | 404507 | 8465098 | 363125685 | 1332307 | test(app-engine): drop stale schema/tables refs from tests for CI typecheck (#28 |
 | claude-code-c0bf538c-2f5-1783275089-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 11757 | 25180 | 2971521 | 13041 | 49978 | 2.0279 | 416264 | 8490278 | 366097206 | 1345348 | fix(desktop): exhaustive assistant stream switch for CI lint:types (#286)The ass |
+| claude-code-c0bf538c-2f5-1783275486-1 | claude-code | c0bf538c-2f5f-4ef0-a96d-831300b3fbf8 | #286 | claude-opus-4-8 | 1679 | 43901 | 6442614 | 26642 | 72222 | 4.1701 | 417943 | 8534179 | 372539820 | 1371990 | test(gateway): cover the purge-ext route to hold the 75% coverage gate (#286)The |
 
 ### Steering
 

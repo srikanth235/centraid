@@ -210,3 +210,36 @@ test('a spec the vault refuses aborts the publish; main never advances', async (
   expect(versions).toEqual([]);
   expect(() => ownerSql('SELECT 1 FROM ext_gym_bad')).toThrow(/no such table/);
 });
+
+test('purge-ext over HTTP drops the app ext band and its data', async () => {
+  const store = await handle.activeAppsStore();
+  await store.openSession('s1');
+  await writeWorktreeFiles('s1', {
+    'app.json': manifest(EXT_V1),
+    'index.html': '<!doctype html>gym',
+  });
+  expect((await publish('s1', 'v1')).status).toBe(201);
+
+  // Seed a live row so the purge has something to reclaim.
+  const plane = handle.vaults.active();
+  expect(
+    plane.invokeAsAssistant({
+      command: 'ext.gym.insert',
+      input: { table: 'workout', values: { notes: 'reclaim me' } },
+      purpose: 'dpv:ServiceProvision',
+    }).status,
+  ).toBe('executed');
+  expect(ownerSql('SELECT count(*) AS n FROM ext_gym_workout')[0]?.n).toBe(1);
+
+  // The explicit second half of uninstall: the owner purges the band.
+  const purge = await fetch(`${handle.url}/centraid/_vault/apps/gym/purge-ext`, {
+    method: 'POST',
+    headers: auth(),
+  });
+  expect(purge.status).toBe(200);
+  const body = (await purge.json()) as { purged: string[] };
+  expect(body.purged).toEqual(['workout']);
+
+  // The physical table — and its rows — are gone for good.
+  expect(() => ownerSql('SELECT 1 FROM ext_gym_workout')).toThrow(/no such table/);
+});
