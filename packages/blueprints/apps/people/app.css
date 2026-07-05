@@ -710,7 +710,9 @@ button {
   border-radius: 14px;
   overflow: hidden;
   background: var(--bg-elev);
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
 }
 .d-card:hover {
   border-color: var(--line-strong);
