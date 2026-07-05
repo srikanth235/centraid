@@ -10,12 +10,16 @@
 
 import {
   armConfirm,
+  assignAnchors,
+  attachMentionPopover,
+  computeMentionSelector,
   createReference,
   entityKindLabel,
-  openEntityPicker,
   readFailed,
+  reanchorReference,
   relTime,
   removeReference,
+  renderReferenceStrip,
   showSkeleton,
   toast,
 } from './kit.js';
@@ -178,67 +182,188 @@ function wireAttachInput(inputEl, getSubjectId) {
 // and asserted through the shell (pick-is-consent); the library query
 // renders the far end via the resolver's cards.
 
-function renderReferences(stripEl, list) {
-  stripEl.innerHTML = '';
-  for (const ref of list ?? []) {
-    const card = ref.card ?? {};
-    const tile = document.createElement('div');
-    tile.className = 'ref-tile';
-    const kind = document.createElement('span');
-    kind.className = 'ref-kind';
-    kind.textContent = entityKindLabel(card.type);
-    tile.appendChild(kind);
-    const label = document.createElement('span');
-    label.className = 'ref-title';
-    if (card.status === 'missing') {
-      tile.classList.add('ref-gone');
-      label.textContent = 'removed from the vault';
-    } else {
-      label.textContent = card.title ?? `${entityKindLabel(card.type)}`;
-      if (card.status === 'trashed') {
-        tile.classList.add('ref-gone');
-        label.textContent += ' (in trash)';
-      }
-    }
-    tile.appendChild(label);
-    if (card.subtitle && card.status === 'live') {
-      const sub = document.createElement('span');
-      sub.className = 'ref-sub';
-      sub.textContent = card.subtitle;
-      tile.appendChild(sub);
-    }
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'ref-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove reference';
-    rm.addEventListener('click', async () => {
+// The strip renderer is the kit's canonical primitive (issues #272 + #282);
+// this app supplies only the removal behaviour — the vault unlink plus a
+// re-read — and the set of link_ids currently resolved inline so tiles flag
+// themselves "in text" vs "in strip".
+function renderReferences(stripEl, list, inlineSet) {
+  renderReferenceStrip(stripEl, list, {
+    inlineIds: inlineSet,
+    onRemove: async (ref) => {
       const outcome = await removeReference(ref.link_id);
       if (outcome?.status !== 'executed') {
         notice(`Could not remove the reference: ${outcome?.reason ?? 'unknown error'}.`);
       }
       await refresh();
-    });
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
+    },
+  });
 }
 
-async function addReference() {
-  const noteId = viewingId;
-  if (!noteId) return;
-  const picked = await openEntityPicker({
-    title: 'Link this note to…',
-    exclude: { type: 'knowledge.note', id: noteId },
-  });
-  if (!picked) return;
-  const outcome = await createReference({ type: 'knowledge.note', id: noteId }, picked);
-  if (outcome?.status === 'executed') {
-    toast(`Linked to ${picked.title ?? entityKindLabel(picked.type)}.`);
-  } else {
-    notice(`The vault refused the link: ${outcome?.reason ?? outcome?.predicate ?? ''}.`);
+// The one way to create a reference is the inline `@`-mention. The strip's
+// button is a discoverability shim for it (mobile especially, where typing
+// `@` mid-text to summon a popover isn't obvious): it drops into the body
+// editor, inserts an `@` at the caret, and lets the kit popover take over.
+function startMention() {
+  const note = currentNote();
+  if (!note || !draft) return;
+  const input = $('noteBodyInput');
+  if (!editingBody) enterBodyEdit(draft.body.length);
+  input.focus();
+  const pos = input.selectionStart ?? input.value.length;
+  const prev = pos > 0 ? input.value[pos - 1] : '';
+  input.setRangeText(prev && !/[\s(]/.test(prev) ? ' @' : '@', pos, pos, 'end');
+  // One synthetic input event syncs the draft (Notes' own handler) and opens
+  // the mention popover (the kit's handler) — no duplicated bookkeeping.
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// ---------- Inline @-mentions (issue #282) ----------
+// Typing `@` in the body opens the kit's caret popover over the shell picker
+// batch. The pick inserts PLAIN WORDS into the body and asserts a core.link
+// carrying a standoff selector — the text stays canonical bytes, the
+// reference stays a receipted edge, and the read view projects the edge back
+// onto the words as a live chip.
+
+async function onMentionPick(card, range) {
+  const note = currentNote();
+  if (!note || !draft) return;
+  if (card.type === 'knowledge.note' && card.id === note.note_id) {
+    toast('A note cannot reference itself.');
+    return;
   }
-  await refresh();
+  const input = $('noteBodyInput');
+  const label = card.title ?? entityKindLabel(card.type);
+  // Re-anchor, don't duplicate: an edge to this entity whose words were
+  // edited away (orphaned BEFORE this insertion) takes the new selector
+  // instead of minting a second judgment.
+  const anchored = (note.references ?? []).filter((r) => r.selector);
+  const preAssigned = assignAnchors(input.value, anchored);
+  const orphan = (note.references ?? []).find(
+    (r) =>
+      r.selector &&
+      !preAssigned.has(r.link_id) &&
+      r.card?.type === card.type &&
+      r.card?.id === card.id,
+  );
+  input.setRangeText(label, range.start, range.end, 'end');
+  input.focus();
+  draft.body = input.value;
+  dirty = true;
+  autoSize(input);
+  scheduleSave();
+  const selector = computeMentionSelector(input.value, range.start, range.start + label.length);
+  const outcome = orphan
+    ? await reanchorReference(orphan.link_id, selector)
+    : await createReference(
+        { type: 'knowledge.note', id: note.note_id },
+        card,
+        'references',
+        selector,
+      );
+  if (outcome?.status !== 'executed') {
+    narrate(outcome, refresh);
+    return;
+  }
+  if (orphan) {
+    orphan.selector = selector;
+  } else {
+    note.references = [
+      ...(note.references ?? []),
+      { link_id: outcome.output?.link_id, selector, card },
+    ];
+  }
+  toast(`${orphan ? 'Re-linked' : 'Linked'} ${label}.`);
+  renderReferences($('refStrip'), note.references, inlineLinkIds(note, draft.body));
+}
+
+attachMentionPopover($('noteBodyInput'), { onPick: onMentionPick });
+
+// ---------- Orphan reconcile — auto-retract with Undo (issue #282, 4b) ----------
+// Runs when a body save lands (the autosave debounce + blur flush IS the
+// "settled" signal — mid-typing can never fire a vault write). Three duties:
+// re-baseline selectors of still-anchored links to the saved body, retract
+// edges whose mentions left the text (temporal valid_to — receipted, never a
+// silent delete), and offer a one-tap Undo. Undo re-asserts a FRESH edge
+// with no anchor: the retraction stays in history (unlink is never
+// rewritten), and an anchorless link lives in the strip — exempt from any
+// future auto-retract by construction, so undo cannot oscillate against the
+// still-missing words.
+
+let reconcileChain = Promise.resolve();
+
+function reconcileAnchors(note, body) {
+  reconcileChain = reconcileChain.then(() => doReconcile(note, body)).catch(() => {});
+}
+
+async function doReconcile(note, body) {
+  const anchored = (note.references ?? []).filter((r) => r.selector);
+  if (anchored.length === 0) return;
+  const assigned = assignAnchors(body, anchored);
+  const orphans = [];
+  for (const ref of anchored) {
+    const span = assigned.get(ref.link_id);
+    if (!span) {
+      orphans.push(ref);
+      continue;
+    }
+    // Re-baseline: keep the stored selector current with the saved body so
+    // drift never accumulates — the reason resolution needs no fuzzy rung.
+    const fresh = computeMentionSelector(body, span.start, span.end);
+    const cur = ref.selector;
+    if (
+      cur.exact !== fresh.exact ||
+      cur.prefix !== fresh.prefix ||
+      cur.suffix !== fresh.suffix ||
+      cur.start !== fresh.start
+    ) {
+      const outcome = await reanchorReference(ref.link_id, fresh);
+      if (outcome?.status === 'executed') ref.selector = fresh;
+    }
+  }
+  if (orphans.length === 0) return;
+  const retracted = [];
+  for (const ref of orphans) {
+    const outcome = await removeReference(ref.link_id);
+    if (outcome?.status === 'executed') retracted.push(ref);
+  }
+  if (retracted.length === 0) return;
+  note.references = (note.references ?? []).filter((r) => !retracted.includes(r));
+  if (viewingId === note.note_id) {
+    renderReferences($('refStrip'), note.references, inlineLinkIds(note, draft?.body ?? body));
+  }
+  const names = retracted.map((r) => r.card?.title ?? entityKindLabel(r.card?.type)).join(', ');
+  toast(
+    retracted.length === 1
+      ? `Unlinked ${names} — its mention left the text.`
+      : `Unlinked ${retracted.length} references whose mentions left the text.`,
+    {
+      undoLabel: 'Undo',
+      onUndo: async () => {
+        for (const ref of retracted) {
+          const outcome = await createReference(
+            { type: 'knowledge.note', id: note.note_id },
+            ref.card,
+            'references',
+          );
+          if (outcome?.status === 'executed') {
+            note.references = [
+              ...(note.references ?? []),
+              { link_id: outcome.output?.link_id, selector: null, card: ref.card },
+            ];
+          } else {
+            notice(`Could not restore the link: ${outcome?.reason ?? outcome?.predicate ?? ''}.`);
+          }
+        }
+        if (viewingId === note.note_id) {
+          renderReferences(
+            $('refStrip'),
+            note.references,
+            inlineLinkIds(note, draft?.body ?? body),
+          );
+        }
+      },
+    },
+  );
 }
 
 // ---------- Lightbox ----------
@@ -295,11 +420,77 @@ function appendInline(el, text) {
   if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
 }
 
+// ---------- Inline anchored references in the read view (issue #282) ----------
+// A resolved standoff anchor renders the mentioned words as a chip showing
+// the resolver's LIVE card title — rename the target and the chip follows,
+// while the body bytes stay the plain words that were typed. An anchor that
+// no longer resolves simply renders nothing here: the reference stays honest
+// in the strip.
+
+// The live-card chip for one resolved anchor span.
+function mentionChip(ref) {
+  const card = ref.card ?? {};
+  const chip = document.createElement('span');
+  chip.className = 'kit-mention-chip';
+  if (card.status === 'missing') {
+    chip.classList.add('ref-gone');
+    chip.textContent = 'removed from the vault';
+  } else {
+    chip.textContent = card.title ?? entityKindLabel(card.type);
+    if (card.status === 'trashed') chip.classList.add('ref-gone');
+  }
+  chip.title = `${entityKindLabel(card.type)} — linked from this note`;
+  return chip;
+}
+
+// Append one rendered chunk of body text, swapping any anchor span that
+// falls fully inside it for its chip. `absStart` is the chunk's offset in
+// the whole body — the space assignAnchors speaks. A span that straddles a
+// chunk boundary (markdown syntax, a line break) renders as plain text: the
+// chip is presentation, degrading is free.
+function appendRich(el, text, absStart, markdown, inline) {
+  const absEnd = absStart + text.length;
+  const spans = (inline ?? [])
+    .filter((r) => r.start >= absStart && r.end <= absEnd)
+    .toSorted((a, b) => a.start - b.start);
+  const literal = (seg) => {
+    if (!seg) return;
+    if (markdown) appendInline(el, seg);
+    else el.appendChild(document.createTextNode(seg));
+  };
+  if (spans.length === 0) {
+    literal(text);
+    return;
+  }
+  let cursor = absStart;
+  for (const r of spans) {
+    literal(text.slice(cursor - absStart, r.start - absStart));
+    el.appendChild(mentionChip(r));
+    cursor = r.end;
+  }
+  literal(text.slice(cursor - absStart));
+}
+
+// Resolve the note's anchored references against `body` — returns the spans
+// to render inline. Pure presentation: runs in the kit, writes nothing.
+function inlineRefSpans(note, body) {
+  const refs = (note?.references ?? []).filter((r) => r.selector);
+  if (refs.length === 0) return [];
+  const assigned = assignAnchors(String(body ?? ''), refs);
+  return refs
+    .filter((r) => assigned.has(r.link_id))
+    .map((r) => ({ ...assigned.get(r.link_id), link_id: r.link_id, card: r.card }));
+}
+
+function inlineLinkIds(note, body) {
+  return new Set(inlineRefSpans(note, body).map((r) => r.link_id));
+}
+
 const CHECK_RE = /^\s*[-*] \[( |x|X)\] ?(.*)$/;
 
 // One `- [ ]` / `- [x]` source line as a live checkbox row. Works in every
 // format: a checklist is a checklist even in a plain-text note.
-function checkLine(match, lineIndex, markdown) {
+function checkLine(match, lineIndex, markdown, chunkStart, inline) {
   const row = document.createElement('div');
   row.className = `check-line${/x/i.test(match[1]) ? ' done' : ''}`;
   row.dataset.line = String(lineIndex);
@@ -314,8 +505,7 @@ function checkLine(match, lineIndex, markdown) {
   box.appendChild(input);
   const text = document.createElement('span');
   text.className = 'check-text';
-  if (markdown) appendInline(text, match[2]);
-  else text.textContent = match[2];
+  appendRich(text, match[2], chunkStart, markdown, inline);
   row.append(box, text);
   return row;
 }
@@ -324,16 +514,22 @@ function checkLine(match, lineIndex, markdown) {
 // and inline spans; plain/html bodies render as literal lines. Checklists
 // render live in every format. Each block carries data-line so a click can
 // drop the caret on the right source line.
-function renderBodyInto(container, body, format) {
+function renderBodyInto(container, body, format, inline = []) {
   container.innerHTML = '';
   const markdown = format === 'markdown';
   const lines = String(body ?? '').split('\n');
   let list = null;
+  let offset = 0;
   lines.forEach((line, i) => {
+    const lineStart = offset;
+    offset += line.length + 1;
+    // Rendered chunks strip a syntax prefix; since every capture group runs
+    // to end-of-line, its body offset is lineStart + (prefix length).
+    const chunkStart = (group) => lineStart + line.length - group.length;
     const check = CHECK_RE.exec(line);
     if (check) {
       list = null;
-      container.appendChild(checkLine(check, i, markdown));
+      container.appendChild(checkLine(check, i, markdown, chunkStart(check[2]), inline));
       return;
     }
     if (markdown) {
@@ -343,7 +539,7 @@ function renderBodyInto(container, body, format) {
         const h = document.createElement(`h${heading[1].length + 2}`);
         h.className = `md-h${heading[1].length}`;
         h.dataset.line = String(i);
-        appendInline(h, heading[2]);
+        appendRich(h, heading[2], chunkStart(heading[2]), true, inline);
         container.appendChild(h);
         return;
       }
@@ -356,7 +552,7 @@ function renderBodyInto(container, body, format) {
         }
         const li = document.createElement('li');
         li.dataset.line = String(i);
-        appendInline(li, item[1]);
+        appendRich(li, item[1], chunkStart(item[1]), true, inline);
         list.appendChild(li);
         return;
       }
@@ -366,8 +562,7 @@ function renderBodyInto(container, body, format) {
     p.dataset.line = String(i);
     if (line.trim()) {
       p.className = 'md-p';
-      if (markdown) appendInline(p, line);
-      else p.textContent = line;
+      appendRich(p, line, lineStart, markdown, inline);
     } else {
       p.className = 'md-gap';
     }
@@ -835,7 +1030,7 @@ function renderNoteView(note) {
   renderNoteBody(note);
   renderMoveSelect(note);
   renderAttachments($('attachStrip'), note.attachments, removeAttachment);
-  renderReferences($('refStrip'), note.references);
+  renderReferences($('refStrip'), note.references, inlineLinkIds(note, draft.body));
 }
 
 function renderNoteBody(note) {
@@ -849,7 +1044,7 @@ function renderNoteBody(note) {
   } else {
     input.hidden = true;
     render.hidden = false;
-    renderBodyInto(render, draft.body, note?.format);
+    renderBodyInto(render, draft.body, note?.format, inlineRefSpans(note, draft.body));
   }
 }
 
@@ -962,6 +1157,9 @@ async function performSave() {
     note.title = input.title ?? note.title;
     note.body = snapBody;
     note.updated_at = new Date().toISOString();
+    // The saved body is the settled truth — re-baseline the standoff
+    // anchors against it and retract orphaned mentions (issue #282, 4b).
+    if (input.body_text) reconcileAnchors(note, snapBody);
     if (dirty) scheduleSave();
   } else {
     narrate(outcome, refresh);
@@ -1177,7 +1375,7 @@ async function removeAttachment(attachmentId) {
 
 wireAttachInput($('attachInput'), () => viewingId);
 
-$('addRefButton').addEventListener('click', addReference);
+$('addRefButton').addEventListener('click', startMention);
 
 $('pinButton').addEventListener('click', async () => {
   const note = currentNote();

@@ -147,16 +147,36 @@ export default async ({ input, ctx }) => {
         linkRows.map((l) => [`${l.to_type}/${l.to_id}`, { type: l.to_type, id: l.to_id }]),
       ).values(),
     ];
-    const resolved =
+    // Standoff anchors (issue #282): the inline locator a link may carry.
+    // Resolution to text spans is presentation — the app/kit does it; this
+    // projection only ships each live link's selector alongside its card.
+    const [resolved, anchors] = await Promise.all([
       uniqueRefs.length > 0
-        ? await ctx.vault.resolve({ refs: uniqueRefs, purpose })
-        : { cards: [] };
+        ? ctx.vault.resolve({ refs: uniqueRefs, purpose })
+        : Promise.resolve({ cards: [] }),
+      linkRows.length > 0
+        ? ctx.vault.read({
+            entity: 'core.link_anchor',
+            where: [{ column: 'link_id', op: 'in', value: linkRows.map((l) => l.link_id) }],
+            purpose,
+          })
+        : Promise.resolve({ rows: [] }),
+    ]);
     const cardByRef = new Map((resolved.cards ?? []).map((c) => [`${c.type}/${c.id}`, c]));
+    const selectorByLink = new Map();
+    for (const a of anchors.rows ?? []) {
+      try {
+        selectorByLink.set(a.link_id, JSON.parse(a.selector_json));
+      } catch {
+        // an unreadable selector is just an unanchored reference
+      }
+    }
     const referencesByNote = new Map();
     for (const l of linkRows) {
       if (!referencesByNote.has(l.from_id)) referencesByNote.set(l.from_id, []);
       referencesByNote.get(l.from_id).push({
         link_id: l.link_id,
+        selector: selectorByLink.get(l.link_id) ?? null,
         card: cardByRef.get(`${l.to_type}/${l.to_id}`) ?? {
           type: l.to_type,
           id: l.to_id,

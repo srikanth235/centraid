@@ -109,6 +109,19 @@ export interface LinkInput {
   to_type: string;
   to_id: string;
   relation?: string;
+  /** Optional inline anchor written atomically with the link (issue #282). */
+  selector?: AnchorSelector;
+}
+
+/**
+ * The standoff-anchor selector (issue #282): a W3C-style text quote plus a
+ * position hint into the from-endpoint's decoded body (UTF-16 code units).
+ */
+export interface AnchorSelector {
+  exact: string;
+  prefix: string;
+  suffix: string;
+  start: number;
 }
 
 /**
@@ -130,7 +143,27 @@ export function linkAsOwner(
       to_type: input.to_type,
       to_id: input.to_id,
       relation: input.relation ?? 'references',
+      ...(input.selector ? { selector: input.selector } : {}),
     },
+    purpose: 'dpv:ServiceProvision',
+  });
+}
+
+/**
+ * Move or clear the standoff anchor of a live link as the owner (issue
+ * #282): with a selector the anchor upserts (re-anchor / re-baseline);
+ * without one it clears, demoting the reference to strip-only. A locator
+ * write — the link judgment itself is untouched.
+ */
+export function anchorAsOwner(
+  gateway: VaultGateway,
+  cred: Credential,
+  linkId: string,
+  selector: AnchorSelector | null,
+): InvokeOutcome {
+  return gateway.invoke(cred, {
+    command: 'core.anchor_link',
+    input: { link_id: linkId, ...(selector ? { selector } : {}) },
     purpose: 'dpv:ServiceProvision',
   });
 }

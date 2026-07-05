@@ -18,8 +18,10 @@
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
  *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
- *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent)
+ *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent),
+ *                                                        optionally carrying an inline anchor selector (issue #282)
  *   DELETE /centraid/_vault/links/<linkId>             — end a link (temporal, never deletes)
+ *   PATCH  /centraid/_vault/links/<linkId>             — move/clear the link's standoff anchor {selector: {...}|null}
  *
  * Per-vault routes (everything below `vaults`) answer for the ACTIVE vault
  * unless `?vault=<vaultId>` names another one. Deny-by-default is structural:
@@ -30,6 +32,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GrantRequest, VaultPlane } from '../serve/vault-plane.js';
+import type { AnchorSelector } from '../serve/vault-picker.js';
 import { VaultRegistryError, type VaultRegistry } from '../serve/vault-registry.js';
 import { readJson, sendJson } from './route-helpers.js';
 
@@ -166,6 +169,16 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
             message: 'link body needs {from_type, from_id, to_type, to_id, relation?}',
           });
         }
+        let selector: AnchorSelector | undefined;
+        if (body.selector !== undefined) {
+          selector = parseSelector(body.selector);
+          if (selector === undefined) {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message: 'selector must be {exact, prefix, suffix, start}',
+            });
+          }
+        }
         const outcome = plane.linkAsOwner({
           from_type: body.from_type as string,
           from_id: body.from_id as string,
@@ -174,12 +187,35 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
           ...(typeof body.relation === 'string' && body.relation !== ''
             ? { relation: body.relation }
             : {}),
+          ...(selector ? { selector } : {}),
         });
         return sendJson(res, 200, outcome);
       }
 
       if (method === 'DELETE' && segments[0] === 'links' && segments.length === 2) {
         return sendJson(res, 200, plane.unlinkAsOwner(segments[1] ?? ''));
+      }
+
+      // Re-anchor / re-baseline (issue #282): move the standoff anchor of a
+      // live link ({selector: {...}}) or clear it ({selector: null}) —
+      // demoting the reference to strip-only. A locator write; the link
+      // judgment is untouched.
+      if (method === 'PATCH' && segments[0] === 'links' && segments.length === 2) {
+        const body = await readJson(req);
+        if (!('selector' in body)) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'anchor body needs {selector: {exact, prefix, suffix, start} | null}',
+          });
+        }
+        const selector = body.selector === null ? null : parseSelector(body.selector);
+        if (selector === undefined) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'selector must be {exact, prefix, suffix, start} or null',
+          });
+        }
+        return sendJson(res, 200, plane.anchorAsOwner(segments[1] ?? '', selector));
       }
 
       if (method === 'POST' && segments[0] === 'parked' && segments.length === 2) {
@@ -304,6 +340,19 @@ function sendRegistryError(res: ServerResponse, err: unknown): boolean {
     error: 'internal_error',
     message: err instanceof Error ? err.message : String(err),
   });
+}
+
+/**
+ * Validate a standoff-anchor selector from the wire (issue #282). Returns
+ * undefined on anything malformed — the routes turn that into a 400.
+ */
+function parseSelector(raw: unknown): AnchorSelector | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const s = raw as Record<string, unknown>;
+  if (typeof s.exact !== 'string' || s.exact.length === 0) return undefined;
+  if (typeof s.prefix !== 'string' || typeof s.suffix !== 'string') return undefined;
+  if (typeof s.start !== 'number' || !Number.isInteger(s.start) || s.start < 0) return undefined;
+  return { exact: s.exact, prefix: s.prefix, suffix: s.suffix, start: s.start };
 }
 
 const VERBS = new Set(['read', 'read+act', 'act']);

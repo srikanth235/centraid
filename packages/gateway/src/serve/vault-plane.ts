@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one cohesive plane (mount + both bridge planes + workspace accessors, #280); pending split of the bridge executors into a sibling module
+// governance: allow-repo-hygiene file-size-limit one cohesive plane (mount + both bridge planes + workspace accessors, #280; #282 adds anchorAsOwner, a one-line delegation like its link/unlink siblings); pending split of the bridge executors into a sibling module
 /*
  * The vault plane (duaility §12) — the gateway's mount of the owner's
  * personal vault (`@centraid/vault`) beside the per-app data silos.
@@ -83,9 +83,11 @@ import {
   type VaultWorkspace,
 } from '@centraid/app-engine';
 import {
+  anchorAsOwner,
   linkAsOwner,
   pickEntities,
   unlinkAsOwner,
+  type AnchorSelector,
   type LinkInput,
   type PickerHit,
   type PickerRequest,
@@ -390,6 +392,15 @@ export class VaultPlane {
 
   unlinkAsOwner(linkId: string): InvokeOutcome {
     return unlinkAsOwner(this.gateway, this.ownerCredential, linkId);
+  }
+
+  /**
+   * Move or clear a live link's standoff anchor (issue #282) — the
+   * re-anchor / re-baseline half of inline references. A locator write, not
+   * a new judgment.
+   */
+  anchorAsOwner(linkId: string, selector: AnchorSelector | null): InvokeOutcome {
+    return anchorAsOwner(this.gateway, this.ownerCredential, linkId, selector);
   }
 
   confirmParked(invocationId: string, approve: boolean): InvokeOutcome {

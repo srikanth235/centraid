@@ -6,7 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { CONSENT_DDL } from './consent.js';
-import { CORE_DDL } from './core.js';
+import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
@@ -58,6 +58,8 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   FTS_DDL,
   // v3: backfill the cross-referencing relation concepts (issue #272).
   RELATION_BACKFILL_DDL,
+  // v4: standoff anchors for inline references (issue #282) — backfills empty.
+  LINK_ANCHOR_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
