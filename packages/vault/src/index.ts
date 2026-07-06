@@ -48,6 +48,8 @@ export {
   type RevocationResult,
   type SweepResult,
 } from './gateway/duties.js';
+export { SEED_DEMO_ACTIVITY, SEED_PURGE_ACTIVITY } from './schema/seed.js';
+export { type DemoPurgeResult } from './gateway/demo.js';
 export { SEARCHABLE, type SearchableEntity } from './schema/fts.js';
 export {
   VAULT_SQL_DEFAULT_ROWS,

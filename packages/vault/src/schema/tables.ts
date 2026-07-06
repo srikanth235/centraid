@@ -45,6 +45,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'policy',
     'device',
     'export_job',
+    'seed_row',
   ],
   agent: ['agent', 'command', 'capability', 'correction', 'judgment'],
   health: ['vital', 'workout', 'sleep_session', 'medication_course', 'condition'],
