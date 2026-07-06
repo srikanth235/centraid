@@ -171,3 +171,103 @@ test('remove_group_member is refused while the member is on the ledger', () => {
     'failed',
   );
 });
+
+// ── The finance bridge (issue #310 S1) ─────────────────────────────────
+
+test('settle_up involving the owner emits a canonical transaction and binds it', () => {
+  const priya = addFriend();
+  const sid = out<{ settlement_id: string; txn_id: string | null }>(
+    invoke('tally.settle_up', { from_party: me, to_party: priya, amount_minor: 750 }),
+  );
+  expect(sid.txn_id).toBeTruthy();
+  const s = db.vault
+    .prepare('SELECT txn_id FROM tally_settlement WHERE settlement_id = ?')
+    .get(sid.settlement_id) as { txn_id: string | null };
+  expect(s.txn_id).toBe(sid.txn_id);
+  const txn = db.vault
+    .prepare(
+      `SELECT t.amount_minor, t.direction, t.counterparty_party_id, t.external_id, a.name, a.kind
+         FROM core_transaction t JOIN core_account a ON a.account_id = t.account_id
+        WHERE t.txn_id = ?`,
+    )
+    .get(sid.txn_id) as {
+    amount_minor: number;
+    direction: string;
+    counterparty_party_id: string;
+    external_id: string;
+    name: string;
+    kind: string;
+  };
+  expect(txn.amount_minor).toBe(750);
+  expect(txn.direction).toBe('debit'); // owner paid — money left the pool
+  expect(txn.counterparty_party_id).toBe(priya);
+  expect(txn.external_id).toBe(`tally:settlement:${sid.settlement_id}`);
+  expect(txn.name).toBe('Tally settlements');
+  expect(txn.kind).toBe('cash');
+});
+
+test('settle_up toward the owner posts a credit; friend-to-friend stays tally-only', () => {
+  const priya = addFriend();
+  const sam = addFriend('Sam Okafor');
+  const incoming = out<{ settlement_id: string; txn_id: string | null }>(
+    invoke('tally.settle_up', { from_party: priya, to_party: me, amount_minor: 300 }),
+  );
+  expect(incoming.txn_id).toBeTruthy();
+  const dir = db.vault
+    .prepare('SELECT direction FROM core_transaction WHERE txn_id = ?')
+    .get(incoming.txn_id) as { direction: string };
+  expect(dir.direction).toBe('credit');
+
+  const thirdParty = out<{ settlement_id: string; txn_id: string | null }>(
+    invoke('tally.settle_up', { from_party: priya, to_party: sam, amount_minor: 200 }),
+  );
+  expect(thirdParty.txn_id).toBeNull();
+  const count = db.vault
+    .prepare(`SELECT count(*) AS n FROM core_transaction WHERE external_id LIKE 'tally:%'`)
+    .get() as { n: number };
+  expect(count.n).toBe(1); // only the owner's settlement reached the ledger
+});
+
+test('bind_txn adopts an imported transaction onto an expense, and validates its target', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Apt', icon: '🏠', member_ids: [priya] }),
+  ).group_id;
+  const xid = out<{ expense_id: string }>(
+    invoke('tally.add_expense', {
+      group_id: gid,
+      description: 'Rent',
+      amount_minor: 200,
+      paid_by: me,
+      category: 'rent',
+      splits: [
+        { party_id: me, share_minor: 100 },
+        { party_id: priya, share_minor: 100 },
+      ],
+    }),
+  ).expense_id;
+  // An "imported" canonical transaction, as a bank sync would land it.
+  db.vault
+    .prepare(
+      `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, is_asset)
+       VALUES ('acct1', ?, 'HDFC', 'depository', 'USD', 1)`,
+    )
+    .run(me);
+  db.vault
+    .prepare(
+      `INSERT INTO core_transaction (txn_id, account_id, posted_at, amount_minor, currency, direction, status, external_id)
+       VALUES ('txn1', 'acct1', '2026-07-01T00:00:00Z', 200, 'USD', 'debit', 'posted', 'ofx:1')`,
+    )
+    .run();
+  out(invoke('tally.bind_txn', { expense_id: xid, txn_id: 'txn1' }));
+  const e = db.vault
+    .prepare('SELECT txn_id FROM tally_expense WHERE expense_id = ?')
+    .get(xid) as { txn_id: string | null };
+  expect(e.txn_id).toBe('txn1');
+
+  expect(invoke('tally.bind_txn', { txn_id: 'txn1' }).status).toBe('failed'); // no target
+  expect(
+    invoke('tally.bind_txn', { txn_id: 'txn1', expense_id: xid, settlement_id: 'nope' }).status,
+  ).toBe('failed'); // two targets
+  expect(invoke('tally.bind_txn', { txn_id: 'missing', expense_id: xid }).status).toBe('failed'); // txn precondition
+});

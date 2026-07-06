@@ -19,6 +19,13 @@
 // (equally / exact / percentages) at entry time and MUST sum to the amount —
 // the add/edit commands re-validate that server-side. Timestamps TEXT ISO-8601
 // UTC; dates are TEXT YYYY-MM-DD; PKs TEXT UUIDv7; all tables STRICT.
+//
+// The finance bridge (issue #310 S1): Tally is a lens over shared money, not
+// a second ledger. Expenses and settlements carry a nullable `txn_id` into
+// core_transaction — settle_up EMITS a canonical transaction when the owner
+// is a party to the payment (their money actually moved), and either row can
+// be BOUND to an already-imported one via tally.bind_txn (the Studio
+// paid_txn_id pattern: bind, don't duplicate, when the bank already knows).
 
 export const TALLY_DDL = `
 CREATE TABLE tally_friend (
@@ -51,6 +58,7 @@ CREATE TABLE tally_expense (
   spent_on     TEXT NOT NULL,
   category     TEXT NOT NULL CHECK (category IN
     ('food','groceries','rent','utilities','transport','fun','travel','shopping','general')),
+  txn_id       TEXT REFERENCES core_transaction(txn_id),
   created_at   TEXT NOT NULL
 ) STRICT;
 
@@ -69,6 +77,7 @@ CREATE TABLE tally_settlement (
   to_party      TEXT NOT NULL REFERENCES core_party(party_id),
   amount_minor  INTEGER NOT NULL CHECK (amount_minor > 0),
   paid_on       TEXT NOT NULL,
+  txn_id        TEXT REFERENCES core_transaction(txn_id),
   created_at    TEXT NOT NULL
 ) STRICT;
 

@@ -13,6 +13,16 @@
 // Every write is a typed command, consent-checked and receipted, all risk low
 // (money is recorded, not moved). Deleting a group is refused while it still
 // holds expenses; removing a member is refused while they are on the ledger.
+//
+// The finance bridge (issue #310 S1): Tally is a lens over shared money, not
+// a second ledger. A settlement the owner is party to IS the owner's money
+// moving, so settle_up emits a core_transaction on the auto-provisioned
+// "Tally settlements" cash account (external_id `tally:settlement:<id>` keeps
+// replays idempotent) and stamps the settlement's txn_id. Third-party
+// settlements (friend pays friend) touch no owner account and stay tally-only
+// ground facts. When the bank already imported the movement, tally.bind_txn
+// adopts the existing canonical row instead — the Studio paid_txn_id pattern:
+// bind, don't duplicate.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
@@ -36,6 +46,35 @@ function groupMemberIds(ctx: HandlerCtx, groupId: string): Set<string> {
 
 const GROUP_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id';
 const EXPENSE_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id';
+
+/** The vault's base currency — settlements are recorded in it. */
+function baseCurrency(ctx: HandlerCtx): string {
+  const row = ctx.db.prepare('SELECT base_currency FROM core_vault LIMIT 1').get() as
+    | { base_currency: string }
+    | undefined;
+  return row?.base_currency ?? 'USD';
+}
+
+/**
+ * Find-or-create the owner's "Tally settlements" cash account — the canonical
+ * pool settle_up's emitted transactions post against. One per vault, minted
+ * lazily on the first owner-party settlement.
+ */
+function settlementAccountId(ctx: HandlerCtx, ownerId: string): string {
+  const existing = ctx.db
+    .prepare(`SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = 'Tally settlements'`)
+    .get(ownerId) as { account_id: string } | undefined;
+  if (existing) return existing.account_id;
+  const accountId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, institution_party_id, external_ref, is_asset, opened_at, closed_at)
+       VALUES (?, ?, 'Tally settlements', 'cash', ?, NULL, NULL, 1, NULL, NULL)`,
+    )
+    .run(accountId, ownerId, baseCurrency(ctx));
+  ctx.wrote('core.account', accountId);
+  return accountId;
+}
 
 interface SplitInput {
   party_id: string;
@@ -561,23 +600,117 @@ const SETTLE_UP: CommandDefinition = {
       if (g.n !== 1) throw new Error('group not found');
     }
     const settlementId = ctx.newId();
+    const paidOn = input.paid_on ?? ctx.now.slice(0, 10);
+    const amount = Math.round(input.amount_minor);
+
+    // The finance bridge: when the owner is a party to the payment, their
+    // money actually moved — emit the canonical transaction and bind it.
+    // Friend-to-friend settlements touch no owner pool and stay tally-only.
+    const meId = ownerPartyId(ctx);
+    let txnId: string | null = null;
+    if (input.from_party === meId || input.to_party === meId) {
+      const accountId = settlementAccountId(ctx, meId);
+      const ownerPays = input.from_party === meId;
+      const otherId = ownerPays ? input.to_party : input.from_party;
+      const other = ctx.db
+        .prepare('SELECT display_name FROM core_party WHERE party_id = ?')
+        .get(otherId) as { display_name: string } | undefined;
+      txnId = ctx.newId();
+      ctx.db
+        .prepare(
+          `INSERT INTO core_transaction (txn_id, account_id, posted_at, amount_minor, currency, direction, status, transfer_group_id, counterparty_party_id, description, category_concept_id, external_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'posted', NULL, ?, ?, NULL, ?)`,
+        )
+        .run(
+          txnId,
+          accountId,
+          `${paidOn}T00:00:00Z`,
+          amount,
+          baseCurrency(ctx),
+          ownerPays ? 'debit' : 'credit',
+          otherId,
+          `Tally settlement${other ? ` — ${other.display_name}` : ''}`,
+          `tally:settlement:${settlementId}`,
+        );
+      ctx.wrote('core.transaction', txnId);
+    }
+
     ctx.db
       .prepare(
-        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, paid_on, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, paid_on, txn_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         settlementId,
         input.group_id ?? null,
         input.from_party,
         input.to_party,
-        Math.round(input.amount_minor),
-        input.paid_on ?? ctx.now.slice(0, 10),
+        amount,
+        paidOn,
+        txnId,
         ctx.now,
       );
     ctx.wrote('tally.settlement', settlementId);
     ctx.cite({ claim: 'Payment recorded', entityType: 'tally.settlement', entityId: settlementId });
-    return { settlement_id: settlementId };
+    if (txnId)
+      ctx.cite({
+        claim: 'Settlement posted to the canonical ledger',
+        entityType: 'core.transaction',
+        entityId: txnId,
+      });
+    return { settlement_id: settlementId, txn_id: txnId };
+  },
+};
+
+const BIND_TXN: CommandDefinition = {
+  name: 'tally.bind_txn',
+  ownerSchema: 'tally',
+  inputSchema: {
+    type: 'object',
+    required: ['txn_id'],
+    additionalProperties: false,
+    properties: {
+      txn_id: { type: 'string', minLength: 1 },
+      expense_id: { type: 'string', minLength: 1 },
+      settlement_id: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: { type: 'object', properties: { txn_id: { type: 'string' } } },
+  preconditions: [
+    {
+      name: 'txn_exists',
+      sql: 'SELECT count(*) AS n FROM core_transaction WHERE txn_id = :txn_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    const input = ctx.input as { txn_id: string; expense_id?: string; settlement_id?: string };
+    if (!input.expense_id === !input.settlement_id)
+      throw new Error('bind exactly one of expense_id or settlement_id');
+    if (input.expense_id) {
+      const changed = ctx.db
+        .prepare('UPDATE tally_expense SET txn_id = ? WHERE expense_id = ?')
+        .run(input.txn_id, input.expense_id);
+      if (changed.changes !== 1) throw new Error('expense not found');
+      ctx.wrote('tally.expense', input.expense_id);
+    } else if (input.settlement_id) {
+      const changed = ctx.db
+        .prepare('UPDATE tally_settlement SET txn_id = ? WHERE settlement_id = ?')
+        .run(input.txn_id, input.settlement_id);
+      if (changed.changes !== 1) throw new Error('settlement not found');
+      ctx.wrote('tally.settlement', input.settlement_id);
+    }
+    ctx.cite({
+      claim: 'Tally row bound to the canonical transaction',
+      entityType: 'core.transaction',
+      entityId: input.txn_id,
+    });
+    return { txn_id: input.txn_id };
   },
 };
 
@@ -593,4 +726,5 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(EDIT_EXPENSE);
   gateway.registerCommand(DELETE_EXPENSE);
   gateway.registerCommand(SETTLE_UP);
+  gateway.registerCommand(BIND_TXN);
 }
