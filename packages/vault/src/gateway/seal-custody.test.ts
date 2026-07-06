@@ -283,6 +283,43 @@ test('a handler error echoing a sealed input reaches journal and response scrubb
   expect(receipts.detail_json).not.toContain(secret);
 });
 
+// ── transcript-sensitive derivative output (issue #298 item 6) ──────────
+
+test('totp_code returns the live code but redacts it from the durable journal receipt', () => {
+  const itemId = addLogin();
+  const out = gw.invoke(owner, {
+    command: 'locker.totp_code',
+    input: { item_id: itemId },
+    purpose: PURPOSE,
+  });
+  expect(out.status).toBe('executed');
+  const code = (out as { output: { code: string } }).output.code;
+  expect(code).toMatch(/^\d{6}$/); // the live caller gets the real 6 digits
+
+  // …but the journal receipt (a durable, replayable store) must not hold it.
+  const receipt = db.journal
+    .prepare('SELECT detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1')
+    .get() as { detail_json: string };
+  expect(receipt.detail_json).not.toContain(code);
+  expect(receipt.detail_json).toContain('transcript-sensitive');
+});
+
+test('a normal command still stores its output in the receipt', () => {
+  const itemId = addLogin();
+  gw.invoke(owner, {
+    command: 'locker.star_item',
+    input: { item_id: itemId },
+    purpose: PURPOSE,
+  });
+  const receipt = db.journal
+    .prepare(
+      "SELECT detail_json FROM consent_receipt WHERE action = 'act locker.star_item' ORDER BY receipt_id DESC LIMIT 1",
+    )
+    .get() as { detail_json: string } | undefined;
+  expect(receipt?.detail_json).toContain('output');
+  expect(receipt?.detail_json).not.toContain('transcript-sensitive');
+});
+
 test('writeSealKeyFile + loadSealKey roundtrip', () => {
   const file = path.join(root, 'keys', 'x.sealkey');
   const key = Buffer.alloc(32, 3);

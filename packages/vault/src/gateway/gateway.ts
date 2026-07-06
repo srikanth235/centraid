@@ -158,6 +158,7 @@ export class Gateway {
       handler: def.handler,
       sealedInput: def.sealedInput ?? [],
       unseals: def.unseals ?? [],
+      transcriptSensitive: def.transcriptSensitive ?? false,
     });
   }
 

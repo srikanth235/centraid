@@ -52,6 +52,7 @@ export interface RegisteredCommand {
   handler: CommandDefinition['handler'];
   sealedInput: readonly string[];
   unseals: readonly string[];
+  transcriptSensitive: boolean;
 }
 
 // §10 S4: polymorphic (type, id) pairs that declarative FKs cannot express.
@@ -490,6 +491,12 @@ export function runContractAndExecute(
         : { invocation: invocationId },
     );
   }
+  // A transcript-sensitive command's output is secret-derived (issue #298
+  // item 6): the caller still gets the live value below, but it must NOT
+  // persist in the journal receipt (a durable store, read back on replay).
+  const receiptOutput = registered.transcriptSensitive
+    ? { redacted: 'transcript-sensitive derivative (issue #298 item 6)' }
+    : output;
   const receiptId = writeReceipt(db.journal, {
     grantId: consent.grantId,
     invocationId,
@@ -499,7 +506,7 @@ export function runContractAndExecute(
     purpose: request.purpose,
     decision: 'allow',
     detail: {
-      output,
+      output: receiptOutput,
       writes,
       ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
       ...(confirmation ? { confirmation } : {}),

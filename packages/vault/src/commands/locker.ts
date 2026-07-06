@@ -436,6 +436,10 @@ const TOTP_CODE: CommandDefinition = {
   // The exemplar of the sealed class (issue #293): the seed unseals INSIDE
   // the command and only the 6 digits emerge; the unseal is receipted.
   unseals: ['locker.item.otp_seed'],
+  // The 6-digit code is secret-derived (issue #298 item 6): the caller gets
+  // the live value, but it is redacted from the durable journal receipt so a
+  // one-time code never persists in a replayable store.
+  transcriptSensitive: true,
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     const seed = ctx.unseal(LOCKER_ITEM_TYPE, itemId, 'otp_seed');
