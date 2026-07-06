@@ -3,25 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Duaility — Personal Ontology Map</title>
-<meta name="description" content="A person-owned, self-hostable canonical data model of a whole life. Apps become projections; agents act through consent-checked typed commands.">
+<title>The ontology — Centraid docs</title>
+<meta name="description" content="Centraid's personal ontology: a person-owned canonical data model of a whole life. Apps become projections; agents act through consent-checked typed commands.">
+<link rel="icon" href="assets/centraid-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
 <style>
-/* ============ fonts (self-hosted; graceful degradation) ============ */
-@font-face{font-family:'Duaility Display';src:url('fonts/duaility-display.woff2') format('woff2');font-weight:300 800;font-display:swap;}
-@font-face{font-family:'Duaility Grotesk';src:url('fonts/duaility-grotesk.woff2') format('woff2');font-weight:300 700;font-display:swap;}
-@font-face{font-family:'Duaility Mono';src:url('fonts/duaility-mono.woff2') format('woff2');font-weight:400 600;font-display:swap;}
-
-/* ============ tokens ============ */
+/* ============ tokens — Centraid paper palette ============ */
 :root{
-  --paper:#f2f0e9; --paper-2:#eae7dd; --ink:#15171a; --ink-soft:#3d4046; --ink-faint:#6b6e75;
-  --night:#111217; --night-2:#17181f; --night-3:#1d1f28; --bone:#e9e7de; --bone-soft:#b9b7ae; --bone-faint:#83828074;
-  --indigo:#4F46E5; --indigo-soft:#6d66ef; --indigo-wash:rgba(79,70,229,.10);
-  --gold:#E8A830; --gold-wash:rgba(232,168,48,.12);
-  --line:rgba(21,23,26,.16); --line-strong:rgba(21,23,26,.34);
-  --nline:rgba(233,231,222,.14); --nline-strong:rgba(233,231,222,.32);
-  --serif:'Duaility Display','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
-  --sans:'Duaility Grotesk','Helvetica Neue',Helvetica,Arial,'Segoe UI',system-ui,sans-serif;
-  --mono:'Duaility Mono',ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
+  --paper:#f6f0e3; --paper-2:#efe7d4; --ink:#20261f; --ink-soft:#55604f; --ink-faint:#83907c;
+  --night:#111612; --night-2:#0c110d; --night-3:#171d17; --bone:#ece5d2; --bone-soft:#a8ab97; --bone-faint:#6f756574;
+  --indigo:#0d7263; --indigo-soft:#3ec8b4; --indigo-wash:rgba(13,114,99,.10);
+  --gold:#b3690e; --gold-wash:rgba(179,105,14,.12);
+  --line:rgba(32,38,31,.16); --line-strong:rgba(32,38,31,.34);
+  --nline:rgba(236,229,210,.14); --nline-strong:rgba(236,229,210,.32);
+  --serif:'Fraunces','Iowan Old Style','Palatino Linotype',Palatino,Georgia,serif;
+  --sans:'Newsreader',georgia,serif;
+  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
   --rail-w:220px; --max:1180px;
 }
 *{box-sizing:border-box}
@@ -37,11 +36,16 @@ button{font:inherit;color:inherit;cursor:pointer}
 /* ============ topbar ============ */
 .topbar{position:sticky;top:0;z-index:60;display:flex;align-items:baseline;gap:14px;padding:12px 22px;
   background:color-mix(in srgb,var(--paper) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);}
-.topbar .brand{font-family:var(--serif);font-weight:700;font-size:1.15rem;letter-spacing:.01em;text-decoration:none}
-.topbar .brand b{color:var(--indigo)}
+.topbar .brand{font-family:var(--serif);font-weight:640;font-size:1.15rem;letter-spacing:-.01em;text-decoration:none;display:flex;align-items:center;gap:9px}
+.topbar .brand .mark{width:24px;height:24px;border-radius:6px;overflow:hidden;box-shadow:2px 2px 0 rgba(32,38,31,.14);flex:none}
+.topbar .brand .mark img{width:100%;height:100%;display:block}
 .topbar .doc{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint)}
 .topbar .spacer{flex:1}
+.topbar .nav{display:flex;gap:2px;align-items:center}
+.topbar .nav a{font-family:var(--mono);font-size:.74rem;letter-spacing:.05em;text-transform:lowercase;color:var(--ink-soft);text-decoration:none;padding:6px 9px;border-radius:6px}
+.topbar .nav a:hover{color:var(--indigo)}
 .topbar .ver{font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)}
+@media (max-width:820px){.topbar .nav,.topbar .ver{display:none}}
 
 /* ============ left rail ============ */
 .rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail-w);padding:86px 0 24px 18px;z-index:50;display:flex;flex-direction:column;gap:2px;}
@@ -69,8 +73,8 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .note{font-size:.85rem;color:var(--ink-faint);max-width:70ch}
 .dark .note{color:var(--bone-soft)}
 .mono{font-family:var(--mono)}
-.k{font-family:var(--mono);font-size:.8em;background:var(--indigo-wash);border:1px solid rgba(79,70,229,.25);border-radius:4px;padding:.06em .34em;white-space:nowrap}
-.dark .k{background:rgba(79,70,229,.18);border-color:rgba(109,102,239,.4)}
+.k{font-family:var(--mono);font-size:.8em;background:var(--indigo-wash);border:1px solid rgba(13,114,99,.25);border-radius:4px;padding:.06em .34em;white-space:nowrap}
+.dark .k{background:rgba(13,114,99,.18);border-color:rgba(62,200,180,.4)}
 
 /* reveal */
 .rv{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
@@ -99,10 +103,10 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 
 /* stacked system map */
 .stackscroll{overflow-x:auto;padding-bottom:8px}
-.stack{min-width:900px;position:relative;border:1px solid var(--line-strong);border-radius:14px;background:#fbfaf5;padding:22px 22px 22px 26px;display:grid;gap:12px}
+.stack{min-width:900px;position:relative;border:1px solid var(--line-strong);border-radius:14px;background:#fbf7ec;padding:22px 22px 22px 26px;display:grid;gap:12px}
 .stack::before{content:"";position:absolute;left:50%;top:14px;bottom:14px;width:4px;transform:translateX(-50%);
   background:linear-gradient(var(--indigo) ,var(--indigo) 62%,var(--gold));border-radius:4px;opacity:.85;z-index:0;
-  box-shadow:0 0 22px rgba(79,70,229,.35)}
+  box-shadow:0 0 22px rgba(13,114,99,.35)}
 .band{position:relative;z-index:1;border-radius:10px;padding:12px 16px;border:1px solid var(--line)}
 .band .bt{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
 .band .bt h3{font-size:.95rem;font-weight:650}
@@ -110,8 +114,8 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .band .row{display:flex;flex-wrap:wrap;gap:7px}
 .pill{font-family:var(--mono);font-size:.72rem;border-radius:6px;padding:4px 9px;border:1px solid var(--line);background:#fff}
 .band.surface{background:#fff}
-.band.ext{background:var(--gold-wash);border-color:rgba(232,168,48,.45)}
-.band.ext .pill{background:#fff8ea;border-color:rgba(232,168,48,.5)}
+.band.ext{background:var(--gold-wash);border-color:rgba(179,105,14,.45)}
+.band.ext .pill{background:#f9f1de;border-color:rgba(179,105,14,.5)}
 .band.core{background:var(--indigo);border-color:var(--indigo);color:#fff}
 .band.core .bt .tag{color:rgba(255,255,255,.75)}
 .band.core .pill{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.35);color:#fff}
@@ -121,7 +125,7 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid var(--line)}
 .legend .l-core i{background:var(--indigo);border-color:var(--indigo)}
-.legend .l-ext i{background:var(--gold-wash);border-color:rgba(232,168,48,.6)}
+.legend .l-ext i{background:var(--gold-wash);border-color:rgba(179,105,14,.6)}
 .legend .l-ui i{background:#fff}
 .legend .l-pol i{background:#15171a;border-color:#15171a}
 
@@ -142,11 +146,11 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .zone li.rel-own .cn{color:var(--bone-soft)}
 .zone.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 10px 34px rgba(0,0,0,.4)}
 .mapcanvas.hasSel .zone:not(.sel){opacity:.28}
-.corezone{grid-area:corez;border:1px solid rgba(109,102,239,.55);border-radius:12px;background:linear-gradient(180deg,rgba(79,70,229,.22),rgba(79,70,229,.08));padding:16px;display:flex;flex-direction:column;gap:10px}
+.corezone{grid-area:corez;border:1px solid rgba(62,200,180,.55);border-radius:12px;background:linear-gradient(180deg,rgba(13,114,99,.22),rgba(13,114,99,.08));padding:16px;display:flex;flex-direction:column;gap:10px}
 .corezone h3{font-family:var(--serif);font-size:1.25rem}
 .coregrid{display:flex;flex-wrap:wrap;gap:8px}
 .corechip{font-family:var(--mono);font-size:.72rem;padding:6px 10px;border-radius:8px;border:1px solid rgba(233,231,222,.3);background:rgba(17,18,23,.5);transition:all .25s}
-.corechip.lit{background:var(--gold);border-color:var(--gold);color:var(--night);box-shadow:0 0 18px rgba(232,168,48,.5)}
+.corechip.lit{background:var(--gold);border-color:var(--gold);color:var(--night);box-shadow:0 0 18px rgba(179,105,14,.5)}
 .mapcanvas.hasSel .corechip:not(.lit){opacity:.35}
 .zone-health{grid-area:health}.zone-money{grid-area:money}.zone-calendar{grid-area:calendar}.zone-tasks{grid-area:tasks}
 .zone-contacts{grid-area:contacts}.zone-photos{grid-area:photos}.zone-messages{grid-area:messages}.zone-home{grid-area:home}
@@ -161,7 +165,7 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .schemahdr h3{font-size:1.35rem;font-weight:650}
 .schemahdr .sid{font-family:var(--mono);font-size:.72rem;color:#fff;background:var(--indigo);border-radius:5px;padding:2px 8px}
 .schemahdr .sdesc{font-size:.85rem;color:var(--ink-faint);flex-basis:100%;max-width:78ch}
-.tbl{border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5;margin:0 0 16px;overflow:hidden}
+.tbl{border:1px solid var(--line-strong);border-radius:12px;background:#fbf7ec;margin:0 0 16px;overflow:hidden}
 .tbl>header{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line-strong);background:var(--paper-2)}
 .tbl>header h4{margin:0;font-family:var(--mono);font-size:.95rem;font-weight:600}
 .tbl>header h4 .sch{color:var(--ink-faint);font-weight:400}
@@ -178,8 +182,8 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .colrow .cnote{color:var(--ink-faint);font-size:.76rem}
 .badge{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.05em;border-radius:4px;padding:1px 5px;margin-right:4px;border:1px solid}
 .b-PK{background:var(--indigo);border-color:var(--indigo);color:#fff}
-.b-FK{background:var(--indigo-wash);border-color:rgba(79,70,229,.4);color:var(--indigo)}
-.b-UQ{background:var(--gold-wash);border-color:rgba(232,168,48,.55);color:#8a6210}
+.b-FK{background:var(--indigo-wash);border-color:rgba(13,114,99,.4);color:var(--indigo)}
+.b-UQ{background:var(--gold-wash);border-color:rgba(179,105,14,.55);color:#8a6210}
 .b-NN{background:transparent;border-color:var(--line-strong);color:var(--ink-soft)}
 .b-CK{background:rgba(21,23,26,.06);border-color:var(--line-strong);color:var(--ink-soft)}
 .erd.compact .colhead,.erd.compact .colrow{grid-template-columns:190px 170px 168px 1fr;min-width:760px;padding-top:4px;padding-bottom:4px}
@@ -198,13 +202,13 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 
 /* ============ layer stack ============ */
 .layers{display:grid;gap:10px;counter-reset:ly}
-.layer{display:grid;grid-template-columns:64px 240px 1fr auto;gap:16px;align-items:baseline;border:1px solid var(--line-strong);border-radius:10px;background:#fbfaf5;padding:14px 18px;transition:opacity .25s}
+.layer{display:grid;grid-template-columns:64px 240px 1fr auto;gap:16px;align-items:baseline;border:1px solid var(--line-strong);border-radius:10px;background:#fbf7ec;padding:14px 18px;transition:opacity .25s}
 .layer .ln{font-family:var(--mono);font-size:.8rem;color:var(--indigo)}
 .layer h3{font-size:1rem;font-weight:650}
 .layer p{margin:4px 0 0;font-size:.82rem;color:var(--ink-faint)}
 .layer .lt{font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line-strong);border-radius:999px;padding:3px 9px;white-space:nowrap}
-.layer[data-kind="shared"] .lt{color:var(--indigo);border-color:rgba(79,70,229,.45);background:var(--indigo-wash)}
-.layer[data-kind="domain"] .lt{color:#8a6210;border-color:rgba(232,168,48,.55);background:var(--gold-wash)}
+.layer[data-kind="shared"] .lt{color:var(--indigo);border-color:rgba(13,114,99,.45);background:var(--indigo-wash)}
+.layer[data-kind="domain"] .lt{color:#8a6210;border-color:rgba(179,105,14,.55);background:var(--gold-wash)}
 .layer[data-kind="agent"] .lt{color:var(--paper);border-color:var(--ink);background:var(--ink)}
 .layers.f-shared .layer:not([data-kind="shared"]),
 .layers.f-domain .layer:not([data-kind="domain"]),
@@ -217,7 +221,7 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .pick{display:grid;gap:8px}
 .pickbtn{text-align:left;border:1px solid var(--nline);background:var(--night-2);border-radius:10px;padding:11px 14px;font-size:.86rem;display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .pickbtn .pm{font-family:var(--mono);font-size:.64rem;color:var(--bone-soft)}
-.pickbtn[aria-pressed="true"]{border-color:var(--gold);background:linear-gradient(90deg,rgba(232,168,48,.16),transparent);color:var(--bone)}
+.pickbtn[aria-pressed="true"]{border-color:var(--gold);background:linear-gradient(90deg,rgba(179,105,14,.16),transparent);color:var(--bone)}
 .panel{border:1px solid var(--nline);border-radius:14px;background:var(--night-2);padding:24px;min-height:300px}
 .panel h3{font-family:var(--serif);font-size:1.5rem;margin-bottom:4px}
 .panel .sub{font-family:var(--mono);font-size:.72rem;color:var(--gold);margin-bottom:16px}
@@ -226,30 +230,30 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .panel p{margin:0 0 6px;font-size:.86rem;color:var(--bone)}
 .panel ul{margin:0;padding-left:18px;font-size:.84rem;color:var(--bone-soft)}
 .panel li{margin:3px 0}
-.panel .aff{font-family:var(--mono);font-size:.74rem;color:var(--bone);background:rgba(79,70,229,.16);border:1px solid rgba(109,102,239,.4);border-radius:6px;padding:4px 8px;display:inline-block;margin:0 6px 6px 0}
+.panel .aff{font-family:var(--mono);font-size:.74rem;color:var(--bone);background:rgba(13,114,99,.16);border:1px solid rgba(62,200,180,.4);border-radius:6px;padding:4px 8px;display:inline-block;margin:0 6px 6px 0}
 .panel .warn{border-left:3px solid var(--gold);padding-left:12px;color:var(--bone-soft);font-size:.84rem}
 /* light variants for core explorer */
-.light .pickbtn{background:#fbfaf5;border-color:var(--line-strong)}
+.light .pickbtn{background:#fbf7ec;border-color:var(--line-strong)}
 .light .pickbtn .pm{color:var(--ink-faint)}
 .light .pickbtn[aria-pressed="true"]{border-color:var(--indigo);background:linear-gradient(90deg,var(--indigo-wash),transparent)}
-.light .panel{background:#fbfaf5;border-color:var(--line-strong)}
+.light .panel{background:#fbf7ec;border-color:var(--line-strong)}
 .light .panel .sub{color:var(--indigo)}
 .light .panel h4{color:var(--ink-faint);border-color:var(--line)}
 .light .panel p{color:var(--ink)}
 .light .panel ul{color:var(--ink-soft)}
-.light .panel .aff{background:var(--indigo-wash);border-color:rgba(79,70,229,.35);color:var(--ink)}
+.light .panel .aff{background:var(--indigo-wash);border-color:rgba(13,114,99,.35);color:var(--ink)}
 .light .panel .warn{color:var(--ink-soft)}
 
 /* ============ matrix ============ */
-.mxscroll{overflow-x:auto;border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5}
+.mxscroll{overflow-x:auto;border:1px solid var(--line-strong);border-radius:12px;background:#fbf7ec}
 table.mx{border-collapse:collapse;width:100%;min-width:960px;font-size:.8rem}
 .mx th,.mx td{border-bottom:1px solid var(--line);padding:9px 12px;text-align:center}
 .mx thead th{font-family:var(--mono);font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);border-bottom:1px solid var(--line-strong);background:var(--paper-2)}
-.mx tbody th{text-align:left;font-weight:600;position:sticky;left:0;background:#fbfaf5;border-right:1px solid var(--line);min-width:170px}
+.mx tbody th{text-align:left;font-weight:600;position:sticky;left:0;background:#fbf7ec;border-right:1px solid var(--line);min-width:170px}
 .mx td span{display:inline-block;font-family:var(--mono);font-size:.66rem;border-radius:4px;padding:2px 7px}
 .mx .mC span{background:var(--indigo);color:#fff}
-.mx .mE span{background:var(--gold-wash);color:#8a6210;border:1px solid rgba(232,168,48,.5)}
-.mx .mR span{border:1px solid rgba(79,70,229,.4);color:var(--indigo)}
+.mx .mE span{background:var(--gold-wash);color:#8a6210;border:1px solid rgba(179,105,14,.5)}
+.mx .mR span{border:1px solid rgba(13,114,99,.4);color:var(--indigo)}
 .mx .mN span{color:var(--ink-faint);opacity:.5}
 .mxlegend{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:.76rem;color:var(--ink-faint);font-family:var(--mono)}
 .dark .mx th,.dark .mx td{border-bottom-color:var(--nline)}
@@ -275,7 +279,7 @@ table.mx{border-collapse:collapse;width:100%;min-width:960px;font-size:.8rem}
 
 /* ============ rules ============ */
 .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;counter-reset:rl}
-.rule{border:1px solid var(--line-strong);border-radius:12px;background:#fbfaf5;padding:18px 20px}
+.rule{border:1px solid var(--line-strong);border-radius:12px;background:#fbf7ec;padding:18px 20px}
 .rule::before{counter-increment:rl;content:"R" counter(rl,decimal-leading-zero);font-family:var(--mono);font-size:.7rem;color:var(--indigo);letter-spacing:.12em}
 .rule h3{font-size:1.02rem;margin:8px 0 8px}
 .rule p{margin:0;font-size:.83rem;color:var(--ink-soft)}
@@ -296,7 +300,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 .gwstage .gn{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--indigo);display:block;margin-bottom:6px}
 .gwstage h3{font-family:var(--serif);font-size:1.06rem;margin:0 0 4px}
 .gwstage p{margin:0;font-size:.76rem;color:var(--ink-soft);line-height:1.45}
-.gwstage[aria-pressed="true"]{border-color:var(--indigo);box-shadow:0 6px 22px rgba(79,70,229,.14);transform:translateY(-2px)}
+.gwstage[aria-pressed="true"]{border-color:var(--indigo);box-shadow:0 6px 22px rgba(13,114,99,.14);transform:translateY(-2px)}
 .gwstage[aria-pressed="true"] .gn{color:var(--gold-deep,#b07d17)}
 .gwpanel{margin-top:18px;border:1px solid var(--line-strong);border-left:5px solid var(--indigo);border-radius:12px;background:#fff;padding:20px 24px}
 .gwpanel h3{font-family:var(--serif);font-size:1.25rem;margin-bottom:4px}
@@ -304,7 +308,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 .gwpanel h4{font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;color:var(--indigo);margin:14px 0 6px}
 .gwpanel ul{margin:0;padding-left:18px;font-size:.86rem;color:var(--ink-soft)}
 .gwpanel ul li{margin-bottom:5px;line-height:1.5}
-.gwpanel .deny{border:1px dashed rgba(232,168,48,.7);background:#fff8ea;border-radius:8px;padding:10px 14px;font-size:.84rem;color:var(--ink-soft);margin-top:12px}
+.gwpanel .deny{border:1px dashed rgba(179,105,14,.7);background:#f9f1de;border-radius:8px;padding:10px 14px;font-size:.84rem;color:var(--ink-soft);margin-top:12px}
 .gwpanel .deny b{color:var(--ink)}
 .gwduties{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px}
 @media(max-width:1000px){.gwduties{grid-template-columns:repeat(2,1fr)}}
@@ -321,10 +325,16 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <body>
 
 <header class="topbar">
-  <a class="brand" href="#hero">Duai<b>lity</b>.</a>
-  <span class="doc">Personal Ontology Map</span>
+  <a class="brand" href="./"><span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt=""></span>Centraid</a>
+  <span class="doc">The ontology</span>
   <span class="spacer"></span>
-  <span class="ver">ontology v1.2 · logical model · 06 Jul 2026</span>
+  <span class="nav">
+    <a href="start.html">start</a>
+    <a href="data.html">data</a>
+    <a href="apps.html">apps</a>
+    <a href="devices.html">devices</a>
+  </span>
+  <span class="ver">ontology v1.2 · logical model</span>
 </header>
 
 <nav class="rail" aria-label="Section index">
@@ -339,7 +349,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
   <a href="#flow"><span class="n">§09</span>Cross-app agent flow</a>
   <a href="#gateway"><span class="n">§10</span>The gateway</a>
   <a href="#rules"><span class="n">§11</span>Implementation rules</a>
-  <a href="#centraid"><span class="n">§12</span>Centraid integration</a>
+  <a href="#centraid"><span class="n">§12</span>Inside the runtime</a>
 </nav>
 
 <main>
@@ -349,7 +359,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
   <div class="wrap">
     <p class="eyebrow">§01 · Thesis &amp; system map</p>
     <h1>One life. One model. <em>Apps become projections.</em></h1>
-    <p class="lede">Your life is currently modeled by whoever shipped the app: your heart rate belongs to a watch vendor, your invoices to an accounting SaaS, your relationships to a contacts silo. Duaility inverts the ownership. A single, person-owned, self-hostable ontology holds the canonical record — <strong>identity, place, time, money, content, activity, observation, relationship, classification</strong> — and every familiar app becomes a thin projection over it. A personal agent operates across the whole model through one typed, consent-governed surface.</p>
+    <p class="lede">Your life is currently modeled by whoever shipped the app: your heart rate belongs to a watch vendor, your invoices to an accounting SaaS, your relationships to a contacts silo. Centraid inverts the ownership. A single, person-owned, self-hostable ontology holds the canonical record — <strong>identity, place, time, money, content, activity, observation, relationship, classification</strong> — and every familiar app becomes a thin projection over it. A personal agent operates across the whole model through one typed, consent-governed surface.</p>
     <div class="hero-kv">
       <div><b>1</b>canonical spine</div>
       <div><b>11</b>schemas modeled</div>
@@ -645,7 +655,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 <!-- ================= §12 CENTRAID INTEGRATION ================= -->
 <section id="centraid">
   <div class="wrap">
-    <p class="eyebrow">§12 · Centraid integration</p>
+    <p class="eyebrow">§12 · Inside the runtime</p>
     <h2>A second plane, not a second silo</h2>
     <p class="lede">Centraid’s app host (<span class="k">@centraid/gateway</span> + <span class="k">@centraid/app-engine</span>) once gave every app a private <span class="k">data.sqlite</span> — full SQL, zero sharing. Issue #286 deleted that silo: app-declared tables now live as a registered <strong>ext band</strong> inside <span class="k">vault.db</span> (<span class="k">ext.&lt;app_id&gt;.*</span>), diffed on publish, retained-and-purged on uninstall. A handler reaches everything through <span class="k">ctx.vault</span> — canonical entities under consent scopes, its own ext tables under its band — and every call walks §10’s five-stage pipeline on the host side of the process boundary.</p>
 
@@ -688,7 +698,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
       <p><strong>Consent model: manifest-declared scopes with explicit owner approval.</strong> An app's <span class="k">app.json</span> <span class="k">vault</span> block is a request, never a grant; the owner approves it over <span class="k">POST /centraid/_vault/apps/&lt;id&gt;/grants</span>, and until then every call is a receipted deny.</p>
       <p><strong>Data planes: one file, two bands.</strong> The per-app <span class="k">data.sqlite</span> is deleted (issue #286); app extension tables ride inside <span class="k">vault.db</span> as the declared ext band, and the shipped blueprints declare zero of them — pure projections. The canon stays the consent-gated shared plane; the band boundary, not a separate file, is the silo line now.</p>
       <p>All six phases are implemented and tested: the vault plane mounts off <span class="k">GatewayPaths.vaultDir</span> (<span class="k">gateway/src/serve/vault-plane.ts</span>), live apps enroll and uninstalls cascade, <span class="k">ctx.vault</span> rides the worker RPC (<span class="k">app-engine/src/worker/runner.ts</span>), owner routes serve grants and parked confirmations, the builder prompt teaches generated handlers the surface, and the sweep clock runs on the gateway lifecycle.</p>
-      <p><strong>And the §01 projection band ships as blueprints.</strong> All ten product surfaces exist as first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">agenda</span>, <span class="k">vitals</span>, <span class="k">budgets</span>, <span class="k">tasks</span>, <span class="k">people</span>, <span class="k">threads</span>, <span class="k">notes</span>, <span class="k">photos</span>, <span class="k">home-inventory</span>, <span class="k">studio</span> — each a pure projection: zero private tables, zero migrations, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked-send pause rendered as first-class UI states. The four foundation domains read <em>and act</em>; the other four are read-only windows until their command packs ship — a window today, a pen later. Revoke a grant and the projection goes dark; the model, history and receipts remain.</p>
+      <p><strong>And the §01 projection band ships as blueprints.</strong> Eight product surfaces are first-class templates in <span class="k">packages/blueprints/apps</span> — <span class="k">docs</span>, <span class="k">photos</span>, <span class="k">notes</span>, <span class="k">people</span>, <span class="k">locker</span>, <span class="k">tally</span>, <span class="k">agenda</span>, <span class="k">tasks</span> — each a pure projection: zero private tables, every row from <span class="k">ctx.vault</span>, every mutation a typed command, consent denial and the parked pause rendered as first-class UI states. Revoke a grant and the projection goes dark; the model, history and receipts remain. The same eight are documented from the user's side in <a href="apps.html" style="color:var(--indigo)">the Apps chapter</a>.</p>
     </div>
   </div>
 </section>
@@ -697,7 +707,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
 
 <footer>
   <div class="wrap">
-    <span>Duaility — Personal Ontology Map · logical model v1.2 · 06 July 2026</span>
+    <span>Centraid — the personal ontology · logical model v1.2</span>
     <span>standards: vCard · schema.org · RFC 5545 / JSCalendar · ISO 20022 / OFX · FHIR / Open mHealth · W3C PROV · ODRL / DPV · SKOS · MCP</span>
   </div>
 </footer>
@@ -881,7 +891,7 @@ cols:[
 ['scheme_id','TEXT (uuidv7)','PK NN','', 'Immutable scheme identity.'],
 ['uri','TEXT','NN UQ','', 'skos:ConceptScheme URI; stable across installs.'],
 ['title','TEXT','NN','', 'Human name of the vocabulary.'],
-['publisher','TEXT','','', 'Who maintains it (Duaility, DPV, owner-custom).'],
+['publisher','TEXT','','', 'Who maintains it (Centraid, DPV, owner-custom).'],
 ['version','TEXT','NN','', 'Vocabulary version, independent of ontology_version.'],
 ]},
 { n:'concept', std:'W3C SKOS Concept', p:'One term in a scheme, with hierarchy. Classification lives here so “Groceries” means the same thing to the budget app, the agent, and the export.',

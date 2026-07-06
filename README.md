@@ -4,7 +4,7 @@
 
 Describe an app in a sentence — an agent builds it, a local gateway runs it, and it shows up on your desktop and phone. Each app is a folder of HTML + JS handlers + its own SQLite, versioned in a local git store, operable by you or an AI.
 
-[Docs](docs/index.mdx) · [Quickstart](docs/quickstart.mdx) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
+[Docs](https://docs.centraid.dev) · [Get started](docs/start.html) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
 
 ## What it does
 
@@ -58,7 +58,7 @@ centraid-gateway print-token --data-dir ./gw-data   # Bearer token for clients
 
 Mobile companion: `bun run dev:mobile` (Expo), then point it at a gateway URL.
 
-Full tour: [Quickstart](docs/quickstart.mdx) — clone Hydrate and watch a write round-trip through the dispatcher and change stream in five minutes.
+Full tour: [Get started](docs/start.html) ([docs.centraid.dev/start.html](https://docs.centraid.dev/start.html)) — install → vault → first app → phone → always-on, in one page.
 
 ## Layout
 
@@ -94,15 +94,15 @@ Desktop e2e: 59 Playwright tests across 14 scenario sections, driving the real E
 
 ## Documentation
 
+The docs ([docs.centraid.dev](https://docs.centraid.dev)) are hand-authored HTML in [`docs/`](docs/) — two personas, three pillars:
+
 | | |
 |---|---|
-| [Quickstart](docs/quickstart.mdx) | Clone a template, see the round-trip, in five minutes |
-| [Concepts](docs/concepts/architecture.mdx) | Gateway, apps, automations, chat, agent runtime, change stream |
-| [Build an app](docs/build/app-anatomy.mdx) | File layout, `app.json`, queries, actions, migrations, UI |
-| [Automations](docs/automations/index.mdx) | Manifest, triggers, handler contract, webhooks, run history |
-| [Templates](docs/templates/index.mdx) | The bundled gallery, cloning, authoring your own |
-| [Deploy](docs/deploy/local.mdx) | Desktop embed, standalone daemon, OpenClaw plugin, SQLite layout |
-| [Reference](docs/reference/http-api.mdx) | HTTP API, both CLIs, three-tool dispatcher, error codes |
+| [Start](docs/start.html) | Install → vault → first app → pair a phone → always-on → key backup |
+| [Data](docs/data.html) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
+| [Apps](docs/apps.html) | The eight blueprints, app anatomy, the builder, attach & link, the agent surface, mobile |
+| [Devices](docs/devices.html) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
+| [Ontology](docs/ontology.html) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 
 [AGENTS.md](AGENTS.md) maps the durable docs agents and humans use to orient in this repo.
 

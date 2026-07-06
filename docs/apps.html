@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apps — Centraid docs</title>
+    <meta
+      name="description"
+      content="The Apps pillar: eight blueprint apps, what an app actually is (a projection over the vault), the conversational builder, attachments and cross-references, and how agents drive the same handlers your buttons do."
+    />
+    <link rel="icon" href="assets/centraid-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/docs.css" />
+  </head>
+  <body class="has-rail">
+    <header class="site-head">
+      <div class="head-row">
+        <a class="brand" href="./">
+          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
+          Centraid <span class="docs-tag">docs</span>
+        </a>
+        <nav>
+          <a href="start.html">start</a>
+          <a href="data.html">data</a>
+          <a href="apps.html" aria-current="page">apps</a>
+          <a href="devices.html">devices</a>
+          <a href="ontology.html" class="hide-sm">ontology</a>
+          <a
+            href="https://github.com/srikanth235/centraid"
+            target="_blank"
+            rel="noopener"
+            class="hide-sm"
+            >github</a
+          >
+          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        </nav>
+      </div>
+    </header>
+
+    <nav class="rail" aria-label="Section index">
+      <a href="#model" class="on"><span class="n">§01</span>What an app is</a>
+      <a href="#blueprints"><span class="n">§02</span>The blueprints</a>
+      <a href="#anatomy"><span class="n">§03</span>Anatomy</a>
+      <a href="#builder"><span class="n">§04</span>The builder</a>
+      <a href="#linking"><span class="n">§05</span>Attach &amp; link</a>
+      <a href="#agents"><span class="n">§06</span>Agents drive apps</a>
+      <a href="#mobile"><span class="n">§07</span>On the phone</a>
+    </nav>
+
+    <main>
+      <section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">A</div>
+        <p class="eyebrow r">Chapter 2 · apps</p>
+        <h1 class="r" style="--d: 0.1s">Apps are <em>projections,</em> not places.</h1>
+        <p class="lede r" style="--d: 0.22s">
+          In the silo world, an app is where your data lives. Here it is a <b>window</b>: a folder
+          of plain HTML and JavaScript that renders vault rows and mutates them through typed
+          commands, under a grant you signed. Delete the app and nothing of yours is lost. Ask the
+          builder to reshape it and it's a different window onto the same record by dinner.
+        </p>
+      </section>
+
+      <!-- §01 WHAT AN APP IS -->
+      <section class="sec wrap" id="model">
+        <p class="eyebrow r">§01 · the model</p>
+        <h2 class="r" style="--d: 0.06s">No private database. <em>On purpose.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            A Centraid app has <b>no database of its own</b>. The per-app
+            <code>data.sqlite</code> of earlier designs is deliberately dead: every row an app shows
+            comes from the vault through its granted scopes, and every mutation is a typed vault
+            command. Handlers hold no file handle — they reach the canon through
+            <code>ctx.vault</code>, and consent is enforced on the host side of that boundary.
+          </p>
+          <p>
+            When an app genuinely needs its own tables — a game's score sheet, a niche tracker — it
+            declares an <b>ext band</b>: registered tables that live inside
+            <code>vault.db</code> under the app's namespace. Ext tables may point <i>into</i> the
+            canonical model; the canon never points back. Uninstall retains, then purges the band —
+            the silo line is a band boundary you can see, not a separate file you forget.
+          </p>
+          <p class="aside">
+            Why the ontology can absorb almost everything without ext tables — and the rule that
+            keeps flags, memos and links canonical:
+            <a href="ontology.html#rules">Ontology § implementation rules →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- §02 BLUEPRINTS -->
+      <section class="dark" id="blueprints">
+        <div class="wrap">
+          <p class="eyebrow r">§02 · the blueprints</p>
+          <h2 class="r" style="--d: 0.06s">Eight windows, <em>one record.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            The shipped apps are pure projections — and each one exists to prove a different part of
+            the substrate. Star something in Docs and Photos knows, because a star is a canonical
+            tag, not a column.
+          </p>
+          <div class="grid cols-2" style="margin-top: 28px">
+            <div class="card r" style="--d: 0.08s">
+              <p class="c-no">files that matter</p>
+              <h3>Docs</h3>
+              <p>
+                A drive for important documents. Bytes dedupe by hash into canonical content;
+                folders are concepts, not directories; trash keeps its folder for restore; PDFs
+                preview in place. Proves: <b>content custody</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.12s">
+              <p class="c-no">the library</p>
+              <h3>Photos</h3>
+              <p>
+                Albums are canonical collections that can hold mixed types; favorites live on the
+                asset; face-region proposals wait for your confirm before touching a person. Proves:
+                <b>derivatives &amp; enrichment consent</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.16s">
+              <p class="c-no">thinking surface</p>
+              <h3>Notes</h3>
+              <p>
+                Notebooks over canonical note rows; type <code>@</code> to link any entity inline —
+                the reference survives edits via standoff anchors, and orphaned links land in a
+                strip instead of vanishing. Proves: <b>universal cross-referencing</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.2s">
+              <p class="c-no">personal crm</p>
+              <h3>People</h3>
+              <p>
+                Every person is the same canonical party your calendar and expenses reference.
+                Circles, cadences ("reconnect every 6 weeks"), important dates, gift ideas, debts, a
+                journal. Proves: <b>shared identity</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.24s">
+              <p class="c-no">password manager</p>
+              <h3>Locker</h3>
+              <p>
+                Logins, cards, Wi-Fi, notes — secrets sealed at rest, revealed per-item with a
+                receipt, TOTP computed client-side, Watchtower flags weak and reused passwords
+                without unsealing anything into a transcript. Proves: <b>sealed columns</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.28s">
+              <p class="c-no">expense splitter</p>
+              <h3>Tally</h3>
+              <p>
+                Groups decorate canonical circles; expenses validate their splits server-side;
+                settlements post to the real ledger and balances are <i>derived, never stored</i>.
+                Proves: <b>money as canonical transactions</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.32s">
+              <p class="c-no">calendar</p>
+              <h3>Agenda</h3>
+              <p>
+                Events, proposals, RSVPs on the canonical schedule; cancelling someone else's plans
+                is exactly the kind of act that parks for your confirmation. Proves:
+                <b>confirm-gated commands</b>.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.36s">
+              <p class="c-no">task manager</p>
+              <h3>Tasks</h3>
+              <p>
+                A Things-style board over canonical tasks — subtask families, priorities, a closed
+                logbook — the same rows your assistant queries and your automations nag you about.
+                Proves: <b>one task list, every surface</b>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §03 ANATOMY -->
+      <section class="sec wrap" id="anatomy">
+        <p class="eyebrow r">§03 · anatomy</p>
+        <h2 class="r" style="--d: 0.06s">Small enough to <em>read in an evening.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            An app is a folder with no build step: the runtime loads the files as they are. Four
+            things matter —
+          </p>
+        </div>
+        <div class="artifact tilt-l r" style="--d: 0.16s; margin-top: 24px; max-width: 700px">
+          <div class="artifact-head">
+            <span>apps/docs</span><span class="tag">the whole app</span>
+          </div>
+          <div class="artifact-body" style="white-space: nowrap">
+            <div><span style="color: var(--accent); font-weight: 600">docs/</span></div>
+            <div>
+              ├── app.json&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                style="color: var(--ink-3); font-style: italic"
+                >manifest: identity, scopes, actions, queries, knobs</span
+              >
+            </div>
+            <div>
+              ├── index.html&nbsp;&nbsp;&nbsp;&nbsp;<span
+                style="color: var(--ink-3); font-style: italic"
+                >the UI shell</span
+              >
+            </div>
+            <div>
+              ├── app.js · app.css&nbsp;&nbsp;<span style="color: var(--ink-3); font-style: italic"
+                >vanilla JS controller + styles</span
+              >
+            </div>
+            <div>
+              ├──
+              <span style="color: var(--accent); font-weight: 600">actions/</span
+              >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                style="color: var(--ink-3); font-style: italic"
+                >one handler per intent — upload.js, rename.js…</span
+              >
+            </div>
+            <div>
+              ├──
+              <span style="color: var(--accent); font-weight: 600">queries/</span
+              >&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                style="color: var(--ink-3); font-style: italic"
+                >bounded reads — drive.js, search.js</span
+              >
+            </div>
+            <div>
+              └── kit.js&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                style="color: var(--amber)"
+                >shared UX kit, served canonically to every app</span
+              >
+            </div>
+          </div>
+        </div>
+        <div class="prose r" style="--d: 0.22s">
+          <p>
+            The <b>manifest</b> is the contract: a <code>vault</code> block declaring purpose and
+            scopes (which tables, which verbs — <code>read</code>, <code>act</code>,
+            <code>reveal</code>), <b>actions</b> with JSON-Schema inputs and an optional
+            confirmation gate, <b>queries</b> that return bounded windows (never whole-table pulls),
+            and <b>knobs</b> — font, width, color, view — that make customization a setting instead
+            of a fork.
+          </p>
+          <p>
+            <b>Handlers</b> are pure functions: <code>(ctx, input) → outcome</code>. They run in a
+            worker that holds no keys and no connections; every vault touch crosses to the host and
+            comes back as <code>executed</code>, <code>denied</code>, or <code>parked</code> — with
+            a receipt id either way. The <b>kit</b> gives every app the same toasts, confirms,
+            charts, reference chips and Ask panel, so eight apps feel like one product.
+          </p>
+        </div>
+      </section>
+
+      <!-- §04 THE BUILDER -->
+      <section class="dark" id="builder">
+        <div class="wrap">
+          <p class="eyebrow r">§04 · the builder</p>
+          <h2 class="r" style="--d: 0.06s">
+            Describe the change. <em>Poke the preview. Publish.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            Blueprints are starting points, not products you're stuck with. The builder is an agent
+            that edits app code in conversation — "make Docs group by year", "add a warranty-expiry
+            view to home inventory" — against a live preview, on a draft.
+          </p>
+          <div class="artifact tilt-r r" style="--d: 0.16s; max-width: 660px; margin-top: 8px">
+            <div class="artifact-head">
+              <span>builder · docs</span><span class="tag">draft</span>
+            </div>
+            <div class="artifact-body">
+              <div class="t-line">
+                <span class="t-who you">you</span>
+                <span class="t-msg"
+                  >I want receipts separated from documents, and a monthly total next to each
+                  folder.</span
+                >
+              </div>
+              <div class="t-line">
+                <span class="t-who agent">builder</span>
+                <span class="t-msg"
+                  ><span class="tool-chip">⚙ vault_sql → folders, attachment roles, txn joins</span>
+                  Receipts already carry a canonical role — no new table needed. Drafting a filtered
+                  view + a query that joins attachments to transactions.
+                  <span class="dim nl">Preview updated. Publish?</span></span
+                >
+              </div>
+            </div>
+          </div>
+          <div class="prose r" style="--d: 0.24s">
+            <p>
+              The guardrails are the same ones everything else obeys: the builder reads the live
+              schema and ontology vocabulary each turn, is steered to map onto canonical mechanisms
+              first (an ext table is a justified escape, not a default), can't widen the app's
+              scopes without a request you approve, and publishes through the app lifecycle — which
+              re-diffs the grant. Generated code is untrusted by construction; it gets the paved
+              road, not a side door.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §05 ATTACH & LINK -->
+      <section class="sec wrap" id="linking">
+        <p class="eyebrow r">§05 · attach &amp; link</p>
+        <h2 class="r" style="--d: 0.06s">
+          Bytes attach. Entities link. <em>Everywhere the same.</em>
+        </h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Two verbs cover every "this belongs with that" in the system.
+            <b>Attach</b> binds bytes to an entity: stage a file (up to 512&nbsp;MB, deduped by
+            hash), then claim it with a role — the receipt on a transaction, the manual on an
+            appliance, the photo on a person. <b>Link</b> binds entities to each other through the
+            canonical link table: typed, temporal, provenance-stamped.
+          </p>
+          <p>
+            Inline references are links with an anchor: type <code>@</code> in Notes and the mention
+            pins to a text span that survives editing. Every app renders references through the same
+            resolver — a card that knows whether its target is live, trashed, missing, or simply not
+            readable under your grant. A link you're not allowed to see through says so, instead of
+            leaking a title.
+          </p>
+          <p class="aside">
+            Attach = <code>core.attachment</code> (bytes, role) · link = <code>core.link</code>
+            (typed relation) · anchor = standoff selector. One judgment, one mechanism —
+            <a href="ontology.html#rules">rule 9 →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- §06 AGENTS DRIVE APPS -->
+      <section class="sec wrap" id="agents">
+        <p class="eyebrow r">§06 · agents drive apps</p>
+        <h2 class="r" style="--d: 0.06s">
+          Saying it and tapping it are <em>the same code path.</em>
+        </h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            An app's declared actions and queries aren't just its button wiring — they are its
+            <b>agent surface</b>. A tap posts to the dispatcher; an agent's
+            <code>vault_invoke</code> lands on the same dispatcher, the same schema validation, the
+            same handler, the same outcome shape. There is no shadow API for machines, which means
+            talking to an app is full-fidelity use — and every guardrail you've read about (scopes,
+            parking, receipts) covers both doors, because there is only one door.
+          </p>
+          <p>
+            Inside each app, the kit's <b>Ask panel</b> runs a scoped conversation with that app's
+            surface; parked writes come back as proposal cards you approve or discard in place. The
+            vault-wide version of the same loop is the assistant —
+            <a class="u" href="data.html#assistant">Data § the assistant</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- §07 MOBILE -->
+      <section class="sec wrap" id="mobile">
+        <p class="eyebrow r">§07 · on the phone</p>
+        <h2 class="r" style="--d: 0.06s">Written once, <em>worn twice.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Apps are responsive by rule, mobile layout first: the same HTML that fills a desktop
+            window reflows to the phone, and desktop-only flourishes gate themselves on width
+            instead of forking the code. The mobile companion renders the identical app over the
+            peer-to-peer tunnel — same handlers, same grants, live updates over SSE — plus an
+            approvals surface, because a parked command should be answerable from your pocket.
+          </p>
+          <p class="aside">
+            How the tunnel, pairing and the companion actually work:
+            <a href="devices.html">Devices →</a>
+          </p>
+        </div>
+
+        <div class="chapter-next r">
+          <a href="data.html">← previous: data</a>
+          <a href="devices.html">next chapter: devices →</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="foot-manifesto r">
+          When apps are cheap to generate, projections become disposable —
+          <em>and the model becomes everything.</em>
+        </p>
+        <div class="foot-row">
+          <span>© 2026 Centraid</span>
+          <span class="foot-links">
+            <a href="https://centraid.dev">centraid.dev</a>
+            <a href="start.html">start</a>
+            <a href="data.html">data</a>
+            <a href="devices.html">devices</a>
+            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+              >github</a
+            >
+          </span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/docs.js"></script>
+  </body>
+</html>

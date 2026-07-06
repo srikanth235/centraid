@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Centraid docs — your data, your apps, your devices</title>
+    <meta
+      name="description"
+      content="Documentation for Centraid: a sovereign vault built on one personal ontology, apps that project it, and devices that carry it — all running on your own machine."
+    />
+    <link rel="icon" href="assets/centraid-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/docs.css" />
+  </head>
+  <body>
+    <header class="site-head">
+      <div class="head-row">
+        <a class="brand" href="./">
+          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
+          Centraid <span class="docs-tag">docs</span>
+        </a>
+        <nav>
+          <a href="start.html">start</a>
+          <a href="data.html">data</a>
+          <a href="apps.html">apps</a>
+          <a href="devices.html">devices</a>
+          <a href="ontology.html" class="hide-sm">ontology</a>
+          <a
+            href="https://github.com/srikanth235/centraid"
+            target="_blank"
+            rel="noopener"
+            class="hide-sm"
+            >github</a
+          >
+          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- HERO -->
+      <section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">§</div>
+        <p class="eyebrow r">Centraid · the manual</p>
+        <h1 class="r" style="--d: 0.1s">Your data. Your apps. <em>Your devices.</em></h1>
+        <p class="lede r" style="--d: 0.22s">
+          Centraid is personal software with the ownership inverted. One <b>vault</b> on your own
+          machine holds the canonical record of your life on a single shared ontology — no silos.
+          <b>Apps</b> are thin projections over it, built and rebuilt by an agent to fit you.
+          <b>Devices</b> are clients of one gateway you run, connected peer-to-peer. Everything in
+          this manual branches from those three pieces.
+        </p>
+      </section>
+
+      <div class="wrap">
+        <hr style="border: 0; border-top: 1px solid var(--line)" />
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--mono);
+            font-size: 11.5px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--ink-3);
+            padding-top: 10px;
+          "
+        >
+          <span>Two ways to read</span><span>pick your path</span>
+        </div>
+      </div>
+
+      <!-- PERSONA SPLIT -->
+      <section class="sec wrap" style="border: 0">
+        <div class="split">
+          <a class="path r" href="start.html">
+            <p class="c-no">path 1 · use it</p>
+            <h2>I want it running <em>today.</em></h2>
+            <p>
+              Install from source, open the desktop shell, get a vault, pair your phone, clone your
+              first app, and let an automation pull your first external data in. No theory — a
+              straight line from <code>git clone</code> to a living vault.
+            </p>
+            <p class="go">get started →</p>
+          </a>
+          <a class="path r" href="data.html" style="--d: 0.1s">
+            <p class="c-no">path 2 · understand it</p>
+            <h2>I want to know <em>how it works.</em></h2>
+            <p>
+              Three long chapters — <b>Data</b>, <b>Apps</b>, <b>Devices</b> — each walking one
+              pillar end to end: the ontology and consent machinery, the projection-app model and
+              the builder, the gateway and the peer-to-peer mesh. Every subsystem lives in exactly
+              one of them.
+            </p>
+            <p class="go">start with data →</p>
+          </a>
+        </div>
+      </section>
+
+      <!-- THREE PILLARS -->
+      <section class="dark">
+        <div class="wrap">
+          <p class="eyebrow r">The shape of the system</p>
+          <h2 class="r" style="--d: 0.06s">
+            Three pillars, <em>every subsystem accounted for.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            If you can name a piece of Centraid, it lives in one of these chapters. Nothing floats.
+          </p>
+          <div class="grid cols-3" style="margin-top: 34px">
+            <a class="card r" href="data.html" style="--d: 0.1s">
+              <p class="c-no">chapter 1</p>
+              <h3>Data</h3>
+              <p>
+                The vault and its files, the personal ontology, consent and the outbox, sealed
+                secrets, external connections and sync, automations that ferry data in, the
+                assistant that reads across all of it, blob custody, and search.
+              </p>
+              <div class="pill-row" style="margin-top: 14px">
+                <span class="pill">vault</span><span class="pill">ontology</span
+                ><span class="pill">consent</span><span class="pill">connections</span
+                ><span class="pill">automations</span><span class="pill">assistant</span>
+              </div>
+            </a>
+            <a class="card r" href="apps.html" style="--d: 0.18s">
+              <p class="c-no">chapter 2</p>
+              <h3>Apps</h3>
+              <p>
+                Eight blueprint apps — Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks —
+                what an app actually is (a projection, not a silo), how the builder customizes one
+                in conversation, attachments and cross-references, and how agents drive the same
+                handlers your buttons do.
+              </p>
+              <div class="pill-row" style="margin-top: 14px">
+                <span class="pill">blueprints</span><span class="pill">builder</span
+                ><span class="pill">manifest</span><span class="pill">attachments</span
+                ><span class="pill">linking</span>
+              </div>
+            </a>
+            <a class="card r" href="devices.html" style="--d: 0.26s">
+              <p class="c-no">chapter 3</p>
+              <h3>Devices</h3>
+              <p>
+                One gateway, many clients: the star topology, (gateway, vault) addressing, one-time
+                pairing tickets, the iroh peer-to-peer tunnel, the desktop shell and mobile
+                companion, and the agent runtimes a gateway can host — Claude Code, Codex, OpenClaw.
+              </p>
+              <div class="pill-row" style="margin-top: 14px">
+                <span class="pill">gateway</span><span class="pill">pairing</span
+                ><span class="pill">iroh</span><span class="pill">desktop</span
+                ><span class="pill">mobile</span><span class="pill">runtimes</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- THE ONTOLOGY CALLOUT -->
+      <section class="sec wrap">
+        <p class="eyebrow r">The deep end</p>
+        <h2 class="r" style="--d: 0.06s">The ontology has <em>its own chapter.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The claim that Centraid has <b>no data silos</b> rests on one artifact: a single
+            person-owned data model where identity, time, money, content, activity, observation and
+            relationships are declared exactly once, and every app either extends or references them
+            — never re-declares them. It is rendered as a live, explorable document: the full
+            schema, the entity map, the ownership matrix, the gateway contract, and the ten rules
+            that keep it honest.
+          </p>
+          <p class="aside" style="--d: 0.2s">
+            Eleven schemas · one spine · consent checked on every read and write.
+            <a href="ontology.html">Read the ontology →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- QUICK INDEX -->
+      <section class="sec wrap">
+        <p class="eyebrow r">Find a subsystem</p>
+        <h2 class="r" style="--d: 0.06s">Where things are documented</h2>
+        <div class="dt-scroll r" style="--d: 0.14s; margin-top: 20px">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>Subsystem</th>
+                <th>Chapter</th>
+                <th>What you'll find</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>vault files</td>
+                <td><a class="u" href="data.html#vault">Data § the vault</a></td>
+                <td>
+                  vault.db, journal.db, blobs/, keys/ — what each file is and why keys live outside
+                  backups
+                </td>
+              </tr>
+              <tr>
+                <td>ontology</td>
+                <td><a class="u" href="ontology.html">Ontology</a></td>
+                <td>the full logical model, explorable — schemas, entity map, matrix, rules</td>
+              </tr>
+              <tr>
+                <td>consent &amp; outbox</td>
+                <td><a class="u" href="data.html#consent">Data § consent</a></td>
+                <td>
+                  install-time grants, confirm-gated commands, the outbox, standing grants, receipts
+                </td>
+              </tr>
+              <tr>
+                <td>sealed secrets</td>
+                <td><a class="u" href="data.html#sealed">Data § sealed columns</a></td>
+                <td>AES-GCM at rest, the reveal verb, key export and rotation</td>
+              </tr>
+              <tr>
+                <td>connections &amp; sync</td>
+                <td><a class="u" href="data.html#connections">Data § connections</a></td>
+                <td>the broker, sealed credentials, staging batches, the external-id map</td>
+              </tr>
+              <tr>
+                <td>automations</td>
+                <td><a class="u" href="data.html#automations">Data § automations</a></td>
+                <td>four trigger kinds, agent identity, durable transcripts</td>
+              </tr>
+              <tr>
+                <td>assistant</td>
+                <td><a class="u" href="data.html#assistant">Data § assistant</a></td>
+                <td>SQL-first reads, typed writes, the judgment loop</td>
+              </tr>
+              <tr>
+                <td>blueprint apps</td>
+                <td><a class="u" href="apps.html#blueprints">Apps § blueprints</a></td>
+                <td>the eight shipped apps and what each proves</td>
+              </tr>
+              <tr>
+                <td>app anatomy</td>
+                <td><a class="u" href="apps.html#anatomy">Apps § anatomy</a></td>
+                <td>manifest, handlers, scopes, the ext band</td>
+              </tr>
+              <tr>
+                <td>builder</td>
+                <td><a class="u" href="apps.html#builder">Apps § builder</a></td>
+                <td>describe → draft → preview → publish</td>
+              </tr>
+              <tr>
+                <td>gateway topology</td>
+                <td><a class="u" href="devices.html#topology">Devices § topology</a></td>
+                <td>one gateway, star of clients, three hosts</td>
+              </tr>
+              <tr>
+                <td>pairing</td>
+                <td><a class="u" href="devices.html#pairing">Devices § pairing</a></td>
+                <td>one-time tickets, QR flow, enrollment ACL</td>
+              </tr>
+              <tr>
+                <td>iroh tunnel</td>
+                <td><a class="u" href="devices.html#iroh">Devices § connectivity</a></td>
+                <td>the wire protocol, transport tiers, anti-spoof</td>
+              </tr>
+              <tr>
+                <td>agent runtimes</td>
+                <td><a class="u" href="devices.html#runtimes">Devices § runtimes</a></td>
+                <td>Claude Code, Codex, OpenClaw — how a gateway hosts a brain</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="foot-manifesto r">
+          Most software is built for everyone, so none of it fits anyone.
+          <em>Yours can just fit you.</em>
+        </p>
+        <div class="foot-row">
+          <span>© 2026 Centraid</span>
+          <span class="foot-links">
+            <a href="https://centraid.dev">centraid.dev</a>
+            <a href="start.html">start</a>
+            <a href="ontology.html">ontology</a>
+            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+              >github</a
+            >
+          </span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/docs.js"></script>
+  </body>
+</html>

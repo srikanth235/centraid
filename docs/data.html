@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Data — Centraid docs</title>
+    <meta
+      name="description"
+      content="The Data pillar: the vault and its files, the personal ontology, consent and the outbox, sealed secrets, connections and sync, automations, the assistant, blob custody, and search."
+    />
+    <link rel="icon" href="assets/centraid-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/docs.css" />
+  </head>
+  <body class="has-rail">
+    <header class="site-head">
+      <div class="head-row">
+        <a class="brand" href="./">
+          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
+          Centraid <span class="docs-tag">docs</span>
+        </a>
+        <nav>
+          <a href="start.html">start</a>
+          <a href="data.html" aria-current="page">data</a>
+          <a href="apps.html">apps</a>
+          <a href="devices.html">devices</a>
+          <a href="ontology.html" class="hide-sm">ontology</a>
+          <a
+            href="https://github.com/srikanth235/centraid"
+            target="_blank"
+            rel="noopener"
+            class="hide-sm"
+            >github</a
+          >
+          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        </nav>
+      </div>
+    </header>
+
+    <nav class="rail" aria-label="Section index">
+      <a href="#vault" class="on"><span class="n">§01</span>The vault</a>
+      <a href="#ontology"><span class="n">§02</span>The ontology</a>
+      <a href="#consent"><span class="n">§03</span>Consent</a>
+      <a href="#outbox"><span class="n">§04</span>The outbox</a>
+      <a href="#sealed"><span class="n">§05</span>Sealed columns</a>
+      <a href="#connections"><span class="n">§06</span>Connections &amp; sync</a>
+      <a href="#automations"><span class="n">§07</span>Automations</a>
+      <a href="#assistant"><span class="n">§08</span>The assistant</a>
+      <a href="#blobs"><span class="n">§09</span>Bytes &amp; blobs</a>
+      <a href="#search"><span class="n">§10</span>Search</a>
+    </nav>
+
+    <main>
+      <section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">D</div>
+        <p class="eyebrow r">Chapter 1 · data</p>
+        <h1 class="r" style="--d: 0.1s">One vault. One model. <em>Zero silos.</em></h1>
+        <p class="lede r" style="--d: 0.22s">
+          Everything in Centraid stands on a single claim: the canonical record of your life lives
+          in <b>one place you own</b>, on <b>one shared model</b>, behind
+          <b>one consent-checked door</b>. This chapter walks that claim end to end — the files on
+          disk, the ontology that kills the silos, the consent machinery that makes borrowing
+          possible, and the systems that move data in (connections, automations) and make it useful
+          (the assistant, search).
+        </p>
+      </section>
+
+      <!-- §01 THE VAULT -->
+      <section class="sec wrap" id="vault">
+        <p class="eyebrow r">§01 · the vault</p>
+        <h2 class="r" style="--d: 0.06s">A directory you can <em>copy out.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            A vault is not a service. It is a directory of SQLite files on a machine you control,
+            and the whole sovereignty story reduces to what's in it:
+          </p>
+        </div>
+        <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>What it holds</th>
+                <th>Why it's separate</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>vault.db</td>
+                <td>
+                  Every schema of the ontology — canonical core, consent plane, agent plane, sync
+                  spine, and all life domains — in one ACID boundary.
+                </td>
+                <td>
+                  One transaction commits provenance, core rows and domain rows together; all
+                  foreign keys stay engine-enforced.
+                </td>
+              </tr>
+              <tr>
+                <td>journal.db</td>
+                <td>
+                  The append-only audit stream: receipts, provenance, command invocations, checks,
+                  evidence.
+                </td>
+                <td>
+                  It grows orders of magnitude faster than the model and never rolls back a domain
+                  write — keeping it out keeps the sovereign asset small.
+                </td>
+              </tr>
+              <tr>
+                <td>blobs/</td>
+                <td>
+                  Content-addressed bytes — originals, thumbnails, previews — keyed by sha256.
+                </td>
+                <td>
+                  Bytes are rented, meaning is owned: the rows can re-home the bytes to any disk or
+                  S3 bucket without touching a relationship.
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  keys/
+                  <span style="font-family: var(--body); color: var(--ink-3)"
+                    >(sibling, outside the vault dir)</span
+                  >
+                </td>
+                <td>The vault's sealing key (DEK) for encrypted columns.</td>
+                <td>
+                  Deliberately outside backup scope — a copied vault can't reveal its own secrets.
+                  Custody is yours: <code>centraid-gateway key export / restore / rotate</code>.
+                </td>
+              </tr>
+              <tr>
+                <td>transcripts.db</td>
+                <td>Conversation and automation-run transcripts — operational state, per vault.</td>
+                <td>
+                  A standing stance: the runtime store stays <i>outside</i> the graph until an agent
+                  query genuinely needs it.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose r" style="--d: 0.24s">
+          <p>
+            A gateway can mount <b>many vaults</b> — each a subdirectory with its own pair of
+            databases, its own identity row, its own grants. Devices are enrolled per-vault, and
+            every request addresses a (gateway, vault) pair explicitly. Export is honest: copy the
+            directory, verify hashes, done.
+          </p>
+          <p class="aside">
+            Backup ritual and key custody commands are in
+            <a href="start.html#backup">Start § back up the keys</a>. How requests get scoped to a
+            vault: <a href="devices.html#addressing">Devices § addressing</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- §02 THE ONTOLOGY -->
+      <section class="dark" id="ontology">
+        <div class="wrap">
+          <p class="eyebrow r">§02 · the ontology</p>
+          <h2 class="r" style="--d: 0.06s">Declared once, <em>everywhere the same.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            The reason Centraid has no silos is not an integration layer — it's that there is
+            nothing to integrate. "A person", "money moved", "something was measured" are declared
+            exactly once, in a canonical core; every app either <b>extends</b> a core row (is one,
+            plus columns) or <b>references</b> it (points at shared identity). No app ever
+            re-declares a concept.
+          </p>
+          <div class="grid cols-3" style="margin-top: 30px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">the spine</p>
+              <h3>Nine load-bearing types</h3>
+              <p>
+                party · place · event · account · transaction · content_item · activity ·
+                observation · link — plus SKOS concepts for vocabulary. Identity and history live
+                here, and nowhere else.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">the domains</p>
+              <h3>Thin typed extensions</h3>
+              <p>
+                Health, finance, schedule, social, knowledge, media, home, business, people, locker,
+                tally — each adds behavior (a workout's load, an invoice's dunning), never a second
+                identity.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.26s">
+              <p class="c-no">the planes</p>
+              <h3>Consent + agent</h3>
+              <p>
+                Scoped expiring grants, receipts and provenance on every access; agents act only
+                through typed, precondition-checked commands. Sovereignty is a plane, not a settings
+                page.
+              </p>
+            </div>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              The model is versioned (currently <code>ontology 1.2</code>) and every new domain
+              passes a seven-point admission checklist in review — anchors, links, flags, memos,
+              search, registry, doc — so drift gets caught as process, not archaeology.
+            </p>
+            <p class="aside">
+              The full model is its own explorable chapter: every schema and column, the unified
+              entity map, the ownership matrix, the gateway contract, and the ten hard rules.
+              <a href="ontology.html">Read the ontology →</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §03 CONSENT -->
+      <section class="sec wrap" id="consent">
+        <p class="eyebrow r">§03 · consent</p>
+        <h2 class="r" style="--d: 0.06s">
+          Apps <em>borrow.</em> You sign. Everything is receipted.
+        </h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Nothing reads or writes the vault except through the gateway, and the gateway evaluates
+            a grant on <b>every</b> call. The machinery, in the order you'll meet it:
+          </p>
+        </div>
+        <div class="steps r" style="--d: 0.18s; max-width: 860px">
+          <div class="step">
+            <span class="dot">01</span>
+            <div>
+              <h3>Install-time grants</h3>
+              <p>
+                An app's manifest declares scopes — schema, table, verbs (<code>read</code>,
+                <code>act</code>, <code>reveal</code>) — and installing mints exactly that grant,
+                idempotently. Re-publishing an app tops up only <i>newly declared</i> scopes; it can
+                never silently widen what you already refused.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="dot">02</span>
+            <div>
+              <h3>Confirm-gated commands</h3>
+              <p>
+                A handful of commands are consequential enough to pause regardless of who asks —
+                sending a message, sending an invoice, publishing a sync batch, merging two people.
+                When a non-owner caller invokes one, the invocation <b>parks</b> and waits for your
+                decision in the blocking surface. Deny is a first-class, receipted outcome.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="dot">03</span>
+            <div>
+              <h3>Your "no" is durable</h3>
+              <p>
+                Revoking a scope writes a <b>tombstone</b>: an app that later asks for it again gets
+                blocked at the request stage, not re-granted by a sneaky update. Widening requests
+                queue for explicit review — one open request per app, replaced on re-publish.
+              </p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="dot">04</span>
+            <div>
+              <h3>Receipts, ranked by salience</h3>
+              <p>
+                Every allow and every deny lands in the journal with who, what, why, and a risk
+                marker. The review feed ranks by salience — denials above allows, risk-weighted — so
+                the interesting ten of ten thousand receipts surface themselves.
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="aside r" style="--d: 0.24s">
+          Revoke a grant and the cascade is total: sessions killed, projections dark, the app's ext
+          band retained then purged. Your rows, history and receipts remain.
+          <a href="ontology.html#gateway">The gateway contract →</a>
+        </p>
+      </section>
+
+      <!-- §04 THE OUTBOX -->
+      <section class="dark" id="outbox">
+        <div class="wrap">
+          <p class="eyebrow r">§04 · the outbox</p>
+          <h2 class="r" style="--d: 0.06s">
+            The outside world gets written to <em>only through a drawer you open.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            Reads come in through staging; writes go out through the outbox. Any agent or automation
+            that wants to touch the world — send an email, post to Slack — can only
+            <b>stage an artifact</b>: the rendered thing itself, inert, sitting in a drawer with the
+            request that would send it.
+          </p>
+          <div class="grid cols-2" style="margin-top: 28px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">you decide</p>
+              <h3>Approve · edit · discard · always-allow</h3>
+              <p>
+                You read the actual email, not a description of it. Edit it and the edited version
+                is what's sent — atomically, in the same decision. "Always allow" mints a standing
+                grant for exactly that (actor, verb, target) triple — <i>this</i> automation,
+                sending <i>this kind</i> of thing, to <i>this place</i> — revocable any time, and
+                still receipted on every use.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">the executor sends</p>
+              <h3>Credentials never touch the author</h3>
+              <p>
+                Approved items drain through a gateway-side executor that substitutes
+                <code>{{connection:…}}</code> placeholders with sealed tokens at the last moment,
+                pinned to the connection's allowed hosts over https. The automation that drafted the
+                email never held a secret. Transient failures retry; hard failures are scrubbed and
+                surfaced.
+              </p>
+            </div>
+          </div>
+          <p class="note r" style="--d: 0.24s; margin-top: 22px">
+            Sent things become rows: an email that drains binds back to a canonical
+            <code>social.message</code> — your outbound acts are first-class history, not
+            fire-and-forget JSON.
+          </p>
+        </div>
+      </section>
+
+      <!-- §05 SEALED COLUMNS -->
+      <section class="sec wrap" id="sealed">
+        <p class="eyebrow r">§05 · sealed columns</p>
+        <h2 class="r" style="--d: 0.06s">Some cells are <em>ciphertext even to you.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Passwords, TOTP seeds, card numbers, OAuth tokens: columns declared <b>sealed</b> are
+            AES-256-GCM ciphertext at rest, sealed inside the same write transaction that creates
+            them. Ordinary reads get a placeholder. Getting plaintext requires the explicit
+            <code>reveal</code> verb — a distinct scope apps must declare, receipted per item, so
+            "the app looked at this password, at this time" is a fact in your journal.
+          </p>
+          <p>
+            The discipline is structural, not polite: sealed columns are barred from the search
+            index by construction, journal entries carry keyed hash tokens instead of values, and
+            error paths are scrubbed. The sealing key lives beside — not inside — the vault
+            directory, with export, restore and rotation as receipted shell ceremonies.
+          </p>
+          <p class="aside">
+            Locker is the showcase: items seal their secrets, computes TOTP client-side, and its
+            Watchtower derives weak/reused flags without ever unsealing into the transcript.
+            <a href="apps.html#blueprints">Apps § blueprints →</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- §06 CONNECTIONS & SYNC -->
+      <section class="dark" id="connections">
+        <div class="wrap">
+          <p class="eyebrow r">§06 · connections &amp; sync</p>
+          <h2 class="r" style="--d: 0.06s">The border has <em>a customs post.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            External services connect through a broker the gateway owns, and external rows enter
+            through a staging band you review. Two mechanisms, one discipline: nothing crosses the
+            border unattributed.
+          </p>
+          <div class="steps r" style="--d: 0.16s; max-width: 880px">
+            <div class="step">
+              <span class="dot">a</span>
+              <div>
+                <h3>Bring your own client</h3>
+                <p>
+                  A connection is your own OAuth client (or API key) for Gmail, Google Calendar,
+                  Google Contacts, GitHub… The PKCE ceremony runs once; tokens land <b>sealed</b> as
+                  credential sidecar rows. The broker refreshes single-flight and injects tokens
+                  only into requests bound for the connection's pinned hosts — connector code sees
+                  <code>{{connection:access_token}}</code>, never the token.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">b</span>
+              <div>
+                <h3>Everything stages</h3>
+                <p>
+                  Pulls land as <b>staged batches</b> — rows with dispositions (create / update /
+                  skip / merge-candidate) resolved against the universal external-id map, so the
+                  same Gmail thread never imports twice and upstream edits become reviewable
+                  updates. You publish a batch in one transaction; per-row provenance says exactly
+                  where each fact came from. Trusted connections can auto-publish; the vault wins
+                  conflicts either way.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">c</span>
+              <div>
+                <h3>Enrichment rides the same rails</h3>
+                <p>
+                  Nine optional enrichers — photo captioning, document text extraction, face
+                  proposals, trip albums, renewal reminders and friends — derive new rows
+                  <i>into tables the ontology already has</i>, attributed and re-derivable, under
+                  per-class standing consent. Derived data is never a parallel store you can't
+                  audit.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p class="note r" style="--d: 0.24s; margin-top: 18px">
+            Honest beta note: the broker, staging, templates and health panel are real; the guided
+            "sign in with…" wizard UI is still landing. Today connections are configured through the
+            automation templates.
+          </p>
+        </div>
+      </section>
+
+      <!-- §07 AUTOMATIONS -->
+      <section class="sec wrap" id="automations">
+        <p class="eyebrow r">§07 · automations</p>
+        <h2 class="r" style="--d: 0.06s">Agents on a clock, <em>with a paper trail.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            An automation is an agent with a manifest: a trigger, a grant of its own, and a durable
+            transcript for every run. It is how data moves while you sleep — the Gmail pull, the
+            morning briefing, the renewal nag — and it enjoys no special powers: same scopes, same
+            typed commands, same parking for consequential acts, same receipts.
+          </p>
+        </div>
+        <div class="grid cols-4" style="margin-top: 26px">
+          <div class="card r" style="--d: 0.1s">
+            <p class="c-no">trigger</p>
+            <h3>cron</h3>
+            <p>Five-field schedule. The briefing at 06:30, the weekly sweep on Sundays.</p>
+          </div>
+          <div class="card r" style="--d: 0.16s">
+            <p class="c-no">trigger</p>
+            <h3>webhook</h3>
+            <p>A slug route with a shared-secret hash — GitHub pings it, the automation fires.</p>
+          </div>
+          <div class="card r" style="--d: 0.22s">
+            <p class="c-no">trigger</p>
+            <h3>condition</h3>
+            <p>
+              A consented read on a gate: fire once per new row that matches. "A message was
+              released."
+            </p>
+          </div>
+          <div class="card r" style="--d: 0.28s">
+            <p class="c-no">trigger</p>
+            <h3>data</h3>
+            <p>The change feed itself: fire on new change entries, cursor strictly time-ordered.</p>
+          </div>
+        </div>
+        <div class="prose r" style="--d: 0.3s">
+          <p>
+            Every fire runs as an enrolled agent identity — its invocations, pre/post checks and
+            evidence land in the journal, and the run reads back as a conversation, not a log file.
+            When you wonder why it did what it did, you read the transcript.
+          </p>
+        </div>
+      </section>
+
+      <!-- §08 THE ASSISTANT -->
+      <section class="dark" id="assistant">
+        <div class="wrap">
+          <p class="eyebrow r">§08 · the assistant</p>
+          <h2 class="r" style="--d: 0.06s">
+            The payoff: one brain over <em>the whole record.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            Silo-free data is only worth the trouble if something can think across it. The assistant
+            is an owner-plane agent with exactly three tools — and the restraint is the design.
+          </p>
+          <div class="grid cols-3" style="margin-top: 28px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">read</p>
+              <h3>vault_sql</h3>
+              <p>
+                One read-only SELECT over the entire ontology — joins, window functions, recursive
+                CTEs, FTS matches. Row-capped, receipted, no writes, no DDL. Your data becomes
+                answerable because it's one schema.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">act</p>
+              <h3>vault_invoke</h3>
+              <p>
+                One typed command per call — the same command palette apps use. Consequential
+                commands park for your confirmation exactly as they would for any other caller.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.26s">
+              <p class="c-no">open</p>
+              <h3>vault_content</h3>
+              <p>
+                The extracted text of one document by id — size-bounded and receipted — so
+                "summarize the lease" reads the actual lease, not a guess.
+              </p>
+            </div>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              And it learns in rows, not vibes: when you correct it, the diff is stored as a
+              correction and distilled into a scoped <b>judgment</b> the agent consults before
+              acting again — auditable, expirable, revocable like everything else here.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §09 BLOBS -->
+      <section class="sec wrap" id="blobs">
+        <p class="eyebrow r">§09 · bytes &amp; blobs</p>
+        <h2 class="r" style="--d: 0.06s">Own the meaning, <em>rent the bytes.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Originals — photos, PDFs, videos up to 512&nbsp;MB streamed — land in a local
+            content-addressed store keyed by sha256, so identical bytes exist once no matter how
+            many apps attach them. Uploading is not yet a fact: bytes stage under their hash, and
+            only the typed command that <b>claims</b> the hash (add a document, add an asset) mints
+            the canonical row and the receipt.
+          </p>
+          <p>
+            Derivatives — thumbnails, previews, extracted text — hang off the canonical item as
+            attributed variants; extracted text feeds straight into search. An optional
+            S3-compatible tier replicates the local store for durability, encrypting each blob under
+            the vault key before it leaves — the address stays the plaintext hash, so dedup survives
+            re-keying and the meaning never moves: lose a blob store and you've lost re-fetchable
+            bytes, never a relationship.
+          </p>
+        </div>
+      </section>
+
+      <!-- §10 SEARCH -->
+      <section class="sec wrap" id="search">
+        <p class="eyebrow r">§10 · search</p>
+        <h2 class="r" style="--d: 0.06s">One index over <em>everything the model knows.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Full-text search (SQLite FTS5) indexes the text-bearing tables across every domain —
+            notes and their bodies, documents, messages, people, tasks, events, transactions,
+            annotations, expenses — kept in sync by triggers in the same transaction as the write.
+            Apps get bounded search through their scopes; the assistant gets it through SQL.
+          </p>
+          <p>
+            Two structural guarantees: <b>sealed columns can't be indexed</b> — the bar is in the
+            schema layer, not a code-review convention — and search walks the same consent pipeline
+            as reads, failing closed if a grant masks any indexed column.
+          </p>
+        </div>
+
+        <div class="chapter-next r">
+          <a href="ontology.html">deep-dive: the ontology →</a>
+          <a href="apps.html">next chapter: apps →</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="foot-manifesto r">
+          The apps are disposable. The devices are replaceable.
+          <em>The vault is the asset.</em>
+        </p>
+        <div class="foot-row">
+          <span>© 2026 Centraid</span>
+          <span class="foot-links">
+            <a href="https://centraid.dev">centraid.dev</a>
+            <a href="start.html">start</a>
+            <a href="apps.html">apps</a>
+            <a href="devices.html">devices</a>
+            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+              >github</a
+            >
+          </span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/docs.js"></script>
+  </body>
+</html>
