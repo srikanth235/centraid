@@ -15,6 +15,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { BlobCustody, type RemoteTier } from './blob/custody.js';
 import { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
 import { S3BlobStore, type S3Credentials } from './blob/s3.js';
+import { registerHammingFn } from './enrich/similarity.js';
 import { registerContentTextFn } from './schema/fts.js';
 import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
 import { ephemeralSealKey, loadOrCreateSealKey, sealKeyFileFor } from './schema/sealed.js';
@@ -111,6 +112,8 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
   // this function, so it must exist before migrations touch the file.
   registerContentTextFn(vault);
+  // Perceptual-hash distance (issue #299) — near-duplicates are plain SQL.
+  registerHammingFn(vault);
   migrate(vault, VAULT_MIGRATIONS);
   migrate(journal, JOURNAL_MIGRATIONS);
 

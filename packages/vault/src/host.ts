@@ -158,6 +158,58 @@ export function updateBlobStoreSettings(
   return settings;
 }
 
+/** Enrichment tier per domain (issue #299 §2). Absent means `local`. */
+export type EnrichTier = 'off' | 'local' | 'model';
+
+export interface EnrichSettings {
+  photos: EnrichTier;
+  docs: EnrichTier;
+}
+
+const ENRICH_TIERS: readonly EnrichTier[] = ['off', 'local', 'model'];
+
+/**
+ * The owner's enrichment policy out of the settings bag. `local` is the
+ * default on both domains: Tier-0 derivation (EXIF, thumbs, text
+ * extraction, phash) never leaves the vault, so it needs no opt-in;
+ * `model` — bytes leaving for an inference provider — is a deliberate,
+ * per-domain gesture (issue #299 §2).
+ */
+export function readEnrichSettings(db: VaultDb): EnrichSettings {
+  const bag = readVaultSettings(db).enrich;
+  const e =
+    bag !== null && typeof bag === 'object' && !Array.isArray(bag)
+      ? (bag as Record<string, unknown>)
+      : {};
+  const tier = (v: unknown): EnrichTier =>
+    typeof v === 'string' && (ENRICH_TIERS as readonly string[]).includes(v)
+      ? (v as EnrichTier)
+      : 'local';
+  return { photos: tier(e.photos), docs: tier(e.docs) };
+}
+
+/** Merge an enrichment-policy patch into the settings bag (owner act). */
+export function updateEnrichSettings(
+  db: VaultDb,
+  patch: Partial<Record<'photos' | 'docs', EnrichTier | null>>,
+): EnrichSettings {
+  const settings = readVaultSettings(db);
+  const current =
+    settings.enrich !== null && typeof settings.enrich === 'object' && !Array.isArray(settings.enrich)
+      ? (settings.enrich as Record<string, unknown>)
+      : {};
+  for (const key of ['photos', 'docs'] as const) {
+    if (!(key in patch)) continue;
+    const v = patch[key];
+    if (v === null || v === undefined) delete current[key];
+    else if ((ENRICH_TIERS as readonly string[]).includes(v)) current[key] = v;
+    else throw new Error(`enrich.${key} must be one of ${ENRICH_TIERS.join(', ')}`);
+  }
+  settings.enrich = current;
+  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  return readEnrichSettings(db);
+}
+
 export interface EnrolledApp {
   appId: string;
   signingKey: string;

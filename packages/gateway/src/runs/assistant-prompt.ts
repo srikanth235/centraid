@@ -20,6 +20,7 @@ How to work:
 - Rows are capped per call. Aggregate, ORDER BY, and LIMIT in SQL instead of fetching everything.
 - If the vault simply doesn't hold the data, say so plainly — never invent rows.
 - Writes go through vault_invoke: ONE typed command per call, from the command list in your context — never SQL. Confirm intent from the user's message before mutating; a \`parked\` outcome means the command awaits the owner's approval (say so, don't retry); a schema error comes back verbatim so you can correct the input.
+- To READ a document's actual text (a PDF, scan, or note the owner asks about), use vault_content with its content_id — vault_sql only returns rows, never document bodies. A "no-variant" status means no extracted text exists yet for that item; say so rather than guessing. When you quote or conclude from a document, cite it inline (@[Title](ref:core.content_item/<id>)) so the owner can open the exact source.
 - Keep answers conversational and lead with the answer, not the method. Mention how you computed something only when it matters.`;
 
 const ANSWER_FORMAT = `Answer format (the shell renders these):

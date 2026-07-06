@@ -7,7 +7,13 @@
  * matches the worker's expected wire shape.
  */
 
-import type { AgentDispatcher, DispatchContext, ToolDispatcher, ToolResult } from './runner.js';
+import type {
+  AgentAttachment,
+  AgentDispatcher,
+  DispatchContext,
+  ToolDispatcher,
+  ToolResult,
+} from './runner.js';
 import type {
   ConversationStore,
   TurnStreamEvent,
@@ -136,6 +142,61 @@ export interface CtxReply {
   error?: string;
 }
 
+/** One `ctx.agent` content reference, as the worker sent it (issue #299). */
+export interface AgentContentRef {
+  contentId: string;
+  variant: string;
+  maxBytes?: number;
+}
+
+/**
+ * Resolve `ctx.agent` content refs into attachments through the vault
+ * bridge (issue #299 §2): each fetch runs under the automation's grant and
+ * is receipted host-side as its own consent event. Resolution is
+ * fail-closed — a denied or missing derivative fails the agent call with
+ * the reason (and receipt id) in the error, never a silent partial prompt.
+ */
+async function resolveAgentAttachments(
+  vault: VaultBridge | undefined,
+  refs: readonly AgentContentRef[],
+): Promise<AgentAttachment[]> {
+  if (!vault) {
+    throw new Error('ctx.agent content refs need a vault surface — the host mounted no vault plane');
+  }
+  const attachments: AgentAttachment[] = [];
+  for (const [i, ref] of refs.entries()) {
+    const reply = await vault({
+      op: 'content',
+      payload: {
+        contentId: ref.contentId,
+        variant: ref.variant,
+        ...(ref.maxBytes !== undefined ? { maxBytes: ref.maxBytes } : {}),
+      },
+    });
+    if (!reply.ok) {
+      throw new Error(`ctx.agent content[${i}] (${ref.contentId} ${ref.variant}): ${reply.error}`);
+    }
+    const out = reply.result as
+      | { status: 'ok'; kind: 'bytes'; mediaType: string; base64: string }
+      | { status: 'ok'; kind: 'text'; mediaType: string; text: string }
+      | { status: string };
+    if (out.status !== 'ok') {
+      throw new Error(
+        `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`,
+      );
+    }
+    const resolved = out as { kind: 'bytes' | 'text'; mediaType: string; base64?: string; text?: string };
+    const ext = resolved.kind === 'text' ? 'txt' : (resolved.mediaType.split('/')[1] ?? 'bin');
+    attachments.push({
+      name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
+      mediaType: resolved.mediaType,
+      ...(resolved.base64 !== undefined ? { base64: resolved.base64 } : {}),
+      ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+    });
+  }
+  return attachments;
+}
+
 /**
  * Service one `ctx.agent` call: open an `agent` run node, dispatch, forward
  * streamed chat events as `node.delta`, and settle the node with the
@@ -149,6 +210,8 @@ export async function handleAgentMessage(
   agentDispatcher: AgentDispatcher,
   prompt: string,
   json: unknown,
+  content?: readonly AgentContentRef[],
+  vault?: VaultBridge,
 ): Promise<CtxReply> {
   const ordinal = nextOrdinal(audit);
   const started = Date.now();
@@ -160,7 +223,7 @@ export async function handleAgentMessage(
     ordinal,
     kind: 'agent',
     name: 'agent',
-    args: { prompt },
+    args: { prompt, ...(content?.length ? { content } : {}) },
     started,
   });
   // When the runner streams (issue #158, Phase 2), forward each chat event as a
@@ -176,7 +239,13 @@ export async function handleAgentMessage(
     }
   };
   try {
-    const result = await agentDispatcher({ prompt, json, onEvent }, dispatchCtx);
+    const attachments = content?.length
+      ? await resolveAgentAttachments(vault, content)
+      : undefined;
+    const result = await agentDispatcher(
+      { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
+      dispatchCtx,
+    );
     closeRunNode({
       store: audit.store,
       emit: audit.emit,

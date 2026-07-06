@@ -20,6 +20,8 @@
  * journal feed) are agent-plane ops — automation bridges implement them;
  * app bridges may reject them. `resolve` (issue #272) turns (type, id)
  * references into renderable cards under the resolvable-if-linked rule.
+ * `content` (issue #299) is the size-bounded derivative fetch — thumb,
+ * preview or extracted text of one content item, never original bytes.
  */
 export type VaultOp =
   | 'read'
@@ -30,7 +32,8 @@ export type VaultOp =
   | 'parked'
   | 'changes'
   | 'resolve'
-  | 'reveal';
+  | 'reveal'
+  | 'content';
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

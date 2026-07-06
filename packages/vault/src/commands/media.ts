@@ -96,6 +96,9 @@ const ADD_ASSET: CommandDefinition = {
       width: { type: 'integer', minimum: 1 },
       height: { type: 'integer', minimum: 1 },
       duration_s: { type: 'number', minimum: 0 },
+      // Perceptual hash (issue #299 §2, Tier 0) — hex, producer-agnostic:
+      // the client canvas computes a dHash beside its thumb today.
+      phash: { type: 'string', minLength: 4, maxLength: 64, pattern: '^[0-9a-f]+$' },
     },
   },
   outputSchema: {
@@ -167,6 +170,7 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     width?: number;
     height?: number;
     duration_s?: number;
+    phash?: string;
   };
   // Staged claims carry spool metadata (issue #296 §4): the gateway sniffed
   // the type and read EXIF server-side, so capture time and dimensions no
@@ -222,6 +226,17 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
       input.duration_s ?? null,
       Object.keys(exif).length > 0 ? JSON.stringify(exif) : null,
     );
+  // Perceptual hash (issue #299 §2, Tier 0): producer-agnostic like thumbs —
+  // the client canvas computes a dHash beside its thumbnail today. Derived
+  // data in a sidecar; near-duplicates are one vault_hamming JOIN away.
+  if (input.phash) {
+    ctx.db
+      .prepare(
+        `INSERT INTO media_asset_phash (asset_id, phash, computed_at) VALUES (?, ?, ?)
+         ON CONFLICT (asset_id) DO UPDATE SET phash = excluded.phash, computed_at = excluded.computed_at`,
+      )
+      .run(assetId, input.phash, ctx.now);
+  }
   ctx.wrote('media.media_asset', assetId);
   ctx.cite({
     claim: `${minted.mediaType} (${minted.byteSize} bytes) entered the library`,

@@ -77,6 +77,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'connection_run',
   ],
   tally: ['friend', 'group', 'group_member', 'expense', 'expense_split', 'settlement'],
+  enrich: ['embedding', 'request'],
 };
 
 /** journal.db tables — the append-only audit stream. */

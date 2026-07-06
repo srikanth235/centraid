@@ -8,6 +8,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
 import { promoteStagedBlob } from '../blob/promote.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import { ENRICH_PUBLISHERS } from './enrich-publishers.js';
 import type { Publisher, PublishedWrite } from './staging.js';
 
 // ── core.event (ICS) ────────────────────────────────────────────────────
@@ -513,7 +514,12 @@ const lockerItemPublisher: Publisher = {
 
 /** The publisher registry the spine walks. */
 export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
-  [eventPublisher, partyPublisher, messagePublisher, transactionPublisher, lockerItemPublisher].map(
-    (p) => [p.entityType, p],
-  ),
+  [
+    eventPublisher,
+    partyPublisher,
+    messagePublisher,
+    transactionPublisher,
+    lockerItemPublisher,
+    ...ENRICH_PUBLISHERS,
+  ].map((p) => [p.entityType, p]),
 );

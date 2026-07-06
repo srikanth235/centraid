@@ -56,6 +56,7 @@ export type {
   TurnAttachment,
   RunTurnFn,
   VaultInvokeRunner,
+  VaultContentRunner,
   VaultSqlRunner,
   VaultSqlToolResult,
 } from './conversation/turn.js';

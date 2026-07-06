@@ -11,6 +11,12 @@ import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
 import {
+  AGENT_CONTENT_VARIANTS,
+  resolveAgentContent,
+  type AgentContentOutcome,
+  type AgentContentVariant,
+} from '../enrich/content.js';
+import {
   stageBlobBytes,
   type StageBlobOptions,
   type StagedBlob,
@@ -1010,6 +1016,71 @@ export class Gateway {
       detail: {
         surface: 'blob',
         variant: options.variant ?? 'original',
+        ...(outcome.status === 'ok' ? {} : { failing: outcome.status }),
+      },
+    });
+    return { ...outcome, receiptId };
+  }
+
+  /**
+   * Agent content access (issue #299 §2, the #296 §7 seam): the size-bounded
+   * byte primitive enrichers and the assistant read through. Structural
+   * rule: DERIVATIVES EGRESS, NEVER ORIGINALS — the surface only spells
+   * `thumb`, `preview` and `text`. Consent is the same read evaluation the
+   * blob routes run, and every fetch (allow or deny) is receipted — the
+   * "multimodal hand-off is its own consent event" decision, made code.
+   */
+  async contentForAgent(
+    cred: Credential,
+    request: { contentId: string; variant: string; maxBytes?: number; purpose?: string },
+  ): Promise<AgentContentOutcome & { receiptId: string }> {
+    const identity = this.identify(cred);
+    const purpose = request.purpose ?? 'dpv:ServiceProvision';
+    if (!(AGENT_CONTENT_VARIANTS as readonly string[]).includes(request.variant)) {
+      throw new GatewayError(
+        'consent',
+        `variant "${request.variant}" is not agent-readable — derivatives egress, never originals (issue #299): ${AGENT_CONTENT_VARIANTS.join(', ')}`,
+      );
+    }
+    const consent = evaluateConsent(
+      this.db.vault,
+      identity,
+      'core',
+      'content_item',
+      'read',
+      purpose,
+    );
+    if (consent.decision === 'deny') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: consent.grantId,
+        invocationId: null,
+        action: 'read',
+        objectType: 'core.content_item',
+        objectId: request.contentId,
+        purpose,
+        decision: 'deny',
+        detail: { failing: consent.failing, surface: 'agent-content', variant: request.variant },
+      });
+      throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
+    }
+    const outcome = await resolveAgentContent(
+      this.db,
+      request.contentId,
+      request.variant as AgentContentVariant,
+      request.maxBytes,
+    );
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: consent.grantId,
+      invocationId: null,
+      action: 'read',
+      objectType: 'core.content_item',
+      objectId: request.contentId,
+      purpose,
+      decision: outcome.status === 'ok' ? 'allow' : 'deny',
+      detail: {
+        surface: 'agent-content',
+        variant: request.variant,
+        by: identity.callerId,
         ...(outcome.status === 'ok' ? {} : { failing: outcome.status }),
       },
     });
