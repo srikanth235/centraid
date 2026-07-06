@@ -27,6 +27,7 @@ import {
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
+  type VaultContentRunner,
   type VaultSqlRunner,
 } from '@centraid/app-engine';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -63,6 +64,7 @@ export function assistantCwd(vaults: VaultRegistry): string {
 export function makeVaultToolRunners(vaults: VaultRegistry): {
   vaultSql: () => VaultSqlRunner;
   vaultInvoke: () => VaultInvokeRunner;
+  vaultContent: () => VaultContentRunner;
 } {
   return {
     vaultSql: () => (sql: string) => {
@@ -77,13 +79,20 @@ export function makeVaultToolRunners(vaults: VaultRegistry): {
         input: call.input,
         purpose: 'dpv:ServiceProvision',
       }),
+    // Document-text reads (issue #299): "walk me through this contract"
+    // resolves the text variant, receipted; the receipt id stays here.
+    vaultContent: () => async (call) => {
+      const result = (await vaults.current().contentAsOwner(call)) as Record<string, unknown>;
+      const { receiptId: _receiptId, ...rest } = result;
+      return rest;
+    },
   };
 }
 
 export function makeAssistantConversationRunner(
   opts: AssistantConversationRunnerOptions,
 ): ConversationRunner {
-  const { vaultSql, vaultInvoke } = makeVaultToolRunners(opts.vaults);
+  const { vaultSql, vaultInvoke, vaultContent } = makeVaultToolRunners(opts.vaults);
 
   return makeConversationRunnerCore({
     prefsLoader: opts.prefsLoader,
@@ -91,6 +100,7 @@ export function makeAssistantConversationRunner(
     runTurn: opts.runTurn ?? runTurn,
     vaultSql,
     vaultInvoke,
+    vaultContent,
     ...(opts.buildPrompt
       ? { buildExtraSystemPrompt: ({ input }) => opts.buildPrompt!(input) }
       : {}),

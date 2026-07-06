@@ -22,6 +22,9 @@ export default async ({ body, ctx }) => {
         ...(input.width != null ? { width: Number(input.width) } : {}),
         ...(input.height != null ? { height: Number(input.height) } : {}),
         ...(input.duration_s != null ? { duration_s: Number(input.duration_s) } : {}),
+        // Perceptual hash (issue #299 Tier 0) — computed client-side from
+        // the same canvas that grew the thumb; near-dups become plain SQL.
+        ...(input.phash != null ? { phash: String(input.phash) } : {}),
       },
       purpose: 'dpv:ServiceProvision',
     });

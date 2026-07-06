@@ -57,6 +57,7 @@ import {
   type RunnerPrefs,
   type RunTurnFn,
   type VaultInvokeRunner,
+  type VaultContentRunner,
   type VaultSqlRunner,
 } from '@centraid/app-engine';
 import { provisionAppPendingWebhooks, WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
@@ -92,6 +93,8 @@ export interface UnifiedConversationRunnerOptions {
   /** The builder's typed-write tool — rides the `_assistant` agent, so
    *  high-risk commands park exactly like assistant/ask turns. */
   vaultInvoke?: () => VaultInvokeRunner;
+  /** Document-text access (issue #299) — same owner-side runner as the assistant. */
+  vaultContent?: () => VaultContentRunner;
   /** Session id for an app's shared draft worktree. Defaults to a
    *  host-neutral `chat-<appId>` scheme. Hosts that share the draft with
    *  another editing surface inject their own scheme — the desktop passes
@@ -197,6 +200,7 @@ export function makeUnifiedConversationRunner(
     // vault_sql/vault_invoke surface the assistant and ask turns ride.
     ...(opts.vaultSql ? { vaultSql: opts.vaultSql } : {}),
     ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke } : {}),
+    ...(opts.vaultContent ? { vaultContent: opts.vaultContent } : {}),
 
     // Open (or reuse) the app's shared draft worktree so native file edits
     // stage in the draft, and run the turn from its app dir. Keep the

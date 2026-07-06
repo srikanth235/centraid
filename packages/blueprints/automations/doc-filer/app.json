@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "doc-filer",
+  "name": "Document filing",
+  "kind": "automation",
+  "description": "Proposes a folder and a readable title for every scan-dump document — you approve, it files.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

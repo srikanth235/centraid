@@ -51,7 +51,43 @@ export const VAULT_INVOKE_TOOL = {
   },
 } as const;
 
+export const VAULT_CONTENT_TOOL = {
+  name: 'vault_content',
+  description:
+    'Read the TEXT of one document/content item by content_id (its extracted-text derivative, or ' +
+    'the inline body for text items) — how you actually read a PDF, scan or note the owner asks ' +
+    'about, since vault_sql only returns rows. Size-bounded and receipted. Returns ' +
+    '{ text, truncated } or a status explaining why nothing is readable (e.g. "no-variant" — no ' +
+    'extracted text exists yet for a binary item).',
+  inputSchema: {
+    type: 'object',
+    required: ['content_id'],
+    properties: {
+      content_id: { type: 'string', description: 'core_content_item.content_id to read.' },
+    },
+    additionalProperties: false,
+  },
+} as const;
+
 export type VaultSqlToolOutcome = { ok: true; result: unknown } | { ok: false; errorText: string };
+
+/** Execute one `vault_content` call through the turn's owner-side runner. */
+export async function runVaultContentTool(
+  ctx: ToolContext,
+  args: unknown,
+): Promise<VaultSqlToolOutcome> {
+  if (!ctx.vaultContent)
+    return { ok: false, errorText: 'vault_content is not available on this turn' };
+  const a = (args ?? {}) as { content_id?: unknown };
+  if (typeof a.content_id !== 'string' || a.content_id.trim() === '') {
+    return { ok: false, errorText: 'vault_content requires { content_id }' };
+  }
+  try {
+    return { ok: true, result: await ctx.vaultContent({ contentId: a.content_id }) };
+  } catch (err) {
+    return { ok: false, errorText: err instanceof Error ? err.message : String(err) };
+  }
+}
 
 /** Execute one `vault_invoke` call through the turn's assistant-agent runner. */
 export async function runVaultInvokeTool(

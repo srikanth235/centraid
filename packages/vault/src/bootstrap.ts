@@ -33,6 +33,11 @@ const SEED_SCHEMES: Record<string, { uri: string; title: string }> = {
   'activity-kinds': { uri: 'urn:duaility:activity-kinds', title: 'Activity kinds' },
   'spend-categories': { uri: 'urn:duaility:spend-categories', title: 'Spend categories' },
   flags: { uri: 'urn:duaility:flags', title: 'Agent flags' },
+  // Machine-tag vocabularies (issue #299) — concepts arrive on demand from
+  // the enrichment publishers; only the scheme rows seed. Pre-v10 vaults
+  // get these from the guarded v10 backfill instead.
+  vision: { uri: 'urn:centraid:vision', title: 'Vision tags (machine)' },
+  doctype: { uri: 'urn:centraid:doctype', title: 'Document types (machine)' },
 };
 const SEED_CONCEPTS: SeedConcept[] = [
   { scheme: 'purposes', notation: 'dpv:ServiceProvision', label: 'Service provision' },

@@ -1,0 +1,36 @@
+{
+  "name": "Renewal reminders",
+  "version": "0.1.0",
+  "description": "The condition trigger IS the reminder logic: tentative calendar events whose date falls within the next 14 days fire this, and the run briefs you on what's coming due — no wall-clock guesswork, the time semantics live in the data.",
+  "enabled": false,
+  "prompt": "When a tentative calendar event's date comes within the next two weeks, brief me: what it is, when it's due, and how many days remain. These are the deadlines my documents produced — surface them, don't act on them.",
+  "triggers": [
+    {
+      "kind": "condition",
+      "entity": "core.event",
+      "where": [
+        { "column": "status", "op": "eq", "value": "tentative" },
+        { "column": "dtstart", "op": "within-next-days", "value": 14 }
+      ],
+      "every": "0 8 * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Watches tentative calendar events (the obligations your documents produced) coming due within 14 days and briefs you (issue #299 phase 4).",
+    "scopes": [
+      { "schema": "core", "verbs": "read" },
+      { "schema": "schedule", "verbs": "read" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

@@ -42,7 +42,10 @@ import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
 import {
   mediaLocationPolicy,
   readBlobStoreSettings,
+  readEnrichSettings,
   updateBlobStoreSettings,
+  updateEnrichSettings,
+  type EnrichTier,
 } from '@centraid/vault';
 import { readJson, sendJson } from './route-helpers.js';
 
@@ -152,6 +155,33 @@ export function makeVaultRouteHandler(
             blob_store: readBlobStoreSettings(plane.db.vault),
             media_location: mediaLocationPolicy(plane.db),
           });
+        }
+      }
+
+      // The owner's enrichment policy (issue #299 §2): Tier 0 (`local`) is
+      // the default; `model` — derivative bytes leaving for an inference
+      // provider — is a deliberate per-domain opt-in; `off` silences a
+      // domain entirely.
+      if (segments[0] === 'enrich' && segments.length === 1) {
+        if (method === 'GET') {
+          return sendJson(res, 200, { enrich: readEnrichSettings(plane.db) });
+        }
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          const patch: Partial<Record<'photos' | 'docs', EnrichTier | null>> = {};
+          for (const key of ['photos', 'docs'] as const) {
+            const v = body[key];
+            if (v === undefined) continue;
+            if (v !== null && v !== 'off' && v !== 'local' && v !== 'model') {
+              return sendJson(res, 400, {
+                error: 'bad_request',
+                message: `${key} must be "off", "local", "model" or null`,
+              });
+            }
+            patch[key] = v as EnrichTier | null;
+          }
+          updateEnrichSettings(plane.db, patch);
+          return sendJson(res, 200, { enrich: readEnrichSettings(plane.db) });
         }
       }
 

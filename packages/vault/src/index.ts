@@ -137,6 +137,10 @@ export {
   renameVault,
   readVaultSettings,
   updateBlobStoreSettings,
+  readEnrichSettings,
+  updateEnrichSettings,
+  type EnrichSettings,
+  type EnrichTier,
   readVaultPresentation,
   updateVaultPresentation,
   type VaultPresentation,
@@ -177,6 +181,27 @@ export { registerPeopleCommands, CIRCLE_SCHEME_URI } from './commands/people.js'
 export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
 export { registerTallyCommands } from './commands/tally.js';
 export { registerSyncCommands } from './commands/sync.js';
+export { registerEnrichCommands } from './commands/enrich.js';
+
+export {
+  AGENT_CONTENT_VARIANTS,
+  AGENT_CONTENT_DEFAULT_MAX_BYTES,
+  AGENT_CONTENT_HARD_MAX_BYTES,
+  resolveAgentContent,
+  type AgentContentOutcome,
+  type AgentContentVariant,
+} from './enrich/content.js';
+export {
+  hexHamming,
+  registerHammingFn,
+  encodeVector,
+  decodeVector,
+  cosine,
+  scanEmbeddings,
+  type SemanticHit,
+} from './enrich/similarity.js';
+export { ENRICH_PUBLISHERS, tagNotation } from './ingest/enrich-publishers.js';
+export { VISION_SCHEME_URI, DOCTYPE_SCHEME_URI } from './schema/enrich.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
 export {

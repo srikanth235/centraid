@@ -1,0 +1,32 @@
+{
+  "name": "Document links",
+  "version": "0.1.0",
+  "description": "Reads each newly readable document, finds mentions of people already in your vault, and asserts anchored core.link references — the exact quoted passage, machine-attributed, endable any time.",
+  "enabled": false,
+  "prompt": "When documents become readable, find where they mention people I already know. Link each document to the mentioned person with the exact quoted passage as the anchor. Only link people who already exist in my vault — never invent contacts — and never re-assert a link that's already live.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["core.content_derivative"],
+      "every": "*/10 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads newly readable documents' text and the party list, and asserts anchored references (core.link_entities, both endpoints already readable) from documents to the people they mention (issue #299 phase 4).",
+    "scopes": [
+      { "schema": "core", "verbs": "read+act" },
+      { "schema": "sync", "verbs": "read" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

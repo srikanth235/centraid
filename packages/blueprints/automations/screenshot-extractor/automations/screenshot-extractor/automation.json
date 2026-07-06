@@ -1,0 +1,33 @@
+{
+  "name": "Screenshot intelligence",
+  "version": "0.1.0",
+  "description": "Classifies screenshots and photographed documents; receipts become staged transactions and bookings become staged tentative events — cross-domain writes ALWAYS stop for your review.",
+  "enabled": false,
+  "prompt": "When new screenshots or photographed documents arrive, look at each one's preview and classify it. If it's a receipt, extract the merchant, amount, currency and date and stage a transaction. If it's a booking or confirmation, extract what/when and stage a tentative calendar event. Everything you extract stays a staged draft until I approve it — never publish across domains on your own.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.media_asset"],
+      "every": "*/10 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads new screenshots' preview/thumb derivatives, extracts structured data (receipts → transactions, bookings → events), and stages the rows for the owner's review (issue #299 phase 2 — cross-domain extraction never auto-publishes).",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "core", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

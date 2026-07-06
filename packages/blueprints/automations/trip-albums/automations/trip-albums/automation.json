@@ -1,0 +1,31 @@
+{
+  "name": "Trip albums",
+  "version": "0.1.0",
+  "description": "Deterministic clustering — no model turns: photos taken in a burst of days separated by long gaps become a proposed album; publishing is your review click, and top-ups never remove what you curated.",
+  "enabled": false,
+  "prompt": "Group my photos into trip albums: photos captured close together in time, separated from the rest by a long gap, belong to one trip. Propose each trip as a draft album named by its dates. Never publish an album yourself and never remove photos from albums I've curated.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "0 6 * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads photo capture times, clusters trips by time gaps (plain code — issue #290's agents-write-code doctrine, no model turns), and stages album proposals for review (issue #299 phase 3).",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

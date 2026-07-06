@@ -1,0 +1,32 @@
+{
+  "name": "Document deadlines",
+  "version": "0.1.0",
+  "description": "Reads each newly readable document for dated obligations (expiries, renewals, due dates) and stages tentative calendar events for your review — dateless guesses are dropped, never invented.",
+  "enabled": false,
+  "prompt": "When documents become readable, find dated obligations: expiry dates, renewal deadlines, payment due dates. Stage each as a tentative calendar event named for what it is, so renewal reminders can watch them. Only extract dates that are actually visible in the document.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["core.content_derivative"],
+      "every": "*/10 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads newly readable documents' text, extracts dated obligations, and stages tentative core.event rows for review (issue #299 phase 4 — 'your documents watch your deadlines').",
+    "scopes": [
+      { "schema": "core", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

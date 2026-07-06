@@ -1,0 +1,34 @@
+{
+  "name": "Photo captions",
+  "version": "0.1.0",
+  "description": "Looks at each new photo's preview (never the original) and stages a one-line caption plus scene tags — machine-attributed, searchable, and yours to overrule.",
+  "enabled": false,
+  "prompt": "When new photos arrive, look at each one's preview and write a one-line caption plus a few scene tags with confidence scores. Stage them into the vault as machine annotations under the enrichment connection. Never overwrite anything I wrote myself, and never send original bytes anywhere.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.media_asset"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads new photos' preview/thumb derivatives, asks a vision model for captions and tags, and stages them on the vault's enrichment connection (issue #299).",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "core", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

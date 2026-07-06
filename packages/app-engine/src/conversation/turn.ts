@@ -61,6 +61,15 @@ export type VaultInvokeRunner = (call: {
 }) => Promise<unknown> | unknown;
 
 /**
+ * The vault assistant's content tool (issue #299): the extracted text /
+ * inline body of one content item, size-bounded and receipted — how "walk
+ * me through this contract" reads the document without unbounded bytes
+ * leaving custody. Text-first by design: binary variants stay on the
+ * enricher plane.
+ */
+export type VaultContentRunner = (call: { contentId: string }) => Promise<unknown> | unknown;
+
+/**
  * Per-turn binding that lets adapters register the vault-register tools
  * (`vault_sql` / `vault_invoke`, when the runners below are threaded in)
  * and emit provenanced change-bus events. Optional — when absent (tests),
@@ -102,6 +111,8 @@ export interface ToolContext {
   vaultSql?: VaultSqlRunner;
   /** The write half of the vault register — only read when `vaultSql` is set. */
   vaultInvoke?: VaultInvokeRunner;
+  /** Document-text access (issue #299) — only read when `vaultSql` is set. */
+  vaultContent?: VaultContentRunner;
 }
 
 /**

@@ -57,13 +57,16 @@ const STAGE_ROWS: CommandDefinition = {
       batch_id: { type: 'string' },
       connection_id: { type: 'string' },
       staged: { type: 'object' },
+      published: { type: 'object' },
     },
   },
   preconditions: [],
   postconditions: [
     {
-      name: 'batch_staged_as_draft',
-      sql: `SELECT count(*) AS n FROM sync_import_batch WHERE batch_id = :batch_id AND status = 'draft'`,
+      // Draft for review, or already applied under the connection's
+      // owner-set `auto-publish` trust (issue #299 §3) — never discarded.
+      name: 'batch_staged_or_auto_published',
+      sql: `SELECT count(*) AS n FROM sync_import_batch WHERE batch_id = :batch_id AND status IN ('draft','published')`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -97,19 +100,65 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
     }
   }
   const connectionId = ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label });
+  // Attribution is injected server-side, never trusted from source data
+  // (issue #299 §1): an annotation candidate is stamped with the CALLER's
+  // party — the enricher's enrolled agent party, or the owner running an
+  // import by hand. Masquerade is structurally impossible.
+  const authorPartyId = ctx.identity.partyId ?? ownerPartyIdOf(ctx);
   const candidates: StageCandidate[] = input.rows.map((r) => ({
     entityType: r.entity_type,
     externalId: r.external_id,
-    payload: r.payload,
+    payload:
+      r.entity_type === 'knowledge.annotation'
+        ? { ...r.payload, author_party_id: authorPartyId }
+        : r.payload,
   }));
   const { batchId, counts } = stageBatchTx(ctx.db, connectionId, candidates, PUBLISHERS, ctx.now);
   ctx.wrote('sync.import_batch', batchId);
+  // The owner's standing consent (issue #299 §3): a connection the owner set
+  // to `auto-publish` applies its batch in the same command — captions and
+  // machine tags land without a review click, still receipted, still
+  // provenance-stamped per row. `staged` trust keeps today's behavior.
+  const trust = (
+    ctx.db.prepare('SELECT trust FROM sync_connection WHERE connection_id = ?').get(connectionId) as
+      | { trust: string }
+      | undefined
+  )?.trust;
+  if (trust === 'auto-publish') {
+    const applied = applyBatchTx(ctx.db, batchId, PUBLISHERS, ownerPartyIdOf(ctx), ctx.now);
+    for (const write of applied.provenanced) ctx.wrote(write.type, write.id);
+    ctx.cite({
+      claim: `auto-published ${applied.created + applied.updated} row(s) from ${input.kind} "${input.label}" under the connection's standing trust (${applied.failed.length} failed)`,
+      entityType: 'sync.import_batch',
+      entityId: batchId,
+    });
+    return {
+      batch_id: batchId,
+      connection_id: connectionId,
+      staged: counts,
+      published: {
+        created: applied.created,
+        updated: applied.updated,
+        skipped: applied.skipped,
+        failed: applied.failed.length,
+      },
+    };
+  }
   ctx.cite({
     claim: `staged ${input.rows.length} row(s) from ${input.kind} "${input.label}" as draft ${batchId} (${counts.create} create, ${counts.update} update, ${counts.skip} skip)`,
     entityType: 'sync.import_batch',
     entityId: batchId,
   });
   return { batch_id: batchId, connection_id: connectionId, staged: counts };
+}
+
+/** The vault owner's party id — the publish actor for auto-publish trust. */
+function ownerPartyIdOf(ctx: HandlerCtx): string {
+  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
+    | { owner_party_id: string | null }
+    | undefined;
+  if (!owner?.owner_party_id) throw new Error('vault has no owner');
+  return owner.owner_party_id;
 }
 
 const PUBLISH_BATCH: CommandDefinition = {

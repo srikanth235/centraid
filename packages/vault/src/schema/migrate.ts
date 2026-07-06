@@ -6,6 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { BLOB_DDL } from './blob.js';
+import { ENRICH_DDL } from './enrich.js';
 import { CONSENT_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
@@ -86,6 +87,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // registry, and the derivative-aware rebuild of the content item's FTS
   // sync triggers.
   BLOB_DDL,
+  // v10: the enrichment spine (issue #299) — the perceptual-hash column,
+  // the additive embedding index, the on-demand request queue, and the
+  // machine-tag concept schemes.
+  ENRICH_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

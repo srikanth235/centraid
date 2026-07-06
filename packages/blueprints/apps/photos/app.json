@@ -25,7 +25,11 @@
       { "schema": "media", "table": "rename_album", "verbs": "act" },
       { "schema": "media", "table": "delete_album", "verbs": "act" },
       { "schema": "media", "table": "add_to_album", "verbs": "act" },
-      { "schema": "media", "table": "remove_from_album", "verbs": "act" }
+      { "schema": "media", "table": "remove_from_album", "verbs": "act" },
+      { "schema": "media", "table": "face_region", "verbs": "read" },
+      { "schema": "core", "table": "party", "verbs": "read" },
+      { "schema": "media", "table": "confirm_face", "verbs": "act" },
+      { "schema": "media", "table": "reject_face", "verbs": "act" }
     ]
   },
   "actions": [
@@ -43,7 +47,14 @@
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
           "height": { "type": "integer", "minimum": 1 },
-          "duration_s": { "type": "number", "minimum": 0 }
+          "duration_s": { "type": "number", "minimum": 0 },
+          "phash": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]+$",
+            "description": "Client-computed perceptual hash (issue #299 Tier 0)."
+          }
         },
         "additionalProperties": false
       },
@@ -238,6 +249,51 @@
         }
       },
       "writes": []
+    },
+    {
+      "name": "confirm-face",
+      "description": "Confirm one enricher face proposal as a person through media.confirm_face (issue #299) — the owner half of the propose-and-confirm loop.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "region_id": { "type": "string", "minLength": 1 },
+          "party_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["region_id", "party_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "reject-face",
+      "description": "Reject one enricher face proposal through media.reject_face (issue #299); the derived region row deletes and can always re-derive.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "region_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["region_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
     }
   ],
   "queries": [
@@ -264,6 +320,26 @@
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
           "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "faces",
+      "description": "Face proposals for one asset (issue #299): the enricher's media.face_region rows (confidence, confirmed state) plus a bounded people list for the confirm picker.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "regions": { "type": "array" },
+          "people": { "type": "array" },
+          "denied": { "type": "boolean" }
         }
       }
     }

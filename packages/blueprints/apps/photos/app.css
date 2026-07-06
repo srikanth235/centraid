@@ -808,6 +808,31 @@ input:focus {
   justify-content: flex-end;
   gap: 0.35rem;
 }
+.lightbox-faces-title {
+  margin: 0;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lightbox-face {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  font-size: 0.85rem;
+}
+.lightbox-face select {
+  flex: 1 1 8rem;
+  min-width: 0;
+  font: inherit;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: inherit;
+}
 .lightbox-fav {
   margin-right: auto;
 }

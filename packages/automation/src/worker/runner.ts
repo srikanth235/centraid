@@ -81,7 +81,13 @@ export interface FetchSpec {
 
 type WorkerMessage =
   | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
-  | { type: 'agent'; id: number; prompt: string; json?: unknown }
+  | {
+      type: 'agent';
+      id: number;
+      prompt: string;
+      json?: unknown;
+      content?: { contentId: string; variant: string; maxBytes?: number }[];
+    }
   | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
   | {
       type: 'runs';
@@ -101,7 +107,8 @@ type WorkerMessage =
         | 'parked'
         | 'changes'
         | 'resolve'
-        | 'reveal';
+        | 'reveal'
+        | 'content';
       payload: Record<string, unknown>;
     }
   | { type: 'fetch'; id: number; spec: FetchSpec }
@@ -285,7 +292,8 @@ function vaultCall(
     | 'parked'
     | 'changes'
     | 'resolve'
-    | 'reveal',
+    | 'reveal'
+    | 'content',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
   return rpcCall({ type: 'vault', op, payload });
@@ -322,6 +330,14 @@ const vault = {
   reveal(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('reveal', request);
   },
+  /**
+   * One content item's derivative, size-bounded (issue #299): `variant` is
+   * `thumb`, `preview` or `text` — originals never egress. Every fetch is a
+   * receipted read on the host side.
+   */
+  content(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('content', request);
+  },
 };
 
 const ctx = {
@@ -346,11 +362,23 @@ const ctx = {
       text: string;
     }>;
   },
-  agent(args: { prompt: string; json?: unknown }): Promise<unknown> {
+  /**
+   * One bounded model turn. `content` names vault derivatives (thumb /
+   * preview / text of a content item) to hand the model alongside the
+   * prompt — the HOST resolves them under this automation's grant, receipts
+   * each fetch, and stages the bytes for the provider; the worker never
+   * holds them (issue #299 §2).
+   */
+  agent(args: {
+    prompt: string;
+    json?: unknown;
+    content?: { contentId: string; variant: string; maxBytes?: number }[];
+  }): Promise<unknown> {
     return rpcCall({
       type: 'agent',
       prompt: args.prompt,
       ...(args.json !== undefined ? { json: args.json } : {}),
+      ...(args.content !== undefined ? { content: args.content } : {}),
     });
   },
   state,

@@ -14,8 +14,10 @@
  */
 import type { ToolContext } from '../../runtime.js';
 import {
+  VAULT_CONTENT_TOOL,
   VAULT_INVOKE_TOOL,
   VAULT_SQL_TOOL,
+  runVaultContentTool,
   runVaultInvokeTool,
   runVaultSqlTool,
 } from '../../vault-sql-tool.js';
@@ -63,8 +65,21 @@ export async function buildCentraidMcpServer(
       return out.ok ? okText(out.result) : errText(out.errorText);
     },
   );
+  const vaultContent = mod.tool(
+    VAULT_CONTENT_TOOL.name,
+    VAULT_CONTENT_TOOL.description,
+    { content_id: z.string().describe('core_content_item.content_id to read.') },
+    async ({ content_id }) => {
+      const out = await runVaultContentTool(ctx, { content_id });
+      return out.ok ? okText(out.result) : errText(out.errorText);
+    },
+  );
   return mod.createSdkMcpServer({
     name: 'centraid',
-    tools: ctx.vaultInvoke ? [vaultSql, vaultInvoke] : [vaultSql],
+    tools: [
+      vaultSql,
+      ...(ctx.vaultInvoke ? [vaultInvoke] : []),
+      ...(ctx.vaultContent ? [vaultContent] : []),
+    ],
   });
 }

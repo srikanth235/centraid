@@ -1,0 +1,33 @@
+{
+  "name": "Document text",
+  "version": "0.1.0",
+  "description": "Makes scanned and binary documents searchable: OCR when the spool couldn't extract text, plus a machine summary annotation per document.",
+  "enabled": false,
+  "prompt": "When new documents arrive, make them searchable. If a document has no extracted text (a scan, a photographed page), read its preview and transcribe the text you can see. When a document has text, write a one-paragraph summary. Store both as machine-attributed derived data; never touch what I wrote myself.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["core.content_item"],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads new documents' text/preview derivatives, transcribes scans and summarizes documents, and writes the results back as the text derivative (searchable) and a summary annotation (issue #299).",
+    "scopes": [
+      { "schema": "core", "verbs": "read+act" },
+      { "schema": "knowledge", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

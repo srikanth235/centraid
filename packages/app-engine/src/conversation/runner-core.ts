@@ -41,6 +41,7 @@ import type {
   ToolContext,
   TurnInput,
   VaultInvokeRunner,
+  VaultContentRunner,
   VaultSqlRunner,
 } from './turn.js';
 
@@ -103,6 +104,8 @@ export interface ConversationRunnerCoreOptions {
   vaultSql?: () => VaultSqlRunner;
   /** The write half of the vault register — resolved per turn like `vaultSql`. */
   vaultInvoke?: () => VaultInvokeRunner;
+  /** Document-text access (issue #299) — resolved per turn like `vaultSql`. */
+  vaultContent?: () => VaultContentRunner;
   /**
    * The model turn driver. agent-runtime injects its codex/claude
    * `runTurn`; tests inject a stub. Required — this spine is
@@ -159,6 +162,7 @@ export function makeConversationRunnerCore(
         ...(opts.cwdIsDraftWorktree ? { overrideCodeDir: cwd } : {}),
         ...(opts.vaultSql ? { vaultSql: opts.vaultSql() } : {}),
         ...(opts.vaultInvoke ? { vaultInvoke: opts.vaultInvoke() } : {}),
+        ...(opts.vaultContent ? { vaultContent: opts.vaultContent() } : {}),
       };
 
       const turnInput: TurnInput = {

@@ -45,6 +45,7 @@ import {
   registerAttachmentCommands,
   registerBusinessCommands,
   registerDocumentCommands,
+  registerEnrichCommands,
   registerFinanceCommands,
   registerHealthCommands,
   registerHomeCommands,
@@ -144,6 +145,30 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
   }
 }
 
+/** The `content` op's request shape (issue #299): one derivative fetch. */
+interface AgentContentRequest {
+  contentId: string;
+  variant: string;
+  maxBytes?: number;
+  purpose?: string;
+}
+
+/** The async twin — the `content` op awaits custody I/O (issue #299). */
+async function asVaultCallResultAsync(fn: () => Promise<unknown>): Promise<VaultCallResult> {
+  try {
+    return { ok: true, result: await fn() };
+  } catch (err) {
+    if (err instanceof GatewayError) {
+      return { ok: false, code: `VAULT_${err.stage.toUpperCase()}`, error: err.message };
+    }
+    return {
+      ok: false,
+      code: 'VAULT_ERROR',
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
@@ -211,6 +236,7 @@ export class VaultPlane {
     registerLockerCommands(this.gateway);
     registerTallyCommands(this.gateway);
     registerSyncCommands(this.gateway);
+    registerEnrichCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
@@ -519,6 +545,21 @@ export class VaultPlane {
     });
   }
 
+  /**
+   * The assistant's document-text access (issue #299): the `text` variant
+   * (extracted document text / inline body) of one content item, receipted.
+   * Owner-credentialed like `sqlAsOwner` — the assistant IS the owner
+   * reading their own document. Text-first by design; binary variants stay
+   * on the enricher plane.
+   */
+  contentAsOwner(call: { contentId: string }): Promise<unknown> {
+    return this.gateway.contentForAgent(this.ownerCredential, {
+      contentId: call.contentId,
+      variant: 'text',
+      purpose: 'owner-assistant',
+    });
+  }
+
   /** The assistant's schema + ontology map, built live from this vault. */
   assistantContext(): string {
     return buildAssistantContext(this.db);
@@ -636,6 +677,12 @@ export class VaultPlane {
         };
       }
       const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+      if (call.op === 'content') {
+        // Derivative fetch (issue #299) — async custody I/O, receipted read.
+        return asVaultCallResultAsync(() =>
+          this.gateway.contentForAgent(cred, call.payload as unknown as AgentContentRequest),
+        );
+      }
       return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':
@@ -703,6 +750,14 @@ export class VaultPlane {
         deviceId: this.boot.deviceId,
         deviceKey: this.boot.deviceKey,
       };
+      if (call.op === 'content') {
+        // The enricher's byte primitive (issue #299 §2): thumb/preview/text
+        // only — the gateway refuses originals structurally, and every
+        // fetch is receipted as the multimodal-egress consent event.
+        return asVaultCallResultAsync(() =>
+          this.gateway.contentForAgent(cred, call.payload as unknown as AgentContentRequest),
+        );
+      }
       return asVaultCallResult(() => {
         switch (call.op) {
           case 'read':

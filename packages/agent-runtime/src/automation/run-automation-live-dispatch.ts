@@ -140,11 +140,31 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
   });
   const toolDispatcher: automation.ToolDispatcher = session.toolDispatcher;
 
+  // Vault-derivative attachments (issue #299): the runner already resolved
+  // and receipted them; here they become scratch files the CLI's native
+  // multimodal Read path picks up — one mechanism for both runners, no
+  // per-backend wire format.
+  const stageAttachments = async (call: automation.AgentCall): Promise<string> => {
+    if (!call.attachments?.length) return call.prompt;
+    const lines: string[] = [];
+    for (const att of call.attachments) {
+      const file = path.join(scratchDir, `attach-${randomUUID().slice(0, 8)}-${att.name}`);
+      if (att.base64 !== undefined) {
+        await fs.writeFile(file, Buffer.from(att.base64, 'base64'));
+      } else {
+        await fs.writeFile(file, att.text ?? '', 'utf8');
+      }
+      lines.push(`- ${file} (${att.mediaType})`);
+    }
+    return `${call.prompt}\n\nAttached files — read each from disk before answering (images are visual input):\n${lines.join('\n')}`;
+  };
+
   // ctx.agent routes to the user's REAL provider via the local CLI —
   // no mock involvement. The final answer is read from a file the CLI
   // writes (codex `--output-last-message`) rather than parsed out of
   // the event stream, and `--output-schema` enforces the JSON shape.
   const agentDispatcher: automation.AgentDispatcher = async (call, ctx): Promise<unknown> => {
+    const effectivePrompt = await stageAttachments(call);
     const env = { ...process.env };
     // `stdin: 'ignore'` is load-bearing: `codex exec` treats an open
     // stdin pipe as an appended `<stdin>` instruction block and blocks
@@ -168,7 +188,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       let errorMessage: string | undefined;
       await runClaudeTurn({
         cwd: opts.workdir,
-        message: call.prompt,
+        message: effectivePrompt,
         extraSystemPrompt: '',
         permissionMode: 'bypassPermissions',
         abortSignal: ctx.abortSignal,
@@ -206,7 +226,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       await fs.writeFile(schemaFile, JSON.stringify(normalizeOutputSchema(call.json)), 'utf8');
       args.push('--output-schema', schemaFile);
     }
-    args.push(call.prompt);
+    args.push(effectivePrompt);
 
     const result = await collectProcess(spawn('codex', args, spawnOpts));
     if (!result.ok) {

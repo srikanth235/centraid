@@ -90,9 +90,23 @@ export type ToolDispatcher = (
   ctx: DispatchContext,
 ) => Promise<ToolResult[]>;
 
+/**
+ * One resolved vault derivative riding beside a `ctx.agent` prompt (issue
+ * #299): already consent-checked and receipted by the vault bridge. `base64`
+ * for binary variants (thumb/preview), `text` for the text variant.
+ */
+export interface AgentAttachment {
+  readonly name: string;
+  readonly mediaType: string;
+  readonly base64?: string;
+  readonly text?: string;
+}
+
 export interface AgentCall {
   readonly prompt: string;
   readonly json?: unknown;
+  /** Vault derivatives to hand the model with the prompt (issue #299). */
+  readonly attachments?: readonly AgentAttachment[];
   /**
    * Token-stream sink (issue #158, Phase 2). When a runner routes
    * `ctx.agent` through its streaming chat adapter, each `TurnStreamEvent`
@@ -190,7 +204,13 @@ interface FetchSpecWire {
 
 type WorkerToParentMessage =
   | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
-  | { type: 'agent'; id: number; prompt: string; json?: unknown }
+  | {
+      type: 'agent';
+      id: number;
+      prompt: string;
+      json?: unknown;
+      content?: { contentId: string; variant: string; maxBytes?: number }[];
+    }
   | { type: 'fetch'; id: number; spec: FetchSpecWire }
   | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
   | {
@@ -475,6 +495,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           opts.agentDispatcher,
           msg.prompt,
           msg.json,
+          msg.content,
+          opts.vault,
         ).then((reply) => {
           send({ type: 'agent-reply', id: msg.id, ...reply });
         });

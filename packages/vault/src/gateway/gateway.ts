@@ -11,10 +11,12 @@ import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
 import {
-  stageBlobBytes,
-  type StageBlobOptions,
-  type StagedBlob,
-} from '../blob/staging.js';
+  AGENT_CONTENT_VARIANTS,
+  resolveAgentContent,
+  type AgentContentOutcome,
+  type AgentContentVariant,
+} from '../enrich/content.js';
+import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
 import type { ReconcileResult } from '../blob/custody.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
@@ -416,7 +418,29 @@ export class Gateway {
    */
   search(cred: Credential, request: SearchRequest): SearchResult {
     const identity = this.identify(cred);
-    return searchEntity(this.db, identity, request);
+    const result = searchEntity(this.db, identity, request);
+    // Search-miss prioritization (issue #299 phase 5): an OWNER search that
+    // found nothing records what was wanted; enrichers drain the queue
+    // before their backlog. Owner-plane only (an app's misses are its own
+    // business), deduped against open requests so repeat searches don't
+    // spam the queue.
+    if (result.rows.length === 0 && identity.kind === 'owner-device') {
+      const open = this.db.vault
+        .prepare(
+          `SELECT 1 AS x FROM enrich_request
+            WHERE entity_type = ? AND reason = 'search-miss' AND detail = ? AND drained_at IS NULL`,
+        )
+        .get(request.entity, request.query);
+      if (!open) {
+        this.db.vault
+          .prepare(
+            `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, detail, requested_at, drained_at)
+             VALUES (?, ?, NULL, 'search-miss', ?, ?, NULL)`,
+          )
+          .run(uuidv7(), request.entity, request.query, nowIso());
+      }
+    }
+    return result;
   }
 
   /**
@@ -1010,6 +1034,71 @@ export class Gateway {
       detail: {
         surface: 'blob',
         variant: options.variant ?? 'original',
+        ...(outcome.status === 'ok' ? {} : { failing: outcome.status }),
+      },
+    });
+    return { ...outcome, receiptId };
+  }
+
+  /**
+   * Agent content access (issue #299 §2, the #296 §7 seam): the size-bounded
+   * byte primitive enrichers and the assistant read through. Structural
+   * rule: DERIVATIVES EGRESS, NEVER ORIGINALS — the surface only spells
+   * `thumb`, `preview` and `text`. Consent is the same read evaluation the
+   * blob routes run, and every fetch (allow or deny) is receipted — the
+   * "multimodal hand-off is its own consent event" decision, made code.
+   */
+  async contentForAgent(
+    cred: Credential,
+    request: { contentId: string; variant: string; maxBytes?: number; purpose?: string },
+  ): Promise<AgentContentOutcome & { receiptId: string }> {
+    const identity = this.identify(cred);
+    const purpose = request.purpose ?? 'dpv:ServiceProvision';
+    if (!(AGENT_CONTENT_VARIANTS as readonly string[]).includes(request.variant)) {
+      throw new GatewayError(
+        'consent',
+        `variant "${request.variant}" is not agent-readable — derivatives egress, never originals (issue #299): ${AGENT_CONTENT_VARIANTS.join(', ')}`,
+      );
+    }
+    const consent = evaluateConsent(
+      this.db.vault,
+      identity,
+      'core',
+      'content_item',
+      'read',
+      purpose,
+    );
+    if (consent.decision === 'deny') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: consent.grantId,
+        invocationId: null,
+        action: 'read',
+        objectType: 'core.content_item',
+        objectId: request.contentId,
+        purpose,
+        decision: 'deny',
+        detail: { failing: consent.failing, surface: 'agent-content', variant: request.variant },
+      });
+      throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
+    }
+    const outcome = await resolveAgentContent(
+      this.db,
+      request.contentId,
+      request.variant as AgentContentVariant,
+      request.maxBytes,
+    );
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: consent.grantId,
+      invocationId: null,
+      action: 'read',
+      objectType: 'core.content_item',
+      objectId: request.contentId,
+      purpose,
+      decision: outcome.status === 'ok' ? 'allow' : 'deny',
+      detail: {
+        surface: 'agent-content',
+        variant: request.variant,
+        by: identity.callerId,
         ...(outcome.status === 'ok' ? {} : { failing: outcome.status }),
       },
     });

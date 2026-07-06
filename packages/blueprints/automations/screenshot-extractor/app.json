@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "screenshot-extractor",
+  "name": "Screenshot intelligence",
+  "kind": "automation",
+  "description": "Turns photographed receipts and bookings into staged ledger and calendar entries you review.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

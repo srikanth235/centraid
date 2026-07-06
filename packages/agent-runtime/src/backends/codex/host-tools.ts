@@ -13,8 +13,10 @@
 import type { TurnStreamEvent } from '@centraid/app-engine';
 import type { ToolContext } from '../../runtime.js';
 import {
+  VAULT_CONTENT_TOOL,
   VAULT_INVOKE_TOOL,
   VAULT_SQL_TOOL,
+  runVaultContentTool,
   runVaultInvokeTool,
   runVaultSqlTool,
 } from '../../vault-sql-tool.js';
@@ -43,6 +45,15 @@ export function centraidDynamicToolSpecs(ctx?: ToolContext): Array<{
             name: VAULT_INVOKE_TOOL.name,
             description: VAULT_INVOKE_TOOL.description,
             inputSchema: VAULT_INVOKE_TOOL.inputSchema as unknown,
+          },
+        ]
+      : []),
+    ...(ctx.vaultContent
+      ? [
+          {
+            name: VAULT_CONTENT_TOOL.name,
+            description: VAULT_CONTENT_TOOL.description,
+            inputSchema: VAULT_CONTENT_TOOL.inputSchema as unknown,
           },
         ]
       : []),
@@ -92,7 +103,9 @@ export async function handleCentraidToolCall(
       ? await runVaultSqlTool(ctx, (args as { sql?: unknown }).sql)
       : toolName === VAULT_INVOKE_TOOL.name
         ? await runVaultInvokeTool(ctx, args)
-        : { ok: false as const, errorText: `unknown tool "${toolName}"` };
+        : toolName === VAULT_CONTENT_TOOL.name
+          ? await runVaultContentTool(ctx, args)
+          : { ok: false as const, errorText: `unknown tool "${toolName}"` };
 
   if (out.ok) {
     events.push({

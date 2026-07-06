@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "doc-entity-linker",
+  "name": "Document links",
+  "kind": "automation",
+  "description": "Links documents to the people they mention, anchored to the exact passage — your CRM timeline grows documents.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

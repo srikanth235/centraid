@@ -1118,6 +1118,14 @@ function renderLightbox() {
     panel.appendChild(strip);
   }
 
+  // People (issue #299): the enricher's face proposals with the owner's
+  // confirm/reject loop. Loaded async so an empty vault costs nothing; the
+  // section only appears when regions exist.
+  const facesHost = document.createElement('div');
+  facesHost.className = 'lightbox-faces';
+  panel.appendChild(facesHost);
+  renderFaces(facesHost, asset.asset_id, note);
+
   const actions = document.createElement('div');
   actions.className = 'lightbox-actions';
   const fav = ghostBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
@@ -1310,6 +1318,72 @@ $('searchClear').addEventListener('click', () => {
   $('searchInput').focus();
 });
 
+// ---------- Faces (issue #299) ----------
+
+// The propose-and-confirm loop over media.face_region: unconfirmed
+// proposals show a person picker + Confirm/Reject; confirmed ones read as
+// facts. Everything here is derived data — rejecting is disposal, and a
+// re-run of the enricher can always propose again.
+async function renderFaces(host, assetId, note) {
+  let data;
+  try {
+    data = await window.centraid.read({ query: 'faces', input: { asset_id: assetId } });
+  } catch {
+    return; // face queries never break the lightbox
+  }
+  const regions = data?.regions ?? [];
+  if (regions.length === 0 || data?.denied) return;
+  host.replaceChildren();
+  const heading = document.createElement('p');
+  heading.className = 'lightbox-faces-title';
+  heading.textContent = 'People';
+  host.appendChild(heading);
+  for (const region of regions) {
+    const row = document.createElement('div');
+    row.className = 'lightbox-face';
+    if (region.confirmed) {
+      const who = document.createElement('span');
+      who.textContent = `✓ ${region.person_name ?? 'Confirmed'}`;
+      row.appendChild(who);
+      host.appendChild(row);
+      continue;
+    }
+    const label = document.createElement('span');
+    const pct = region.confidence != null ? ` · ${Math.round(region.confidence * 100)}%` : '';
+    label.textContent = `Face${region.person_name ? ` — ${region.person_name}?` : ''}${pct}`;
+    row.appendChild(label);
+    const picker = document.createElement('select');
+    picker.setAttribute('aria-label', 'Who is this?');
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Who is this?';
+    picker.appendChild(blank);
+    for (const person of data.people ?? []) {
+      const option = document.createElement('option');
+      option.value = person.party_id;
+      option.textContent = person.name;
+      if (region.party_id === person.party_id) option.selected = true;
+      picker.appendChild(option);
+    }
+    const confirm = ghostBtn('Confirm', async () => {
+      const partyId = picker.value;
+      if (!partyId) {
+        note.textContent = 'Pick a person first.';
+        return;
+      }
+      const outcome = await act('confirm-face', { region_id: region.region_id, party_id: partyId });
+      if (narrate(outcome, note)) await renderFaces(host, assetId, note);
+    });
+    const reject = ghostBtn('✕', async () => {
+      const outcome = await act('reject-face', { region_id: region.region_id });
+      if (narrate(outcome, note)) await renderFaces(host, assetId, note);
+    });
+    reject.setAttribute('aria-label', 'Reject this face proposal');
+    row.append(picker, confirm, reject);
+    host.appendChild(row);
+  }
+}
+
 // ---------- Upload ----------
 
 // Stage one file's bytes into the vault's CAS (issue #296): the file
@@ -1328,9 +1402,39 @@ async function stageFileBytes(file, extra = '') {
   return res.json();
 }
 
+// 64-bit dHash (issue #299 Tier 0): 9×8 grayscale, each bit = "left pixel
+// brighter than its right neighbour". The canvas is the client's raster
+// codec, so the phash rides the same decode the thumb already paid for.
+function dHashFromImage(img) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 9;
+    canvas.height = 8;
+    const g = canvas.getContext('2d');
+    g.drawImage(img, 0, 0, 9, 8);
+    const data = g.getImageData(0, 0, 9, 8).data;
+    const lum = [];
+    for (let i = 0; i < 72; i += 1) {
+      const o = i * 4;
+      lum.push(0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2]);
+    }
+    let hex = '';
+    for (let row = 0; row < 8; row += 1) {
+      let byte = 0;
+      for (let col = 0; col < 8; col += 1) {
+        byte = (byte << 1) | (lum[row * 9 + col] > lum[row * 9 + col + 1] ? 1 : 0);
+      }
+      hex += byte.toString(16).padStart(2, '0');
+    }
+    return hex;
+  } catch {
+    return null; // no phash is fewer duplicate hints, never a failed upload
+  }
+}
+
 // The grid's thumbnail, produced at upload time on this device (the canvas
 // is the one raster codec every client has) and staged as the `thumb`
-// variant beside the original. Dimensions ride along for free.
+// variant beside the original. Dimensions + perceptual hash ride for free.
 async function stageClientThumb(file, parentSha) {
   try {
     const url = URL.createObjectURL(file);
@@ -1339,6 +1443,7 @@ async function stageClientThumb(file, parentSha) {
     await img.decode();
     const dims =
       img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
+    const phash = dHashFromImage(img);
     const long = Math.max(img.naturalWidth, img.naturalHeight);
     if (long > THUMB_EDGE) {
       const scale = THUMB_EDGE / long;
@@ -1348,14 +1453,15 @@ async function stageClientThumb(file, parentSha) {
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
       if (blob) {
-        await fetch(
-          `${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`,
-          { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: blob },
-        );
+        await fetch(`${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`, {
+          method: 'POST',
+          headers: { 'content-type': 'image/jpeg' },
+          body: blob,
+        });
       }
     }
     URL.revokeObjectURL(url);
-    return dims;
+    return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
   } catch {
     return null; // no thumb is a slower grid, never a failed upload
   }
@@ -1409,7 +1515,8 @@ async function uploadFiles(files) {
       kind,
       captured_at: new Date(file.lastModified || Date.now()).toISOString(),
       ...(file.name ? { title: file.name } : {}),
-      ...(dims ? { width: dims.width, height: dims.height } : {}),
+      ...(dims?.width ? { width: dims.width, height: dims.height } : {}),
+      ...(dims?.phash ? { phash: dims.phash } : {}),
     });
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === 'executed') {

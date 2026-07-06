@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "renewal-reminders",
+  "name": "Renewal reminders",
+  "kind": "automation",
+  "description": "Watches published deadlines and briefs you when one is inside two weeks.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

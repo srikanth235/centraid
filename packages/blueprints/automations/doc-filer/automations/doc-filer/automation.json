@@ -1,0 +1,32 @@
+{
+  "name": "Document filing",
+  "version": "0.1.0",
+  "description": "Reads each new document's extracted text, proposes a human-readable title, a folder, and a doctype tag — staged for your approval, never auto-refiled.",
+  "enabled": false,
+  "prompt": "When new documents have extracted text, propose how to file them: a clear human title (replace scanner names like scan_001), the right folder given my existing folders, and a document-type tag. Stage every proposal for my review — never move or rename anything on your own.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["core.content_derivative"],
+      "every": "*/10 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads new documents' extracted text and the existing folder concepts, proposes filing (title + folder + doctype tag), and stages the proposals for review (issue #299 phase 2 — filing never applies itself).",
+    "scopes": [
+      { "schema": "core", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}
