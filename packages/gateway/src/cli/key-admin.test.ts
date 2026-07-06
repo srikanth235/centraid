@@ -56,17 +56,25 @@ afterEach(() => {
 });
 
 async function createVault(): Promise<{ vaultId: string; dir: string; keyFile: string }> {
-  const out = await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Test'], fail));
+  const out = await capture(() =>
+    commandVault(['create', '--data-dir', dataDir, '--name', 'Test'], fail),
+  );
   const { vaultId } = JSON.parse(out) as { vaultId: string };
   const dir = path.join(daemonLayoutFor(dataDir).vaultDir, vaultId);
   return { vaultId, dir, keyFile: sealKeyFileFor(dir) };
 }
 
-function lastReceipt(dir: string): { action: string; decision: string; detail: Record<string, unknown> } {
+function lastReceipt(dir: string): {
+  action: string;
+  decision: string;
+  detail: Record<string, unknown>;
+} {
   const journal = new DatabaseSync(path.join(dir, 'journal.db'), { readOnly: true });
   try {
     const row = journal
-      .prepare('SELECT action, decision, detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1')
+      .prepare(
+        'SELECT action, decision, detail_json FROM consent_receipt ORDER BY receipt_id DESC LIMIT 1',
+      )
       .get() as { action: string; decision: string; detail_json: string };
     return { action: row.action, decision: row.decision, detail: JSON.parse(row.detail_json) };
   } finally {
@@ -76,7 +84,9 @@ function lastReceipt(dir: string): { action: string; decision: string; detail: R
 
 test('key status reports the key file, fingerprints and health', async () => {
   const v = await createVault();
-  const out = await capture(() => commandKey(['status', '--data-dir', dataDir, '--vault', v.vaultId], fail));
+  const out = await capture(() =>
+    commandKey(['status', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+  );
   const status = JSON.parse(out) as Record<string, unknown>;
   expect(status['keyPresent']).toBe(true);
   expect(status['stampedFingerprint']).toBeNull(); // nothing sealed yet
@@ -105,7 +115,9 @@ test('key export writes a fingerprinted envelope and receipts the gesture', asyn
 test('key restore puts an exported key back and receipts it', async () => {
   const v = await createVault();
   const outFile = path.join(dataDir, 'vault-key.json');
-  await capture(() => commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId, '--out', outFile], fail));
+  await capture(() =>
+    commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId, '--out', outFile], fail),
+  );
   const original = readFileSync(v.keyFile);
   rmSync(v.keyFile); // the disaster: directory intact, key gone
   await capture(() =>
@@ -118,20 +130,26 @@ test('key restore puts an exported key back and receipts it', async () => {
 test('key restore refuses to overwrite a DIFFERENT key already in place', async () => {
   const v = await createVault();
   const outFile = path.join(dataDir, 'vault-key.json');
-  await capture(() => commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId, '--out', outFile], fail));
+  await capture(() =>
+    commandKey(['export', '--data-dir', dataDir, '--vault', v.vaultId, '--out', outFile], fail),
+  );
   rmSync(v.keyFile);
   // A fresh open would mint a new key here; simulate that foreign key.
   await fs.mkdir(path.dirname(v.keyFile), { recursive: true });
   await fs.writeFile(v.keyFile, crypto.randomBytes(32), { mode: 0o600 });
   await expect(
-    capture(() => commandKey(['restore', '--data-dir', dataDir, '--vault', v.vaultId, '--from', outFile], fail)),
+    capture(() =>
+      commandKey(['restore', '--data-dir', dataDir, '--vault', v.vaultId, '--from', outFile], fail),
+    ),
   ).rejects.toThrow(/refusing to overwrite/);
 });
 
 test('key rotate swaps the key file and reports fingerprints', async () => {
   const v = await createVault();
   const before = readFileSync(v.keyFile);
-  const out = await capture(() => commandKey(['rotate', '--data-dir', dataDir, '--vault', v.vaultId], fail));
+  const out = await capture(() =>
+    commandKey(['rotate', '--data-dir', dataDir, '--vault', v.vaultId], fail),
+  );
   const result = JSON.parse(out) as { oldFingerprint: string; newFingerprint: string };
   expect(result.newFingerprint).not.toBe(result.oldFingerprint);
   expect(readFileSync(v.keyFile).equals(before)).toBe(false);
@@ -140,7 +158,9 @@ test('key rotate swaps the key file and reports fingerprints', async () => {
 
 test('key resolves the vault by display name too, and fails on unknowns', async () => {
   const v = await createVault();
-  const out = await capture(() => commandKey(['status', '--data-dir', dataDir, '--vault', 'Test'], fail));
+  const out = await capture(() =>
+    commandKey(['status', '--data-dir', dataDir, '--vault', 'Test'], fail),
+  );
   expect((JSON.parse(out) as { vaultId: string }).vaultId).toBe(v.vaultId);
   await expect(
     capture(() => commandKey(['status', '--data-dir', dataDir, '--vault', 'nope'], fail)),

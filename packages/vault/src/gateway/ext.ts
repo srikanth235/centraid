@@ -31,12 +31,7 @@ import {
   type ExtTableSpec,
 } from '../schema/ext.js';
 import { resolveEntity } from '../schema/tables.js';
-import {
-  isSealedValue,
-  sealAad,
-  sealValue,
-  stampSealKeyFingerprint,
-} from '../schema/sealed.js';
+import { isSealedValue, sealAad, sealValue, stampSealKeyFingerprint } from '../schema/sealed.js';
 import { clearColumnCache } from './filters.js';
 import type { SearchableEntity } from '../schema/fts.js';
 import type { CommandDefinition, HandlerCtx } from './types.js';

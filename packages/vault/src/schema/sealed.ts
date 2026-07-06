@@ -222,7 +222,8 @@ export function readSealKeyFingerprint(vault: DatabaseSync): string | null {
       | undefined;
     if (!row?.settings_json) return null;
     const bag = (JSON.parse(row.settings_json) as Record<string, unknown>)[SETTINGS_KEY];
-    const fp = bag && typeof bag === 'object' ? (bag as { fingerprint?: unknown }).fingerprint : null;
+    const fp =
+      bag && typeof bag === 'object' ? (bag as { fingerprint?: unknown }).fingerprint : null;
     return typeof fp === 'string' && fp.length > 0 ? fp : null;
   } catch {
     return null;
@@ -323,11 +324,7 @@ export function redactSealedInput(
  * HTTP error surface. Occurrences are replaced by the same keyed hash token
  * the journal uses, so the trail stays correlatable without being readable.
  */
-export function scrubSealedText(
-  key: Buffer,
-  text: string,
-  values: readonly string[],
-): string {
+export function scrubSealedText(key: Buffer, text: string, values: readonly string[]): string {
   let out = text;
   for (const v of values) {
     if (v.length > 0 && !isSealedValue(v) && out.includes(v)) {
@@ -405,7 +402,10 @@ export function redactCommandInput(
     if (entity && payload && typeof payload === 'object') {
       const cols = sealedColumnsOf(entity, vault);
       if (cols.length > 0) {
-        out = { ...out, [container]: redactSealedInput(key, payload as Record<string, unknown>, cols) };
+        out = {
+          ...out,
+          [container]: redactSealedInput(key, payload as Record<string, unknown>, cols),
+        };
       }
     }
   }

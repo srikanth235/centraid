@@ -365,11 +365,7 @@ export class Gateway {
       if (value == null || value === '') {
         values[col] = null;
       } else if (isSealedValue(value)) {
-        values[col] = unsealValue(
-          this.db.sealKey,
-          sealAad(ref.physical, col, entityId),
-          value,
-        );
+        values[col] = unsealValue(this.db.sealKey, sealAad(ref.physical, col, entityId), value);
         unsealedAny = true;
       } else {
         values[col] = String(value); // pre-seal legacy plaintext

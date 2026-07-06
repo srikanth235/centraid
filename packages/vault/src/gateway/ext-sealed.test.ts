@@ -8,11 +8,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, type Gateway } from './gateway.js';
-import {
-  applyExtBand,
-  extCommandDefinitions,
-  seedExtDraft,
-} from './ext.js';
+import { applyExtBand, extCommandDefinitions, seedExtDraft } from './ext.js';
 import { resealVaultKey } from './reseal.js';
 import { ExtSpecError, type ExtTableSpec } from '../schema/ext.js';
 import { isSealedValue, readSealKeyFingerprint } from '../schema/sealed.js';
@@ -63,7 +59,12 @@ function addCredential(apiKey = 'ghp_secret_TOKEN_123'): string {
 
 test('a sealed column that is also searchable is refused at declaration', () => {
   expect(() =>
-    applyExtBand(db, APP, [{ ...CRED_TABLE, searchable: ['label', 'api_key'], sealed: ['api_key'] }], 'live'),
+    applyExtBand(
+      db,
+      APP,
+      [{ ...CRED_TABLE, searchable: ['label', 'api_key'], sealed: ['api_key'] }],
+      'live',
+    ),
   ).toThrow(ExtSpecError);
 });
 
@@ -123,9 +124,9 @@ test('the journal holds a hash token for the nested ext secret, never the value'
   installApp();
   const secret = 'ghp_never_in_journal';
   addCredential(secret);
-  const rows = db.journal
-    .prepare('SELECT input_json FROM agent_command_invocation')
-    .all() as { input_json: string }[];
+  const rows = db.journal.prepare('SELECT input_json FROM agent_command_invocation').all() as {
+    input_json: string;
+  }[];
   const all = rows.map((r) => r.input_json).join('\n');
   expect(all).not.toContain(secret);
   expect(all).toContain('sealed:sha256:'); // redacted, not dropped
@@ -143,7 +144,12 @@ test('a read scope cannot reveal an ext secret — the reveal verb is separate',
   });
   const reader: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
   expect(() =>
-    gw.reveal(reader, { entity: `ext.${APP}.credential`, entityId: id, columns: ['api_key'], purpose: PURPOSE }),
+    gw.reveal(reader, {
+      entity: `ext.${APP}.credential`,
+      entityId: id,
+      columns: ['api_key'],
+      purpose: PURPOSE,
+    }),
   ).toThrow();
 });
 
@@ -192,7 +198,11 @@ test('draft-band writes seal too', () => {
   seedExtDraft(db, APP, [CRED_TABLE]);
   const out = gw.invoke(owner, {
     command: `ext.${APP}.insert`,
-    input: { table: 'credential', values: { label: 'Draft', api_key: 'draft_secret' }, band: 'draft' },
+    input: {
+      table: 'credential',
+      values: { label: 'Draft', api_key: 'draft_secret' },
+      band: 'draft',
+    },
     purpose: PURPOSE,
   });
   expect(out.status).toBe('executed');

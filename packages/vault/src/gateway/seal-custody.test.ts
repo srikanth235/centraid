@@ -340,7 +340,12 @@ test('delete+recreate heals an alias binding — the rotation gesture', () => {
   gw.invoke(owner, { command: 'locker.trash_item', input: { item_id: oldId }, purpose: PURPOSE });
   // A reveal by alias now fails: no live item holds it.
   expect(() =>
-    gw.reveal(owner, { entity: 'locker.item', alias: 'github-token', columns: ['password'], purpose: PURPOSE }),
+    gw.reveal(owner, {
+      entity: 'locker.item',
+      alias: 'github-token',
+      columns: ['password'],
+      purpose: PURPOSE,
+    }),
   ).toThrow(/no live locker item/);
   // Add the replacement with the SAME alias — the binding heals, no manifest edit.
   addLogin('new-token', 'github-token');
@@ -363,7 +368,12 @@ test('a trashed item frees its alias for a live item to claim', () => {
 
 test('reveal by alias is locker-only and denies an unknown alias', () => {
   expect(() =>
-    gw.reveal(owner, { entity: 'locker.item', alias: 'nope', columns: ['password'], purpose: PURPOSE }),
+    gw.reveal(owner, {
+      entity: 'locker.item',
+      alias: 'nope',
+      columns: ['password'],
+      purpose: PURPOSE,
+    }),
   ).toThrow(/no live locker item/);
 });
 

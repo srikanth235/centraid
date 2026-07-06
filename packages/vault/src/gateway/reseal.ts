@@ -46,9 +46,7 @@ function sealedEntities(db: VaultDb): string[] {
   const entities = [...Object.keys(SEALED_COLUMNS)];
   try {
     const rows = db.vault
-      .prepare(
-        `SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`,
-      )
+      .prepare(`SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`)
       .all() as { app_id: string; table_name: string; spec_json: string }[];
     for (const row of rows) {
       const sealed = (JSON.parse(row.spec_json) as { sealed?: unknown }).sealed;

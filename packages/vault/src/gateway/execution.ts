@@ -219,7 +219,9 @@ export function insertInvocation(
       // The journal is append-only (issue #293): declared secret inputs land
       // as keyed hash tokens, never as values — a leak here is permanent.
       // Command-aware so the ext trio's nested secrets redact too (#298 item 9).
-      JSON.stringify(redactCommandInput(db.sealKey, command.name, request.input, sealedInput, db.vault)),
+      JSON.stringify(
+        redactCommandInput(db.sealKey, command.name, request.input, sealedInput, db.vault),
+      ),
       status,
       nowIso(),
     );

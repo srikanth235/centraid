@@ -386,9 +386,7 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
       `malformed secret ref "${ref}" — expected locker:<item_id>:<column> or locker:@<alias>:<column>`,
     );
   }
-  const target = selector.startsWith('@')
-    ? { alias: selector.slice(1) }
-    : { entityId: selector };
+  const target = selector.startsWith('@') ? { alias: selector.slice(1) } : { entityId: selector };
   const reply = await vault({
     op: 'reveal',
     payload: {

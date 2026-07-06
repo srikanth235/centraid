@@ -171,13 +171,16 @@ export async function commandKey(
           keyPresent: key !== null,
           keyFingerprint: key ? sealKeyFingerprint(key) : null,
           stampedFingerprint: row.fingerprint,
-          healthy: row.fingerprint === null || (key !== null && sealKeyFingerprint(key) === row.fingerprint),
+          healthy:
+            row.fingerprint === null ||
+            (key !== null && sealKeyFingerprint(key) === row.fingerprint),
         })}\n`,
       );
       return;
     }
     case 'export': {
-      if (!parsed.out) fail('usage: key export --data-dir <path> --vault <name-or-id> --out <file>', 2);
+      if (!parsed.out)
+        fail('usage: key export --data-dir <path> --vault <name-or-id> --out <file>', 2);
       if (!key) fail(`no seal key at ${keyFile} — nothing to export`, 1);
       const envelope: KeyEnvelope = {
         version: 1,
@@ -201,14 +204,16 @@ export async function commandKey(
       return;
     }
     case 'restore': {
-      if (!parsed.from) fail('usage: key restore --data-dir <path> --vault <name-or-id> --from <file>', 2);
+      if (!parsed.from)
+        fail('usage: key restore --data-dir <path> --vault <name-or-id> --from <file>', 2);
       const envelope = JSON.parse(readFileSync(parsed.from, 'utf8')) as KeyEnvelope;
       if (envelope.kind !== 'centraid-seal-key' || typeof envelope.key !== 'string') {
         fail(`${parsed.from} is not a centraid seal-key export`, 2);
       }
       const restored = Buffer.from(envelope.key, 'base64');
       const fp = sealKeyFingerprint(restored);
-      if (fp !== envelope.fingerprint) fail('export file corrupt: key does not match its own fingerprint', 1);
+      if (fp !== envelope.fingerprint)
+        fail('export file corrupt: key does not match its own fingerprint', 1);
       if (row.fingerprint !== null && fp !== row.fingerprint) {
         fail(
           `this is not the key that sealed vault ${row.vaultId} (${fp} vs stamped ${row.fingerprint}) — restoring it would not decrypt anything`,
@@ -226,7 +231,9 @@ export async function commandKey(
         fingerprint: fp,
         from: path.basename(parsed.from),
       });
-      process.stdout.write(`${JSON.stringify({ restored: keyFile, fingerprint: fp, receiptId })}\n`);
+      process.stdout.write(
+        `${JSON.stringify({ restored: keyFile, fingerprint: fp, receiptId })}\n`,
+      );
       return;
     }
     case 'rotate': {
