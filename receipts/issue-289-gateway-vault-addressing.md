@@ -151,6 +151,16 @@ seam #280 deliberately deferred.
 - Pins: `device-plane.test.ts` — enrollment rows (multi-vault, re-enroll
   refresh, revoke-by-row/key), cross-process visibility via mtime reload,
   ticket one-time/burn/TTL semantics, pasteable-token round-trip.
+  `cli/admin.test.ts` — the admin plane exercised through its command
+  functions: `vault create|list|rename|delete` (+ bad-usage and last-vault
+  guard), `devices add|list|revoke` (+ unknown-vault), `pair` (needs the
+  daemon endpoint identity, then mints a decodable gw-pair token), and the
+  daemon device plane (`deviceKeyFor` trusts only the in-process proof
+  header; `startEndpoint` mints + publishes `endpoint.json` offline). This
+  restores the gateway coverage floor the new CLI code otherwise breached.
+- `endpoint-host.ts` gains an optional `relays` passthrough so the device
+  plane can bind its endpoint offline under test (mirrors the tunnel
+  package's `relays: 'disabled'`).
 - Files: `packages/gateway/src/serve/enrollment-store.ts` (new),
   `packages/gateway/src/serve/pairing-store.ts` (new),
   `packages/gateway/src/serve/device-plane.test.ts` (new),
@@ -159,6 +169,7 @@ seam #280 deliberately deferred.
   `packages/gateway/src/cli/vault-admin.ts` (new),
   `packages/gateway/src/cli/device-admin.ts` (new),
   `packages/gateway/src/cli/endpoint-host.ts` (new),
+  `packages/gateway/src/cli/admin.test.ts` (new),
   `packages/gateway/package.json` (adds the `@centraid/tunnel` dep),
   `bun.lock`.
 
@@ -328,15 +339,15 @@ client-side pointer flip and keys the active-vault state by gateway.
 Full battery, all green:
 
 ```sh
-bun run typecheck && bun run test && bun run lint && bun run format:check && bun run lint:types
+bun run typecheck && bun run test && bun run lint && bun run format:check && bun run lint:types && bun run coverage
 ```
 
 - `bun run typecheck` — 21/21 turbo tasks green (all packages incl.
   desktop + mobile).
-- `bun run test` — gateway: 27 test files / 149 tests green (incl. new
-  `serve-vault-addressing.test.ts`, `device-plane.test.ts`, rewritten
-  `vault-registry.test.ts`); tunnel: 2 files / 12 tests green (incl. new
-  `gateway-endpoint.test.ts` — real iroh endpoints on loopback, relays
+- `bun run test` — gateway: 28 test files / 156 tests green (incl. new
+  `serve-vault-addressing.test.ts`, `device-plane.test.ts`, `cli/admin.test.ts`,
+  rewritten `vault-registry.test.ts`); tunnel: 2 files / 12 tests green (incl.
+  new `gateway-endpoint.test.ts` — real iroh endpoints on loopback, relays
   disabled); desktop: 7 files / 91 tests green (incl. new `transport.test.ts`,
   `version-handshake.test.ts` + `settings-merge.test.ts` vault-map cases);
   app-engine 224, vault 248, automation 132, agent-runtime 68, blueprints
@@ -345,6 +356,10 @@ bun run typecheck && bun run test && bun run lint && bun run format:check && bun
   parallel load; both pass standalone and in a gateway-suite rerun.)
 - `bun run lint` (oxlint 0 errors) + `bun run format:check` (oxfmt clean)
   + `bun run lint:types` (all packages ok).
+- `bun run coverage` — exit 0: the seeded engine floors hold, including the
+  `packages/gateway/src/**` line floor (75%) that the new admin-CLI code
+  first breached (dropped the package to 70.07%) and `cli/admin.test.ts`
+  restores. This was the CI `check`-job failure on PR #291.
 
 ## Audit
 
@@ -385,6 +400,8 @@ The session ran autonomously from a single `/goal` directive (enqueued 2026-07-0
 | claude-code-a8d0b6fa-89f-1783280160-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7726 | 7110 | 2949845 | 2209 | 17045 | 1.6132 | 204382 | 1613652 | 145718627 | 558087 | feat(desktop): vault addressing, client-side switch, keyed active-vault (#289)Th |
 | claude-code-a8d0b6fa-89f-1783280183-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 7440 | 1212 | 989998 | 424 | 9076 | 0.5504 | 211822 | 1614864 | 146708625 | 558511 | feat(desktop): vault addressing, client-side switch, keyed active-vault (#289)Is |
 | claude-code-a8d0b6fa-89f-1783280250-1 | claude-code | a8d0b6fa-89f8-4877-ba09-5eef76327dd5 | #289 | claude-opus-4-8 | 290 | 18178 | 3494995 | 5458 | 23926 | 1.9990 | 212112 | 1633042 | 150203620 | 563969 | feat(desktop): flat (gateway, vault) switcher, keyed state, identity strip (#289 |
+| claude-code-f1050fea-eda-1783305013-1 | claude-code | f1050fea-edae-40f0-abbf-1fe1dfcd139e | #289 | claude-opus-4-8 | 185280 | 1877723 | 75409496 | 419320 | 2482323 | 60.8499 | 185280 | 1877723 | 75409496 | 419320 | test(gateway): admin-plane CLI coverage to restore the gateway floor (#289)The n |
+| claude-code-f1050fea-eda-1783305066-1 | claude-code | f1050fea-edae-40f0-abbf-1fe1dfcd139e | #289 | claude-opus-4-8 | 11548 | 8643 | 1741225 | 3567 | 23758 | 1.0715 | 196828 | 1886366 | 77150721 | 422887 | test(gateway): admin-plane CLI coverage to restore the gateway floor (#289)The n |
 
 ### Steering
 

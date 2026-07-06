@@ -74,6 +74,11 @@ export function makeDaemonDevicePlane(input: {
    */
   vaults: () => VaultRegistry | undefined;
   logger: RuntimeLogger;
+  /**
+   * iroh relay mode. Defaults to the production n0 relays + discovery;
+   * `disabled` keeps the endpoint offline (tests bind on loopback only).
+   */
+  relays?: 'n0' | 'disabled';
 }): DaemonDevicePlane {
   const { layout, logger } = input;
   const enrollments = EnrollmentStore.open(layout.devicesFile);
@@ -136,6 +141,7 @@ export function makeDaemonDevicePlane(input: {
           [DEVICE_HEADER]: endpointId,
           [DEVICE_PROOF_HEADER]: deviceProof,
         }),
+        ...(input.relays ? { relays: input.relays } : {}),
       });
     } catch (err) {
       logger.warn(
