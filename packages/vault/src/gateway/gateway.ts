@@ -36,6 +36,12 @@ import {
   type VaultSqlResult,
 } from './sql.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
+import { stageFile, type StageFileOptions, type StageFileResult } from '../ingest/stage-file.js';
+import { discardBatch, publishBatch, type PublishResult } from '../ingest/staging.js';
+import { PUBLISHERS } from '../ingest/publishers.js';
+import { demoStatus, purgeDemoRows, type DemoPurgeResult } from './demo.js';
+import { pkColumn } from './execution.js';
+import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import { backupVault, checkpointVault, type BackupResult } from './custody.js';
 import {
   applyExtBand,
@@ -215,11 +221,26 @@ export class Gateway {
     const order = compileOrderBy(target, ref.physical, request.orderBy);
     const select = applyFieldMask(target, ref.physical, consent.fieldMask);
     const limit = Math.min(Math.max(request.limit ?? 1000, 1), 10_000);
+    // The automation plane never sees demo data (issue #290 phase 1):
+    // condition triggers evaluate agent-credentialed reads, so seeded rows
+    // are structurally excluded here — a fake "rent due" row must not fire a
+    // real reminder. Owners and apps DO see demo rows: rendering them is the
+    // scenario's whole point. Appended beside the grant filter, so it can
+    // narrow but never widen.
+    const demoExclusion =
+      identity.kind === 'agent' && ref.file === 'vault' && ref.schema !== 'consent'
+        ? ` AND NOT EXISTS (SELECT 1 FROM consent_seed_row _s
+             WHERE _s.entity_type = ? AND _s.entity_id = "${ref.physical}"."${pkColumn(target, ref.physical)}")`
+        : '';
     const rows = target
       .prepare(
-        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${order} LIMIT ${limit}`,
+        `SELECT ${select} FROM "${ref.physical}" WHERE ${grantFilter.where} AND ${callerFilter.where}${demoExclusion}${order} LIMIT ${limit}`,
       )
-      .all(...grantFilter.params, ...callerFilter.params) as Record<string, unknown>[];
+      .all(
+        ...grantFilter.params,
+        ...callerFilter.params,
+        ...(demoExclusion ? [request.entity] : []),
+      ) as Record<string, unknown>[];
     const receiptId = writeReceipt(this.db.journal, {
       grantId: consent.grantId,
       invocationId: null,
@@ -340,11 +361,14 @@ export class Gateway {
     if (request.cursor !== null) {
       const limit = Math.min(Math.max(request.limit ?? 200, 1), 500);
       const placeholders = request.entities.map(() => '?').join(', ');
+      // Demo writes never reach the feed (issue #290 phase 1): data triggers
+      // ride this outbox, and scenario data must not fire automations.
       const rows = this.db.journal
         .prepare(
           `SELECT prov_id, entity_type, entity_id, prov_activity, agent_kind, occurred_at
              FROM consent_provenance
             WHERE prov_id > ? AND entity_type IN (${placeholders})
+              AND prov_activity != '${SEED_DEMO_ACTIVITY}'
             ORDER BY prov_id ASC LIMIT ${limit}`,
         )
         .all(request.cursor, ...request.entities) as {
@@ -387,6 +411,22 @@ export class Gateway {
   /** Typed-command invocation: the only write path (rule R04). */
   invoke(cred: Credential, request: InvokeRequest): InvokeOutcome {
     const identity = this.identify(cred);
+    // The demo register is the owner loading a scenario — no app or agent
+    // ever mints demo data (a granted caller marking real-looking rows as
+    // purgeable would be an integrity hole, not a feature).
+    if (request.demo && identity.kind !== 'owner-device') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: null,
+        invocationId: null,
+        action: `act ${request.command}`,
+        objectType: 'agent.command',
+        objectId: null,
+        purpose: request.purpose,
+        decision: 'deny',
+        detail: { failing: 'demo register is owner-only' },
+      });
+      return { status: 'denied', receiptId, reason: 'demo register is owner-only' };
+    }
     const replayed = request.invocationId ? replayInvocation(this.db, request.invocationId) : null;
     if (replayed) return replayed;
 
@@ -743,6 +783,44 @@ export class Gateway {
       decision: 'allow',
       detail: { ...detail, by: owner.partyId },
     });
+  }
+
+  /**
+   * Purge demo data (issue #290 phase 1) — whole vault or one app's
+   * scenario. Owner-only, receipted; rows a non-demo FK still holds are
+   * reported blocked, never force-deleted.
+   */
+  purgeDemo(cred: Credential, appId?: string): DemoPurgeResult {
+    const owner = this.requireOwner(cred, 'only the owner purges demo data');
+    return purgeDemoRows(this.db, owner, appId);
+  }
+
+  /** Seeded-row counts per app — the "demo data present" surface. */
+  demoStatus(cred: Credential): { appId: string; rows: number }[] {
+    this.requireOwner(cred, 'only the owner inspects demo status');
+    return demoStatus(this.db);
+  }
+
+  /**
+   * File-drop customs (issue #290 phase 2): stage a dropped file into a
+   * reviewable draft batch on its (kind, filename) connection. Nothing
+   * touches a domain table until the owner publishes.
+   */
+  stageImportFile(cred: Credential, options: StageFileOptions): StageFileResult {
+    const owner = this.requireOwner(cred, 'only the owner imports (v0)');
+    return stageFile(this.db, owner, options);
+  }
+
+  /** Publish a reviewed draft batch — creates/updates land, receipted. */
+  publishImport(cred: Credential, batchId: string): PublishResult {
+    const owner = this.requireOwner(cred, 'only the owner publishes imports (v0)');
+    return publishBatch(this.db, owner, batchId, PUBLISHERS);
+  }
+
+  /** Discard a draft batch — rows dropped, nothing published. */
+  discardImport(cred: Credential, batchId: string): { receiptId: string } {
+    const owner = this.requireOwner(cred, 'only the owner discards imports (v0)');
+    return discardBatch(this.db, owner, batchId);
   }
 
   /** Standing duty: ingest customs — ICS events enter through the border post. */

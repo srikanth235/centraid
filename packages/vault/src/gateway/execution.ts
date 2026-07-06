@@ -19,6 +19,7 @@ import {
   writeReceipt,
 } from './evidence.js';
 import { validateJson } from './json-schema.js';
+import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import type {
   Citation,
   CommandDefinition,
@@ -46,7 +47,7 @@ const POLY_RULES: Record<string, { pk: string; refs: [string, string][] }> = {
   'knowledge.annotation': { pk: 'annotation_id', refs: [['target_type', 'target_id']] },
 };
 
-function pkColumn(vault: DatabaseSync, physical: string): string {
+export function pkColumn(vault: DatabaseSync, physical: string): string {
   const rows = vault.prepare(`PRAGMA table_info(${JSON.stringify(physical)})`).all() as {
     name: string;
     pk: number;
@@ -301,6 +302,19 @@ export function runContractAndExecute(
         predicate: failedPost.predicate,
       };
     }
+    // Demo-register writes join the seed registry INSIDE the transaction —
+    // a committed demo row that escaped the registry would be unpurgeable
+    // and visible to triggers (issue #290 phase 1).
+    if (request.demo) {
+      const seedStmt = db.vault.prepare(
+        `INSERT INTO consent_seed_row (seed_id, app_id, entity_type, entity_id, seeded_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (entity_type, entity_id) DO NOTHING`,
+      );
+      for (const write of writes) {
+        seedStmt.run(uuidv7(), request.demo.appId, write.entityType, write.entityId, ctx.now);
+      }
+    }
     db.vault.exec('COMMIT');
     for (const r of postResults)
       writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
@@ -327,16 +341,18 @@ export function runContractAndExecute(
   }
 
   // S5 — evidence: provenance per write, receipt, evidence, explanation.
+  // Demo-register writes stamp `seed.demo` — the journal-side truth that a
+  // row is scenario data; the command still names itself in `used_json`.
   for (const write of writes) {
     writeProvenance(
       db.journal,
       identity,
       write.entityType,
       write.entityId,
-      `command.${command.name}`,
-      {
-        invocation: invocationId,
-      },
+      request.demo ? SEED_DEMO_ACTIVITY : `command.${command.name}`,
+      request.demo
+        ? { invocation: invocationId, command: command.name, app: request.demo.appId }
+        : { invocation: invocationId },
     );
   }
   const receiptId = writeReceipt(db.journal, {

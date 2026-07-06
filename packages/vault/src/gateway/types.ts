@@ -107,6 +107,14 @@ export interface InvokeRequest {
    * id returns the recorded outcome instead of re-executing (§10 S4).
    */
   invocationId?: string;
+  /**
+   * The demo register (issue #290 phase 1): rows this invocation writes are
+   * scenario-seed data — provenance stamps `seed.demo` instead of the
+   * command activity, and every write lands in the seed registry so it is
+   * purgeable in one act and invisible to the automation plane. Owner-device
+   * only; `appId` names the scenario's app for per-app reset.
+   */
+  demo?: { appId: string };
 }
 
 export interface ReadResult {

@@ -75,6 +75,8 @@ import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import type { VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { makeDemoRouteHandler } from '../routes/demo-routes.js';
+import { makeImportRouteHandler } from '../routes/import-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
@@ -895,6 +897,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       runner: assistantRunner,
       conversationLocks: new Map(),
     }),
+    // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
+    // Mounted BEFORE the generic `_vault` handler (same prefix family).
+    makeDemoRouteHandler(vaultRegistry, {
+      codeAppsDir: () => requireHost().codeAppsDir(),
+    }),
+    // File-drop imports (issue #290 phase 2): stage → review → publish.
+    makeImportRouteHandler(vaultRegistry),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are

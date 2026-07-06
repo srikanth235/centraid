@@ -56,6 +56,7 @@ import {
   registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
+  registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
   type AgentSummary,
@@ -79,6 +80,7 @@ import {
   type ResolveResult,
   type ExtApplyOutcome,
   type ExtTableSpec,
+  type DemoPurgeResult,
 } from '@centraid/vault';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -183,6 +185,7 @@ export class VaultPlane {
     registerPeopleCommands(this.gateway);
     registerLockerCommands(this.gateway);
     registerTallyCommands(this.gateway);
+    registerSyncCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
@@ -545,6 +548,51 @@ export class VaultPlane {
       this.logger.info(`vault plane: purged ext band for "${appId}" [${out.purged.join(', ')}]`);
     }
     return out;
+  }
+
+  /**
+   * The scenario-seed `ctx.vault` executor (issue #290 phase 1): a seed
+   * generator is the OWNER loading demo data, so calls ride the owner-device
+   * credential with the demo register set — every write stamps `seed.demo`
+   * provenance and lands in the seed registry, purgeable in one act and
+   * invisible to the automation plane. Reads let a generator reference what
+   * it already minted; nothing else is exposed.
+   */
+  demoBridgeFor(appId: string): VaultBridge {
+    return async (call): Promise<VaultCallResult> =>
+      asVaultCallResult(() => {
+        switch (call.op) {
+          case 'read':
+            return this.gateway.read(this.ownerCredential, call.payload as unknown as ReadRequest);
+          case 'search':
+            return this.gateway.search(
+              this.ownerCredential,
+              call.payload as unknown as SearchRequest,
+            );
+          case 'invoke':
+            return this.gateway.invoke(this.ownerCredential, {
+              ...(call.payload as unknown as InvokeRequest),
+              demo: { appId },
+            });
+          case 'describe':
+            return this.gateway.discover(this.ownerCredential);
+          default:
+            throw new GatewayError(
+              'consent',
+              `seed generators read and invoke — vault op ${call.op} is not part of the scenario surface`,
+            );
+        }
+      });
+  }
+
+  /** Purge demo data — whole vault or one app's scenario (issue #290). */
+  purgeDemo(appId?: string): DemoPurgeResult {
+    return this.gateway.purgeDemo(this.ownerCredential, appId);
+  }
+
+  /** Seeded-row counts per app — the "demo data present" surface. */
+  demoStatus(): { appId: string; rows: number }[] {
+    return this.gateway.demoStatus(this.ownerCredential);
   }
 
   /**

@@ -17,8 +17,12 @@ import {
   confirmVaultParked,
   revokeVaultGrant,
   vaultApps,
+  vaultDemoLoad,
+  vaultDemoPurge,
+  vaultDemoStatus,
   vaultParked,
   vaultStatus,
+  type VaultDemoApp,
   type VaultGrant,
   type VaultParkedEntry,
   type VaultScope,
@@ -83,11 +87,17 @@ export async function renderVaultPane(input: VaultPaneInput): Promise<void> {
 
   let grants: VaultGrant[] = [];
   let parked: VaultParkedEntry[] = [];
+  let demo: VaultDemoApp | undefined;
   try {
-    const [apps, allParked] = await Promise.all([vaultApps(), vaultParked()]);
+    const [apps, allParked, demoApps] = await Promise.all([
+      vaultApps(),
+      vaultParked(),
+      vaultDemoStatus().catch(() => [] as VaultDemoApp[]),
+    ]);
     // Enrollment stores the Centraid app id as `consent.app.name`.
     grants = apps.find((a) => a.name === appId)?.grants ?? [];
     parked = allParked.filter((p) => p.callerKind === 'app' && p.caller === appId);
+    demo = demoApps.find((d) => d.appId === appId);
   } catch {
     host.replaceChildren(note('Could not read the vault consent surface.'));
     return;
@@ -99,7 +109,60 @@ export async function renderVaultPane(input: VaultPaneInput): Promise<void> {
   const sections: HTMLElement[] = [renderRequestSection(el, block)];
   sections.push(renderGrantSection(input, grants, rerender, status.name));
   if (parked.length > 0) sections.push(renderParkedSection(input, parked, rerender));
+  if (demo && (demo.seedable || demo.rows > 0)) {
+    sections.push(renderDemoSection(input, demo, rerender));
+  }
   host.replaceChildren(...sections);
+}
+
+/**
+ * Scenario seeds (issue #290 phase 1): load the blueprint's demo data —
+ * written through the demo register, so it is purgeable in one click and
+ * never fires automations — or reset what a previous load left behind.
+ */
+function renderDemoSection(
+  input: VaultPaneInput,
+  demo: VaultDemoApp,
+  rerender: () => void,
+): HTMLElement {
+  const { el, appId } = input;
+  const section = el('div', { class: 'cd-app-settings-section cd-vault-demo' });
+  section.append(el('div', { class: 'cd-vault-label' }, 'Demo data'));
+  section.append(
+    el(
+      'div',
+      { class: 'cd-app-settings-note' },
+      demo.rows > 0
+        ? `${demo.rows} demo row${demo.rows === 1 ? '' : 's'} loaded — safe to reset any time; real data is never touched.`
+        : 'Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click.',
+    ),
+  );
+  const actions = el('div', { class: 'cd-vault-demo-actions' });
+  const act = (label: string, run: () => Promise<unknown>, doneMsg: string): HTMLElement => {
+    const btn = el('button', { class: 'cd-vault-grant-btn', type: 'button' }, label);
+    btn.addEventListener('click', () => {
+      (btn as HTMLButtonElement).disabled = true;
+      run()
+        .then(() => {
+          input.showToast?.(doneMsg);
+          input.onAccessChanged?.();
+          rerender();
+        })
+        .catch((err: unknown) => {
+          (btn as HTMLButtonElement).disabled = false;
+          input.showToast?.(err instanceof Error ? err.message : `${label} failed`);
+        });
+    });
+    return btn;
+  };
+  if (demo.seedable) {
+    actions.append(act('Load demo data', () => vaultDemoLoad(appId), 'Demo data loaded'));
+  }
+  if (demo.rows > 0) {
+    actions.append(act('Reset demo data', () => vaultDemoPurge(appId), 'Demo data reset'));
+  }
+  section.append(actions);
+  return section;
 }
 
 /** WHAT the app asked for — why line + requested scopes as chips. */

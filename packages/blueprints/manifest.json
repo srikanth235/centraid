@@ -113,6 +113,7 @@
         "package.json",
         "queries/board.js",
         "queries/search.js",
+        "seed.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -222,6 +223,7 @@
         "queries/people.js",
         "queries/person.js",
         "queries/search.js",
+        "seed.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -336,6 +338,7 @@
         "package.json",
         "queries/library.js",
         "queries/search.js",
+        "seed.js",
         "wall.css"
       ],
       "appKnobs": [
@@ -719,7 +722,8 @@
         "queries/dashboard.js",
         "queries/friend.js",
         "queries/group.js",
-        "queries/search.js"
+        "queries/search.js",
+        "seed.js"
       ],
       "appKnobs": [
         {

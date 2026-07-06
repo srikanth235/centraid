@@ -211,3 +211,177 @@ export async function confirmVaultParked(input: {
   });
   return readJson<{ status: string }>(res, 'confirm parked invocation');
 }
+
+/** One app's scenario-seed state (issue #290 phase 1). */
+export interface VaultDemoApp {
+  appId: string;
+  rows: number;
+  seedable: boolean;
+}
+
+/** Per-app demo status: which apps ship a scenario, which have rows loaded. */
+export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/demo', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ apps: VaultDemoApp[] }>(res, 'read demo status');
+  return body.apps;
+}
+
+/** Run an app's seed.js scenario generator (demo register, owner act). */
+export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/demo/${enc(appId)}`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return readJson<{ rows: number }>(res, 'load demo data');
+}
+
+/** One staged import batch as the shell lists it (issue #290 phase 2). */
+export interface VaultImportBatch {
+  batchId: string;
+  status: 'draft' | 'published' | 'discarded';
+  createdAt: string;
+  resolvedAt: string | null;
+  summary: Record<string, number>;
+  kind: string | null;
+  label: string | null;
+}
+
+/** One staged row for review. */
+export interface VaultImportRow {
+  seq: number;
+  entityType: string;
+  externalId: string;
+  disposition: 'create' | 'update' | 'skip' | 'merge-candidate';
+  note: string | null;
+  publishedEntityId: string | null;
+}
+
+/** Stage a dropped file into a reviewable draft batch. */
+export async function vaultImportStage(input: {
+  filename: string;
+  text?: string;
+  base64?: string;
+  accountName?: string;
+  currency?: string;
+}): Promise<{
+  batchId: string;
+  kind: string;
+  staged: Record<string, number>;
+  total: number;
+  unrouted: string[];
+}> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/imports', {
+    method: 'POST',
+    headers: authHeaders(token, 'application/json'),
+    body: JSON.stringify(input),
+  });
+  return readJson(res, 'stage import');
+}
+
+/** Batches, newest first. */
+export async function vaultImportsList(): Promise<VaultImportBatch[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/imports', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ batches: VaultImportBatch[] }>(res, 'list imports');
+  return body.batches;
+}
+
+/** The staged rows of one batch, for review. */
+export async function vaultImportRows(batchId: string): Promise<VaultImportRow[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}`, {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ rows: VaultImportRow[] }>(res, 'read import batch');
+  return body.rows;
+}
+
+/** Publish a reviewed draft batch. */
+export async function vaultImportPublish(
+  batchId: string,
+): Promise<{ created: number; updated: number; skipped: number; failed: unknown[] }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}/publish`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return readJson(res, 'publish import');
+}
+
+/** Discard a draft batch. */
+export async function vaultImportDiscard(batchId: string): Promise<{ receiptId: string }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/imports/${enc(batchId)}/discard`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return readJson(res, 'discard import');
+}
+
+/** One connection's health (issue #290 phase 4). */
+export interface VaultConnection {
+  connectionId: string;
+  kind: string;
+  label: string;
+  principal: string | null;
+  status: 'active' | 'needs-auth' | 'failing' | 'paused';
+  lastRunAt: string | null;
+  lastRun: {
+    status: string;
+    startedAt: string;
+    staged: number;
+    published: number;
+    error: string | null;
+  } | null;
+}
+
+/** Connection health — every connection with its latest run. */
+export async function vaultConnections(): Promise<VaultConnection[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/imports/connections', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ connections: VaultConnection[] }>(res, 'read connections');
+  return body.connections;
+}
+
+/** Pause or resume a connection (owner act). */
+export async function vaultConnectionSetStatus(
+  connectionId: string,
+  status: 'paused' | 'active',
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/imports/connections/${enc(connectionId)}/status`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({ status }),
+    },
+  );
+  await readJson(res, 'set connection status');
+}
+
+/** Purge demo rows — one app's, or every app's when appId is omitted. */
+export async function vaultDemoPurge(
+  appId?: string,
+): Promise<{ purged: number; blocked: unknown[] }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/demo${appId ? `/${enc(appId)}` : ''}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return readJson<{ purged: number; blocked: unknown[] }>(res, 'purge demo data');
+}

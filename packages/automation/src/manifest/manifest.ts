@@ -253,6 +253,27 @@ export interface HistoryConfig {
  * automation is associated with (reverse-looked-up by the app Settings
  * screen).
  */
+/**
+ * Connector declaration (issue #290 phase 4): this automation is a PUBLISHED
+ * CONNECTOR — deterministic code syncing one external source into the vault.
+ * The broker invariants hang off this block:
+ *   - `requires.tools` becomes a HARD allowlist (a calendar importer
+ *     physically cannot call gmail.send — the confused-deputy defense);
+ *   - `ctx.agent` is forbidden at runtime (agents write code, not data —
+ *     an LLM turn inside a sync loop breaks determinism, cost and audit);
+ *   - `principal`, when set, pins the external account: `sync.begin_run`
+ *     refuses a mismatched observed principal and flips the connection to
+ *     `needs-auth` (liveness is honest, never silent).
+ */
+export interface ConnectorSpec {
+  /** Source kind, e.g. `mcp.gmail` — names WHAT is synced. */
+  readonly kind: string;
+  /** Connection label (account handle, calendar name…) — names WHICH. */
+  readonly label: string;
+  /** Pinned external principal; unset pins on first successful run. */
+  readonly principal?: string;
+}
+
 export interface Manifest {
   readonly name: string;
   readonly version: string;
@@ -265,6 +286,8 @@ export interface Manifest {
    */
   readonly triggers: readonly Trigger[];
   readonly requires: ManifestRequires;
+  /** Declares this automation a connector (issue #290 phase 4). */
+  readonly connector?: ConnectorSpec;
   /** Requested vault access — owner-approved into a grant on the automation's agent. */
   readonly vault?: ManifestVault;
   /** App ids this automation is associated with. */
@@ -554,6 +577,34 @@ function validateRequires(raw: unknown): ManifestRequires {
   return requires;
 }
 
+function validateConnector(
+  value: unknown,
+  requires: ManifestRequires,
+): ConnectorSpec | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ManifestError('invalid_field', 'manifest.connector must be an object', 'connector');
+  }
+  const c = value as Record<string, unknown>;
+  const kind = requireString(c.kind, 'connector.kind');
+  const label = requireString(c.label, 'connector.label');
+  let principal: string | undefined;
+  if (c.principal !== undefined) {
+    principal = requireString(c.principal, 'connector.principal');
+  }
+  // Resolved, not hinted (issue #290 decision 4): a connector's tool needs
+  // are a CONTRACT — an empty allowlist would make every ctx.tool call an
+  // error at run time, which is a manifest bug, not a runtime surprise.
+  if (!requires.tools || requires.tools.length === 0) {
+    throw new ManifestError(
+      'invalid_field',
+      'manifest.connector requires a non-empty requires.tools allowlist (requires-as-allowlist, issue #290)',
+      'requires.tools',
+    );
+  }
+  return { kind, label, ...(principal !== undefined ? { principal } : {}) };
+}
+
 const VAULT_VERBS = new Set(['read', 'read+act', 'act']);
 
 function validateVault(raw: unknown): ManifestVault | undefined {
@@ -682,7 +733,17 @@ export function validateManifest(raw: unknown): Manifest {
   const prompt = requireString(r.prompt, 'prompt');
   const triggers = resolveTriggers(r);
   const requires = validateRequires(r.requires);
+  const connector = validateConnector(r.connector, requires);
   const vault = validateVault(r.vault);
+  // A connector's whole job is writing staged rows into the vault — a
+  // connector manifest without a vault block can never do anything.
+  if (connector && !vault) {
+    throw new ManifestError(
+      'invalid_field',
+      'manifest.connector requires a manifest.vault block (connectors stage rows through sync.stage_rows)',
+      'connector',
+    );
+  }
   // A condition/data trigger IS a consented vault read — without a vault
   // block there is no grant to evaluate it under, so the manifest is
   // incoherent.
@@ -717,6 +778,7 @@ export function validateManifest(raw: unknown): Manifest {
     prompt,
     triggers,
     requires,
+    ...(connector ? { connector } : {}),
     ...(vault ? { vault } : {}),
     ...(apps ? { apps } : {}),
     ...(costEstimate ? { costEstimate } : {}),

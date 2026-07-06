@@ -16,6 +16,8 @@ import { LOCKER_DDL } from './domains-locker.js';
 import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
+import { SEED_DDL } from './seed.js';
+import { SYNC_DDL } from './sync.js';
 
 /** Ontology contract version stamped on rows (rule R07). */
 export const ONTOLOGY_VERSION = '1.1';
@@ -70,6 +72,11 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // v5: the ext-band registry (issue #286 phase 2) — app-declared extension
   // tables live inside vault.db; this table tracks their declared specs.
   APP_EXT_DDL,
+  // v6: the scenario-seed registry (issue #290 phase 1) — backfills empty.
+  SEED_DDL,
+  // v7: the sync domain (issue #290 phases 2-4) — connections, the
+  // external-id map, the import staging band, cursors + run log.
+  SYNC_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

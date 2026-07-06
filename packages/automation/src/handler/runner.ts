@@ -143,6 +143,16 @@ export interface RunHandlerOptions {
   outputSchema?: OutputSchema;
   history?: HistoryConfig;
   timeoutMs?: number;
+  /**
+   * Connector confinement (issue #290 phase 4). When present, this run is a
+   * published connector: `tools` is a HARD per-call allowlist over ctx.tool
+   * (requires-as-allowlist — the confused-deputy defense: connector code
+   * holds broad ambient harness tokens AND vault access, so confinement
+   * happens at the one chokepoint the vault side owns), and `ctx.agent` is
+   * forbidden entirely (agents write code, not data — the LLM appears at
+   * authoring/repair time, never in the per-sync loop).
+   */
+  connector?: { readonly tools: readonly string[] };
 }
 
 export interface HandlerOutcome {
@@ -304,6 +314,46 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     worker.on('message', (msg: WorkerToParentMessage) => {
       if (msg.type === 'tool-batch') {
         toolBatches++;
+        // Requires-as-allowlist (issue #290): a connector's disallowed call
+        // errors WITHOUT reaching the dispatcher — allowed calls in the same
+        // batch still run, so one stray call degrades, never widens.
+        if (opts.connector) {
+          const allow = new Set(opts.connector.tools);
+          const blocked = msg.calls.filter((c) => !allow.has(c.name));
+          if (blocked.length > 0) {
+            const allowed = msg.calls.filter((c) => allow.has(c.name));
+            void (allowed.length > 0
+              ? dispatchToolBatch({
+                  audit,
+                  toolDispatcher: opts.toolDispatcher,
+                  dispatchCtx,
+                  calls: allowed,
+                })
+              : Promise.resolve([] as Awaited<ReturnType<typeof dispatchToolBatch>>)
+            )
+              .then((allowedResults) => {
+                let i = 0;
+                const results = msg.calls.map((c) =>
+                  allow.has(c.name)
+                    ? allowedResults[i++]
+                    : {
+                        ok: false,
+                        error: `tool "${c.name}" is outside this connector's requires.tools allowlist (issue #290)`,
+                      },
+                );
+                send({ type: 'tool-reply', id: msg.id, results });
+              })
+              .catch((err: unknown) => {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                send({
+                  type: 'tool-reply',
+                  id: msg.id,
+                  results: msg.calls.map(() => ({ ok: false, error: errorMsg })),
+                });
+              });
+            return;
+          }
+        }
         void dispatchToolBatch({
           audit,
           toolDispatcher: opts.toolDispatcher,
@@ -324,6 +374,18 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         return;
       }
       if (msg.type === 'agent') {
+        // Connectors are deterministic code — no LLM turn ever runs inside
+        // a sync loop (issue #290: agents write code, not data).
+        if (opts.connector) {
+          send({
+            type: 'agent-reply',
+            id: msg.id,
+            ok: false,
+            error:
+              'ctx.agent is forbidden in connector handlers — connectors are deterministic published code; repair happens at authoring time (issue #290)',
+          });
+          return;
+        }
         agentCalls++;
         void handleAgentMessage(
           audit,

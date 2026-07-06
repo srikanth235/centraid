@@ -276,6 +276,11 @@ export class VaultRegistry {
     };
   }
 
+  /** The scenario-seed executor against the ACTIVE vault (issue #290). */
+  demoBridgeFor(appId: string): VaultBridge {
+    return async (call) => this.active().demoBridgeFor(appId)(call);
+  }
+
   /**
    * Enroll a live app in the current request's vault (identity only).
    * Post-#280 an app is a vault asset — it lives in one vault's code store
