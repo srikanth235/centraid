@@ -166,7 +166,10 @@ describe('outbox.decide', () => {
     const requestOnly = invoke(owner, 'outbox.decide', {
       item_id: itemId,
       decision: 'approve',
-      request: { method: 'POST', url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send' },
+      request: {
+        method: 'POST',
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      },
     });
     expect(requestOnly.status).toBe('failed');
   });
@@ -237,7 +240,8 @@ describe('standing grants (issue #306 phase 3)', () => {
     // Two more matching items auto-approve at staging; neither has drained.
     const second = invoke(agent, 'outbox.stage', stageInput());
     const third = invoke(agent, 'outbox.stage', stageInput());
-    if (second.status !== 'executed' || third.status !== 'executed') throw new Error('stage failed');
+    if (second.status !== 'executed' || third.status !== 'executed')
+      throw new Error('stage failed');
     const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
     expect(revoked.status).toBe('executed');
     // All three: the always-allow decision stamped the grant onto the first
@@ -262,7 +266,11 @@ describe('standing grants (issue #306 phase 3)', () => {
       always_allow: true,
     });
     const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id as string;
-    invoke(owner, 'outbox.record_result', { item_id: firstId, disposition: 'sent', status_code: 200 });
+    invoke(owner, 'outbox.record_result', {
+      item_id: firstId,
+      disposition: 'sent',
+      status_code: 200,
+    });
     const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
     expect(revoked.status).toBe('executed');
     expect((revoked as { output?: { reparked?: number } }).output?.reparked).toBe(0);

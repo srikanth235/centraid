@@ -45,7 +45,9 @@ export function revokeGrantCascade(
 ): RevocationResult {
   const now = nowIso();
   const grant = db.vault
-    .prepare('SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?')
+    .prepare(
+      'SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?',
+    )
     .get(grantId) as
     | { grant_id: string; app_id: string | null; grantee_party_id: string | null }
     | undefined;
@@ -67,7 +69,11 @@ export function revokeGrantCascade(
           grant.app_id !== null
             ? { appId: grant.app_id }
             : { granteePartyId: grant.grantee_party_id as string },
-          revokedScopes.map((s) => ({ schema: s.schema_name, table: s.table_name, verbs: s.verbs })),
+          revokedScopes.map((s) => ({
+            schema: s.schema_name,
+            table: s.table_name,
+            verbs: s.verbs,
+          })),
         )
       : 0;
   let viewsRevoked = 0;
@@ -209,10 +215,14 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     writeProvenance(db.journal, owner, 'knowledge.note', n.note_id, 'sweep.purge');
     dropEntries.run('knowledge.note', n.note_id);
     db.vault
-      .prepare(`DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`)
+      .prepare(
+        `DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`,
+      )
       .run(n.note_id);
     db.vault
-      .prepare(`DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`)
+      .prepare(
+        `DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`,
+      )
       .run(n.note_id);
     db.vault.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(n.note_id);
     endDateLinks.run(now, 'knowledge.note', n.note_id, 'knowledge.note', n.note_id);

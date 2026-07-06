@@ -82,9 +82,7 @@ export function writeScopeTombstones(
 export function listScopeTombstones(db: VaultDb, grantee: GranteeKey): ScopeTriple[] {
   const { where, param } = granteeClause(grantee);
   const rows = db.vault
-    .prepare(
-      `SELECT schema_name, table_name, verbs FROM consent_scope_tombstone WHERE ${where}`,
-    )
+    .prepare(`SELECT schema_name, table_name, verbs FROM consent_scope_tombstone WHERE ${where}`)
     .all(param) as { schema_name: string; table_name: string | null; verbs: string }[];
   return rows.map((r) => ({
     schema: r.schema_name,
@@ -169,7 +167,9 @@ export function closeObsoleteScopeRequest(
   appId: string,
 ): void {
   db.vault
-    .prepare(`DELETE FROM consent_scope_request WHERE plane = ? AND app_id = ? AND decided_at IS NULL`)
+    .prepare(
+      `DELETE FROM consent_scope_request WHERE plane = ? AND app_id = ? AND decided_at IS NULL`,
+    )
     .run(plane, appId);
 }
 

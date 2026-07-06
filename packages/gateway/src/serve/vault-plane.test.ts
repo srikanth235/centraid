@@ -324,7 +324,10 @@ test('the agent plane mirrors the widening park (issue #308 A3)', async () => {
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({ plane: 'agent', appId: 'gmail-send' });
   plane.decideScopeRequest(requests[0]!.requestId, true);
-  const scopes = plane.listAgents().find((a) => a.name === 'gmail-send')?.grants.flatMap((g) => g.scopes);
+  const scopes = plane
+    .listAgents()
+    .find((a) => a.name === 'gmail-send')
+    ?.grants.flatMap((g) => g.scopes);
   expect(scopes).toHaveLength(2);
 });
 

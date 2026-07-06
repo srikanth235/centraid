@@ -7,11 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { BLOB_DDL } from './blob.js';
 import { ENRICH_DDL } from './enrich.js';
-import {
-  CONSENT_DDL,
-  CONSENT_INSTALL_MEMORY_DDL,
-  GRANT_SCOPE_REVEAL_DDL,
-} from './consent.js';
+import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';

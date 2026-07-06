@@ -592,7 +592,9 @@ function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
   if (!note) throw new Error('note vanished between check and execute');
   const until = notePurgeAt(ctx.now);
   ctx.db
-    .prepare('UPDATE knowledge_note SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE note_id = ?')
+    .prepare(
+      'UPDATE knowledge_note SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE note_id = ?',
+    )
     .run(ctx.now, until, ctx.now, input.note_id);
   ctx.wrote('knowledge.note', input.note_id);
   // Bodies are sha256-deduped and canonical — another live note or message
@@ -655,12 +657,16 @@ function restoreNote(ctx: HandlerCtx): Record<string, unknown> {
     .get(input.note_id) as { body_content_id: string } | undefined;
   if (!note) throw new Error('note vanished between check and execute');
   ctx.db
-    .prepare('UPDATE knowledge_note SET deleted_at = NULL, purge_at = NULL, updated_at = ? WHERE note_id = ?')
+    .prepare(
+      'UPDATE knowledge_note SET deleted_at = NULL, purge_at = NULL, updated_at = ? WHERE note_id = ?',
+    )
     .run(ctx.now, input.note_id);
   ctx.wrote('knowledge.note', input.note_id);
   // If trashing released the body bytes, restoring rents them again.
   const body = ctx.db
-    .prepare('UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL WHERE content_id = ? AND deleted_at IS NOT NULL')
+    .prepare(
+      'UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL WHERE content_id = ? AND deleted_at IS NOT NULL',
+    )
     .run(note.body_content_id);
   if (Number(body.changes) > 0) ctx.wrote('core.content_item', note.body_content_id);
   ctx.cite({

@@ -189,12 +189,12 @@ test('lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A
   expect(db.vault.prepare(`SELECT 1 FROM knowledge_note WHERE note_id = 'n-lapsed'`).get()).toBe(
     undefined,
   );
-  expect(db.vault.prepare(`SELECT 1 FROM knowledge_annotation WHERE annotation_id = 'a1'`).get()).toBe(
-    undefined,
-  );
-  expect(db.vault.prepare(`SELECT 1 FROM core_content_item WHERE content_id = 'body-1'`).get()).toBe(
-    undefined,
-  );
+  expect(
+    db.vault.prepare(`SELECT 1 FROM knowledge_annotation WHERE annotation_id = 'a1'`).get(),
+  ).toBe(undefined);
+  expect(
+    db.vault.prepare(`SELECT 1 FROM core_content_item WHERE content_id = 'body-1'`).get(),
+  ).toBe(undefined);
   // …while the in-window one waits for its grace period.
   expect(
     db.vault.prepare(`SELECT 1 FROM knowledge_note WHERE note_id = 'n-fresh'`).get(),
