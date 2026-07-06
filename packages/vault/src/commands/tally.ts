@@ -2,8 +2,9 @@
 // Tally commands (schema `tally`): the expense-splitting write surface. A
 // friend is a canonical core.party (kind='person') plus a tally_friend row
 // for the avatar hue; the owner is the implicit `me` and never a friend. A
-// group is a tally_group with an emoji icon + colour and one
-// tally_group_member row per party (owner included). An expense stores its
+// group is an AUDIENCE (issue #310 S4): a social.circle carrying the name
+// and the membership, decorated by a tally_group row with the emoji icon +
+// colour (owner always a member). An expense stores its
 // resolved splits (one tally_expense_split per participant) — the command
 // re-validates server-side that the shares sum to the amount and that every
 // participant and the payer are group members, so a projection can't smuggle
@@ -37,11 +38,41 @@ function ownerPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
+/**
+ * Group membership lives on the group's circle (issue #310 S4) — one
+ * audience mechanism, social_circle_member, not a per-domain junction.
+ */
 function groupMemberIds(ctx: HandlerCtx, groupId: string): Set<string> {
   const rows = ctx.db
-    .prepare('SELECT party_id FROM tally_group_member WHERE group_id = ?')
+    .prepare(
+      `SELECT m.party_id FROM social_circle_member m
+         JOIN tally_group g ON g.circle_id = m.circle_id
+        WHERE g.group_id = ?`,
+    )
     .all(groupId) as { party_id: string }[];
   return new Set(rows.map((r) => r.party_id));
+}
+
+/** The circle a group decorates. */
+function circleOf(ctx: HandlerCtx, groupId: string): string {
+  const row = ctx.db
+    .prepare('SELECT circle_id FROM tally_group WHERE group_id = ?')
+    .get(groupId) as { circle_id: string } | undefined;
+  if (!row) throw new Error('group not found');
+  return row.circle_id;
+}
+
+/** Add one party to a circle, idempotently. */
+function addCircleMember(ctx: HandlerCtx, circleId: string, partyId: string): void {
+  const present = ctx.db
+    .prepare('SELECT 1 AS x FROM social_circle_member WHERE circle_id = ? AND party_id = ?')
+    .get(circleId, partyId);
+  if (present) return;
+  ctx.db
+    .prepare(
+      'INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(ctx.newId(), circleId, partyId, ctx.now);
 }
 
 const GROUP_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id';
@@ -225,20 +256,31 @@ const CREATE_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { name: string; icon: string; color?: string; member_ids: string[] };
+    const owner = ownerPartyId(ctx);
+    // The group IS an audience: a social.circle carries the name and the
+    // membership; tally_group decorates it with the icon and colour (issue
+    // #310 S4). Circles are UNIQUE(owner, name) — a clash is a real clash.
+    const clash = ctx.db
+      .prepare('SELECT 1 AS x FROM social_circle WHERE owner_party_id = ? AND name = ?')
+      .get(owner, input.name);
+    if (clash) throw new Error(`a circle named "${input.name}" already exists`);
+    const circleId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO social_circle (circle_id, owner_party_id, name, kind) VALUES (?, ?, ?, 'custom')`,
+      )
+      .run(circleId, owner, input.name);
+    ctx.wrote('social.circle', circleId);
     const groupId = ctx.newId();
     ctx.db
       .prepare(
-        'INSERT INTO tally_group (group_id, name, icon, color, created_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO tally_group (group_id, circle_id, icon, color, created_at) VALUES (?, ?, ?, ?, ?)',
       )
-      .run(groupId, input.name, input.icon, input.color ?? '#0FA678', ctx.now);
+      .run(groupId, circleId, input.icon, input.color ?? '#0FA678', ctx.now);
     ctx.wrote('tally.group', groupId);
     // The owner is always a member; friends are added by party id.
-    const members = new Set<string>([ownerPartyId(ctx), ...input.member_ids.map(String)]);
-    for (const pid of members) {
-      ctx.db
-        .prepare('INSERT OR IGNORE INTO tally_group_member (group_id, party_id) VALUES (?, ?)')
-        .run(groupId, pid);
-    }
+    const members = new Set<string>([owner, ...input.member_ids.map(String)]);
+    for (const pid of members) addCircleMember(ctx, circleId, pid);
     ctx.cite({
       claim: `Group "${input.name}" created`,
       entityType: 'tally.group',
@@ -267,9 +309,11 @@ const RENAME_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { group_id: string; name: string };
+    const circleId = circleOf(ctx, input.group_id);
     ctx.db
-      .prepare('UPDATE tally_group SET name = ? WHERE group_id = ?')
-      .run(input.name, input.group_id);
+      .prepare('UPDATE social_circle SET name = ? WHERE circle_id = ?')
+      .run(input.name, circleId);
+    ctx.wrote('social.circle', circleId);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -292,7 +336,9 @@ const ADD_GROUP_MEMBER: CommandDefinition = {
   postconditions: [
     {
       name: 'member_present',
-      sql: 'SELECT count(*) AS n FROM tally_group_member WHERE group_id = :group_id AND party_id = :party_id',
+      sql: `SELECT count(*) AS n FROM social_circle_member m
+             JOIN tally_group g ON g.circle_id = m.circle_id
+            WHERE g.group_id = :group_id AND m.party_id = :party_id`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -302,9 +348,7 @@ const ADD_GROUP_MEMBER: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { group_id: string; party_id: string };
-    ctx.db
-      .prepare('INSERT OR IGNORE INTO tally_group_member (group_id, party_id) VALUES (?, ?)')
-      .run(input.group_id, input.party_id);
+    addCircleMember(ctx, circleOf(ctx, input.group_id), input.party_id);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -346,8 +390,8 @@ const REMOVE_GROUP_MEMBER: CommandDefinition = {
     if (input.party_id === ownerPartyId(ctx))
       throw new Error('you cannot remove yourself from a group');
     ctx.db
-      .prepare('DELETE FROM tally_group_member WHERE group_id = ? AND party_id = ?')
-      .run(input.group_id, input.party_id);
+      .prepare('DELETE FROM social_circle_member WHERE circle_id = ? AND party_id = ?')
+      .run(circleOf(ctx, input.group_id), input.party_id);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -378,10 +422,15 @@ const DELETE_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const groupId = String((ctx.input as { group_id: string }).group_id);
+    const circleId = circleOf(ctx, groupId);
     ctx.db.prepare('DELETE FROM tally_settlement WHERE group_id = ?').run(groupId);
-    ctx.db.prepare('DELETE FROM tally_group_member WHERE group_id = ?').run(groupId);
+    // The decoration goes first (it FKs the circle), then the circle and
+    // its membership — the group owned its audience, so it leaves with it.
     ctx.db.prepare('DELETE FROM tally_group WHERE group_id = ?').run(groupId);
+    ctx.db.prepare('DELETE FROM social_circle_member WHERE circle_id = ?').run(circleId);
+    ctx.db.prepare('DELETE FROM social_circle WHERE circle_id = ?').run(circleId);
     ctx.wrote('tally.group', groupId);
+    ctx.wrote('social.circle', circleId);
     return { group_id: groupId };
   },
 };

@@ -34,12 +34,15 @@ function addFriend(name = 'Priya Nair'): string {
     .party_id;
 }
 function members(groupId: string): string[] {
+  // Membership lives on the group's circle (issue #310 S4).
   return (
     db.vault
-      .prepare('SELECT party_id AS id FROM tally_group_member WHERE group_id = ?')
-      .all(groupId) as {
-      id: string;
-    }[]
+      .prepare(
+        `SELECT m.party_id AS id FROM social_circle_member m
+           JOIN tally_group g ON g.circle_id = m.circle_id
+          WHERE g.group_id = ?`,
+      )
+      .all(groupId) as { id: string }[]
   ).map((r) => r.id);
 }
 
@@ -270,4 +273,55 @@ test('bind_txn adopts an imported transaction onto an expense, and validates its
     invoke('tally.bind_txn', { txn_id: 'txn1', expense_id: xid, settlement_id: 'nope' }).status,
   ).toBe('failed'); // two targets
   expect(invoke('tally.bind_txn', { txn_id: 'missing', expense_id: xid }).status).toBe('failed'); // txn precondition
+});
+
+// ── Groups decorate circles (issue #310 S4) ────────────────────────────
+
+test('a group is a social.circle decoration: name and members on the circle', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Goa Trip', icon: '🌴', member_ids: [priya] }),
+  ).group_id;
+  const g = db.vault
+    .prepare(
+      `SELECT c.name, c.kind, c.owner_party_id FROM tally_group tg
+         JOIN social_circle c ON c.circle_id = tg.circle_id
+        WHERE tg.group_id = ?`,
+    )
+    .get(gid) as { name: string; kind: string; owner_party_id: string };
+  expect(g.name).toBe('Goa Trip');
+  expect(g.kind).toBe('custom');
+  expect(g.owner_party_id).toBe(me);
+
+  // Rename lands on the circle; a clashing circle name refuses creation.
+  out(invoke('tally.rename_group', { group_id: gid, name: 'Goa 2026' }));
+  const renamed = db.vault
+    .prepare(
+      `SELECT c.name FROM tally_group tg JOIN social_circle c ON c.circle_id = tg.circle_id
+        WHERE tg.group_id = ?`,
+    )
+    .get(gid) as { name: string };
+  expect(renamed.name).toBe('Goa 2026');
+  expect(
+    invoke('tally.create_group', { name: 'Goa 2026', icon: '🌴', member_ids: [] }).status,
+  ).toBe('failed');
+});
+
+test('delete_group removes its circle and membership with it', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Temp', icon: '📦', member_ids: [priya] }),
+  ).group_id;
+  const circle = db.vault
+    .prepare('SELECT circle_id FROM tally_group WHERE group_id = ?')
+    .get(gid) as { circle_id: string };
+  out(invoke('tally.delete_group', { group_id: gid }));
+  const circles = db.vault
+    .prepare('SELECT count(*) AS n FROM social_circle WHERE circle_id = ?')
+    .get(circle.circle_id) as { n: number };
+  const membersLeft = db.vault
+    .prepare('SELECT count(*) AS n FROM social_circle_member WHERE circle_id = ?')
+    .get(circle.circle_id) as { n: number };
+  expect(circles.n).toBe(0);
+  expect(membersLeft.n).toBe(0);
 });

@@ -8,11 +8,15 @@
 // fact Tally needs off the party id — the avatar hue. The owner is the
 // implicit `me` (core_vault.owner_party_id) and never gets a tally_friend row.
 //
-// A group carries an emoji icon and a colour the SKOS concept spine has no
-// home for, so — unlike Docs folders / People circles — it is its own table
-// rather than a concept scheme; membership is one `tally_group_member` row per
-// party (the owner included). Deleting a group is refused while it still holds
-// expenses, mirroring the folders "delete when empty" rule.
+// A group IS an audience — and the vault already has exactly one audience
+// mechanism, social.circle (the #274 decision that circles deliberately stay
+// separate from collections). tally_group is a thin DECORATION on a circle
+// (issue #310 S4): the emoji icon and colour the circle has no home for ride
+// here, the name and the membership live on the circle itself
+// (social_circle_member, the owner included). The third "group of people"
+// table this domain briefly re-introduced is gone. Deleting a group is
+// refused while it still holds expenses, mirroring the folders
+// "delete when empty" rule; deleting it removes its circle too.
 //
 // Money is fixed-scale INTEGER minor units (cents) in the vault's base
 // currency; an expense's `tally_expense_split` rows resolve one method
@@ -37,16 +41,10 @@ CREATE TABLE tally_friend (
 
 CREATE TABLE tally_group (
   group_id   TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
+  circle_id  TEXT NOT NULL UNIQUE REFERENCES social_circle(circle_id),
   icon       TEXT NOT NULL,
   color      TEXT NOT NULL,
   created_at TEXT NOT NULL
-) STRICT;
-
-CREATE TABLE tally_group_member (
-  group_id TEXT NOT NULL REFERENCES tally_group(group_id) ON DELETE CASCADE,
-  party_id TEXT NOT NULL REFERENCES core_party(party_id),
-  PRIMARY KEY (group_id, party_id)
 ) STRICT;
 
 CREATE TABLE tally_expense (
