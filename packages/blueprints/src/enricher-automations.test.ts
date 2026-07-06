@@ -14,7 +14,12 @@ import { lintHandlerSource, parseManifest } from '@centraid/automation';
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const ENRICHERS = ['photo-captioner', 'doc-text-extractor'] as const;
+const ENRICHERS = [
+  'photo-captioner',
+  'doc-text-extractor',
+  'screenshot-extractor',
+  'doc-filer',
+] as const;
 
 function automationDir(id: string): string {
   return path.join(PACKAGE_ROOT, 'automations', id, 'automations', id);
@@ -194,5 +199,101 @@ describe('doc-text-extractor behavior', () => {
     expect(harness.agentCalls.length).toBe(0);
     expect(harness.invokes.length).toBe(0);
     expect(result.summary).toContain('skipped 1');
+  });
+});
+
+describe('screenshot-extractor behavior', () => {
+  it('a receipt with a visible date stages a core.transaction; cross-domain rows always stage', async () => {
+    const handler = await loadHandler('screenshot-extractor');
+    const harness = stubCtx({
+      reads: {
+        'media.media_asset': [{ asset_id: 's1', content_id: 'c1', kind: 'photo', exif_json: null }],
+        'core.content_derivative': [{ content_id: 'c1', variant: 'thumb' }],
+      },
+      agent: () => ({
+        kind: 'receipt',
+        receipt: {
+          merchant: 'Blue Tokai',
+          amount_minor: 45000,
+          currency: 'inr',
+          posted_at: '2026-07-01',
+        },
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    const input = harness.invokes[0]!.input as {
+      kind: string;
+      rows: { entity_type: string; payload: Record<string, unknown> }[];
+    };
+    expect(input.kind).toBe('enrichment.extraction');
+    expect(input.rows[0]!.entity_type).toBe('core.transaction');
+    expect(input.rows[0]!.payload.amountMinor).toBe(45000);
+    expect(input.rows[0]!.payload.currency).toBe('INR');
+    expect(input.rows[0]!.payload.postedAt).toBe('2026-07-01');
+  });
+
+  it('a dateless booking is dropped, never defaulted', async () => {
+    const handler = await loadHandler('screenshot-extractor');
+    const harness = stubCtx({
+      reads: {
+        'media.media_asset': [{ asset_id: 's2', content_id: 'c2', kind: 'photo', exif_json: null }],
+        'core.content_derivative': [{ content_id: 'c2', variant: 'preview' }],
+      },
+      agent: () => ({ kind: 'booking', booking: { summary: 'Flight BLR → GOI' } }),
+    });
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    expect(harness.invokes.length).toBe(0);
+    expect(result.summary).toContain('0 booking(s)');
+  });
+});
+
+describe('doc-filer behavior', () => {
+  it('proposes title + folder + doctype from the text variant, staged for review', async () => {
+    const handler = await loadHandler('doc-filer');
+    const harness = stubCtx({
+      reads: {
+        'core.content_derivative': [
+          { derivative_id: 'dv1', content_id: 'd1', variant: 'text' },
+        ],
+        'core.content_item': [
+          { content_id: 'd1', media_type: 'application/pdf', title: 'scan_001' },
+        ],
+        'core.concept_scheme': [
+          { scheme_id: 'sf', uri: 'https://centraid.dev/schemes/folders' },
+        ],
+        'core.concept': [
+          { scheme_id: 'sf', notation: 'insurance', pref_label: 'Insurance' },
+          { scheme_id: 'sf', notation: 'root', pref_label: 'Documents' },
+        ],
+      },
+      agent: (call) => {
+        // The existing folder labels ride into the prompt.
+        expect(call.prompt).toContain('Insurance');
+        expect(call.prompt).not.toContain('Documents,');
+        return {
+          title: 'Home insurance policy 2026',
+          folder: 'Insurance',
+          doctype: 'policy',
+          confidence: 0.9,
+        };
+      },
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd1', variant: 'text' }]);
+    expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
+    const input = harness.invokes[0]!.input as {
+      kind: string;
+      rows: { entity_type: string; external_id: string; payload: Record<string, unknown> }[];
+    };
+    expect(input.kind).toBe('enrichment.doctype');
+    expect(input.rows.map((r) => r.entity_type)).toEqual(['core.content_item', 'core.tag']);
+    expect(input.rows[0]!.payload).toEqual({
+      content_id: 'd1',
+      title: 'Home insurance policy 2026',
+      folder: 'Insurance',
+    });
+    expect(input.rows[1]!.payload.scheme_uri).toBe('urn:centraid:doctype');
+    expect(harness.state.get('cursor')).toBe('dv1');
   });
 });

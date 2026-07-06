@@ -43,7 +43,14 @@
           "title": { "type": "string" },
           "width": { "type": "integer", "minimum": 1 },
           "height": { "type": "integer", "minimum": 1 },
-          "duration_s": { "type": "number", "minimum": 0 }
+          "duration_s": { "type": "number", "minimum": 0 },
+          "phash": {
+            "type": "string",
+            "minLength": 4,
+            "maxLength": 64,
+            "pattern": "^[0-9a-f]+$",
+            "description": "Client-computed perceptual hash (issue #299 Tier 0)."
+          }
         },
         "additionalProperties": false
       },

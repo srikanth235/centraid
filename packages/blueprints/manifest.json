@@ -1026,6 +1026,44 @@
         "automations/doc-text-extractor/automation.json",
         "automations/doc-text-extractor/handler.js"
       ]
+    },
+    {
+      "id": "screenshot-extractor",
+      "name": "Screenshot intelligence",
+      "desc": "Turns photographed receipts and bookings into staged ledger and calendar entries you review.",
+      "colorKey": "forest",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🧾",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When new screenshots arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/screenshot-extractor/automation.json",
+        "automations/screenshot-extractor/handler.js"
+      ]
+    },
+    {
+      "id": "doc-filer",
+      "name": "Document filing",
+      "desc": "Proposes a folder and a readable title for every scan-dump document — you approve, it files.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🗂️",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When documents become readable",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/doc-filer/automation.json",
+        "automations/doc-filer/handler.js"
+      ]
     }
   ]
 }

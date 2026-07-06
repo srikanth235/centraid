@@ -16,7 +16,7 @@ on the agent surface.
 
 - [x] Commit 1 — vault enrichment core + agent content surfaces (v10 schema, publishers, commands, auto-publish trust, `content` op, ctx.agent attachments, assistant vault_content)
 - [x] Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
-- [ ] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
+- [x] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
 - [ ] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
 - [ ] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
 - [ ] Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
@@ -134,6 +134,33 @@ Commit 2 — phase 1 enrichers (blueprint automation templates):
   refs, staged-not-written output, external ids derived from asset ids,
   cursor advance, agent-turn-free skips.
 
+Commit 3 — phase 2: cross-domain extraction + filing; Photos client phash:
+
+- `packages/blueprints/automations/screenshot-extractor/` (new) — the
+  thesis demo: EXIF-less photos (screenshots and photographed documents —
+  camera shots carry spool EXIF, so the camera roll is never taxed) take
+  one vision turn; receipts stage `core.transaction` rows (existing
+  publisher, minor units, "Receipts (screenshots)" account), bookings
+  stage tentative `core.event` rows. A dateless extraction is DROPPED,
+  never defaulted — posted_at/dtstart are NOT NULL in the model and an
+  invented date is a guess. Cross-domain rows ALWAYS stage; the review
+  click is the domain boundary.
+- `packages/blueprints/automations/doc-filer/` (new) — scan-dump triage:
+  watches `core.content_derivative` (a document becomes filable the moment
+  it has text), reads the owner's existing folder labels into the prompt
+  so proposals reuse them, and stages a `core.content_item` filing update
+  (title + folder) plus a doctype tag under the machine scheme per
+  document. Filing never applies itself.
+- Photos client phash (Tier 0): `apps/photos/app.js` computes a 64-bit
+  dHash from the SAME image decode the thumb already pays for (9×8
+  grayscale, adjacent-brightness bits) and passes it through
+  `actions/upload.js` → `media.add_asset` → the sidecar. `app.json`'s
+  upload input schema gains `phash`.
+- Gallery entries (`index.json` + regenerated `manifest.json`, 22
+  templates) and 3 new behavior tests (receipt extraction shape + currency
+  normalization, dateless-booking drop, filing proposal shape + folder
+  reuse + cursor).
+
 ## Decisions of record
 
 - **Enrichment rides the sync spine, not a new pipeline** — an enricher is
@@ -180,8 +207,10 @@ Commit 2 — phase 1 enrichers (blueprint automation templates):
 - `packages/gateway`: 163 green + 1 skipped; `packages/automation`: 144
   green; `packages/agent-runtime`: 68 green; app-engine, vault, gateway,
   automation, agent-runtime typecheck (tsc) clean.
-- `packages/blueprints`: 108 green (`npx vitest run`) — includes new suite
-  `src/enricher-automations.test.ts` (9 tests: manifest validity, handler
-  determinism lint, stub-ctx behavior for both enrichers) and the existing
-  manifest sweep accepting the two new template dirs; `build:manifest`
-  regenerated cleanly (20 templates).
+- `packages/blueprints`: 119 green (`npx vitest run`) — the
+  `src/enricher-automations.test.ts` suite now covers all four enrichers
+  (manifest validity incl. no-connector-block, determinism lint, stub-ctx
+  behavior: derivative-only content refs, staged-not-written output,
+  dateless-extraction drops, folder reuse, cursors); the manifest sweep
+  accepts the four template dirs; `build:manifest` regenerated cleanly
+  (22 templates).

@@ -1328,9 +1328,39 @@ async function stageFileBytes(file, extra = '') {
   return res.json();
 }
 
+// 64-bit dHash (issue #299 Tier 0): 9×8 grayscale, each bit = "left pixel
+// brighter than its right neighbour". The canvas is the client's raster
+// codec, so the phash rides the same decode the thumb already paid for.
+function dHashFromImage(img) {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 9;
+    canvas.height = 8;
+    const g = canvas.getContext('2d');
+    g.drawImage(img, 0, 0, 9, 8);
+    const data = g.getImageData(0, 0, 9, 8).data;
+    const lum = [];
+    for (let i = 0; i < 72; i += 1) {
+      const o = i * 4;
+      lum.push(0.299 * data[o] + 0.587 * data[o + 1] + 0.114 * data[o + 2]);
+    }
+    let hex = '';
+    for (let row = 0; row < 8; row += 1) {
+      let byte = 0;
+      for (let col = 0; col < 8; col += 1) {
+        byte = (byte << 1) | (lum[row * 9 + col] > lum[row * 9 + col + 1] ? 1 : 0);
+      }
+      hex += byte.toString(16).padStart(2, '0');
+    }
+    return hex;
+  } catch {
+    return null; // no phash is fewer duplicate hints, never a failed upload
+  }
+}
+
 // The grid's thumbnail, produced at upload time on this device (the canvas
 // is the one raster codec every client has) and staged as the `thumb`
-// variant beside the original. Dimensions ride along for free.
+// variant beside the original. Dimensions + perceptual hash ride for free.
 async function stageClientThumb(file, parentSha) {
   try {
     const url = URL.createObjectURL(file);
@@ -1339,6 +1369,7 @@ async function stageClientThumb(file, parentSha) {
     await img.decode();
     const dims =
       img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
+    const phash = dHashFromImage(img);
     const long = Math.max(img.naturalWidth, img.naturalHeight);
     if (long > THUMB_EDGE) {
       const scale = THUMB_EDGE / long;
@@ -1355,7 +1386,7 @@ async function stageClientThumb(file, parentSha) {
       }
     }
     URL.revokeObjectURL(url);
-    return dims;
+    return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
   } catch {
     return null; // no thumb is a slower grid, never a failed upload
   }
@@ -1409,7 +1440,8 @@ async function uploadFiles(files) {
       kind,
       captured_at: new Date(file.lastModified || Date.now()).toISOString(),
       ...(file.name ? { title: file.name } : {}),
-      ...(dims ? { width: dims.width, height: dims.height } : {}),
+      ...(dims?.width ? { width: dims.width, height: dims.height } : {}),
+      ...(dims?.phash ? { phash: dims.phash } : {}),
     });
     // One bad file never sinks the batch — count it and keep going.
     if (outcome?.status === 'executed') {
