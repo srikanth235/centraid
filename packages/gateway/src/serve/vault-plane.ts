@@ -70,6 +70,7 @@ import {
   registerScheduleCommands,
   registerSocialCommands,
   registerOutboxCommands,
+  registerJudgmentCommands,
   registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
@@ -314,6 +315,7 @@ export class VaultPlane {
     registerSyncCommands(this.gateway);
     registerEnrichCommands(this.gateway);
     registerOutboxCommands(this.gateway);
+    registerJudgmentCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.

@@ -2,7 +2,6 @@ import { beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
-import { migrate, VAULT_MIGRATIONS } from '../schema/migrate.js';
 import type { Credential } from '../gateway/types.js';
 import { registerKnowledgeCommands } from './knowledge.js';
 import { registerLinkCommands } from './links.js';
@@ -282,16 +281,9 @@ test('backlinks are a reverse read of the same table', () => {
   expect(backlinks.rows).toHaveLength(2);
 });
 
-test('the v3 migration backfills relation notations into a pre-existing vault', () => {
-  // Simulate a vault seeded before the new notations existed.
-  db.vault
-    .prepare(
-      `DELETE FROM core_concept WHERE notation IN ('references', 'attachment-of')
-        AND scheme_id = (SELECT scheme_id FROM core_concept_scheme WHERE uri = 'urn:duaility:relations')`,
-    )
-    .run();
-  db.vault.exec('PRAGMA user_version = 2');
-  migrate(db.vault, VAULT_MIGRATIONS);
+test('bootstrap seeds the cross-referencing relation notations', () => {
+  // v0 stance: the ladder is one rung and a fresh vault gets every relation
+  // notation from the bootstrap seed — there are no backfill rungs to replay.
   const n = db.vault
     .prepare(
       `SELECT count(*) AS n FROM core_concept c

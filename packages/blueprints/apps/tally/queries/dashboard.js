@@ -26,12 +26,15 @@ function initials(name) {
 
 /** Pull every ground fact Tally needs and shape it for the compute helpers. */
 export async function loadTally(ctx, purpose) {
-  const [vaultRes, friendsRes, groupsRes, membersRes, expensesRes, splitsRes, settlesRes] =
+  // A group decorates a social.circle (issue #310 S4): the circle carries
+  // the name and the membership, tally.group the icon + colour.
+  const [vaultRes, friendsRes, groupsRes, circlesRes, membersRes, expensesRes, splitsRes, settlesRes] =
     await Promise.all([
       ctx.vault.read({ entity: 'core.vault', purpose }),
       ctx.vault.read({ entity: 'tally.friend', purpose }),
       ctx.vault.read({ entity: 'tally.group', purpose }),
-      ctx.vault.read({ entity: 'tally.group_member', purpose }),
+      ctx.vault.read({ entity: 'social.circle', purpose }),
+      ctx.vault.read({ entity: 'social.circle_member', purpose }),
       ctx.vault.read({
         entity: 'tally.expense',
         orderBy: { column: 'spent_on', dir: 'desc' },
@@ -74,11 +77,19 @@ export async function loadTally(ctx, purpose) {
     });
   }
 
-  const membersByGroup = new Map();
+  const circleName = new Map((circlesRes.rows ?? []).map((c) => [c.circle_id, c.name]));
+  const groups = (groupsRes.rows ?? []).map((g) => ({
+    ...g,
+    name: circleName.get(g.circle_id) ?? 'Group',
+  }));
+
+  const membersByCircle = new Map();
   for (const m of membersRes.rows ?? []) {
-    if (!membersByGroup.has(m.group_id)) membersByGroup.set(m.group_id, []);
-    membersByGroup.get(m.group_id).push(m.party_id);
+    if (!membersByCircle.has(m.circle_id)) membersByCircle.set(m.circle_id, []);
+    membersByCircle.get(m.circle_id).push(m.party_id);
   }
+  const membersByGroup = new Map();
+  for (const g of groups) membersByGroup.set(g.group_id, membersByCircle.get(g.circle_id) ?? []);
 
   const splitsByExpense = new Map();
   for (const s of splitsRes.rows ?? []) {
@@ -95,7 +106,7 @@ export async function loadTally(ctx, purpose) {
     currency,
     people,
     friends,
-    groups: groupsRes.rows ?? [],
+    groups,
     membersByGroup,
     expenses,
     settlements: settlesRes.rows ?? [],

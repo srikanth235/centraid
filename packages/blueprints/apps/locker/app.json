@@ -21,11 +21,6 @@
         "verbs": "reveal"
       },
       {
-        "schema": "locker",
-        "table": "item_tag",
-        "verbs": "read"
-      },
-      {
         "schema": "core",
         "table": "tag",
         "verbs": "read"

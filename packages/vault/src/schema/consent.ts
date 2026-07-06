@@ -143,22 +143,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_scope_request_open
   ON consent_scope_request(plane, app_id) WHERE decided_at IS NULL;
 `;
 
-// v8 (issue #293): widen the grant-scope verbs CHECK with 'reveal'. SQLite
-// cannot ALTER a CHECK constraint, so existing vaults rebuild the table in
-// place — nothing references consent_grant_scope by FK, and the copy is
-// column-for-column. Fresh vaults get the widened CHECK from v1 and this
-// rung degenerates to the same copy.
-export const GRANT_SCOPE_REVEAL_DDL = `
-CREATE TABLE consent_grant_scope_v8 (
-  scope_id        TEXT PRIMARY KEY,
-  grant_id        TEXT NOT NULL REFERENCES consent_access_grant(grant_id),
-  schema_name     TEXT NOT NULL,
-  table_name      TEXT,
-  verbs           TEXT NOT NULL CHECK (verbs IN ('read','read+act','act','reveal')),
-  row_filter_json TEXT CHECK (row_filter_json IS NULL OR json_valid(row_filter_json)),
-  field_mask_json TEXT CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))
-) STRICT;
-INSERT INTO consent_grant_scope_v8 SELECT * FROM consent_grant_scope;
-DROP TABLE consent_grant_scope;
-ALTER TABLE consent_grant_scope_v8 RENAME TO consent_grant_scope;
-`;

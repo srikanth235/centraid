@@ -109,3 +109,35 @@ test('self-merge is refused by contract', () => {
   const outcome = merge(p, p);
   expect(outcome.status).toBe('failed');
 });
+
+// ── The convergence sweep (issue #310 C4) ──────────────────────────────
+
+test('find_duplicate_parties reports name collisions with identifier context', () => {
+  const now = new Date().toISOString();
+  db.vault
+    .prepare(
+      `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+       VALUES ('dup-a', 'person', 'J. Smith', ?, ?, '1.1'), ('dup-b', 'person', 'j. smith', ?, ?, '1.1'),
+              ('solo', 'person', 'Unique Name', ?, ?, '1.1')`,
+    )
+    .run(now, now, now, now, now, now);
+  db.vault
+    .prepare(
+      `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
+       VALUES ('di-1', 'dup-a', 'email', 'js@work.example', 1, ?), ('di-2', 'dup-b', 'tel', '+15550001', 1, ?)`,
+    )
+    .run(now, now);
+  const outcome = gw.invoke(owner, {
+    command: 'core.find_duplicate_parties',
+    input: {},
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  if (outcome.status !== 'executed') return;
+  const candidates = (outcome.output as { candidates: Record<string, unknown>[] }).candidates;
+  const pair = candidates.find((c) => c.party_a === 'dup-a' && c.party_b === 'dup-b');
+  expect(pair).toBeDefined();
+  expect(String(pair?.a_identifiers)).toContain('email:js@work.example');
+  expect(String(pair?.b_identifiers)).toContain('tel:+15550001');
+  expect(candidates.some((c) => c.party_a === 'solo' || c.party_b === 'solo')).toBe(false);
+});

@@ -2,8 +2,9 @@
 // Tally commands (schema `tally`): the expense-splitting write surface. A
 // friend is a canonical core.party (kind='person') plus a tally_friend row
 // for the avatar hue; the owner is the implicit `me` and never a friend. A
-// group is a tally_group with an emoji icon + colour and one
-// tally_group_member row per party (owner included). An expense stores its
+// group is an AUDIENCE (issue #310 S4): a social.circle carrying the name
+// and the membership, decorated by a tally_group row with the emoji icon +
+// colour (owner always a member). An expense stores its
 // resolved splits (one tally_expense_split per participant) — the command
 // re-validates server-side that the shares sum to the amount and that every
 // participant and the payer are group members, so a projection can't smuggle
@@ -13,10 +14,21 @@
 // Every write is a typed command, consent-checked and receipted, all risk low
 // (money is recorded, not moved). Deleting a group is refused while it still
 // holds expenses; removing a member is refused while they are on the ledger.
+//
+// The finance bridge (issue #310 S1): Tally is a lens over shared money, not
+// a second ledger. A settlement the owner is party to IS the owner's money
+// moving, so settle_up emits a core_transaction on the auto-provisioned
+// "Tally settlements" cash account (external_id `tally:settlement:<id>` keeps
+// replays idempotent) and stamps the settlement's txn_id. Third-party
+// settlements (friend pays friend) touch no owner account and stay tally-only
+// ground facts. When the bank already imported the movement, tally.bind_txn
+// adopts the existing canonical row instead — the Studio paid_txn_id pattern:
+// bind, don't duplicate.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import { replaceMemo } from './annotations.js';
 
 /** The vault owner's party id — Tally's implicit `me`. */
 function ownerPartyId(ctx: HandlerCtx): string {
@@ -27,15 +39,77 @@ function ownerPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
+/**
+ * Group membership lives on the group's circle (issue #310 S4) — one
+ * audience mechanism, social_circle_member, not a per-domain junction.
+ */
 function groupMemberIds(ctx: HandlerCtx, groupId: string): Set<string> {
   const rows = ctx.db
-    .prepare('SELECT party_id FROM tally_group_member WHERE group_id = ?')
+    .prepare(
+      `SELECT m.party_id FROM social_circle_member m
+         JOIN tally_group g ON g.circle_id = m.circle_id
+        WHERE g.group_id = ?`,
+    )
     .all(groupId) as { party_id: string }[];
   return new Set(rows.map((r) => r.party_id));
 }
 
+/** The circle a group decorates. */
+function circleOf(ctx: HandlerCtx, groupId: string): string {
+  const row = ctx.db
+    .prepare('SELECT circle_id FROM tally_group WHERE group_id = ?')
+    .get(groupId) as { circle_id: string } | undefined;
+  if (!row) throw new Error('group not found');
+  return row.circle_id;
+}
+
+/** Add one party to a circle, idempotently. Membership is a WRITE — it is
+ * provenance-stamped (and demo-registered) like any other row. */
+function addCircleMember(ctx: HandlerCtx, circleId: string, partyId: string): void {
+  const present = ctx.db
+    .prepare('SELECT 1 AS x FROM social_circle_member WHERE circle_id = ? AND party_id = ?')
+    .get(circleId, partyId);
+  if (present) return;
+  const memberId = ctx.newId();
+  ctx.db
+    .prepare(
+      'INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at) VALUES (?, ?, ?, ?)',
+    )
+    .run(memberId, circleId, partyId, ctx.now);
+  ctx.wrote('social.circle_member', memberId);
+}
+
 const GROUP_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id';
 const EXPENSE_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_expense WHERE expense_id = :expense_id';
+
+/** The vault's base currency — settlements are recorded in it. */
+function baseCurrency(ctx: HandlerCtx): string {
+  const row = ctx.db.prepare('SELECT base_currency FROM core_vault LIMIT 1').get() as
+    | { base_currency: string }
+    | undefined;
+  return row?.base_currency ?? 'USD';
+}
+
+/**
+ * Find-or-create the owner's "Tally settlements" cash account — the canonical
+ * pool settle_up's emitted transactions post against. One per vault, minted
+ * lazily on the first owner-party settlement.
+ */
+function settlementAccountId(ctx: HandlerCtx, ownerId: string): string {
+  const existing = ctx.db
+    .prepare(`SELECT account_id FROM core_account WHERE owner_party_id = ? AND name = 'Tally settlements'`)
+    .get(ownerId) as { account_id: string } | undefined;
+  if (existing) return existing.account_id;
+  const accountId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_account (account_id, owner_party_id, name, kind, currency, institution_party_id, external_ref, is_asset, opened_at, closed_at)
+       VALUES (?, ?, 'Tally settlements', 'cash', ?, NULL, NULL, 1, NULL, NULL)`,
+    )
+    .run(accountId, ownerId, baseCurrency(ctx));
+  ctx.wrote('core.account', accountId);
+  return accountId;
+}
 
 interface SplitInput {
   party_id: string;
@@ -186,20 +260,31 @@ const CREATE_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { name: string; icon: string; color?: string; member_ids: string[] };
+    const owner = ownerPartyId(ctx);
+    // The group IS an audience: a social.circle carries the name and the
+    // membership; tally_group decorates it with the icon and colour (issue
+    // #310 S4). Circles are UNIQUE(owner, name) — a clash is a real clash.
+    const clash = ctx.db
+      .prepare('SELECT 1 AS x FROM social_circle WHERE owner_party_id = ? AND name = ?')
+      .get(owner, input.name);
+    if (clash) throw new Error(`a circle named "${input.name}" already exists`);
+    const circleId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO social_circle (circle_id, owner_party_id, name, kind) VALUES (?, ?, ?, 'custom')`,
+      )
+      .run(circleId, owner, input.name);
+    ctx.wrote('social.circle', circleId);
     const groupId = ctx.newId();
     ctx.db
       .prepare(
-        'INSERT INTO tally_group (group_id, name, icon, color, created_at) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO tally_group (group_id, circle_id, icon, color, created_at) VALUES (?, ?, ?, ?, ?)',
       )
-      .run(groupId, input.name, input.icon, input.color ?? '#0FA678', ctx.now);
+      .run(groupId, circleId, input.icon, input.color ?? '#0FA678', ctx.now);
     ctx.wrote('tally.group', groupId);
     // The owner is always a member; friends are added by party id.
-    const members = new Set<string>([ownerPartyId(ctx), ...input.member_ids.map(String)]);
-    for (const pid of members) {
-      ctx.db
-        .prepare('INSERT OR IGNORE INTO tally_group_member (group_id, party_id) VALUES (?, ?)')
-        .run(groupId, pid);
-    }
+    const members = new Set<string>([owner, ...input.member_ids.map(String)]);
+    for (const pid of members) addCircleMember(ctx, circleId, pid);
     ctx.cite({
       claim: `Group "${input.name}" created`,
       entityType: 'tally.group',
@@ -228,9 +313,11 @@ const RENAME_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { group_id: string; name: string };
+    const circleId = circleOf(ctx, input.group_id);
     ctx.db
-      .prepare('UPDATE tally_group SET name = ? WHERE group_id = ?')
-      .run(input.name, input.group_id);
+      .prepare('UPDATE social_circle SET name = ? WHERE circle_id = ?')
+      .run(input.name, circleId);
+    ctx.wrote('social.circle', circleId);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -253,7 +340,9 @@ const ADD_GROUP_MEMBER: CommandDefinition = {
   postconditions: [
     {
       name: 'member_present',
-      sql: 'SELECT count(*) AS n FROM tally_group_member WHERE group_id = :group_id AND party_id = :party_id',
+      sql: `SELECT count(*) AS n FROM social_circle_member m
+             JOIN tally_group g ON g.circle_id = m.circle_id
+            WHERE g.group_id = :group_id AND m.party_id = :party_id`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -263,9 +352,7 @@ const ADD_GROUP_MEMBER: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { group_id: string; party_id: string };
-    ctx.db
-      .prepare('INSERT OR IGNORE INTO tally_group_member (group_id, party_id) VALUES (?, ?)')
-      .run(input.group_id, input.party_id);
+    addCircleMember(ctx, circleOf(ctx, input.group_id), input.party_id);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -307,8 +394,8 @@ const REMOVE_GROUP_MEMBER: CommandDefinition = {
     if (input.party_id === ownerPartyId(ctx))
       throw new Error('you cannot remove yourself from a group');
     ctx.db
-      .prepare('DELETE FROM tally_group_member WHERE group_id = ? AND party_id = ?')
-      .run(input.group_id, input.party_id);
+      .prepare('DELETE FROM social_circle_member WHERE circle_id = ? AND party_id = ?')
+      .run(circleOf(ctx, input.group_id), input.party_id);
     ctx.wrote('tally.group', input.group_id);
     return { group_id: input.group_id };
   },
@@ -339,10 +426,15 @@ const DELETE_GROUP: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const groupId = String((ctx.input as { group_id: string }).group_id);
+    const circleId = circleOf(ctx, groupId);
     ctx.db.prepare('DELETE FROM tally_settlement WHERE group_id = ?').run(groupId);
-    ctx.db.prepare('DELETE FROM tally_group_member WHERE group_id = ?').run(groupId);
+    // The decoration goes first (it FKs the circle), then the circle and
+    // its membership — the group owned its audience, so it leaves with it.
     ctx.db.prepare('DELETE FROM tally_group WHERE group_id = ?').run(groupId);
+    ctx.db.prepare('DELETE FROM social_circle_member WHERE circle_id = ?').run(circleId);
+    ctx.db.prepare('DELETE FROM social_circle WHERE circle_id = ?').run(circleId);
     ctx.wrote('tally.group', groupId);
+    ctx.wrote('social.circle', circleId);
     return { group_id: groupId };
   },
 };
@@ -561,23 +653,148 @@ const SETTLE_UP: CommandDefinition = {
       if (g.n !== 1) throw new Error('group not found');
     }
     const settlementId = ctx.newId();
+    const paidOn = input.paid_on ?? ctx.now.slice(0, 10);
+    const amount = Math.round(input.amount_minor);
+
+    // The finance bridge: when the owner is a party to the payment, their
+    // money actually moved — emit the canonical transaction and bind it.
+    // Friend-to-friend settlements touch no owner pool and stay tally-only.
+    const meId = ownerPartyId(ctx);
+    let txnId: string | null = null;
+    if (input.from_party === meId || input.to_party === meId) {
+      const accountId = settlementAccountId(ctx, meId);
+      const ownerPays = input.from_party === meId;
+      const otherId = ownerPays ? input.to_party : input.from_party;
+      const other = ctx.db
+        .prepare('SELECT display_name FROM core_party WHERE party_id = ?')
+        .get(otherId) as { display_name: string } | undefined;
+      txnId = ctx.newId();
+      ctx.db
+        .prepare(
+          `INSERT INTO core_transaction (txn_id, account_id, posted_at, amount_minor, currency, direction, status, transfer_group_id, counterparty_party_id, description, category_concept_id, external_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'posted', NULL, ?, ?, NULL, ?)`,
+        )
+        .run(
+          txnId,
+          accountId,
+          `${paidOn}T00:00:00Z`,
+          amount,
+          baseCurrency(ctx),
+          ownerPays ? 'debit' : 'credit',
+          otherId,
+          `Tally settlement${other ? ` — ${other.display_name}` : ''}`,
+          `tally:settlement:${settlementId}`,
+        );
+      ctx.wrote('core.transaction', txnId);
+    }
+
     ctx.db
       .prepare(
-        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, paid_on, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tally_settlement (settlement_id, group_id, from_party, to_party, amount_minor, paid_on, txn_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         settlementId,
         input.group_id ?? null,
         input.from_party,
         input.to_party,
-        Math.round(input.amount_minor),
-        input.paid_on ?? ctx.now.slice(0, 10),
+        amount,
+        paidOn,
+        txnId,
         ctx.now,
       );
     ctx.wrote('tally.settlement', settlementId);
     ctx.cite({ claim: 'Payment recorded', entityType: 'tally.settlement', entityId: settlementId });
-    return { settlement_id: settlementId };
+    if (txnId)
+      ctx.cite({
+        claim: 'Settlement posted to the canonical ledger',
+        entityType: 'core.transaction',
+        entityId: txnId,
+      });
+    return { settlement_id: settlementId, txn_id: txnId };
+  },
+};
+
+const BIND_TXN: CommandDefinition = {
+  name: 'tally.bind_txn',
+  ownerSchema: 'tally',
+  inputSchema: {
+    type: 'object',
+    required: ['txn_id'],
+    additionalProperties: false,
+    properties: {
+      txn_id: { type: 'string', minLength: 1 },
+      expense_id: { type: 'string', minLength: 1 },
+      settlement_id: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: { type: 'object', properties: { txn_id: { type: 'string' } } },
+  preconditions: [
+    {
+      name: 'txn_exists',
+      sql: 'SELECT count(*) AS n FROM core_transaction WHERE txn_id = :txn_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    const input = ctx.input as { txn_id: string; expense_id?: string; settlement_id?: string };
+    const targets = [input.expense_id, input.settlement_id].filter(Boolean).length;
+    if (targets !== 1) throw new Error('bind exactly one of expense_id or settlement_id');
+    if (input.expense_id) {
+      const changed = ctx.db
+        .prepare('UPDATE tally_expense SET txn_id = ? WHERE expense_id = ?')
+        .run(input.txn_id, input.expense_id);
+      if (changed.changes !== 1) throw new Error('expense not found');
+      ctx.wrote('tally.expense', input.expense_id);
+    } else if (input.settlement_id) {
+      const changed = ctx.db
+        .prepare('UPDATE tally_settlement SET txn_id = ? WHERE settlement_id = ?')
+        .run(input.txn_id, input.settlement_id);
+      if (changed.changes !== 1) throw new Error('settlement not found');
+      ctx.wrote('tally.settlement', input.settlement_id);
+    }
+    ctx.cite({
+      claim: 'Tally row bound to the canonical transaction',
+      entityType: 'core.transaction',
+      entityId: input.txn_id,
+    });
+    return { txn_id: input.txn_id };
+  },
+};
+
+const SET_EXPENSE_MEMO: CommandDefinition = {
+  name: 'tally.set_expense_memo',
+  ownerSchema: 'tally',
+  inputSchema: {
+    type: 'object',
+    required: ['expense_id', 'note'],
+    additionalProperties: false,
+    properties: {
+      expense_id: { type: 'string', minLength: 1 },
+      // '' clears the memo (the one-running-memo-per-entity semantic).
+      note: { type: 'string' },
+    },
+  },
+  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
+  preconditions: [
+    { name: 'expense_exists', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  postconditions: [],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    // The owner's remark about an expense is entity-scoped meaning (issue
+    // #310 C6): knowledge.annotation on the canonical row, the same memo
+    // People and Social write — never a prose column.
+    const input = ctx.input as { expense_id: string; note: string };
+    replaceMemo(ctx, 'tally.expense', input.expense_id, input.note);
+    ctx.wrote('tally.expense', input.expense_id);
+    return { expense_id: input.expense_id };
   },
 };
 
@@ -593,4 +810,6 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(EDIT_EXPENSE);
   gateway.registerCommand(DELETE_EXPENSE);
   gateway.registerCommand(SETTLE_UP);
+  gateway.registerCommand(BIND_TXN);
+  gateway.registerCommand(SET_EXPENSE_MEMO);
 }

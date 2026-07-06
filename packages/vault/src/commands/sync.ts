@@ -20,6 +20,20 @@ import {
 } from '../ingest/staging.js';
 import { sealedColumnsOf } from '../schema/sealed.js';
 
+/**
+ * Derived-data class per stageable entity type (issue #310 C3) — the unit
+ * the owner consents to when narrowing a connection's auto-publish trust.
+ * Entity types not named here (plain import types: events, transactions,
+ * contacts…) are untouched by class narrowing.
+ */
+const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
+  'knowledge.annotation': 'caption',
+  'core.tag': 'tag',
+  'media.face_region': 'face',
+  'core.collection': 'collection',
+  'core.content_item': 'filing',
+};
+
 /** Bound one call's staging payload — bulk arrives as several batches. */
 const MAX_ROWS_PER_STAGE = 500;
 
@@ -114,18 +128,43 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
         ? { ...r.payload, author_party_id: authorPartyId }
         : r.payload,
   }));
-  const { batchId, counts } = stageBatchTx(ctx.db, connectionId, candidates, PUBLISHERS, ctx.now);
-  ctx.wrote('sync.import_batch', batchId);
   // The owner's standing consent (issue #299 §3): a connection the owner set
   // to `auto-publish` applies its batch in the same command — captions and
   // machine tags land without a review click, still receipted, still
   // provenance-stamped per row. `staged` trust keeps today's behavior.
-  const trust = (
-    ctx.db.prepare('SELECT trust FROM sync_connection WHERE connection_id = ?').get(connectionId) as
-      | { trust: string }
-      | undefined
-  )?.trust;
-  if (trust === 'auto-publish') {
+  //
+  // Per-class narrowing (issue #310 C3): the owner may have consented to
+  // captions but not face suggestions. Candidates in classes OUTSIDE the
+  // connection's enrich_classes_json auto-publish nothing — they stage as a
+  // separate draft batch for review, never silently dropped and never
+  // silently landed.
+  const conn = ctx.db
+    .prepare('SELECT trust, enrich_classes_json FROM sync_connection WHERE connection_id = ?')
+    .get(connectionId) as { trust: string; enrich_classes_json: string | null } | undefined;
+  if (conn?.trust === 'auto-publish') {
+    const allowed = conn.enrich_classes_json
+      ? new Set(JSON.parse(conn.enrich_classes_json) as string[])
+      : null;
+    const auto: StageCandidate[] = [];
+    const held: StageCandidate[] = [];
+    for (const c of candidates) {
+      const cls = ENRICH_CLASS_OF[c.entityType];
+      if (allowed === null || (cls !== undefined && allowed.has(cls))) auto.push(c);
+      else held.push(c);
+    }
+    let heldBatchId: string | null = null;
+    if (held.length > 0) {
+      const heldStage = stageBatchTx(ctx.db, connectionId, held, PUBLISHERS, ctx.now);
+      heldBatchId = heldStage.batchId;
+      ctx.wrote('sync.import_batch', heldBatchId);
+      ctx.cite({
+        claim: `${held.length} row(s) in classes outside the connection's standing consent staged as draft ${heldBatchId} for review`,
+        entityType: 'sync.import_batch',
+        entityId: heldBatchId,
+      });
+    }
+    const { batchId, counts } = stageBatchTx(ctx.db, connectionId, auto, PUBLISHERS, ctx.now);
+    ctx.wrote('sync.import_batch', batchId);
     const applied = applyBatchTx(ctx.db, batchId, PUBLISHERS, ownerPartyIdOf(ctx), ctx.now);
     for (const write of applied.provenanced) ctx.wrote(write.type, write.id);
     ctx.cite({
@@ -143,8 +182,11 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
         skipped: applied.skipped,
         failed: applied.failed.length,
       },
+      ...(heldBatchId ? { held_batch_id: heldBatchId, held: held.length } : {}),
     };
   }
+  const { batchId, counts } = stageBatchTx(ctx.db, connectionId, candidates, PUBLISHERS, ctx.now);
+  ctx.wrote('sync.import_batch', batchId);
   ctx.cite({
     claim: `staged ${input.rows.length} row(s) from ${input.kind} "${input.label}" as draft ${batchId} (${counts.create} create, ${counts.update} update, ${counts.skip} skip)`,
     entityType: 'sync.import_batch',

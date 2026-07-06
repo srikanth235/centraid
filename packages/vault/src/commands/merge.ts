@@ -201,6 +201,60 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
 }
 
 /** Register the merge primitive on a gateway. */
+// The convergence sweep (issue #310 C4): merge_party had no operator —
+// handle→party resolution runs at import time only, so duplicates minted
+// by different sources ("J. Smith" from Takeout, a bare email from MBOX)
+// accumulated with nothing surfacing them. This read-shaped command reports
+// candidate pairs deterministically (case-insensitive display-name
+// collisions among live persons, with each side's identifier schemes so a
+// reviewer sees WHY two rows look like one human). The assistant proposes;
+// core.merge_party stays the loud, owner-confirmed act.
+const FIND_DUPLICATES: CommandDefinition = {
+  name: 'core.find_duplicate_parties',
+  ownerSchema: 'core',
+  inputSchema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { limit: { type: 'integer', minimum: 1, maximum: 500 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['candidates'],
+    properties: { candidates: { type: 'array' } },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: 'retry-safe',
+  risk: 'low',
+  handler: (ctx) => {
+    const input = ctx.input as { limit?: number };
+    const limit = input.limit ?? 100;
+    const rows = ctx.db
+      .prepare(
+        `SELECT a.party_id AS party_a, b.party_id AS party_b, a.display_name AS display_name,
+                (SELECT group_concat(scheme || ':' || value, ', ') FROM core_party_identifier WHERE party_id = a.party_id) AS a_identifiers,
+                (SELECT group_concat(scheme || ':' || value, ', ') FROM core_party_identifier WHERE party_id = b.party_id) AS b_identifiers
+           FROM core_party a
+           JOIN core_party b
+             ON lower(a.display_name) = lower(b.display_name)
+            AND a.party_id < b.party_id
+          WHERE a.kind = 'person' AND b.kind = 'person'
+          ORDER BY a.display_name
+          LIMIT ?`,
+      )
+      .all(limit) as Record<string, unknown>[];
+    for (const r of rows) {
+      ctx.cite({
+        claim: `possible duplicate person: "${String(r.display_name)}"`,
+        entityType: 'core.party',
+        entityId: String(r.party_a),
+      });
+    }
+    return { candidates: rows };
+  },
+};
+
 export function registerMergeCommands(gateway: Gateway): void {
   gateway.registerCommand(MERGE_PARTY);
+  gateway.registerCommand(FIND_DUPLICATES);
 }

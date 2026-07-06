@@ -292,6 +292,12 @@ export function runContractAndExecute(
   // Contract version negotiation (§10 S3, R07): this gateway serves exactly
   // one ontology version; compatibility windows for older contracts are a
   // seam. Refusing beats guessing.
+  // v0 stance (issue #310 C5): version compatibility is EQUALITY, on
+  // purpose — there is no data to migrate and no third-party apps to keep
+  // rendering, so a mismatch means a stale registration, not a client on an
+  // old contract. R07's compatibility windows (serving version ranges
+  // during migrations) return when v1 ships and the doc's promise becomes
+  // load-bearing.
   if (command.ontology_version !== ONTOLOGY_VERSION) {
     return denyContract(`contract version ${command.ontology_version} not served`, {
       stage: 'contract',

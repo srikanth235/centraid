@@ -15,8 +15,10 @@
 //
 // The gestures the ontology already models are reused, not re-invented (issue
 // #274): favorites are the flags-scheme star on the item (target_type
-// 'locker.item'), the same star Docs/Photos write. Tags are free-form, one
-// `locker_item_tag` row per (item, tag).
+// 'locker.item'), the same star Docs/Photos write. Tags went the same way
+// (issue #310 S3): free-form labels are SKOS concepts in the locker-tags
+// scheme carried by core_tag rows — the second tagging mechanism the old
+// locker_item_tag table re-introduced is gone.
 //
 // All tables STRICT; PKs are TEXT UUIDv7; timestamps are TEXT ISO-8601 UTC —
 // the core spine's conventions.
@@ -47,6 +49,12 @@ CREATE TABLE locker_item (
   address      TEXT,
   -- wifi (network; the passphrase reuses the login 'password' column)
   network      TEXT,
+  -- The service anchor (issue #310 S3): which broker connection this
+  -- credential is FOR, when one exists — "which logins belong to services I
+  -- have connections for" becomes a join, and Watchtower can correlate a
+  -- breach with the connection that uses the password. Nullable: most items
+  -- guard services the vault never talks to.
+  connection_id TEXT REFERENCES sync_connection(connection_id),
   -- watchtower: the one stored security fact (breach flag); weak/reused derive
   compromised  INTEGER NOT NULL DEFAULT 0 CHECK (compromised IN (0,1)),
   created_at   TEXT NOT NULL,
@@ -57,24 +65,16 @@ CREATE TABLE locker_item (
   purge_at     TEXT
 ) STRICT;
 
-CREATE TABLE locker_item_tag (
-  item_id  TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE,
-  tag      TEXT NOT NULL,
-  PRIMARY KEY (item_id, tag)
-) STRICT;
-
 CREATE INDEX locker_item_type_idx ON locker_item(type);
-CREATE INDEX locker_item_tag_tag_idx ON locker_item_tag(tag);
 `;
 
 // A stable, owner-assigned alias for an item (issue #298 item 4). A
 // connector binds `locker:@<alias>:<column>` instead of the raw UUID, so
 // the natural rotation gesture — trash the old login, add the new one —
 // heals the binding the moment the owner puts the same alias on the
-// replacement. A SIDECAR table, not a column on locker_item: SQLite's ADD
-// COLUMN cannot be written re-runnably (the migration ladder's de-facto
-// contract), and a locker_item rebuild would cross locker_item_tag's
-// ON DELETE CASCADE. `alias` is the sidecar PK (globally unique); uniqueness
+// replacement. A SIDECAR table, not a column on locker_item: the alias is
+// the PRIMARY KEY (globally unique), which a nullable column cannot express
+// as cleanly. Uniqueness
 // AMONG LIVE items is enforced in the command handler (single-writer vault),
 // so a trashed item's alias frees for its successor once reassigned. ON
 // DELETE CASCADE drops the mapping when the item is purged.
