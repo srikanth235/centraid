@@ -1006,9 +1006,22 @@ export class VaultPlane {
    * Reads bypass the keyhole (sql); writes keep the contract + parking
    * asymmetry for the loud-on-purpose verbs.
    *
+   * THE ASSISTANT'S AUTHORITY, WRITTEN DOWN (issue #308 B3): `_assistant`
+   * holds a standing `act` grant over EVERY command schema — it is a more
+   * privileged actor than any installed app, bypassing install-time scoping
+   * entirely. This is intentional ("the assistant is the owner's hands"):
+   * the containment is (1) confirm-gated commands park for it like any
+   * non-owner — with the credential-touching set gated since #308 A1/A2 —
+   * (2) it cannot decide/drain the outbox (owner-plane only), reveal sealed
+   * plaintext, or read another actor's invocations, and (3) every act is
+   * receipted under its own agent identity, so the review feed names it.
+   *
    * The standing act grant is minted idempotently on first use: the
    * assistant is the owner's own hands, so using it IS the consent —
    * scoped to `act` (never widens reads, which don't ride grants here).
+   * The owner CAN narrow it durably: a revoked assistant grant tombstones
+   * its schemas (issue #308 A4), and the self-heal below skips tombstoned
+   * schemas until the owner explicitly re-approves them.
    */
   invokeAsAssistant(request: InvokeRequest): InvokeOutcome {
     const agent = ensureAgentEnrolled(this.db, '_assistant', { modelRef: 'centraid-assistant' });
@@ -1030,6 +1043,10 @@ export class VaultPlane {
           .all(agent.partyId) as { schema_name: string }[]
       ).map((r) => r.schema_name),
     );
+    // The owner's "no" binds the assistant too (issue #308 A4/B3).
+    for (const t of listScopeTombstones(this.db, { granteePartyId: agent.partyId })) {
+      if (t.verbs === 'act') covered.add(t.schema);
+    }
     const missing = schemas.filter((s) => !covered.has(s.owner_schema));
     if (missing.length > 0) {
       const purpose = purposeConceptId(this.db, 'dpv:ServiceProvision');

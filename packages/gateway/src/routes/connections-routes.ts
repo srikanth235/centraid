@@ -86,9 +86,19 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+export interface ConnectionsRouteOptions {
+  /**
+   * Fired after a connection's credential attaches/detaches (issue #308
+   * B4): the host kicks the tool-catalog warmer so both model surfaces
+   * learn the new connection without a manual Refresh. Fire-and-forget.
+   */
+  onConnectionChanged?: () => void;
+}
+
 export function makeConnectionsRouteHandler(
   vaults: VaultRegistry,
   broker: ConnectionBroker,
+  options: ConnectionsRouteOptions = {},
 ): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
@@ -152,6 +162,7 @@ export function makeConnectionsRouteHandler(
         return true;
       }
       invokeAsOwner(plane, res, 'sync.configure_credential', body);
+      options.onConnectionChanged?.();
       return true;
     }
 
