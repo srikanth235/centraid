@@ -400,7 +400,14 @@ describe('outbox graph joins', () => {
            FROM social_message m JOIN core_content_item i ON i.content_id = m.body_content_id
           WHERE m.message_id = ?`,
       )
-      .get(messageId) as Record<string, string>;
+      .get(messageId) as {
+      delivery: string;
+      external_id: string;
+      thread_id: string;
+      sender_party_id: string;
+      title: string;
+      content_uri: string;
+    };
     expect(msg.delivery).toBe('sent');
     expect(msg.external_id).toBe(`outbox:${itemId}`);
     expect(msg.sender_party_id).toBe(boot.ownerPartyId);
@@ -409,7 +416,7 @@ describe('outbox graph joins', () => {
 
     const thread = db.vault
       .prepare('SELECT channel, external_ref FROM social_thread WHERE thread_id = ?')
-      .get(msg.thread_id) as Record<string, string>;
+      .get(msg.thread_id) as { channel: string; external_ref: string };
     expect(thread.channel).toBe('email');
     expect(thread.external_ref).toBe(`outbox:conn-1:ravi@example.com`);
 

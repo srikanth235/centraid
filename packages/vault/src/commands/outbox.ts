@@ -542,6 +542,7 @@ function ensureParticipant(
        VALUES (?, ?, ?, ?, ?, 0, NULL)`,
     )
     .run(tpId, threadId, partyId, handle, ctx.now);
+  ctx.wrote('social.thread_participant', tpId);
 }
 
 const REVOKE_GRANT: CommandDefinition = {

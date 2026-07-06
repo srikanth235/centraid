@@ -63,17 +63,20 @@ function circleOf(ctx: HandlerCtx, groupId: string): string {
   return row.circle_id;
 }
 
-/** Add one party to a circle, idempotently. */
+/** Add one party to a circle, idempotently. Membership is a WRITE — it is
+ * provenance-stamped (and demo-registered) like any other row. */
 function addCircleMember(ctx: HandlerCtx, circleId: string, partyId: string): void {
   const present = ctx.db
     .prepare('SELECT 1 AS x FROM social_circle_member WHERE circle_id = ? AND party_id = ?')
     .get(circleId, partyId);
   if (present) return;
+  const memberId = ctx.newId();
   ctx.db
     .prepare(
       'INSERT INTO social_circle_member (member_id, circle_id, party_id, added_at) VALUES (?, ?, ?, ?)',
     )
-    .run(ctx.newId(), circleId, partyId, ctx.now);
+    .run(memberId, circleId, partyId, ctx.now);
+  ctx.wrote('social.circle_member', memberId);
 }
 
 const GROUP_EXISTS_SQL = 'SELECT count(*) AS n FROM tally_group WHERE group_id = :group_id';
@@ -740,8 +743,8 @@ const BIND_TXN: CommandDefinition = {
   risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { txn_id: string; expense_id?: string; settlement_id?: string };
-    if (!input.expense_id === !input.settlement_id)
-      throw new Error('bind exactly one of expense_id or settlement_id');
+    const targets = [input.expense_id, input.settlement_id].filter(Boolean).length;
+    if (targets !== 1) throw new Error('bind exactly one of expense_id or settlement_id');
     if (input.expense_id) {
       const changed = ctx.db
         .prepare('UPDATE tally_expense SET txn_id = ? WHERE expense_id = ?')

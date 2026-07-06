@@ -689,7 +689,7 @@ describe('per-class standing consent (issue #310 C3)', () => {
     // …and it was not dropped either: it waits as a draft batch for review.
     const heldBatch = db.vault
       .prepare('SELECT status FROM sync_import_batch WHERE batch_id = ?')
-      .get(out.held_batch_id) as { status: string };
+      .get(out.held_batch_id ?? '') as { status: string };
     expect(heldBatch.status).toBe('draft');
   });
 });

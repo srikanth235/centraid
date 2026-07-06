@@ -12,6 +12,13 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { PUBLISHERS } from '../ingest/publishers.js';
+import {
+  applyBatchTx,
+  ensureConnectionTx,
+  stageBatchTx,
+  type StageCandidate,
+} from '../ingest/staging.js';
+import { sealedColumnsOf } from '../schema/sealed.js';
 
 /**
  * Derived-data class per stageable entity type (issue #310 C3) — the unit
@@ -26,13 +33,6 @@ const ENRICH_CLASS_OF: Readonly<Record<string, string>> = {
   'core.collection': 'collection',
   'core.content_item': 'filing',
 };
-import {
-  applyBatchTx,
-  ensureConnectionTx,
-  stageBatchTx,
-  type StageCandidate,
-} from '../ingest/staging.js';
-import { sealedColumnsOf } from '../schema/sealed.js';
 
 /** Bound one call's staging payload — bulk arrives as several batches. */
 const MAX_ROWS_PER_STAGE = 500;
