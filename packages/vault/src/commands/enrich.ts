@@ -246,9 +246,10 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     },
   ],
   idempotency: 'retry-safe',
-  // The owner's standing-consent lever: widening a connection to
-  // auto-publish is above every agent ceiling — a proposal PARKS.
+  // The owner's standing-consent lever (issue #306 Tier 4): widening a
+  // connection to auto-publish is a consent-state change — a proposal PARKS.
   risk: 'high',
+  confirm: true,
   handler: (ctx) => {
     const input = ctx.input as { connection_id: string; trust: 'staged' | 'auto-publish' };
     ctx.db

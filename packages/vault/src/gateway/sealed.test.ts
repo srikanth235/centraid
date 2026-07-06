@@ -210,9 +210,9 @@ test('a readonly device browses placeholders but never reveals', () => {
 });
 
 test('parked summaries carry hash tokens, not secrets', () => {
-  // An agent invoking a high-risk command parks; its input must be redacted
-  // on the confirmation surface. locker commands are low risk, so drive the
-  // park through the ceiling by registering a high-risk probe command.
+  // A non-owner invoking a confirm-gated (Tier 3/4, issue #306) command
+  // parks; its input must be redacted on the confirmation surface. locker
+  // commands don't confirm, so register a confirm-gated probe command.
   gw.registerCommand({
     name: 'locker.import_secret',
     ownerSchema: 'locker',
@@ -226,6 +226,7 @@ test('parked summaries carry hash tokens, not secrets', () => {
     postconditions: [],
     idempotency: 'once',
     risk: 'high',
+    confirm: true,
     sealedInput: ['password'],
     handler: () => ({}),
   });

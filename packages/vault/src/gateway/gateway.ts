@@ -96,9 +96,7 @@ import type {
   SearchRequest,
   SearchResult,
 } from './types.js';
-import { GatewayError } from './types.js';
-
-const RISK_RANK: Record<Risk, number> = { low: 0, medium: 1, high: 2 };
+import { DEFAULT_PURPOSE, GatewayError } from './types.js';
 
 interface Parked {
   identity: Identity;
@@ -131,6 +129,9 @@ export class Gateway {
       def.risk,
       ONTOLOGY_VERSION,
     ];
+    // Confirmation is a Tier 3/4 property of the COMMAND (issue #306
+    // decision 1), not a function of risk — risk is a salience marker.
+    const requiresConfirmation = def.confirm === true ? 1 : 0;
     if (existing) {
       this.db.vault
         .prepare(
@@ -139,6 +140,9 @@ export class Gateway {
            WHERE command_id=?`,
         )
         .run(...params, commandId);
+      this.db.vault
+        .prepare(`UPDATE agent_capability SET requires_confirmation=? WHERE command_id=?`)
+        .run(requiresConfirmation, commandId);
     } else {
       this.db.vault
         .prepare(
@@ -152,7 +156,7 @@ export class Gateway {
           `INSERT INTO agent_capability (capability_id, schema_name, verb, command_id, description, requires_confirmation)
            VALUES (?, ?, 'act', ?, ?, ?)`,
         )
-        .run(uuidv7(), def.ownerSchema, commandId, def.name, def.risk === 'high' ? 1 : 0);
+        .run(uuidv7(), def.ownerSchema, commandId, def.name, requiresConfirmation);
     }
     this.commands.set(def.name, {
       handler: def.handler,
@@ -187,8 +191,9 @@ export class Gateway {
   }
 
   /** Consent-checked read: row filters and field masks applied, receipted. */
-  read(cred: Credential, request: ReadRequest): ReadResult {
+  read(cred: Credential, rawRequest: ReadRequest): ReadResult {
     const identity = this.identify(cred);
+    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref) {
       const receiptId = writeReceipt(this.db.journal, {
@@ -300,8 +305,9 @@ export class Gateway {
    * naming the item and the columns, so "what looked at my secrets" always
    * has an answer. Values never touch the journal.
    */
-  reveal(cred: Credential, request: RevealRequest): RevealResult {
+  reveal(cred: Credential, rawRequest: RevealRequest): RevealResult {
     const identity = this.identify(cred);
+    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
     const deny = (failing: string, grantId: string | null = null): never => {
       const receiptId = writeReceipt(this.db.journal, {
         grantId,
@@ -437,8 +443,9 @@ export class Gateway {
    * runs inside SQLite's FTS5 shadow tables (schema/fts.ts), so a caller
    * gets its LIMIT of ranked matches instead of a whole table to grep.
    */
-  search(cred: Credential, request: SearchRequest): SearchResult {
+  search(cred: Credential, rawRequest: SearchRequest): SearchResult {
     const identity = this.identify(cred);
+    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
     const result = searchEntity(this.db, identity, request);
     // Search-miss prioritization (issue #299 phase 5): an OWNER search that
     // found nothing records what was wanted; enrichers drain the queue
@@ -484,8 +491,9 @@ export class Gateway {
    * bootstraps: no rows, just the current watermark, so a fresh watcher
    * never replays history it was not granted while it happened.
    */
-  changes(cred: Credential, request: ChangesRequest): ChangesResult {
+  changes(cred: Credential, rawRequest: ChangesRequest): ChangesResult {
     const identity = this.identify(cred);
+    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
     if (request.entities.length === 0) {
       throw new GatewayError('contract', 'changes needs at least one entity to watch');
     }
@@ -565,8 +573,11 @@ export class Gateway {
   }
 
   /** Typed-command invocation: the only write path (rule R04). */
-  invoke(cred: Credential, request: InvokeRequest): InvokeOutcome {
+  invoke(cred: Credential, rawRequest: InvokeRequest): InvokeOutcome {
     const identity = this.identify(cred);
+    // Purposes are off the critical path (issue #306 decision 4): a caller
+    // that names none rides the default; the journal records what applied.
+    const request = { ...rawRequest, purpose: rawRequest.purpose ?? DEFAULT_PURPOSE };
     // The demo register is the owner loading a scenario — no app or agent
     // ever mints demo data (a granted caller marking real-looking rows as
     // purgeable would be an integrity hole, not a feature).
@@ -623,13 +634,16 @@ export class Gateway {
       return { status: 'denied', receiptId, reason: consent.failing };
     }
 
-    // Risk vs ceiling: above it, the request parks for owner confirmation
-    // instead of executing (§10 standing duty: confirmation routing).
+    // Confirmation routing (issue #306 decision 2, amending #294 decision 4):
+    // an installed caller's declared commands execute under the install-time
+    // grant — risk is a salience marker in the journal, never a park trigger.
+    // Only a Tier 3/4 command (`confirm: true` → capability row) parks, and
+    // it parks for EVERY non-owner caller, regardless of ceiling.
     const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
-    if (
-      identity.riskCeiling !== 'owner' &&
-      RISK_RANK[command.risk] > RISK_RANK[identity.riskCeiling]
-    ) {
+    const capability = this.db.vault
+      .prepare(`SELECT requires_confirmation FROM agent_capability WHERE command_id = ?`)
+      .get(command.command_id) as { requires_confirmation: number } | undefined;
+    if (identity.kind !== 'owner-device' && capability?.requires_confirmation === 1) {
       const invocationId = insertInvocation(
         this.db,
         request,
@@ -650,7 +664,7 @@ export class Gateway {
       return {
         status: 'parked',
         invocationId,
-        reason: `risk ${command.risk} exceeds ceiling ${identity.riskCeiling}`,
+        reason: `${command.name} requires owner confirmation (loud on purpose)`,
       };
     }
 

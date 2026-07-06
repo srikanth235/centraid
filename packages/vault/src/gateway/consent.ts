@@ -6,6 +6,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { nowIso } from '../ids.js';
 import type { FilterClause, Identity } from './types.js';
+import { DEFAULT_PURPOSE } from './types.js';
 
 export interface GrantRow {
   grant_id: string;
@@ -126,8 +127,11 @@ export function evaluateConsent(
   schema: string,
   table: string,
   verb: 'read' | 'act' | 'reveal',
-  purpose: string,
+  declaredPurpose?: string,
 ): ConsentDecision {
+  // Purposes are dormant, not deleted (issue #306 decision 4): an undeclared
+  // purpose evaluates as the default, so policy rules still bite either way.
+  const purpose = declaredPurpose ?? DEFAULT_PURPOSE;
   // Reveal is read-shaped but act-graded (issue #293): a readonly device may
   // browse placeholders, never dump secrets.
   if ((verb === 'act' || verb === 'reveal') && !identity.mayAct) {

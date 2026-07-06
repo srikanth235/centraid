@@ -201,9 +201,11 @@ const PUBLISH_BATCH: CommandDefinition = {
     },
   ],
   idempotency: 'once',
-  // Above every agent ceiling — an agent-proposed publish PARKS for the
-  // owner; the pause between draft and send is the consent gesture.
+  // An agent-proposed publish PARKS for the owner (issue #306 Tier 4): a
+  // whole batch landing in domain tables bypasses the staged-trust review,
+  // so the pause between draft and land stays the consent gesture.
   risk: 'high',
+  confirm: true,
   handler: publishStagedBatch,
 };
 

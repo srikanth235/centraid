@@ -42,6 +42,7 @@ import type {
   InvokeOutcome,
   InvokeRequest,
 } from './types.js';
+import { DEFAULT_PURPOSE } from './types.js';
 
 /**
  * A registered command as the gateway executes it: the handler plus the
@@ -269,6 +270,9 @@ export function runContractAndExecute(
   invocationId: string,
   confirmation?: Record<string, unknown>,
 ): InvokeOutcome {
+  // The purpose that applies (issue #306 decision 4) — journaled even when
+  // the caller declared none.
+  const purpose = request.purpose ?? DEFAULT_PURPOSE;
   const denyContract = (predicate: string, detail: Record<string, unknown>): InvokeOutcome => {
     setInvocationStatus(db, invocationId, 'failed');
     const receiptId = writeReceipt(db.journal, {
@@ -277,9 +281,9 @@ export function runContractAndExecute(
       action: `act ${command.name}`,
       objectType: 'agent.command',
       objectId: command.command_id,
-      purpose: request.purpose,
+      purpose,
       decision: 'deny',
-      detail,
+      detail: { ...detail, risk: command.risk },
     });
     writeExplanation(db.journal, invocationId, `${command.name} did not run: ${predicate}.`);
     return { status: 'failed', invocationId, receiptId, reason: predicate, predicate };
@@ -337,7 +341,7 @@ export function runContractAndExecute(
     db: db.vault,
     identity,
     input: request.input,
-    purpose: request.purpose,
+    purpose,
     now: nowIso(),
     newId: uuidv7,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
@@ -420,9 +424,9 @@ export function runContractAndExecute(
         action: `act ${command.name}`,
         objectType: 'agent.command',
         objectId: command.command_id,
-        purpose: request.purpose,
+        purpose,
         decision: 'deny',
-        detail: { stage: 'execution', predicate: failedPost.predicate },
+        detail: { stage: 'execution', predicate: failedPost.predicate, risk: command.risk },
       });
       writeExplanation(
         db.journal,
@@ -466,9 +470,9 @@ export function runContractAndExecute(
       action: `act ${command.name}`,
       objectType: 'agent.command',
       objectId: command.command_id,
-      purpose: request.purpose,
+      purpose,
       decision: 'deny',
-      detail: { stage: 'execution', error: reason },
+      detail: { stage: 'execution', error: reason, risk: command.risk },
     });
     writeExplanation(
       db.journal,
@@ -505,11 +509,14 @@ export function runContractAndExecute(
     action: `act ${command.name}`,
     objectType: 'agent.command',
     objectId: command.command_id,
-    purpose: request.purpose,
+    purpose,
     decision: 'allow',
     detail: {
       output: receiptOutput,
       writes,
+      // The salience marker (issue #306 decision 2): what the review feed
+      // surfaces first, now that risk no longer gates execution.
+      risk: command.risk,
       ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
       ...(confirmation ? { confirmation } : {}),
     },

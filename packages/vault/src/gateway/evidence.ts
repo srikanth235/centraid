@@ -13,7 +13,8 @@ export interface ReceiptInput {
   action: string;
   objectType: string;
   objectId: string | null;
-  purpose: string | null;
+  /** The purpose that APPLIED — callers record the defaulted notation (issue #306). */
+  purpose: string | null | undefined;
   decision: 'allow' | 'deny';
   detail?: Record<string, unknown>;
 }
@@ -49,7 +50,7 @@ export function writeReceipt(journal: DatabaseSync, input: ReceiptInput): string
       input.action,
       input.objectType,
       input.objectId,
-      input.purpose,
+      input.purpose ?? null,
       input.decision,
       occurredAt,
       hash,

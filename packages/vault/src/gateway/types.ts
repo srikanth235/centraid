@@ -11,6 +11,14 @@ export type Credential =
 
 export type Risk = 'low' | 'medium' | 'high';
 
+/**
+ * The auto-defaulted DPV purpose (issue #306 decision 4): purposes are off
+ * the critical path — a request that names none journals this notation. The
+ * vocabulary and `consent.policy` purpose rules stay for the day sharing
+ * reintroduces a genuine second party.
+ */
+export const DEFAULT_PURPOSE = 'dpv:ServiceProvision';
+
 /** Resolved caller identity after S1. */
 export interface Identity {
   kind: 'app' | 'agent' | 'owner-device';
@@ -20,12 +28,6 @@ export interface Identity {
   provAgentKind: 'app' | 'ai_agent' | 'owner';
   /** Party the caller acts as, when it has one (agents, owner devices). */
   partyId: string | null;
-  /**
-   * Highest command risk executable without per-action owner confirmation.
-   * Apps carry consent.app.risk_ceiling; agents default to medium (risk=high
-   * always requires confirmation per §03); the owner confirms by acting.
-   */
-  riskCeiling: Risk | 'owner';
   /** readonly devices may read but never act. */
   mayAct: boolean;
 }
@@ -76,8 +78,8 @@ export interface ReadRequest {
    */
   orderBy?: OrderBy;
   limit?: number;
-  /** Declared DPV purpose, e.g. `dpv:ServiceProvision`. */
-  purpose: string;
+  /** Declared DPV purpose. Absent = `DEFAULT_PURPOSE` (issue #306). */
+  purpose?: string;
 }
 
 /**
@@ -94,14 +96,14 @@ export interface SearchRequest {
   /** Caller-supplied filter, ANDed with the grant's row filter. */
   where?: FilterClause[];
   limit?: number;
-  purpose: string;
+  purpose?: string;
 }
 
 export interface InvokeRequest {
   /** Registered command name, e.g. `schedule.propose_event`. */
   command: string;
   input: Record<string, unknown>;
-  purpose: string;
+  purpose?: string;
   /**
    * Caller-supplied invocation id for idempotent replay: re-sending the same
    * id returns the recorded outcome instead of re-executing (§10 S4).
@@ -142,7 +144,7 @@ export interface SearchResult {
 export interface ChangesRequest {
   /** Logical entities to watch, e.g. `['core.transaction']`. Each is consent-checked for read. */
   entities: string[];
-  purpose: string;
+  purpose?: string;
   cursor: string | null;
   limit?: number;
 }
@@ -295,7 +297,21 @@ export interface CommandDefinition {
   preconditions: ConditionSpec[];
   postconditions: ConditionSpec[];
   idempotency: 'idempotent' | 'once' | 'retry-safe';
+  /**
+   * Salience marker (issue #306 decision 2): journaled on every invocation
+   * receipt and used to rank the owner's review feed — NOT an approval
+   * trigger. Parking rides `confirm` alone.
+   */
   risk: Risk;
+  /**
+   * Tier 3/4 marker (issue #306 decision 1): the command is loud on purpose —
+   * a non-owner invocation PARKS for explicit owner confirmation regardless
+   * of risk. Reserved for semantic egress (sends, publishes) and
+   * consent-state or irreversible acts (trust widening, merges). Everything
+   * else executes under the caller's install-time grant and is reviewed
+   * after the fact.
+   */
+  confirm?: boolean;
   handler: CommandHandler['execute'];
   /**
    * Input keys carrying secret material (issue #293 decision 4). The journal
@@ -335,7 +351,7 @@ export interface RevealRequest {
   alias?: string;
   /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
   columns?: string[];
-  purpose: string;
+  purpose?: string;
 }
 
 export interface RevealResult {
