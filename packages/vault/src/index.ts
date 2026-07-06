@@ -121,6 +121,7 @@ export { registerHomeCommands } from './commands/home.js';
 export { registerPeopleCommands, CIRCLE_SCHEME_URI } from './commands/people.js';
 export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
 export { registerTallyCommands } from './commands/tally.js';
+export { registerSyncCommands } from './commands/sync.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
 export {

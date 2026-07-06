@@ -21,9 +21,7 @@ Phase 2 — file-drop import spine:
 
 Phase 3 — interactive one-shot pulls:
 
-- [ ] Commit 5 — `sync.stage_rows` / `sync.publish_batch` typed commands:
-  agents stage freely, publishing parks for the owner (risk asymmetry is the
-  consent story)
+- [x] Commit 5 — agent staging commands
 
 Phase 4 — connections + broker invariants:
 
@@ -148,6 +146,24 @@ Commit 4 — gateway + shell import surface:
   (Account section).
 - `apps/desktop/src/renderer/styles.css` — import row/history styles.
 
+Commit 5 — agent staging commands:
+
+- `packages/vault/src/commands/sync.ts` (new) — `sync.stage_rows` (risk
+  low: agents with a live harness session stage parsed rows into a draft
+  batch, ≤500/call, unpublishable entity types refused at staging time)
+  and `sync.publish_batch` (risk high: parks above every agent ceiling —
+  the pause between draft and send IS the consent gesture; owner-direct
+  publishes run). Published rows ride the command pipeline's evidence.
+- `packages/vault/src/ingest/staging.ts` — transaction-less cores
+  (`stageBatchTx`, `applyBatchTx`, `ensureConnectionTx`) extracted so
+  command handlers reuse the spine inside the pipeline's own transaction;
+  the owner-path wrappers keep their receipts.
+- `packages/vault/src/commands/sync.test.ts` (new) — 4 tests: stage→park→
+  owner-approve lands + re-stage skips via the map, denial keeps the vault
+  untouched and the draft alive, unpublishable type refused, owner-direct
+  publish.
+- `packages/gateway/src/serve/vault-plane.ts` — sync commands registered.
+
 ## Decisions
 
 - **Registry beside provenance, not instead of it.** The issue said
@@ -207,6 +223,7 @@ Commit 4 — gateway + shell import surface:
   clean); app-engine 224 green; blueprints 95 green; typecheck green across
   vault/gateway/app-engine/blueprints/desktop.
 
+- Phase 3: vault 271 tests green (4 new consent-asymmetry tests).
 - Phase 2: vault 267 tests green (incl. 7 staging + 3 merge tests over the
   new spine; the pre-spine ingest suite passes unchanged on the rebased
   wrappers); gateway 145 green (incl. the over-HTTP import-route suite);
@@ -257,3 +274,4 @@ npx turbo run typecheck test \
 | claude-code-18f9dd6d-2f0-1783306222-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 17187 | 213298 | 43248152 | 198299 | 428784 | 56.0012 | 82265 | 1909177 | 109651163 | 529790 | feat(vault): the import spine — sync domain, staging band, file-drop customs, co |
 | claude-code-18f9dd6d-2f0-1783306260-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1939 | 455325 | 658 | 2599 | 0.5125 | 82267 | 1911116 | 110106488 | 530448 | feat(vault): import spine — sync domain, staging band, merge_party (#290)One ing |
 | claude-code-18f9dd6d-2f0-1783306296-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 739 | 457264 | 422 | 1163 | 0.4876 | 82269 | 1911855 | 110563752 | 530870 | feat(gateway+desktop): staged-import routes and the Import page (#290)/centraid/ |
+| claude-code-18f9dd6d-2f0-1783306436-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 8232 | 21271 | 5089005 | 21830 | 51333 | 6.5287 | 90501 | 1933126 | 115652757 | 552700 | feat(vault): agent staging commands — stage freely, publish parks (#290)sync.sta |
