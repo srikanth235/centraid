@@ -42,12 +42,19 @@ function unsealCell(itemId: string, column: string): string | null {
   return unsealValue(db.sealKey, sealAad('locker_item', column, itemId), String(v));
 }
 function tagsOf(itemId: string): string[] {
+  // Tags are SKOS concepts in the locker-tags scheme on core_tag (issue
+  // #310 S3) — the canonical mechanism, not a per-domain tag table.
   return (
     db.vault
-      .prepare('SELECT tag FROM locker_item_tag WHERE item_id = ? ORDER BY tag')
-      .all(itemId) as {
-      tag: string;
-    }[]
+      .prepare(
+        `SELECT c.pref_label AS tag FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+           JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+          WHERE t.target_type = 'locker.item' AND t.target_id = ?
+            AND s.uri = 'https://centraid.dev/schemes/locker-tags'
+          ORDER BY c.pref_label`,
+      )
+      .all(itemId) as { tag: string }[]
   ).map((r) => r.tag);
 }
 function starCount(itemId: string): number {
@@ -154,4 +161,60 @@ test('unstar clears the flag idempotently', () => {
   out(invoke('locker.unstar_item', { item_id: id }));
   out(invoke('locker.unstar_item', { item_id: id }));
   expect(starCount(id)).toBe(0);
+});
+
+// ── The service anchor + canonical tags (issue #310 S3) ────────────────
+
+test('connection_id anchors an item to a live broker connection, and validates', () => {
+  db.vault
+    .prepare(
+      `INSERT INTO sync_connection (connection_id, kind, label, principal, status, trust, created_at)
+       VALUES ('conn-gh', 'pull.github', 'work', NULL, 'active', 'staged', 't')`,
+    )
+    .run();
+  const id = out<{ item_id: string }>(
+    invoke('locker.add_item', {
+      type: 'login',
+      title: 'GitHub',
+      username: 'sri',
+      password: 'hunter2!',
+      connection_id: 'conn-gh',
+    }),
+  ).item_id;
+  const row = db.vault
+    .prepare('SELECT connection_id FROM locker_item WHERE item_id = ?')
+    .get(id) as { connection_id: string | null };
+  expect(row.connection_id).toBe('conn-gh');
+
+  // '' clears; a ghost connection refuses.
+  out(invoke('locker.edit_item', { item_id: id, connection_id: '' }));
+  const cleared = db.vault
+    .prepare('SELECT connection_id FROM locker_item WHERE item_id = ?')
+    .get(id) as { connection_id: string | null };
+  expect(cleared.connection_id).toBeNull();
+  expect(invoke('locker.edit_item', { item_id: id, connection_id: 'ghost' }).status).toBe(
+    'failed',
+  );
+  expect(
+    invoke('locker.add_item', { type: 'login', title: 'X', connection_id: 'ghost' }).status,
+  ).toBe('failed');
+});
+
+test('tags are shared SKOS concepts — two items reuse one concept', () => {
+  const a = out<{ item_id: string }>(
+    invoke('locker.add_item', { type: 'note', title: 'A', content: 'x', tags: ['work'] }),
+  ).item_id;
+  const b = out<{ item_id: string }>(
+    invoke('locker.add_item', { type: 'note', title: 'B', content: 'y', tags: ['work', 'dev'] }),
+  ).item_id;
+  expect(tagsOf(a)).toEqual(['work']);
+  expect(tagsOf(b)).toEqual(['dev', 'work']);
+  const concepts = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM core_concept c
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE s.uri = 'https://centraid.dev/schemes/locker-tags'`,
+    )
+    .get() as { n: number };
+  expect(concepts.n).toBe(2); // 'work' shared, 'dev' minted once
 });

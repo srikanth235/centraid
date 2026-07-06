@@ -37,10 +37,12 @@ export const ONTOLOGY_VERSION = '1.1';
 //   - the consent plane (apps, grants, install memory, the seed registry,
 //     the ext-band registry) before anything that enrolls or scopes;
 //   - the agent plane's model tables;
+//   - the sync spine before the domains (locker's connection anchor FKs it),
+//     with its credential/health sidecars;
 //   - the domains (extensions hold FKs into core; locker's alias sidecar and
 //     tally after the domains they decorate);
-//   - the sync spine, then its credential/health sidecars, then the outbox
-//     (items reference connections);
+//   - the outbox after sync and social (items reference connections and
+//     published messages);
 //   - enrichment after media (the phash sidecar FKs the asset);
 //   - FTS_DDL near-last: generated triggers read every base table's final
 //     shape, and the backfill is a no-op on a fresh file;
@@ -56,6 +58,8 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     SEED_DDL,
     APP_EXT_DDL,
     AGENT_DDL,
+    SYNC_DDL,
+    SYNC_CREDENTIAL_DDL,
     HEALTH_DDL,
     FINANCE_DDL,
     SCHEDULE_DDL,
@@ -68,8 +72,6 @@ export const VAULT_MIGRATIONS: readonly string[] = [
     LOCKER_DDL,
     LOCKER_ALIAS_DDL,
     TALLY_DDL,
-    SYNC_DDL,
-    SYNC_CREDENTIAL_DDL,
     ENRICH_DDL,
     OUTBOX_DDL,
     FTS_DDL,

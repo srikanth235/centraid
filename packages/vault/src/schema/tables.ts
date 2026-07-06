@@ -69,7 +69,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'debt',
     'journal_entry',
   ],
-  locker: ['item', 'item_tag'],
+  locker: ['item'],
   sync: [
     'connection',
     'external_entity',

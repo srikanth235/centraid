@@ -29,6 +29,14 @@ import { setStarred } from './flags.js';
 
 export const LOCKER_ITEM_TYPE = 'locker.item';
 
+/**
+ * Free-form locker tags are SKOS concepts in this scheme, carried by
+ * core_tag rows on the item (issue #310 S3) — the one classification
+ * mechanism, not a second per-domain tag table. https URI, not urn:, for
+ * the same colon-literal reason as the flags scheme.
+ */
+export const LOCKER_TAGS_SCHEME_URI = 'https://centraid.dev/schemes/locker-tags';
+
 const PURGE_WINDOW_DAYS = 30;
 
 /** Columns each item type owns; everything else is nulled on write. */
@@ -80,16 +88,89 @@ function plusDays(iso: string, days: number): string {
   return d.toISOString();
 }
 
-/** Replace an item's tags with the given set (deduped, trimmed, non-empty). */
+/** The locker-tags scheme, created on first use (the flags-scheme pattern). */
+function lockerTagsSchemeId(ctx: HandlerCtx): string {
+  const existing = ctx.db
+    .prepare('SELECT scheme_id FROM core_concept_scheme WHERE uri = ?')
+    .get(LOCKER_TAGS_SCHEME_URI) as { scheme_id: string } | undefined;
+  if (existing) return existing.scheme_id;
+  const schemeId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
+       VALUES (?, ?, 'Locker tags', 'centraid', '1')`,
+    )
+    .run(schemeId, LOCKER_TAGS_SCHEME_URI);
+  return schemeId;
+}
+
+/**
+ * Replace an item's tags with the given set (deduped, trimmed, non-empty).
+ * Each label is a SKOS concept in the locker-tags scheme (created on first
+ * use, shared across items) and membership is a core_tag row — who tagged
+ * and when come for free, and the graph sees locker items exactly the way
+ * it sees tagged photos and documents.
+ */
 function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void {
-  ctx.db.prepare('DELETE FROM locker_item_tag WHERE item_id = ?').run(itemId);
+  const schemeId = lockerTagsSchemeId(ctx);
+  ctx.db
+    .prepare(
+      `DELETE FROM core_tag
+        WHERE target_type = ? AND target_id = ?
+          AND concept_id IN (SELECT concept_id FROM core_concept WHERE scheme_id = ?)`,
+    )
+    .run(LOCKER_ITEM_TYPE, itemId, schemeId);
+  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
+    | { owner_party_id: string | null }
+    | undefined;
   const seen = new Set<string>();
   for (const raw of tags) {
     const tag = String(raw).trim();
     if (!tag || seen.has(tag)) continue;
     seen.add(tag);
-    ctx.db.prepare('INSERT INTO locker_item_tag (item_id, tag) VALUES (?, ?)').run(itemId, tag);
+    let conceptId = (
+      ctx.db
+        .prepare('SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?')
+        .get(schemeId, tag) as { concept_id: string } | undefined
+    )?.concept_id;
+    if (!conceptId) {
+      conceptId = ctx.newId();
+      ctx.db
+        .prepare(
+          `INSERT INTO core_concept (concept_id, scheme_id, notation, pref_label, alt_labels_json, broader_concept_id, definition)
+           VALUES (?, ?, ?, ?, NULL, NULL, NULL)`,
+        )
+        .run(conceptId, schemeId, tag, tag);
+    }
+    const tagId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?)`,
+      )
+      .run(tagId, LOCKER_ITEM_TYPE, itemId, conceptId, owner?.owner_party_id ?? null, ctx.now);
+    ctx.wrote('core.tag', tagId);
   }
+}
+
+/**
+ * Set (or clear, on '') the item's service anchor (issue #310 S3): the
+ * broker connection this credential is for. Validated live — an anchor to a
+ * connection the vault does not hold would be the opaque pointer again.
+ */
+function setConnection(ctx: HandlerCtx, itemId: string, connectionId: string): void {
+  const trimmed = connectionId.trim();
+  if (trimmed.length === 0) {
+    ctx.db.prepare('UPDATE locker_item SET connection_id = NULL WHERE item_id = ?').run(itemId);
+    return;
+  }
+  const live = ctx.db
+    .prepare('SELECT 1 AS x FROM sync_connection WHERE connection_id = ?')
+    .get(trimmed);
+  if (!live) throw new Error(`no sync.connection with id ${trimmed}`);
+  ctx.db
+    .prepare('UPDATE locker_item SET connection_id = ? WHERE item_id = ?')
+    .run(trimmed, itemId);
 }
 
 /**
@@ -154,6 +235,9 @@ const ADD_ITEM: CommandDefinition = {
       // A stable connector-binding name (issue #298 item 4): letters, digits,
       // dot, dash, underscore — the token in `locker:@<alias>:<column>`.
       alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,64}$' },
+      // The service anchor (issue #310 S3): the broker connection this
+      // credential is for, validated live.
+      connection_id: { type: 'string' },
       ...FIELD_SCHEMA,
     },
   },
@@ -208,6 +292,9 @@ const ADD_ITEM: CommandDefinition = {
     if (typeof input.alias === 'string' && input.alias.length > 0) {
       setAlias(ctx, itemId, input.alias);
     }
+    if (typeof input.connection_id === 'string' && input.connection_id.length > 0) {
+      setConnection(ctx, itemId, input.connection_id);
+    }
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
     ctx.cite({
@@ -233,6 +320,8 @@ const EDIT_ITEM: CommandDefinition = {
       compromised: { type: 'boolean' },
       // Set to re-point a connector binding at this item; '' clears it.
       alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{0,64}$' },
+      // Set to re-anchor the service connection; '' clears it.
+      connection_id: { type: 'string' },
       ...FIELD_SCHEMA,
     },
   },
@@ -264,6 +353,9 @@ const EDIT_ITEM: CommandDefinition = {
     if (input.alias != null) {
       // Empty string clears the alias (frees it for another item).
       setAlias(ctx, itemId, String(input.alias));
+    }
+    if (input.connection_id != null) {
+      setConnection(ctx, itemId, String(input.connection_id));
     }
     for (const [col, val] of Object.entries(f)) {
       if (isPlaceholder(val)) continue; // round-tripped «sealed» = unchanged
@@ -351,7 +443,7 @@ const PURGE_ITEM: CommandDefinition = {
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
-    ctx.db.prepare('DELETE FROM locker_item_tag WHERE item_id = ?').run(itemId);
+    setTags(ctx, itemId, []); // core_tag rows are polymorphic — no CASCADE
     ctx.db.prepare('DELETE FROM locker_item WHERE item_id = ?').run(itemId);
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     return { item_id: itemId };

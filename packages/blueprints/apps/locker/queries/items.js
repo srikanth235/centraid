@@ -15,6 +15,7 @@
  */
 
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
+const LOCKER_TAGS_SCHEME_URI = 'https://centraid.dev/schemes/locker-tags';
 const ITEM_TYPE = 'locker.item';
 
 /** A safe, secret-free subtitle for a list row. */
@@ -77,18 +78,38 @@ export function decorate(rows, tagsByItem, starredIds, watchByItem) {
   });
 }
 
-/** Read tags for a set of item ids into item_id → string[]. */
+/**
+ * Read tags for a set of item ids into item_id → string[]. Tags are SKOS
+ * concepts in the locker-tags scheme carried by core_tag rows (issue #310
+ * S3) — the same canonical mechanism the star already rides.
+ */
 export async function readTags(ctx, ids, purpose) {
   const map = new Map();
   if (ids.length === 0) return map;
-  const tags = await ctx.vault.read({
-    entity: 'locker.item_tag',
-    where: [{ column: 'item_id', op: 'in', value: ids }],
-    purpose,
-  });
+  const [concepts, schemes, tags] = await Promise.all([
+    ctx.vault.read({ entity: 'core.concept', purpose }),
+    ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
+    ctx.vault.read({
+      entity: 'core.tag',
+      where: [
+        { column: 'target_type', op: 'eq', value: ITEM_TYPE },
+        { column: 'target_id', op: 'in', value: ids },
+      ],
+      purpose,
+    }),
+  ]);
+  const tagScheme = (schemes.rows ?? []).find((s) => s.uri === LOCKER_TAGS_SCHEME_URI);
+  if (!tagScheme) return map;
+  const labelByConcept = new Map(
+    (concepts.rows ?? [])
+      .filter((c) => c.scheme_id === tagScheme.scheme_id)
+      .map((c) => [c.concept_id, c.pref_label]),
+  );
   for (const t of tags.rows ?? []) {
-    if (!map.has(t.item_id)) map.set(t.item_id, []);
-    map.get(t.item_id).push(t.tag);
+    const label = labelByConcept.get(t.concept_id);
+    if (!label) continue; // a flags-scheme star, not a tag
+    if (!map.has(t.target_id)) map.set(t.target_id, []);
+    map.get(t.target_id).push(label);
   }
   for (const arr of map.values()) arr.sort();
   return map;
