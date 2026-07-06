@@ -18,6 +18,7 @@ import { LOCKER_ALIAS_DDL, LOCKER_DDL } from './domains-locker.js';
 import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
+import { OUTBOX_DDL } from './outbox.js';
 import { SEED_DDL } from './seed.js';
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
@@ -100,6 +101,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // cells the gateway broker injects toward pinned hosts; no row keeps the
   // harness-ambient lane.
   SYNC_CREDENTIAL_DDL,
+  // v13: the outbox (issue #306) — external writes as first-class artifacts
+  // the owner decides on, plus the standing (actor, verb, target) grants
+  // minted from them.
+  OUTBOX_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];
