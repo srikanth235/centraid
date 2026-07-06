@@ -229,6 +229,15 @@ export interface HandlerCtx {
   wrote(entityType: string, entityId: string): void;
   /** Cite a row the command read to justify its action. */
   cite(citation: Citation): void;
+  /**
+   * Decrypt one sealed cell INSIDE the command (issue #293 decision 5):
+   * derivatives without revelation — `locker.totp_code` unseals the seed,
+   * returns the 6 digits, and the seed never crosses the command boundary.
+   * Only cells the command declares in `unseals` resolve; every unseal is
+   * noted on the command's receipt (column names, never values). Plaintext
+   * legacy values return as-is; a missing row/column returns null.
+   */
+  unseal(entityType: string, entityId: string, column: string): string | null;
 }
 
 /** Domain-owned command implementation, hosted and checked by the gateway. */
@@ -248,6 +257,35 @@ export interface CommandDefinition {
   idempotency: 'idempotent' | 'once' | 'retry-safe';
   risk: Risk;
   handler: CommandHandler['execute'];
+  /**
+   * Input keys carrying secret material (issue #293 decision 4). The journal
+   * is append-only — these keys are replaced with a keyed hash token before
+   * the invocation row is written, and in every parked-summary payload. The
+   * handler still receives the raw input.
+   */
+  sealedInput?: readonly string[];
+  /**
+   * Sealed cells this command may decrypt internally, as
+   * `<entity>.<column>` (e.g. `locker.item.otp_seed`). `ctx.unseal` refuses
+   * anything not declared here.
+   */
+  unseals?: readonly string[];
+}
+
+/** A reveal: plaintext of one entity's sealed columns (issue #293). */
+export interface RevealRequest {
+  /** Logical entity, e.g. `locker.item`. Must have sealed columns. */
+  entity: string;
+  entityId: string;
+  /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
+  columns?: string[];
+  purpose: string;
+}
+
+export interface RevealResult {
+  /** column → plaintext (null where the cell is empty). */
+  values: Record<string, string | null>;
+  receiptId: string;
 }
 
 export class GatewayError extends Error {

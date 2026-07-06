@@ -20,6 +20,14 @@ import {
 } from './evidence.js';
 import { validateJson } from './json-schema.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
+import {
+  isSealedValue,
+  redactSealedInput,
+  sealAad,
+  sealValue,
+  sealedColumnsOf,
+  unsealValue,
+} from '../schema/sealed.js';
 import type {
   Citation,
   CommandDefinition,
@@ -29,6 +37,17 @@ import type {
   InvokeOutcome,
   InvokeRequest,
 } from './types.js';
+
+/**
+ * A registered command as the gateway executes it: the handler plus the
+ * sealed-class declarations (issue #293) that never leave process memory —
+ * `sealedInput` drives journal redaction, `unseals` gates `ctx.unseal`.
+ */
+export interface RegisteredCommand {
+  handler: CommandDefinition['handler'];
+  sealedInput: readonly string[];
+  unseals: readonly string[];
+}
 
 // §10 S4: polymorphic (type, id) pairs that declarative FKs cannot express.
 // Any row a command writes into these tables must point at live rows, or the
@@ -98,6 +117,37 @@ export function sweepDanglingLinks(
   }
 }
 
+/**
+ * The seal sweep (issue #293): every command write passes this chokepoint,
+ * so a plaintext secret in a sealed column becomes ciphertext BEFORE the
+ * transaction may commit — even when the handler was careless. Values that
+ * are already sealed (re-writes of untouched columns) pass through.
+ */
+export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: string }[]): void {
+  for (const write of writes) {
+    const cols = sealedColumnsOf(write.entityType);
+    if (cols.length === 0) continue;
+    const ref = resolveEntity(write.entityType, db.vault);
+    if (!ref || ref.file !== 'vault') continue;
+    const pk = pkColumn(db.vault, ref.physical);
+    const select = cols.map((c) => `"${c}"`).join(', ');
+    const row = db.vault
+      .prepare(`SELECT ${select} FROM "${ref.physical}" WHERE "${pk}" = ?`)
+      .get(write.entityId) as Record<string, unknown> | undefined;
+    if (!row) continue; // deleted within the same command
+    for (const col of cols) {
+      const value = row[col];
+      if (typeof value !== 'string' || value.length === 0 || isSealedValue(value)) continue;
+      db.vault
+        .prepare(`UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
+        .run(
+          sealValue(db.sealKey, sealAad(ref.physical, col, write.entityId), value),
+          write.entityId,
+        );
+    }
+  }
+}
+
 /** Validate every polymorphic row this invocation wrote. Throws to roll back. */
 export function validatePolymorphicWrites(
   vault: DatabaseSync,
@@ -140,6 +190,7 @@ export function insertInvocation(
   grantId: string | null,
   status: string,
   fixedId?: string,
+  sealedInput: readonly string[] = [],
 ): string {
   const invocationId = fixedId ?? request.invocationId ?? uuidv7();
   db.journal
@@ -152,7 +203,9 @@ export function insertInvocation(
       command.command_id,
       identity.callerId,
       grantId,
-      JSON.stringify(request.input),
+      // The journal is append-only (issue #293): declared secret inputs land
+      // as keyed hash tokens, never as values — a leak here is permanent.
+      JSON.stringify(redactSealedInput(db.sealKey, request.input, sealedInput)),
       status,
       nowIso(),
     );
@@ -192,7 +245,7 @@ export function replayInvocation(db: VaultDb, invocationId: string): InvokeOutco
 
 export function runContractAndExecute(
   db: VaultDb,
-  handlers: ReadonlyMap<string, CommandDefinition['handler']>,
+  commands: ReadonlyMap<string, RegisteredCommand>,
   identity: Identity,
   request: InvokeRequest,
   command: CommandRow,
@@ -249,8 +302,12 @@ export function runContractAndExecute(
   // S4 — execution: the only writer in the system.
   const writes: { entityType: string; entityId: string }[] = [];
   const citations: Citation[] = [];
-  const handler = handlers.get(command.name);
-  if (!handler) return denyContract('handler missing', { stage: 'execution' });
+  const registered = commands.get(command.name);
+  if (!registered) return denyContract('handler missing', { stage: 'execution' });
+  const handler = registered.handler;
+  // Cells this command decrypted internally (issue #293) — receipted as
+  // column names, never values.
+  const unsealed = new Set<string>();
   const ctx: HandlerCtx = {
     db: db.vault,
     identity,
@@ -260,6 +317,24 @@ export function runContractAndExecute(
     newId: uuidv7,
     wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
     cite: (citation) => citations.push(citation),
+    unseal: (entityType, entityId, column) => {
+      const cell = `${entityType}.${column}`;
+      if (!registered.unseals.includes(cell)) {
+        throw new Error(`${command.name} does not declare unseal of ${cell}`);
+      }
+      const ref = resolveEntity(entityType, db.vault);
+      if (!ref || ref.file !== 'vault') throw new Error(`unknown entity ${entityType}`);
+      const pk = pkColumn(db.vault, ref.physical);
+      const row = db.vault
+        .prepare(`SELECT "${column}" AS v FROM "${ref.physical}" WHERE "${pk}" = ?`)
+        .get(entityId) as { v: unknown } | undefined;
+      if (!row || row.v == null) return null;
+      unsealed.add(cell);
+      const value = String(row.v);
+      return isSealedValue(value)
+        ? unsealValue(db.sealKey, sealAad(ref.physical, column, entityId), value)
+        : value;
+    },
   };
   let output: Record<string, unknown>;
   db.vault.exec('BEGIN');
@@ -271,6 +346,10 @@ export function runContractAndExecute(
     // end-date their inbound/outbound links (after validation — a swept
     // link points at the deleted row by design).
     sweepDanglingLinks(db.vault, writes, ctx.now);
+    // The seal sweep (issue #293): plaintext in sealed columns becomes
+    // ciphertext inside the same transaction — no committed row ever holds a
+    // clear secret, however the handler wrote it.
+    sealWrites(db, writes);
     const postSpecs = JSON.parse(command.postconditions_json) as ConditionSpec[];
     const postResults = evaluateConditions(db.vault, postSpecs, { ...request.input, ...output });
     const failedPost = postResults.find((r) => !r.passed);
@@ -363,7 +442,12 @@ export function runContractAndExecute(
     objectId: command.command_id,
     purpose: request.purpose,
     decision: 'allow',
-    detail: { output, writes, ...(confirmation ? { confirmation } : {}) },
+    detail: {
+      output,
+      writes,
+      ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
+      ...(confirmation ? { confirmation } : {}),
+    },
   });
   writeEvidence(db.journal, invocationId, citations);
   writeExplanation(

@@ -11,7 +11,13 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { PUBLISHERS } from '../ingest/publishers.js';
-import { applyBatchTx, ensureConnectionTx, stageBatchTx, type StageCandidate } from '../ingest/staging.js';
+import {
+  applyBatchTx,
+  ensureConnectionTx,
+  stageBatchTx,
+  type StageCandidate,
+} from '../ingest/staging.js';
+import { sealedColumnsOf } from '../schema/sealed.js';
 
 /** Bound one call's staging payload — bulk arrives as several batches. */
 const MAX_ROWS_PER_STAGE = 500;
@@ -80,6 +86,13 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
     if (!PUBLISHERS.has(row.entity_type)) {
       throw new Error(
         `no publisher for "${row.entity_type}" — stageable: ${[...PUBLISHERS.keys()].join(', ')}`,
+      );
+    }
+    // Sealed entity types stage only through the owner's file-drop surface
+    // (issue #293): an agent never carries secret material, even staged.
+    if (sealedColumnsOf(row.entity_type).length > 0) {
+      throw new Error(
+        `"${row.entity_type}" carries sealed columns — secret material stages only through the owner's import surface (issue #293)`,
       );
     }
   }
@@ -411,7 +424,9 @@ function setCursor(ctx: HandlerCtx): Record<string, unknown> {
   const cursorId = existing?.cursor_id ?? ctx.newId();
   if (existing) {
     ctx.db
-      .prepare('UPDATE sync_connection_cursor SET value_json = ?, updated_at = ? WHERE cursor_id = ?')
+      .prepare(
+        'UPDATE sync_connection_cursor SET value_json = ?, updated_at = ? WHERE cursor_id = ?',
+      )
       .run(JSON.stringify(input.value ?? null), ctx.now, cursorId);
   } else {
     ctx.db
@@ -436,7 +451,10 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
       connection_id: { type: 'string', minLength: 1 },
       // The owner's two levers: pause a connector, or resume one (a resumed
       // needs-auth connection re-proves itself on the next begin_run).
-      status: { type: 'string', enum: ['paused', 'active'] },
+      // `needs-auth` is the fire path's flip when a declared secret item is
+      // missing or trashed (issue #293) — same honest-liveness state a
+      // principal mismatch shows.
+      status: { type: 'string', enum: ['paused', 'active', 'needs-auth'] },
     },
   },
   outputSchema: {

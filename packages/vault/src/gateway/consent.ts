@@ -18,7 +18,7 @@ export interface ScopeRow {
   grant_id: string;
   schema_name: string;
   table_name: string | null;
-  verbs: 'read' | 'read+act' | 'act';
+  verbs: 'read' | 'read+act' | 'act' | 'reveal';
   row_filter_json: string | null;
   field_mask_json: string | null;
 }
@@ -125,10 +125,12 @@ export function evaluateConsent(
   identity: Identity,
   schema: string,
   table: string,
-  verb: 'read' | 'act',
+  verb: 'read' | 'act' | 'reveal',
   purpose: string,
 ): ConsentDecision {
-  if (verb === 'act' && !identity.mayAct) {
+  // Reveal is read-shaped but act-graded (issue #293): a readonly device may
+  // browse placeholders, never dump secrets.
+  if ((verb === 'act' || verb === 'reveal') && !identity.mayAct) {
     return { decision: 'deny', failing: 'device is readonly', grantId: null };
   }
   if (!purposePermitted(vault, schema, table, purpose)) {
@@ -148,7 +150,14 @@ export function evaluateConsent(
   const explicitOnly = requiresExplicitScope(vault, schema, table);
   for (const grant of grants) {
     for (const scope of scopesFor(vault, grant.grant_id, schema, table)) {
-      const verbOk = verb === 'read' ? scope.verbs !== 'act' : scope.verbs !== 'read';
+      // Reveal never rides read or act (issue #293): only an explicit
+      // 'reveal' scope covers it, and a 'reveal' scope covers nothing else.
+      const verbOk =
+        verb === 'reveal'
+          ? scope.verbs === 'reveal'
+          : verb === 'read'
+            ? scope.verbs === 'read' || scope.verbs === 'read+act'
+            : scope.verbs === 'act' || scope.verbs === 'read+act';
       if (!verbOk) continue;
       // High-sensitivity tables never ride a whole-schema scope.
       if (explicitOnly && scope.table_name === null) continue;

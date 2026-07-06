@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
+import { isSealedValue, sealAad, unsealValue } from '../schema/sealed.js';
 import type { Credential } from '../gateway/types.js';
 import { LOCKER_ITEM_TYPE, registerLockerCommands } from './locker.js';
 
@@ -31,6 +32,14 @@ function row(itemId: string): Record<string, unknown> | undefined {
   return db.vault.prepare('SELECT * FROM locker_item WHERE item_id = ?').get(itemId) as
     | Record<string, unknown>
     | undefined;
+}
+/** At-rest secret value, decrypted for assertion (issue #293: rows hold ciphertext). */
+function unsealCell(itemId: string, column: string): string | null {
+  const r = row(itemId);
+  const v = r?.[column];
+  if (v == null) return null;
+  expect(isSealedValue(v), `${column} should be sealed at rest`).toBe(true);
+  return unsealValue(db.sealKey, sealAad('locker_item', column, itemId), String(v));
 }
 function tagsOf(itemId: string): string[] {
   return (
@@ -67,12 +76,12 @@ function addLogin(input: Record<string, unknown> = {}): string {
   ).item_id;
 }
 
-test('add_item stores the login with its secret fields and tags', () => {
+test('add_item stores the login with its secret fields (sealed at rest) and tags', () => {
   const id = addLogin();
   const r = row(id)!;
   expect(r.type).toBe('login');
   expect(r.title).toBe('GitHub');
-  expect(r.password).toBe('H2$kL9mVq!pR4wZ');
+  expect(unsealCell(id, 'password')).toBe('H2$kL9mVq!pR4wZ');
   expect(r.deleted_at).toBeNull();
   expect(tagsOf(id)).toEqual(['dev', 'work']);
 });
@@ -87,7 +96,7 @@ test('add_item nulls fields that do not belong to the item type', () => {
     }),
   ).item_id;
   const r = row(id)!;
-  expect(r.content).toBe('No. 5123');
+  expect(unsealCell(id, 'content')).toBe('No. 5123');
   // username is not a note field, so it is dropped, not smuggled in.
   expect(r.username).toBeNull();
 });
@@ -104,7 +113,7 @@ test('edit_item rewrites the type fields and replaces tags', () => {
   );
   const r = row(id)!;
   expect(r.title).toBe('GitHub (work)');
-  expect(r.password).toBe('newpass123!');
+  expect(unsealCell(id, 'password')).toBe('newpass123!');
   expect(tagsOf(id)).toEqual(['dev']);
 });
 

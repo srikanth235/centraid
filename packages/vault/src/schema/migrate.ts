@@ -5,7 +5,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
-import { CONSENT_DDL } from './consent.js';
+import { CONSENT_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
@@ -77,6 +77,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // v7: the sync domain (issue #290 phases 2-4) — connections, the
   // external-id map, the import staging band, cursors + run log.
   SYNC_DDL,
+  // v8: the `reveal` scope verb (issue #293) — SQLite cannot ALTER a CHECK,
+  // so grant scopes rebuild in place. Pure copy; fresh vaults get the
+  // widened CHECK from v1 directly.
+  GRANT_SCOPE_REVEAL_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

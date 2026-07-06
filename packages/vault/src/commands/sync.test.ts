@@ -70,9 +70,9 @@ test('agent stages freely; publish parks; owner approval lands the rows', () => 
   const batchId = (staged as { output: { batch_id: string } }).output.batch_id;
 
   // Nothing landed — staging is reviewable state.
-  expect(
-    (db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n,
-  ).toBe(0);
+  expect((db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n).toBe(
+    0,
+  );
 
   const publish = gw.invoke(agent, {
     command: 'sync.publish_batch',
@@ -81,11 +81,7 @@ test('agent stages freely; publish parks; owner approval lands the rows', () => 
   });
   expect(publish.status).toBe('parked'); // high > agent ceiling medium
 
-  const confirmed = gw.confirm(
-    owner,
-    (publish as { invocationId: string }).invocationId,
-    true,
-  );
+  const confirmed = gw.confirm(owner, (publish as { invocationId: string }).invocationId, true);
   expect(confirmed.status).toBe('executed');
   expect((confirmed as { output: { created: number } }).output.created).toBe(1);
   const event = db.vault
@@ -115,9 +111,9 @@ test('owner denial keeps the vault untouched; the draft survives for later', () 
   });
   const denied = gw.confirm(owner, (publish as { invocationId: string }).invocationId, false);
   expect(denied.status).toBe('denied');
-  expect(
-    (db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n,
-  ).toBe(0);
+  expect((db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number }).n).toBe(
+    0,
+  );
   const batch = db.vault
     .prepare('SELECT status FROM sync_import_batch WHERE batch_id = ?')
     .get(batchId) as { status: string };
@@ -130,12 +126,26 @@ test('an unpublishable entity type is refused at staging time', () => {
     input: {
       kind: 'pull.x',
       label: 'x',
-      rows: [{ entity_type: 'locker.item', external_id: 'e1', payload: {} }],
+      rows: [{ entity_type: 'health.vital', external_id: 'e1', payload: {} }],
     },
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('failed');
   expect((outcome as { reason: string }).reason).toMatch(/no publisher/);
+});
+
+test('a sealed entity type never stages through an agent (issue #293)', () => {
+  const outcome = gw.invoke(agent, {
+    command: 'sync.stage_rows',
+    input: {
+      kind: 'pull.x',
+      label: 'x',
+      rows: [{ entity_type: 'locker.item', external_id: 'e1', payload: { title: 'x' } }],
+    },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('failed');
+  expect((outcome as { reason: string }).reason).toMatch(/sealed/);
 });
 
 test('the owner publishes directly — no parking above their ceiling', () => {
@@ -186,9 +196,7 @@ describe('connection lifecycle (phase 4)', () => {
     // A matching re-auth restores the connection to active.
     const recovered = beginRun('me@example.com');
     expect(recovered.status).toBe('executed');
-    expect(
-      (recovered as { output: { run_id?: string } }).output.run_id,
-    ).toBeTruthy();
+    expect((recovered as { output: { run_id?: string } }).output.run_id).toBeTruthy();
     const after = db.vault
       .prepare(`SELECT status FROM sync_connection WHERE kind = 'mcp.gmail'`)
       .get() as { status: string };

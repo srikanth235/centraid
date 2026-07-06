@@ -12,6 +12,7 @@
 // is always present when a trigger fires.
 
 import type { DatabaseSync } from 'node:sqlite';
+import { sealedColumnsOf } from './sealed.js';
 
 /** Decoded text of a canonical body, or null for anything non-text. */
 export function contentText(mediaType: unknown, contentUri: unknown): string | null {
@@ -43,7 +44,7 @@ type FtsColumn =
   /** core.content_item indexing its own uri (text media only). */
   | { name: string; kind: 'self-content' };
 
-interface FtsEntitySpec {
+export interface FtsEntitySpec {
   /** Logical entity, e.g. `knowledge.note`. */
   entity: string;
   /** Base-table PK, mirrored UNINDEXED into the fts table for joins. */
@@ -198,7 +199,26 @@ function valueExpr(column: FtsColumn, prefix: string): string {
             WHERE content_id = ${prefix}."${column.fk}")`;
 }
 
+/**
+ * The structural FTS gate (issue #293): a sealed column can never feed a
+ * text index, whatever a spec declares — the throw happens at DDL-build
+ * time, so a bad declaration fails the migration, not the audit.
+ */
+export function assertNoSealedFtsColumns(spec: FtsEntitySpec): void {
+  const sealed = sealedColumnsOf(spec.entity);
+  if (sealed.length === 0) return;
+  for (const col of spec.columns) {
+    const name = col.kind === 'column' ? col.name : col.kind === 'content' ? col.fk : 'content_uri';
+    if (sealed.includes(name)) {
+      throw new Error(
+        `fts spec for ${spec.entity} names sealed column "${name}" — sealed columns are never indexed (issue #293)`,
+      );
+    }
+  }
+}
+
 function entityDdl(spec: FtsEntitySpec): string {
+  assertNoSealedFtsColumns(spec);
   const base = physical(spec.entity);
   const fts = `fts_${base}`;
   const ftsColumns = [`${spec.idColumn} UNINDEXED`, ...spec.columns.map((c) => c.name)];
