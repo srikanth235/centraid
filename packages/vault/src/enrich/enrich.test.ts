@@ -623,3 +623,73 @@ describe('enrich settings', () => {
     );
   });
 });
+
+describe('per-class standing consent (issue #310 C3)', () => {
+  test('classes outside the narrowed trust stage for review instead of auto-publishing', () => {
+    const { assetId } = addPhoto();
+    // Owner consents to captions only on this enrichment connection.
+    const first = invoke(agent, 'sync.stage_rows', {
+      kind: 'enrichment.vision',
+      label: 'narrow',
+      rows: [
+        {
+          entity_type: 'knowledge.annotation',
+          external_id: `${assetId}:warmup`,
+          payload: { target_type: 'media.media_asset', target_id: assetId, body: 'warmup' },
+        },
+      ],
+    });
+    const connectionId = output<{ connection_id: string }>(first).connection_id;
+    expect(
+      invoke(owner, 'sync.set_connection_trust', {
+        connection_id: connectionId,
+        trust: 'auto-publish',
+        enrich_classes: ['caption'],
+      }).status,
+    ).toBe('executed');
+
+    const mixed = invoke(agent, 'sync.stage_rows', {
+      kind: 'enrichment.vision',
+      label: 'narrow',
+      rows: [
+        {
+          entity_type: 'knowledge.annotation',
+          external_id: `${assetId}:caption`,
+          payload: { target_type: 'media.media_asset', target_id: assetId, body: 'A red bicycle' },
+        },
+        {
+          entity_type: 'core.tag',
+          external_id: `${assetId}:tag:bicycle`,
+          payload: {
+            target_type: 'media.media_asset',
+            target_id: assetId,
+            label: 'Bicycle',
+            confidence: 0.9,
+          },
+        },
+      ],
+    });
+    expect(mixed.status).toBe('executed');
+    const out = output<{
+      published: { created: number };
+      held?: number;
+      held_batch_id?: string;
+    }>(mixed);
+    // The caption landed; the vision tag did NOT land silently…
+    expect(out.published.created).toBe(1);
+    expect(out.held).toBe(1);
+    expect(out.held_batch_id).toBeTruthy();
+    const tagCount = db.vault
+      .prepare(
+        `SELECT count(*) AS n FROM core_tag t JOIN core_concept c ON c.concept_id = t.concept_id
+          JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id WHERE s.uri = ?`,
+      )
+      .get(VISION_SCHEME_URI) as { n: number };
+    expect(tagCount.n).toBe(0);
+    // …and it was not dropped either: it waits as a draft batch for review.
+    const heldBatch = db.vault
+      .prepare('SELECT status FROM sync_import_batch WHERE batch_id = ?')
+      .get(out.held_batch_id) as { status: string };
+    expect(heldBatch.status).toBe('draft');
+  });
+});

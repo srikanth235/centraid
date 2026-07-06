@@ -220,6 +220,13 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
     properties: {
       connection_id: { type: 'string', minLength: 1 },
       trust: { type: 'string', enum: ['staged', 'auto-publish'] },
+      // Per-class standing consent (issue #310 C3): which derived-data
+      // classes the trust covers. Omitted = all classes (a full grant);
+      // an array narrows it — everything else stages for review.
+      enrich_classes: {
+        type: 'array',
+        items: { type: 'string', enum: ['caption', 'tag', 'face', 'collection', 'filing'] },
+      },
     },
   },
   outputSchema: {
@@ -251,13 +258,18 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
   risk: 'high',
   confirm: true,
   handler: (ctx) => {
-    const input = ctx.input as { connection_id: string; trust: 'staged' | 'auto-publish' };
+    const input = ctx.input as {
+      connection_id: string;
+      trust: 'staged' | 'auto-publish';
+      enrich_classes?: string[];
+    };
+    const classes = input.enrich_classes ? JSON.stringify([...new Set(input.enrich_classes)]) : null;
     ctx.db
-      .prepare('UPDATE sync_connection SET trust = ? WHERE connection_id = ?')
-      .run(input.trust, input.connection_id);
+      .prepare('UPDATE sync_connection SET trust = ?, enrich_classes_json = ? WHERE connection_id = ?')
+      .run(input.trust, classes, input.connection_id);
     ctx.wrote('sync.connection', input.connection_id);
     ctx.cite({
-      claim: `connection trust set to ${input.trust}`,
+      claim: `connection trust set to ${input.trust}${classes ? ` (classes: ${input.enrich_classes!.join(', ')})` : ''}`,
       entityType: 'sync.connection',
       entityId: input.connection_id,
     });

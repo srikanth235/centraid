@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS sync_connection (
   principal     TEXT,
   status        TEXT NOT NULL CHECK (status IN ('active','needs-auth','failing','paused')),
   trust         TEXT NOT NULL CHECK (trust IN ('staged','auto-publish')),
+  -- Per-class standing consent for enrichment (issue #310 C3): NULL means
+  -- auto-publish trust covers every derived-data class; a JSON array
+  -- (['caption','tag','face','collection','filing']) narrows it — classes
+  -- outside it stage as drafts for review instead of landing silently.
+  enrich_classes_json TEXT CHECK (enrich_classes_json IS NULL OR json_valid(enrich_classes_json)),
   created_at    TEXT NOT NULL,
   last_run_at   TEXT,
   UNIQUE (kind, label)
