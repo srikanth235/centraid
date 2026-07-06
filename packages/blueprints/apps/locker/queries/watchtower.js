@@ -1,14 +1,14 @@
 /**
  * The security review: compromised / weak / reused counts plus the needs-
- * attention items, in the secret-free row shape. Everything is derived
- * server-side from the passwords the vault holds (weak = low strength, reused
- * = a login password shared by ≥2 logins) except compromised, the one stored
- * breach flag. Only non-trashed items are reviewed.
+ * attention items, in the secret-free row shape. Weak and reused come from
+ * the `locker.watchtower` command — derived INSIDE the vault's sealed
+ * boundary (issue #293), the unseal receipted — compromised is the one
+ * stored breach flag. Only non-trashed items are reviewed.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
-import { decorate, readTags, readStarred } from './items.js';
+import { decorate, readTags, readStarred, readWatchtower } from './items.js';
 
 export default async ({ ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -22,11 +22,12 @@ export default async ({ ctx }) => {
     });
     const rows = res.rows ?? [];
     const ids = rows.map((r) => r.item_id);
-    const [tagsByItem, starredIds] = await Promise.all([
+    const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids, purpose),
       readStarred(ctx, ids, purpose),
+      readWatchtower(ctx, purpose),
     ]);
-    const decorated = decorate(rows, tagsByItem, starredIds);
+    const decorated = decorate(rows, tagsByItem, starredIds, watchByItem);
     const affected = decorated.filter((it) => it.compromised || it.weak || it.reused);
     return {
       compromised: decorated.filter((it) => it.compromised).length,

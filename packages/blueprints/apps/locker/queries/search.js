@@ -9,7 +9,7 @@
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
-import { decorate, readTags, readStarred } from './items.js';
+import { decorate, readTags, readStarred, readWatchtower } from './items.js';
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -39,11 +39,12 @@ export default async ({ input, ctx }) => {
       );
     });
     const ids = matched.map((r) => r.item_id);
-    const [tagsByItem, starredIds] = await Promise.all([
+    const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids, purpose),
       readStarred(ctx, ids, purpose),
+      readWatchtower(ctx, purpose),
     ]);
-    return { items: decorate(matched, tagsByItem, starredIds) };
+    return { items: decorate(matched, tagsByItem, starredIds, watchByItem) };
   } catch (err) {
     return { items: [], vaultDenied: { code: err.code, message: err.message } };
   }

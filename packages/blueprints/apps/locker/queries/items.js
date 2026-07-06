@@ -3,12 +3,13 @@
  * newest-updated first (caller-sized, default 300), each decorated with its
  * favorite (the canonical flags-scheme star on target_type 'locker.item',
  * issue #274), its free-form tags, a safe subtitle, and its derived Watchtower
- * status. Weak and reused are computed here from the passwords the server
- * holds; compromised is the one stored flag. Secrets NEVER ride this payload:
- * passwords, card numbers, CVVs, OTP seeds and note bodies are stripped —
- * only the single-item query returns them. `truncated` tells the UI older
- * items exist beyond the window. Everything comes from the vault; this app
- * holds no rows of its own.
+ * status. Secrets are SEALED columns (issue #293): a read returns
+ * placeholders, so weak/reused and a card's last-four come from the
+ * `locker.watchtower` command — derived INSIDE the vault's sealed boundary,
+ * with the unseal receipted. Compromised is the one stored flag. Secrets
+ * NEVER ride this payload; only the single-item query reveals them.
+ * `truncated` tells the UI older items exist beyond the window. Everything
+ * comes from the vault; this app holds no rows of its own.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
@@ -16,27 +17,13 @@
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
 const ITEM_TYPE = 'locker.item';
 
-/** length + character-class score, 0..5; weak at ≤2 (mirrors the app meter). */
-export function strengthScore(pw) {
-  if (!pw) return 0;
-  let s = 0;
-  if (pw.length >= 8) s++;
-  if (pw.length >= 14) s++;
-  if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^A-Za-z0-9]/.test(pw)) s++;
-  return s;
-}
-
 /** A safe, secret-free subtitle for a list row. */
-function subtitleOf(it) {
+function subtitleOf(it, watch) {
   switch (it.type) {
     case 'login':
       return it.username || '—';
-    case 'card': {
-      const digits = String(it.card_number || '').replace(/\s/g, '');
-      return digits ? `•••• ${digits.slice(-4)}` : 'Card';
-    }
+    case 'card':
+      return watch?.last4 ? `•••• ${watch.last4}` : 'Card';
     case 'note':
       return 'Secure note';
     case 'identity':
@@ -48,26 +35,36 @@ function subtitleOf(it) {
   }
 }
 
-/** Build the secret-free decorated rows for a set of raw item rows. */
-export function decorate(rows, tagsByItem, starredIds) {
-  // Reused: a login password that appears on ≥2 non-trashed logins.
-  const pwCount = new Map();
-  for (const it of rows) {
-    if (it.type === 'login' && it.password)
-      pwCount.set(it.password, (pwCount.get(it.password) || 0) + 1);
+/**
+ * Watchtower derivatives per item id: {weak, reused, last4?}. Computed by
+ * the vault (`locker.watchtower`, issue #293) — passwords never leave the
+ * sealed boundary. Fail-soft: no grant → an empty map, list still renders.
+ */
+export async function readWatchtower(ctx, purpose) {
+  const map = new Map();
+  try {
+    const out = await ctx.vault.invoke({ command: 'locker.watchtower', input: {}, purpose });
+    if (out.status !== 'executed') return map;
+    for (const entry of out.output?.items ?? []) map.set(entry.item_id, entry);
+  } catch {
+    /* fail soft */
   }
+  return map;
+}
+
+/** Build the secret-free decorated rows for a set of raw item rows. */
+export function decorate(rows, tagsByItem, starredIds, watchByItem) {
   return rows.map((it) => {
-    const pw =
-      it.type === 'login' || it.type === 'wifi' || it.type === 'password' ? it.password : null;
-    const weak = it.type === 'login' && !!it.password && strengthScore(it.password) <= 2;
-    const reused = it.type === 'login' && !!it.password && (pwCount.get(it.password) || 0) >= 2;
+    const watch = watchByItem?.get(it.item_id);
+    const weak = !!watch?.weak;
+    const reused = !!watch?.reused;
     const compromised = it.compromised === 1 || it.compromised === true;
     const severity = compromised ? 'danger' : weak || reused ? 'warn' : '';
     return {
       item_id: it.item_id,
       type: it.type,
       title: it.title,
-      subtitle: subtitleOf(it),
+      subtitle: subtitleOf(it, watch),
       favorite: starredIds.has(it.item_id),
       tags: tagsByItem.get(it.item_id) ?? [],
       weak,
@@ -76,8 +73,6 @@ export function decorate(rows, tagsByItem, starredIds) {
       severity,
       updated_at: it.updated_at,
       purge_at: it.purge_at ?? null,
-      // silence unused-var lint intent: pw participates only in derivations
-      _hasSecret: pw != null || undefined,
     };
   });
 }
@@ -140,11 +135,12 @@ export default async ({ input, ctx }) => {
     });
     const rows = res.rows ?? [];
     const ids = rows.map((r) => r.item_id);
-    const [tagsByItem, starredIds] = await Promise.all([
+    const [tagsByItem, starredIds, watchByItem] = await Promise.all([
       readTags(ctx, ids, purpose),
       readStarred(ctx, ids, purpose),
+      readWatchtower(ctx, purpose),
     ]);
-    const items = decorate(rows, tagsByItem, starredIds);
+    const items = decorate(rows, tagsByItem, starredIds, watchByItem);
     return { items, truncated: rows.length >= window, window };
   } catch (err) {
     return { items: [], vaultDenied: { code: err.code, message: err.message } };
