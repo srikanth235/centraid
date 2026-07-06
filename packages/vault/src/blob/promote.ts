@@ -48,7 +48,9 @@ export function promoteStagedBlob(
     | { media_type: string; byte_size: number; original_name: string | null; meta_json: string }
     | undefined;
   const existing = vault
-    .prepare('SELECT content_id, media_type, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?')
+    .prepare(
+      'SELECT content_id, media_type, byte_size, deleted_at FROM core_content_item WHERE sha256 = ?',
+    )
     .get(sha256) as
     | { content_id: string; media_type: string; byte_size: number; deleted_at: string | null }
     | undefined;
@@ -131,7 +133,16 @@ function promoteVariants(
     )
     .all(parentSha) as { sha256: string; media_type: string; byte_size: number; variant: string }[];
   for (const v of variants) {
-    upsert.run(deps.newId(), contentId, v.variant, v.sha256, v.media_type, v.byte_size, null, deps.now);
+    upsert.run(
+      deps.newId(),
+      contentId,
+      v.variant,
+      v.sha256,
+      v.media_type,
+      v.byte_size,
+      null,
+      deps.now,
+    );
     vault.prepare('DELETE FROM blob_staging WHERE sha256 = ?').run(v.sha256);
   }
   if (typeof meta.text === 'string' && meta.text.length > 0) {

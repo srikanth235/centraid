@@ -129,9 +129,12 @@ error surface, the clipboard, and connector bindings.
 - **Clearing/reassigning an alias from the Locker UI** — the field is write-safe
   (set/change only); clearing is an assistant/CLI gesture. Reassigning to a new
   live item auto-steals the alias.
-- **An `oxfmt` sweep wanted to re-wrap five #296-era files this branch never
-  edited** (blob.test, flow.test, promote, s3, stage-file) — reverted, not
-  folded in (out-of-scope-work rule; same drift #299 already flagged).
+- **Pre-existing `oxfmt` drift in five #296-era files this branch never edited
+  for logic** (blob.test, flow.test, promote, s3, stage-file; same drift #299
+  flagged and byte-identical to main) — fixed in a SEPARATE formatting-only
+  cleanup commit (`style: oxfmt pre-existing drift…`), kept out of the #298
+  feature commits so repo-wide `format:check` passes clean. Line-wrapping only,
+  no logic change.
 
 ## Verification
 

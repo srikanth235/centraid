@@ -101,7 +101,9 @@ test('uncompressed pdf text-show operators extract; binary junk does not', () =>
   const meta = extractBlobMeta(pdf, 'application/pdf');
   expect(meta.text).toContain('Quarterly tax receipt');
   expect(meta.text).toContain('second fragment');
-  expect(extractBlobMeta(Buffer.from('%PDF-1.1 <compressed>'), 'application/pdf').text).toBeUndefined();
+  expect(
+    extractBlobMeta(Buffer.from('%PDF-1.1 <compressed>'), 'application/pdf').text,
+  ).toBeUndefined();
 });
 
 /**

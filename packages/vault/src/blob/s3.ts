@@ -45,7 +45,12 @@ function sha256HexOf(data: Buffer | string): string {
 function encodeKeyPath(key: string): string {
   return key
     .split('/')
-    .map((seg) => encodeURIComponent(seg).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`))
+    .map((seg) =>
+      encodeURIComponent(seg).replace(
+        /[!'()*]/g,
+        (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+      ),
+    )
     .join('/');
 }
 
@@ -74,7 +79,10 @@ export class S3BlobStore implements BlobStore {
   ): Promise<Response> {
     const creds = await this.options.credentials();
     const now = new Date();
-    const amzDate = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const amzDate = now
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}/, '');
     const dateStamp = amzDate.slice(0, 8);
     const region = this.options.region ?? 'us-east-1';
     const service = 's3';
@@ -110,12 +118,9 @@ export class S3BlobStore implements BlobStore {
       payloadHash,
     ].join('\n');
     const scope = `${dateStamp}/${region}/${service}/aws4_request`;
-    const stringToSign = [
-      'AWS4-HMAC-SHA256',
-      amzDate,
-      scope,
-      sha256HexOf(canonicalRequest),
-    ].join('\n');
+    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, scope, sha256HexOf(canonicalRequest)].join(
+      '\n',
+    );
     const kDate = hmac(`AWS4${creds.secretAccessKey}`, dateStamp);
     const kRegion = hmac(kDate, region);
     const kService = hmac(kRegion, service);
