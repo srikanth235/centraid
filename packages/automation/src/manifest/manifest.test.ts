@@ -330,4 +330,16 @@ describe('data triggers', () => {
       validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['transactions'] }] }),
     ).toThrow(/entity name/);
   });
+
+  it('refuses outbox entities — a drain receipt must not re-fire the stager (issue #308 A8)', () => {
+    expect(() =>
+      validateManifest({ ...base, triggers: [{ kind: 'data', entities: ['outbox.item'] }] }),
+    ).toThrow(/outbox/);
+    expect(() =>
+      validateManifest({
+        ...base,
+        triggers: [{ kind: 'data', entities: ['core.transaction', 'outbox.grant'] }],
+      }),
+    ).toThrow(/outbox/);
+  });
 });

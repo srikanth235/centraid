@@ -475,6 +475,18 @@ function validateOneTrigger(raw: unknown, field: string): Trigger {
           ef,
         );
       }
+      // Loop guard (issue #308 A8): outbox drains write receipted results
+      // that would re-enter the change feed — a data trigger watching
+      // outbox.* could re-stage on its own drain and cycle forever. The
+      // outbox is the CONSENT surface, not a data source; refused here so
+      // the manifest fails loudly at author time.
+      if (entity.startsWith('outbox.')) {
+        throw new ManifestError(
+          'invalid_trigger',
+          `manifest.${ef} must not watch "${entity}" — outbox entities are excluded from data triggers (a drain's own receipts would re-fire the automation, issue #308)`,
+          ef,
+        );
+      }
       return entity;
     });
     let every: string | undefined;

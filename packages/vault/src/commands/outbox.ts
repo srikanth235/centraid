@@ -189,6 +189,15 @@ function decideItem(ctx: HandlerCtx): Record<string, unknown> {
     always_allow?: boolean;
     note?: string;
   };
+  // The outbox's whole justification is that the owner approves THE THING
+  // ITSELF — an edit that replaces only the human-readable artifact while
+  // the original request goes on the wire breaks that quietly (issue #308
+  // A5). Both halves replace together or the edit is refused.
+  if ((input.artifact === undefined) !== (input.request === undefined)) {
+    throw new Error(
+      'an edited outbox item replaces artifact and request TOGETHER — editing one half lets the approved artifact diverge from the wire request (issue #308 A5)',
+    );
+  }
   const item = ctx.db
     .prepare('SELECT actor_id, verb, target FROM outbox_item WHERE item_id = ?')
     .get(input.item_id) as { actor_id: string; verb: string; target: string } | undefined;
@@ -343,6 +352,15 @@ const REVOKE_GRANT: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // Revocation retro-invalidates (issue #308 A8): nothing this grant
+      // approved may still be waiting to drain.
+      name: 'no_approved_items_ride_the_grant',
+      sql: `SELECT count(*) AS n FROM outbox_item WHERE grant_id = :grant_id AND status = 'approved'`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
   ],
   idempotency: 'once',
   risk: 'low',
@@ -353,7 +371,91 @@ const REVOKE_GRANT: CommandDefinition = {
       .prepare('UPDATE outbox_grant SET revoked_at = ? WHERE grant_id = ?')
       .run(ctx.now, input.grant_id);
     ctx.wrote('outbox.grant', input.grant_id);
-    return { grant_id: input.grant_id };
+    // Items the grant auto-approved but the executor has not yet drained
+    // park back to pending (issue #308 A8): revoking the rule withdraws the
+    // consent it minted, not just future matches. Drained items are history.
+    const undrained = ctx.db
+      .prepare(`SELECT item_id FROM outbox_item WHERE grant_id = ? AND status = 'approved'`)
+      .all(input.grant_id) as { item_id: string }[];
+    if (undrained.length > 0) {
+      ctx.db
+        .prepare(
+          `UPDATE outbox_item
+              SET status = 'pending', decided_at = NULL, grant_id = NULL,
+                  note = 'standing grant revoked before drain — awaiting a fresh decision'
+            WHERE grant_id = ? AND status = 'approved'`,
+        )
+        .run(input.grant_id);
+      for (const item of undrained) ctx.wrote('outbox.item', item.item_id);
+      ctx.cite({
+        claim: `standing grant revoked; ${undrained.length} approved-but-undrained item(s) parked back to pending`,
+        entityType: 'outbox.grant',
+        entityId: input.grant_id,
+      });
+    }
+    return { grant_id: input.grant_id, reparked: undrained.length };
+  },
+};
+
+// Approval staleness (issue #308 A7): consent to THE THING is not consent to
+// any future moment. The executor calls this when an approved item has sat
+// undrained past the staleness window — the item parks back to pending and
+// the owner decides again with the delay in view. Owner-plane only, like
+// `record_result`: the executor rides the host's owner credential.
+const REPARK: CommandDefinition = {
+  name: 'outbox.repark',
+  ownerSchema: 'outbox',
+  inputSchema: {
+    type: 'object',
+    required: ['item_id'],
+    additionalProperties: false,
+    properties: {
+      item_id: { type: 'string', minLength: 1 },
+      note: { type: 'string' },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['item_id', 'status'],
+    properties: { item_id: { type: 'string' }, status: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'item_is_approved',
+      sql: `SELECT count(*) AS n FROM outbox_item WHERE item_id = :item_id AND status = 'approved'`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'item_back_to_pending',
+      sql: `SELECT count(*) AS n FROM outbox_item WHERE item_id = :item_id AND status = 'pending' AND decided_at IS NULL`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'once',
+  risk: 'low',
+  handler: (ctx) => {
+    requireOwner(ctx, 'only the executor (owner plane) reparks stale approvals');
+    const input = ctx.input as { item_id: string; note?: string };
+    ctx.db
+      .prepare(
+        `UPDATE outbox_item
+            SET status = 'pending', decided_at = NULL, grant_id = NULL, note = coalesce(?, note)
+          WHERE item_id = ?`,
+      )
+      .run(input.note ?? null, input.item_id);
+    ctx.wrote('outbox.item', input.item_id);
+    ctx.cite({
+      claim: `approved outbox item parked back to pending${input.note ? ` — ${input.note}` : ''}`,
+      entityType: 'outbox.item',
+      entityId: input.item_id,
+    });
+    return { item_id: input.item_id, status: 'pending' };
   },
 };
 
@@ -371,4 +473,5 @@ export function registerOutboxCommands(gateway: Gateway): void {
   gateway.registerCommand(DECIDE);
   gateway.registerCommand(RECORD_RESULT);
   gateway.registerCommand(REVOKE_GRANT);
+  gateway.registerCommand(REPARK);
 }
