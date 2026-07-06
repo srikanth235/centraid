@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { makeTranscriptsDbProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from '../conversation/store.js';
 import { AnalyticsStore } from './analytics-store.js';
-import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
+import { InsightsStore } from './insights-store.js';
 
 /**
  * `runs` writes to a conversation ledger and — because it is constructed WITH
@@ -35,9 +35,11 @@ function seedRun(
   opts: {
     kind: 'automation' | 'chat' | 'build';
     automationRef?: string;
+    appId?: string;
     model?: string;
     inputTokens?: number;
     outputTokens?: number;
+    cacheReadTokens?: number;
     costUsd?: number;
     retryOf?: string;
     startedAt?: number;
@@ -51,7 +53,11 @@ function seedRun(
     conversationId = randomUUID();
     runs.createAutomationRun(conversationId, opts.automationRef, opts.automationRef.split('/')[0]);
   } else {
-    conversationId = runs.createConversation({ kind: opts.kind, userId: 'u' }).id;
+    conversationId = runs.createConversation({
+      kind: opts.kind,
+      userId: 'u',
+      ...(opts.appId ? { appId: opts.appId } : {}),
+    }).id;
   }
   runs.insertTurn({
     turnId: runId,
@@ -69,6 +75,7 @@ function seedRun(
     ...(opts.model ? { model: opts.model } : {}),
     ...(opts.inputTokens !== undefined ? { inputTokens: opts.inputTokens } : {}),
     ...(opts.outputTokens !== undefined ? { outputTokens: opts.outputTokens } : {}),
+    ...(opts.cacheReadTokens !== undefined ? { cacheReadTokens: opts.cacheReadTokens } : {}),
     ...(opts.costUsd !== undefined ? { costUsd: opts.costUsd } : {}),
     startedAt,
     endedAt: startedAt + 100,
@@ -88,7 +95,9 @@ describe('InsightsStore', () => {
     expect(s.kpis.totalTokens).toBe(0);
     expect(s.kpis.totalCostUsd).toBe(0);
     expect(s.kpis.appsTouched).toBe(0);
-    expect(s.kpis.quotaTokens).toBe(INSIGHTS_QUOTA_TOKENS);
+    expect(s.kpis.unpricedRuns).toBe(0);
+    expect(s.kpis.unpricedTokens).toBe(0);
+    expect(s.kpis.cacheReadTokens).toBe(0);
     expect(s.daily).toEqual([]);
     expect(s.byAutomation).toEqual([]);
     expect(s.byModel).toEqual([]);
@@ -162,6 +171,52 @@ describe('InsightsStore', () => {
     expect(auto).toBeTruthy();
     expect(auto!.key).toBe('auto.x/auto-1');
     expect(auto!.tokens).toBe(500);
+  });
+
+  it('flags runs whose model was unpriced (spend is a lower bound)', () => {
+    const { runs, insights } = setup();
+    // Priced run — cost recorded.
+    seedRun(runs, { kind: 'chat', model: 'claude-sonnet-4-5', inputTokens: 100, costUsd: 0.05 });
+    // Unpriced run — tokens but no cost (unknown model → NULL total_cost_usd).
+    seedRun(runs, { kind: 'chat', model: 'some-new-model', inputTokens: 400, outputTokens: 100 });
+    const s = insights.summary();
+    expect(s.kpis.totalTokens).toBe(600);
+    // Only the priced run contributes to spend.
+    expect(s.kpis.totalCostUsd).toBe(0.05);
+    expect(s.kpis.unpricedRuns).toBe(1);
+    expect(s.kpis.unpricedTokens).toBe(500);
+  });
+
+  it('sums cache-read tokens over the window', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, { kind: 'chat', inputTokens: 100, cacheReadTokens: 900 });
+    seedRun(runs, { kind: 'chat', inputTokens: 50, cacheReadTokens: 50 });
+    expect(insights.summary().kpis.cacheReadTokens).toBe(950);
+  });
+
+  it('breaks out per-app chat and resolves source labels', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, { kind: 'chat', appId: 'locker', inputTokens: 300 });
+    seedRun(runs, { kind: 'chat', appId: '_assistant', inputTokens: 200 });
+    const s = insights.summary({
+      resolveSource: ({ appId }) => {
+        if (appId === 'locker') return 'Locker';
+        if (appId === '_assistant') return 'Vault assistant';
+        return undefined;
+      },
+    });
+    const locker = s.byAutomation.find((r) => r.key === 'chat:locker');
+    const assistant = s.byAutomation.find((r) => r.key === 'chat:_assistant');
+    expect(locker?.label).toBe('Locker');
+    expect(locker?.tokens).toBe(300);
+    expect(assistant?.label).toBe('Vault assistant');
+    expect(assistant?.tokens).toBe(200);
+  });
+
+  it('echoes the scoped vault identity when provided', () => {
+    const { insights } = setup();
+    const s = insights.summary({ vault: { id: 'v1', name: 'Home' } });
+    expect(s.vault).toEqual({ id: 'v1', name: 'Home' });
   });
 
   it('groups by each run’s dominant model', () => {
