@@ -49,8 +49,26 @@ export function buildExtraPrompt(input: BuildExtraPromptInput): string {
   lines.push('', renderCatalogBlock(input.manifest));
   const vaultBlock = renderVaultBlock(input.appId, input.manifest);
   if (vaultBlock) lines.push('', vaultBlock);
+  lines.push('', EXTERNAL_WORLD_BLOCK);
   return lines.join('\n');
 }
+
+/**
+ * The external-world contract (issues #304/#306, taught per #308 B1): how
+ * generated code reads external APIs and — critically — how it writes to
+ * them. Rendered unconditionally: "build me something that emails me" must
+ * meet this grounding before any connection or scope exists, or the model
+ * confidently authors a direct send the read-only ceiling then refuses.
+ */
+const EXTERNAL_WORLD_BLOCK = `### The outside world: connections, reads, and the outbox
+
+External APIs are reached through owner-configured CONNECTIONS (\`sync.connection\` rows, keyed by kind + label), whose credentials live gateway-side — handler code never sees a token.
+
+- **External reads** (connector automations): \`await ctx.fetch({ url, headers, … })\` may carry \`{{connection:access_token}}\` / \`{{connection:api_key}}\` placeholders. The gateway injects the real value transport-side, only toward the connection's \`allowed_hosts\` pin, and only for GET/HEAD/OPTIONS — the connection is READ-ONLY inside a fire, structurally.
+- **External writes** (send an email, create a remote event, any POST/PUT/PATCH/DELETE): NEVER call the API from handler code — the ceiling refuses it. Stage the write as an outbox artifact instead:
+  \`await ctx.vault.invoke({ command: 'outbox.stage', input: { kind, label, verb, target, artifact, request } })\`
+  where \`kind\`/\`label\` name the connection, \`verb\`/\`target\` are the semantic act (e.g. \`gmail.send\` → the recipient list), \`artifact\` is the thing as the owner reads it (to/subject/body…), and \`request\` is the exact HTTP call — method/url/headers/body with \`{{connection:…}}\` placeholders, never real tokens. The item parks for the owner's approval (a standing "always allow" rule may auto-approve); the gateway executor performs the send and receipts the result. Staging returns \`status: 'pending' | 'approved'\` in the output — 'pending' means awaiting the owner; do NOT retry or work around it. Remember staged ids in \`ctx.state\` so re-runs don't stage duplicates.
+- **Least scope**: declare in \`app.json\` only the vault scopes the code actually uses (staging needs \`{schema: 'outbox', verbs: 'act'}\`). Installing grants the declared block once; a later publish that widens scopes does NOT auto-grant — it parks a request for the owner, so design within what was declared.`;
 
 /**
  * Personal-vault section — the app's whole data story. Documents the

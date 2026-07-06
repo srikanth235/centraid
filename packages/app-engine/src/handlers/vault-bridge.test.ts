@@ -175,12 +175,19 @@ describe('manifest vault block', () => {
     ).toThrow(ManifestError);
   });
 
-  it('build prompt documents ctx.vault only when the manifest declares access', () => {
+  it('build prompt scopes the vault-primitive teaching to declared access; the external-world contract is always taught', () => {
     const without = buildExtraPrompt({
       appId: 'a',
       manifest: parseManifest(JSON.stringify(base)),
     });
-    expect(without).not.toContain('ctx.vault');
+    // No declared access → no per-app vault block (scopes, read/search)…
+    expect(without).not.toContain('### Personal vault');
+    expect(without).not.toContain('ctx.vault.read');
+    // …but the external-world doctrine (issue #308 B1) renders regardless:
+    // "build me something that emails" needs the outbox before scopes exist.
+    expect(without).toContain('outbox.stage');
+    expect(without).toContain('READ-ONLY');
+    expect(without).toContain('{{connection:');
     const withVault = buildExtraPrompt({
       appId: 'a',
       manifest: parseManifest(
