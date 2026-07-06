@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-gmail-send",
+  "name": "Gmail send",
+  "kind": "automation",
+  "description": "Carries your released email drafts out through the outbox (issue #306): each send is staged as a reviewable artifact, approved by you (or a standing grant), and performed by the gateway's executor through your own Google OAuth client.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

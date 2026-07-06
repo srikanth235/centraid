@@ -1185,6 +1185,27 @@
       ]
     },
     {
+      "id": "google-gmail-send",
+      "name": "Gmail send",
+      "desc": "Released email drafts leave through the outbox — each send is a reviewable artifact you approve, performed by the gateway through your own Google OAuth client.",
+      "colorKey": "red",
+      "iconKey": "PaperPlaneTilt",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📤",
+      "category": "Connectors",
+      "triggerKind": "condition",
+      "triggerLabel": "When you release an email draft",
+      "integrations": [
+        "Gmail"
+      ],
+      "files": [
+        "app.json",
+        "automations/google-gmail-send/automation.json",
+        "automations/google-gmail-send/handler.js"
+      ]
+    },
+    {
       "id": "google-calendar-pull",
       "name": "Google Calendar sync",
       "desc": "Your Google Calendar lands in the vault as events — read-only, incremental via sync tokens.",

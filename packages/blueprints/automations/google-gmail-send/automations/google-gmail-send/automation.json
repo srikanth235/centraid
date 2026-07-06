@@ -1,0 +1,43 @@
+{
+  "name": "Gmail send",
+  "version": "0.1.0",
+  "description": "The first outbox consumer (issue #306): watches email messages you released with social.send_message and stages each as an outbox artifact — recipient, subject, body, plus the exact Gmail API call. Nothing leaves until you approve the item (or a standing 'always allow' grant matches); the gateway executor performs the send through the pull.gmail connection's credential.",
+  "enabled": false,
+  "prompt": "When I release an email draft for sending, stage it in the outbox as the rendered message so I can approve, edit, or discard it. Never call the network yourself — the outbox executor performs approved sends through my Gmail connection.",
+  "triggers": [
+    {
+      "kind": "condition",
+      "entity": "social.message",
+      "where": [
+        { "column": "delivery", "op": "eq", "value": "sent" },
+        { "column": "external_id", "op": "is-null" }
+      ],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {
+    "tools": []
+  },
+  "connector": {
+    "kind": "pull.gmail",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads released email messages (thread, recipients, body text) and stages each as an outbox artifact for your decision. Holds no send capability of its own — external writes are the outbox executor's, behind your approval.",
+    "scopes": [
+      { "schema": "social", "verbs": "read" },
+      { "schema": "core", "verbs": "read" },
+      { "schema": "outbox", "verbs": "act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}
