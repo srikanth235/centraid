@@ -19,7 +19,7 @@ import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
 import { SEED_DDL } from './seed.js';
-import { SYNC_DDL } from './sync.js';
+import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
 /** Ontology contract version stamped on rows (rule R07). */
 export const ONTOLOGY_VERSION = '1.1';
@@ -95,6 +95,11 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // owner-assigned name a connector binds instead of the item UUID, so
   // delete+recreate re-heals the credential binding without republishing.
   LOCKER_ALIAS_DDL,
+  // v12: broker-owned credentials (issue #304) — the credential + health
+  // SIDECARS on the connection: oauth2/api_key kinds with sealed token
+  // cells the gateway broker injects toward pinned hosts; no row keeps the
+  // harness-ambient lane.
+  SYNC_CREDENTIAL_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

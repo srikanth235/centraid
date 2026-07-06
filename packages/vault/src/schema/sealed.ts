@@ -44,6 +44,10 @@ import type { DatabaseSync } from 'node:sqlite';
  */
 export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   'locker.item': ['password', 'otp_seed', 'card_number', 'cvv', 'content'],
+  // Broker-owned credentials (issue #304): tokens live on the connection's
+  // credential sidecar so the gateway broker can inject them; every read
+  // surface shows a placeholder and reseal covers them like any secret cell.
+  'sync.connection_credential': ['client_secret', 'access_token', 'refresh_token', 'api_key'],
 };
 
 /**

@@ -84,3 +84,44 @@ CREATE TABLE IF NOT EXISTS sync_connection_run (
   error         TEXT
 ) STRICT;
 `;
+
+// Broker-owned credentials (issue #304, amending #290 decision 4): a
+// connection may CARRY its credential instead of borrowing the harness's —
+// `oauth2` (BYO client: the owner registers their own OAuth app per
+// provider) or `api_key` (a static PAT). Both live in a SIDECAR keyed by
+// the connection (not columns on sync_connection — migration
+// re-runnability, the same call #298/#299 made): no row = today's
+// harness-ambient lane. Secret cells (client_secret, access_token,
+// refresh_token, api_key) are sealed columns — ciphertext at rest,
+// placeholder on read, hash in the journal — and are only ever INJECTED by
+// the gateway broker into `ctx.fetch` requests toward `allowed_hosts`;
+// connector code never sees a token.
+//
+// `sync_connection_health` carries WHY a connection sits in needs-auth
+// (refresh refused, scope withdrawn) so the reconnect surface is
+// actionable, not a mystery — its own sidecar because notes outlive and
+// predate credentials (a missing locker secret flips needs-auth too).
+export const SYNC_CREDENTIAL_DDL = `
+CREATE TABLE IF NOT EXISTS sync_connection_credential (
+  connection_id    TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
+  cred_kind        TEXT NOT NULL CHECK (cred_kind IN ('oauth2','api_key')),
+  provider         TEXT,
+  auth_url         TEXT,
+  token_url        TEXT,
+  scopes           TEXT,
+  client_id        TEXT,
+  client_secret    TEXT,
+  access_token     TEXT,
+  refresh_token    TEXT,
+  api_key          TEXT,
+  token_expires_at TEXT,
+  allowed_hosts    TEXT NOT NULL CHECK (json_valid(allowed_hosts)),
+  updated_at       TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE IF NOT EXISTS sync_connection_health (
+  connection_id TEXT PRIMARY KEY REFERENCES sync_connection(connection_id) ON DELETE CASCADE,
+  auth_note     TEXT,
+  updated_at    TEXT NOT NULL
+) STRICT;
+`;
