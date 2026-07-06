@@ -172,6 +172,20 @@ export {
   type AppSummary,
   type AgentSummary,
 } from './host.js';
+export {
+  writeScopeTombstones,
+  listScopeTombstones,
+  clearScopeTombstones,
+  clearAllScopeTombstones,
+  hasGrantHistory,
+  openScopeRequest,
+  closeObsoleteScopeRequest,
+  listOpenScopeRequests,
+  getOpenScopeRequest,
+  markScopeRequestDecided,
+  type ScopeTriple,
+  type ScopeRequestSummary,
+} from './install-memory.js';
 
 export { registerScheduleCommands } from './commands/schedule.js';
 export { registerTaskCommands } from './commands/tasks.js';

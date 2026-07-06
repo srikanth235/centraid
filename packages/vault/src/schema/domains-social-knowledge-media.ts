@@ -64,6 +64,68 @@ CREATE TABLE social_message (
 ) STRICT;
 `;
 
+// v15 (issue #308 A6): the standard soft-delete pair on notes. Tier 1's
+// rationale is "journaled and REVERSIBLE" — delete_note used to hard-delete
+// the row, leaving the owner a receipt and no undo. Trash semantics give
+// deletion the same grace window documents and media assets already have;
+// the lifecycle sweep purges lapsed notes (edges included) for real.
+//
+// A rebuild rather than ALTER ADD COLUMN so the rung stays re-runnable
+// (the ladder's standing property — the v3 backfill test replays it), in
+// the v8 copy pattern. The DROP takes the v2 FTS sync triggers with the
+// table, so they re-arm here WITH the live guard (the v9 precedent) —
+// trashed notes leave the search index like trashed documents do — and the
+// shadow rows rebuild to match.
+export const KNOWLEDGE_TRASH_DDL = `
+CREATE TABLE knowledge_note_v15 (
+  note_id         TEXT PRIMARY KEY,
+  author_party_id TEXT NOT NULL REFERENCES core_party(party_id),
+  title           TEXT NOT NULL,
+  body_content_id TEXT NOT NULL REFERENCES core_content_item(content_id),
+  format          TEXT NOT NULL CHECK (format IN ('markdown','html','plain')),
+  pinned          INTEGER NOT NULL CHECK (pinned IN (0,1)),
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL,
+  deleted_at      TEXT,
+  purge_at        TEXT
+) STRICT;
+INSERT INTO knowledge_note_v15
+  (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at)
+SELECT note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at
+  FROM knowledge_note;
+DROP TABLE knowledge_note;
+ALTER TABLE knowledge_note_v15 RENAME TO knowledge_note;
+
+DROP TRIGGER IF EXISTS fts_knowledge_note_ai;
+DROP TRIGGER IF EXISTS fts_knowledge_note_au;
+DROP TRIGGER IF EXISTS fts_knowledge_note_ad;
+CREATE TRIGGER fts_knowledge_note_ai AFTER INSERT ON knowledge_note BEGIN
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT new.rowid, new."note_id", new."title",
+         (SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+           WHERE content_id = new."body_content_id")
+   WHERE new."deleted_at" IS NULL;
+END;
+CREATE TRIGGER fts_knowledge_note_au AFTER UPDATE ON knowledge_note BEGIN
+  DELETE FROM fts_knowledge_note WHERE rowid = old.rowid;
+  INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+  SELECT new.rowid, new."note_id", new."title",
+         (SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+           WHERE content_id = new."body_content_id")
+   WHERE new."deleted_at" IS NULL;
+END;
+CREATE TRIGGER fts_knowledge_note_ad AFTER DELETE ON knowledge_note BEGIN
+  DELETE FROM fts_knowledge_note WHERE rowid = old.rowid;
+END;
+DELETE FROM fts_knowledge_note;
+INSERT INTO fts_knowledge_note(rowid, note_id, title, body)
+SELECT b.rowid, b."note_id", b."title",
+       (SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+         WHERE content_id = b."body_content_id")
+  FROM knowledge_note b
+ WHERE b."deleted_at" IS NULL;
+`;
+
 export const KNOWLEDGE_DDL = `
 CREATE TABLE knowledge_note (
   note_id         TEXT PRIMARY KEY,

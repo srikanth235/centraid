@@ -122,7 +122,7 @@ test('resolvable-if-linked: an app renders a foreign entity ONLY through a live 
   expect(ended.cards[0]?.status).toBe('denied');
 });
 
-test('hard-deleting a linked endpoint leaves a tombstone card for the survivor side', () => {
+test('purging a linked endpoint leaves a tombstone card for the survivor side', () => {
   const noteId = addNote('Doomed note');
   const assetId = addPhoto('Survivor');
   invoke(owner, 'core.link_entities', {
@@ -132,7 +132,19 @@ test('hard-deleting a linked endpoint leaves a tombstone card for the survivor s
     to_id: assetId,
     relation: 'references',
   });
+  // Delete is trash now (issue #308 A6) — the row survives its grace
+  // window, so the card still resolves…
   expect(invoke(owner, 'knowledge.delete_note', { note_id: noteId }).status).toBe('executed');
+  const trashed = gw.resolveRefs(owner, {
+    refs: [{ type: 'knowledge.note', id: noteId }],
+    purpose: PURPOSE,
+  });
+  expect(trashed.cards[0]?.status).toBe('live');
+  // …until the lifecycle sweep performs the real deletion past the window.
+  db.vault
+    .prepare(`UPDATE knowledge_note SET purge_at = '2020-01-01T00:00:00Z' WHERE note_id = ?`)
+    .run(noteId);
+  gw.sweep(owner);
   const { cards } = gw.resolveRefs(owner, {
     refs: [{ type: 'knowledge.note', id: noteId }],
     purpose: PURPOSE,

@@ -24,7 +24,9 @@ const CONVENTIONS = `## Conventions
 - Canonical bytes/text live in core_content_item (content_uri is a data: URI). Use the SQL function vault_content_text(media_type, content_uri) to decode a body to text. Note/message bodies hang off *_content_id columns.
 - Soft deletes: content has deleted_at, links have valid_to; filter them for "current" answers.
 - Money: core_transaction.amount_minor is an INTEGER in minor units (divide by 100 for display) with its own currency column and a debit/credit direction.
-- Sealed columns (issue #293): secret cells (locker_item password, otp_seed, card_number, cvv, content) are ciphertext at rest and show as «sealed» in results — you cannot SELECT their plaintext, and you must never try to. Derivatives come from typed commands (locker.watchtower, locker.totp_code).`;
+- Sealed columns (issue #293): secret cells (locker_item password, otp_seed, card_number, cvv, content) are ciphertext at rest and show as «sealed» in results — you cannot SELECT their plaintext, and you must never try to. Derivatives come from typed commands (locker.watchtower, locker.totp_code).
+- External connections live in the sync schema: sync_connection (kind, label, status 'active'/'paused'/'needs-auth') with sync_connection_health.auth_note carrying the human-readable reason a connection left active, sync_connection_run logging recent pull runs, and sync_connection_credential holding broker-owned secrets (sealed — status and allowed_hosts are readable, token cells mask). "Why isn't X syncing?" is answered here.
+- External writes are outbox rows: outbox_item (verb, target, artifact_json, status pending→approved→sent/failed/discarded) and outbox_grant, the standing always-allow rules. Staging is the only way anything leaves the vault.`;
 
 const FTS_NOTE = `## Full-text search (joinable FTS5 tables)
 Each fts_* table indexes its base table (join on the shared id column) and supports MATCH:
@@ -114,7 +116,7 @@ export function buildAssistantContext(db: VaultDb): string {
   if (commands.length > 0) {
     sections.push(
       `## Typed commands (the ONLY write path — use the vault_invoke tool)\n` +
-        `Invalid input returns the command's schema error; high-risk commands park for the owner's approval.\n` +
+        `Invalid input returns the command's schema error; confirm-gated commands park for the owner's approval (risk is a salience marker, not a gate — issue #306).\n` +
         commands.join('\n'),
     );
   }
@@ -133,9 +135,12 @@ function registeredCommands(db: VaultDb): string[] {
           ORDER BY c.name`,
       )
       .all() as { name: string; risk: string; requires_confirmation: number }[];
+    // Only the capability's confirm flag parks (issue #306; #308 fixed the
+    // annotation) — advertising risk-high as parking would teach the model
+    // a gate that no longer exists.
     return rows.map(
       (r) =>
-        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 || r.risk === 'high' ? ' (parks for owner approval)' : ''}`,
+        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 ? ' (parks for owner approval)' : ''}`,
     );
   } catch {
     return [];

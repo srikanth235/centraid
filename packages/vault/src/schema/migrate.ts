@@ -7,7 +7,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { BLOB_DDL } from './blob.js';
 import { ENRICH_DDL } from './enrich.js';
-import { CONSENT_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
+import { CONSENT_DDL, CONSENT_INSTALL_MEMORY_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
@@ -16,7 +16,12 @@ import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
 import { PEOPLE_DDL } from './domains-people.js';
 import { LOCKER_ALIAS_DDL, LOCKER_DDL } from './domains-locker.js';
 import { TALLY_DDL } from './domains-tally.js';
-import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
+import {
+  SOCIAL_DDL,
+  KNOWLEDGE_DDL,
+  KNOWLEDGE_TRASH_DDL,
+  MEDIA_DDL,
+} from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
 import { OUTBOX_DDL } from './outbox.js';
 import { SEED_DDL } from './seed.js';
@@ -105,6 +110,14 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // the owner decides on, plus the standing (actor, verb, target) grants
   // minted from them.
   OUTBOX_DDL,
+  // v14: consent memory (issue #308 A3/A4) — scope tombstones make owner
+  // revocations durable against the install-grant top-up; scope requests
+  // park manifest widening as a blocking item instead of auto-granting.
+  CONSENT_INSTALL_MEMORY_DDL,
+  // v15: note trash (issue #308 A6) — delete becomes reversible: the
+  // soft-delete pair on knowledge_note, restore via knowledge.restore_note,
+  // real deletion deferred to the lifecycle sweep's purge window.
+  KNOWLEDGE_TRASH_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

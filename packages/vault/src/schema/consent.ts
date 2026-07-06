@@ -100,6 +100,49 @@ CREATE TABLE consent_export_job (
 ) STRICT;
 `;
 
+// v14 (issue #308 A3/A4): consent memory for the install-grant top-up.
+//
+// `consent_scope_tombstone` — the owner's "no", made durable. #306's top-up
+// diffed declared scopes against ACTIVE grants only, so an owner-revoked
+// scope was silently re-minted on the next mount/sync/publish. A revocation
+// now writes one tombstone per scope triple; the top-up (and the widening
+// request below) skip tombstoned triples, and only an explicit owner
+// re-approval clears them. Uninstall clears the app's tombstones — a
+// reinstall is a fresh consent.
+//
+// `consent_scope_request` — a manifest that widens BEYOND the last owner
+// consent parks here as a blocking item instead of auto-granting: agents
+// author their own manifests, so "install was the consent" must not be
+// bypassable by the very actor consent contains. One open request per
+// (plane, app); re-publishes replace the open request's scope set.
+export const CONSENT_INSTALL_MEMORY_DDL = `
+CREATE TABLE IF NOT EXISTS consent_scope_tombstone (
+  tombstone_id     TEXT PRIMARY KEY,
+  app_id           TEXT REFERENCES consent_app(app_id),
+  grantee_party_id TEXT REFERENCES core_party(party_id),
+  schema_name      TEXT NOT NULL,
+  table_name       TEXT,
+  verbs            TEXT NOT NULL CHECK (verbs IN ('read','read+act','act','reveal')),
+  revoked_at       TEXT NOT NULL,
+  CHECK (app_id IS NOT NULL OR grantee_party_id IS NOT NULL)
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_scope_tombstone_app ON consent_scope_tombstone(app_id);
+CREATE INDEX IF NOT EXISTS idx_scope_tombstone_party ON consent_scope_tombstone(grantee_party_id);
+
+CREATE TABLE IF NOT EXISTS consent_scope_request (
+  request_id   TEXT PRIMARY KEY,
+  plane        TEXT NOT NULL CHECK (plane IN ('app','agent')),
+  app_id       TEXT NOT NULL,
+  purpose      TEXT NOT NULL,
+  scopes_json  TEXT NOT NULL CHECK (json_valid(scopes_json)),
+  requested_at TEXT NOT NULL,
+  decided_at   TEXT,
+  decision     TEXT CHECK (decision IN ('approved','denied'))
+) STRICT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_scope_request_open
+  ON consent_scope_request(plane, app_id) WHERE decided_at IS NULL;
+`;
+
 // v8 (issue #293): widen the grant-scope verbs CHECK with 'reveal'. SQLite
 // cannot ALTER a CHECK constraint, so existing vaults rebuild the table in
 // place — nothing references consent_grant_scope by FK, and the copy is

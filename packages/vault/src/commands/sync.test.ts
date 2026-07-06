@@ -80,7 +80,7 @@ test('agent stages freely; publish parks; owner approval lands the rows', () => 
     input: { batch_id: batchId },
     purpose: 'dpv:ServiceProvision',
   });
-  expect(publish.status).toBe('parked'); // high > agent ceiling medium
+  expect(publish.status).toBe('parked'); // confirm-gated (issue #306): parks for every non-owner
 
   const confirmed = gw.confirm(owner, (publish as { invocationId: string }).invocationId, true);
   expect(confirmed.status).toBe('executed');
@@ -517,5 +517,97 @@ describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
       .status;
     expect(status).toBe('active');
     expect(db.vault.prepare('SELECT auth_note FROM sync_connection_health').get()).toBeUndefined();
+  });
+});
+
+// Issue #308 A1/A2: post-#306 only `confirm: true` parks — risk never does.
+// The credential-touching pair must park for every non-owner caller, because
+// `allowed_hosts` is #304's structural pin and the token pair is what every
+// drain rides. The needs-auth honesty flip stays unparked (deliberate).
+describe('credential commands are confirm-gated (issue #308 A1/A2)', () => {
+  test('an agent proposing configure_credential parks; owner approval lands it', () => {
+    const proposed = gw.invoke(agent, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        auth_url: 'https://a.example/auth',
+        token_url: 'https://a.example/token',
+        client_id: 'cid',
+        client_secret: 'GOCSPX-evil',
+        allowed_hosts: ['attacker.example'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(proposed.status).toBe('parked');
+    // Nothing moved while parked — the pin is untouched.
+    expect(db.vault.prepare('SELECT * FROM sync_connection_credential').get()).toBeUndefined();
+    const confirmed = gw.confirm(owner, (proposed as { invocationId: string }).invocationId, true);
+    expect(confirmed.status).toBe('executed');
+    expect(
+      (db.vault.prepare('SELECT allowed_hosts FROM sync_connection_credential').get() as {
+        allowed_hosts: string;
+      }).allowed_hosts,
+    ).toContain('attacker.example');
+  });
+
+  test('an agent proposing store_tokens parks; the stored pair is untouched', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        auth_url: 'https://a.example/auth',
+        token_url: 'https://a.example/token',
+        client_id: 'cid',
+        allowed_hosts: ['gmail.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const connectionId = (
+      db.vault.prepare('SELECT connection_id FROM sync_connection').get() as {
+        connection_id: string;
+      }
+    ).connection_id;
+    gw.invoke(owner, {
+      command: 'sync.store_tokens',
+      input: { connection_id: connectionId, access_token: 'ya29.owner' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const proposed = gw.invoke(agent, {
+      command: 'sync.store_tokens',
+      input: { connection_id: connectionId, access_token: 'ya29.attacker' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(proposed.status).toBe('parked');
+    const denied = gw.confirm(owner, (proposed as { invocationId: string }).invocationId, false);
+    expect(denied.status).toBe('denied');
+  });
+
+  test('the needs-auth flip stays unparked for agent callers (deliberately open)', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        api_key: 'ghp_x',
+        allowed_hosts: ['api.github.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const connectionId = (
+      db.vault.prepare('SELECT connection_id FROM sync_connection').get() as {
+        connection_id: string;
+      }
+    ).connection_id;
+    const flipped = gw.invoke(agent, {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'needs-auth', note: 'secret item trashed' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(flipped.status).toBe('executed');
   });
 });

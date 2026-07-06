@@ -47,7 +47,9 @@ function purgeAt(now: string): string {
 const CONTENT_REFERENCES: { table: string; column: string; onlyLive?: string }[] = [
   { table: 'core_attachment', column: 'content_id' },
   { table: 'core_party', column: 'avatar_content_id' },
-  { table: 'knowledge_note', column: 'body_content_id' },
+  // A trashed note is not a rental (issue #308 A6) — its body releases with
+  // it, and knowledge.restore_note un-trashes both.
+  { table: 'knowledge_note', column: 'body_content_id', onlyLive: 'deleted_at IS NULL' },
   { table: 'social_message', column: 'body_content_id' },
   { table: 'business_invoice', column: 'pdf_content_id' },
   { table: 'home_warranty', column: 'terms_content_id' },

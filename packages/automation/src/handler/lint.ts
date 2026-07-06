@@ -97,9 +97,12 @@ const RULES: readonly LintRule[] = [
   },
   {
     id: 'no-raw-fetch',
-    re: /\bfetch\s*\(/g,
+    // `ctx.fetch(...)` is exempt: it is the audited connector rail (ledgered,
+    // broker-injected, host-pinned, read-only) — the very thing this rule
+    // steers toward. Everything else spelling `fetch(` is ambient I/O.
+    re: /(?<!ctx\.)\bfetch\s*\(/g,
     message:
-      'A raw fetch() is network I/O that bypasses the run ledger and the requires.tools allowlist. Reach external data through a ctx.tool(...) call (an MCP tool), which is recorded and declared.',
+      'A raw fetch() is network I/O that bypasses the run ledger and the requires.tools allowlist. READS ride ctx.fetch (connector fires, broker-injected and host-pinned) or a declared ctx.tool(...); an external WRITE (send an email, call a mutating API) is staged, never sent: ctx.vault.invoke({ command: "outbox.stage", … }) parks it for the owner and the gateway executor performs the send (issue #306).',
   },
   {
     id: 'no-node-io-import',

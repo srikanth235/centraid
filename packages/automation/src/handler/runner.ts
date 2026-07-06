@@ -227,8 +227,9 @@ export interface ConnectionAuth {
   /**
    * Whether this credential may be injected toward MUTATING methods (issue
    * #304 phase 5). Default (unset) = read-only: a POST/PUT/PATCH/DELETE
-   * injected request is refused. Wave-1 connectors never set this — external
-   * writes ride the parked-approval path, not raw ctx.fetch.
+   * injected request is refused. Connector fires never set this — external
+   * writes ride `outbox.stage` → the gateway executor's `allowWrites` lane
+   * (issue #306), never raw ctx.fetch.
    */
   readonly allowWrites?: boolean;
 }
@@ -393,14 +394,13 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(', ')} (issue #304)`,
       );
     }
-    // Wave-1 read-only ceiling (issue #304 non-goal / phase 5): a broker
-    // credential injects toward SAFE methods only. A mutating injected
-    // request needs the credential to have opted into writes — the
-    // structural half of "no external writes until ingest earns trust";
-    // the per-write parked-approval send flow is the deferred other half.
+    // Read-only ceiling (issue #304 phase 5): a broker credential injects
+    // toward SAFE methods only inside a fire. The write half shipped as the
+    // outbox (issue #306) — the error names the actual path (issue #308 B1)
+    // so a model that hits the ceiling can self-correct instead of retrying.
     if (!SAFE_METHODS.has(method.toUpperCase()) && !opts.connectionAuth?.allowWrites) {
       throw new Error(
-        `injected ${method.toUpperCase()} refused — this connection is read-only; external writes ride the parked-approval path, not raw ctx.fetch (issue #304 phase 5)`,
+        `injected ${method.toUpperCase()} refused — this connection is read-only inside a fire. External writes are STAGED, never sent from handler code: ctx.vault.invoke({ command: 'outbox.stage', input: { kind, label, verb, target, artifact, request } }) parks the exact request for the owner's approval and the gateway executor performs the send (issues #304/#306)`,
       );
     }
   };

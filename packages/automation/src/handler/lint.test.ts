@@ -54,6 +54,12 @@ describe('lintHandlerSource', () => {
   it('flags raw fetch and node I/O imports', () => {
     const fetchFindings = lintHandlerSource("const r = await fetch('https://x');");
     expect(fetchFindings[0]!.rule).toBe('no-raw-fetch');
+    // The steer names the actual external-write path (issue #308 B6).
+    expect(fetchFindings[0]!.message).toContain('outbox.stage');
+    // ctx.fetch is the audited connector rail, not ambient I/O — exempt…
+    expect(lintHandlerSource('const r = await ctx.fetch({ url });')).toEqual([]);
+    // …but other member spellings stay flagged.
+    expect(lintHandlerSource('globalThis.fetch("https://x");')[0]!.rule).toBe('no-raw-fetch');
 
     for (const imp of [
       "import { readFile } from 'fs/promises';",

@@ -23,7 +23,9 @@
  *   POST   /centraid/_vault/outbox/<itemId>            — {decision, artifact?, request?, always_allow?, note?}
  *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
  *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
- *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked)
+ *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked + scope requests)
+ *   GET    /centraid/_vault/scope-requests             — open manifest scope-widening asks (issue #308)
+ *   POST   /centraid/_vault/scope-requests/<requestId> — {approve: boolean} → decided request
  *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
  *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
  *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent),
@@ -350,6 +352,32 @@ export function makeVaultRouteHandler(
       // salience-ranked, with receipts.
       if (method === 'GET' && segments[0] === 'blocking' && segments.length === 1) {
         return sendJson(res, 200, plane.blocking());
+      }
+
+      // Manifest scope-widening requests (issue #308 A3): a published
+      // manifest asking beyond its last consent parks here; the owner's
+      // decision mints the grant (approve) or tombstones the ask (deny).
+      if (method === 'GET' && segments[0] === 'scope-requests' && segments.length === 1) {
+        return sendJson(res, 200, { requests: plane.listScopeRequests() });
+      }
+
+      if (method === 'POST' && segments[0] === 'scope-requests' && segments.length === 2) {
+        const body = await readJson(req);
+        if (typeof body.approve !== 'boolean') {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'scope-request decision body needs {approve: boolean}',
+          });
+        }
+        try {
+          const request = plane.decideScopeRequest(segments[1] ?? '', body.approve);
+          return sendJson(res, 200, { request, approved: body.approve });
+        } catch (err) {
+          return sendJson(res, 404, {
+            error: 'decide_failed',
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
 
       if (method === 'GET' && segments[0] === 'review' && segments.length === 1) {

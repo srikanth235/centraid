@@ -148,6 +148,32 @@ describe('outbox.decide', () => {
     expect(JSON.parse(String(row.request_json)).body).toBe('{"raw":"edited"}');
   });
 
+  test('an edit that replaces only one half is refused — artifact and request move together (issue #308 A5)', () => {
+    const staged = invoke(agent, 'outbox.stage', stageInput());
+    if (staged.status !== 'executed') throw new Error('stage failed');
+    const itemId = (staged.output as { item_id: string }).item_id;
+    const artifactOnly = invoke(owner, 'outbox.decide', {
+      item_id: itemId,
+      decision: 'approve',
+      artifact: { to: 'ravi@example.com', subject: 'Hi (edited)', body: 'See you at 7.' },
+    });
+    expect(artifactOnly.status).toBe('failed');
+    if (artifactOnly.status === 'failed') expect(artifactOnly.reason).toContain('TOGETHER');
+    // The item is untouched — still pending, original halves intact.
+    const row = itemRow(itemId);
+    expect(row.status).toBe('pending');
+    expect(JSON.parse(String(row.artifact_json)).subject).toBe('Hi');
+    const requestOnly = invoke(owner, 'outbox.decide', {
+      item_id: itemId,
+      decision: 'approve',
+      request: {
+        method: 'POST',
+        url: 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      },
+    });
+    expect(requestOnly.status).toBe('failed');
+  });
+
   test('a decided item cannot be re-decided', () => {
     const staged = invoke(agent, 'outbox.stage', stageInput());
     if (staged.status !== 'executed') throw new Error('stage failed');
@@ -200,6 +226,79 @@ describe('standing grants (issue #306 phase 3)', () => {
     const next = invoke(agent, 'outbox.stage', stageInput());
     if (next.status !== 'executed') throw new Error('stage failed');
     expect((next.output as { status: string }).status).toBe('pending');
+  });
+
+  test('revocation retro-invalidates: approved-but-undrained items park back to pending (issue #308 A8)', () => {
+    const first = invoke(agent, 'outbox.stage', stageInput());
+    if (first.status !== 'executed') throw new Error('stage failed');
+    const decided = invoke(owner, 'outbox.decide', {
+      item_id: (first.output as { item_id: string }).item_id,
+      decision: 'approve',
+      always_allow: true,
+    });
+    const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id as string;
+    // Two more matching items auto-approve at staging; neither has drained.
+    const second = invoke(agent, 'outbox.stage', stageInput());
+    const third = invoke(agent, 'outbox.stage', stageInput());
+    if (second.status !== 'executed' || third.status !== 'executed')
+      throw new Error('stage failed');
+    const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
+    expect(revoked.status).toBe('executed');
+    // All three: the always-allow decision stamped the grant onto the first
+    // item too, so every approved-but-undrained rider of the rule reparks.
+    expect((revoked as { output?: { reparked?: number } }).output?.reparked).toBe(3);
+    for (const outcome of [first, second, third]) {
+      const row = itemRow((outcome.output as { item_id: string }).item_id);
+      expect(row.status).toBe('pending');
+      expect(row.decided_at).toBeNull();
+      expect(row.grant_id).toBeNull();
+      expect(String(row.note)).toContain('revoked');
+    }
+  });
+
+  test('a drained item is history — revocation leaves sent items sent', () => {
+    const first = invoke(agent, 'outbox.stage', stageInput());
+    if (first.status !== 'executed') throw new Error('stage failed');
+    const firstId = (first.output as { item_id: string }).item_id;
+    const decided = invoke(owner, 'outbox.decide', {
+      item_id: firstId,
+      decision: 'approve',
+      always_allow: true,
+    });
+    const grantId = (decided as { output?: { grant_id?: string } }).output?.grant_id as string;
+    invoke(owner, 'outbox.record_result', {
+      item_id: firstId,
+      disposition: 'sent',
+      status_code: 200,
+    });
+    const revoked = invoke(owner, 'outbox.revoke_grant', { grant_id: grantId });
+    expect(revoked.status).toBe('executed');
+    expect((revoked as { output?: { reparked?: number } }).output?.reparked).toBe(0);
+    expect(itemRow(firstId).status).toBe('sent');
+  });
+});
+
+describe('outbox.repark (issue #308 A7)', () => {
+  test('an approved item parks back to pending; owner-plane only', () => {
+    const staged = invoke(agent, 'outbox.stage', stageInput());
+    if (staged.status !== 'executed') throw new Error('stage failed');
+    const itemId = (staged.output as { item_id: string }).item_id;
+    invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
+    // The staging actor cannot repark its own item.
+    const forged = invoke(agent, 'outbox.repark', { item_id: itemId, note: 'nope' });
+    expect(forged.status).toBe('failed');
+    const real = invoke(owner, 'outbox.repark', {
+      item_id: itemId,
+      note: 'approval expired undrained after 24h — approve again to send',
+    });
+    expect(real.status).toBe('executed');
+    const row = itemRow(itemId);
+    expect(row.status).toBe('pending');
+    expect(row.decided_at).toBeNull();
+    expect(String(row.note)).toContain('expired');
+    // A pending item cannot repark — the precondition holds the line.
+    const again = invoke(owner, 'outbox.repark', { item_id: itemId });
+    expect(again.status).toBe('failed');
   });
 });
 

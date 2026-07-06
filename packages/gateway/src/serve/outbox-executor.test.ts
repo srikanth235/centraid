@@ -106,9 +106,13 @@ function itemRow(plane: VaultPlane, itemId: string): Record<string, unknown> {
     .get(itemId) as Record<string, unknown>;
 }
 
-function executorFor(plane: VaultPlane, api: FetchDouble): OutboxExecutor {
+function executorFor(
+  plane: VaultPlane,
+  api: FetchDouble,
+  options?: ConstructorParameters<typeof OutboxExecutor>[3],
+): OutboxExecutor {
   const broker = new ConnectionBroker(() => plane);
-  return new OutboxExecutor(broker, silentLogger, api.impl);
+  return new OutboxExecutor(broker, silentLogger, api.impl, options);
 }
 
 test('an approved item drains: credential injected toward the pinned host, receipted sent', async () => {
@@ -258,6 +262,65 @@ test('a credential-less connection defers the item — it survives for the recon
   expect(report).toMatchObject({ approved: 1, deferred: 1, sent: 0, failed: 0 });
   expect(api.calls).toHaveLength(0);
   expect(itemRow(plane, itemId).status).toBe('approved');
+});
+
+test('a stale approval reparks to pending instead of draining (issue #308 A7)', async () => {
+  const plane = openPlane(await tempDir());
+  configureApiKey(plane);
+  const itemId = stageItem(plane);
+  plane.decideOutbox({ itemId, decision: 'approve' });
+  // Monday's approval, Thursday's drain: age the decision past the window.
+  plane.db.vault
+    .prepare('UPDATE outbox_item SET decided_at = ? WHERE item_id = ?')
+    .run(new Date(Date.now() - 25 * 3_600_000).toISOString(), itemId);
+  const api = fetchDouble();
+  const report = await executorFor(plane, api).drain(plane);
+  expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, reparked: 1 });
+  // Zero egress; the item waits for a FRESH decision, with the delay named.
+  expect(api.calls).toHaveLength(0);
+  const row = plane.db.vault
+    .prepare('SELECT status, decided_at, note FROM outbox_item WHERE item_id = ?')
+    .get(itemId) as { status: string; decided_at: string | null; note: string };
+  expect(row.status).toBe('pending');
+  expect(row.decided_at).toBeNull();
+  expect(row.note).toContain('expired');
+  // A fresh approval within the window drains normally.
+  plane.decideOutbox({ itemId, decision: 'approve' });
+  api.respond(200, '{"id":"msg-9"}');
+  const second = await executorFor(plane, api).drain(plane);
+  expect(second).toMatchObject({ sent: 1, reparked: 0 });
+});
+
+test('one pass drains a bounded batch; the surplus stays approved for the next pass (issue #308 A8)', async () => {
+  const plane = openPlane(await tempDir());
+  configureApiKey(plane);
+  const items = [stageItem(plane), stageItem(plane), stageItem(plane)];
+  for (const itemId of items) plane.decideOutbox({ itemId, decision: 'approve' });
+  const api = fetchDouble();
+  api.respond(200);
+  api.respond(200);
+  const capped = await executorFor(plane, api, { maxItemsPerDrain: 2 }).drain(plane);
+  expect(capped).toMatchObject({ approved: 3, sent: 2, deferred: 1 });
+  const remaining = plane.db.vault
+    .prepare(`SELECT count(*) AS n FROM outbox_item WHERE status = 'approved'`)
+    .get() as { n: number };
+  expect(remaining.n).toBe(1);
+  // The next pass finishes the queue — bounded, never dropped.
+  api.respond(200);
+  const next = await executorFor(plane, api, { maxItemsPerDrain: 2 }).drain(plane);
+  expect(next).toMatchObject({ approved: 1, sent: 1, deferred: 0 });
+});
+
+test('the per-actor cap bounds a single actor flushing the whole pass (issue #308 A8)', async () => {
+  const plane = openPlane(await tempDir());
+  configureApiKey(plane);
+  const items = [stageItem(plane), stageItem(plane)];
+  for (const itemId of items) plane.decideOutbox({ itemId, decision: 'approve' });
+  const api = fetchDouble();
+  api.respond(200);
+  const report = await executorFor(plane, api, { maxItemsPerActor: 1 }).drain(plane);
+  expect(report).toMatchObject({ approved: 2, sent: 1, deferred: 1 });
+  expect(api.calls).toHaveLength(1);
 });
 
 test('blocking lists what waits on the owner; the review feed ranks receipts by risk', async () => {

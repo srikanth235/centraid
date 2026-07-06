@@ -385,6 +385,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         resolveCatalogSurface('tools', kind, refresh, readRunnerTools)
     : undefined;
 
+  // Catalog invalidation (issue #308 B4): the warmer used to run at boot /
+  // manual Refresh only, so a published app, an install, or a new
+  // connection could leave both model surfaces blind to new host tools
+  // until someone clicked Refresh. Lifecycle events kick a re-warm of the
+  // active runner's tools surface — fire-and-forget, deduped by the warmer.
+  const invalidateToolCatalog = (): void => {
+    if (!warmer) return;
+    void (async () => {
+      const runnerPrefs = await prefsLoader();
+      if (!runnerPrefs) return;
+      await warmer.warm(runnerPrefs.kind, 'tools');
+    })().catch((err: unknown) => {
+      logger.warn(
+        `tool-catalog invalidation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  };
+
   // Cycle break: the chat runner needs the Runtime's dispatcher, but
   // the Runtime is constructed *with* the chat runner. The runtimeRef
   // holder resolves at call time, after the assignment below.
@@ -628,10 +646,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           // A publish/rollback may have added/removed/toggled an
           // automation — resync THIS vault's cron scheduler off the new `main`.
           reconcileScheduler(vaultId);
+          invalidateToolCatalog();
         },
         onAppDeleted: async (appId) => {
           await deregisterAndCleanup(appId);
           reconcileScheduler(vaultId);
+          invalidateToolCatalog();
         },
         ext,
       }),
@@ -645,6 +665,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           await requireRuntime().registry.ensureUploaded(appId);
           vaultRegistry.enrollApp(appId);
           await grantDeclaredAppScopes(plane, store, appId);
+          invalidateToolCatalog();
         },
         deregister: deregisterAndCleanup,
         reconcile: () => reconcileScheduler(vaultId),
@@ -981,7 +1002,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Broker-carried connection credentials (issue #304): health list,
     // configure, pause/resume, and the PKCE consent ceremony. Mounted
     // BEFORE the generic `_vault` handler (same prefix family).
-    makeConnectionsRouteHandler(vaultRegistry, connectionBroker),
+    makeConnectionsRouteHandler(vaultRegistry, connectionBroker, {
+      onConnectionChanged: invalidateToolCatalog,
+    }),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are

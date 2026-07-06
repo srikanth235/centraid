@@ -218,7 +218,7 @@ test('an app may only assert links between endpoints its grant lets it READ', ()
   expect(liveLink(linkId)).toMatchObject({ valid_to: null, asserted_by: 'app' });
 });
 
-test('hard-deleting an endpoint end-dates its live links via the gateway sweep', () => {
+test('purging an endpoint end-dates its live links via the gateway sweep', () => {
   const noteId = addNote('Doomed');
   const taskId = addTask('Survivor');
   const out = invoke(owner, 'core.link_entities', {
@@ -230,7 +230,14 @@ test('hard-deleting an endpoint end-dates its live links via the gateway sweep',
   });
   const linkId = (out as { output: { link_id: string } }).output.link_id;
 
+  // Trash keeps the note (and its links) alive for the grace window
+  // (issue #308 A6): the real deletion is the sweep's purge.
   expect(invoke(owner, 'knowledge.delete_note', { note_id: noteId }).status).toBe('executed');
+  expect(liveLink(linkId)?.valid_to).toBeNull();
+  db.vault
+    .prepare(`UPDATE knowledge_note SET purge_at = '2020-01-01T00:00:00Z' WHERE note_id = ?`)
+    .run(noteId);
+  gw.sweep(owner);
   const row = liveLink(linkId);
   expect(row).toBeDefined(); // ended, not erased
   expect(row?.valid_to).not.toBeNull();

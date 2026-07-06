@@ -18,6 +18,14 @@
  *   - 429/5xx/network → the item STAYS approved and retries next drain;
  *   - auth-dead (401 after refresh / scope-flavored 403) → needs-auth flips
  *     with a note and the item stays approved until the owner reconnects.
+ *
+ * Two consent-freshness bounds ride the drain (issue #308 A7/A8):
+ *   - an approved item older than the staleness window reparks to pending
+ *     via `outbox.repark` instead of draining — consent to the thing never
+ *     silently becomes consent to any future moment;
+ *   - each pass drains a bounded batch with a per-actor cap, so a buggy
+ *     automation under a standing grant cannot flush an unbounded queue in
+ *     one pass; the surplus stays approved for later passes, logged.
  */
 
 import type { ConnectionAuth } from '@centraid/automation';
@@ -27,13 +35,30 @@ import type { VaultPlane } from './vault-plane.js';
 
 const CONNECTION_REF_RE = /\{\{connection:([a-z_]+)\}\}/g;
 const BODY_SNIPPET_CHARS = 300;
+/** Approval staleness window (issue #308 A7): older approvals repark. */
+const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+/** Per-pass drain bound (issue #308 A8): the surplus waits, logged. */
+const DEFAULT_MAX_ITEMS_PER_DRAIN = 25;
+/** Per-actor bound within one pass (issue #308 A8). */
+const DEFAULT_MAX_ITEMS_PER_ACTOR = 10;
 
 interface ApprovedRow {
   item_id: string;
   connection_id: string;
+  actor_id: string;
   verb: string;
   target: string;
   request_json: string;
+  decided_at: string | null;
+}
+
+export interface OutboxExecutorOptions {
+  /** Approved items older than this (by decided_at) repark to pending. */
+  staleAfterMs?: number;
+  /** Max items drained in one pass across all actors. */
+  maxItemsPerDrain?: number;
+  /** Max items drained in one pass per staging actor. */
+  maxItemsPerActor?: number;
 }
 
 interface StagedRequest {
@@ -47,19 +72,29 @@ export interface DrainReport {
   approved: number;
   sent: number;
   failed: number;
-  /** Items left approved for a later pass (needs-auth, transient upstream). */
+  /** Items left approved for a later pass (needs-auth, transient upstream, caps). */
   deferred: number;
+  /** Stale approvals parked back to pending for a fresh decision (#308 A7). */
+  reparked: number;
 }
 
 export class OutboxExecutor {
   /** One drain at a time per vault — concurrent triggers join the running pass. */
   private readonly draining = new Map<string, Promise<DrainReport>>();
+  private readonly staleAfterMs: number;
+  private readonly maxItemsPerDrain: number;
+  private readonly maxItemsPerActor: number;
 
   constructor(
     private readonly broker: ConnectionBroker,
     private readonly logger: RuntimeLogger,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    options: OutboxExecutorOptions = {},
+  ) {
+    this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
+    this.maxItemsPerDrain = options.maxItemsPerDrain ?? DEFAULT_MAX_ITEMS_PER_DRAIN;
+    this.maxItemsPerActor = options.maxItemsPerActor ?? DEFAULT_MAX_ITEMS_PER_ACTOR;
+  }
 
   drain(plane: VaultPlane): Promise<DrainReport> {
     const key = plane.boot.vaultId;
@@ -75,12 +110,44 @@ export class OutboxExecutor {
   private async drainPass(plane: VaultPlane): Promise<DrainReport> {
     const rows = plane.db.vault
       .prepare(
-        `SELECT item_id, connection_id, verb, target, request_json
+        `SELECT item_id, connection_id, actor_id, verb, target, request_json, decided_at
            FROM outbox_item WHERE status = 'approved' ORDER BY staged_at`,
       )
       .all() as unknown as ApprovedRow[];
-    const report: DrainReport = { approved: rows.length, sent: 0, failed: 0, deferred: 0 };
+    const report: DrainReport = {
+      approved: rows.length,
+      sent: 0,
+      failed: 0,
+      deferred: 0,
+      reparked: 0,
+    };
+    const now = Date.now();
+    const perActor = new Map<string, number>();
+    let drained = 0;
     for (const row of rows) {
+      // A stale approval never drains (issue #308 A7): the owner said yes to
+      // a send NOW, not to whenever the provider recovers. Repark first so
+      // staleness is judged even when the caps would have deferred the item.
+      const decidedAtMs = row.decided_at ? Date.parse(row.decided_at) : Number.NaN;
+      if (Number.isFinite(decidedAtMs) && now - decidedAtMs > this.staleAfterMs) {
+        this.repark(
+          plane,
+          row.item_id,
+          `approval expired undrained after ${Math.round(this.staleAfterMs / 3_600_000)}h — approve again to send`,
+        );
+        report.reparked += 1;
+        continue;
+      }
+      // Bounded passes (issue #308 A8): the surplus stays approved and the
+      // next pass (event kick or the 60s clock) continues — no silent drop,
+      // but no unbounded flush under a standing grant either.
+      const actorCount = perActor.get(row.actor_id) ?? 0;
+      if (drained >= this.maxItemsPerDrain || actorCount >= this.maxItemsPerActor) {
+        report.deferred += 1;
+        continue;
+      }
+      drained += 1;
+      perActor.set(row.actor_id, actorCount + 1);
       try {
         const outcome = await this.drainItem(plane, row);
         report[outcome] += 1;
@@ -94,10 +161,24 @@ export class OutboxExecutor {
     }
     if (report.approved > 0) {
       this.logger.info(
-        `outbox: drained vault ${plane.boot.vaultId} — sent=${report.sent} failed=${report.failed} deferred=${report.deferred}`,
+        `outbox: drained vault ${plane.boot.vaultId} — sent=${report.sent} failed=${report.failed} ` +
+          `deferred=${report.deferred} reparked=${report.reparked}`,
       );
     }
     return report;
+  }
+
+  /** Park a stale approval back to pending via the typed command (one door). */
+  private repark(plane: VaultPlane, itemId: string, note: string): void {
+    const outcome = plane.gateway.invoke(plane.ownerCredential, {
+      command: 'outbox.repark',
+      input: { item_id: itemId, note },
+    });
+    if (outcome.status !== 'executed') {
+      this.logger.warn(
+        `outbox: stale item ${itemId} did not repark (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})`,
+      );
+    }
   }
 
   private async drainItem(
