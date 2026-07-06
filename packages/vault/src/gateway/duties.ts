@@ -12,6 +12,7 @@ import { sweepBlobStaging } from '../blob/staging.js';
 import { shaOfBlobUri } from '../blob/store.js';
 import { resolveEntity } from '../schema/tables.js';
 import { retainExtBand } from './ext.js';
+import { writeScopeTombstones } from '../install-memory.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
 import { tableColumns } from './filters.js';
 import type { Identity } from './types.js';
@@ -44,12 +45,31 @@ export function revokeGrantCascade(
 ): RevocationResult {
   const now = nowIso();
   const grant = db.vault
-    .prepare('SELECT grant_id, app_id FROM consent_access_grant WHERE grant_id = ?')
-    .get(grantId) as { grant_id: string; app_id: string | null } | undefined;
+    .prepare('SELECT grant_id, app_id, grantee_party_id FROM consent_access_grant WHERE grant_id = ?')
+    .get(grantId) as
+    | { grant_id: string; app_id: string | null; grantee_party_id: string | null }
+    | undefined;
   if (!grant) throw new Error(`no grant ${grantId}`);
   db.vault
     .prepare(`UPDATE consent_access_grant SET status='revoked', revoked_at=? WHERE grant_id=?`)
     .run(now, grantId);
+  // The owner's "no" outlives the grant row (issue #308 A4): tombstone each
+  // revoked scope triple so the install-grant top-up can never silently
+  // re-mint it on the next mount/sync/publish. Uninstall clears these — a
+  // reinstall is a fresh consent.
+  const revokedScopes = db.vault
+    .prepare(`SELECT schema_name, table_name, verbs FROM consent_grant_scope WHERE grant_id = ?`)
+    .all(grantId) as { schema_name: string; table_name: string | null; verbs: string }[];
+  const tombstoned =
+    grant.app_id !== null || grant.grantee_party_id !== null
+      ? writeScopeTombstones(
+          db,
+          grant.app_id !== null
+            ? { appId: grant.app_id }
+            : { granteePartyId: grant.grantee_party_id as string },
+          revokedScopes.map((s) => ({ schema: s.schema_name, table: s.table_name, verbs: s.verbs })),
+        )
+      : 0;
   let viewsRevoked = 0;
   let extRetained: string[] = [];
   let centraidAppId: string | null = null;
@@ -82,7 +102,7 @@ export function revokeGrantCascade(
     objectId: grantId,
     purpose: null,
     decision: 'allow',
-    detail: { viewsRevoked, parkedDropped, extRetained, revokedBy: owner.partyId },
+    detail: { viewsRevoked, parkedDropped, extRetained, tombstoned, revokedBy: owner.partyId },
   });
   writeProvenance(db.journal, owner, 'consent.access_grant', grantId, 'owner.revoke');
   return { grantId, appId: centraidAppId, viewsRevoked, parkedDropped, extRetained, receiptId };

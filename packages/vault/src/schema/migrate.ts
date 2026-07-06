@@ -7,7 +7,11 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_DDL } from './agent.js';
 import { BLOB_DDL } from './blob.js';
 import { ENRICH_DDL } from './enrich.js';
-import { CONSENT_DDL, GRANT_SCOPE_REVEAL_DDL } from './consent.js';
+import {
+  CONSENT_DDL,
+  CONSENT_INSTALL_MEMORY_DDL,
+  GRANT_SCOPE_REVEAL_DDL,
+} from './consent.js';
 import { APP_EXT_DDL } from './ext.js';
 import { CORE_DDL, LINK_ANCHOR_DDL } from './core.js';
 import { FTS_DDL } from './fts.js';
@@ -105,6 +109,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // the owner decides on, plus the standing (actor, verb, target) grants
   // minted from them.
   OUTBOX_DDL,
+  // v14: consent memory (issue #308 A3/A4) — scope tombstones make owner
+  // revocations durable against the install-grant top-up; scope requests
+  // park manifest widening as a blocking item instead of auto-granting.
+  CONSENT_INSTALL_MEMORY_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

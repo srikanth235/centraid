@@ -38,6 +38,18 @@ import {
   markAppRevoked,
   openVaultDb,
   purposeConceptId,
+  clearAllScopeTombstones,
+  clearScopeTombstones,
+  closeObsoleteScopeRequest,
+  getOpenScopeRequest,
+  hasGrantHistory,
+  listOpenScopeRequests,
+  listScopeTombstones,
+  markScopeRequestDecided,
+  openScopeRequest,
+  writeScopeTombstones,
+  type ScopeRequestSummary,
+  type ScopeTriple,
   renameVault,
   readVaultPresentation,
   updateVaultPresentation,
@@ -185,13 +197,23 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
   }
 }
 
-/** Declared scopes not yet covered by any active grant — exact-triple diff. */
-function missingScopes(grants: GrantSummary[], declared: InstallScopeBlock['scopes']): ScopeSpec[] {
-  const covered = new Set(
-    grants.flatMap((g) => g.scopes.map((s) => `${s.schema}|${s.table ?? ''}|${s.verbs}`)),
-  );
+/**
+ * Declared scopes not yet covered by any active grant — exact-triple diff.
+ * Tombstoned triples (issue #308 A4) are the owner's standing "no": they are
+ * neither re-granted nor re-requested, only an explicit owner approval
+ * (which clears the tombstone) brings one back.
+ */
+function missingScopes(
+  grants: GrantSummary[],
+  declared: InstallScopeBlock['scopes'],
+  tombstoned: readonly ScopeTriple[] = [],
+): ScopeSpec[] {
+  const key = (s: { schema: string; table?: string | null; verbs: string }): string =>
+    `${s.schema}|${s.table ?? ''}|${s.verbs}`;
+  const covered = new Set(grants.flatMap((g) => g.scopes.map(key)));
+  for (const t of tombstoned) covered.add(key(t));
   return declared
-    .filter((s) => !covered.has(`${s.schema}|${s.table ?? ''}|${s.verbs}`))
+    .filter((s) => !covered.has(key(s)))
     .map((s) => ({
       schema: s.schema,
       ...(s.table !== undefined ? { table: s.table } : {}),
@@ -440,6 +462,14 @@ export class VaultPlane {
         );
       }
     }
+    // Uninstall wipes the consent memory (issue #308 A3/A4): the cascade's
+    // own revocations just tombstoned every scope, but uninstall is "no to
+    // the whole app", not "no to these scopes forever" — a reinstall is a
+    // fresh install-time consent. Open widening requests go with it.
+    if (app) clearAllScopeTombstones(this.db, { appId: app.appId });
+    if (agent) clearAllScopeTombstones(this.db, { granteePartyId: agent.partyId });
+    closeObsoleteScopeRequest(this.db, 'app', appId);
+    closeObsoleteScopeRequest(this.db, 'agent', appId);
     return { grantsRevoked: revoked };
   }
 
@@ -455,6 +485,8 @@ export class VaultPlane {
     if (!purpose) throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0) throw new Error('a grant needs at least one scope');
     for (const scope of request.scopes) assertExtSchemaOwnership(appId, scope.schema);
+    // An explicit owner approval overrides a past revocation (issue #308 A4).
+    clearScopeTombstones(this.db, { appId: app.appId }, request.scopes);
     return createGrant(this.db, {
       appId: app.appId,
       purposeConceptId: purpose,
@@ -474,6 +506,8 @@ export class VaultPlane {
     const purpose = purposeConceptId(this.db, request.purpose);
     if (!purpose) throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0) throw new Error('a grant needs at least one scope');
+    // An explicit owner approval overrides a past revocation (issue #308 A4).
+    clearScopeTombstones(this.db, { granteePartyId: agent.partyId }, request.scopes);
     return createGrant(this.db, {
       granteePartyId: agent.partyId,
       purposeConceptId: purpose,
@@ -484,37 +518,133 @@ export class VaultPlane {
   }
 
   /**
-   * Install-time scopes (issue #306 decision 2): installing the app WAS the
-   * consent. Top up the app's active grants to cover every scope its
-   * manifest declares — idempotent (already-covered scopes mint nothing),
-   * so it runs on every enroll/sync without ceremony. Ext-band ownership is
-   * still asserted; an unknown purpose still refuses.
+   * Install-time scopes (issue #306 decision 2, bounded by issue #308 A3/A4):
+   * installing the app WAS the consent — for the scopes declared AT install.
+   * The first grant (no consent history) covers the whole declared block;
+   * after that the top-up never widens on its own: a manifest declaring
+   * scopes beyond the last owner consent parks a `consent_scope_request`
+   * blocking item (agents author their own manifests — auto-granting a
+   * re-publish would let the contained actor steer its own containment),
+   * and owner-revoked scopes are tombstoned — neither re-granted nor
+   * re-requested until the owner explicitly approves them again.
    */
   ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
     const app = ensureAppEnrolled(this.db, appId, { origin: 'generated' });
-    const missing = missingScopes(listActiveGrants(this.db, app.appId), block.scopes);
-    if (missing.length === 0) return;
-    this.approveGrant(appId, {
-      purpose: block.purpose ?? 'dpv:ServiceProvision',
-      scopes: missing,
+    this.ensureInstallGrant({
+      plane: 'app',
+      appId,
+      block,
+      grantee: { appId: app.appId },
+      grants: listActiveGrants(this.db, app.appId),
+      approve: (request) => void this.approveGrant(appId, request),
     });
-    this.logger.info(
-      `vault plane: install-time grant for app "${appId}" (+${missing.length} scope(s))`,
-    );
   }
 
   /** The agent-plane mirror: an automation's declared scopes, granted at install. */
   ensureAgentInstallGrant(appId: string, block: InstallScopeBlock): void {
     const agent = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
-    const missing = missingScopes(listActiveAgentGrants(this.db, agent.partyId), block.scopes);
-    if (missing.length === 0) return;
-    this.approveAgentGrant(appId, {
-      purpose: block.purpose ?? 'dpv:ServiceProvision',
-      scopes: missing,
+    this.ensureInstallGrant({
+      plane: 'agent',
+      appId,
+      block,
+      grantee: { granteePartyId: agent.partyId },
+      grants: listActiveAgentGrants(this.db, agent.partyId),
+      approve: (request) => void this.approveAgentGrant(appId, request),
+    });
+  }
+
+  private ensureInstallGrant(input: {
+    plane: 'app' | 'agent';
+    appId: string;
+    block: InstallScopeBlock;
+    grantee: { appId?: string; granteePartyId?: string };
+    grants: GrantSummary[];
+    approve: (request: GrantRequest) => void;
+  }): void {
+    const purpose = input.block.purpose ?? 'dpv:ServiceProvision';
+    const tombstoned = listScopeTombstones(this.db, input.grantee);
+    const missing = missingScopes(input.grants, input.block.scopes, tombstoned);
+    if (missing.length === 0) {
+      // Nothing is being asked anymore (the manifest narrowed, the owner
+      // decided, or everything asked-for is tombstoned) — a stale open
+      // request must not keep blocking the owner.
+      closeObsoleteScopeRequest(this.db, input.plane, input.appId);
+      return;
+    }
+    if (!hasGrantHistory(this.db, input.grantee)) {
+      // First consent: installing was the consent for the declared block.
+      input.approve({ purpose, scopes: missing });
+      this.logger.info(
+        `vault plane: install-time grant for ${input.plane} "${input.appId}" (+${missing.length} scope(s))`,
+      );
+      return;
+    }
+    // Widened beyond the last owner consent (issue #308 A3): park the ask.
+    openScopeRequest(this.db, {
+      plane: input.plane,
+      appId: input.appId,
+      purpose,
+      scopes: missing.map((s) => ({
+        schema: s.schema,
+        ...(s.table !== undefined ? { table: s.table } : {}),
+        verbs: s.verbs,
+      })),
     });
     this.logger.info(
-      `vault plane: install-time grant for automation "${appId}" (+${missing.length} scope(s))`,
+      `vault plane: ${input.plane} "${input.appId}" asks for ${missing.length} scope(s) beyond its last consent — parked for the owner`,
     );
+  }
+
+  /** Open scope-widening requests — blocking items (issue #308 A3). */
+  listScopeRequests(): ScopeRequestSummary[] {
+    return listOpenScopeRequests(this.db);
+  }
+
+  /**
+   * The owner's decision on a widening request. Approve mints the grant
+   * (clearing any tombstones on those triples — an explicit yes overrides a
+   * past no); deny tombstones the asked triples so the same manifest does
+   * not re-ask on every mount.
+   */
+  decideScopeRequest(requestId: string, approve: boolean): ScopeRequestSummary {
+    const request = getOpenScopeRequest(this.db, requestId);
+    if (!request) throw new Error(`no open scope request ${requestId}`);
+    const grantee = this.granteeFor(request);
+    if (approve) {
+      clearScopeTombstones(this.db, grantee, request.scopes);
+      const grantRequest: GrantRequest = {
+        purpose: request.purpose,
+        scopes: request.scopes.map((s) => ({
+          schema: s.schema,
+          ...(s.table !== undefined ? { table: s.table } : {}),
+          verbs: s.verbs,
+        })),
+      };
+      if (request.plane === 'app') this.approveGrant(request.appId, grantRequest);
+      else this.approveAgentGrant(request.appId, grantRequest);
+    } else {
+      writeScopeTombstones(this.db, grantee, request.scopes);
+    }
+    markScopeRequestDecided(this.db, requestId, approve ? 'approved' : 'denied');
+    this.logger.info(
+      `vault plane: owner ${approve ? 'approved' : 'denied'} the ${request.plane} "${request.appId}" scope request (${request.scopes.length} scope(s))`,
+    );
+    return request;
+  }
+
+  /** Resolve a request's grantee key on its identity plane. */
+  private granteeFor(request: ScopeRequestSummary): {
+    appId?: string;
+    granteePartyId?: string;
+  } {
+    if (request.plane === 'app') {
+      const app = ensureAppEnrolled(this.db, request.appId, { origin: 'generated' });
+      return { appId: app.appId };
+    }
+    const agent = ensureAgentEnrolled(this.db, request.appId, {
+      modelRef: 'centraid-automation',
+    });
+    return { granteePartyId: agent.partyId };
   }
 
   /** Enrolled apps with their active grants — the owner consent surface. */
@@ -705,6 +835,8 @@ export class VaultPlane {
     outbox: OutboxItemSummary[];
     needsAuth: Array<{ connectionId: string; kind: string; label: string; note: string | null }>;
     parked: ParkedSummary[];
+    /** Manifest scope-widening asks awaiting the owner (issue #308 A3). */
+    scopeRequests: ScopeRequestSummary[];
   } {
     const needsAuth = this.db.vault
       .prepare(
@@ -723,6 +855,7 @@ export class VaultPlane {
         note: r.auth_note,
       })),
       parked: this.listParked(),
+      scopeRequests: this.listScopeRequests(),
     };
   }
 
