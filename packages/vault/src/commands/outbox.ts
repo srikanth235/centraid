@@ -8,6 +8,28 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { sha256Hex } from '../ids.js';
+import { resolveEntity } from '../schema/tables.js';
+
+/** The vault owner's party id. */
+function ownerPartyId(ctx: HandlerCtx): string {
+  const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
+    | { owner_party_id: string | null }
+    | undefined;
+  if (!owner?.owner_party_id) throw new Error('vault has no owner');
+  return owner.owner_party_id;
+}
+
+/** Resolve a wire address (email, phone, handle) to a live party, if known. */
+function partyForAddress(ctx: HandlerCtx, value: string): string | null {
+  const row = ctx.db
+    .prepare(
+      `SELECT party_id FROM core_party_identifier
+        WHERE value = ? AND (valid_to IS NULL OR valid_to > ?) LIMIT 1`,
+    )
+    .get(value, ctx.now) as { party_id: string } | undefined;
+  return row?.party_id ?? null;
+}
 
 /** The wire shape a staged external call must fit (placeholders, no tokens). */
 const REQUEST_SCHEMA = {
@@ -41,6 +63,13 @@ const STAGE: CommandDefinition = {
       // The thing itself, as the owner reads it (to/subject/body, payload…).
       artifact: { type: 'object' },
       request: REQUEST_SCHEMA,
+      // Graph joins (issue #310 S2): the canonical row this write is ABOUT
+      // (both-or-neither), and the resolved destination person. `target`
+      // stays the wire address the grant key needs; these are the typed refs
+      // an agent can walk.
+      subject_type: { type: 'string', minLength: 1 },
+      subject_id: { type: 'string', minLength: 1 },
+      recipient_party_id: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
@@ -75,6 +104,9 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     target: string;
     artifact: Record<string, unknown>;
     request: { method: string; url: string; headers?: Record<string, string>; body?: string };
+    subject_type?: string;
+    subject_id?: string;
+    recipient_party_id?: string;
   };
   const connection = ctx.db
     .prepare('SELECT connection_id FROM sync_connection WHERE kind = ? AND label = ?')
@@ -83,6 +115,36 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     throw new Error(
       `no connection (${input.kind}, ${input.label}) — an outbox item drains through an existing connection's credential`,
     );
+  }
+  // Typed refs (issue #310 S2): the subject must be a real canonical row —
+  // an opaque pointer would be the old silo back under a new name.
+  if ((input.subject_type === undefined) !== (input.subject_id === undefined)) {
+    throw new Error('subject_type and subject_id come together or not at all');
+  }
+  if (input.subject_type && input.subject_id) {
+    const ref = resolveEntity(input.subject_type, ctx.db);
+    if (!ref || ref.file !== 'vault')
+      throw new Error(`subject_type names unknown entity "${input.subject_type}"`);
+    const pkRow = ctx.db
+      .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
+      .all() as { name: string; pk: number }[];
+    const pk = pkRow.find((r) => r.pk === 1)?.name;
+    if (!pk) throw new Error(`no primary key on ${ref.physical}`);
+    const live = ctx.db
+      .prepare(`SELECT 1 AS x FROM "${ref.physical}" WHERE "${pk}" = ?`)
+      .get(input.subject_id);
+    if (!live) throw new Error(`no ${input.subject_type} with id ${input.subject_id}`);
+  }
+  // The destination person: explicit, or resolved from the wire address the
+  // way ingest resolves handles — never a duplicate party per channel.
+  let recipientPartyId = input.recipient_party_id ?? null;
+  if (recipientPartyId) {
+    const live = ctx.db
+      .prepare('SELECT 1 AS x FROM core_party WHERE party_id = ?')
+      .get(recipientPartyId);
+    if (!live) throw new Error(`no core.party with id ${recipientPartyId}`);
+  } else {
+    recipientPartyId = partyForAddress(ctx, input.target);
   }
   // Standing grants (issue #306 decision 3, phase 3): a live
   // (actor, verb, target) rule approves the item at staging time — it still
@@ -98,9 +160,10 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO outbox_item
-         (item_id, connection_id, actor_id, actor_kind, verb, target, artifact_json, request_json,
-          status, grant_id, staged_at, decided_at, drained_at, result_json, note)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
+         (item_id, connection_id, actor_id, actor_kind, verb, target,
+          subject_type, subject_id, recipient_party_id, artifact_json, request_json,
+          status, grant_id, staged_at, decided_at, drained_at, result_json, published_message_id, note)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL)`,
     )
     .run(
       itemId,
@@ -109,6 +172,9 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
       ctx.identity.provAgentKind,
       input.verb,
       input.target,
+      input.subject_type ?? null,
+      input.subject_id ?? null,
+      recipientPartyId,
       JSON.stringify(input.artifact),
       JSON.stringify(input.request),
       status,
@@ -318,7 +384,164 @@ function recordResult(ctx: HandlerCtx): Record<string, unknown> {
       input.item_id,
     );
   ctx.wrote('outbox.item', input.item_id);
-  return { item_id: input.item_id, status: input.disposition };
+  // The drain is not the end of the story (issue #310 S2): a sent
+  // message-shaped artifact becomes a canonical social_message, so the
+  // owner's own outbound acts are graph facts — not JSON stranded in
+  // result_json until a provider sync happens to re-import them.
+  let messageId: string | null = null;
+  if (input.disposition === 'sent') {
+    messageId = publishSentMessage(ctx, input.item_id);
+    if (messageId) {
+      ctx.db
+        .prepare('UPDATE outbox_item SET published_message_id = ? WHERE item_id = ?')
+        .run(messageId, input.item_id);
+      ctx.cite({
+        claim: 'sent artifact published into the social spine',
+        entityType: 'social.message',
+        entityId: messageId,
+      });
+    }
+  }
+  return {
+    item_id: input.item_id,
+    status: input.disposition,
+    ...(messageId ? { message_id: messageId } : {}),
+  };
+}
+
+/**
+ * Publish one drained, message-shaped outbox item into the social spine:
+ * body → sha-deduped core.content_item (the note/message mechanism), thread
+ * per (connection, target) so repeated sends to one address converse,
+ * participants = owner + resolved recipient (party if known, wire handle
+ * otherwise — never a duplicate person per channel), message with
+ * external_id `outbox:<item_id>` so a replayed record_result finds the row
+ * it already published. Returns null for non-message artifacts (no `body`
+ * or `text` string) — a calendar payload is not a message.
+ */
+function publishSentMessage(ctx: HandlerCtx, itemId: string): string | null {
+  const item = ctx.db
+    .prepare(
+      `SELECT connection_id, verb, target, artifact_json, recipient_party_id
+         FROM outbox_item WHERE item_id = ?`,
+    )
+    .get(itemId) as
+    | {
+        connection_id: string;
+        verb: string;
+        target: string;
+        artifact_json: string;
+        recipient_party_id: string | null;
+      }
+    | undefined;
+  if (!item) return null;
+  const artifact = JSON.parse(item.artifact_json) as Record<string, unknown>;
+  const bodyText =
+    typeof artifact.body === 'string'
+      ? artifact.body
+      : typeof artifact.text === 'string'
+        ? artifact.text
+        : null;
+  if (bodyText === null) return null;
+
+  const existing = ctx.db
+    .prepare('SELECT message_id FROM social_message WHERE external_id = ?')
+    .get(`outbox:${itemId}`) as { message_id: string } | undefined;
+  if (existing) return existing.message_id;
+
+  const owner = ownerPartyId(ctx);
+  const subject = typeof artifact.subject === 'string' ? artifact.subject : null;
+
+  // Body bytes: sha-deduped canonical content, inline data: URI.
+  const sha = sha256Hex(bodyText);
+  let contentId = (
+    ctx.db.prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?').get(sha) as
+      | { content_id: string }
+      | undefined
+  )?.content_id;
+  if (!contentId) {
+    contentId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO core_content_item
+           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
+         VALUES (?, 'text/plain', ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`,
+      )
+      .run(
+        contentId,
+        `data:text/plain;charset=utf-8,${encodeURIComponent(bodyText)}`,
+        sha,
+        Buffer.byteLength(bodyText, 'utf8'),
+        subject,
+        owner,
+        ctx.now,
+      );
+    ctx.wrote('core.content_item', contentId);
+  }
+
+  // One thread per (connection, wire address): repeated sends converse.
+  const externalRef = `outbox:${item.connection_id}:${item.target}`;
+  const channel = /mail/.test(item.verb) ? 'email' : 'dm';
+  let threadId = (
+    ctx.db.prepare('SELECT thread_id FROM social_thread WHERE external_ref = ?').get(externalRef) as
+      | { thread_id: string }
+      | undefined
+  )?.thread_id;
+  if (!threadId) {
+    threadId = ctx.newId();
+    ctx.db
+      .prepare(
+        `INSERT INTO social_thread (thread_id, channel, subject, external_ref, created_at, last_message_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(threadId, channel, subject, externalRef, ctx.now, ctx.now);
+    ctx.wrote('social.thread', threadId);
+  } else {
+    ctx.db
+      .prepare('UPDATE social_thread SET last_message_at = ? WHERE thread_id = ?')
+      .run(ctx.now, threadId);
+  }
+
+  const recipient = item.recipient_party_id ?? partyForAddress(ctx, item.target);
+  ensureParticipant(ctx, threadId, owner, null);
+  ensureParticipant(ctx, threadId, recipient, recipient ? null : item.target);
+
+  const messageId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO social_message
+         (message_id, thread_id, sender_party_id, sender_handle, sent_at, body_content_id, in_reply_to_id, delivery, external_id)
+       VALUES (?, ?, ?, NULL, ?, ?, NULL, 'sent', ?)`,
+    )
+    .run(messageId, threadId, owner, ctx.now, contentId, `outbox:${itemId}`);
+  ctx.wrote('social.message', messageId);
+  return messageId;
+}
+
+function ensureParticipant(
+  ctx: HandlerCtx,
+  threadId: string,
+  partyId: string | null,
+  handle: string | null,
+): void {
+  if (!partyId && !handle) return;
+  const present = partyId
+    ? ctx.db
+        .prepare('SELECT 1 AS x FROM social_thread_participant WHERE thread_id = ? AND party_id = ?')
+        .get(threadId, partyId)
+    : ctx.db
+        .prepare(
+          'SELECT 1 AS x FROM social_thread_participant WHERE thread_id = ? AND party_id IS NULL AND handle = ?',
+        )
+        .get(threadId, handle);
+  if (present) return;
+  const tpId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO social_thread_participant (tp_id, thread_id, party_id, handle, joined_at, muted, last_read_at)
+       VALUES (?, ?, ?, ?, ?, 0, NULL)`,
+    )
+    .run(tpId, threadId, partyId, handle, ctx.now);
 }
 
 const REVOKE_GRANT: CommandDefinition = {

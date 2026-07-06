@@ -329,3 +329,125 @@ describe('outbox.record_result', () => {
     expect(JSON.parse(String(row.result_json)).status_code).toBe(200);
   });
 });
+
+// ── Graph joins + drain-side publish (issue #310 S2) ───────────────────
+
+describe('outbox graph joins', () => {
+  function stageDecideDrain(overrides: Record<string, unknown> = {}) {
+    const staged = invoke(agent, 'outbox.stage', stageInput(overrides));
+    if (staged.status !== 'executed') throw new Error('stage failed');
+    const itemId = (staged.output as { item_id: string }).item_id;
+    const decided = invoke(owner, 'outbox.decide', { item_id: itemId, decision: 'approve' });
+    if (decided.status !== 'executed') throw new Error('decide failed');
+    const drained = invoke(owner, 'outbox.record_result', {
+      item_id: itemId,
+      disposition: 'sent',
+      status_code: 200,
+    });
+    if (drained.status !== 'executed') throw new Error('drain failed');
+    return { itemId, output: drained.output as Record<string, unknown> };
+  }
+
+  test('stage resolves the wire address to a known party and validates subject refs', () => {
+    // A known person carrying the target email as an identifier.
+    db.vault
+      .prepare(
+        `INSERT INTO core_party (party_id, kind, display_name, created_at, updated_at, ontology_version)
+         VALUES ('p-ravi', 'person', 'Ravi', 't', 't', '1.1')`,
+      )
+      .run();
+    db.vault
+      .prepare(
+        `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, is_primary, valid_from)
+         VALUES ('pi-1', 'p-ravi', 'email', 'ravi@example.com', 1, 't')`,
+      )
+      .run();
+    const staged = invoke(
+      agent,
+      'outbox.stage',
+      stageInput({ subject_type: 'core.party', subject_id: 'p-ravi' }),
+    );
+    expect(staged.status).toBe('executed');
+    if (staged.status !== 'executed') return;
+    const row = itemRow((staged.output as { item_id: string }).item_id);
+    expect(row.recipient_party_id).toBe('p-ravi');
+    expect(row.subject_type).toBe('core.party');
+    expect(row.subject_id).toBe('p-ravi');
+
+    // Half a subject ref, an unknown entity, and a dead row all refuse.
+    expect(invoke(agent, 'outbox.stage', stageInput({ subject_type: 'core.party' })).status).toBe(
+      'failed',
+    );
+    expect(
+      invoke(agent, 'outbox.stage', stageInput({ subject_type: 'no.such', subject_id: 'x' }))
+        .status,
+    ).toBe('failed');
+    expect(
+      invoke(agent, 'outbox.stage', stageInput({ subject_type: 'core.party', subject_id: 'ghost' }))
+        .status,
+    ).toBe('failed');
+  });
+
+  test('a sent message-shaped artifact publishes into the social spine', () => {
+    const { itemId, output } = stageDecideDrain();
+    const messageId = output.message_id as string;
+    expect(messageId).toBeTruthy();
+    expect(itemRow(itemId).published_message_id).toBe(messageId);
+
+    const msg = db.vault
+      .prepare(
+        `SELECT m.delivery, m.external_id, m.thread_id, m.sender_party_id, i.title, i.content_uri
+           FROM social_message m JOIN core_content_item i ON i.content_id = m.body_content_id
+          WHERE m.message_id = ?`,
+      )
+      .get(messageId) as Record<string, string>;
+    expect(msg.delivery).toBe('sent');
+    expect(msg.external_id).toBe(`outbox:${itemId}`);
+    expect(msg.sender_party_id).toBe(boot.ownerPartyId);
+    expect(msg.title).toBe('Hi');
+    expect(decodeURIComponent(msg.content_uri.split(',')[1] ?? '')).toBe('See you at 6.');
+
+    const thread = db.vault
+      .prepare('SELECT channel, external_ref FROM social_thread WHERE thread_id = ?')
+      .get(msg.thread_id) as Record<string, string>;
+    expect(thread.channel).toBe('email');
+    expect(thread.external_ref).toBe(`outbox:conn-1:ravi@example.com`);
+
+    // Participants: the owner as a party, the unknown address as a handle.
+    const parts = db.vault
+      .prepare(
+        'SELECT party_id, handle FROM social_thread_participant WHERE thread_id = ? ORDER BY party_id',
+      )
+      .all(msg.thread_id) as { party_id: string | null; handle: string | null }[];
+    expect(parts).toHaveLength(2);
+    expect(parts.some((p) => p.party_id === boot.ownerPartyId)).toBe(true);
+    expect(parts.some((p) => p.party_id === null && p.handle === 'ravi@example.com')).toBe(true);
+  });
+
+  test('repeated sends to one address converse in one thread; replay is idempotent', () => {
+    const first = stageDecideDrain();
+    const second = stageDecideDrain({ artifact: { subject: 'Again', body: 'Second note.' } });
+    const t1 = db.vault
+      .prepare('SELECT thread_id FROM social_message WHERE external_id = ?')
+      .get(`outbox:${first.itemId}`) as { thread_id: string };
+    const t2 = db.vault
+      .prepare('SELECT thread_id FROM social_message WHERE external_id = ?')
+      .get(`outbox:${second.itemId}`) as { thread_id: string };
+    expect(t1.thread_id).toBe(t2.thread_id);
+    const n = db.vault
+      .prepare('SELECT count(*) AS n FROM social_message WHERE thread_id = ?')
+      .get(t1.thread_id) as { n: number };
+    expect(n.n).toBe(2);
+  });
+
+  test('a non-message artifact (no body text) drains without publishing', () => {
+    const { itemId, output } = stageDecideDrain({
+      verb: 'gcal.create_event',
+      artifact: { summary: 'Standup', start: '2026-07-07T09:00:00Z' },
+    });
+    expect(output.message_id).toBeUndefined();
+    expect(itemRow(itemId).published_message_id).toBeNull();
+    const n = db.vault.prepare('SELECT count(*) AS n FROM social_message').get() as { n: number };
+    expect(n.n).toBe(0);
+  });
+});

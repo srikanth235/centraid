@@ -64,18 +64,6 @@ CREATE TABLE social_message (
 ) STRICT;
 `;
 
-// v15 (issue #308 A6): the standard soft-delete pair on notes. Tier 1's
-// rationale is "journaled and REVERSIBLE" — delete_note used to hard-delete
-// the row, leaving the owner a receipt and no undo. Trash semantics give
-// deletion the same grace window documents and media assets already have;
-// the lifecycle sweep purges lapsed notes (edges included) for real.
-//
-// A rebuild rather than ALTER ADD COLUMN so the rung stays re-runnable
-// (the ladder's standing property — the v3 backfill test replays it), in
-// the v8 copy pattern. The DROP takes the v2 FTS sync triggers with the
-// table, so they re-arm here WITH the live guard (the v9 precedent) —
-// trashed notes leave the search index like trashed documents do — and the
-// shadow rows rebuild to match.
 export const KNOWLEDGE_DDL = `
 CREATE TABLE knowledge_note (
   note_id         TEXT PRIMARY KEY,
