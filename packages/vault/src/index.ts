@@ -56,7 +56,7 @@ export {
 } from './schema/tables.js';
 
 export { createGateway, Gateway } from './gateway/gateway.js';
-export { GatewayError } from './gateway/types.js';
+export { GatewayError, DEFAULT_PURPOSE } from './gateway/types.js';
 export type {
   Credential,
   Identity,
@@ -192,6 +192,7 @@ export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
 export { registerTallyCommands } from './commands/tally.js';
 export { registerSyncCommands } from './commands/sync.js';
 export { registerEnrichCommands } from './commands/enrich.js';
+export { registerOutboxCommands } from './commands/outbox.js';
 
 export {
   AGENT_CONTENT_VARIANTS,

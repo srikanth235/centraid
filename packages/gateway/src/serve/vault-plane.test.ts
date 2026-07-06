@@ -126,7 +126,7 @@ test('search op rides both bridges: FTS match vault-side, consent still one door
   expect((agentHit.result as { rows: unknown[] }).rows).toHaveLength(1);
 });
 
-test('an app invoke above its risk ceiling parks; the owner confirm releases it into the canon', async () => {
+test('a granted app invoke executes without parking; the risk marker rides the receipt (issue #306)', async () => {
   const dir = await tempDir();
   const plane = openPlane(dir);
   const calendarId = seedCalendar(plane);
@@ -150,16 +150,79 @@ test('an app invoke above its risk ceiling parks; the owner confirm releases it 
       purpose: 'dpv:ServiceProvision',
     },
   });
-  // propose_event is medium risk; app ceiling defaults to low → parked.
+  // propose_event is medium risk — installing granted the scope, so it
+  // executes; risk is a salience marker in the journal, not a park trigger.
   expect(outcome.ok).toBe(true);
-  const parked = outcome.result as { status: string; invocationId: string };
-  expect(parked.status).toBe('parked');
-  expect(plane.listParked()).toHaveLength(1);
-
-  const released = plane.confirmParked(parked.invocationId, true);
-  expect(released.status).toBe('executed');
+  const executed = outcome.result as { status: string; receiptId: string };
+  expect(executed.status).toBe('executed');
+  expect(plane.listParked()).toHaveLength(0);
+  const receipt = plane.db.journal
+    .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
+    .get(executed.receiptId) as { detail_json: string };
+  expect(JSON.parse(receipt.detail_json).risk).toBe('medium');
   const events = plane.db.vault.prepare('SELECT summary, status FROM core_event').all();
   expect(events).toEqual([{ summary: 'Design review', status: 'tentative' }]);
+});
+
+test('install-time scopes: enrolling grants the declared block, idempotently (issue #306)', async () => {
+  const dir = await tempDir();
+  const plane = openPlane(dir);
+  const calendarId = seedCalendar(plane);
+
+  // Installing IS the consent: no owner grant ceremony precedes the invoke.
+  plane.ensureAppInstallGrant('planner', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+  });
+  const outcome = await plane.bridgeFor('planner')({
+    op: 'invoke',
+    payload: {
+      command: 'schedule.propose_event',
+      input: {
+        summary: 'Kickoff',
+        dtstart: '2026-07-08T09:00:00Z',
+        dtend: '2026-07-08T09:30:00Z',
+        calendar_id: calendarId,
+      },
+    },
+  });
+  expect(outcome.ok).toBe(true);
+  expect((outcome.result as { status: string }).status).toBe('executed');
+
+  // Idempotent: re-running with the same block mints no second grant.
+  const before = plane.listApps().find((a) => a.name === 'planner')?.grants.length;
+  plane.ensureAppInstallGrant('planner', {
+    purpose: 'dpv:ServiceProvision',
+    scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+  });
+  const after = plane.listApps().find((a) => a.name === 'planner')?.grants.length;
+  expect(after).toBe(before);
+  // A widened declaration tops up only the missing scope.
+  plane.ensureAppInstallGrant('planner', {
+    scopes: [
+      { schema: 'schedule', verbs: 'read+act' },
+      { schema: 'knowledge', verbs: 'read' },
+    ],
+  });
+  const widened = plane.listApps().find((a) => a.name === 'planner');
+  const scopes = widened?.grants.flatMap((g) => g.scopes) ?? [];
+  expect(scopes).toHaveLength(2);
+
+  // The agent-plane mirror covers automations.
+  plane.ensureAgentInstallGrant('gmail-send', {
+    scopes: [{ schema: 'outbox', verbs: 'act' }],
+  });
+  const agents = plane.listAgents();
+  expect(agents.find((a) => a.name === 'gmail-send')?.grants).toHaveLength(1);
+
+  // The consent surface renders what was granted, salience included.
+  const surface = plane.scopeSurface('planner');
+  expect(surface.scopes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ plane: 'app', schema: 'schedule', verbs: 'read+act' }),
+    ]),
+  );
+  expect(surface.highlights.some((h) => h.schema === 'schedule')).toBe(true);
 });
 
 test('the plane survives a restart: same identity, grants intact, ctx.vault still works', async () => {
@@ -245,7 +308,14 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   expect(apps.apps[0]).toMatchObject({ name: 'planner' });
   expect(apps.apps[0]?.grants).toHaveLength(1);
 
-  // Park an invocation through the bridge, confirm it over HTTP.
+  // Park an invocation through the bridge, confirm it over HTTP. Parking
+  // is confirm-gated (issue #306): mark the command loud-on-purpose first.
+  plane.db.vault
+    .prepare(
+      `UPDATE agent_capability SET requires_confirmation=1
+        WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+    )
+    .run();
   const parked = await plane.bridgeFor('planner')({
     op: 'invoke',
     payload: {
@@ -514,14 +584,21 @@ test('agent changes feed + app parked surface ride the bridges', async () => {
   expect(bootstrap.ok).toBe(true);
   const cursor = (bootstrap.result as { cursor: string }).cursor;
 
-  // An app parks a high-risk booking request…
+  // An app parks a confirm-gated booking request (issue #306: parking is a
+  // property of the command, not of risk)…
   plane.enrollApp('bookings');
   plane.approveGrant('bookings', {
     purpose: 'dpv:ServiceProvision',
     scopes: [{ schema: 'schedule', verbs: 'read+act' }],
   });
+  plane.db.vault
+    .prepare(
+      `UPDATE agent_capability SET requires_confirmation=1
+        WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+    )
+    .run();
   const appBridge = plane.bridgeFor('bookings');
-  // …after a low-risk write that lands in the agent's feed.
+  // …a write that, once confirmed, lands in the agent's feed.
   const proposed = await appBridge({
     op: 'invoke',
     payload: {

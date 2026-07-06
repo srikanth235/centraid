@@ -326,10 +326,14 @@ describe('confirmation routing + revocation + sweeps', () => {
     };
   }
 
-  test('agent invoking a high-risk command parks; owner approval executes it', () => {
-    // Raise the command's risk to high so it exceeds the agent's medium ceiling.
+  test('agent invoking a confirm-gated command parks; owner approval executes it', () => {
+    // Mark the command loud-on-purpose (issue #306): confirmation is a
+    // property of the command's capability row, not of its risk.
     db.vault
-      .prepare(`UPDATE agent_command SET risk='high' WHERE name='schedule.propose_event'`)
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
       .run();
     const { cred } = grantedAgent();
     const parked = gw.invoke(cred, {
@@ -359,9 +363,72 @@ describe('confirmation routing + revocation + sweeps', () => {
     expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(boot.ownerPartyId);
   });
 
+  test('install-time scopes execute without parking; risk is journaled as salience (issue #306)', () => {
+    // propose_event is medium risk; the agent has no ceiling anymore — the
+    // granted command executes, and the receipt carries the risk marker.
+    const { cred } = grantedAgent();
+    const outcome = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+    if (outcome.status !== 'executed') return;
+    const receipt = db.journal
+      .prepare('SELECT detail_json FROM consent_receipt WHERE receipt_id = ?')
+      .get(outcome.receiptId) as { detail_json: string };
+    expect(JSON.parse(receipt.detail_json).risk).toBe('medium');
+  });
+
+  test('an omitted purpose defaults and is journaled (issue #306)', () => {
+    const { cred } = grantedAgent();
+    const outcome = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+    });
+    expect(outcome.status).toBe('executed');
+    if (outcome.status !== 'executed') return;
+    const receipt = db.journal
+      .prepare('SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?')
+      .get(outcome.receiptId) as { purpose_concept_id: string | null };
+    expect(receipt.purpose_concept_id).toBe('dpv:ServiceProvision');
+    // A purposeless read rides the same default and still receipts it.
+    const read = gw.read(cred, { entity: 'schedule.calendar' });
+    const readReceipt = db.journal
+      .prepare('SELECT purpose_concept_id FROM consent_receipt WHERE receipt_id = ?')
+      .get(read.receiptId) as { purpose_concept_id: string | null };
+    expect(readReceipt.purpose_concept_id).toBe('dpv:ServiceProvision');
+  });
+
+  test('consent.policy purpose rules still evaluate when a purpose IS supplied (issue #306)', () => {
+    db.vault
+      .prepare(
+        `INSERT INTO consent_policy (policy_id, kind, applies_schema, applies_table, rule_json, retention_days, residency_region, effective_from, priority)
+         VALUES (?, 'purpose', 'schedule', NULL, '{"allowed_purposes":["dpv:ServiceProvision"]}', NULL, NULL, '2020-01-01T00:00:00Z', 1)`,
+      )
+      .run(uuidv7());
+    const { cred } = grantedAgent();
+    const denied = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:Billing',
+    });
+    expect(denied.status).toBe('denied');
+    if (denied.status === 'denied') expect(denied.reason).toContain('policy forbids');
+    // The defaulted purpose satisfies the same policy.
+    const allowed = gw.invoke(cred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+    });
+    expect(allowed.status).toBe('executed');
+  });
+
   test('owner denial of a parked invocation is receipted as deny', () => {
     db.vault
-      .prepare(`UPDATE agent_command SET risk='high' WHERE name='schedule.propose_event'`)
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
       .run();
     const { cred } = grantedAgent();
     const parked = gw.invoke(cred, {

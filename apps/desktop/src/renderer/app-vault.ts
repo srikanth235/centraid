@@ -5,8 +5,8 @@
 //      (purpose, why, scopes), which is a *request*, never access;
 //   2. let the owner grant exactly that request (deny-by-default until the
 //      grant lands) or revoke it (the cascade runs gateway-side);
-//   3. surface this app's parked invocations — commands whose risk exceeds
-//      the app's ceiling wait here for the owner's explicit say-so.
+//   3. surface this app's parked invocations — confirm-gated (Tier 3/4,
+//      issue #306) commands wait here for the owner's explicit say-so.
 //
 // The tab only appears for apps whose manifest declares a `vault` block
 // (see `app-appview.ts`). Everything here talks to `/centraid/_vault/*`

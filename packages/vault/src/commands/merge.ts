@@ -77,7 +77,9 @@ const MERGE_PARTY: CommandDefinition = {
     },
   ],
   idempotency: 'once',
+  // Tier 4 (issue #306): an irreversible merge stays loud on purpose.
   risk: 'high',
+  confirm: true,
   handler: mergeParty,
 };
 

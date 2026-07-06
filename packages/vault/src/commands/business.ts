@@ -595,8 +595,10 @@ const SEND_INVOICE: CommandDefinition = {
   ],
   idempotency: 'once',
   // The moment an internal draft becomes an outward commitment to a client
-  // for a specific amount — parks for the owner, like social.send_message.
+  // for a specific amount — Tier 3 semantic egress (issue #306): loud on
+  // purpose, parks for every non-owner caller.
   risk: 'high',
+  confirm: true,
   handler: sendInvoice,
 };
 

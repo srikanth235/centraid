@@ -190,7 +190,10 @@ export class ConnectionBroker {
       code_verifier: ceremony.verifier,
     });
     if (row.client_secret) {
-      form.set('client_secret', this.unseal(plane, connectionId, 'client_secret', row.client_secret));
+      form.set(
+        'client_secret',
+        this.unseal(plane, connectionId, 'client_secret', row.client_secret),
+      );
     }
     const response = await this.postTokenForm(row.token_url, form);
     if (!response.ok) {
@@ -227,10 +230,12 @@ export class ConnectionBroker {
     if (!row?.cred_kind) return undefined;
     const allowedHosts = parseHosts(row.allowed_hosts);
     if (allowedHosts.length === 0) {
-      return { refused: `connection "${connector.label}" carries a credential but no allowed_hosts pin` };
+      return {
+        refused: `connection "${connector.label}" carries a credential but no allowed_hosts pin`,
+      };
     }
     const limiter = this.limiterFor(plane, row.connection_id);
-    const limit = <T,>(fn: () => Promise<T>): Promise<T> => limiter.run(fn);
+    const limit = <T>(fn: () => Promise<T>): Promise<T> => limiter.run(fn);
     const onAuthDead = (reason: string): Promise<void> =>
       this.flipNeedsAuth(plane, row.connection_id, reason);
 
@@ -265,6 +270,64 @@ export class ConnectionBroker {
       };
     }
   };
+
+  /**
+   * The outbox executor's seam (issue #306): resolve one connection to
+   * injectable values on the WRITE lane. Same custody as `resolveForFire` —
+   * injection only, host pin, single-flight refresh — plus `allowWrites`,
+   * which connector fires never get: the only mutating injected requests in
+   * the system are executor drains of owner-approved/grant-matched items.
+   */
+  async resolveForDrain(
+    plane: VaultPlane,
+    connectionId: string,
+  ): Promise<ConnectionAuth | { refused: string }> {
+    const row = this.readRowById(plane, connectionId);
+    if (!row?.cred_kind) {
+      return {
+        refused: `connection ${connectionId} carries no broker credential — the outbox drains through broker-carried credentials only`,
+      };
+    }
+    const allowedHosts = parseHosts(row.allowed_hosts);
+    if (allowedHosts.length === 0) {
+      return {
+        refused: `connection ${connectionId} carries a credential but no allowed_hosts pin`,
+      };
+    }
+    const limiter = this.limiterFor(plane, row.connection_id);
+    const limit = <T>(fn: () => Promise<T>): Promise<T> => limiter.run(fn);
+    const onAuthDead = (reason: string): Promise<void> =>
+      this.flipNeedsAuth(plane, row.connection_id, reason);
+    if (row.cred_kind === 'api_key') {
+      if (!row.api_key) {
+        return { refused: `connection ${connectionId} is api_key-kind but holds no key` };
+      }
+      return {
+        values: { api_key: this.unseal(plane, row.connection_id, 'api_key', row.api_key) },
+        allowedHosts,
+        onAuthDead,
+        limit,
+        allowWrites: true,
+      } satisfies ConnectionAuth;
+    }
+    try {
+      const accessToken = await this.ensureFreshToken(plane, row.connection_id, false);
+      return {
+        values: { access_token: accessToken },
+        allowedHosts,
+        refresh: async () => ({
+          access_token: await this.ensureFreshToken(plane, row.connection_id, true),
+        }),
+        onAuthDead,
+        limit,
+        allowWrites: true,
+      } satisfies ConnectionAuth;
+    } catch (err) {
+      return {
+        refused: `connection ${connectionId} has no usable token: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
 
   /**
    * Resolve a live access token, refreshing when expired (or `force`, after
@@ -310,7 +373,10 @@ export class ConnectionBroker {
       client_id: row.client_id,
     });
     if (row.client_secret) {
-      form.set('client_secret', this.unseal(plane, connectionId, 'client_secret', row.client_secret));
+      form.set(
+        'client_secret',
+        this.unseal(plane, connectionId, 'client_secret', row.client_secret),
+      );
     }
 
     const response = await this.postTokenForm(row.token_url, form);
@@ -400,7 +466,11 @@ export class ConnectionBroker {
       }
       const accessToken = body.access_token;
       if (typeof accessToken !== 'string' || accessToken.length === 0) {
-        return { ok: false, authDead: false, detail: 'token endpoint answered without access_token' };
+        return {
+          ok: false,
+          authDead: false,
+          detail: 'token endpoint answered without access_token',
+        };
       }
       const expiresIn = typeof body.expires_in === 'number' ? body.expires_in : undefined;
       return {
@@ -415,7 +485,11 @@ export class ConnectionBroker {
   }
 
   /** needs-auth with a reason — the ONE actionable reconnect state. */
-  private async flipNeedsAuth(plane: VaultPlane, connectionId: string, note: string): Promise<void> {
+  private async flipNeedsAuth(
+    plane: VaultPlane,
+    connectionId: string,
+    note: string,
+  ): Promise<void> {
     plane.gateway.invoke(plane.ownerCredential, {
       command: 'sync.set_connection_status',
       input: { connection_id: connectionId, status: 'needs-auth', note },

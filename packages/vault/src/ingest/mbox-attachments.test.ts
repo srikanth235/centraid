@@ -66,7 +66,6 @@ beforeEach(() => {
     callerId: boot.deviceId,
     provAgentKind: 'owner',
     partyId: boot.ownerPartyId,
-    riskCeiling: 'owner',
     mayAct: true,
   };
 });

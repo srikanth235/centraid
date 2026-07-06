@@ -7,7 +7,7 @@
 import { promises as fs } from 'node:fs';
 import nodePath from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { AppScaffoldError, type ScaffoldFile } from '@centraid/blueprints';
+import { AppScaffoldError, listTemplates, type ScaffoldFile } from '@centraid/blueprints';
 import * as automation from '@centraid/automation';
 import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
@@ -135,6 +135,59 @@ export async function handleAutomationSetEnabled(
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
+}
+
+// ---- POST /centraid/_automations/enrichment (batch toggle, issue #306) ----
+
+/**
+ * "Enable enrichment" is ONE owner decision (issue #306 decision 6): flip
+ * every installed enricher automation in one act instead of nine separate
+ * discoveries. Enrichers are identified by the blueprint catalog's
+ * `category: "Enrichment"` template ids; the response reports what toggled
+ * so a surface can render the checklist honestly.
+ */
+export async function handleEnrichmentToggle(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<boolean> {
+  const body = await readJson(req);
+  if (typeof body.enabled !== 'boolean') {
+    return sendJson(res, 400, { error: 'bad_request', message: 'enrichment needs { enabled }' });
+  }
+  const enricherIds = new Set(
+    (await listTemplates()).filter((t) => t.category === 'Enrichment').map((t) => t.id),
+  );
+  const { rows } = await automation.list(opts.codeAppsDir());
+  const toggled: string[] = [];
+  const unchanged: string[] = [];
+  for (const row of rows) {
+    if (!enricherIds.has(row.ownerApp)) continue;
+    if (row.enabled === body.enabled) {
+      unchanged.push(row.ref);
+      continue;
+    }
+    const sessionId = defaultSessionId(row.ownerApp);
+    await prepareLifecycleSession(opts.store, sessionId, true);
+    const appDir = await opts.store.snapshotSessionAppDir(sessionId, row.ownerApp);
+    const current = await readFileMap(appDir);
+    const changed = automation.setEnabledInFiles(current as ScaffoldFile[], row.id, body.enabled);
+    if (changed.length > 0) {
+      await stageAndMaybePublish(opts, {
+        appId: row.ownerApp,
+        sessionId,
+        files: changed,
+        publish: true,
+        message: `${body.enabled ? 'enable' : 'disable'} enrichment (${row.id})`,
+        ephemeralSession: true,
+      });
+      toggled.push(row.ref);
+    } else {
+      await opts.store.closeSession(sessionId);
+      unchanged.push(row.ref);
+    }
+  }
+  return sendJson(res, 200, { ok: true, enabled: body.enabled, toggled, unchanged });
 }
 
 // ---- DELETE /centraid/_automations?ref=&publish= (remove an automation) ----

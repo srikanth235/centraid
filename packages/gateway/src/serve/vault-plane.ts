@@ -57,6 +57,7 @@ import {
   registerPeopleCommands,
   registerScheduleCommands,
   registerSocialCommands,
+  registerOutboxCommands,
   registerSyncCommands,
   registerTallyCommands,
   registerTaskCommands,
@@ -125,6 +126,45 @@ export interface GrantRequest {
   expiresAt?: string;
 }
 
+/** A manifest's declared vault block, as install-time consent (issue #306). */
+export interface InstallScopeBlock {
+  purpose?: string;
+  scopes: readonly { schema: string; table?: string; verbs: ScopeSpec['verbs'] }[];
+}
+
+/** One outbox item as the owner surface lists it (issue #306). */
+export interface OutboxItemSummary {
+  itemId: string;
+  connection: { kind: string; label: string };
+  actor: string | null;
+  actorKind: string;
+  verb: string;
+  target: string;
+  artifact: Record<string, unknown>;
+  status: string;
+  grantId: string | null;
+  stagedAt: string;
+  decidedAt: string | null;
+  drainedAt: string | null;
+  result: Record<string, unknown> | null;
+  note: string | null;
+}
+
+/** One review-feed entry: a receipt ranked by risk salience (issue #306). */
+export interface ReviewEntry {
+  receiptId: string;
+  action: string;
+  objectType: string;
+  objectId: string | null;
+  decision: string;
+  occurredAt: string;
+  /** Salience marker off the receipt detail — absent on pre-#306 receipts. */
+  risk: string | null;
+  invocationId: string | null;
+  /** Acting identity row id (agent/app/device) when an invocation exists. */
+  actorId: string | null;
+}
+
 /**
  * The shared bridge error contract: a GatewayError maps to its pipeline
  * stage (`VAULT_CONSENT`, `VAULT_CONTRACT`, …), anything else to
@@ -143,6 +183,20 @@ function asVaultCallResult(fn: () => unknown): VaultCallResult {
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/** Declared scopes not yet covered by any active grant — exact-triple diff. */
+function missingScopes(grants: GrantSummary[], declared: InstallScopeBlock['scopes']): ScopeSpec[] {
+  const covered = new Set(
+    grants.flatMap((g) => g.scopes.map((s) => `${s.schema}|${s.table ?? ''}|${s.verbs}`)),
+  );
+  return declared
+    .filter((s) => !covered.has(`${s.schema}|${s.table ?? ''}|${s.verbs}`))
+    .map((s) => ({
+      schema: s.schema,
+      ...(s.table !== undefined ? { table: s.table } : {}),
+      verbs: s.verbs,
+    }));
 }
 
 /** The `content` op's request shape (issue #299): one derivative fetch. */
@@ -237,6 +291,7 @@ export class VaultPlane {
     registerTallyCommands(this.gateway);
     registerSyncCommands(this.gateway);
     registerEnrichCommands(this.gateway);
+    registerOutboxCommands(this.gateway);
     // Re-arm the ext-band write trios for every installed app that
     // declared extension tables (issue #286 phase 2) — command handlers
     // live in gateway memory, the contract rows in the vault.
@@ -371,6 +426,20 @@ export class VaultPlane {
       }
       markAgentRevoked(this.db, agent.agentId);
     }
+    // Standing outbox grants die with the actor (issue #306): an
+    // uninstalled app's "always allow" rules must not outlive it.
+    for (const actorId of [app?.appId, agent?.agentId]) {
+      if (!actorId) continue;
+      const rules = this.db.vault
+        .prepare('SELECT grant_id FROM outbox_grant WHERE actor_id = ? AND revoked_at IS NULL')
+        .all(actorId) as { grant_id: string }[];
+      for (const rule of rules) {
+        this.revokeOutboxGrant(rule.grant_id);
+        this.logger.info(
+          `vault plane: revoked standing outbox grant ${rule.grant_id} for "${appId}"`,
+        );
+      }
+    }
     return { grantsRevoked: revoked };
   }
 
@@ -412,6 +481,40 @@ export class VaultPlane {
       scopes: request.scopes,
       ...(request.expiresAt ? { expiresAt: request.expiresAt } : {}),
     });
+  }
+
+  /**
+   * Install-time scopes (issue #306 decision 2): installing the app WAS the
+   * consent. Top up the app's active grants to cover every scope its
+   * manifest declares — idempotent (already-covered scopes mint nothing),
+   * so it runs on every enroll/sync without ceremony. Ext-band ownership is
+   * still asserted; an unknown purpose still refuses.
+   */
+  ensureAppInstallGrant(appId: string, block: InstallScopeBlock): void {
+    const app = ensureAppEnrolled(this.db, appId, { origin: 'generated' });
+    const missing = missingScopes(listActiveGrants(this.db, app.appId), block.scopes);
+    if (missing.length === 0) return;
+    this.approveGrant(appId, {
+      purpose: block.purpose ?? 'dpv:ServiceProvision',
+      scopes: missing,
+    });
+    this.logger.info(
+      `vault plane: install-time grant for app "${appId}" (+${missing.length} scope(s))`,
+    );
+  }
+
+  /** The agent-plane mirror: an automation's declared scopes, granted at install. */
+  ensureAgentInstallGrant(appId: string, block: InstallScopeBlock): void {
+    const agent = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+    const missing = missingScopes(listActiveAgentGrants(this.db, agent.partyId), block.scopes);
+    if (missing.length === 0) return;
+    this.approveAgentGrant(appId, {
+      purpose: block.purpose ?? 'dpv:ServiceProvision',
+      scopes: missing,
+    });
+    this.logger.info(
+      `vault plane: install-time grant for automation "${appId}" (+${missing.length} scope(s))`,
+    );
   }
 
   /** Enrolled apps with their active grants — the owner consent surface. */
@@ -477,12 +580,298 @@ export class VaultPlane {
   }
 
   /**
+   * The outbox surface (issue #306): items as the owner reads them — the
+   * artifact itself, WHO staged it, and where it would go. Host-plane
+   * queries like `listParked`; the request_json stays server-side (it is
+   * the executor's business, and it may carry placeholder plumbing the
+   * owner shouldn't have to parse).
+   */
+  listOutbox(statuses?: readonly string[]): OutboxItemSummary[] {
+    const filter = statuses && statuses.length > 0 ? statuses : null;
+    const rows = this.db.vault
+      .prepare(
+        `SELECT i.item_id, i.actor_id, i.actor_kind, i.verb, i.target, i.artifact_json,
+                i.status, i.grant_id, i.staged_at, i.decided_at, i.drained_at, i.result_json,
+                i.note, c.kind, c.label
+           FROM outbox_item i JOIN sync_connection c ON c.connection_id = i.connection_id
+          ${filter ? `WHERE i.status IN (${filter.map(() => '?').join(', ')})` : ''}
+          ORDER BY i.staged_at DESC LIMIT 500`,
+      )
+      .all(...(filter ?? [])) as {
+      item_id: string;
+      actor_id: string;
+      actor_kind: string;
+      verb: string;
+      target: string;
+      artifact_json: string;
+      status: string;
+      grant_id: string | null;
+      staged_at: string;
+      decided_at: string | null;
+      drained_at: string | null;
+      result_json: string | null;
+      note: string | null;
+      kind: string;
+      label: string;
+    }[];
+    return rows.map((r) => ({
+      itemId: r.item_id,
+      connection: { kind: r.kind, label: r.label },
+      actor: this.actorName(r.actor_id, r.actor_kind),
+      actorKind: r.actor_kind,
+      verb: r.verb,
+      target: r.target,
+      artifact: JSON.parse(r.artifact_json) as Record<string, unknown>,
+      status: r.status,
+      grantId: r.grant_id,
+      stagedAt: r.staged_at,
+      decidedAt: r.decided_at,
+      drainedAt: r.drained_at,
+      result: r.result_json ? (JSON.parse(r.result_json) as Record<string, unknown>) : null,
+      note: r.note,
+    }));
+  }
+
+  /** Owner decision on one outbox item — rides the typed command, receipted. */
+  decideOutbox(input: {
+    itemId: string;
+    decision: 'approve' | 'discard';
+    artifact?: Record<string, unknown>;
+    request?: Record<string, unknown>;
+    alwaysAllow?: boolean;
+    note?: string;
+  }): InvokeOutcome {
+    return this.gateway.invoke(this.ownerCredential, {
+      command: 'outbox.decide',
+      input: {
+        item_id: input.itemId,
+        decision: input.decision,
+        ...(input.artifact ? { artifact: input.artifact } : {}),
+        ...(input.request ? { request: input.request } : {}),
+        ...(input.alwaysAllow !== undefined ? { always_allow: input.alwaysAllow } : {}),
+        ...(input.note !== undefined ? { note: input.note } : {}),
+      },
+    });
+  }
+
+  /** Standing (actor, verb, target) rules, live first (issue #306 phase 3). */
+  listOutboxGrants(): Array<{
+    grantId: string;
+    actor: string | null;
+    actorId: string;
+    verb: string;
+    target: string;
+    createdAt: string;
+    revokedAt: string | null;
+  }> {
+    const rows = this.db.vault
+      .prepare(
+        `SELECT grant_id, actor_id, verb, target, created_at, revoked_at
+           FROM outbox_grant ORDER BY revoked_at IS NOT NULL, created_at DESC`,
+      )
+      .all() as {
+      grant_id: string;
+      actor_id: string;
+      verb: string;
+      target: string;
+      created_at: string;
+      revoked_at: string | null;
+    }[];
+    return rows.map((r) => ({
+      grantId: r.grant_id,
+      actor: this.actorName(r.actor_id, 'ai_agent') ?? this.actorName(r.actor_id, 'app'),
+      actorId: r.actor_id,
+      verb: r.verb,
+      target: r.target,
+      createdAt: r.created_at,
+      revokedAt: r.revoked_at,
+    }));
+  }
+
+  revokeOutboxGrant(grantId: string): InvokeOutcome {
+    return this.gateway.invoke(this.ownerCredential, {
+      command: 'outbox.revoke_grant',
+      input: { grant_id: grantId },
+    });
+  }
+
+  /**
+   * The BLOCKING list (issue #306 decision 5): only things actually waiting
+   * on the owner — pending outbox artifacts, needs-auth connections, and
+   * Tier 3/4 parked confirmations. Everything else belongs to the review
+   * feed, not here.
+   */
+  blocking(): {
+    outbox: OutboxItemSummary[];
+    needsAuth: Array<{ connectionId: string; kind: string; label: string; note: string | null }>;
+    parked: ParkedSummary[];
+  } {
+    const needsAuth = this.db.vault
+      .prepare(
+        `SELECT c.connection_id, c.kind, c.label, h.auth_note
+           FROM sync_connection c
+           LEFT JOIN sync_connection_health h ON h.connection_id = c.connection_id
+          WHERE c.status = 'needs-auth' ORDER BY c.kind, c.label`,
+      )
+      .all() as { connection_id: string; kind: string; label: string; auth_note: string | null }[];
+    return {
+      outbox: this.listOutbox(['pending']),
+      needsAuth: needsAuth.map((r) => ({
+        connectionId: r.connection_id,
+        kind: r.kind,
+        label: r.label,
+        note: r.auth_note,
+      })),
+      parked: this.listParked(),
+    };
+  }
+
+  /**
+   * The review feed (issue #306 decision 5): what HAPPENED, salience-ranked —
+   * risk-marker-weighted receipts over a recent window, denies surfacing
+   * above allows of the same tier. Review-after-the-fact is the Tier 1
+   * consent mechanism; this is its surface.
+   */
+  reviewFeed(limit = 50): ReviewEntry[] {
+    const window = this.db.journal
+      .prepare(
+        `SELECT r.receipt_id, r.action, r.object_type, r.object_id, r.decision, r.occurred_at,
+                r.detail_json, r.invocation_id, i.agent_id
+           FROM consent_receipt r
+           LEFT JOIN agent_command_invocation i ON i.invocation_id = r.invocation_id
+          WHERE r.action LIKE 'act %'
+          ORDER BY r.receipt_id DESC LIMIT 500`,
+      )
+      .all() as {
+      receipt_id: string;
+      action: string;
+      object_type: string;
+      object_id: string | null;
+      decision: string;
+      occurred_at: string;
+      detail_json: string | null;
+      invocation_id: string | null;
+      agent_id: string | null;
+    }[];
+    const riskRank: Record<string, number> = { high: 2, medium: 1, low: 0 };
+    const entries = window.map((r) => {
+      let risk: string | null = null;
+      if (r.detail_json) {
+        const detail = JSON.parse(r.detail_json) as { risk?: unknown };
+        if (typeof detail.risk === 'string') risk = detail.risk;
+      }
+      return {
+        entry: {
+          receiptId: r.receipt_id,
+          action: r.action,
+          objectType: r.object_type,
+          objectId: r.object_id,
+          decision: r.decision,
+          occurredAt: r.occurred_at,
+          risk,
+          invocationId: r.invocation_id,
+          actorId: r.agent_id,
+        } satisfies ReviewEntry,
+        salience: (riskRank[risk ?? ''] ?? 0) + (r.decision === 'deny' ? 1 : 0),
+      };
+    });
+    return entries
+      .sort(
+        (a, b) => b.salience - a.salience || b.entry.occurredAt.localeCompare(a.entry.occurredAt),
+      )
+      .slice(0, Math.min(Math.max(limit, 1), 200))
+      .map((e) => e.entry);
+  }
+
+  /**
+   * The install/consent surface for one app (issue #306 phase 4): every
+   * scope its identities hold (app plane + automation agent plane), plus
+   * salience highlights — the act commands those scopes reach, risk-ranked,
+   * confirm-gated (Tier 3/4) verbs flagged. "This app can delete notes" is
+   * a render of this, not a judgment call.
+   */
+  scopeSurface(appId: string): {
+    scopes: Array<{
+      plane: 'app' | 'agent';
+      schema: string;
+      table: string | null;
+      verbs: string;
+    }>;
+    highlights: Array<{ command: string; schema: string; risk: string; confirm: boolean }>;
+  } {
+    const scopes: Array<{
+      plane: 'app' | 'agent';
+      schema: string;
+      table: string | null;
+      verbs: string;
+    }> = [];
+    const app = lookupAppByName(this.db, appId);
+    if (app) {
+      for (const grant of listActiveGrants(this.db, app.appId)) {
+        for (const s of grant.scopes) {
+          scopes.push({ plane: 'app', schema: s.schema, table: s.table, verbs: s.verbs });
+        }
+      }
+    }
+    const agent = lookupAgentByName(this.db, appId);
+    if (agent) {
+      for (const grant of listActiveAgentGrants(this.db, agent.partyId)) {
+        for (const s of grant.scopes) {
+          scopes.push({ plane: 'agent', schema: s.schema, table: s.table, verbs: s.verbs });
+        }
+      }
+    }
+    const actSchemas = [
+      ...new Set(scopes.filter((s) => s.verbs.includes('act')).map((s) => s.schema)),
+    ];
+    const highlights =
+      actSchemas.length === 0
+        ? []
+        : (
+            this.db.vault
+              .prepare(
+                `SELECT c.name, c.owner_schema, c.risk, cap.requires_confirmation
+                 FROM agent_command c
+                 JOIN agent_capability cap ON cap.command_id = c.command_id
+                WHERE c.owner_schema IN (${actSchemas.map(() => '?').join(', ')})
+                ORDER BY CASE c.risk WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, c.name`,
+              )
+              .all(...actSchemas) as {
+              name: string;
+              owner_schema: string;
+              risk: string;
+              requires_confirmation: number;
+            }[]
+          ).map((r) => ({
+            command: r.name,
+            schema: r.owner_schema,
+            risk: r.risk,
+            confirm: r.requires_confirmation === 1,
+          }));
+    return { scopes, highlights };
+  }
+
+  /** Display name for an outbox actor row id (agent party / app name). */
+  private actorName(actorId: string, actorKind: string): string | null {
+    if (actorKind === 'owner') return 'owner';
+    const row = this.db.vault
+      .prepare(
+        actorKind === 'app'
+          ? 'SELECT name FROM consent_app WHERE app_id = ?'
+          : `SELECT p.display_name AS name FROM agent_agent a
+               JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`,
+      )
+      .get(actorId) as { name: string } | undefined;
+    return row?.name ?? null;
+  }
+
+  /**
    * The vault assistant's WRITE tool (issue #286 phase 2): typed commands
    * riding an enrolled `_assistant` agent — NOT the owner-device
-   * credential, deliberately: agents carry a structural `medium` risk
-   * ceiling, so high-risk commands park for the owner's explicit say-so
-   * in the existing approval surface. Reads bypass the keyhole (sql);
-   * writes keep the contract + parking asymmetry.
+   * credential, deliberately: Tier 3/4 confirm-gated commands (issue #306)
+   * park for the owner's explicit say-so in the existing approval surface.
+   * Reads bypass the keyhole (sql); writes keep the contract + parking
+   * asymmetry for the loud-on-purpose verbs.
    *
    * The standing act grant is minted idempotently on first use: the
    * assistant is the owner's own hands, so using it IS the consent —
@@ -730,9 +1119,9 @@ export class VaultPlane {
    * The per-automation `ctx.vault` executor — the agent-plane mirror of
    * `bridgeFor`. Fires authenticate as the automation's enrolled
    * `agent.agent` riding the host's owner device (session binding, §12);
-   * risk ceiling is structurally `medium`, so `high` commands park for
-   * owner confirmation. Credential resolution happens per call so a
-   * revocation lands immediately.
+   * Tier 3/4 confirm-gated commands (issue #306) park for owner
+   * confirmation. Credential resolution happens per call so a revocation
+   * lands immediately.
    */
   agentBridgeFor(appId: string): VaultBridge {
     return async (call): Promise<VaultCallResult> => {

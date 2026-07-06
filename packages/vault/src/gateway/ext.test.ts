@@ -376,7 +376,6 @@ describe('export / import', () => {
       callerId: boot.deviceId,
       provAgentKind: 'owner',
       partyId: boot.ownerPartyId,
-      riskCeiling: 'owner',
       mayAct: true,
     });
     expect(Object.keys(artifact.tables)).toContain(`ext.${APP}.workout`);

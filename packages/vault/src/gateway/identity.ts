@@ -12,7 +12,6 @@ interface AppRow {
   app_id: string;
   signing_key: string | null;
   status: string;
-  risk_ceiling: 'low' | 'medium' | 'high';
 }
 interface AgentRow {
   agent_id: string;
@@ -46,7 +45,7 @@ function deviceRow(vault: DatabaseSync, deviceId: string, deviceKey: string): De
 export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
   if (cred.kind === 'app') {
     const row = vault
-      .prepare('SELECT app_id, signing_key, status, risk_ceiling FROM consent_app WHERE app_id = ?')
+      .prepare('SELECT app_id, signing_key, status FROM consent_app WHERE app_id = ?')
       .get(cred.appId) as AppRow | undefined;
     if (
       !row ||
@@ -61,7 +60,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       callerId: row.app_id,
       provAgentKind: 'app',
       partyId: null,
-      riskCeiling: row.risk_ceiling,
       mayAct: true,
     };
   }
@@ -77,9 +75,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
       callerId: row.agent_id,
       provAgentKind: 'ai_agent',
       partyId: row.party_id,
-      // §03: command risk 'high' requires owner confirmation — agents never
-      // exceed medium without a parked confirmation.
-      riskCeiling: 'medium',
       mayAct: device.trust === 'full',
     };
   }
@@ -96,7 +91,6 @@ export function authenticate(vault: DatabaseSync, cred: Credential): Identity {
     callerId: device.device_id,
     provAgentKind: 'owner',
     partyId: device.owner_party_id,
-    riskCeiling: 'owner',
     mayAct: device.trust === 'full',
   };
 }

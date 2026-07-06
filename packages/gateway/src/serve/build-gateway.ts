@@ -73,7 +73,8 @@ import {
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import { ConnectionBroker } from './connection-broker.js';
-import type { VaultPlane } from './vault-plane.js';
+import { OutboxExecutor } from './outbox-executor.js';
+import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
 import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
@@ -419,6 +420,43 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // call time, exactly like `vaultFor` below.
   const connectionBroker = new ConnectionBroker(() => vaultRegistry.current());
 
+  // The outbox executor (issue #306): the only writer on the broker's
+  // `allowWrites` lane, draining owner-approved / grant-matched items. It
+  // runs OUTSIDE the fire loop — kicked after owner approvals, after each
+  // fire (grant-matched items a connector just staged), and on a slow clock.
+  const outboxExecutor = new OutboxExecutor(connectionBroker, logger);
+  const drainOutbox = (plane: VaultPlane): void => {
+    void outboxExecutor.drain(plane).catch((err) => {
+      logger.warn(`outbox drain failed: ${err instanceof Error ? err.message : String(err)}`);
+    });
+  };
+
+  // Install-time scopes (issue #306 decision 2): enrolling an app grants the
+  // vault block its manifest declares — installing IS the consent. Read off
+  // the app's live `main` app.json; malformed or absent blocks grant nothing.
+  const grantDeclaredAppScopes = async (
+    plane: VaultPlane,
+    store: WorktreeStore,
+    appId: string,
+  ): Promise<void> => {
+    try {
+      const dir = await store.resolveActiveAppDir(appId);
+      if (!dir) return;
+      const raw = JSON.parse(await fs.readFile(path.join(dir, 'app.json'), 'utf8')) as {
+        vault?: { purpose?: unknown; scopes?: unknown };
+      };
+      const block = manifestScopeBlock(raw.vault);
+      if (block) plane.ensureAppInstallGrant(appId, block);
+    } catch (err) {
+      logger.warn(
+        `install-time grant for app "${appId}" failed: ` +
+          (err instanceof Error ? err.message : String(err)),
+      );
+    }
+  };
+
+  let outboxTimer: NodeJS.Timeout | undefined;
+
   // The one fire path, shared by "run now" (manual) and the cron schedulers
   // (scheduled). A host can override the fire entirely (Plane B — OpenClaw
   // runs it in-process); the default below runs on THIS host with the
@@ -458,6 +496,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             ...(opts.input !== undefined ? { input: opts.input } : {}),
             onRunEvent: (ev) => runEventBus.publish(runId, ev),
           });
+          // Grant-matched outbox items the fire just staged drain now, not
+          // on the next clock tick (issue #306 phase 3).
+          drainOutbox(vaultRegistry.current());
         })().catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
           // Failed before the ledger opened: close off the bus or the viewer hangs.
@@ -494,6 +535,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       for (const appId of await host.store.listApps()) {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
+        await grantDeclaredAppScopes(plane, host.store, appId);
       }
       settledHosts.set(vaultId, host);
       reconcileScheduler(vaultId);
@@ -519,6 +561,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       for (const appId of await host.store.listApps()) {
         await requireRuntime().registry.ensureUploaded(appId);
         vaultRegistry.enrollApp(appId);
+        await grantDeclaredAppScopes(plane, host.store, appId);
       }
     });
     reconcileScheduler(id);
@@ -581,6 +624,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         onAppLive: async (appId) => {
           await requireRuntime().registry.ensureUploaded(appId);
           vaultRegistry.enrollApp(appId);
+          await grantDeclaredAppScopes(plane, store, appId);
           // A publish/rollback may have added/removed/toggled an
           // automation — resync THIS vault's cron scheduler off the new `main`.
           reconcileScheduler(vaultId);
@@ -600,6 +644,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         ensureRegistered: async (appId) => {
           await requireRuntime().registry.ensureUploaded(appId);
           vaultRegistry.enrollApp(appId);
+          await grantDeclaredAppScopes(plane, store, appId);
         },
         deregister: deregisterAndCleanup,
         reconcile: () => reconcileScheduler(vaultId),
@@ -685,14 +730,28 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         settled.dirty = false;
         const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
         // Every automation app acts through an enrolled agent.agent (duaility
-        // §12) — enroll identities in THIS vault as the desired set settles.
-        // Idempotent; grants stay owner-approved and deny-by-default.
+        // §12) — enroll identities in THIS vault as the desired set settles,
+        // and grant each automation's DECLARED scopes at the same moment
+        // (issue #306 decision 2: installing was the consent).
+        const plane = vaultRegistry.get(vaultId);
         for (const appId of new Set(rows.map((r) => r.ownerApp))) {
           try {
             vaultRegistry.enrollAutomationAgent(appId);
           } catch (err) {
             logger.warn(
               `vault plane: agent enrollment for "${appId}" failed: ` +
+                (err instanceof Error ? err.message : String(err)),
+            );
+          }
+        }
+        for (const row of rows) {
+          const block = manifestScopeBlock(row.manifest.vault);
+          if (!block || !plane) continue;
+          try {
+            plane.ensureAgentInstallGrant(row.ownerApp, block);
+          } catch (err) {
+            logger.warn(
+              `install-time grant for automation "${row.ownerApp}" failed: ` +
                 (err instanceof Error ? err.message : String(err)),
             );
           }
@@ -927,10 +986,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are
     // ADMIN acts (server CLI) — they no longer ride HTTP (#289).
-    makeVaultRouteHandler(
-      vaultRegistry,
-      options.deviceAccess ? { deviceAccess: options.deviceAccess } : {},
-    ),
+    makeVaultRouteHandler(vaultRegistry, {
+      ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
+      onOutboxDecided: drainOutbox,
+    }),
     // Template catalog (issue #141): the gateway owns it, so the renderer
     // reads `GET /centraid/_templates` directly. Templates are SEEDS —
     // gateway-level, read-only material instantiated INTO a vault (#280).
@@ -1042,6 +1101,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Vault standing duties on the gateway clock: a sweep now, then hourly.
     vaultRegistry.start();
 
+    // The outbox slow clock (issue #306): a periodic drain per mounted
+    // vault backstops the event-driven kicks (owner approvals, post-fire) —
+    // e.g. items deferred on a transient 5xx or a needs-auth reconnect.
+    outboxTimer = setInterval(() => {
+      for (const plane of vaultRegistry.planesList()) drainOutbox(plane);
+    }, 60_000);
+    outboxTimer.unref();
+
     // Warm the host-capability catalog — BOTH models and tools — for each
     // detected runner on EVERY gateway start, in the background so it never
     // delays readiness. Best-effort; the warmer dedupes, so a client Refresh
@@ -1079,6 +1146,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   const stop = async (): Promise<void> => {
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
+    if (outboxTimer) clearInterval(outboxTimer);
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
   };
@@ -1097,4 +1165,36 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     start,
     stop,
   } satisfies BuiltGateway;
+}
+
+/**
+ * Validate a manifest's declared vault block into an install-scope block
+ * (issue #306). Manifests are app-authored input: anything malformed grants
+ * nothing rather than something surprising.
+ */
+function manifestScopeBlock(raw: unknown): InstallScopeBlock | undefined {
+  if (raw === null || typeof raw !== 'object') return undefined;
+  const block = raw as { purpose?: unknown; scopes?: unknown };
+  if (!Array.isArray(block.scopes)) return undefined;
+  const verbs = new Set(['read', 'read+act', 'act', 'reveal']);
+  const scopes = block.scopes.flatMap((s: unknown) => {
+    if (s === null || typeof s !== 'object') return [];
+    const scope = s as { schema?: unknown; table?: unknown; verbs?: unknown };
+    if (typeof scope.schema !== 'string' || scope.schema === '') return [];
+    if (typeof scope.verbs !== 'string' || !verbs.has(scope.verbs)) return [];
+    return [
+      {
+        schema: scope.schema,
+        ...(typeof scope.table === 'string' && scope.table !== '' ? { table: scope.table } : {}),
+        verbs: scope.verbs as 'read' | 'read+act' | 'act' | 'reveal',
+      },
+    ];
+  });
+  if (scopes.length === 0) return undefined;
+  return {
+    ...(typeof block.purpose === 'string' && block.purpose !== ''
+      ? { purpose: block.purpose }
+      : {}),
+    scopes,
+  };
 }

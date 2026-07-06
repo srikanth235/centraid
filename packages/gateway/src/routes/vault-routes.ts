@@ -19,6 +19,12 @@
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
+ *   GET    /centraid/_vault/outbox?status=             — external-write artifacts (issue #306)
+ *   POST   /centraid/_vault/outbox/<itemId>            — {decision, artifact?, request?, always_allow?, note?}
+ *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
+ *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
+ *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked)
+ *   GET    /centraid/_vault/review?limit=              — salience-ranked receipt feed
  *   GET    /centraid/_vault/picker?term=&kinds=&limit= — shell entity picker (issue #272)
  *   POST   /centraid/_vault/links                      — assert a link as the owner (pick-is-consent),
  *                                                        optionally carrying an inline anchor selector (issue #282)
@@ -58,6 +64,15 @@ export interface VaultRouteOptions {
    * is implicitly enrolled in every vault (loopback embed).
    */
   deviceAccess?: DeviceAccess;
+  /**
+   * Kick the outbox executor after an owner approval (issue #306) so the
+   * drain happens now, not on the next periodic pass. Fire-and-forget.
+   */
+  onOutboxDecided?: (plane: VaultPlane) => void;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 export function makeVaultRouteHandler(
@@ -255,6 +270,18 @@ export function makeVaultRouteHandler(
         }
       }
 
+      // The install/consent surface (issue #306 phase 4): declared-and-
+      // granted scopes with salience highlights — what the install screen
+      // and the app's consent card render.
+      if (
+        method === 'GET' &&
+        segments[0] === 'apps' &&
+        segments.length === 3 &&
+        segments[2] === 'scopes'
+      ) {
+        return sendJson(res, 200, plane.scopeSurface(segments[1] ?? ''));
+      }
+
       if (method === 'DELETE' && segments[0] === 'grants' && segments.length === 2) {
         try {
           const result = plane.revokeGrant(segments[1] ?? '');
@@ -269,6 +296,69 @@ export function makeVaultRouteHandler(
 
       if (method === 'GET' && segments[0] === 'parked' && segments.length === 1) {
         return sendJson(res, 200, { parked: plane.listParked() });
+      }
+
+      // The outbox (issue #306): external writes as artifacts. GET lists the
+      // items (pending first is the client's sort; the payload carries the
+      // artifact itself); POST /<itemId> is the owner's decision — approve /
+      // edit-then-approve / discard / always-allow — and an approval kicks
+      // the executor so the send happens now, not on the next clock tick.
+      if (method === 'GET' && segments[0] === 'outbox' && segments.length === 1) {
+        const statusParam = url.searchParams.get('status');
+        const statuses = statusParam
+          ? statusParam
+              .split(',')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : undefined;
+        return sendJson(res, 200, { items: plane.listOutbox(statuses) });
+      }
+
+      if (method === 'POST' && segments[0] === 'outbox' && segments.length === 2) {
+        const body = await readJson(req);
+        if (body.decision !== 'approve' && body.decision !== 'discard') {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message: 'outbox decision body needs {decision: "approve" | "discard"}',
+          });
+        }
+        const outcome = plane.decideOutbox({
+          itemId: segments[1] ?? '',
+          decision: body.decision,
+          ...(isRecord(body.artifact) ? { artifact: body.artifact } : {}),
+          ...(isRecord(body.request) ? { request: body.request } : {}),
+          ...(typeof body.always_allow === 'boolean' ? { alwaysAllow: body.always_allow } : {}),
+          ...(typeof body.note === 'string' ? { note: body.note } : {}),
+        });
+        if (outcome.status === 'executed' && body.decision === 'approve') {
+          options.onOutboxDecided?.(plane);
+        }
+        return sendJson(res, outcome.status === 'executed' ? 200 : 409, outcome);
+      }
+
+      if (method === 'GET' && segments[0] === 'outbox-grants' && segments.length === 1) {
+        return sendJson(res, 200, { grants: plane.listOutboxGrants() });
+      }
+
+      if (method === 'DELETE' && segments[0] === 'outbox-grants' && segments.length === 2) {
+        const outcome = plane.revokeOutboxGrant(segments[1] ?? '');
+        return sendJson(res, outcome.status === 'executed' ? 200 : 409, outcome);
+      }
+
+      // The honest split of the old parked surface (issue #306 decision 5):
+      // BLOCKING = things waiting on the owner; REVIEW = what happened,
+      // salience-ranked, with receipts.
+      if (method === 'GET' && segments[0] === 'blocking' && segments.length === 1) {
+        return sendJson(res, 200, plane.blocking());
+      }
+
+      if (method === 'GET' && segments[0] === 'review' && segments.length === 1) {
+        const limitParam = Number(url.searchParams.get('limit'));
+        return sendJson(res, 200, {
+          entries: plane.reviewFeed(
+            Number.isFinite(limitParam) && limitParam > 0 ? limitParam : undefined,
+          ),
+        });
       }
 
       // The cross-referencing shell surface (issue #272): the picker is an

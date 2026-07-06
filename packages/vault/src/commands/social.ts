@@ -292,7 +292,10 @@ const SEND_MESSAGE: CommandDefinition = {
     },
   ],
   idempotency: 'once',
+  // Tier 3 semantic egress (issue #306): a send is the one thing structure
+  // cannot verify — loud on purpose, parks for every non-owner caller.
   risk: 'high',
+  confirm: true,
   handler: sendMessage,
 };
 
