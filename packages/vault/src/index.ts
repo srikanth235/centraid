@@ -207,6 +207,7 @@ export { registerTallyCommands } from './commands/tally.js';
 export { registerSyncCommands } from './commands/sync.js';
 export { registerEnrichCommands } from './commands/enrich.js';
 export { registerOutboxCommands } from './commands/outbox.js';
+export { registerJudgmentCommands } from './commands/judgment.js';
 
 export {
   AGENT_CONTENT_VARIANTS,
