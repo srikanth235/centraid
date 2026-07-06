@@ -459,7 +459,7 @@ describe('core.set_extracted_text', () => {
       entity: 'core.content_item',
       query: 'espresso',
       purpose: 'dpv:ServiceProvision',
-    }) as { rows: { id: string }[] };
+    }) as { rows: unknown[] };
     expect(hits.rows.length).toBe(1);
     // Re-extraction replaces in place (re-derivable).
     invoke(agent, 'core.set_extracted_text', {

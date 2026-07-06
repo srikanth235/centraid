@@ -161,7 +161,9 @@ async function resolveAgentAttachments(
   refs: readonly AgentContentRef[],
 ): Promise<AgentAttachment[]> {
   if (!vault) {
-    throw new Error('ctx.agent content refs need a vault surface — the host mounted no vault plane');
+    throw new Error(
+      'ctx.agent content refs need a vault surface — the host mounted no vault plane',
+    );
   }
   const attachments: AgentAttachment[] = [];
   for (const [i, ref] of refs.entries()) {
@@ -185,7 +187,12 @@ async function resolveAgentAttachments(
         `ctx.agent content[${i}] (${ref.contentId} ${ref.variant}) did not resolve: ${out.status}`,
       );
     }
-    const resolved = out as { kind: 'bytes' | 'text'; mediaType: string; base64?: string; text?: string };
+    const resolved = out as {
+      kind: 'bytes' | 'text';
+      mediaType: string;
+      base64?: string;
+      text?: string;
+    };
     const ext = resolved.kind === 'text' ? 'txt' : (resolved.mediaType.split('/')[1] ?? 'bin');
     attachments.push({
       name: `content-${i}-${ref.contentId.slice(0, 8)}.${ext}`,
@@ -239,9 +246,7 @@ export async function handleAgentMessage(
     }
   };
   try {
-    const attachments = content?.length
-      ? await resolveAgentAttachments(vault, content)
-      : undefined;
+    const attachments = content?.length ? await resolveAgentAttachments(vault, content) : undefined;
     const result = await agentDispatcher(
       { prompt, json, ...(attachments ? { attachments } : {}), onEvent },
       dispatchCtx,

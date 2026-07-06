@@ -120,9 +120,9 @@ function stageRows(ctx: HandlerCtx): Record<string, unknown> {
   // machine tags land without a review click, still receipted, still
   // provenance-stamped per row. `staged` trust keeps today's behavior.
   const trust = (
-    ctx.db
-      .prepare('SELECT trust FROM sync_connection WHERE connection_id = ?')
-      .get(connectionId) as { trust: string } | undefined
+    ctx.db.prepare('SELECT trust FROM sync_connection WHERE connection_id = ?').get(connectionId) as
+      | { trust: string }
+      | undefined
   )?.trust;
   if (trust === 'auto-publish') {
     const applied = applyBatchTx(ctx.db, batchId, PUBLISHERS, ownerPartyIdOf(ctx), ctx.now);

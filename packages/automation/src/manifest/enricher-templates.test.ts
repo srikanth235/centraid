@@ -8,11 +8,16 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { lintHandlerSource, parseManifest } from '@centraid/automation';
+import { lintHandlerSource } from '../handler/lint.js';
+import { parseManifest } from './manifest.js';
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Lives here beside bundled-templates.test.ts for the same reason: the
+// dependency points automation → blueprints, never the other way.
+const require = createRequire(import.meta.url);
+const PACKAGE_ROOT = path.dirname(require.resolve('@centraid/blueprints/package.json'));
 
 const ENRICHERS = [
   'photo-captioner',
@@ -95,7 +100,9 @@ describe('enricher template hygiene', () => {
   it.each(ENRICHERS.map((id) => [id] as const))(
     '%s: manifest parses, data trigger + vault block cohere, ships disabled',
     (id) => {
-      const manifest = parseManifest(readFileSync(path.join(automationDir(id), 'automation.json'), 'utf8'));
+      const manifest = parseManifest(
+        readFileSync(path.join(automationDir(id), 'automation.json'), 'utf8'),
+      );
       expect(manifest.enabled).toBe(false); // enabling IS the owner's opt-in
       expect(manifest.vault).toBeDefined();
       const wantKind = CRON_ENRICHERS.has(id)
@@ -215,7 +222,10 @@ describe('doc-text-extractor behavior', () => {
     await handler({ ctx: harness.ctx, log: harness.log });
     expect(harness.agentCalls[0]!.content).toEqual([{ contentId: 'd2', variant: 'text' }]);
     expect(harness.invokes.map((i) => i.command)).toEqual(['sync.stage_rows']);
-    const rows = harness.invokes[0]!.input.rows as { external_id: string; payload: { body: string } }[];
+    const rows = harness.invokes[0]!.input.rows as {
+      external_id: string;
+      payload: { body: string };
+    }[];
     expect(rows[0]!.external_id).toBe('d2:summary');
     expect(rows[0]!.payload.body).toContain('insurance');
   });
@@ -425,7 +435,11 @@ describe('renewal-reminders behavior', () => {
       input: {
         rows: [
           { summary: 'Passport expiry', dtstart: '2026-07-18', status: 'tentative' },
-          { summary: 'Home insurance renewal (renewal)', dtstart: '2026-07-12', status: 'tentative' },
+          {
+            summary: 'Home insurance renewal (renewal)',
+            dtstart: '2026-07-12',
+            status: 'tentative',
+          },
         ],
       },
     });
@@ -445,15 +459,11 @@ describe('doc-filer behavior', () => {
     const handler = await loadHandler('doc-filer');
     const harness = stubCtx({
       reads: {
-        'core.content_derivative': [
-          { derivative_id: 'dv1', content_id: 'd1', variant: 'text' },
-        ],
+        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
         'core.content_item': [
           { content_id: 'd1', media_type: 'application/pdf', title: 'scan_001' },
         ],
-        'core.concept_scheme': [
-          { scheme_id: 'sf', uri: 'https://centraid.dev/schemes/folders' },
-        ],
+        'core.concept_scheme': [{ scheme_id: 'sf', uri: 'https://centraid.dev/schemes/folders' }],
         'core.concept': [
           { scheme_id: 'sf', notation: 'insurance', pref_label: 'Insurance' },
           { scheme_id: 'sf', notation: 'root', pref_label: 'Documents' },

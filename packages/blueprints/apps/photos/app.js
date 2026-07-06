@@ -1453,10 +1453,11 @@ async function stageClientThumb(file, parentSha) {
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
       if (blob) {
-        await fetch(
-          `${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`,
-          { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: blob },
-        );
+        await fetch(`${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`, {
+          method: 'POST',
+          headers: { 'content-type': 'image/jpeg' },
+          body: blob,
+        });
       }
     }
     URL.revokeObjectURL(url);

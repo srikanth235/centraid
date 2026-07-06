@@ -256,6 +256,13 @@ Commit 6 — phase 5: on-demand prioritization:
 - The assistant's `vault_content` is **text-first**: binary variants stay
   on the enricher plane (the conversation wire has no image tool-results).
 
+Commit 7 — hygiene: the enricher template suite moved to
+`packages/automation/src/manifest/enricher-templates.test.ts` (beside its
+twin `bundled-templates.test.ts` — blueprints cannot depend on automation;
+the dependency points the other way, and the devDep I first added created
+a typecheck cycle, now removed), plus format normalization of this
+branch's own files.
+
 ## Out of scope
 
 - Enricher automation templates (commits 2–5).
@@ -266,6 +273,12 @@ Commit 6 — phase 5: on-demand prioritization:
   are the seam; wiring a provider is a later, provider-agnostic decision.
 - Desktop Settings UI for the enrich policy (the routes are the surface).
 - `media_asset_phash` rows do not ride `importVaultExport` (re-derivable).
+- 8 pre-existing `oxlint` errors in #296-landed files (blob-routes,
+  blob/local, mbox, pipeline, blob.test) — present on origin/main before
+  this branch (verified via stash), not touched here.
+- An `oxfmt` sweep wanted to re-wrap five #296-era files this branch never
+  edited (blob.test, flow.test, promote, s3, stage-file) — reverted, not
+  folded in (out-of-scope-work rule).
 
 ## Verification
 
@@ -281,10 +294,15 @@ Commit 6 — phase 5: on-demand prioritization:
 - `packages/gateway`: 163 green + 1 skipped; `packages/automation`: 144
   green; `packages/agent-runtime`: 68 green; app-engine, vault, gateway,
   automation, agent-runtime typecheck (tsc) clean.
-- `packages/blueprints`: 119 green (`npx vitest run`) — the
-  `src/enricher-automations.test.ts` suite now covers all four enrichers
-  (manifest validity incl. no-connector-block, determinism lint, stub-ctx
-  behavior: derivative-only content refs, staged-not-written output,
-  dateless-extraction drops, folder reuse, cursors); the manifest sweep
-  accepts the four template dirs; `build:manifest` regenerated cleanly
-  (22 templates).
+- The enricher template suite (33 tests, final home
+  `packages/automation/src/manifest/enricher-templates.test.ts`) covers
+  all nine enrichers: manifest validity (incl. no-connector-block,
+  ships-disabled, trigger-kind hygiene), determinism lint, and stub-ctx
+  behavior (derivative-only content refs, staged-not-written output,
+  dateless-extraction drops, folder reuse, vault-only person matching,
+  identity-blind faces, deterministic clustering, queue drain, cursors).
+- Final counts: vault 327, gateway 163+1 skipped, automation 177,
+  agent-runtime 68, app-engine 224, blueprints 112 — full monorepo
+  battery 21/21 turbo tasks green; repo-wide `typecheck` green (after
+  breaking the blueprints→automation devDep cycle by moving the template
+  suite); `oxfmt` clean on this branch's files.

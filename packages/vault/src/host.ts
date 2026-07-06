@@ -147,7 +147,9 @@ export function updateBlobStoreSettings(
   }
   if ('media_location' in patch) {
     const media =
-      settings.media !== null && typeof settings.media === 'object' && !Array.isArray(settings.media)
+      settings.media !== null &&
+      typeof settings.media === 'object' &&
+      !Array.isArray(settings.media)
         ? (settings.media as Record<string, unknown>)
         : {};
     if (patch.media_location === null) delete media.location;
@@ -195,7 +197,9 @@ export function updateEnrichSettings(
 ): EnrichSettings {
   const settings = readVaultSettings(db);
   const current =
-    settings.enrich !== null && typeof settings.enrich === 'object' && !Array.isArray(settings.enrich)
+    settings.enrich !== null &&
+    typeof settings.enrich === 'object' &&
+    !Array.isArray(settings.enrich)
       ? (settings.enrich as Record<string, unknown>)
       : {};
   for (const key of ['photos', 'docs'] as const) {

@@ -16,11 +16,7 @@ import {
   type AgentContentOutcome,
   type AgentContentVariant,
 } from '../enrich/content.js';
-import {
-  stageBlobBytes,
-  type StageBlobOptions,
-  type StagedBlob,
-} from '../blob/staging.js';
+import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
 import type { ReconcileResult } from '../blob/custody.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
