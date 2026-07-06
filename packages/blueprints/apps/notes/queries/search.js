@@ -68,6 +68,8 @@ export default async ({ input, ctx }) => {
     const matches = await ctx.vault.search({
       entity: 'knowledge.note',
       query: term,
+      // Trashed notes (issue #308: delete is reversible) never match.
+      where: [{ column: 'deleted_at', op: 'is-null' }],
       limit: 100,
       purpose,
     });

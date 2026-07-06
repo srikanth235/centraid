@@ -113,6 +113,8 @@ export interface SweepResult {
   sharesExpired: number;
   contentPurged: number;
   assetsPurged: number;
+  /** Trashed notes whose grace window lapsed (issue #308 A6). */
+  notesPurged: number;
   retentionDeleted: number;
   /** CAS bytes reclaimed with their purged content items (issue #296). */
   blobsReclaimed: number;
@@ -197,6 +199,25 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const dropEntries = db.vault.prepare(
     'DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?',
   );
+  // Lapsed trashed notes purge FIRST (issue #308 A6): the note row rents its
+  // body content (NOT NULL FK), so the row and its edges must go before the
+  // content purge below can delete the body's bytes in the same pass.
+  const lapsedNotes = db.vault
+    .prepare('SELECT note_id FROM knowledge_note WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .all(now) as { note_id: string }[];
+  for (const n of lapsedNotes) {
+    writeProvenance(db.journal, owner, 'knowledge.note', n.note_id, 'sweep.purge');
+    dropEntries.run('knowledge.note', n.note_id);
+    db.vault
+      .prepare(`DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`)
+      .run(n.note_id);
+    db.vault
+      .prepare(`DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`)
+      .run(n.note_id);
+    db.vault.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(n.note_id);
+    endDateLinks.run(now, 'knowledge.note', n.note_id, 'knowledge.note', n.note_id);
+    dropTags.run('knowledge.note', n.note_id);
+  }
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
     // A trashed media asset over these bytes goes with them — the asset row
@@ -283,6 +304,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       sharesExpired: Number(shares.changes),
       contentPurged: purgeable.length,
       assetsPurged: lapsedAssets.length,
+      notesPurged: lapsedNotes.length,
       retentionDeleted,
       blobsReclaimed,
       stagingExpired: staging.expired.length,
@@ -293,6 +315,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     sharesExpired: Number(shares.changes),
     contentPurged: purgeable.length,
     assetsPurged: lapsedAssets.length,
+    notesPurged: lapsedNotes.length,
     retentionDeleted,
     blobsReclaimed,
     stagingExpired: staging.expired.length,

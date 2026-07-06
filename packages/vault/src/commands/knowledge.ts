@@ -173,8 +173,9 @@ const EDIT_NOTE: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'note_exists',
-      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id',
+      // A trashed note is frozen: restore first, then edit.
+      name: 'note_is_live',
+      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -265,8 +266,9 @@ const MOVE_NOTE: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'note_exists',
-      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id',
+      // A trashed note is frozen: restore first, then move.
+      name: 'note_is_live',
+      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -526,6 +528,12 @@ function deleteNotebook(ctx: HandlerCtx): Record<string, unknown> {
   return { notebook_id: input.notebook_id, notes_unfiled: filed.n };
 }
 
+// Delete is TRASH (issue #308 A6): Tier 1's consent story is
+// review-after-the-fact WITH undo, so the destructive verb must be
+// reversible from the review feed. The row soft-deletes with the same
+// 30-day grace window documents and assets carry; edges (placement,
+// annotations, attachments) stay for a faithful restore; the lifecycle
+// sweep performs the real deletion once the window lapses.
 const DELETE_NOTE: CommandDefinition = {
   name: 'knowledge.delete_note',
   ownerSchema: 'knowledge',
@@ -537,16 +545,17 @@ const DELETE_NOTE: CommandDefinition = {
   },
   outputSchema: {
     type: 'object',
-    required: ['note_id'],
+    required: ['note_id', 'purge_at'],
     properties: {
       note_id: { type: 'string' },
+      purge_at: { type: 'string' },
       body_released: { type: 'integer' },
     },
   },
   preconditions: [
     {
-      name: 'note_exists',
-      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id',
+      name: 'note_is_live',
+      sql: 'SELECT count(*) AS n FROM knowledge_note WHERE note_id = :note_id AND deleted_at IS NULL',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -554,16 +563,12 @@ const DELETE_NOTE: CommandDefinition = {
   ],
   postconditions: [
     {
-      // The note and every edge onto it are gone together.
-      name: 'note_and_edges_removed',
-      sql: `SELECT (
-              (SELECT count(*) FROM knowledge_note WHERE note_id = :note_id)
-              + (SELECT count(*) FROM core_collection_entry WHERE target_type = 'knowledge.note' AND target_id = :note_id)
-              + (SELECT count(*) FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = :note_id)
-            ) AS n`,
+      name: 'note_trashed_not_destroyed',
+      sql: `SELECT count(*) AS n FROM knowledge_note
+             WHERE note_id = :note_id AND deleted_at IS NOT NULL AND purge_at IS NOT NULL`,
       column: 'n',
       op: 'eq',
-      value: 0,
+      value: 1,
     },
   ],
   idempotency: 'idempotent',
@@ -571,36 +576,99 @@ const DELETE_NOTE: CommandDefinition = {
   handler: deleteNote,
 };
 
+const NOTE_PURGE_AFTER_DAYS = 30;
+
+function notePurgeAt(now: string): string {
+  return new Date(
+    new Date(now).getTime() + NOTE_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
 function deleteNote(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { note_id: string };
   const note = ctx.db
     .prepare('SELECT body_content_id FROM knowledge_note WHERE note_id = ?')
     .get(input.note_id) as { body_content_id: string } | undefined;
   if (!note) throw new Error('note vanished between check and execute');
+  const until = notePurgeAt(ctx.now);
   ctx.db
-    .prepare(
-      `DELETE FROM core_collection_entry WHERE target_type = 'knowledge.note' AND target_id = ?`,
-    )
-    .run(input.note_id);
-  ctx.db
-    .prepare(
-      `DELETE FROM knowledge_annotation WHERE target_type = 'knowledge.note' AND target_id = ?`,
-    )
-    .run(input.note_id);
-  ctx.db
-    .prepare(`DELETE FROM core_attachment WHERE subject_type = 'knowledge.note' AND subject_id = ?`)
-    .run(input.note_id);
-  ctx.db.prepare('DELETE FROM knowledge_note WHERE note_id = ?').run(input.note_id);
+    .prepare('UPDATE knowledge_note SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE note_id = ?')
+    .run(ctx.now, until, ctx.now, input.note_id);
   ctx.wrote('knowledge.note', input.note_id);
-  // Bodies are sha256-deduped and canonical — another note or message may
-  // still rent the same bytes, so only an unreferenced body soft-deletes.
+  // Bodies are sha256-deduped and canonical — another live note or message
+  // may still rent the same bytes, so only an unreferenced body soft-deletes
+  // (a trashed note is not a rental; restore un-trashes the body with it).
   const released = releaseContentIfUnreferenced(ctx, note.body_content_id);
   ctx.cite({
-    claim: `note ${input.note_id} deleted; body ${released ? 'soft-deleted' : 'still rented elsewhere'}`,
+    claim: `note ${input.note_id} moved to trash (restore with knowledge.restore_note); purges after ${until.slice(0, 10)}; body ${released ? 'soft-deleted' : 'still rented elsewhere'}`,
     entityType: 'knowledge.note',
     entityId: input.note_id,
   });
-  return { note_id: input.note_id, body_released: released ? 1 : 0 };
+  return { note_id: input.note_id, purge_at: until, body_released: released ? 1 : 0 };
+}
+
+// The undo half (issue #308 A6): a trashed note comes back whole — row,
+// placement, annotations, attachments (never removed) and its body bytes.
+const RESTORE_NOTE: CommandDefinition = {
+  name: 'knowledge.restore_note',
+  ownerSchema: 'knowledge',
+  inputSchema: {
+    type: 'object',
+    required: ['note_id'],
+    additionalProperties: false,
+    properties: { note_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['note_id'],
+    properties: { note_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'note_in_trash',
+      sql: `SELECT count(*) AS n FROM knowledge_note
+             WHERE note_id = :note_id AND deleted_at IS NOT NULL`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'note_restored',
+      sql: `SELECT count(*) AS n FROM knowledge_note
+             WHERE note_id = :note_id AND deleted_at IS NULL AND purge_at IS NULL`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: restoreNote,
+};
+
+function restoreNote(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { note_id: string };
+  const note = ctx.db
+    .prepare('SELECT body_content_id FROM knowledge_note WHERE note_id = ?')
+    .get(input.note_id) as { body_content_id: string } | undefined;
+  if (!note) throw new Error('note vanished between check and execute');
+  ctx.db
+    .prepare('UPDATE knowledge_note SET deleted_at = NULL, purge_at = NULL, updated_at = ? WHERE note_id = ?')
+    .run(ctx.now, input.note_id);
+  ctx.wrote('knowledge.note', input.note_id);
+  // If trashing released the body bytes, restoring rents them again.
+  const body = ctx.db
+    .prepare('UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL WHERE content_id = ? AND deleted_at IS NOT NULL')
+    .run(note.body_content_id);
+  if (Number(body.changes) > 0) ctx.wrote('core.content_item', note.body_content_id);
+  ctx.cite({
+    claim: `note ${input.note_id} restored from trash`,
+    entityType: 'knowledge.note',
+    entityId: input.note_id,
+  });
+  return { note_id: input.note_id };
 }
 
 /** Register the knowledge domain's commands on a gateway. */
@@ -612,4 +680,5 @@ export function registerKnowledgeCommands(gateway: Gateway): void {
   gateway.registerCommand(RENAME_NOTEBOOK);
   gateway.registerCommand(DELETE_NOTEBOOK);
   gateway.registerCommand(DELETE_NOTE);
+  gateway.registerCommand(RESTORE_NOTE);
 }

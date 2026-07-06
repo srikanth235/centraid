@@ -1332,13 +1332,15 @@ export class VaultPlane {
         result.grantsExpired +
         result.sharesExpired +
         result.contentPurged +
+        result.notesPurged +
         result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
       if (touched > 0) {
         this.logger.info(
           `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
-            `contentPurged=${result.contentPurged} retentionDeleted=${result.retentionDeleted} ` +
+            `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
+            `retentionDeleted=${result.retentionDeleted} ` +
             `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`,
         );
       }

@@ -83,13 +83,18 @@ export default async ({ input, ctx }) => {
     const [recent, pinnedNotes, notebooks] = await Promise.all([
       ctx.vault.read({
         entity: 'knowledge.note',
+        // Trashed notes (issue #308: delete is reversible) stay out of the library.
+        where: [{ column: 'deleted_at', op: 'is-null' }],
         orderBy: { column: 'updated_at', dir: 'desc' },
         limit: window,
         purpose,
       }),
       ctx.vault.read({
         entity: 'knowledge.note',
-        where: [{ column: 'pinned', op: 'eq', value: 1 }],
+        where: [
+          { column: 'pinned', op: 'eq', value: 1 },
+          { column: 'deleted_at', op: 'is-null' },
+        ],
         orderBy: { column: 'updated_at', dir: 'desc' },
         limit: 200,
         purpose,

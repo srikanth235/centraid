@@ -110,7 +110,7 @@ test('edit_note updates only the fields sent; a body edit re-points the referenc
 test('edit_note on an unknown note is refused by precondition', () => {
   const outcome = invoke('knowledge.edit_note', { note_id: 'ghost', title: 'New' });
   expect(outcome.status).toBe('failed');
-  if (outcome.status === 'failed') expect(outcome.predicate).toContain('note_exists');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('note_is_live');
 });
 
 test('move_note refiles, is single-placement, and omitting notebook_id unfiles', () => {
@@ -175,7 +175,7 @@ test('create_note writes provenance for the note', () => {
   expect(prov.n).toBe(1);
 });
 
-test('delete_note removes the note, its placements and edges', () => {
+test('delete_note is trash: reversible, edges kept, body released (issue #308 A6)', () => {
   const notebook = createNotebook('Journal');
   const { note_id, body_content_id } = createNote({
     title: 'Ephemeral',
@@ -184,24 +184,63 @@ test('delete_note removes the note, its placements and edges', () => {
   });
   const outcome = invoke('knowledge.delete_note', { note_id });
   expect(outcome.status).toBe('executed');
+  expect((outcome as { output: { purge_at: string } }).output.purge_at).toBeTruthy();
+  // The row survives, trashed — deletion is undoable, not a hard delete.
   const note = db.vault
-    .prepare('SELECT count(*) AS n FROM knowledge_note WHERE note_id = ?')
-    .get(note_id) as { n: number };
-  expect(note.n).toBe(0);
+    .prepare('SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?')
+    .get(note_id) as { deleted_at: string | null; purge_at: string | null };
+  expect(note.deleted_at).not.toBeNull();
+  expect(note.purge_at).not.toBeNull();
+  // Placement is kept for a faithful restore.
   const placements = db.vault
     .prepare(
       `SELECT count(*) AS n FROM core_collection_entry
         WHERE target_type = 'knowledge.note' AND target_id = ?`,
     )
     .get(note_id) as { n: number };
-  expect(placements.n).toBe(0);
+  expect(placements.n).toBe(1);
   // The body was rented by this note alone, so its bytes soft-delete.
   const body = db.vault
     .prepare('SELECT deleted_at FROM core_content_item WHERE content_id = ?')
     .get(body_content_id) as { deleted_at: string | null };
   expect(body.deleted_at).not.toBeNull();
-  const again = invoke('knowledge.delete_note', { note_id });
-  expect(again.status).toBe('failed');
+  // A trashed note is frozen: no re-delete, no edit, no move.
+  expect(invoke('knowledge.delete_note', { note_id }).status).toBe('failed');
+  expect(invoke('knowledge.edit_note', { note_id, title: 'Nope' }).status).toBe('failed');
+  expect(invoke('knowledge.move_note', { note_id }).status).toBe('failed');
+});
+
+test('restore_note brings the note back whole — row, placement, body (issue #308 A6)', () => {
+  const notebook = createNotebook('Journal');
+  const { note_id, body_content_id } = createNote({
+    title: 'Kept',
+    body_text: 'not gone after all',
+    notebook_id: notebook,
+  });
+  invoke('knowledge.delete_note', { note_id });
+  const restored = invoke('knowledge.restore_note', { note_id });
+  expect(restored.status).toBe('executed');
+  const note = db.vault
+    .prepare('SELECT deleted_at, purge_at FROM knowledge_note WHERE note_id = ?')
+    .get(note_id) as { deleted_at: string | null; purge_at: string | null };
+  expect(note.deleted_at).toBeNull();
+  expect(note.purge_at).toBeNull();
+  // The body bytes are rented again.
+  const body = db.vault
+    .prepare('SELECT deleted_at, purge_at FROM core_content_item WHERE content_id = ?')
+    .get(body_content_id) as { deleted_at: string | null; purge_at: string | null };
+  expect(body.deleted_at).toBeNull();
+  // Placement survived the round trip; the note is editable again.
+  const placements = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM core_collection_entry
+        WHERE target_type = 'knowledge.note' AND target_id = ?`,
+    )
+    .get(note_id) as { n: number };
+  expect(placements.n).toBe(1);
+  expect(invoke('knowledge.edit_note', { note_id, title: 'Edited' }).status).toBe('executed');
+  // Restoring a live note is a receipted refusal.
+  expect(invoke('knowledge.restore_note', { note_id }).status).toBe('failed');
 });
 
 test('delete_note keeps a body another note still rents (sha256 dedup)', () => {

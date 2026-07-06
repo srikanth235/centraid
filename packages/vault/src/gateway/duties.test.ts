@@ -149,6 +149,58 @@ test('retention policy: sweep deletes rows past the window using the policy time
   expect(remaining).toEqual([{ message_id: 'm-new' }]);
 });
 
+test('lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A6)', () => {
+  const now = new Date().toISOString();
+  const past = '2020-01-01T00:00:00Z';
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at, deleted_at, purge_at)
+       VALUES ('body-1', 'text/plain', 'data:text/plain,x', 'sha-note-body', 1, ?, ?, ?)`,
+    )
+    .run(past, past, past);
+  db.vault
+    .prepare(
+      `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at, deleted_at, purge_at)
+       VALUES ('n-lapsed', ?, 'Lapsed', 'body-1', 'plain', 0, ?, ?, ?, ?)`,
+    )
+    .run(boot.ownerPartyId, past, past, past, past);
+  // A trashed note still inside its window survives the sweep.
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES ('body-2', 'text/plain', 'data:text/plain,y', 'sha-note-body-2', 1, ?)`,
+    )
+    .run(now);
+  db.vault
+    .prepare(
+      `INSERT INTO knowledge_note (note_id, author_party_id, title, body_content_id, format, pinned, created_at, updated_at, deleted_at, purge_at)
+       VALUES ('n-fresh', ?, 'Fresh trash', 'body-2', 'plain', 0, ?, ?, ?, '2999-01-01T00:00:00Z')`,
+    )
+    .run(boot.ownerPartyId, now, now, now);
+  db.vault
+    .prepare(
+      `INSERT INTO knowledge_annotation (annotation_id, author_party_id, target_type, target_id, body_text, created_at)
+       VALUES ('a1', ?, 'knowledge.note', 'n-lapsed', 'margin note', ?)`,
+    )
+    .run(boot.ownerPartyId, past);
+  const result = gw.sweep(owner);
+  expect(result.notesPurged).toBe(1);
+  // The lapsed note, its annotation, and its body row are gone together…
+  expect(db.vault.prepare(`SELECT 1 FROM knowledge_note WHERE note_id = 'n-lapsed'`).get()).toBe(
+    undefined,
+  );
+  expect(db.vault.prepare(`SELECT 1 FROM knowledge_annotation WHERE annotation_id = 'a1'`).get()).toBe(
+    undefined,
+  );
+  expect(db.vault.prepare(`SELECT 1 FROM core_content_item WHERE content_id = 'body-1'`).get()).toBe(
+    undefined,
+  );
+  // …while the in-window one waits for its grace period.
+  expect(
+    db.vault.prepare(`SELECT 1 FROM knowledge_note WHERE note_id = 'n-fresh'`).get(),
+  ).toBeTruthy();
+});
+
 function calendarAppWithEvent(): { cred: Credential; appId: string } {
   const app = enrollApp(db, { name: 'agenda-widget', origin: 'generated' });
   createGrant(db, {
