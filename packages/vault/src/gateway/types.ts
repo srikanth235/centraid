@@ -310,13 +310,29 @@ export interface CommandDefinition {
    * anything not declared here.
    */
   unseals?: readonly string[];
+  /**
+   * The output is derived from secret material and must not persist in any
+   * durable store (issue #298 item 6). `locker.totp_code` returns a live
+   * 6-digit code from an unsealed seed; low-stakes (30s TTL) but the one
+   * crack in "secrets never enter durable transcripts". Marking it here
+   * redacts the OUTPUT from the vault journal receipt (which otherwise keeps
+   * it for replay) while the live caller still receives the real value.
+   */
+  transcriptSensitive?: boolean;
 }
 
 /** A reveal: plaintext of one entity's sealed columns (issue #293). */
 export interface RevealRequest {
   /** Logical entity, e.g. `locker.item`. Must have sealed columns. */
   entity: string;
-  entityId: string;
+  entityId?: string;
+  /**
+   * Resolve the target by a stable alias instead of entityId (issue #298
+   * item 4): `locker.item` only. The gateway maps the alias to the live
+   * item under the same reveal grant, so a connector binding survives the
+   * delete+recreate rotation gesture. Exactly one of entityId/alias.
+   */
+  alias?: string;
   /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
   columns?: string[];
   purpose: string;

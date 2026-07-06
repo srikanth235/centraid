@@ -41,10 +41,11 @@ import {
 } from './execution.js';
 import {
   isSealedValue,
-  redactSealedInput,
+  redactCommandInput,
   sealAad,
   SEALED_PLACEHOLDER,
   sealedColumnsOf,
+  stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
 import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
@@ -157,6 +158,7 @@ export class Gateway {
       handler: def.handler,
       sealedInput: def.sealedInput ?? [],
       unseals: def.unseals ?? [],
+      transcriptSensitive: def.transcriptSensitive ?? false,
     });
   }
 
@@ -270,7 +272,7 @@ export class Gateway {
       ) as Record<string, unknown>[];
     // Sealed columns never ride a read (issue #293): default reads show a
     // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
-    const sealedCols = sealedColumnsOf(request.entity);
+    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
     if (sealedCols.length > 0) {
       for (const row of rows) {
         for (const col of sealedCols) {
@@ -306,7 +308,7 @@ export class Gateway {
         invocationId: null,
         action: 'reveal',
         objectType: request.entity,
-        objectId: request.entityId,
+        objectId: request.entityId ?? (request.alias ? `@${request.alias}` : null),
         purpose: request.purpose,
         decision: 'deny',
         detail: { failing },
@@ -315,12 +317,29 @@ export class Gateway {
     };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref || ref.file !== 'vault') return deny(`unknown entity ${request.entity}`);
-    const sealedCols = sealedColumnsOf(request.entity);
+    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
     if (sealedCols.length === 0) return deny(`${request.entity} has no sealed columns`);
     const columns = request.columns ?? [...sealedCols];
     for (const col of columns) {
       if (!sealedCols.includes(col)) return deny(`${col} is not a sealed column`);
     }
+    // Resolve a stable alias to the live item (issue #298 item 4). Only
+    // locker.item carries aliases; the lookup rides the reveal grant, so no
+    // separate read scope is needed for a connector to survive a rotation.
+    let entityId = request.entityId;
+    if (request.alias !== undefined) {
+      if (request.entity !== 'locker.item') return deny('alias reveal is locker.item only');
+      const hit = this.db.vault
+        .prepare(
+          `SELECT a.item_id FROM locker_item_alias a
+             JOIN locker_item i ON i.item_id = a.item_id
+            WHERE a.alias = ? AND i.deleted_at IS NULL`,
+        )
+        .get(request.alias) as { item_id: string } | undefined;
+      if (!hit) return deny(`no live locker item with alias "${request.alias}"`);
+      entityId = hit.item_id;
+    }
+    if (!entityId) return deny('reveal needs an entityId or alias');
     const consent = evaluateConsent(
       this.db.vault,
       identity,
@@ -337,32 +356,34 @@ export class Gateway {
     const select = columns.map((c) => `"${c}"`).join(', ');
     const row = this.db.vault
       .prepare(`SELECT ${select} FROM "${ref.physical}" WHERE "${pk}" = ? AND ${rowFilter.where}`)
-      .get(request.entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
-    if (!row) return deny(`no revealable ${request.entity} row ${request.entityId}`);
+      .get(entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
+    if (!row) return deny(`no revealable ${request.entity} row ${entityId}`);
     const values: Record<string, string | null> = {};
+    let unsealedAny = false;
     for (const col of columns) {
       const value = row[col];
       if (value == null || value === '') {
         values[col] = null;
       } else if (isSealedValue(value)) {
-        values[col] = unsealValue(
-          this.db.sealKey,
-          sealAad(ref.physical, col, request.entityId),
-          value,
-        );
+        values[col] = unsealValue(this.db.sealKey, sealAad(ref.physical, col, entityId), value);
+        unsealedAny = true;
       } else {
         values[col] = String(value); // pre-seal legacy plaintext
       }
     }
+    // A successful unseal proves this key sealed this vault's secrets —
+    // stamp the fingerprint if a pre-#298 vault never recorded it, so the
+    // open-time custody check covers legacy vaults too.
+    if (unsealedAny) stampSealKeyFingerprint(this.db.vault, this.db.sealKey);
     const receiptId = writeReceipt(this.db.journal, {
       grantId: consent.grantId,
       invocationId: null,
       action: 'reveal',
       objectType: request.entity,
-      objectId: request.entityId,
+      objectId: entityId,
       purpose: request.purpose,
       decision: 'allow',
-      detail: { columns },
+      detail: { columns, ...(request.alias !== undefined ? { alias: request.alias } : {}) },
     });
     return { values, receiptId };
   }
@@ -1165,11 +1186,14 @@ export class Gateway {
       callerKind: p.identity.kind,
       caller: this.callerName(p.identity),
       // The confirmation surface shows WHAT is asked, never secret material
-      // (issue #293) — sealed inputs ride as hash tokens here too.
-      input: redactSealedInput(
+      // (issue #293) — sealed inputs ride as hash tokens here too, nested ext
+      // secrets included (issue #298 item 9).
+      input: redactCommandInput(
         this.db.sealKey,
+        p.command.name,
         p.request.input,
         this.commands.get(p.command.name)?.sealedInput ?? [],
+        this.db.vault,
       ),
     }));
   }

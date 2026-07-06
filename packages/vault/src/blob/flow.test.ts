@@ -56,7 +56,9 @@ test('stage → claim via media.add_asset: blob URI, spool metadata, tiny journa
     invoke('media.add_asset', { staged_sha: staged.sha256 }),
   );
   const content = db.vault
-    .prepare('SELECT content_uri, sha256, byte_size, media_type, title FROM core_content_item WHERE content_id = ?')
+    .prepare(
+      'SELECT content_uri, sha256, byte_size, media_type, title FROM core_content_item WHERE content_id = ?',
+    )
     .get(out.content_id) as Record<string, unknown>;
   expect(content.content_uri).toBe(blobUriFor(staged.sha256));
   expect(content.sha256).toBe(staged.sha256); // identity = raw bytes
@@ -94,7 +96,11 @@ test('inline data_uri: text stays in the row, binary spills to the CAS, big refu
   const taskOut = executed<{ task_id: string }>(invoke('schedule.add_task', { title: 'T' }));
   const textUri = `data:text/plain;charset=utf-8,${encodeURIComponent('inline body')}`;
   const t = executed<{ content_id: string }>(
-    invoke('core.attach', { subject_type: 'schedule.task', subject_id: taskOut.task_id, data_uri: textUri }),
+    invoke('core.attach', {
+      subject_type: 'schedule.task',
+      subject_id: taskOut.task_id,
+      data_uri: textUri,
+    }),
   );
   const textRow = db.vault
     .prepare('SELECT content_uri, sha256 FROM core_content_item WHERE content_id = ?')
@@ -104,7 +110,11 @@ test('inline data_uri: text stays in the row, binary spills to the CAS, big refu
 
   const pngUri = `data:image/png;base64,${PNG_BYTES.toString('base64')}`;
   const p = executed<{ content_id: string }>(
-    invoke('core.attach', { subject_type: 'schedule.task', subject_id: taskOut.task_id, data_uri: pngUri }),
+    invoke('core.attach', {
+      subject_type: 'schedule.task',
+      subject_id: taskOut.task_id,
+      data_uri: pngUri,
+    }),
   );
   const pngRow = db.vault
     .prepare('SELECT content_uri FROM core_content_item WHERE content_id = ?')
@@ -130,7 +140,9 @@ test('extracted text feeds the PARENT document row in search, and survives renam
   );
   // The text variant exists and the PARENT (not a shadow row) matches.
   const variant = db.vault
-    .prepare("SELECT text_content FROM core_content_derivative WHERE content_id = ? AND variant = 'text'")
+    .prepare(
+      "SELECT text_content FROM core_content_derivative WHERE content_id = ? AND variant = 'text'",
+    )
     .get(doc.content_id) as { text_content: string };
   expect(variant.text_content).toContain('unicorn depreciation');
   const hits = gw.search(owner, {
@@ -227,9 +239,9 @@ test('purge sweep reclaims CAS bytes and derivative rows; staging TTL sweeps unc
   expect(swept.contentPurged).toBe(1);
   expect(swept.blobsReclaimed).toBeGreaterThanOrEqual(1);
   expect(db.blobs.hasSync(staged.sha256)).toBe(false);
-  expect(
-    db.vault.prepare('SELECT count(*) AS n FROM core_content_derivative').get(),
-  ).toEqual({ n: 0 });
+  expect(db.vault.prepare('SELECT count(*) AS n FROM core_content_derivative').get()).toEqual({
+    n: 0,
+  });
 
   // Unclaimed staging past the TTL loses rows AND bytes; a held row stays.
   const loose = gw.stageBlob(owner, { bytes: Buffer.from('never claimed') });

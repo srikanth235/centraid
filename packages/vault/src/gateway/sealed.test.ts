@@ -406,6 +406,20 @@ test('a password CSV stages sealed, publishes sealed, and reveals correctly', ()
   expect(revealed.values.password).toBe('gh-s3cret-!x');
   expect(revealed.values.otp_seed).toBe('JBSWY3DPEHPK3PXP');
 
+  // Shred-after-publish (issue #298 item 3): the staged rows no longer carry
+  // the sealed payload once published — no second copy of the secret sits in
+  // sync_import_row. Plain fields (title, url) remain for provenance.
+  const stagedRows = db.vault
+    .prepare('SELECT payload_json FROM sync_import_row WHERE published_entity_id IS NOT NULL')
+    .all() as { payload_json: string }[];
+  expect(stagedRows.length).toBeGreaterThan(0);
+  for (const r of stagedRows) {
+    const p = JSON.parse(r.payload_json) as Record<string, unknown>;
+    expect('password' in p).toBe(false);
+    expect('otpSeed' in p).toBe(false);
+    expect(p.title).toBeDefined(); // provenance survives
+  }
+
   // Re-staging the same export skips: dedup rides the PLAINTEXT hash.
   const again = gw.stageImportFile(owner, { filename: 'bitwarden-export.csv', data: csv });
   expect(again.staged.skip).toBe(2);

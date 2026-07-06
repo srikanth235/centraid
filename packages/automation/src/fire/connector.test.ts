@@ -271,6 +271,36 @@ describe('connector secrets (issue #293)', () => {
     }
   });
 
+  it('resolves an aliased secret ref (locker:@alias:column) by alias, not entityId', async () => {
+    await writeAutomation(
+      `export default async ({ ctx }) => {
+         const res = await ctx.fetch({
+           url: 'http://127.0.0.1:1/x',
+           headers: { authorization: 'Bearer {{secret:locker:@github-token:password}}' },
+         }).catch(() => ({ status: 0, text: '' }));
+         return { status: res.status };
+       };`,
+      { requires: { tools: ['gmail.search'], secrets: ['locker:@github-token:password'] } },
+    );
+    const aliases: Array<string | undefined> = [];
+    const bridge: VaultBridge = async (call) => {
+      if (call.op === 'reveal') {
+        const p = call.payload as { alias?: string; entityId?: string };
+        aliases.push(p.alias);
+        // The ref carried an alias, never an entityId.
+        expect(p.entityId).toBeUndefined();
+        return { ok: true, result: { values: { password: 'aliased-secret' } } };
+      }
+      if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
+      return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+    };
+    await runFire(
+      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => bridge },
+      { openDispatch: noDispatch },
+    );
+    expect(aliases).toEqual(['github-token']);
+  });
+
   it('a placeholder outside requires.secrets errors without resolving', async () => {
     await writeAutomation(
       `export default async ({ ctx }) => {

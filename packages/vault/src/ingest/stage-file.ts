@@ -89,11 +89,7 @@ function partyCandidates(text: string): StageCandidate[] {
  * publish. A batch hold (applied after the batch id exists) pins the stage
  * past the TTL while the owner reviews.
  */
-function messageCandidates(
-  db: VaultDb,
-  text: string,
-  stagedShas: string[],
-): StageCandidate[] {
+function messageCandidates(db: VaultDb, text: string, stagedShas: string[]): StageCandidate[] {
   return parseMbox(text).map((message) => ({
     entityType: 'social.message',
     externalId: message.messageId,

@@ -91,11 +91,21 @@ export {
   unsealValue,
   sealAad,
   sealKeyFileFor,
-  loadOrCreateSealKey,
+  loadSealKey,
+  createSealKey,
+  resolveSealKey,
+  sealKeyFingerprint,
+  readSealKeyFingerprint,
+  stampSealKeyFingerprint,
+  SealKeyError,
   ephemeralSealKey,
   sealedHashToken,
   redactSealedInput,
+  scrubSealedText,
+  writeSealKeyFile,
 } from './schema/sealed.js';
+export { resealVaultKey, type ResealResult } from './gateway/reseal.js';
+export { writeReceipt } from './gateway/evidence.js';
 export {
   admitImportedRow,
   resolveHandle,

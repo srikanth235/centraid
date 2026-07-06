@@ -236,6 +236,15 @@ export class VaultRegistry {
    * orphan objects, which any later reconcile against the empty set finds).
    * ADMIN act — CLI/host only, never HTTP. The LAST vault is protected so
    * a gateway always has something to serve.
+   *
+   * The seal key in the `keys/` sibling is DELIBERATELY left behind (issue
+   * #298 item 2): a directory backup taken before this delete stays
+   * restorable only while its key survives. Key material leaves the box
+   * through the receipted `key export` gesture, never as a side effect.
+   * Corollary for any FUTURE gesture that renames or duplicates the vault
+   * DIRECTORY (none exists today — rename is display-name-only): it must
+   * move/copy `sealKeyFileFor(dir)` in the same step, or the custody check
+   * in openVaultDb refuses the next open (issue #298 item 1).
    */
   delete(vaultId: string): void {
     const plane = this.require(vaultId);

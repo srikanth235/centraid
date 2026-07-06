@@ -14,7 +14,7 @@ import { FTS_DDL } from './fts.js';
 import { HEALTH_DDL, FINANCE_DDL, SCHEDULE_DDL } from './domains-health-finance-schedule.js';
 import { HOME_DDL, BUSINESS_DDL } from './domains-home-business.js';
 import { PEOPLE_DDL } from './domains-people.js';
-import { LOCKER_DDL } from './domains-locker.js';
+import { LOCKER_ALIAS_DDL, LOCKER_DDL } from './domains-locker.js';
 import { TALLY_DDL } from './domains-tally.js';
 import { SOCIAL_DDL, KNOWLEDGE_DDL, MEDIA_DDL } from './domains-social-knowledge-media.js';
 import { JOURNAL_DDL } from './journal.js';
@@ -91,6 +91,10 @@ export const VAULT_MIGRATIONS: readonly string[] = [
   // the additive embedding index, the on-demand request queue, and the
   // machine-tag concept schemes.
   ENRICH_DDL,
+  // v11: stable locker aliases (issue #298 item 4) — a sidecar mapping an
+  // owner-assigned name a connector binds instead of the item UUID, so
+  // delete+recreate re-heals the credential binding without republishing.
+  LOCKER_ALIAS_DDL,
 ];
 
 export const JOURNAL_MIGRATIONS: readonly string[] = [JOURNAL_DDL];

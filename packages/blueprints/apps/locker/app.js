@@ -325,13 +325,42 @@ function regen() {
   render();
 }
 
-function copy(text, label) {
+// Seconds a copied secret is allowed to live on the clipboard before we
+// wipe it (issue #298 item 5): copy-password legitimately crosses into the
+// OS clipboard, and from there into clipboard-history tools. We can't reach
+// the native `org.nspasteboard.ConcealedType` mark from this sandboxed
+// iframe (navigator.clipboard only speaks text/html/png), so the portable
+// mitigation is a timed clear — and we only clear if the clipboard STILL
+// holds the value we put there, never clobbering a later copy.
+var CLIP_CLEAR_S = 30;
+var clipClearTimer = null;
+function scheduleClipboardClear(secret) {
+  if (clipClearTimer) clearTimeout(clipClearTimer);
+  if (!navigator.clipboard || !navigator.clipboard.writeText) return;
+  clipClearTimer = setTimeout(function () {
+    clipClearTimer = null;
+    var done = function () {};
+    try {
+      if (navigator.clipboard.readText) {
+        navigator.clipboard.readText().then(function (cur) {
+          if (cur === secret) navigator.clipboard.writeText('').catch(done);
+        }, done);
+      }
+      // No read permission → leave the clipboard alone rather than risk
+      // wiping something the user copied since.
+    } catch {
+      /* clipboard unavailable */
+    }
+  }, CLIP_CLEAR_S * 1000);
+}
+function copy(text, label, secret) {
   try {
     navigator.clipboard && navigator.clipboard.writeText(text);
+    if (secret) scheduleClipboardClear(text);
   } catch {
     /* clipboard unavailable — nothing to log */
   }
-  toast((label || 'Copied') + ' copied');
+  toast((label || 'Copied') + ' copied' + (secret ? ' · clears in ' + CLIP_CLEAR_S + 's' : ''));
 }
 
 // ---------- Data helpers ----------
@@ -906,7 +935,7 @@ function fieldRow(f) {
           class: 'v-fbtn',
           'aria-label': 'Copy',
           html: svg(I.copy, 1.6),
-          onclick: () => copy(code.replace(' ', ''), 'Code'),
+          onclick: () => copy(code.replace(' ', ''), 'Code', true),
         }),
       );
     return row;
@@ -983,7 +1012,8 @@ function fieldRow(f) {
         class: 'v-fbtn',
         'aria-label': 'Copy',
         html: svg(I.copy, 1.6),
-        onclick: () => copy(f.val, f.k),
+        // A secret field: copy arms the timed clipboard clear (issue #298).
+        onclick: () => copy(f.val, f.k, true),
       }),
     );
   }
@@ -1121,7 +1151,7 @@ function renderGenerator(root) {
     if (state.genTarget && state.edit) {
       setEditField(state.genTarget, state.genValue);
     }
-    copy(state.genValue, 'Password');
+    copy(state.genValue, 'Password', true);
     closeGen();
   });
   foot.appendChild(useBtn);
@@ -1191,6 +1221,21 @@ function renderEdit(root) {
   });
   tagsWrap.appendChild(tagsInput);
   modal.appendChild(tagsWrap);
+
+  // Connector alias (issue #298 item 4): a stable name an automation binds to,
+  // so replacing this item later re-heals the binding without a manifest edit.
+  const aliasWrap = h('div', { class: 'v-field-lg' });
+  aliasWrap.appendChild(h('div', { class: 'v-flabel' }, 'Connector alias (optional)'));
+  const aliasInput = h('input', {
+    class: 'v-in mono',
+    placeholder: 'e.g. github-token',
+    value: e.alias || '',
+  });
+  aliasInput.addEventListener('input', (ev) => {
+    e.alias = ev.target.value.trim();
+  });
+  aliasWrap.appendChild(aliasInput);
+  modal.appendChild(aliasWrap);
 
   const foot = h('div', { class: 'v-modal-foot' });
   foot.appendChild(
@@ -1281,7 +1326,7 @@ function editFieldRow(e, f) {
 // ---------- Edit / new plumbing ----------
 
 function openNew() {
-  state.edit = { mode: 'new', type: 'login', title: '', fields: {}, tags: '' };
+  state.edit = { mode: 'new', type: 'login', title: '', fields: {}, tags: '', alias: '' };
   state.sideOpen = false;
   render();
 }
@@ -1315,6 +1360,7 @@ function openEdit(sel) {
     title: sel.title,
     fields,
     tags: (sel.tags || []).join(', '),
+    alias: sel.alias || '',
   };
   render();
 }
@@ -1342,6 +1388,11 @@ async function saveEdit() {
   for (const [k, v] of Object.entries(e.fields)) {
     if (allowed.has(k) && v != null && v !== '') input[k] = v;
   }
+  // Alias is write-safe from the UI: a non-empty value sets/changes it; a
+  // blank field is left untouched (never clobbers an existing binding).
+  // Clearing or reassigning is an assistant/CLI gesture.
+  const alias = (e.alias || '').trim();
+  if (alias) input.alias = alias;
   let outcome;
   if (e.mode === 'edit') {
     outcome = await act('edit-item', { item_id: e.id, ...input });

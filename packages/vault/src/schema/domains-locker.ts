@@ -66,3 +66,22 @@ CREATE TABLE locker_item_tag (
 CREATE INDEX locker_item_type_idx ON locker_item(type);
 CREATE INDEX locker_item_tag_tag_idx ON locker_item_tag(tag);
 `;
+
+// A stable, owner-assigned alias for an item (issue #298 item 4). A
+// connector binds `locker:@<alias>:<column>` instead of the raw UUID, so
+// the natural rotation gesture — trash the old login, add the new one —
+// heals the binding the moment the owner puts the same alias on the
+// replacement. A SIDECAR table, not a column on locker_item: SQLite's ADD
+// COLUMN cannot be written re-runnably (the migration ladder's de-facto
+// contract), and a locker_item rebuild would cross locker_item_tag's
+// ON DELETE CASCADE. `alias` is the sidecar PK (globally unique); uniqueness
+// AMONG LIVE items is enforced in the command handler (single-writer vault),
+// so a trashed item's alias frees for its successor once reassigned. ON
+// DELETE CASCADE drops the mapping when the item is purged.
+export const LOCKER_ALIAS_DDL = `
+CREATE TABLE IF NOT EXISTS locker_item_alias (
+  alias    TEXT PRIMARY KEY,
+  item_id  TEXT NOT NULL REFERENCES locker_item(item_id) ON DELETE CASCADE
+) STRICT;
+CREATE INDEX IF NOT EXISTS locker_item_alias_item_idx ON locker_item_alias(item_id);
+`;

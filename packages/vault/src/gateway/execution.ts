@@ -24,10 +24,13 @@ import { validateJson } from './json-schema.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
   isSealedValue,
-  redactSealedInput,
+  redactCommandInput,
+  scrubSealedText,
   sealAad,
   sealValue,
   sealedColumnsOf,
+  sealedValuesForCommand,
+  stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
 import type {
@@ -49,6 +52,7 @@ export interface RegisteredCommand {
   handler: CommandDefinition['handler'];
   sealedInput: readonly string[];
   unseals: readonly string[];
+  transcriptSensitive: boolean;
 }
 
 // §10 S4: polymorphic (type, id) pairs that declarative FKs cannot express.
@@ -126,8 +130,9 @@ export function sweepDanglingLinks(
  * are already sealed (re-writes of untouched columns) pass through.
  */
 export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: string }[]): void {
+  let sealedAny = false;
   for (const write of writes) {
-    const cols = sealedColumnsOf(write.entityType);
+    const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
     const ref = resolveEntity(write.entityType, db.vault);
     if (!ref || ref.file !== 'vault') continue;
@@ -146,8 +151,14 @@ export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: 
           sealValue(db.sealKey, sealAad(ref.physical, col, write.entityId), value),
           write.entityId,
         );
+      sealedAny = true;
     }
   }
+  // The moment this vault first holds a sealed cell, the key's fingerprint
+  // is stamped into core_vault settings (issue #298 item 1) — inside the
+  // same transaction, so "has secrets" and the secrets themselves commit
+  // together. From here on, opening without the matching key fails loudly.
+  if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
 /** Validate every polymorphic row this invocation wrote. Throws to roll back. */
@@ -207,7 +218,10 @@ export function insertInvocation(
       grantId,
       // The journal is append-only (issue #293): declared secret inputs land
       // as keyed hash tokens, never as values — a leak here is permanent.
-      JSON.stringify(redactSealedInput(db.sealKey, request.input, sealedInput)),
+      // Command-aware so the ext trio's nested secrets redact too (#298 item 9).
+      JSON.stringify(
+        redactCommandInput(db.sealKey, command.name, request.input, sealedInput, db.vault),
+      ),
       status,
       nowIso(),
     );
@@ -281,7 +295,16 @@ export function runContractAndExecute(
       gatewayVersion: ONTOLOGY_VERSION,
     });
   }
-  const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input);
+  const sealedInput = commands.get(command.name)?.sealedInput ?? [];
+  // Error surfaces get the same discipline as input_json (issue #298 item
+  // 7): any text derived from runtime values passes through the sealed
+  // scrub before it reaches the journal, the receipt or the HTTP response.
+  // Command-aware so the ext trio's nested secrets scrub too (#298 item 9).
+  const secretValues = sealedValuesForCommand(command.name, request.input, sealedInput, db.vault);
+  const scrub = (text: string): string => scrubSealedText(db.sealKey, text, secretValues);
+  const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input).map(
+    scrub,
+  );
   if (schemaErrors.length > 0) {
     return denyContract(`input schema violation`, { stage: 'contract', errors: schemaErrors });
   }
@@ -433,7 +456,10 @@ export function runContractAndExecute(
   } catch (err) {
     db.vault.exec('ROLLBACK');
     setInvocationStatus(db, invocationId, 'failed');
-    const reason = err instanceof Error ? err.message : String(err);
+    // A handler (or SQLite constraint message) that echoes its input would
+    // put a submitted secret into the journal and the HTTP error — scrub
+    // declared sealed inputs out of the text first (issue #298 item 7).
+    const reason = scrub(err instanceof Error ? err.message : String(err));
     const receiptId = writeReceipt(db.journal, {
       grantId: consent.grantId,
       invocationId,
@@ -467,6 +493,12 @@ export function runContractAndExecute(
         : { invocation: invocationId },
     );
   }
+  // A transcript-sensitive command's output is secret-derived (issue #298
+  // item 6): the caller still gets the live value below, but it must NOT
+  // persist in the journal receipt (a durable store, read back on replay).
+  const receiptOutput = registered.transcriptSensitive
+    ? { redacted: 'transcript-sensitive derivative (issue #298 item 6)' }
+    : output;
   const receiptId = writeReceipt(db.journal, {
     grantId: consent.grantId,
     invocationId,
@@ -476,7 +508,7 @@ export function runContractAndExecute(
     purpose: request.purpose,
     decision: 'allow',
     detail: {
-      output,
+      output: receiptOutput,
       writes,
       ...(unsealed.size > 0 ? { unsealed: [...unsealed] } : {}),
       ...(confirmation ? { confirmation } : {}),
