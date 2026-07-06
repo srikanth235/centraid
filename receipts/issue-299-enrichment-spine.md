@@ -15,7 +15,7 @@ on the agent surface.
 ## Checklist
 
 - [x] Commit 1 — vault enrichment core + agent content surfaces (v10 schema, publishers, commands, auto-publish trust, `content` op, ctx.agent attachments, assistant vault_content)
-- [ ] Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
+- [x] Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
 - [ ] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
 - [ ] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
 - [ ] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
@@ -107,6 +107,33 @@ Commit 1 — vault enrichment core + agent content surfaces:
   runner wiring; `assistant-prompt.ts` teaches the register when to reach
   for vault_content and to cite `ref:core.content_item/<id>`.
 
+Commit 2 — phase 1 enrichers (blueprint automation templates):
+
+- `packages/blueprints/automations/photo-captioner/` (new) — the vision
+  enricher: data trigger on media.media_asset (5-min gate), UUIDv7 cursor
+  in ctx.state (id order IS time order — no wall clock), preview-else-thumb
+  variant pick (a photo with neither is an honest skip), one bounded
+  `ctx.agent` vision turn per photo with a JSON schema, captions + tags
+  staged via `sync.stage_rows` on the `enrichment.vision` connection.
+  Ships `enabled: false` — enabling IS the owner's opt-in; the vault block
+  requests media/core read + sync read+act.
+- `packages/blueprints/automations/doc-text-extractor/` (new) — the doc
+  enricher: scans (no text variant, preview exists) OCR through
+  `core.set_extracted_text` so the #296 FTS triggers index the PARENT
+  document in-transaction; documents WITH text get a one-paragraph summary
+  staged as a machine annotation on `enrichment.doctext`; a binary with
+  neither derivative is "not enrichable yet", logged, never guessed.
+- `packages/blueprints/index.json` + regenerated `manifest.json` — both
+  templates in the gallery under a new "Enrichment" category with
+  data-trigger labels; neither declares `connector` (connectors forbid
+  ctx.agent — enrichers are the OTHER kind of automation, by design).
+- `packages/blueprints/src/enricher-automations.test.ts` (new) — manifests
+  parse under the runtime validator (vault block + data trigger cohere,
+  ships disabled, no connector block), handlers pass the determinism lint,
+  and stub-ctx behavior tests pin the contract: preview-over-thumb content
+  refs, staged-not-written output, external ids derived from asset ids,
+  cursor advance, agent-turn-free skips.
+
 ## Decisions of record
 
 - **Enrichment rides the sync spine, not a new pipeline** — an enricher is
@@ -153,3 +180,8 @@ Commit 1 — vault enrichment core + agent content surfaces:
 - `packages/gateway`: 163 green + 1 skipped; `packages/automation`: 144
   green; `packages/agent-runtime`: 68 green; app-engine, vault, gateway,
   automation, agent-runtime typecheck (tsc) clean.
+- `packages/blueprints`: 108 green (`npx vitest run`) — includes new suite
+  `src/enricher-automations.test.ts` (9 tests: manifest validity, handler
+  determinism lint, stub-ctx behavior for both enrichers) and the existing
+  manifest sweep accepting the two new template dirs; `build:manifest`
+  regenerated cleanly (20 templates).

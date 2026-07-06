@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "photo-captioner",
+  "name": "Photo captions",
+  "kind": "automation",
+  "description": "Captions and tags new photos so the library is searchable by what's in the pictures.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

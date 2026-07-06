@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@centraid/app-engine": "workspace:*",
+    "@centraid/automation": "workspace:*",
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "catalog:"

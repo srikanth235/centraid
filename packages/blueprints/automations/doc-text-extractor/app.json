@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "doc-text-extractor",
+  "name": "Document text",
+  "kind": "automation",
+  "description": "OCRs scanned documents into searchable text and writes a one-paragraph summary for each.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

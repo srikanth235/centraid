@@ -988,6 +988,44 @@
         "automations/flaky-test-tracker/automation.json",
         "automations/flaky-test-tracker/handler.js"
       ]
+    },
+    {
+      "id": "photo-captioner",
+      "name": "Photo captions",
+      "desc": "Captions and tags new photos so the library is searchable by what's in the pictures.",
+      "colorKey": "ochre",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🖼️",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When new photos arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/photo-captioner/automation.json",
+        "automations/photo-captioner/handler.js"
+      ]
+    },
+    {
+      "id": "doc-text-extractor",
+      "name": "Document text",
+      "desc": "OCRs scanned documents into searchable text and writes a one-paragraph summary for each.",
+      "colorKey": "slate",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📄",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When new documents arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/doc-text-extractor/automation.json",
+        "automations/doc-text-extractor/handler.js"
+      ]
     }
   ]
 }
