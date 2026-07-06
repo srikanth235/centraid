@@ -67,6 +67,14 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'journal_entry',
   ],
   locker: ['item', 'item_tag'],
+  sync: [
+    'connection',
+    'external_entity',
+    'import_batch',
+    'import_row',
+    'connection_cursor',
+    'connection_run',
+  ],
   tally: ['friend', 'group', 'group_member', 'expense', 'expense_split', 'settlement'],
 };
 

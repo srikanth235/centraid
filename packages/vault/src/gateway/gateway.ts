@@ -36,6 +36,9 @@ import {
   type VaultSqlResult,
 } from './sql.js';
 import { importIcsEvents, importVcardParties, type ImportResult } from '../ingest/import.js';
+import { stageFile, type StageFileOptions, type StageFileResult } from '../ingest/stage-file.js';
+import { discardBatch, publishBatch, type PublishResult } from '../ingest/staging.js';
+import { PUBLISHERS } from '../ingest/publishers.js';
 import { demoStatus, purgeDemoRows, type DemoPurgeResult } from './demo.js';
 import { pkColumn } from './execution.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
@@ -796,6 +799,28 @@ export class Gateway {
   demoStatus(cred: Credential): { appId: string; rows: number }[] {
     this.requireOwner(cred, 'only the owner inspects demo status');
     return demoStatus(this.db);
+  }
+
+  /**
+   * File-drop customs (issue #290 phase 2): stage a dropped file into a
+   * reviewable draft batch on its (kind, filename) connection. Nothing
+   * touches a domain table until the owner publishes.
+   */
+  stageImportFile(cred: Credential, options: StageFileOptions): StageFileResult {
+    const owner = this.requireOwner(cred, 'only the owner imports (v0)');
+    return stageFile(this.db, owner, options);
+  }
+
+  /** Publish a reviewed draft batch — creates/updates land, receipted. */
+  publishImport(cred: Credential, batchId: string): PublishResult {
+    const owner = this.requireOwner(cred, 'only the owner publishes imports (v0)');
+    return publishBatch(this.db, owner, batchId, PUBLISHERS);
+  }
+
+  /** Discard a draft batch — rows dropped, nothing published. */
+  discardImport(cred: Credential, batchId: string): { receiptId: string } {
+    const owner = this.requireOwner(cred, 'only the owner discards imports (v0)');
+    return discardBatch(this.db, owner, batchId);
   }
 
   /** Standing duty: ingest customs — ICS events enter through the border post. */

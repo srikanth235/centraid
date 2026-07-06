@@ -10,6 +10,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import { registerMergeCommands } from './merge.js';
 
 const IDENTIFIER_SCHEMES = ['email', 'tel', 'url', 'handle', 'other'] as const;
 
@@ -224,4 +225,6 @@ function updateParty(ctx: HandlerCtx): Record<string, unknown> {
 export function registerPartyCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_PARTY);
   gateway.registerCommand(UPDATE_PARTY);
+  // Entity resolution rides the party family (issue #290 phase 2).
+  registerMergeCommands(gateway);
 }

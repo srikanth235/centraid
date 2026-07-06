@@ -16,11 +16,8 @@ Phase 1 — scenario seeds:
 
 Phase 2 — file-drop import spine:
 
-- [ ] Commit 3 — vault: `sync` schema (connection, external_entity,
-  import_batch, import_row), staging pipeline (stage → review → publish /
-  discard), ICS + vCard rebased onto it, MBOX + transactions-CSV + Takeout-zip
-  importers, `core.merge_party`
-- [ ] Commit 4 — gateway + shell: import routes and the review surface
+- [x] Commit 3 — vault import spine
+- [x] Commit 4 — gateway + shell import surface
 
 Phase 3 — interactive one-shot pulls:
 
@@ -89,6 +86,68 @@ Commit 2 — host wiring, generators, shell:
 - `apps/desktop/src/renderer/styles.css` — demo actions row style.
 - `receipts/issue-290-data-flows-connectors.md` (this receipt).
 
+Commit 3 — vault import spine:
+
+- `packages/vault/src/schema/sync.ts` (new) — the sync domain DDL (v7):
+  `sync_connection` (kind/label/principal/status/trust),
+  `sync_external_entity` (the universal `(connection, external_id) → entity`
+  map with content hash + `gone_upstream`), `sync_import_batch` +
+  `sync_import_row` (the staging band), `sync_connection_cursor` +
+  `sync_connection_run` (phase-4 runtime state, defined with the domain).
+- `packages/vault/src/schema/migrate.ts` — v7 step.
+- `packages/vault/src/schema/tables.ts` — `sync.*` joins the registry.
+- `packages/vault/src/ingest/staging.ts` (new) — the spine:
+  `ensureConnection`, `stageCandidates` (map-hash dispositioning + domain
+  probes), `publishBatch` (one transaction, per-entity `import.<kind>`
+  provenance, map upsert incl. adopted rows, per-row failure honesty, one
+  batch receipt), `discardBatch`.
+- `packages/vault/src/ingest/publishers.ts` (new) — per-entity appliers:
+  core.event (ical_uid), core.party (identifier resolution + handle
+  backfill; the vault wins — imports never rewrite a person's name),
+  social.message (thread find-or-create by normalized subject, sender
+  party resolve-or-mint, canonical content bodies), core.transaction
+  (account find-or-create by name).
+- `packages/vault/src/ingest/mbox.ts` (new) — RFC 4155 parsing (headers,
+  mboxrd unquoting, address + thread-key extraction).
+- `packages/vault/src/ingest/csv.ts` (new) — statement CSV parsing
+  (RFC 4180 fields, column aliases, signed amounts → minor units).
+- `packages/vault/src/ingest/zip.ts` (new) — minimal central-directory
+  ZIP reader (stored + deflate) for Takeout archives.
+- `packages/vault/src/ingest/stage-file.ts` (new) — extension routing,
+  Takeout recursion into one mixed batch, unrouted entries reported.
+- `packages/vault/src/ingest/import.ts` — ICS/vCard wrappers rebased onto
+  the spine (stage + publish in one act; contract preserved).
+- `packages/vault/src/commands/merge.ts` (new) — `core.merge_party`:
+  engine FKs discovered via `PRAGMA foreign_key_list`, polymorphic
+  (type, id) follow, identifiers demote-never-drop, uniqueness collisions
+  dedupe, external-id map re-targets; risk `high`.
+- `packages/vault/src/commands/parties.ts` — merge registration.
+- `packages/vault/src/gateway/gateway.ts` — `stageImportFile` /
+  `publishImport` / `discardImport` owner surfaces.
+- `packages/vault/src/ingest/staging.test.ts` (new) — 7 tests: staged
+  drafts, re-import skip/update, discard, MBOX threading, CSV accounts,
+  Takeout zip routing, owner-only.
+- `packages/vault/src/commands/merge.test.ts` (new) — 3 tests: full
+  re-point + demotion + map, owner-merge refusal, self-merge refusal.
+- `packages/vault/src/index.ts` — exports.
+
+Commit 4 — gateway + shell import surface:
+
+- `packages/gateway/src/routes/import-routes.ts` (new) —
+  `POST/GET /centraid/_vault/imports`, `GET /imports/<batchId>`,
+  `POST /imports/<batchId>/publish|discard` (128 MB body cap for
+  mailboxes/Takeouts).
+- `packages/gateway/src/routes/import-routes.test.ts` (new) — over-HTTP:
+  stage → review → publish → history; unroutable file is a clean 400.
+- `packages/gateway/src/serve/build-gateway.ts` — route mounted.
+- `apps/desktop/src/renderer/gateway-client-vault.ts` — import client calls.
+- `apps/desktop/src/renderer/app-import.ts` (new) — the Import settings
+  page: file picker → staged draft with disposition rows → Publish/Discard,
+  plus history.
+- `apps/desktop/src/renderer/app-settings.ts` — Import page registered
+  (Account section).
+- `apps/desktop/src/renderer/styles.css` — import row/history styles.
+
 ## Decisions
 
 - **Registry beside provenance, not instead of it.** The issue said
@@ -109,6 +168,26 @@ Commit 2 — host wiring, generators, shell:
 - **Generators are code, not a fixtures DSL** (per the standing
   handler-is-source-of-truth doctrine): `seed.js` runs in the same worker
   sandbox as app handlers with `ctx.vault` bound to the demo bridge.
+- **Staging is a band of rows, not a draft twin of every canonical table.**
+  The issue sketched "generalize the ext draft-twin"; twinning every
+  canonical table for imports would explode DDL for no review benefit.
+  `sync_import_row` (payload JSON + disposition + target) delivers the same
+  gesture — draft → review diff → publish — with one table.
+- **The sync schema is `sync.*`, not `core.*`.** The issue's "core.connection
+  domain" wording is honored as its own schema namespace, consistent with
+  how every other domain landed (locker, tally, people); consent scopes can
+  name it as a unit.
+- **Adopted rows join the map on publish.** A probe hit (row the vault
+  already held) records a `sync_external_entity` entry with the candidate's
+  hash, so the NEXT import of the same source diffs instead of re-probing —
+  the upgrade from append-on-dedup to true sync.
+- **Programmatic ICS/vCard imports stay one-call** (stage + publish in the
+  same act) — the pre-spine contract and tests hold; only owner-facing file
+  drops pause at review.
+- **Merge fallback rule:** a re-pointed row that trips a uniqueness
+  constraint means the survivor already holds that relation — the duplicate
+  deletes, EXCEPT identifiers, which demote to non-primary (a handle is
+  never lost in a merge).
 
 ## Out of scope
 
@@ -128,27 +207,33 @@ Commit 2 — host wiring, generators, shell:
   clean); app-engine 224 green; blueprints 95 green; typecheck green across
   vault/gateway/app-engine/blueprints/desktop.
 
+- Phase 2: vault 267 tests green (incl. 7 staging + 3 merge tests over the
+  new spine; the pre-spine ingest suite passes unchanged on the rebased
+  wrappers); gateway 145 green (incl. the over-HTTP import-route suite);
+  desktop typecheck green.
+
 ```sh
 npx turbo run typecheck test \
   --filter=@centraid/vault --filter=@centraid/gateway \
   --filter=@centraid/app-engine --filter=@centraid/blueprints
 ```
 
-- The desktop Vault-tab demo section was not interactively click-tested.
+- The desktop Vault-tab demo section and the Import settings page were not
+  interactively click-tested.
 
 ## Audit
 
-1. **"## What changed" faithfully describes the diff**: PASS — Receipt lists all 18 files (9 vault/gateway core, 4 blueprint seed generators, 2 desktop shell, 2 tests, 1 app-engine export) and accurately names what each contributes. One omission noted: receipt says demo-routes.ts is a "new" file but lists it as "[in] packages/gateway/src/routes/demo-routes.ts" under "What changed" for Commit 2; the file exists untracked in the worktree and is imported by build-gateway.ts but is not yet staged (git status shows it untracked). All staged files are accurately described.
+1. **"## What changed" faithfully describes the diff (Commits 1–4, both committed and working-tree)**: PASS — Receipt fully describes all 35 files across Phase 1 (Commits 1–2, both landed on main) and Phase 2 (Commits 3–4, working-tree staged/untracked). Commit 3 spine file counts: sync.ts DDL (1), staging.ts (2 core + 1 test), publishers.ts (1), mbox.ts (1), csv.ts (1), zip.ts (1), stage-file.ts (1), merge.ts (2 core + 1 test) = 10 files. Commit 4 surface: import-routes.ts (2 core + 1 test), app-import.ts (1), gateway-client-vault.ts additions, app-settings.ts, styles.css (5 files). All changes to migrate.ts, schema/tables.ts, parties.ts, import.ts, gateway.ts, build-gateway.ts are present in the diff. No omissions or misrepresentations.
 
-2. **Each [x] checklist item in the receipt is realized in the diff**: PASS — Phase 1 Commit 1 (9 items): seed registry DDL (seed.ts), v6 migration, tables.ts registry link, InvokeRequest.demo flag (types.ts), owner gate + read/feed exclusion + purge surfaces (gateway.ts), demo write registration + seed-activity stamping (execution.ts), purge logic with FK-blocked honesty (demo.ts), 9 test cases covering register/provenance/deny/exclusion/purge (demo.test.ts), index.ts exports. Phase 1 Commit 2 (12 items): runHandler export (app-engine), demoBridgeFor + purge/status (vault-plane), passthrough (vault-registry), routes mounted (build-gateway), e2e generator test (demo-seed.test.ts), 4 seed.js generators (tasks/notes/people/tally, deterministic, dates relative to input.now, invoking through demo bridge), manifest.json regenerated, desktop client calls (gateway-client-vault.ts), demo tab UI with load/reset (app-vault.ts), button styling (styles.css), receipt file created. All 21 checklist items present.
+2. **Each [x] checklist item is realized (Commits 1–4)**: PASS — Phase 1 Commits 1–2: all 21 items present in git log (demo register, generators, purge, shell demo section). Phase 2 Commit 3: 8 checklist items — (a) sync domain DDL (sync.ts v7 migration step, tables.ts registry, schema precisely matches receipt: connection/external_entity/import_batch/import_row/connection_cursor/connection_run), (b) staging spine (staging.ts ensureConnection/stageCandidates/publishBatch/discardBatch, publishers.ts per-entity appliers for event/party/message/transaction), (c) file ingesters (mbox.ts RFC 4155, csv.ts RFC 4180, zip.ts Takeout recursion, stage-file.ts extension routing), (d) merge command (merge.ts core.merge_party with PRAGMA discovery + polymorphic re-point + identifier demotion), (e) gateway surfaces (gateway.ts stageImportFile/publishImport/discardImport owner-only), (f) ingest tests (staging.test.ts 7 tests, merge.test.ts 3 tests, both cover named scenarios), (g) vault exports (index.ts exports staging/publishers/mbox/csv/zip/stageFile). Phase 2 Commit 4: 4 checklist items — (a) import routes (import-routes.ts POST/GET /imports, 128 MB cap, import-routes.test.ts over-HTTP suite), (b) gateway mount (build-gateway.ts route mounted), (c) desktop client (gateway-client-vault.ts import client calls vaultImportStage/List/Rows/Publish/Discard), (d) import page (app-import.ts 201 lines, app-settings.ts registration, styles.css import row/history styling). All 12 Phase 2 items verified.
 
-3. **The "## Checklist" mirrors the linked issue's scope**: PASS — Issue #290 "Suggested phasing" phase 1 reads: "Scenarios — generators + seed.demo provenance + purge + trigger/notification exclusion + shell affordance." Receipt checklist maps exactly: generators ✓, provenance ✓, purge ✓, exclusion ✓, shell (Vault-tab demo section) ✓. Issue's "Decisions" section (9 points) and "Non-goals" section align with receipt's "Out of scope" and "Decisions" sections (no OAuth, no data migrations, no bidirectional sync).
+3. **The "## Checklist" mirrors issue #290's phased scope**: PASS — Issue #290 "Suggested phasing" phase 2 reads: "File-drop imports — Takeout/CSV/MBOX importers over the existing ingest/ spine; generalized staging band + review diff; external_entity map; core.merge_party." Receipt Commits 3–4 deliver exactly: (1) file ingesters (mbox/csv/zip) = done, (2) staging band (sync_import_batch/sync_import_row + stageCandidates/publishBatch) = done, (3) external_entity map (sync_external_entity with connection-id/external_id PK) = done, (4) merge (core.merge_party command with FK re-point + polymorphic handling) = done. Decision 6 policy stances (vault wins conflicts, upstream deletions never delete, one-way ingestion) are encoded in sync.ts schema design (gone_upstream flag, update-not-overwrite staging logic, no write-back columns). The scope exactly matches the phasing outline in issue #290.
 
 ## Steering
 
-1. **Human-steering events (interrupts / redirects mid-task) recorded as rows**: PASS — No steering events found. Session transcript (18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88) contains no mid-work interrupts or corrections. User messages cluster in the design/exploration phase (initial brainstorm, clarifying direction toward "connectors-as-published-code", feedback on problem framing) before `/goal` directive at turn 74, which sets scope and begins Phase 1 implementation. No subsequent user messages redirect or interrupt work already in progress. All user interactions are forward-working toward the stated goal.
+1. **Human-steering events (interrupts / redirects mid-task) recorded in the ledger**: PASS — Session 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 has no mid-work steering corrections. All user messages are forward-working: design-phase clarifications precede `/goal` (scope-setting, not steering), and Phase 1 + Phase 2 execution shows no interrupts or mid-task redirects. The transcript contains only task messages, goal directives, and continuation prompts — no evidence of user-initiated course corrections or architectural pivots once work began.
 
-2. **No non-steering messages recorded as steering events**: PASS — No false positives. The `/goal` command (turn 74: "work on entire scope of #290 and create a PR") is a goal directive, not a steering event (goals are task-setting, not mid-work corrections). Design-phase feedback messages ("I didn't get your conclusion...", "connectors-as-published-code is the direction...") are ordinary task messages from the exploration phase, not steering. The message "continue" (turn 92) is a continuation directive at the start of Phase 1 execution, not a steering correction.
+2. **No non-steering messages are recorded as steering**: PASS — Zero false positives. The `/goal` command and "continue" prompts are task-control directives (scope-setting and execution triggers), not mid-work interrupts. Design-phase feedback ("the direction is...") is exploration-phase ordinary conversation. The transcript correctly reflects that Phase 1 and Phase 2 execution proceeded uninterrupted by user corrections to the original scope or approach.
 
 ## Accounting
 
@@ -169,3 +254,5 @@ npx turbo run typecheck test \
 | claude-code-18f9dd6d-2f0-1783305041-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 582 | 355056 | 133 | 717 | 0.3690 | 65070 | 1689702 | 64978737 | 328531 | xIssue: #290 |
 | claude-code-18f9dd6d-2f0-1783305072-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 6 | 5166 | 1066914 | 2523 | 7695 | 1.2577 | 65076 | 1694868 | 66045651 | 331054 | feat(gateway+blueprints+desktop): scenario seeds — generators, demo bridge, rout |
 | claude-code-18f9dd6d-2f0-1783305101-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1011 | 357360 | 437 | 1450 | 0.3919 | 65078 | 1695879 | 66403011 | 331491 | feat(gateway+blueprints+desktop): scenario seeds — generators, demo bridge, shel |
+| claude-code-18f9dd6d-2f0-1783306222-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 17187 | 213298 | 43248152 | 198299 | 428784 | 56.0012 | 82265 | 1909177 | 109651163 | 529790 | feat(vault): the import spine — sync domain, staging band, file-drop customs, co |
+| claude-code-18f9dd6d-2f0-1783306260-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1939 | 455325 | 658 | 2599 | 0.5125 | 82267 | 1911116 | 110106488 | 530448 | feat(vault): import spine — sync domain, staging band, merge_party (#290)One ing |

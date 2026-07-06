@@ -123,6 +123,22 @@ export { registerLockerCommands, LOCKER_ITEM_TYPE } from './commands/locker.js';
 export { registerTallyCommands } from './commands/tally.js';
 
 export { parseIcs, type IcsEvent } from './ingest/ics.js';
+export {
+  ensureConnection,
+  stageCandidates,
+  publishBatch,
+  discardBatch,
+  payloadHash,
+  type StageCandidate,
+  type StageResult,
+  type PublishResult,
+  type Publisher,
+} from './ingest/staging.js';
+export { PUBLISHERS } from './ingest/publishers.js';
+export { stageFile, type StageFileOptions, type StageFileResult } from './ingest/stage-file.js';
+export { parseMbox, threadKey, type MboxMessage } from './ingest/mbox.js';
+export { parseTransactionsCsv, parseCsvRows, type CsvTransaction } from './ingest/csv.js';
+export { readZipEntries, type ZipEntry } from './ingest/zip.js';
 export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
