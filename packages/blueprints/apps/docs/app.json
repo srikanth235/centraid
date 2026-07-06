@@ -35,10 +35,11 @@
         "type": "object",
         "properties": {
           "data_uri": { "type": "string", "minLength": 6 },
+          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
           "title": { "type": "string", "minLength": 1 },
           "folder_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["data_uri", "title"],
+        "required": ["title"],
         "additionalProperties": false
       },
       "output": {

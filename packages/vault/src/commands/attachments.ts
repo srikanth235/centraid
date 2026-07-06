@@ -1,25 +1,20 @@
 // Attachments (core §01): the one cross-cutting write every projection wants
 // — pin a file (image, PDF, any media) to a canonical row. An attachment is
 // a polymorphic edge (core_attachment.subject_type/subject_id) onto a
-// canonical core_content_item. Bytes live inline as base64 `data:` URIs,
-// sha256-deduped (rent the bytes, own the reference), which is the same
-// mechanism note bodies and message bodies already use — extended here to
-// arbitrary media, size-capped, because a vault with no blob store shouldn't
-// swallow a 4K video into a SQLite row. Large-file custody stays the
-// deferred seam; everyday attachments do not need to wait for it.
+// canonical core_content_item.
 //
-// Issue #272: attach also accepts an EXISTING content item by `content_id`
-// (exactly one of data_uri / content_id per call) — "embed these bytes in my
-// thing" without shipping them through the caller again. The edge counts as
-// a reference in the shared GC rule (media.ts CONTENT_REFERENCES), so an
-// embedded photo survives the photo being trashed in its own app.
+// Byte custody is issue #296: large files arrive STAGED (POST /_vault/blobs
+// hashed the bytes into the CAS; `staged_sha` claims them here, which is
+// when the receipt mints), small payloads still ride inline as `data_uri`
+// (text stays in the row, binaries spill to the CAS), and issue #272's
+// `content_id` attaches EXISTING bytes without re-shipping them. Exactly one
+// source per call. The edge counts as a reference in the shared GC rule
+// (media.ts CONTENT_REFERENCES), so an embedded photo survives the photo
+// being trashed in its own app.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { sha256Hex } from '../ids.js';
-
-/** ~8 MB of decoded content; the data: URI is ~4/3 of that in base64. */
-const MAX_DATA_URI_CHARS = 11_000_000;
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 
 /**
  * The entities a projection may attach to, logical name → primary-key column.
@@ -34,6 +29,7 @@ const SUBJECT_PK: Record<string, string> = {
   'schedule.task': 'task_id',
   'knowledge.note': 'note_id',
   'social.thread': 'thread_id',
+  'social.message': 'message_id',
   'health.vital': 'vital_id',
   'finance.recurring_series': 'series_id',
   'business.client': 'client_id',
@@ -45,59 +41,6 @@ const SUBJECT_PK: Record<string, string> = {
 
 const ROLES = ['photo', 'manual', 'receipt', 'warranty', 'contract', 'embed', 'other'] as const;
 
-interface ParsedDataUri {
-  mediaType: string;
-  byteSize: number;
-}
-
-/** Pull the media type and decoded size out of a `data:` URI. */
-function parseDataUri(uri: string): ParsedDataUri {
-  if (!uri.startsWith('data:')) throw new Error('attachment must be a data: URI');
-  const comma = uri.indexOf(',');
-  if (comma === -1) throw new Error('malformed data: URI (no comma)');
-  const meta = uri.slice(5, comma); // between "data:" and ","
-  const payload = uri.slice(comma + 1);
-  const isBase64 = meta.split(';').includes('base64');
-  const mediaType = meta.split(';')[0] || 'application/octet-stream';
-  const byteSize = isBase64
-    ? Buffer.from(payload, 'base64').length
-    : Buffer.byteLength(decodeURIComponent(payload), 'utf8');
-  return { mediaType, byteSize };
-}
-
-/** Dedupe-or-insert the content item behind an attachment. */
-function contentItemFor(
-  ctx: HandlerCtx,
-  uri: string,
-  parsed: ParsedDataUri,
-  title?: string,
-): string {
-  const sha = sha256Hex(uri);
-  const existing = ctx.db
-    .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
-    .get(sha) as { content_id: string } | undefined;
-  if (existing) return existing.content_id;
-  const contentId = ctx.newId();
-  ctx.db
-    .prepare(
-      `INSERT INTO core_content_item
-         (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`,
-    )
-    .run(
-      contentId,
-      parsed.mediaType,
-      uri,
-      sha,
-      parsed.byteSize,
-      title ?? null,
-      ctx.identity.partyId,
-      ctx.now,
-    );
-  ctx.wrote('core.content_item', contentId);
-  return contentId;
-}
-
 const ATTACH: CommandDefinition = {
   name: 'core.attach',
   ownerSchema: 'core',
@@ -108,10 +51,12 @@ const ATTACH: CommandDefinition = {
     properties: {
       subject_type: { type: 'string', enum: Object.keys(SUBJECT_PK) },
       subject_id: { type: 'string', minLength: 1 },
-      /** New bytes, inline. Exactly one of data_uri / content_id (issue #272). */
+      /** Small inline bytes. Exactly one of data_uri / content_id / staged_sha. */
       data_uri: { type: 'string', minLength: 6 },
       /** An existing canonical content item — attach without re-uploading. */
       content_id: { type: 'string', minLength: 1 },
+      /** Staged bytes (issue #296): claim what POST /_vault/blobs hashed. */
+      staged_sha: { type: 'string', minLength: 64, maxLength: 64 },
       /** Only meaningful when minting new bytes; an existing item keeps its title. */
       title: { type: 'string' },
       role: { type: 'string', enum: [...ROLES] },
@@ -128,9 +73,10 @@ const ATTACH: CommandDefinition = {
   },
   preconditions: [
     {
-      // Two sources, one per call: fresh bytes OR an existing content item.
+      // Three sources, one per call: staged bytes, inline bytes, or an
+      // existing content item (issues #296 / #272).
       name: 'exactly_one_source',
-      sql: 'SELECT ((:data_uri IS NOT NULL) + (:content_id IS NOT NULL)) AS n',
+      sql: 'SELECT ((:data_uri IS NOT NULL) + (:content_id IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n',
       column: 'n',
       op: 'eq',
       value: 1,
@@ -144,9 +90,20 @@ const ATTACH: CommandDefinition = {
       value: 1,
     },
     {
-      // Cap the row: a vault with no blob store must not swallow a huge file.
+      // The inline door is for SMALL payloads (issue #296): the journal
+      // records every input, so big bytes take the staging route.
       name: 'within_size_cap',
-      sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_DATA_URI_CHARS}) END AS n`,
+      sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // A staged sha must actually be staged — or already owned (dedup).
+      name: 'staged_or_owned',
+      sql: `SELECT CASE WHEN :staged_sha IS NULL THEN 1 ELSE
+              (EXISTS(SELECT 1 FROM blob_staging WHERE sha256 = :staged_sha AND variant IS NULL)
+               OR EXISTS(SELECT 1 FROM core_content_item WHERE sha256 = :staged_sha)) END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -184,6 +141,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     subject_id: string;
     data_uri?: string;
     content_id?: string;
+    staged_sha?: string;
     title?: string;
     role?: string;
   };
@@ -197,17 +155,24 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     .get(input.subject_id) as { n: number };
   if (subject.n !== 1) throw new Error(`no ${input.subject_type} with id ${input.subject_id}`);
 
-  // Two sources (issue #272): fresh bytes mint-or-dedupe a content item;
-  // an existing content_id just gains one more edge — no re-upload, and the
-  // extra reference keeps the bytes alive through the shared GC rule.
+  // Three sources (issues #272/#296): staged bytes claim their content item
+  // (custody's receipt is THIS command's receipt), fresh inline bytes
+  // mint-or-dedupe one, and an existing content_id just gains one more edge
+  // — no re-upload, and the extra reference keeps the bytes alive through
+  // the shared GC rule.
   let contentId: string;
   let mediaType: string;
   let byteSize: number;
-  if (input.data_uri !== undefined) {
-    const parsed = parseDataUri(input.data_uri);
-    contentId = contentItemFor(ctx, input.data_uri, parsed, input.title);
-    mediaType = parsed.mediaType;
-    byteSize = parsed.byteSize;
+  if (input.staged_sha !== undefined) {
+    const claimed = ctx.blobs.claimStaged(input.staged_sha, { title: input.title });
+    contentId = claimed.contentId;
+    mediaType = claimed.mediaType;
+    byteSize = claimed.byteSize;
+  } else if (input.data_uri !== undefined) {
+    const minted = mintContentFromDataUri(ctx, input.data_uri, { title: input.title });
+    contentId = minted.contentId;
+    mediaType = minted.mediaType;
+    byteSize = minted.byteSize;
   } else if (input.content_id !== undefined) {
     const existing = ctx.db
       .prepare(
@@ -219,7 +184,7 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     mediaType = existing.media_type;
     byteSize = existing.byte_size;
   } else {
-    throw new Error('attach needs a data_uri or a content_id'); // precondition guards this
+    throw new Error('attach needs a staged_sha, data_uri or content_id'); // precondition guards this
   }
   // Role defaults from the media type; images read as photos.
   const role = input.role ?? (mediaType.startsWith('image/') ? 'photo' : 'other');

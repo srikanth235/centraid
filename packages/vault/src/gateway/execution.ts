@@ -7,6 +7,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
+import { promoteStagedBlob } from '../blob/promote.js';
+import { stagedInfoTx } from '../blob/staging.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import type { ConsentAllow } from './consent.js';
@@ -334,6 +336,37 @@ export function runContractAndExecute(
       return isSealedValue(value)
         ? unsealValue(db.sealKey, sealAad(ref.physical, column, entityId), value)
         : value;
+    },
+    // Blob custody inside the transaction (issue #296): claims and spills
+    // are row work — bytes already sit in (or synchronously enter) the
+    // local CAS, so a rollback leaves the stage intact and orphans at
+    // worst a content-addressed file the staging sweep reclaims.
+    blobs: {
+      staged: (sha256) => {
+        const row = stagedInfoTx(db.vault, sha256);
+        return row
+          ? {
+              mediaType: row.media_type,
+              byteSize: row.byte_size,
+              originalName: row.original_name,
+              meta: JSON.parse(row.meta_json) as Record<string, unknown>,
+            }
+          : null;
+      },
+      claimStaged: (sha256, options) =>
+        promoteStagedBlob(
+          {
+            vault: db.vault,
+            now: nowIso(),
+            newId: uuidv7,
+            wrote: (entityType, entityId) => writes.push({ entityType, entityId }),
+            creatorPartyId: identity.partyId,
+          },
+          sha256,
+          options,
+        ),
+      spill: (bytes) => db.blobs.ingestSync(bytes).sha256,
+      has: (sha256) => db.blobs.hasSync(sha256),
     },
   };
   let output: Record<string, unknown>;

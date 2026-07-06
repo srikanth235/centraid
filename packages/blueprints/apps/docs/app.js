@@ -17,7 +17,10 @@
 import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // reject before reading — ~8 MB
+// Bytes stream to the blob staging route (issue #296) — no base64 through
+// command JSON — so big documents fit; the route itself caps at 512 MB.
+const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+const BLOB_ROUTE = '/centraid/_vault/blobs';
 
 // ---------- Tiny DOM helpers ----------
 
@@ -240,7 +243,10 @@ function typeMeta(mediaType) {
 }
 
 function loadable(uri) {
-  return /^(data:|https?:)/i.test(String(uri ?? ''));
+  // Same-origin vault blob URLs (issue #296) render everywhere data: did —
+  // and in iframes BETTER: `default-src 'self'` allows them where data:
+  // PDFs went blank.
+  return /^(data:|https?:|\/centraid\/_vault\/blobs\/)/i.test(String(uri ?? ''));
 }
 function isImage(doc) {
   return String(doc.media_type ?? '').startsWith('image/') && loadable(doc.content_uri);
@@ -583,13 +589,20 @@ async function deleteFolder(folder) {
 
 // ---------- Upload (picker + drag-and-drop) ----------
 
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
+// Stage one file's bytes into the vault's CAS (issue #296): the file
+// streams to the blob route — no base64 through command JSON — and the
+// upload action claims the returned sha (that claim is the receipt).
+async function stageFileBytes(file) {
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type || 'application/octet-stream' },
+    body: file,
   });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return res.json();
 }
 
 async function uploadFiles(fileList) {
@@ -602,9 +615,9 @@ async function uploadFiles(fileList) {
   const failures = [];
   if (skipped.length === 1)
     failures.push(
-      `“${skipped[0].name}” is ${fmtBytes(skipped[0].size)} — files up to 8 MB travel well.`,
+      `“${skipped[0].name}” is ${fmtBytes(skipped[0].size)} — files up to 512 MB travel well.`,
     );
-  else if (skipped.length > 1) failures.push(`Skipped ${skipped.length} files over 8 MB.`);
+  else if (skipped.length > 1) failures.push(`Skipped ${skipped.length} files over 512 MB.`);
 
   uploading = true;
   let ok = 0;
@@ -612,15 +625,15 @@ async function uploadFiles(fileList) {
   for (let i = 0; i < accepted.length; i += 1) {
     const file = accepted[i];
     notice(`Uploading ${i + 1} of ${accepted.length}…`);
-    let dataUri;
+    let staged;
     try {
-      dataUri = await fileToDataUri(file);
+      staged = await stageFileBytes(file);
     } catch {
       failures.push(`Could not read “${file.name}”.`);
       continue;
     }
     const outcome = await act('upload', {
-      data_uri: dataUri,
+      staged_sha: staged.sha256,
       title: file.name,
       ...(folderId != null ? { folder_id: folderId } : {}),
     });

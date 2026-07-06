@@ -13,11 +13,8 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { sha256Hex } from '../ids.js';
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
-
-/** ~8 MB of decoded content; the data: URI is ~4/3 of that in base64. */
-const MAX_DATA_URI_CHARS = 11_000_000;
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -34,21 +31,6 @@ function actorPartyId(ctx: HandlerCtx): string {
     | undefined;
   if (!owner?.owner_party_id) throw new Error('vault has no owner');
   return owner.owner_party_id;
-}
-
-/** Pull the media type and decoded size out of a `data:` URI. */
-function parseDataUri(uri: string): { mediaType: string; byteSize: number } {
-  if (!uri.startsWith('data:')) throw new Error('a document must arrive as a data: URI');
-  const comma = uri.indexOf(',');
-  if (comma === -1) throw new Error('malformed data: URI (no comma)');
-  const meta = uri.slice(5, comma);
-  const payload = uri.slice(comma + 1);
-  const isBase64 = meta.split(';').includes('base64');
-  const mediaType = meta.split(';')[0] || 'application/octet-stream';
-  const byteSize = isBase64
-    ? Buffer.from(payload, 'base64').length
-    : Buffer.byteLength(decodeURIComponent(payload), 'utf8');
-  return { mediaType, byteSize };
 }
 
 function purgeAt(now: string): string {
@@ -124,10 +106,13 @@ const ADD_DOCUMENT: CommandDefinition = {
   ownerSchema: 'core',
   inputSchema: {
     type: 'object',
-    required: ['data_uri', 'title'],
+    required: ['title'],
     additionalProperties: false,
     properties: {
+      /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: 'string', minLength: 6 },
+      /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
+      staged_sha: { type: 'string', minLength: 64, maxLength: 64 },
       title: { type: 'string', minLength: 1 },
       folder_id: { type: 'string', minLength: 1 },
     },
@@ -142,15 +127,33 @@ const ADD_DOCUMENT: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'is_data_uri',
-      sql: "SELECT (:data_uri LIKE 'data:%') AS n",
+      name: 'exactly_one_source',
+      sql: 'SELECT ((:data_uri IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n',
       column: 'n',
       op: 'eq',
       value: 1,
     },
     {
+      name: 'is_data_uri',
+      sql: "SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (:data_uri LIKE 'data:%') END AS n",
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // The inline door is for SMALL payloads (issue #296): the journal
+      // records every input, so big documents take the staging route.
       name: 'within_size_cap',
-      sql: `SELECT (length(:data_uri) <= ${MAX_DATA_URI_CHARS}) AS n`,
+      sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'staged_or_owned',
+      sql: `SELECT CASE WHEN :staged_sha IS NULL THEN 1 ELSE
+              (EXISTS(SELECT 1 FROM blob_staging WHERE sha256 = :staged_sha AND variant IS NULL)
+               OR EXISTS(SELECT 1 FROM core_content_item WHERE sha256 = :staged_sha)) END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -182,50 +185,26 @@ const ADD_DOCUMENT: CommandDefinition = {
 };
 
 function addDocument(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { data_uri: string; title: string; folder_id?: string };
-  const parsed = parseDataUri(input.data_uri);
-  const sha = sha256Hex(input.data_uri);
-  let contentId: string;
-  let deduped = 0;
-  const existing = ctx.db
-    .prepare('SELECT content_id, deleted_at FROM core_content_item WHERE sha256 = ?')
-    .get(sha) as { content_id: string; deleted_at: string | null } | undefined;
-  if (existing) {
-    contentId = existing.content_id;
-    deduped = 1;
-    // Re-uploading known bytes restores them from trash and renames them.
-    ctx.db
-      .prepare(
-        'UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL, title = ? WHERE content_id = ?',
-      )
-      .run(input.title, contentId);
-  } else {
-    contentId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`,
-      )
-      .run(
-        contentId,
-        parsed.mediaType,
-        input.data_uri,
-        sha,
-        parsed.byteSize,
-        input.title,
-        ctx.identity.partyId,
-        ctx.now,
-      );
-  }
+  const input = ctx.input as {
+    data_uri?: string;
+    staged_sha?: string;
+    title: string;
+    folder_id?: string;
+  };
+  // Staged bytes claim their content item (issue #296); small inline
+  // payloads mint one. Both restore-from-trash on dedup and retitle.
+  const minted = input.staged_sha
+    ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
+    : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
+  const contentId = minted.contentId;
   ctx.wrote('core.content_item', contentId);
   fileInto(ctx, contentId, input.folder_id ?? rootFolderId(ctx));
   ctx.cite({
-    claim: `"${input.title}" (${parsed.mediaType}, ${parsed.byteSize} bytes) filed into the drive`,
+    claim: `"${input.title}" (${minted.mediaType}, ${minted.byteSize} bytes) filed into the drive`,
     entityType: 'core.content_item',
     entityId: contentId,
   });
-  return { content_id: contentId, deduped };
+  return { content_id: contentId, deduped: minted.deduped };
 }
 
 const RENAME_DOCUMENT: CommandDefinition = {

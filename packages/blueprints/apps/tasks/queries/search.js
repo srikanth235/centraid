@@ -46,6 +46,11 @@ export default async ({ input, ctx }) => {
           })
         : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+    // Blob-backed bytes serve as same-origin URLs (issue #296).
+    const srcOf = (c) =>
+      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+        ? `/centraid/_vault/blobs/${c.content_id}`
+        : c?.content_uri;
     const attByTask = new Map();
     for (const a of attachmentRows) {
       const content = contentById.get(a.content_id);
@@ -57,7 +62,7 @@ export default async ({ input, ctx }) => {
         is_primary: a.is_primary,
         media_type: content?.media_type ?? 'application/octet-stream',
         title: content?.title ?? null,
-        content_uri: content?.content_uri ?? '',
+        content_uri: srcOf(content) ?? '',
         byte_size: content?.byte_size ?? 0,
       });
     }

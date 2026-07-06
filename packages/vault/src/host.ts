@@ -126,6 +126,38 @@ export function updateVaultPresentation(
   return current as VaultPresentation;
 }
 
+/**
+ * Merge a byte-custody patch into `core_vault.settings_json` (owner act,
+ * issue #296): the `blob_store` bag (fs | s3 endpoint/bucket/region/prefix/
+ * encrypt — credentials NEVER live here, they are harness-ambient) and the
+ * `media.location` GPS policy (keep | strip). The custody facade re-reads
+ * settings on every use, so a change takes effect without a reopen.
+ */
+export function updateBlobStoreSettings(
+  db: VaultDb,
+  patch: {
+    blob_store?: Record<string, unknown> | null;
+    media_location?: 'keep' | 'strip' | null;
+  },
+): Record<string, unknown> {
+  const settings = readVaultSettings(db);
+  if ('blob_store' in patch) {
+    if (patch.blob_store === null) delete settings.blob_store;
+    else settings.blob_store = patch.blob_store;
+  }
+  if ('media_location' in patch) {
+    const media =
+      settings.media !== null && typeof settings.media === 'object' && !Array.isArray(settings.media)
+        ? (settings.media as Record<string, unknown>)
+        : {};
+    if (patch.media_location === null) delete media.location;
+    else media.location = patch.media_location;
+    settings.media = media;
+  }
+  db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
+  return settings;
+}
+
 export interface EnrolledApp {
   appId: string;
   signingKey: string;

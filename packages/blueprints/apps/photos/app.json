@@ -37,6 +37,7 @@
         "type": "object",
         "properties": {
           "data_uri": { "type": "string", "minLength": 6 },
+          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
           "kind": { "type": "string", "enum": ["photo", "video", "audio", "scan"] },
           "captured_at": { "type": "string" },
           "title": { "type": "string" },
@@ -44,7 +45,6 @@
           "height": { "type": "integer", "minimum": 1 },
           "duration_s": { "type": "number", "minimum": 0 }
         },
-        "required": ["data_uri"],
         "additionalProperties": false
       },
       "output": {

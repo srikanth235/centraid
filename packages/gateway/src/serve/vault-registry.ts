@@ -229,9 +229,13 @@ export class VaultRegistry {
   }
 
   /**
-   * Delete a vault: plane stopped, its directory (both SQLite files and the
-   * appext exports under it) removed. ADMIN act — CLI/host only, never HTTP.
-   * The LAST vault is protected so a gateway always has something to serve.
+   * Delete a vault: plane stopped, its directory (both SQLite files, the
+   * blob CAS and the appext exports under it) removed, and any remote blob
+   * tier purged best-effort (issue #296 — deleting a vault must not leave
+   * the owner's bytes billing in a bucket forever; a crash here costs
+   * orphan objects, which any later reconcile against the empty set finds).
+   * ADMIN act — CLI/host only, never HTTP. The LAST vault is protected so
+   * a gateway always has something to serve.
    */
   delete(vaultId: string): void {
     const plane = this.require(vaultId);
@@ -241,10 +245,27 @@ export class VaultRegistry {
         'cannot delete the last vault — a gateway always hosts at least one',
       );
     }
+    // The remote tier resolves synchronously inside purgeRemote — BEFORE
+    // stop() closes the db handles — and the deletes then run detached:
+    // remote latency must not block the admin act.
+    const purge = plane.db.blobs.purgeRemote();
     plane.stop();
     this.planes.delete(vaultId);
     this.scannedDirs.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });
+    void purge
+      .then((shas) => {
+        if (shas.length > 0) {
+          this.logger.info(
+            `vault registry: purged ${shas.length} remote blob(s) of deleted vault ${vaultId}`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `vault registry: remote blob purge for deleted vault ${vaultId} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     this.logger.info(`vault registry: deleted vault ${vaultId} ("${plane.name}")`);
   }
 

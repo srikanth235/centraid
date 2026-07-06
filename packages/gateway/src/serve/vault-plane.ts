@@ -162,7 +162,31 @@ export class VaultPlane {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
     this.dir = options.dir;
-    this.db = openVaultDb({ dir: options.dir });
+    // S3 blob-store credentials are HARNESS-AMBIENT (issue #296 §2, the
+    // #290 broker posture): they live in the gateway process environment,
+    // never in settings or vault rows. A vault whose settings name an s3
+    // tier without the env pair stays local-only and the replication sweep
+    // reports the gap instead of failing writes.
+    this.db = openVaultDb({
+      dir: options.dir,
+      s3Credentials: () => {
+        const accessKeyId = process.env.CENTRAID_S3_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.CENTRAID_S3_SECRET_ACCESS_KEY;
+        if (!accessKeyId || !secretAccessKey) {
+          return Promise.reject(
+            new Error(
+              's3 blob store configured but CENTRAID_S3_ACCESS_KEY_ID / CENTRAID_S3_SECRET_ACCESS_KEY are not in the gateway environment (issue #296: creds are harness-ambient, never settings)',
+            ),
+          );
+        }
+        const sessionToken = process.env.CENTRAID_S3_SESSION_TOKEN;
+        return Promise.resolve({
+          accessKeyId,
+          secretAccessKey,
+          ...(sessionToken ? { sessionToken } : {}),
+        });
+      },
+    });
     this.boot = ensureVaultBootstrapped(this.db, {
       ownerName: options.ownerName ?? 'Owner',
       ...(options.vaultId ? { vaultId: options.vaultId } : {}),
@@ -731,13 +755,33 @@ export class VaultPlane {
         result.grantsExpired +
         result.sharesExpired +
         result.contentPurged +
-        result.retentionDeleted;
+        result.retentionDeleted +
+        result.blobsReclaimed +
+        result.stagingExpired;
       if (touched > 0) {
         this.logger.info(
           `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
-            `contentPurged=${result.contentPurged} retentionDeleted=${result.retentionDeleted}`,
+            `contentPurged=${result.contentPurged} retentionDeleted=${result.retentionDeleted} ` +
+            `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`,
         );
       }
+      // Blob custody maintenance (issue #296): replicate to the remote tier
+      // and reconcile orphans, detached — remote latency never blocks the
+      // lifecycle sweep, and a vault with no remote tier no-ops.
+      void this.gateway
+        .sweepBlobs(this.ownerCredential)
+        .then((blobs) => {
+          if (blobs.replicated.length + blobs.orphansDeleted.length + blobs.missing.length > 0) {
+            this.logger.info(
+              `vault plane: blob sweep replicated=${blobs.replicated.length} orphansDeleted=${blobs.orphansDeleted.length} missing=${blobs.missing.length}`,
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
     } catch (err) {
       this.logger.warn(
         `vault plane: sweep failed: ${err instanceof Error ? err.message : String(err)}`,

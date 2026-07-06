@@ -14,6 +14,11 @@
 
 /** The shared attachment projection — see library.js for the shape's home. */
 function attachmentsBySubject(subjectType, attachments, contentById) {
+  // Blob-backed bytes serve as same-origin URLs (issue #296).
+  const srcOf = (c) =>
+    typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      ? `/centraid/_vault/blobs/${c.content_id}`
+      : c?.content_uri;
   const bySubject = new Map();
   for (const a of attachments) {
     if (a.subject_type !== subjectType) continue;
@@ -26,7 +31,7 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
       is_primary: a.is_primary,
       media_type: content?.media_type ?? 'application/octet-stream',
       title: content?.title ?? null,
-      content_uri: content?.content_uri ?? '',
+      content_uri: srcOf(content) ?? '',
       byte_size: content?.byte_size ?? 0,
     });
   }

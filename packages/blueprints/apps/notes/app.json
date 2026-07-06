@@ -365,6 +365,11 @@
             "type": "string",
             "minLength": 6
           },
+          "staged_sha": {
+            "type": "string",
+            "minLength": 64,
+            "maxLength": 64
+          },
           "title": {
             "type": "string"
           },
@@ -373,7 +378,7 @@
             "enum": ["photo", "manual", "receipt", "warranty", "contract", "embed", "other"]
           }
         },
-        "required": ["subject_id", "data_uri"],
+        "required": ["subject_id"],
         "additionalProperties": false
       },
       "output": {

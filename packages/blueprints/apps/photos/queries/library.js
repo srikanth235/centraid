@@ -120,13 +120,28 @@ export default async ({ input, ctx }) => {
       albumIdsByAsset.get(entry.target_id).push(entry.collection_id);
     }
 
+    // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
+    // the client gets same-origin serve URLs instead (Range, immutable
+    // caching, server thumb variants); inline data: URIs pass through.
+    const BLOB_ROUTE = '/centraid/_vault/blobs';
+    const srcOf = (content) => {
+      const uri = content?.content_uri;
+      if (typeof uri !== 'string') return { src: null, thumb: null };
+      if (!uri.startsWith('blob:')) return { src: uri, thumb: null };
+      const src = `${BLOB_ROUTE}/${content.content_id}`;
+      return { src, thumb: `${src}?variant=thumb` };
+    };
+
     const join = (asset) => {
       const content = contentById.get(asset.content_id);
       const albumIds = albumIdsByAsset.get(asset.asset_id) ?? [];
+      const { src, thumb } = srcOf(content);
       return {
         ...asset,
         favorite: starredIds.has(asset.content_id) ? 1 : 0,
-        content_uri: content?.content_uri ?? null,
+        content_uri: src,
+        thumb_uri: thumb,
+        byte_size: content?.byte_size ?? null,
         media_type: content?.media_type ?? null,
         title: content?.title ?? null,
         // The real timestamp: capture time when the camera recorded one,

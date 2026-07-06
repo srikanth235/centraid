@@ -3,10 +3,19 @@
 // connections; every read and typed command walks identity → consent →
 // contract → execution → evidence. It stays a thin, mostly declarative
 // interpreter over the consent and capability tables: no domain logic, no
-// reasoning, no rendering, no byte custody.
+// reasoning, no rendering. Byte custody (issue #296) rides the same door —
+// staging is pre-model (no receipt until a command claims), egress is
+// consent-checked resolution; the bytes themselves live behind db.blobs.
 
 import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
+import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
+import {
+  stageBlobBytes,
+  type StageBlobOptions,
+  type StagedBlob,
+} from '../blob/staging.js';
+import type { ReconcileResult } from '../blob/custody.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
@@ -936,6 +945,103 @@ export class Gateway {
   discardImport(cred: Credential, batchId: string): { receiptId: string } {
     const owner = this.requireOwner(cred, 'only the owner discards imports (v0)');
     return discardBatch(this.db, owner, batchId);
+  }
+
+  /**
+   * Blob ingress (issue #296 §3): hash raw bytes into the local CAS and
+   * record a staging row. NOT a vault write — no receipt, no content item;
+   * the command that claims the sha (`core.attach` / `core.add_document` /
+   * `media.add_asset` with `staged_sha`) is the write, and mints the
+   * receipt. Unclaimed stages sweep after the TTL. Any caller that may act
+   * can stage; claiming is where consent bites.
+   */
+  stageBlob(cred: Credential, options: Omit<StageBlobOptions, 'stagedBy'>): StagedBlob {
+    const identity = this.identify(cred);
+    if (!identity.mayAct) {
+      throw new GatewayError('consent', 'readonly devices stage nothing');
+    }
+    return stageBlobBytes(this.db, { ...options, stagedBy: identity.callerId });
+  }
+
+  /**
+   * Blob egress resolution (issue #296 §5): consent (read on
+   * core.content_item, receipted) plus the DERIVED reachability rule — the
+   * bytes serve only when some edge in the model claims them. Returns
+   * resolution metadata; the transport streams bytes from custody itself
+   * (`db.blobs.open`), so Range never crosses this boundary.
+   */
+  resolveBlob(
+    cred: Credential,
+    contentId: string,
+    options: { variant?: string; purpose?: string } = {},
+  ): BlobResolveOutcome & { receiptId?: string } {
+    const identity = this.identify(cred);
+    const purpose = options.purpose ?? 'dpv:ServiceProvision';
+    const consent = evaluateConsent(
+      this.db.vault,
+      identity,
+      'core',
+      'content_item',
+      'read',
+      purpose,
+    );
+    if (consent.decision === 'deny') {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId: consent.grantId,
+        invocationId: null,
+        action: 'read',
+        objectType: 'core.content_item',
+        objectId: contentId,
+        purpose,
+        decision: 'deny',
+        detail: { failing: consent.failing, surface: 'blob' },
+      });
+      throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
+    }
+    const outcome = resolveServableBlob(this.db.vault, contentId, options.variant);
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: consent.grantId,
+      invocationId: null,
+      action: 'read',
+      objectType: 'core.content_item',
+      objectId: contentId,
+      purpose,
+      decision: outcome.status === 'ok' ? 'allow' : 'deny',
+      detail: {
+        surface: 'blob',
+        variant: options.variant ?? 'original',
+        ...(outcome.status === 'ok' ? {} : { failing: outcome.status }),
+      },
+    });
+    return { ...outcome, receiptId };
+  }
+
+  /**
+   * Standing duty: blob replication + reconciliation (issue #296 §6).
+   * Pushes local bytes the remote tier lacks, deletes remote orphans
+   * nothing claims, and reports shas missing from BOTH tiers (integrity
+   * errors are surfaced, never papered over). Owner-only, receipted.
+   */
+  async sweepBlobs(cred: Credential): Promise<ReconcileResult & { receiptId: string }> {
+    const owner = this.identify(cred);
+    if (owner.kind !== 'owner-device')
+      throw new GatewayError('consent', 'only the owner sweeps blob custody');
+    const result = await this.db.blobs.reconcile(liveBlobShas(this.db.vault));
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: null,
+      invocationId: null,
+      action: 'act consent.blob_sweep',
+      objectType: 'core.content_item',
+      objectId: null,
+      purpose: null,
+      decision: 'allow',
+      detail: {
+        orphansDeleted: result.orphansDeleted.length,
+        replicated: result.replicated.length,
+        missing: result.missing,
+      },
+    });
+    return { ...result, receiptId };
   }
 
   /** Standing duty: ingest customs — ICS events enter through the border post. */

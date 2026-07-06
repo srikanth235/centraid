@@ -1,8 +1,9 @@
 /**
- * Ingest one file into the library through media.add_asset. The bytes ride
- * in as a data: URI and land as a deduped canonical content item: identical
- * bytes collapse onto one asset, and re-uploading a deleted photo restores
- * it. Kind is inferred from the media type when not given. Risk low.
+ * Ingest one file into the library through media.add_asset. Bytes arrive
+ * either STAGED (issue #296: the app streamed them to /_vault/blobs and
+ * claims the sha here — large files, EXIF read server-side) or as a small
+ * inline data: URI. Identical bytes collapse onto one asset, and
+ * re-uploading a deleted photo restores it. Risk low.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
@@ -12,7 +13,9 @@ export default async ({ body, ctx }) => {
     const outcome = await ctx.vault.invoke({
       command: 'media.add_asset',
       input: {
-        data_uri: String(input.data_uri ?? ''),
+        ...(input.staged_sha != null
+          ? { staged_sha: String(input.staged_sha) }
+          : { data_uri: String(input.data_uri ?? '') }),
         ...(input.kind != null ? { kind: String(input.kind) } : {}),
         ...(input.captured_at != null ? { captured_at: String(input.captured_at) } : {}),
         ...(input.title != null ? { title: String(input.title) } : {}),
