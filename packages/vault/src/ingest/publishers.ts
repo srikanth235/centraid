@@ -6,6 +6,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
+import { promoteStagedBlob } from '../blob/promote.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import type { Publisher, PublishedWrite } from './staging.js';
 
@@ -199,6 +200,8 @@ export interface MessagePayload {
   body: string;
   /** Normalized subject — the thread grouping key. */
   threadKey: string;
+  /** Staged blob shas the parser hashed into the CAS (issue #296). */
+  attachments?: { stagedSha: string; filename: string; mediaType: string; byteSize: number }[];
 }
 
 /** Dedupe-or-insert a plain-text body as a canonical content item. */
@@ -323,6 +326,42 @@ const messagePublisher: Publisher = {
         body.contentId,
         p.messageId,
       );
+    // Email attachments (issue #296): the parser staged the bytes; publish
+    // is the claim — content items promote from the staging band and pin to
+    // the message with the same edge core.attach writes.
+    for (const att of p.attachments ?? []) {
+      const promoted = promoteStagedBlob(
+        {
+          vault,
+          now,
+          newId: uuidv7,
+          wrote: (type, id) => wrote.push({ type, id }),
+          creatorPartyId: senderId,
+        },
+        att.stagedSha,
+        { title: att.filename },
+      );
+      const isFirst = vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_attachment WHERE subject_type = 'social.message' AND subject_id = ?`,
+        )
+        .get(messageId) as { n: number };
+      const attachmentId = uuidv7();
+      vault
+        .prepare(
+          `INSERT INTO core_attachment (attachment_id, subject_type, subject_id, content_id, role, is_primary, created_at)
+           VALUES (?, 'social.message', ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          attachmentId,
+          messageId,
+          promoted.contentId,
+          promoted.mediaType.startsWith('image/') ? 'photo' : 'other',
+          isFirst.n === 0 ? 1 : 0,
+          now,
+        );
+      wrote.push({ type: 'core.attachment', id: attachmentId });
+    }
     return { entityId: messageId, wrote };
   },
   update() {

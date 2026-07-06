@@ -191,7 +191,7 @@ export {
 } from './ingest/staging.js';
 export { PUBLISHERS } from './ingest/publishers.js';
 export { stageFile, type StageFileOptions, type StageFileResult } from './ingest/stage-file.js';
-export { parseMbox, threadKey, type MboxMessage } from './ingest/mbox.js';
+export { parseMbox, threadKey, type MboxMessage, type MboxAttachment } from './ingest/mbox.js';
 export { parseTransactionsCsv, parseCsvRows, type CsvTransaction } from './ingest/csv.js';
 export { readZipEntries, type ZipEntry } from './ingest/zip.js';
 export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from './ingest/vcard.js';

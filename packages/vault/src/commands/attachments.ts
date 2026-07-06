@@ -29,6 +29,7 @@ const SUBJECT_PK: Record<string, string> = {
   'schedule.task': 'task_id',
   'knowledge.note': 'note_id',
   'social.thread': 'thread_id',
+  'social.message': 'message_id',
   'health.vital': 'vital_id',
   'finance.recurring_series': 'series_id',
   'business.client': 'client_id',

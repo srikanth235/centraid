@@ -18,6 +18,7 @@
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
+import { releaseBatchHold } from '../blob/staging.js';
 import { nowIso, uuidv7 } from '../ids.js';
 import { pkColumn } from '../gateway/execution.js';
 import { writeProvenance, writeReceipt } from './../gateway/evidence.js';
@@ -455,6 +456,9 @@ export function applyBatchTx(
       JSON.stringify({ created, updated, skipped, failed: failed.length, total: rows.length }),
       batchId,
     );
+  // Publish releases the batch's blob holds (issue #296): claimed shas are
+  // model now; anything left (a failed row's attachment) resumes its TTL.
+  releaseBatchHold(vault, batchId);
   vault
     .prepare('UPDATE sync_connection SET last_run_at = ? WHERE connection_id = ?')
     .run(now, batch.connection_id);
@@ -520,6 +524,9 @@ export function discardBatch(db: VaultDb, owner: Identity, batchId: string): { r
         `UPDATE sync_import_batch SET status = 'discarded', resolved_at = ? WHERE batch_id = ?`,
       )
       .run(nowIso(), batchId);
+    // Discard releases the batch's blob holds (issue #296): nothing claimed
+    // the staged bytes, so the TTL sweep reclaims them.
+    releaseBatchHold(db.vault, batchId);
     db.vault.exec('COMMIT');
   } catch (err) {
     db.vault.exec('ROLLBACK');

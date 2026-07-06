@@ -6,6 +6,7 @@
 
 import type { VaultDb } from '../db.js';
 import type { Identity } from '../gateway/types.js';
+import { stageBlobBytes } from '../blob/staging.js';
 import { parseIcs } from './ics.js';
 import { parseVcards } from './vcard.js';
 import { parseMbox, threadKey } from './mbox.js';
@@ -81,7 +82,18 @@ function partyCandidates(text: string): StageCandidate[] {
   }));
 }
 
-function messageCandidates(text: string): StageCandidate[] {
+/**
+ * Email attachments go through the blob staging band (issue #296): bytes
+ * hash into the CAS NOW (the spool pipeline sniffs/extracts on the way),
+ * the payload carries shas, and the message publisher claims them at
+ * publish. A batch hold (applied after the batch id exists) pins the stage
+ * past the TTL while the owner reviews.
+ */
+function messageCandidates(
+  db: VaultDb,
+  text: string,
+  stagedShas: string[],
+): StageCandidate[] {
   return parseMbox(text).map((message) => ({
     entityType: 'social.message',
     externalId: message.messageId,
@@ -93,6 +105,20 @@ function messageCandidates(text: string): StageCandidate[] {
       sentAt: message.sentAt,
       body: message.body,
       threadKey: threadKey(message.subject),
+      attachments: message.attachments.map((a) => {
+        const staged = stageBlobBytes(db, {
+          bytes: a.data,
+          mediaType: a.mediaType,
+          filename: a.filename,
+        });
+        stagedShas.push(staged.sha256);
+        return {
+          stagedSha: staged.sha256,
+          filename: a.filename,
+          mediaType: staged.mediaType,
+          byteSize: staged.byteSize,
+        };
+      }),
     } satisfies MessagePayload as unknown as Record<string, unknown>,
   }));
 }
@@ -171,9 +197,10 @@ function baseCurrency(db: VaultDb): string {
 
 /** Route ONE file's content to candidates. Unknown extensions yield none. */
 function candidatesFor(
+  db: VaultDb,
   filename: string,
   text: string,
-  opts: { accountName: string; currency: string },
+  opts: { accountName: string; currency: string; stagedShas: string[] },
 ): StageCandidate[] | null {
   switch (extension(filename)) {
     case 'ics':
@@ -182,7 +209,7 @@ function candidatesFor(
     case 'vcard':
       return partyCandidates(text);
     case 'mbox':
-      return messageCandidates(text);
+      return messageCandidates(db, text, opts.stagedShas);
     case 'csv':
       return csvCandidates(text, opts);
     default:
@@ -205,22 +232,30 @@ export function stageFile(
   const unrouted: string[] = [];
   let kind: string;
   const candidates: StageCandidate[] = [];
+  // Blob shas the parsers staged (email attachments) — pinned to the batch
+  // below so the review pause never races the staging TTL (issue #296).
+  const stagedShas: string[] = [];
 
   if (extension(options.filename) === 'zip') {
     kind = 'file.takeout';
     const buffer =
       typeof options.data === 'string' ? Buffer.from(options.data, 'base64') : options.data;
     for (const entry of readZipEntries(buffer)) {
-      const routed = candidatesFor(entry.name, entry.data.toString('utf8'), {
+      const routed = candidatesFor(db, entry.name, entry.data.toString('utf8'), {
         accountName: stem(entry.name),
         currency,
+        stagedShas,
       });
       if (routed === null) unrouted.push(entry.name);
       else candidates.push(...routed);
     }
   } else {
     const text = typeof options.data === 'string' ? options.data : options.data.toString('utf8');
-    const routed = candidatesFor(options.filename, text, { accountName, currency });
+    const routed = candidatesFor(db, options.filename, text, {
+      accountName,
+      currency,
+      stagedShas,
+    });
     if (routed === null) {
       throw new Error(
         `no importer for "${options.filename}" — supported: .ics, .vcf, .mbox, .csv, .zip`,
@@ -232,5 +267,9 @@ export function stageFile(
 
   const connectionId = ensureConnection(db, { kind, label: options.filename });
   const result = stageCandidates(db, importer, connectionId, candidates, PUBLISHERS);
+  if (stagedShas.length > 0) {
+    const hold = db.vault.prepare('UPDATE blob_staging SET held_by_batch = ? WHERE sha256 = ?');
+    for (const sha of stagedShas) hold.run(result.batchId, sha);
+  }
   return { ...result, kind, unrouted };
 }
