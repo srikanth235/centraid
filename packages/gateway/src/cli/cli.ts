@@ -17,6 +17,7 @@
  *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (admin plane, #289)
  *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
+ *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
  *   centraid-gateway --help
  *   centraid-gateway --version
  */
@@ -30,6 +31,7 @@ import { readOrMintToken, readPersistedToken } from './token.js';
 import { seedRunnerPrefs } from './runner-prefs.js';
 import { commandVault } from './vault-admin.js';
 import { commandDevices, commandPair } from './device-admin.js';
+import { commandKey } from './key-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 
 const PKG_VERSION = '0.1.0';
@@ -60,12 +62,19 @@ function usage(): never {
       '  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]',
       '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
       '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
+      '  centraid-gateway key status  --data-dir <path> --vault <name-or-id>',
+      '  centraid-gateway key export  --data-dir <path> --vault <name-or-id> --out <file>',
+      '  centraid-gateway key restore --data-dir <path> --vault <name-or-id> --from <file>',
+      '  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
       '',
-      'vault/pair/devices are the ADMIN plane (issue #289): vault lifecycle,',
-      'pairing tickets, and device enrollment are landlord acts guarded by',
-      'shell access to this box — they never ride HTTP.',
+      'vault/pair/devices/key are the ADMIN plane (issue #289): vault',
+      'lifecycle, pairing tickets, device enrollment and seal-key custody',
+      'are landlord acts guarded by shell access to this box — they never',
+      'ride HTTP. key export/restore are the recovery story for sealed',
+      'secrets (issue #298): copying a vault directory carries ciphertext',
+      'only; the key travels ONLY through these receipted gestures.',
       '',
       'serve flags override the config file. --data-dir is required if no',
       '--config is supplied (the config file otherwise carries dataDir).',
@@ -256,6 +265,9 @@ async function main(): Promise<void> {
       return;
     case 'devices':
       await commandDevices(rest, fail);
+      return;
+    case 'key':
+      await commandKey(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);
