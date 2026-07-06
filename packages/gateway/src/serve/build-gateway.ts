@@ -602,6 +602,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         transcriptsDbFile: workspace.transcriptsDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
+        vaultLabel: () => ({ id: vaultId, name: plane.name }),
         runAutomation: ({ automationRef, runId }) =>
           fireAutomation(automationRef, {
             runId,

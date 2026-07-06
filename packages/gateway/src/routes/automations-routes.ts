@@ -33,11 +33,13 @@ import {
   ConversationStore,
   AnalyticsStore,
   InsightsStore,
+  ASSISTANT_APP_ID,
   makeTranscriptsDbProvider,
   type Item,
   type Turn,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
+  type InsightsSourceKey,
   type RunKind,
   type RunStreamEvent,
   type RunSummary,
@@ -55,6 +57,9 @@ export interface AutomationsRouteOptions {
   analytics: AnalyticsStore;
   /** Insights aggregator over the same rollup. */
   insights: InsightsStore;
+  /** Identity of the request's scoped vault (#289), echoed into the
+   *  insights payload so the screen can name which vault it shows. */
+  vaultLabel?: () => { id: string; name: string };
   /**
    * Fire an automation now (fire-and-forget). Injected so `serve()` wires
    * `runAutomation` with the gateway's dirs + runner, and tests can
@@ -353,12 +358,29 @@ export function makeAutomationsRouteHandler(
     try {
       if (isInsights && method === 'GET') {
         const windowDays = Number(url.searchParams.get('windowDays'));
+        // Source labels live on disk, not in a table to join: resolve the
+        // automation refs and app ids in the rollup to their manifest names.
+        // Best-effort — an unreadable registry just falls back to raw ids.
+        const [autos, apps] = await Promise.all([
+          automation.list(codeAppsDir()).catch(() => ({ rows: [], errors: [] })),
+          opts.store.listAppsWithMeta().catch(() => []),
+        ]);
+        const nameByRef = new Map(autos.rows.map((r) => [r.ref, r.name]));
+        const nameByApp = new Map(apps.map((a) => [a.id, a.name ?? a.id]));
+        const resolveSource = (key: InsightsSourceKey): string | undefined => {
+          if (key.automationRef) return nameByRef.get(key.automationRef) ?? key.automationRef;
+          if (key.appId === ASSISTANT_APP_ID) return 'Vault assistant';
+          if (key.appId) return nameByApp.get(key.appId) ?? key.appId;
+          return undefined;
+        };
         return sendJson(
           res,
           200,
-          opts.insights.summary(
-            Number.isFinite(windowDays) && windowDays > 0 ? { windowDays } : {},
-          ),
+          opts.insights.summary({
+            ...(Number.isFinite(windowDays) && windowDays > 0 ? { windowDays } : {}),
+            resolveSource,
+            ...(opts.vaultLabel ? { vault: opts.vaultLabel() } : {}),
+          }),
         );
       }
 
