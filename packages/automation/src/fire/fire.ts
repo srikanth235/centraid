@@ -197,6 +197,46 @@ export async function runFire(
     onLog,
   });
 
+  // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
+  // never fires its connector — the skip is logged, and since connectors are
+  // cursor-based, the next healthy run catches up over the accumulated gap
+  // in one fire. Best-effort: an unreadable status (no grant yet) lets the
+  // run proceed to sync.begin_run's hard gate rather than dying silently.
+  if (row.manifest.connector && vaultBridge) {
+    const status = await connectionStatus(vaultBridge, row.manifest.connector).catch(
+      () => undefined,
+    );
+    if (status === 'paused' || status === 'needs-auth') {
+      onLog(
+        'warn',
+        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" is ${status}`,
+      );
+      const endedAt = Date.now();
+      const outcomeSkipped: HandlerOutcome = {
+        ok: false,
+        error: `connection is ${status}`,
+        logs: [],
+        toolBatches: 0,
+        agentCalls: 0,
+      };
+      return {
+        outcome: outcomeSkipped,
+        record: {
+          automationRef: opts.automationRef,
+          automationName: row.name,
+          runId,
+          startedAt,
+          endedAt,
+          durationMs: endedAt - startedAt,
+          ok: false,
+          error: `connection is ${status}`,
+          toolBatches: 0,
+          agentCalls: 0,
+        },
+      };
+    }
+  }
+
   let outcome: HandlerOutcome;
   try {
     outcome = await runHandler({
@@ -216,6 +256,9 @@ export async function runFire(
       ...(row.manifest.outputSchema ? { outputSchema: row.manifest.outputSchema } : {}),
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
+      ...(row.manifest.connector
+        ? { connector: { tools: row.manifest.requires.tools ?? [] } }
+        : {}),
     });
   } finally {
     await dispatch.close().catch(() => undefined);
@@ -278,4 +321,26 @@ export async function runFire(
     agentCalls: outcome.agentCalls,
   };
   return { outcome, record };
+}
+
+/** Read one connection's status through the automation's consented bridge. */
+async function connectionStatus(
+  vault: VaultBridge,
+  connector: { kind: string; label: string },
+): Promise<string | undefined> {
+  const reply = await vault({
+    op: 'read',
+    payload: {
+      entity: 'sync.connection',
+      where: [
+        { column: 'kind', op: 'eq', value: connector.kind },
+        { column: 'label', op: 'eq', value: connector.label },
+      ],
+      limit: 1,
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  if (!reply.ok) return undefined;
+  const rows = (reply.result as { rows?: { status?: unknown }[] })?.rows ?? [];
+  return typeof rows[0]?.status === 'string' ? (rows[0].status as string) : undefined;
 }

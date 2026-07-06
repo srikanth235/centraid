@@ -25,9 +25,7 @@ Phase 3 — interactive one-shot pulls:
 
 Phase 4 — connections + broker invariants:
 
-- [ ] Commit 6 — vault: connection cursors + run log; connector runtime
-  contract (principal pinning, requires-as-allowlist, `ctx.agent` forbidden
-  in connector handlers, liveness states)
+- [x] Commit 6 — connector contract and broker gates
 
 ## What changed
 
@@ -164,6 +162,44 @@ Commit 5 — agent staging commands:
   publish.
 - `packages/gateway/src/serve/vault-plane.ts` — sync commands registered.
 
+Commit 6 — connector contract and broker gates:
+
+- `packages/automation/src/manifest/manifest.ts` — the `connector` block
+  (`kind`, `label`, `principal?`): declares an automation a published
+  connector. Contract checks at parse time: a connector requires a
+  non-empty `requires.tools` allowlist (resolved, not hinted) and a
+  `vault` block (it stages through `sync.stage_rows` or nothing).
+- `packages/automation/src/handler/runner.ts` — the two runtime gates:
+  `requires.tools` enforced as a HARD per-call allowlist over `ctx.tool`
+  (blocked calls error without reaching the dispatcher; allowed calls in
+  the same batch still run), and `ctx.agent` forbidden entirely in
+  connector handlers (agents write code, not data).
+- `packages/automation/src/fire/fire.ts` — the honest-liveness fire gate:
+  a paused / needs-auth connection never runs its connector (skip logged;
+  cursor-based connectors catch up over the gap in one healthy run);
+  unreadable status fails open to `sync.begin_run`'s hard gate.
+- `packages/vault/src/commands/sync.ts` — the connection lifecycle:
+  `sync.begin_run` (principal pinning: first observed principal pins,
+  a mismatch flips the connection to `needs-auth` and REFUSES via output
+  — not a thrown rollback, so the health flip commits; paused refuses;
+  a matching re-auth restores active; cursors returned), `sync.finish_run`
+  (run log + failing/active health), `sync.set_cursor` (incremental
+  position as receipted rows), `sync.set_connection_status` (the owner's
+  pause/resume levers, risk medium).
+- `packages/automation/src/fire/connector.test.ts` (new) — 7 tests over
+  the manifest contract and all three runtime gates.
+- `packages/vault/src/commands/sync.test.ts` — 4 lifecycle tests added
+  (pin → mismatch → needs-auth → re-auth; failing/active flips; paused
+  refusal + resume; cursor round-trip).
+- `packages/gateway/src/routes/import-routes.ts` — the health surface:
+  `GET /imports/connections` (every connection + latest run) and
+  `POST /imports/connections/<id>/status` (pause/resume).
+- `apps/desktop/src/renderer/app-import.ts` — Connections section on the
+  Import page: live connections with status/principal/last-run and a
+  Pause/Resume act.
+- `apps/desktop/src/renderer/gateway-client-vault.ts` — connection client
+  calls; `apps/desktop/src/renderer/styles.css` — connection row styles.
+
 ## Decisions
 
 - **Registry beside provenance, not instead of it.** The issue said
@@ -200,6 +236,16 @@ Commit 5 — agent staging commands:
 - **Programmatic ICS/vCard imports stay one-call** (stage + publish in the
   same act) — the pre-spine contract and tests hold; only owner-facing file
   drops pause at review.
+- **begin_run refusals are outputs, not throws.** A thrown handler rolls
+  the command transaction back — which would undo the very needs-auth flip
+  the refusal exists to record. Connector code checks `output.refused`.
+- **The scheduler stays pure.** The liveness gate lives in `runFire` (it
+  covers cron, manual and on-failure fires alike) rather than in the
+  minute-timer, whose fire/evaluate effects stay injected.
+- **Inbox integration is deferred.** Health is fully READABLE state
+  (`sync.connection` + `sync.connection_run` + the Connections section);
+  pushing needs-auth items into a notification surface is follow-up work,
+  noted in the issue.
 - **Merge fallback rule:** a re-pointed row that trips a uniqueness
   constraint means the survivor already holds that relation — the duplicate
   deletes, EXCEPT identifiers, which demote to non-primary (a handle is
@@ -223,6 +269,9 @@ Commit 5 — agent staging commands:
   clean); app-engine 224 green; blueprints 95 green; typecheck green across
   vault/gateway/app-engine/blueprints/desktop.
 
+- Phase 4: vault 275 tests green (4 lifecycle tests added); automation
+  suite green incl. 7 new connector broker tests; desktop typecheck green;
+  full-repo build + typecheck + test battery green.
 - Phase 3: vault 271 tests green (4 new consent-asymmetry tests).
 - Phase 2: vault 267 tests green (incl. 7 staging + 3 merge tests over the
   new spine; the pre-spine ingest suite passes unchanged on the rebased
@@ -240,17 +289,22 @@ npx turbo run typecheck test \
 
 ## Audit
 
-1. **"## What changed" faithfully describes the diff (Commits 1–4, both committed and working-tree)**: PASS — Receipt fully describes all 35 files across Phase 1 (Commits 1–2, both landed on main) and Phase 2 (Commits 3–4, working-tree staged/untracked). Commit 3 spine file counts: sync.ts DDL (1), staging.ts (2 core + 1 test), publishers.ts (1), mbox.ts (1), csv.ts (1), zip.ts (1), stage-file.ts (1), merge.ts (2 core + 1 test) = 10 files. Commit 4 surface: import-routes.ts (2 core + 1 test), app-import.ts (1), gateway-client-vault.ts additions, app-settings.ts, styles.css (5 files). All changes to migrate.ts, schema/tables.ts, parties.ts, import.ts, gateway.ts, build-gateway.ts are present in the diff. No omissions or misrepresentations.
+- "## What changed" faithfully describes the full change set (Commits 1–6, no misrepresentation or omission): PASS
+  Evidence: `git show --stat HEAD~4..HEAD` matches the per-commit file lists exactly — Commit 1 (9 files, demo register), Commit 2 (15 files, host wiring + 4 seed.js generators), Commit 3 (17 files, sync domain v7 + staging spine + mbox/csv/zip/stage-file + merge_party), Commit 4 (8 files, import-routes + Import page), Commit 5 (5 files, sync.stage_rows/publish_batch + Tx cores) — and the working tree (`git status --short`: 10 modified + connector.test.ts new) matches the Commit 6 section item-for-item (manifest connector block, runner allowlist + ctx.agent gates, fire liveness gate, sync lifecycle commands, health routes, Connections shell section, 7 broker tests).
 
-2. **Each [x] checklist item is realized (Commits 1–4)**: PASS — Phase 1 Commits 1–2: all 21 items present in git log (demo register, generators, purge, shell demo section). Phase 2 Commit 3: 8 checklist items — (a) sync domain DDL (sync.ts v7 migration step, tables.ts registry, schema precisely matches receipt: connection/external_entity/import_batch/import_row/connection_cursor/connection_run), (b) staging spine (staging.ts ensureConnection/stageCandidates/publishBatch/discardBatch, publishers.ts per-entity appliers for event/party/message/transaction), (c) file ingesters (mbox.ts RFC 4155, csv.ts RFC 4180, zip.ts Takeout recursion, stage-file.ts extension routing), (d) merge command (merge.ts core.merge_party with PRAGMA discovery + polymorphic re-point + identifier demotion), (e) gateway surfaces (gateway.ts stageImportFile/publishImport/discardImport owner-only), (f) ingest tests (staging.test.ts 7 tests, merge.test.ts 3 tests, both cover named scenarios), (g) vault exports (index.ts exports staging/publishers/mbox/csv/zip/stageFile). Phase 2 Commit 4: 4 checklist items — (a) import routes (import-routes.ts POST/GET /imports, 128 MB cap, import-routes.test.ts over-HTTP suite), (b) gateway mount (build-gateway.ts route mounted), (c) desktop client (gateway-client-vault.ts import client calls vaultImportStage/List/Rows/Publish/Discard), (d) import page (app-import.ts 201 lines, app-settings.ts registration, styles.css import row/history styling). All 12 Phase 2 items verified.
+- Each '- [x]' checklist item (Commits 1–6) is realized — 1–5 in git log, 6 in the working tree: PASS
+  Evidence: commits f71deec/ad17c0f/d46e177/693dd00/9dc0396 realize Commits 1–5 respectively (verified via `git log --oneline -6` + per-commit stats); Commit 6 is realized in the working tree — read-verified: manifest.ts refuses empty requires.tools + missing vault block, runner.ts blocks disallowed ctx.tool calls pre-dispatch and forbids ctx.agent, fire.ts skips paused/needs-auth connections (fails open when status unreadable), sync.ts adds begin_run (principal pin, refusal-as-output) / finish_run / set_cursor / set_connection_status, import-routes.ts adds GET /imports/connections + POST /connections/<id>/status, and connector.test.ts carries the 7 tests over the contract and all three runtime gates.
 
-3. **The "## Checklist" mirrors issue #290's phased scope**: PASS — Issue #290 "Suggested phasing" phase 2 reads: "File-drop imports — Takeout/CSV/MBOX importers over the existing ingest/ spine; generalized staging band + review diff; external_entity map; core.merge_party." Receipt Commits 3–4 deliver exactly: (1) file ingesters (mbox/csv/zip) = done, (2) staging band (sync_import_batch/sync_import_row + stageCandidates/publishBatch) = done, (3) external_entity map (sync_external_entity with connection-id/external_id PK) = done, (4) merge (core.merge_party command with FK re-point + polymorphic handling) = done. Decision 6 policy stances (vault wins conflicts, upstream deletions never delete, one-way ingestion) are encoded in sync.ts schema design (gone_upstream flag, update-not-overwrite staging logic, no write-back columns). The scope exactly matches the phasing outline in issue #290.
+- The "## Checklist" mirrors issue #290's phased scope (the 4 phases of "Suggested phasing"): PASS
+  Evidence: the receipt's four phase headings map one-to-one onto the issue's phasing (1 scenarios → Commits 1–2; 2 file-drop imports incl. staging band, external_entity map, core.merge_party → Commits 3–4; 3 interactive one-shot pulls → Commit 5; 4 connectors headless → Commit 6), and all four of decision 4's broker invariants land in Commit 6 — resolved-not-hinted (manifest parse-time refusal of an empty requires.tools), principal-pinned (sync.begin_run pins the first observed principal, flips needs-auth on mismatch), requires-as-allowlist (runner.ts hard per-call gate before the dispatcher), honest-liveness (fire.ts skip gate + readable sync.connection/connection_run health + pause/resume routes); inbox integration is deferred and honestly noted under Decisions.
 
 ## Steering
 
-1. **Human-steering events (interrupts / redirects mid-task) recorded in the ledger**: PASS — Session 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 has no mid-work steering corrections. All user messages are forward-working: design-phase clarifications precede `/goal` (scope-setting, not steering), and Phase 1 + Phase 2 execution shows no interrupts or mid-task redirects. The transcript contains only task messages, goal directives, and continuation prompts — no evidence of user-initiated course corrections or architectural pivots once work began.
+- Every human-steering event in the transcript is recorded as a ledger row for this receipt: PASS
+  Evidence: a full scan of session 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 (287 user-role messages) found zero steering events — the messages are the initial brainstorm, design-phase clarifications preceding issue creation, the `/goal work on entire scope of #290` directive, and continuation/notification prompts, with no mid-task interrupt or redirect — so no ledger rows were owed and none were appended.
 
-2. **No non-steering messages are recorded as steering**: PASS — Zero false positives. The `/goal` command and "continue" prompts are task-control directives (scope-setting and execution triggers), not mid-work interrupts. Design-phase feedback ("the direction is...") is exploration-phase ordinary conversation. The transcript correctly reflects that Phase 1 and Phase 2 execution proceeded uninterrupted by user corrections to the original scope or approach.
+- No non-steering message is recorded as a steering event: PASS
+  Evidence: the ledger holds no steering rows for this session/issue, so there are no false positives; the `/goal` directive and continuation prompts are task-control messages, not steering, and were correctly left unrecorded.
 
 ## Accounting
 
@@ -275,3 +329,6 @@ npx turbo run typecheck test \
 | claude-code-18f9dd6d-2f0-1783306260-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1939 | 455325 | 658 | 2599 | 0.5125 | 82267 | 1911116 | 110106488 | 530448 | feat(vault): import spine — sync domain, staging band, merge_party (#290)One ing |
 | claude-code-18f9dd6d-2f0-1783306296-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 739 | 457264 | 422 | 1163 | 0.4876 | 82269 | 1911855 | 110563752 | 530870 | feat(gateway+desktop): staged-import routes and the Import page (#290)/centraid/ |
 | claude-code-18f9dd6d-2f0-1783306436-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 8232 | 21271 | 5089005 | 21830 | 51333 | 6.5287 | 90501 | 1933126 | 115652757 | 552700 | feat(vault): agent staging commands — stage freely, publish parks (#290)sync.sta |
+| claude-code-18f9dd6d-2f0-1783307277-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 62028 | 133188 | 29501358 | 75000 | 270216 | 35.5365 | 152529 | 2066314 | 145154115 | 627700 | feat(automation+vault): connector contract and broker gates (#290)The connector  |
+| claude-code-18f9dd6d-2f0-1783307310-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1528 | 540057 | 128 | 1658 | 0.5656 | 152531 | 2067842 | 145694172 | 627828 | xIssue: #290 |
+| claude-code-18f9dd6d-2f0-1783307476-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 877 | 5851 | 4344082 | 2338 | 9066 | 4.5429 | 153408 | 2073693 | 150038254 | 630166 | feat(automation+vault): connector contract and broker gates (#290)The connector  |

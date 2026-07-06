@@ -2,7 +2,7 @@
 // parsed rows freely (risk low), but PUBLISHING them exceeds every agent's
 // ceiling and parks for the owner — the pause between draft and send.
 
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import {
   bootstrapVault,
   createGrant,
@@ -151,4 +151,100 @@ test('the owner publishes directly — no parking above their ceiling', () => {
     purpose: 'dpv:ServiceProvision',
   });
   expect(publish.status).toBe('executed');
+});
+
+describe('connection lifecycle (phase 4)', () => {
+  function beginRun(principal?: string) {
+    return gw.invoke(agent, {
+      command: 'sync.begin_run',
+      input: { kind: 'mcp.gmail', label: 'personal', ...(principal ? { principal } : {}) },
+      purpose: 'dpv:ServiceProvision',
+    });
+  }
+
+  test('first run pins the principal; a mismatch flips needs-auth and refuses', () => {
+    const first = beginRun('me@example.com');
+    expect(first.status).toBe('executed');
+    const runId = (first as { output: { run_id: string } }).output.run_id;
+    const finish = gw.invoke(agent, {
+      command: 'sync.finish_run',
+      input: { run_id: runId, ok: true, staged: 3 },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(finish.status).toBe('executed');
+
+    // The mismatch REFUSES via output (not a thrown rollback — the
+    // needs-auth flip must survive the invocation).
+    const wrong = beginRun('other@example.com');
+    expect(wrong.status).toBe('executed');
+    expect((wrong as { output: { refused: string } }).output.refused).toBe('principal-mismatch');
+    const conn = db.vault
+      .prepare(`SELECT status, principal FROM sync_connection WHERE kind = 'mcp.gmail'`)
+      .get() as { status: string; principal: string };
+    expect(conn).toEqual({ status: 'needs-auth', principal: 'me@example.com' });
+
+    // A matching re-auth restores the connection to active.
+    const recovered = beginRun('me@example.com');
+    expect(recovered.status).toBe('executed');
+    expect(
+      (recovered as { output: { run_id?: string } }).output.run_id,
+    ).toBeTruthy();
+    const after = db.vault
+      .prepare(`SELECT status FROM sync_connection WHERE kind = 'mcp.gmail'`)
+      .get() as { status: string };
+    expect(after.status).toBe('active');
+  });
+
+  test('a failed run flips the connection to failing; a good one restores it', () => {
+    const first = beginRun('me@example.com');
+    const runId = (first as { output: { run_id: string } }).output.run_id;
+    gw.invoke(agent, {
+      command: 'sync.finish_run',
+      input: { run_id: runId, ok: false, error: 'rate limited' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const failing = db.vault
+      .prepare(`SELECT status FROM sync_connection WHERE kind = 'mcp.gmail'`)
+      .get() as { status: string };
+    expect(failing.status).toBe('failing');
+    const run = db.vault
+      .prepare('SELECT status, error FROM sync_connection_run WHERE run_id = ?')
+      .get(runId) as { status: string; error: string };
+    expect(run).toEqual({ status: 'failed', error: 'rate limited' });
+  });
+
+  test('paused means paused — begin_run refuses until the owner resumes', () => {
+    const first = beginRun('me@example.com');
+    const connectionId = (first as { output: { connection_id: string } }).output.connection_id;
+    const pause = gw.invoke(owner, {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'paused' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(pause.status).toBe('executed');
+    const refused = beginRun('me@example.com');
+    expect(refused.status).toBe('executed');
+    expect((refused as { output: { refused: string } }).output.refused).toBe('paused');
+    gw.invoke(owner, {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'active' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(beginRun('me@example.com').status).toBe('executed');
+  });
+
+  test('cursors persist across runs and come back on begin_run', () => {
+    const first = beginRun('me@example.com');
+    const connectionId = (first as { output: { connection_id: string } }).output.connection_id;
+    const set = gw.invoke(agent, {
+      command: 'sync.set_cursor',
+      input: { connection_id: connectionId, key: 'history_id', value: { id: 42017 } },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(set.status).toBe('executed');
+    const next = beginRun('me@example.com');
+    expect((next as { output: { cursors: Record<string, unknown> } }).output.cursors).toEqual({
+      history_id: { id: 42017 },
+    });
+  });
 });

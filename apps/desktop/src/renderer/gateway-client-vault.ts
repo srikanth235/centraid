@@ -349,6 +349,52 @@ export async function vaultImportDiscard(batchId: string): Promise<{ receiptId: 
   return readJson(res, 'discard import');
 }
 
+/** One connection's health (issue #290 phase 4). */
+export interface VaultConnection {
+  connectionId: string;
+  kind: string;
+  label: string;
+  principal: string | null;
+  status: 'active' | 'needs-auth' | 'failing' | 'paused';
+  lastRunAt: string | null;
+  lastRun: {
+    status: string;
+    startedAt: string;
+    staged: number;
+    published: number;
+    error: string | null;
+  } | null;
+}
+
+/** Connection health — every connection with its latest run. */
+export async function vaultConnections(): Promise<VaultConnection[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/imports/connections', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ connections: VaultConnection[] }>(res, 'read connections');
+  return body.connections;
+}
+
+/** Pause or resume a connection (owner act). */
+export async function vaultConnectionSetStatus(
+  connectionId: string,
+  status: 'paused' | 'active',
+): Promise<void> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_vault/imports/connections/${enc(connectionId)}/status`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({ status }),
+    },
+  );
+  await readJson(res, 'set connection status');
+}
+
 /** Purge demo rows — one app's, or every app's when appId is omitted. */
 export async function vaultDemoPurge(
   appId?: string,

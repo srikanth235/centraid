@@ -6,12 +6,15 @@
 // deliberate second act.
 
 import {
+  vaultConnectionSetStatus,
+  vaultConnections,
   vaultImportDiscard,
   vaultImportPublish,
   vaultImportRows,
   vaultImportStage,
   vaultImportsList,
   vaultStatus,
+  type VaultConnection,
   type VaultImportBatch,
 } from './gateway-client.js';
 import { relativeTime } from './app-format.js';
@@ -108,7 +111,59 @@ export async function renderImportPage(input: ImportPageInput): Promise<void> {
   }
   if (!host.isConnected) return;
 
+  // ── Connections (issue #290 phase 4): the health surface ─────────────
+  let connections: VaultConnection[] = [];
+  try {
+    connections = await vaultConnections();
+  } catch {
+    connections = [];
+  }
+  if (!host.isConnected) return;
+
   const sections: HTMLElement[] = [dropSection];
+  const live = connections.filter((c) => !c.kind.startsWith('file.'));
+  if (live.length > 0) {
+    const section = el('div', { class: 'cd-app-settings-section' });
+    section.append(
+      el('div', { class: 'cd-vault-label' }, 'Connections'),
+      note(
+        'Live sources syncing into this vault. A paused connection never runs; needs-auth means the harness is signed into the wrong account.',
+      ),
+    );
+    for (const c of live) {
+      const row = el('div', { class: 'cd-import-connection', 'data-status': c.status }, [
+        el('span', { class: 'cd-import-connection-label' }, `${c.label} · ${c.kind}`),
+        el(
+          'span',
+          { class: 'cd-import-history-sub' },
+          `${c.status}${c.principal ? ` · ${c.principal}` : ''}${
+            c.lastRunAt ? ` · last run ${relativeTime(c.lastRunAt)}` : ''
+          }${c.lastRun?.error ? ` · ${c.lastRun.error}` : ''}`,
+        ),
+      ]);
+      const toggle = el(
+        'button',
+        { class: 'cd-vault-deny-btn', type: 'button' },
+        c.status === 'paused' ? 'Resume' : 'Pause',
+      );
+      toggle.addEventListener('click', () => {
+        (toggle as HTMLButtonElement).disabled = true;
+        vaultConnectionSetStatus(c.connectionId, c.status === 'paused' ? 'active' : 'paused')
+          .then(() => {
+            input.showToast?.(c.status === 'paused' ? 'Connection resumed' : 'Connection paused');
+            rerender();
+          })
+          .catch((err: unknown) => {
+            (toggle as HTMLButtonElement).disabled = false;
+            input.showToast?.(err instanceof Error ? err.message : 'Update failed');
+          });
+      });
+      row.append(toggle);
+      section.append(row);
+    }
+    sections.push(section);
+  }
+
   const drafts = batches.filter((b) => b.status === 'draft');
   const settled = batches.filter((b) => b.status !== 'draft').slice(0, 8);
 

@@ -10,6 +10,8 @@
 //   GET    /centraid/_vault/imports/<batchId>          the batch's rows
 //   POST   /centraid/_vault/imports/<batchId>/publish  apply the draft
 //   POST   /centraid/_vault/imports/<batchId>/discard  drop the draft
+//   GET    /centraid/_vault/imports/connections        connection health
+//   POST   /centraid/_vault/imports/connections/<id>/status  {status: paused|active}
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
@@ -75,6 +77,64 @@ export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'active'>): R
             };
           }),
         });
+      }
+
+      if (method === 'GET' && segments.length === 1 && segments[0] === 'connections') {
+        // The health surface (issue #290 phase 4): every connection with its
+        // latest run — status is READABLE state, sync never dies silently.
+        const connections = plane.gateway.read(owner, {
+          entity: 'sync.connection',
+          orderBy: { column: 'connection_id', dir: 'desc' },
+          limit: 200,
+          purpose,
+        }).rows;
+        const runs = plane.gateway.read(owner, {
+          entity: 'sync.connection_run',
+          orderBy: { column: 'run_id', dir: 'desc' },
+          limit: 500,
+          purpose,
+        }).rows;
+        const latestRun = new Map<unknown, Record<string, unknown>>();
+        for (const run of runs) {
+          if (!latestRun.has(run.connection_id)) latestRun.set(run.connection_id, run);
+        }
+        return sendJson(res, 200, {
+          connections: connections.map((c) => {
+            const run = latestRun.get(c.connection_id);
+            return {
+              connectionId: c.connection_id,
+              kind: c.kind,
+              label: c.label,
+              principal: c.principal,
+              status: c.status,
+              lastRunAt: c.last_run_at,
+              lastRun: run
+                ? {
+                    status: run.status,
+                    startedAt: run.started_at,
+                    staged: run.staged,
+                    published: run.published,
+                    error: run.error,
+                  }
+                : null,
+            };
+          }),
+        });
+      }
+
+      if (
+        method === 'POST' &&
+        segments.length === 3 &&
+        segments[0] === 'connections' &&
+        segments[2] === 'status'
+      ) {
+        const body = await readJson(req);
+        const outcome = plane.gateway.invoke(owner, {
+          command: 'sync.set_connection_status',
+          input: { connection_id: segments[1], status: String(body.status ?? '') },
+          purpose,
+        });
+        return sendJson(res, outcome.status === 'executed' ? 200 : 400, outcome);
       }
 
       if (method === 'GET' && segments.length === 1) {

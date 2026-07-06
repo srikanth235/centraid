@@ -9922,6 +9922,20 @@ select.input option {
   color: var(--text-secondary);
   flex: none;
 }
+.cd-import-connection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+.cd-import-connection-label {
+  font-weight: 600;
+}
+.cd-import-connection[data-status='needs-auth'] .cd-import-connection-label,
+.cd-import-connection[data-status='failing'] .cd-import-connection-label {
+  color: var(--danger, #c0392b);
+}
 .cd-import-history-row {
   display: flex;
   justify-content: space-between;
