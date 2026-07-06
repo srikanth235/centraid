@@ -151,8 +151,18 @@ export interface RunHandlerOptions {
    * happens at the one chokepoint the vault side owns), and `ctx.agent` is
    * forbidden entirely (agents write code, not data — the LLM appears at
    * authoring/repair time, never in the per-sync loop).
+   *
+   * `secrets` (issue #293) is the allowlist for `{{secret:…}}` placeholders
+   * in `ctx.fetch` — `locker:<item_id>:<column>` refs the manifest declared.
    */
-  connector?: { readonly tools: readonly string[] };
+  connector?: { readonly tools: readonly string[]; readonly secrets?: readonly string[] };
+  /**
+   * Host-injected secret resolution for connector `ctx.fetch` (issue #293):
+   * ref → plaintext, backed by the automation agent's `reveal` grant. The
+   * value substitutes into the request at THIS side of the worker boundary
+   * and is scrubbed from every recorded string as a backstop.
+   */
+  resolveSecret?: (ref: string) => Promise<string>;
 }
 
 export interface HandlerOutcome {
@@ -171,9 +181,17 @@ interface PendingState {
   resolved: boolean;
 }
 
+interface FetchSpecWire {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
 type WorkerToParentMessage =
   | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
   | { type: 'agent'; id: number; prompt: string; json?: unknown }
+  | { type: 'fetch'; id: number; spec: FetchSpecWire }
   | { type: 'state'; id: number; method: 'get' | 'set' | 'delete'; key: string; value?: unknown }
   | {
       type: 'runs';
@@ -203,6 +221,54 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
 
   let toolBatches = 0;
   let agentCalls = 0;
+
+  // Secret values resolved for ctx.fetch this run (issue #293). Substitution
+  // is transport-level; this set powers the backstop scrub over everything
+  // the run RECORDS — logs, summary, output, errors.
+  const resolvedSecretValues = new Set<string>();
+  const scrub = (text: string): string => {
+    let out = text;
+    for (const value of resolvedSecretValues) {
+      // Both the raw form and its JSON-escaped form — a secret embedded in
+      // stringified output would otherwise slip the net.
+      for (const needle of [value, JSON.stringify(value).slice(1, -1)]) {
+        if (needle) out = out.replaceAll(needle, '«secret»');
+      }
+    }
+    return out;
+  };
+  const SECRET_REF_RE = /\{\{secret:([^}]+)\}\}/g;
+  const substituteSecrets = async (spec: FetchSpecWire): Promise<FetchSpecWire> => {
+    const allow = new Set(opts.connector?.secrets);
+    const resolved = new Map<string, string>();
+    const substitute = async (text: string): Promise<string> => {
+      const refs = [...text.matchAll(SECRET_REF_RE)].map((m) => m[1]!);
+      let out = text;
+      for (const ref of refs) {
+        if (!allow.has(ref)) {
+          throw new Error(
+            `secret "${ref}" is outside this connector's requires.secrets allowlist (issue #293)`,
+          );
+        }
+        if (!resolved.has(ref)) {
+          if (!opts.resolveSecret) throw new Error('no secret resolver is available for this run');
+          const value = await opts.resolveSecret(ref);
+          resolved.set(ref, value);
+          resolvedSecretValues.add(value);
+        }
+        out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
+      }
+      return out;
+    };
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(spec.headers ?? {})) headers[k] = await substitute(v);
+    return {
+      url: await substitute(spec.url),
+      ...(spec.method ? { method: spec.method } : {}),
+      ...(spec.headers ? { headers } : {}),
+      ...(spec.body !== undefined ? { body: await substitute(spec.body) } : {}),
+    };
+  };
 
   const emit = opts.onRunEvent ?? noopRunEventSink;
   const audit: AuditState = {
@@ -283,6 +349,21 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
       if (state.resolved) return;
       state.resolved = true;
       if (timeoutHandle) clearTimeout(timeoutHandle);
+      // Backstop scrub (issue #293): nothing a run RECORDS may carry a
+      // resolved secret — transport injection is the mechanism, this is the
+      // net under it.
+      if (resolvedSecretValues.size > 0) {
+        if (outcome.error) outcome.error = scrub(outcome.error);
+        if (outcome.summary) outcome.summary = scrub(outcome.summary);
+        if (outcome.output !== undefined) {
+          outcome.output = JSON.parse(scrub(JSON.stringify(outcome.output))) as unknown;
+        }
+        if (outcome.value !== undefined) {
+          outcome.value = JSON.parse(scrub(JSON.stringify(outcome.value))) as unknown;
+        }
+        outcome.logs = outcome.logs.map((l) => ({ ...l, msg: scrub(l.msg) }));
+        for (const entry of persistedEntries) entry.msg = scrub(entry.msg);
+      }
       audit.store.finishTurn({
         turnId: audit.runId,
         endedAt: Date.now(),
@@ -322,14 +403,15 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           const blocked = msg.calls.filter((c) => !allow.has(c.name));
           if (blocked.length > 0) {
             const allowed = msg.calls.filter((c) => allow.has(c.name));
-            void (allowed.length > 0
-              ? dispatchToolBatch({
-                  audit,
-                  toolDispatcher: opts.toolDispatcher,
-                  dispatchCtx,
-                  calls: allowed,
-                })
-              : Promise.resolve([] as Awaited<ReturnType<typeof dispatchToolBatch>>)
+            void (
+              allowed.length > 0
+                ? dispatchToolBatch({
+                    audit,
+                    toolDispatcher: opts.toolDispatcher,
+                    dispatchCtx,
+                    calls: allowed,
+                  })
+                : Promise.resolve([] as Awaited<ReturnType<typeof dispatchToolBatch>>)
             )
               .then((allowedResults) => {
                 let i = 0;
@@ -396,6 +478,49 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         ).then((reply) => {
           send({ type: 'agent-reply', id: msg.id, ...reply });
         });
+        return;
+      }
+      if (msg.type === 'fetch') {
+        // Transport-level secret injection (issue #293): connector-only —
+        // the recorded spec keeps its placeholders; substitution happens
+        // here, past the worker boundary, and the response rides back to
+        // the handler without ever being journaled.
+        if (!opts.connector) {
+          send({
+            type: 'fetch-reply',
+            id: msg.id,
+            ok: false,
+            error: 'ctx.fetch is connector-only (issue #293) — declare manifest.connector',
+          });
+          return;
+        }
+        logs.push({ level: 'info', msg: `fetch ${msg.spec.method ?? 'GET'} ${msg.spec.url}` });
+        void (async () => {
+          const spec = await substituteSecrets(msg.spec);
+          const response = await fetch(spec.url, {
+            method: spec.method ?? 'GET',
+            ...(spec.headers ? { headers: spec.headers } : {}),
+            ...(spec.body !== undefined ? { body: spec.body } : {}),
+            signal: dispatchCtx.abortSignal,
+          });
+          const text = (await response.text()).slice(0, 2 * 1024 * 1024);
+          return {
+            status: response.status,
+            headers: { 'content-type': response.headers.get('content-type') ?? '' },
+            text,
+          };
+        })()
+          .then((result) => {
+            send({ type: 'fetch-reply', id: msg.id, ok: true, result });
+          })
+          .catch((err: unknown) => {
+            send({
+              type: 'fetch-reply',
+              id: msg.id,
+              ok: false,
+              error: scrub(err instanceof Error ? err.message : String(err)),
+            });
+          });
         return;
       }
       if (msg.type === 'state') {

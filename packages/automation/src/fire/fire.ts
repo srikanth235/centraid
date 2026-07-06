@@ -197,6 +197,32 @@ export async function runFire(
     onLog,
   });
 
+  const skipRun = (error: string): { outcome: HandlerOutcome; record: RunRecord } => {
+    const endedAt = Date.now();
+    const outcomeSkipped: HandlerOutcome = {
+      ok: false,
+      error,
+      logs: [],
+      toolBatches: 0,
+      agentCalls: 0,
+    };
+    return {
+      outcome: outcomeSkipped,
+      record: {
+        automationRef: opts.automationRef,
+        automationName: row.name,
+        runId,
+        startedAt,
+        endedAt,
+        durationMs: endedAt - startedAt,
+        ok: false,
+        error,
+        toolBatches: 0,
+        agentCalls: 0,
+      },
+    };
+  };
+
   // Honest liveness (issue #290 phase 4): a paused or needs-auth connection
   // never fires its connector — the skip is logged, and since connectors are
   // cursor-based, the next healthy run catches up over the accumulated gap
@@ -211,29 +237,36 @@ export async function runFire(
         'warn',
         `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" is ${status}`,
       );
-      const endedAt = Date.now();
-      const outcomeSkipped: HandlerOutcome = {
-        ok: false,
-        error: `connection is ${status}`,
-        logs: [],
-        toolBatches: 0,
-        agentCalls: 0,
-      };
-      return {
-        outcome: outcomeSkipped,
-        record: {
-          automationRef: opts.automationRef,
-          automationName: row.name,
-          runId,
-          startedAt,
-          endedAt,
-          durationMs: endedAt - startedAt,
-          ok: false,
-          error: `connection is ${status}`,
-          toolBatches: 0,
-          agentCalls: 0,
-        },
-      };
+      await dispatch.close().catch(() => undefined);
+      return skipRun(`connection is ${status}`);
+    }
+  }
+
+  // Secrets preflight (issue #293 decision 8): every declared secret must
+  // reveal BEFORE the handler runs — one reveal per ref, receipted by the
+  // vault. A trashed/missing item flips the connection to needs-auth (the
+  // same honest-liveness state a wrong login shows) and the run skips.
+  const secretRefs = row.manifest.requires.secrets ?? [];
+  const secretCache = new Map<string, string>();
+  if (row.manifest.connector && secretRefs.length > 0) {
+    if (!vaultBridge) {
+      await dispatch.close().catch(() => undefined);
+      return skipRun('connector declares requires.secrets but no vault bridge is mounted');
+    }
+    for (const ref of secretRefs) {
+      const value = await revealSecret(vaultBridge, ref).catch((err: unknown) => {
+        onLog(
+          'warn',
+          `connector ${opts.automationRef}: secret "${ref}" did not resolve — ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return undefined;
+      });
+      if (value === undefined) {
+        await flipNeedsAuth(vaultBridge, row.manifest.connector).catch(() => undefined);
+        await dispatch.close().catch(() => undefined);
+        return skipRun(`secret "${ref}" is unavailable — connection flipped to needs-auth`);
+      }
+      secretCache.set(ref, value);
     }
   }
 
@@ -257,7 +290,22 @@ export async function runFire(
       history: row.manifest.history,
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(row.manifest.connector
-        ? { connector: { tools: row.manifest.requires.tools ?? [] } }
+        ? {
+            connector: {
+              tools: row.manifest.requires.tools ?? [],
+              ...(secretRefs.length > 0 ? { secrets: secretRefs } : {}),
+            },
+          }
+        : {}),
+      ...(secretCache.size > 0
+        ? {
+            resolveSecret: (ref: string): Promise<string> => {
+              const value = secretCache.get(ref);
+              return value === undefined
+                ? Promise.reject(new Error(`secret "${ref}" was not preflighted`))
+                : Promise.resolve(value);
+            },
+          }
         : {}),
     });
   } finally {
@@ -321,6 +369,72 @@ export async function runFire(
     agentCalls: outcome.agentCalls,
   };
   return { outcome, record };
+}
+
+/**
+ * Reveal one declared secret ref (`locker:<item_id>:<column>`) through the
+ * automation's consented bridge — rides the agent's `reveal` grant, and the
+ * vault receipts the reveal per item (issue #293).
+ */
+async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
+  const [scheme, itemId, column] = ref.split(':');
+  if (scheme !== 'locker' || !itemId || !column) {
+    throw new Error(`malformed secret ref "${ref}" — expected locker:<item_id>:<column>`);
+  }
+  const reply = await vault({
+    op: 'reveal',
+    payload: {
+      entity: 'locker.item',
+      entityId: itemId,
+      columns: [column],
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  if (!reply.ok) throw new Error(reply.error ?? 'reveal failed');
+  const value = (reply.result as { values?: Record<string, string | null> })?.values?.[column];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`locker item ${itemId} holds no ${column}`);
+  }
+  return value;
+}
+
+/** Flip the connector's connection to needs-auth (issue #293): a missing or
+ *  trashed secret item is the same honest-liveness state a wrong login is. */
+async function flipNeedsAuth(
+  vault: VaultBridge,
+  connector: { kind: string; label: string },
+): Promise<void> {
+  const connectionId = await connectionIdOf(vault, connector);
+  if (!connectionId) return; // no connection yet — nothing to flip
+  await vault({
+    op: 'invoke',
+    payload: {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'needs-auth' },
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+}
+
+async function connectionIdOf(
+  vault: VaultBridge,
+  connector: { kind: string; label: string },
+): Promise<string | undefined> {
+  const reply = await vault({
+    op: 'read',
+    payload: {
+      entity: 'sync.connection',
+      where: [
+        { column: 'kind', op: 'eq', value: connector.kind },
+        { column: 'label', op: 'eq', value: connector.label },
+      ],
+      limit: 1,
+      purpose: 'dpv:ServiceProvision',
+    },
+  });
+  if (!reply.ok) return undefined;
+  const rows = (reply.result as { rows?: { connection_id?: unknown }[] })?.rows ?? [];
+  return typeof rows[0]?.connection_id === 'string' ? rows[0].connection_id : undefined;
 }
 
 /** Read one connection's status through the automation's consented bridge. */

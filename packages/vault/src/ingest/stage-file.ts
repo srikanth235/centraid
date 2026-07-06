@@ -9,16 +9,23 @@ import type { Identity } from '../gateway/types.js';
 import { parseIcs } from './ics.js';
 import { parseVcards } from './vcard.js';
 import { parseMbox, threadKey } from './mbox.js';
-import { parseTransactionsCsv } from './csv.js';
+import { parseCsvRows, parseTransactionsCsv } from './csv.js';
+import { isPasswordsCsvHeader, parsePasswordsCsv } from './passwords-csv.js';
 import { readZipEntries } from './zip.js';
 import { PUBLISHERS } from './publishers.js';
 import type {
   EventPayload,
+  LockerItemPayload,
   MessagePayload,
   PartyPayload,
   TransactionPayload,
 } from './publishers.js';
-import { ensureConnection, stageCandidates, type StageCandidate, type StageResult } from './staging.js';
+import {
+  ensureConnection,
+  stageCandidates,
+  type StageCandidate,
+  type StageResult,
+} from './staging.js';
 
 export interface StageFileOptions {
   /** Original filename — routes the parser and labels the connection. */
@@ -116,6 +123,34 @@ function transactionCandidates(
   });
 }
 
+function passwordCandidates(text: string): StageCandidate[] {
+  return parsePasswordsCsv(text).map((item) => ({
+    entityType: 'locker.item',
+    // Stable across re-imports of the same export: a login's identity is
+    // where + who, not its (rotating) password.
+    externalId: `login:${item.title}:${item.username ?? ''}`,
+    payload: {
+      title: item.title,
+      url: item.url,
+      username: item.username,
+      password: item.password,
+      otpSeed: item.otpSeed,
+      notes: item.notes,
+    } satisfies LockerItemPayload as unknown as Record<string, unknown>,
+  }));
+}
+
+/** CSVs route by CONTENT: a password column means a password-manager export. */
+function csvCandidates(
+  text: string,
+  opts: { accountName: string; currency: string },
+): StageCandidate[] {
+  const header = parseCsvRows(text)[0];
+  return header && isPasswordsCsvHeader(header)
+    ? passwordCandidates(text)
+    : transactionCandidates(text, opts.accountName, opts.currency);
+}
+
 function extension(name: string): string {
   const dot = name.lastIndexOf('.');
   return dot >= 0 ? name.slice(dot + 1).toLowerCase() : '';
@@ -149,7 +184,7 @@ function candidatesFor(
     case 'mbox':
       return messageCandidates(text);
     case 'csv':
-      return transactionCandidates(text, opts.accountName, opts.currency);
+      return csvCandidates(text, opts);
     default:
       return null;
   }
@@ -160,7 +195,11 @@ function candidatesFor(
  * separate explicit act (`publishBatch`) — first contact with real data is
  * always staged (issue #290 decision 2).
  */
-export function stageFile(db: VaultDb, importer: Identity, options: StageFileOptions): StageFileResult {
+export function stageFile(
+  db: VaultDb,
+  importer: Identity,
+  options: StageFileOptions,
+): StageFileResult {
   const currency = options.currency ?? baseCurrency(db);
   const accountName = options.accountName ?? stem(options.filename);
   const unrouted: string[] = [];
@@ -169,7 +208,8 @@ export function stageFile(db: VaultDb, importer: Identity, options: StageFileOpt
 
   if (extension(options.filename) === 'zip') {
     kind = 'file.takeout';
-    const buffer = typeof options.data === 'string' ? Buffer.from(options.data, 'base64') : options.data;
+    const buffer =
+      typeof options.data === 'string' ? Buffer.from(options.data, 'base64') : options.data;
     for (const entry of readZipEntries(buffer)) {
       const routed = candidatesFor(entry.name, entry.data.toString('utf8'), {
         accountName: stem(entry.name),

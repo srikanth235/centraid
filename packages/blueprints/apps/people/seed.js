@@ -16,10 +16,22 @@ export default async ({ log, ctx }) => {
   };
   const person = (args) => invoke('people.add_person', args);
 
-  const meera = await person({ display_name: 'Meera Pillai', role: 'College friend', cadence_days: 30 });
-  const arjun = await person({ display_name: 'Arjun Rao', role: 'Flatmate from Bangalore days', cadence_days: 45 });
+  const meera = await person({
+    display_name: 'Meera Pillai',
+    role: 'College friend',
+    cadence_days: 30,
+  });
+  const arjun = await person({
+    display_name: 'Arjun Rao',
+    role: 'Flatmate from Bangalore days',
+    cadence_days: 45,
+  });
   const dadu = await person({ display_name: 'Dadu', role: 'Grandfather', cadence_days: 7 });
-  const sana = await person({ display_name: 'Sana Qureshi', role: 'Design lead, ex-colleague', cadence_days: 60 });
+  const sana = await person({
+    display_name: 'Sana Qureshi',
+    role: 'Design lead, ex-colleague',
+    cadence_days: 60,
+  });
 
   await invoke('people.log_interaction', {
     party_id: meera.party_id,

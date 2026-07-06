@@ -87,9 +87,7 @@ export function parseTransactionsCsv(text: string): CsvTransaction[] {
   const descCol = findColumn(header, DESC_ALIASES);
   const amountCol = findColumn(header, AMOUNT_ALIASES);
   if (dateCol < 0 || amountCol < 0) {
-    throw new Error(
-      `CSV header must name a date and an amount column (got: ${header.join(', ')})`,
-    );
+    throw new Error(`CSV header must name a date and an amount column (got: ${header.join(', ')})`);
   }
   const currencyCol = findColumn(header, CURRENCY_ALIASES);
   const idCol = findColumn(header, ID_ALIASES);

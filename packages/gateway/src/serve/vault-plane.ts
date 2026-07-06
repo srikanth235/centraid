@@ -71,6 +71,7 @@ import {
   type ParkedSummary,
   type ReadRequest,
   type RefRequest,
+  type RevealRequest,
   type RevocationResult,
   type ScopeSpec,
   type SearchRequest,
@@ -638,6 +639,10 @@ export class VaultPlane {
             // Cross-domain reference cards (issue #272) — resolvable when a
             // live core.link ties the ref to something this app reads.
             return this.gateway.resolveRefs(cred, call.payload as unknown as RefRequest);
+          case 'reveal':
+            // Sealed-column plaintext (issue #293) — takes the app's
+            // explicit `reveal` scope; every allow is receipted per item.
+            return this.gateway.reveal(cred, call.payload as unknown as RevealRequest);
           case 'changes':
             throw new GatewayError(
               'consent',
@@ -692,6 +697,10 @@ export class VaultPlane {
               .filter((p) => p.callerKind === 'agent' && p.caller === appId);
           case 'resolve':
             return this.gateway.resolveRefs(cred, call.payload as unknown as RefRequest);
+          case 'reveal':
+            // Connector secrets resolution (issue #293 decision 8): the
+            // agent's reveal grant names its specific items via row filter.
+            return this.gateway.reveal(cred, call.payload as unknown as RevealRequest);
           case 'changes':
             // The consented provenance feed data triggers ride; also callable
             // from handlers that want to catch up since a stored cursor.

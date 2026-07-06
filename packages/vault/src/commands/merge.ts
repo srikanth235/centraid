@@ -125,9 +125,7 @@ function mergeParty(ctx: HandlerCtx): Record<string, unknown> {
 
   for (const ref of partyFkColumns(ctx)) {
     const rows = ctx.db
-      .prepare(
-        `SELECT "${ref.pk}" AS pk FROM "${ref.table}" WHERE "${ref.column}" = ?`,
-      )
+      .prepare(`SELECT "${ref.pk}" AS pk FROM "${ref.table}" WHERE "${ref.column}" = ?`)
       .all(merged) as { pk: string | number }[];
     for (const row of rows) {
       try {

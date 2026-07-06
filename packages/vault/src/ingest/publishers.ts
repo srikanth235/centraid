@@ -30,7 +30,11 @@ const eventPublisher: Publisher = {
       .prepare('SELECT event_id FROM core_event WHERE ical_uid = ?')
       .get(p.uid) as { event_id: string } | undefined;
     return existing
-      ? { entityId: existing.event_id, disposition: 'skip', note: 'already in the vault (ical_uid)' }
+      ? {
+          entityId: existing.event_id,
+          disposition: 'skip',
+          note: 'already in the vault (ical_uid)',
+        }
       : null;
   },
   create(vault, _owner, payload, now) {
@@ -43,7 +47,19 @@ const eventPublisher: Publisher = {
             location_place_id, organizer_party_id, sequence, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?, ?)`,
       )
-      .run(eventId, p.uid, p.summary, p.description, p.dtstart, p.dtend, p.startTz, p.rrule, p.status, now, now);
+      .run(
+        eventId,
+        p.uid,
+        p.summary,
+        p.description,
+        p.dtstart,
+        p.dtend,
+        p.startTz,
+        p.rrule,
+        p.status,
+        now,
+        now,
+      );
     return { entityId: eventId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
@@ -54,7 +70,17 @@ const eventPublisher: Publisher = {
             rrule = ?, status = ?, sequence = sequence + 1, updated_at = ?
           WHERE event_id = ?`,
       )
-      .run(p.summary, p.description, p.dtstart, p.dtend, p.startTz, p.rrule, p.status, now, entityId);
+      .run(
+        p.summary,
+        p.description,
+        p.dtstart,
+        p.dtend,
+        p.startTz,
+        p.rrule,
+        p.status,
+        now,
+        entityId,
+      );
     return { wrote: [] };
   },
 };
@@ -95,7 +121,15 @@ function bindIdentifiers(
         `INSERT INTO core_party_identifier (identifier_id, party_id, scheme, value, label, is_primary, verified_at, valid_from, valid_to)
          VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
       )
-      .run(identifierId, partyId, identifier.scheme, identifier.value, identifier.label, isPrimary, nowIso());
+      .run(
+        identifierId,
+        partyId,
+        identifier.scheme,
+        identifier.value,
+        identifier.label,
+        isPrimary,
+        nowIso(),
+      );
     wrote.push({ type: 'core.party_identifier', id: identifierId });
   }
   return wrote;
@@ -280,7 +314,15 @@ const messagePublisher: Publisher = {
         `INSERT INTO social_message (message_id, thread_id, sender_party_id, sender_handle, sent_at, body_content_id, in_reply_to_id, delivery, external_id)
          VALUES (?, ?, ?, ?, ?, ?, NULL, 'delivered', ?)`,
       )
-      .run(messageId, thread.thread_id, senderId, p.fromEmail, p.sentAt, body.contentId, p.messageId);
+      .run(
+        messageId,
+        thread.thread_id,
+        senderId,
+        p.fromEmail,
+        p.sentAt,
+        body.contentId,
+        p.messageId,
+      );
     return { entityId: messageId, wrote };
   },
   update() {
@@ -345,22 +387,94 @@ const transactionPublisher: Publisher = {
         `INSERT INTO core_transaction (txn_id, account_id, posted_at, amount_minor, currency, direction, status, transfer_group_id, counterparty_party_id, description, category_concept_id, external_id)
          VALUES (?, ?, ?, ?, ?, ?, 'posted', NULL, NULL, ?, NULL, ?)`,
       )
-      .run(txnId, account.accountId, p.postedAt, p.amountMinor, p.currency, p.direction, p.description, p.externalId);
+      .run(
+        txnId,
+        account.accountId,
+        p.postedAt,
+        p.amountMinor,
+        p.currency,
+        p.direction,
+        p.description,
+        p.externalId,
+      );
     return { entityId: txnId, wrote };
   },
   update(vault, entityId, payload) {
     const p = payload as unknown as TransactionPayload;
     vault
-      .prepare(`UPDATE core_transaction SET description = ?, amount_minor = ?, posted_at = ? WHERE txn_id = ?`)
+      .prepare(
+        `UPDATE core_transaction SET description = ?, amount_minor = ?, posted_at = ? WHERE txn_id = ?`,
+      )
       .run(p.description, p.amountMinor, p.postedAt, entityId);
+    return { wrote: [] };
+  },
+};
+
+// ── locker.item (password-manager CSV, issue #293) ─────────────────────
+// Secret fields ride the payload sealed (the spine seals them at stage time
+// and unseals them just-in-time for this publisher); the spine re-seals the
+// written row's columns before the transaction commits. This publisher only
+// shapes rows — it never sees the vault's key.
+
+export interface LockerItemPayload {
+  title: string;
+  url: string | null;
+  username: string | null;
+  password: string | null;
+  otpSeed: string | null;
+  notes: string | null;
+}
+
+const lockerItemPublisher: Publisher = {
+  entityType: 'locker.item',
+  probe(vault, payload) {
+    const p = payload as unknown as LockerItemPayload;
+    const existing = vault
+      .prepare(
+        `SELECT item_id FROM locker_item
+          WHERE type = 'login' AND deleted_at IS NULL AND title = ?
+            AND ((username IS NULL AND ? IS NULL) OR username = ?)`,
+      )
+      .get(p.title, p.username, p.username) as { item_id: string } | undefined;
+    return existing
+      ? {
+          entityId: existing.item_id,
+          disposition: 'update',
+          note: 'matches an existing login (title + username) — vault wins on publish review',
+        }
+      : null;
+  },
+  create(vault, _owner, payload, now) {
+    const p = payload as unknown as LockerItemPayload;
+    const itemId = uuidv7();
+    vault
+      .prepare(
+        `INSERT INTO locker_item
+           (item_id, type, title, username, password, url, otp_seed, notes, compromised, created_at, updated_at)
+         VALUES (?, 'login', ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+      )
+      .run(itemId, p.title, p.username, p.password, p.url, p.otpSeed, p.notes, now, now);
+    return { entityId: itemId, wrote: [] };
+  },
+  update(vault, entityId, payload, now) {
+    // Source fills gaps, never overwrites: an imported password lands only
+    // where the vault holds none (vault-wins, issue #290 decision 6).
+    const p = payload as unknown as LockerItemPayload;
+    vault
+      .prepare(
+        `UPDATE locker_item SET
+           url = COALESCE(url, ?), password = COALESCE(password, ?),
+           otp_seed = COALESCE(otp_seed, ?), notes = COALESCE(notes, ?), updated_at = ?
+         WHERE item_id = ?`,
+      )
+      .run(p.url, p.password, p.otpSeed, p.notes, now, entityId);
     return { wrote: [] };
   },
 };
 
 /** The publisher registry the spine walks. */
 export const PUBLISHERS: ReadonlyMap<string, Publisher> = new Map(
-  [eventPublisher, partyPublisher, messagePublisher, transactionPublisher].map((p) => [
-    p.entityType,
-    p,
-  ]),
+  [eventPublisher, partyPublisher, messagePublisher, transactionPublisher, lockerItemPublisher].map(
+    (p) => [p.entityType, p],
+  ),
 );

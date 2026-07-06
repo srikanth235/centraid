@@ -45,7 +45,14 @@ export default async ({ input, log, ctx }) => {
   };
 
   const everyone = [me, ...friends];
-  const expense = (description, amount_minor, paid_by, category, spentDaysAgo, parties = everyone) =>
+  const expense = (
+    description,
+    amount_minor,
+    paid_by,
+    category,
+    spentDaysAgo,
+    parties = everyone,
+  ) =>
     invoke('tally.add_expense', {
       group_id: group.group_id,
       description,
@@ -59,7 +66,11 @@ export default async ({ input, log, ctx }) => {
   await expense('Beach shack lunch', 248000, me, 'food', 6);
   await expense('Scooter rentals, 2 days', 160000, arjun.party_id, 'transport', 6);
   await expense('Groceries for the villa', 187550, meera.party_id, 'groceries', 5);
-  await expense('Night market', 92000, sana.party_id, 'fun', 4, [me, meera.party_id, sana.party_id]);
+  await expense('Night market', 92000, sana.party_id, 'fun', 4, [
+    me,
+    meera.party_id,
+    sana.party_id,
+  ]);
   await expense('Ferry tickets', 60000, me, 'travel', 4);
 
   await invoke('tally.settle_up', {

@@ -41,7 +41,24 @@ export type {
   HandlerCtx,
   CommandHandler,
   CommandDefinition,
+  RevealRequest,
+  RevealResult,
 } from './gateway/types.js';
+export {
+  SEALED_COLUMNS,
+  SEALED_PLACEHOLDER,
+  SEALED_PREFIX,
+  isSealedValue,
+  sealedColumnsOf,
+  sealValue,
+  unsealValue,
+  sealAad,
+  sealKeyFileFor,
+  loadOrCreateSealKey,
+  ephemeralSealKey,
+  sealedHashToken,
+  redactSealedInput,
+} from './schema/sealed.js';
 export {
   admitImportedRow,
   resolveHandle,

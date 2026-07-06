@@ -193,7 +193,7 @@ export function enrollAgent(
 export interface ScopeSpec {
   schema: string;
   table?: string;
-  verbs: 'read' | 'read+act' | 'act';
+  verbs: 'read' | 'read+act' | 'act' | 'reveal';
   rowFilter?: FilterClause[];
   fieldMask?: string[];
 }

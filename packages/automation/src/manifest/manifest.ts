@@ -44,6 +44,14 @@ export interface ManifestRequires {
    * StreamFn. Validation rejects it.
    */
   readonly model?: string;
+  /**
+   * Sealed Locker cells this connector's `ctx.fetch` may reference (issue
+   * #293 decision 8), as `locker:<item_id>:<column>`. The allowlist for
+   * `{{secret:…}}` placeholders — resolution rides a `reveal` grant on the
+   * automation's agent; the plaintext is injected at the transport layer
+   * and never enters the handler worker. Connector-only.
+   */
+  readonly secrets?: readonly string[];
 }
 
 export interface CostEstimate {
@@ -59,7 +67,7 @@ export interface CostEstimate {
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
-  readonly verbs: 'read' | 'read+act' | 'act';
+  readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
 }
 
 /**
@@ -570,17 +578,27 @@ function validateRequires(raw: unknown): ManifestRequires {
     }
     model = req.model;
   }
+  const secrets = optionalStringArray(req.secrets, 'requires.secrets');
+  if (secrets) {
+    for (const ref of secrets) {
+      if (!/^locker:[^:]+:[a-z_]+$/.test(ref)) {
+        throw new ManifestError(
+          'invalid_field',
+          `manifest.requires.secrets entry "${ref}" must be "locker:<item_id>:<column>" (issue #293)`,
+          'requires.secrets',
+        );
+      }
+    }
+  }
   const requires: ManifestRequires = {};
   if (mcps) (requires as { mcps: readonly string[] }).mcps = mcps;
   if (tools) (requires as { tools: readonly string[] }).tools = tools;
   if (model !== undefined) (requires as { model: string }).model = model;
+  if (secrets) (requires as { secrets: readonly string[] }).secrets = secrets;
   return requires;
 }
 
-function validateConnector(
-  value: unknown,
-  requires: ManifestRequires,
-): ConnectorSpec | undefined {
+function validateConnector(value: unknown, requires: ManifestRequires): ConnectorSpec | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new ManifestError('invalid_field', 'manifest.connector must be an object', 'connector');
@@ -605,7 +623,7 @@ function validateConnector(
   return { kind, label, ...(principal !== undefined ? { principal } : {}) };
 }
 
-const VAULT_VERBS = new Set(['read', 'read+act', 'act']);
+const VAULT_VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
 
 function validateVault(raw: unknown): ManifestVault | undefined {
   if (raw === undefined) return undefined;
@@ -638,7 +656,7 @@ function validateVault(raw: unknown): ManifestVault | undefined {
     if (typeof s.verbs !== 'string' || !VAULT_VERBS.has(s.verbs)) {
       throw new ManifestError(
         'invalid_field',
-        `manifest.${field}.verbs must be "read" | "read+act" | "act"`,
+        `manifest.${field}.verbs must be "read" | "read+act" | "act" | "reveal"`,
         `${field}.verbs`,
       );
     }
@@ -742,6 +760,16 @@ export function validateManifest(raw: unknown): Manifest {
       'invalid_field',
       'manifest.connector requires a manifest.vault block (connectors stage rows through sync.stage_rows)',
       'connector',
+    );
+  }
+  // Secrets are connector-plumbing (issue #293): only a connector's
+  // `ctx.fetch` can reference them, so a non-connector declaring them is a
+  // manifest bug, not a latent capability.
+  if (!connector && requires.secrets && requires.secrets.length > 0) {
+    throw new ManifestError(
+      'invalid_field',
+      'manifest.requires.secrets is connector-only (issue #293) — declare manifest.connector',
+      'requires.secrets',
     );
   }
   // A condition/data trigger IS a consented vault read — without a vault

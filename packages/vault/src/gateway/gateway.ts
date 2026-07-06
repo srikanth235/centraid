@@ -23,9 +23,19 @@ import {
   insertInvocation,
   invocationExists,
   replayInvocation,
+  pkColumn,
   runContractAndExecute,
   setInvocationStatus,
+  type RegisteredCommand,
 } from './execution.js';
+import {
+  isSealedValue,
+  redactSealedInput,
+  sealAad,
+  SEALED_PLACEHOLDER,
+  sealedColumnsOf,
+  unsealValue,
+} from '../schema/sealed.js';
 import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
 import { authenticate } from './identity.js';
 import { searchEntity } from './search.js';
@@ -40,7 +50,6 @@ import { stageFile, type StageFileOptions, type StageFileResult } from '../inges
 import { discardBatch, publishBatch, type PublishResult } from '../ingest/staging.js';
 import { PUBLISHERS } from '../ingest/publishers.js';
 import { demoStatus, purgeDemoRows, type DemoPurgeResult } from './demo.js';
-import { pkColumn } from './execution.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import { backupVault, checkpointVault, type BackupResult } from './custody.js';
 import {
@@ -69,6 +78,8 @@ import type {
   ParkedSummary,
   ReadRequest,
   ReadResult,
+  RevealRequest,
+  RevealResult,
   Risk,
   SearchRequest,
   SearchResult,
@@ -86,7 +97,8 @@ interface Parked {
 }
 
 export class Gateway {
-  private readonly handlers = new Map<string, CommandDefinition['handler']>();
+  /** Registered commands: handler + sealed-class declarations (issue #293). */
+  private readonly commands = new Map<string, RegisteredCommand>();
   /** The pause between draft and send is gateway state (§10 standing duties). */
   private readonly parked = new Map<string, Parked>();
 
@@ -130,7 +142,11 @@ export class Gateway {
         )
         .run(uuidv7(), def.ownerSchema, commandId, def.name, def.risk === 'high' ? 1 : 0);
     }
-    this.handlers.set(def.name, def.handler);
+    this.commands.set(def.name, {
+      handler: def.handler,
+      sealedInput: def.sealedInput ?? [],
+      unseals: def.unseals ?? [],
+    });
   }
 
   /** The discover surface: capabilities visible to any authenticated caller. */
@@ -241,6 +257,16 @@ export class Gateway {
         ...callerFilter.params,
         ...(demoExclusion ? [request.entity] : []),
       ) as Record<string, unknown>[];
+    // Sealed columns never ride a read (issue #293): default reads show a
+    // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
+    const sealedCols = sealedColumnsOf(request.entity);
+    if (sealedCols.length > 0) {
+      for (const row of rows) {
+        for (const col of sealedCols) {
+          if (row[col] != null && row[col] !== '') row[col] = SEALED_PLACEHOLDER;
+        }
+      }
+    }
     const receiptId = writeReceipt(this.db.journal, {
       grantId: consent.grantId,
       invocationId: null,
@@ -252,6 +278,82 @@ export class Gateway {
       detail: { filter: request.where ?? [], rowCount: rows.length },
     });
     return { rows, receiptId };
+  }
+
+  /**
+   * Reveal (issue #293): plaintext of one entity's sealed columns, under the
+   * `reveal` scope verb — never `read`, never `read+act`. Owner devices pass
+   * (they own the model) unless readonly; every reveal writes a receipt
+   * naming the item and the columns, so "what looked at my secrets" always
+   * has an answer. Values never touch the journal.
+   */
+  reveal(cred: Credential, request: RevealRequest): RevealResult {
+    const identity = this.identify(cred);
+    const deny = (failing: string, grantId: string | null = null): never => {
+      const receiptId = writeReceipt(this.db.journal, {
+        grantId,
+        invocationId: null,
+        action: 'reveal',
+        objectType: request.entity,
+        objectId: request.entityId,
+        purpose: request.purpose,
+        decision: 'deny',
+        detail: { failing },
+      });
+      throw new GatewayError('consent', `deny (receipt ${receiptId}): ${failing}`);
+    };
+    const ref = resolveEntity(request.entity, this.db.vault);
+    if (!ref || ref.file !== 'vault') return deny(`unknown entity ${request.entity}`);
+    const sealedCols = sealedColumnsOf(request.entity);
+    if (sealedCols.length === 0) return deny(`${request.entity} has no sealed columns`);
+    const columns = request.columns ?? [...sealedCols];
+    for (const col of columns) {
+      if (!sealedCols.includes(col)) return deny(`${col} is not a sealed column`);
+    }
+    const consent = evaluateConsent(
+      this.db.vault,
+      identity,
+      ref.schema,
+      ref.table,
+      'reveal',
+      request.purpose,
+    );
+    if (consent.decision === 'deny') return deny(consent.failing, consent.grantId);
+    const pk = pkColumn(this.db.vault, ref.physical);
+    // The grant's row filter clamps WHICH items are revealable — this is how
+    // a connector's grant names its specific locker items (issue #293 dec 8).
+    const rowFilter = compileFilters(this.db.vault, ref.physical, consent.rowFilter, nowIso());
+    const select = columns.map((c) => `"${c}"`).join(', ');
+    const row = this.db.vault
+      .prepare(`SELECT ${select} FROM "${ref.physical}" WHERE "${pk}" = ? AND ${rowFilter.where}`)
+      .get(request.entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
+    if (!row) return deny(`no revealable ${request.entity} row ${request.entityId}`);
+    const values: Record<string, string | null> = {};
+    for (const col of columns) {
+      const value = row[col];
+      if (value == null || value === '') {
+        values[col] = null;
+      } else if (isSealedValue(value)) {
+        values[col] = unsealValue(
+          this.db.sealKey,
+          sealAad(ref.physical, col, request.entityId),
+          value,
+        );
+      } else {
+        values[col] = String(value); // pre-seal legacy plaintext
+      }
+    }
+    const receiptId = writeReceipt(this.db.journal, {
+      grantId: consent.grantId,
+      invocationId: null,
+      action: 'reveal',
+      objectType: request.entity,
+      objectId: request.entityId,
+      purpose: request.purpose,
+      decision: 'allow',
+      detail: { columns },
+    });
+    return { values, receiptId };
   }
 
   /**
@@ -431,7 +533,7 @@ export class Gateway {
     if (replayed) return replayed;
 
     const command = lookupCommand(this.db.vault, request.command);
-    if (!command || !this.handlers.has(request.command)) {
+    if (!command || !this.commands.has(request.command)) {
       const receiptId = writeReceipt(this.db.journal, {
         grantId: null,
         invocationId: null,
@@ -469,6 +571,7 @@ export class Gateway {
 
     // Risk vs ceiling: above it, the request parks for owner confirmation
     // instead of executing (§10 standing duty: confirmation routing).
+    const sealedInput = this.commands.get(request.command)?.sealedInput ?? [];
     if (
       identity.riskCeiling !== 'owner' &&
       RISK_RANK[command.risk] > RISK_RANK[identity.riskCeiling]
@@ -480,6 +583,8 @@ export class Gateway {
         identity,
         consent.grantId,
         'proposed',
+        undefined,
+        sealedInput,
       );
       this.parked.set(invocationId, {
         identity,
@@ -497,7 +602,16 @@ export class Gateway {
 
     const invocationId =
       request.invocationId ??
-      insertInvocation(this.db, request, command, identity, consent.grantId, 'proposed');
+      insertInvocation(
+        this.db,
+        request,
+        command,
+        identity,
+        consent.grantId,
+        'proposed',
+        undefined,
+        sealedInput,
+      );
     if (request.invocationId && !invocationExists(this.db, invocationId)) {
       insertInvocation(
         this.db,
@@ -507,11 +621,12 @@ export class Gateway {
         consent.grantId,
         'proposed',
         invocationId,
+        sealedInput,
       );
     }
     return runContractAndExecute(
       this.db,
-      this.handlers,
+      this.commands,
       identity,
       request,
       command,
@@ -559,7 +674,7 @@ export class Gateway {
     };
     return runContractAndExecute(
       this.db,
-      this.handlers,
+      this.commands,
       entry.identity,
       entry.request,
       entry.command,
@@ -758,7 +873,7 @@ export class Gateway {
         .prepare('DELETE FROM agent_command WHERE command_id = ?')
         .run(existing.command_id);
     }
-    this.handlers.delete(name);
+    this.commands.delete(name);
   }
 
   private requireOwner(cred: Credential, refusal: string): Identity {
@@ -854,7 +969,13 @@ export class Gateway {
       parkedAt: p.parkedAt,
       callerKind: p.identity.kind,
       caller: this.callerName(p.identity),
-      input: p.request.input,
+      // The confirmation surface shows WHAT is asked, never secret material
+      // (issue #293) — sealed inputs ride as hash tokens here too.
+      input: redactSealedInput(
+        this.db.sealKey,
+        p.request.input,
+        this.commands.get(p.command.name)?.sealedInput ?? [],
+      ),
     }));
   }
 

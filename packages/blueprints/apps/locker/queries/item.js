@@ -1,14 +1,19 @@
 /**
  * One item's full fields for the detail pane — the ONLY query that returns
  * secrets (password, card number, CVV, OTP seed, note body), and only for the
- * single item the owner opened. Carries the item's tags and its favorite star
- * so the detail pane is self-contained. A missing or wrong id returns
+ * single item the owner opened. Secrets are SEALED columns (issue #293): the
+ * read shows placeholders, so this query is where the app exercises its
+ * `reveal` scope — one reveal per open, receipted per item by the vault, the
+ * "item usage" audit trail. Carries the item's tags and its favorite star so
+ * the detail pane is self-contained. A missing or wrong id returns
  * item:null, never an error.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
 
 import { readTags, readStarred } from './items.js';
+
+const SEALED_FIELDS = ['password', 'otp_seed', 'card_number', 'cvv', 'content'];
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -22,6 +27,19 @@ export default async ({ input, ctx }) => {
     });
     const row = (res.rows ?? [])[0];
     if (!row) return { item: null };
+    // The reveal (issue #293): swap the sealed placeholders for plaintext —
+    // consent-checked under the app's `reveal` scope, receipted per open.
+    try {
+      const revealed = await ctx.vault.reveal({
+        entity: 'locker.item',
+        entityId: itemId,
+        columns: SEALED_FIELDS,
+        purpose,
+      });
+      for (const field of SEALED_FIELDS) row[field] = revealed.values?.[field] ?? null;
+    } catch {
+      // No reveal grant: the pane still renders, secrets stay placeholders.
+    }
     const [tagsByItem, starredIds] = await Promise.all([
       readTags(ctx, [itemId], purpose),
       readStarred(ctx, [itemId], purpose),

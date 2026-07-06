@@ -11,6 +11,7 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import type { VaultDb } from '../db.js';
 import { registerContentTextFn } from '../schema/fts.js';
+import { isSealedValue, SEALED_PLACEHOLDER } from '../schema/sealed.js';
 import { GatewayError } from './types.js';
 
 /** Default and hard-max rows returned to the caller. */
@@ -97,6 +98,14 @@ export function runReadOnlySql(db: VaultDb, sql: string, maxRows: number): Vault
     const all = conn.prepare(sql).all() as Record<string, unknown>[];
     const durationMs = Date.now() - started;
     const rows = all.slice(0, cap);
+    // Sealed cells are ciphertext at rest, so nothing here CAN leak — this
+    // pass just keeps the assistant's transcripts readable: any sealed wire
+    // value (however aliased or CONCAT'd) shows as the placeholder.
+    for (const row of rows) {
+      for (const [k, v] of Object.entries(row)) {
+        if (isSealedValue(v)) row[k] = SEALED_PLACEHOLDER;
+      }
+    }
     return {
       columns: rows[0] ? Object.keys(rows[0]) : all[0] ? Object.keys(all[0]) : [],
       rows,

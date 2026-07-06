@@ -19,8 +19,23 @@ import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
 import { nowIso, uuidv7 } from '../ids.js';
+import { pkColumn } from '../gateway/execution.js';
 import { writeProvenance, writeReceipt } from './../gateway/evidence.js';
+import { resolveEntity } from '../schema/tables.js';
+import {
+  isSealedValue,
+  sealAad,
+  sealValue,
+  sealedColumnsOf,
+  sealedPayloadFieldsOf,
+  unsealValue,
+} from '../schema/sealed.js';
 import type { Identity } from '../gateway/types.js';
+
+/** AAD of one sealed payload field in the draft band. */
+function payloadAad(rowId: string, field: string): string {
+  return sealAad('sync_import_row', `payload.${field}`, rowId);
+}
 
 /** One parsed unit from a source, before dispositioning. */
 export interface StageCandidate {
@@ -135,6 +150,7 @@ export function stageBatchTx(
   candidates: StageCandidate[],
   publishers: ReadonlyMap<string, Publisher>,
   now: string,
+  sealKey?: Buffer,
 ): { batchId: string; counts: StageResult['staged'] } {
   const batchId = uuidv7();
   const counts = { create: 0, update: 0, skip: 0, 'merge-candidate': 0 };
@@ -156,6 +172,8 @@ export function stageBatchTx(
   );
   let seq = 0;
   for (const candidate of candidates) {
+    // Hash the PLAINTEXT payload — sealing is nonce-randomized, and the
+    // dedup contract ("unchanged since last import") is about content.
     const hash = payloadHash(candidate.payload);
     let disposition: 'create' | 'update' | 'skip' | 'merge-candidate' = 'create';
     let target: string | null = null;
@@ -176,13 +194,33 @@ export function stageBatchTx(
       }
     }
     counts[disposition] += 1;
+    const rowId = uuidv7();
+    // The draft band deserves the same protection as the live band (issue
+    // #293): secret payload fields seal before the row is written. Staging
+    // secrets without a key refuses outright — never plaintext-by-accident.
+    const secretFields = sealedPayloadFieldsOf(candidate.entityType);
+    let payload = candidate.payload;
+    if (secretFields.length > 0) {
+      if (!sealKey) {
+        throw new Error(
+          `${candidate.entityType} carries sealed fields — it stages only through the owner surface (issue #293)`,
+        );
+      }
+      payload = { ...payload };
+      for (const field of secretFields) {
+        const v = payload[field];
+        if (typeof v === 'string' && v.length > 0 && !isSealedValue(v)) {
+          payload[field] = sealValue(sealKey, payloadAad(rowId, field), v);
+        }
+      }
+    }
     insertRow.run(
-      uuidv7(),
+      rowId,
       batchId,
       seq,
       candidate.entityType,
       candidate.externalId,
-      JSON.stringify(candidate.payload),
+      JSON.stringify(payload),
       disposition,
       target,
       note,
@@ -206,7 +244,7 @@ export function stageCandidates(
   let staged: { batchId: string; counts: StageResult['staged'] };
   db.vault.exec('BEGIN');
   try {
-    staged = stageBatchTx(db.vault, connectionId, candidates, publishers, now);
+    staged = stageBatchTx(db.vault, connectionId, candidates, publishers, now, db.sealKey);
     db.vault.exec('COMMIT');
   } catch (err) {
     db.vault.exec('ROLLBACK');
@@ -259,6 +297,7 @@ export function applyBatchTx(
   publishers: ReadonlyMap<string, Publisher>,
   ownerPartyId: string,
   now: string,
+  sealKey?: Buffer,
 ): AppliedBatch {
   const batch = vault
     .prepare(
@@ -301,31 +340,102 @@ export function applyBatchTx(
     `UPDATE sync_import_row SET published_entity_id = ?, note = ? WHERE row_id = ?`,
   );
 
+  // Seal a published row's sealed columns in place — the publish path runs
+  // outside the command pipeline, so the spine carries its own mini-sweep
+  // (issue #293): the row-band ciphertext re-binds to the live row's AAD.
+  const sealPublishedRow = (entityType: string, entityId: string): void => {
+    if (!sealKey) return;
+    const cols = sealedColumnsOf(entityType);
+    if (cols.length === 0) return;
+    const ref = resolveEntity(entityType, vault);
+    if (!ref || ref.file !== 'vault') return;
+    const pk = pkColumn(vault, ref.physical);
+    const live = vault
+      .prepare(
+        `SELECT ${cols.map((c) => `"${c}"`).join(', ')} FROM "${ref.physical}" WHERE "${pk}" = ?`,
+      )
+      .get(entityId) as Record<string, unknown> | undefined;
+    if (!live) return;
+    for (const col of cols) {
+      const v = live[col];
+      if (typeof v !== 'string' || v.length === 0 || isSealedValue(v)) continue;
+      vault
+        .prepare(`UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
+        .run(sealValue(sealKey, sealAad(ref.physical, col, entityId), v), entityId);
+    }
+  };
+
   for (const row of rows) {
-    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
-    const hash = payloadHash(payload);
+    let payload = JSON.parse(row.payload_json) as Record<string, unknown>;
     const publisher = publishers.get(row.entity_type);
     try {
+      // Secret payload fields unseal just-in-time for the publisher; a
+      // key-less publish of sealed rows fails per-row, never silently.
+      const secretFields = sealedPayloadFieldsOf(row.entity_type);
+      if (secretFields.length > 0) {
+        if (!sealKey) {
+          throw new Error(
+            `${row.entity_type} carries sealed fields — it publishes only through the owner surface (issue #293)`,
+          );
+        }
+        payload = { ...payload };
+        for (const field of secretFields) {
+          const v = payload[field];
+          if (isSealedValue(v)) {
+            payload[field] = unsealValue(sealKey, payloadAad(row.row_id, field), v);
+          }
+        }
+      }
+      const hash = payloadHash(payload);
       if (row.disposition === 'create') {
         if (!publisher) throw new Error(`no publisher for ${row.entity_type}`);
         const out = publisher.create(vault, ownerPartyId, payload, now);
+        sealPublishedRow(row.entity_type, out.entityId);
         created += 1;
         provenanced.push({ type: row.entity_type, id: out.entityId }, ...out.wrote);
-        upsertMap.run(uuidv7(), batch.connection_id, row.external_id, row.entity_type, out.entityId, hash, now, now);
+        upsertMap.run(
+          uuidv7(),
+          batch.connection_id,
+          row.external_id,
+          row.entity_type,
+          out.entityId,
+          hash,
+          now,
+          now,
+        );
         markRow.run(out.entityId, 'created', row.row_id);
       } else if (row.disposition === 'update' && row.target_entity_id) {
         if (!publisher) throw new Error(`no publisher for ${row.entity_type}`);
         const out = publisher.update(vault, row.target_entity_id, payload, now, ownerPartyId);
+        sealPublishedRow(row.entity_type, row.target_entity_id);
         updated += 1;
         provenanced.push({ type: row.entity_type, id: row.target_entity_id }, ...out.wrote);
-        upsertMap.run(uuidv7(), batch.connection_id, row.external_id, row.entity_type, row.target_entity_id, hash, now, now);
+        upsertMap.run(
+          uuidv7(),
+          batch.connection_id,
+          row.external_id,
+          row.entity_type,
+          row.target_entity_id,
+          hash,
+          now,
+          now,
+        );
         markRow.run(row.target_entity_id, 'updated', row.row_id);
       } else {
         // skip and merge-candidate rows publish nothing, but an adopted
         // row (probe hit) joins the map so the NEXT import syncs it.
         skipped += 1;
         if (row.target_entity_id) {
-          upsertMap.run(uuidv7(), batch.connection_id, row.external_id, row.entity_type, row.target_entity_id, hash, now, now);
+          upsertMap.run(
+            uuidv7(),
+            batch.connection_id,
+            row.external_id,
+            row.entity_type,
+            row.target_entity_id,
+            hash,
+            now,
+            now,
+          );
         }
       }
     } catch (err) {
@@ -369,7 +479,7 @@ export function publishBatch(
   let applied: AppliedBatch;
   db.vault.exec('BEGIN');
   try {
-    applied = applyBatchTx(db.vault, batchId, publishers, owner.partyId ?? '', now);
+    applied = applyBatchTx(db.vault, batchId, publishers, owner.partyId ?? '', now, db.sealKey);
     db.vault.exec('COMMIT');
   } catch (err) {
     db.vault.exec('ROLLBACK');
@@ -406,7 +516,9 @@ export function discardBatch(db: VaultDb, owner: Identity, batchId: string): { r
   try {
     db.vault.prepare('DELETE FROM sync_import_row WHERE batch_id = ?').run(batchId);
     db.vault
-      .prepare(`UPDATE sync_import_batch SET status = 'discarded', resolved_at = ? WHERE batch_id = ?`)
+      .prepare(
+        `UPDATE sync_import_batch SET status = 'discarded', resolved_at = ? WHERE batch_id = ?`,
+      )
       .run(nowIso(), batchId);
     db.vault.exec('COMMIT');
   } catch (err) {
