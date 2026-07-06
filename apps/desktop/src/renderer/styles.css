@@ -9888,6 +9888,50 @@ select.input option {
   gap: 8px;
   margin-top: 6px;
 }
+.cd-import-file {
+  display: none;
+}
+.cd-import-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+.cd-import-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  padding: 2px 0;
+}
+.cd-import-row-disposition {
+  flex: none;
+  width: 52px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cd-import-row[data-disposition='create'] .cd-import-row-disposition {
+  color: var(--accent);
+}
+.cd-import-row-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cd-import-row-note {
+  color: var(--text-secondary);
+  flex: none;
+}
+.cd-import-history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+.cd-import-history-sub {
+  color: var(--text-secondary);
+}
 .cd-vault-approve-btn {
   flex: none;
   padding: 4px 10px;

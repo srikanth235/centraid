@@ -6,6 +6,7 @@
 // the ShellContext accessors.
 import { getAgentsStatus, getUserPrefs, listVaults, saveUserPrefs } from './gateway-client.js';
 import { renderPhonePage } from './app-phone.js';
+import { renderImportPage } from './app-import.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
   AccentKey,
@@ -80,6 +81,7 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       | 'workspace'
       | 'profiles'
       | 'phone'
+      | 'import'
       | 'providers';
     const pageHosts: Record<SettingsPageId, HTMLElement> = {
       appearance: el('div', { class: 'cd-settings-page' }),
@@ -87,6 +89,7 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       workspace: el('div', { class: 'cd-settings-page' }),
       profiles: el('div', { class: 'cd-settings-page' }),
       phone: el('div', { class: 'cd-settings-page' }),
+      import: el('div', { class: 'cd-settings-page' }),
       providers: el('div', { class: 'cd-settings-page' }),
     };
 
@@ -824,6 +827,10 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     const phoneHost = el('div', { class: 'cd-phone-page' });
     pageHosts.phone.append(drawerGroup('Phone', [phoneHost]));
 
+    // Import (issue #290 phase 2) — populated on page show, like Phone.
+    const importHost = el('div', { class: 'cd-import-page' });
+    pageHosts.import.append(drawerGroup('Import', [importHost]));
+
     // §C1 — inner-sidebar shell modelled on RefinedSettingsV2. A grouped
     // category nav (Workspace / Models / Runtime) — each entry an icon +
     // label + optional mono hint — sits beside a scrolling content pane
@@ -873,6 +880,14 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
         icon: 'Phone',
         subtitle:
           'Use your published apps from your phone — anywhere, over an end-to-end encrypted tunnel. Pair with a one-time QR; revoke a device any time.',
+      },
+      {
+        id: 'import',
+        label: 'Import',
+        section: 'Account',
+        icon: 'Save',
+        subtitle:
+          'Bring your existing data into the vault — calendars, contacts, mail, bank statements, or a whole Google Takeout. Everything stages for review before it lands.',
       },
       {
         id: 'providers',
@@ -926,6 +941,9 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       // (renderVaultsPage no-ops on a detached one), and re-showing picks up
       // registry changes made elsewhere (another window, the gateway CLI).
       if (id === 'phone') void renderPhonePage({ el, host: phoneHost, showToast });
+      // The Import page fetches on every show — a publish elsewhere (another
+      // window) must not leave a stale draft here.
+      if (id === 'import') void renderImportPage({ el, host: importHost, showToast });
     };
     let lastSection = '';
     for (const p of settingsPages) {
