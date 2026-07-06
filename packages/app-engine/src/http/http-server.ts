@@ -44,6 +44,16 @@ export interface RuntimeHttpServerOptions {
    * `app-engine` (which OpenClaw + standalone setups share).
    */
   extraHandlers?: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>>;
+  /**
+   * Exact pathnames served WITHOUT the bearer check (issue #304). The one
+   * intended tenant is the OAuth consent callback — a provider redirects
+   * the owner's BROWSER here, which cannot carry the bearer; the request
+   * instead authenticates by its single-use unguessable `state` capability,
+   * minted by an authenticated authorize call and checked by the route
+   * handler. Match is on the exact pathname (query string free), never a
+   * prefix — a public path must never accidentally widen.
+   */
+  publicPaths?: readonly string[];
 }
 
 export interface RuntimeHttpServerHandle {
@@ -131,8 +141,10 @@ export async function startRuntimeHttpServer(
       res.end();
       return;
     }
+    const pathname = (req.url ?? '/').split('?')[0] ?? '/';
+    const isPublic = (opts.publicPaths ?? []).includes(pathname);
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-    if (!raw || !timingSafeEqual(raw, token)) {
+    if (!isPublic && (!raw || !timingSafeEqual(raw, token))) {
       res.statusCode = 401;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));

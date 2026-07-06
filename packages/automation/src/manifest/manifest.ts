@@ -615,12 +615,14 @@ function validateConnector(value: unknown, requires: ManifestRequires): Connecto
     principal = requireString(c.principal, 'connector.principal');
   }
   // Resolved, not hinted (issue #290 decision 4): a connector's tool needs
-  // are a CONTRACT — an empty allowlist would make every ctx.tool call an
-  // error at run time, which is a manifest bug, not a runtime surprise.
-  if (!requires.tools || requires.tools.length === 0) {
+  // are a CONTRACT — the allowlist must be DECLARED, never implied. An
+  // explicit `[]` is legal since issue #304: a broker-credential connector
+  // reaches its source through `ctx.fetch` alone, and the empty allowlist
+  // states "no harness tools" out loud (every ctx.tool call errors).
+  if (!requires.tools) {
     throw new ManifestError(
       'invalid_field',
-      'manifest.connector requires a non-empty requires.tools allowlist (requires-as-allowlist, issue #290)',
+      'manifest.connector requires a requires.tools allowlist — name the harness tools it calls, or [] for a fetch-only connector (issues #290, #304)',
       'requires.tools',
     );
   }

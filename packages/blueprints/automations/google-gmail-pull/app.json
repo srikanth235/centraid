@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-gmail-pull",
+  "name": "Gmail sync",
+  "kind": "automation",
+  "description": "Pulls your Gmail into the vault as messages — read-only, incremental, through your own Google OAuth client.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

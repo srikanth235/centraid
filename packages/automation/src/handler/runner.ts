@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the parent-side handler orchestrator is one message-pump — tool/agent/fetch/state/vault dispatch plus the #293 secret and #304 connection injection all share the one worker-boundary protocol, so splitting scatters the wire contract
 /**
  * Parent-side orchestrator for automation handlers.
  *
@@ -177,6 +178,59 @@ export interface RunHandlerOptions {
    * and is scrubbed from every recorded string as a backstop.
    */
   resolveSecret?: (ref: string) => Promise<string>;
+  /**
+   * Broker-resolved connection credential (issue #304): the values behind
+   * `{{connection:…}}` placeholders in `ctx.fetch`, plus the host pin they
+   * may be injected toward. Provided by the gateway's connection broker when
+   * the connector's connection carries an `oauth2`/`api_key` credential;
+   * absent on the harness-ambient lane.
+   */
+  connectionAuth?: ConnectionAuth;
+  /**
+   * Transient-failure backoff schedule for INJECTED fetches (429/5xx), in
+   * ms. Tests shrink it; the default is [1000, 4000].
+   */
+  fetchRetryDelaysMs?: readonly number[];
+}
+
+/**
+ * A broker-resolved connection credential riding one fire (issue #304).
+ * The token itself never crosses the worker boundary: `values` substitute
+ * into the request parent-side (like `{{secret:…}}`), `allowedHosts` is the
+ * anti-exfiltration pin (injection refuses any other destination), and the
+ * three hooks are how the fetch taxonomy talks back to the broker.
+ */
+export interface ConnectionAuth {
+  /** Placeholder name → plaintext, e.g. `{ access_token: 'ya29…' }`. */
+  readonly values: Readonly<Record<string, string>>;
+  /**
+   * Hosts the credential may be injected toward: exact hostnames or
+   * `*.suffix` wildcards (`*.googleapis.com`).
+   */
+  readonly allowedHosts: readonly string[];
+  /**
+   * Force-refresh after a 401 — resolves replacement `values`. Rejects when
+   * the credential is dead (the broker has already flipped needs-auth).
+   * Absent for `api_key` credentials (nothing to refresh).
+   */
+  readonly refresh?: () => Promise<Readonly<Record<string, string>>>;
+  /**
+   * The credential is dead upstream (401 after refresh, scope withdrawn):
+   * flip the connection to needs-auth with an owner-readable reason.
+   */
+  readonly onAuthDead?: (reason: string) => Promise<void>;
+  /**
+   * Per-connection rate gate every injected request passes through, shared
+   * across concurrent fires on the same connection.
+   */
+  readonly limit?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Whether this credential may be injected toward MUTATING methods (issue
+   * #304 phase 5). Default (unset) = read-only: a POST/PUT/PATCH/DELETE
+   * injected request is refused. Wave-1 connectors never set this — external
+   * writes ride the parked-approval path, not raw ctx.fetch.
+   */
+  readonly allowWrites?: boolean;
 }
 
 export interface HandlerOutcome {
@@ -258,9 +312,14 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     return out;
   };
   const SECRET_REF_RE = /\{\{secret:([^}]+)\}\}/g;
-  const substituteSecrets = async (spec: FetchSpecWire): Promise<FetchSpecWire> => {
+  const CONNECTION_REF_RE = /\{\{connection:([a-z_]+)\}\}/g;
+  const substituteSecrets = async (
+    spec: FetchSpecWire,
+    connectionValues: Readonly<Record<string, string>>,
+  ): Promise<{ spec: FetchSpecWire; injected: boolean }> => {
     const allow = new Set(opts.connector?.secrets);
     const resolved = new Map<string, string>();
+    let injected = false;
     const substitute = async (text: string): Promise<string> => {
       const refs = [...text.matchAll(SECRET_REF_RE)].map((m) => m[1]!);
       let out = text;
@@ -278,16 +337,176 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         }
         out = out.replaceAll(`{{secret:${ref}}}`, resolved.get(ref)!);
       }
+      // Broker-injected connection values (issue #304): the placeholder
+      // names what the credential carries (`access_token` / `api_key`);
+      // an unknown name — or no broker credential at all — is a handler
+      // bug surfaced as an error, never an empty substitution.
+      for (const m of out.matchAll(CONNECTION_REF_RE)) {
+        const name = m[1]!;
+        const value = connectionValues[name];
+        if (value === undefined) {
+          throw new Error(
+            Object.keys(connectionValues).length === 0
+              ? 'this connection carries no broker credential — attach one with sync.configure_credential (issue #304)'
+              : `connection credential has no "${name}" value (carries: ${Object.keys(connectionValues).join(', ')})`,
+          );
+        }
+        injected = true;
+        resolvedSecretValues.add(value);
+        out = out.replaceAll(`{{connection:${name}}}`, value);
+      }
       return out;
     };
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(spec.headers ?? {})) headers[k] = await substitute(v);
     return {
-      url: await substitute(spec.url),
-      ...(spec.method ? { method: spec.method } : {}),
-      ...(spec.headers ? { headers } : {}),
-      ...(spec.body !== undefined ? { body: await substitute(spec.body) } : {}),
+      spec: {
+        url: await substitute(spec.url),
+        ...(spec.method ? { method: spec.method } : {}),
+        ...(spec.headers ? { headers } : {}),
+        ...(spec.body !== undefined ? { body: await substitute(spec.body) } : {}),
+      },
+      injected,
     };
+  };
+
+  // The anti-exfiltration pin (issue #304 decision 2): an injected request
+  // may only point where the CONNECTION says its credential may go. Exact
+  // hostnames or `*.suffix` wildcards; https only, loopback excepted (tests
+  // and the desktop's local bridges).
+  const hostAllowed = (url: URL): boolean =>
+    (opts.connectionAuth?.allowedHosts ?? []).some((entry) =>
+      entry.startsWith('*.')
+        ? url.hostname.endsWith(entry.slice(1)) && url.hostname.length > entry.length - 1
+        : url.hostname === entry,
+    );
+  const isLoopback = (url: URL): boolean =>
+    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+  const assertInjectable = (rawUrl: string, method: string): void => {
+    const url = new URL(rawUrl);
+    if (url.protocol !== 'https:' && !isLoopback(url)) {
+      throw new Error(`injected fetch refuses non-https destination ${url.hostname} (issue #304)`);
+    }
+    if (!hostAllowed(url)) {
+      throw new Error(
+        `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(', ')} (issue #304)`,
+      );
+    }
+    // Wave-1 read-only ceiling (issue #304 non-goal / phase 5): a broker
+    // credential injects toward SAFE methods only. A mutating injected
+    // request needs the credential to have opted into writes — the
+    // structural half of "no external writes until ingest earns trust";
+    // the per-write parked-approval send flow is the deferred other half.
+    if (!SAFE_METHODS.has(method.toUpperCase()) && !opts.connectionAuth?.allowWrites) {
+      throw new Error(
+        `injected ${method.toUpperCase()} refused — this connection is read-only; external writes ride the parked-approval path, not raw ctx.fetch (issue #304 phase 5)`,
+      );
+    }
+  };
+
+  const abortableDelay = (ms: number): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const t = setTimeout(() => {
+        cleanup();
+        resolve();
+      }, ms);
+      const onAbort = (): void => {
+        cleanup();
+        reject(new Error('aborted'));
+      };
+      const cleanup = (): void => {
+        clearTimeout(t);
+        dispatchCtx.abortSignal.removeEventListener('abort', onAbort);
+      };
+      dispatchCtx.abortSignal.addEventListener('abort', onAbort, { once: true });
+    });
+
+  interface FetchWireResult {
+    status: number;
+    headers: Record<string, string>;
+    text: string;
+  }
+
+  // One HTTP round trip. Injected requests never auto-follow redirects — a
+  // cross-host Location would carry the Authorization header somewhere the
+  // pin never approved; the handler sees the 3xx and follows deliberately.
+  const fetchOnce = async (spec: FetchSpecWire, injected: boolean): Promise<FetchWireResult> => {
+    const response = await fetch(spec.url, {
+      method: spec.method ?? 'GET',
+      ...(spec.headers ? { headers: spec.headers } : {}),
+      ...(spec.body !== undefined ? { body: spec.body } : {}),
+      ...(injected ? { redirect: 'manual' as const } : {}),
+      signal: dispatchCtx.abortSignal,
+    });
+    const text = (await response.text()).slice(0, 2 * 1024 * 1024);
+    return {
+      status: response.status,
+      headers: {
+        'content-type': response.headers.get('content-type') ?? '',
+        ...(response.headers.get('retry-after')
+          ? { 'retry-after': response.headers.get('retry-after')! }
+          : {}),
+      },
+      text,
+    };
+  };
+
+  /**
+   * The failure taxonomy for broker-injected fetches (issue #304 decision 5):
+   * 429/5xx → bounded backoff retry; 401 → one forced token refresh, then
+   * retry; 401 again (or with nothing to refresh) → the credential is dead,
+   * flip needs-auth and hand the response back; 403 that names scopes →
+   * same flip (re-consent is an owner act, not a retry). Non-injected
+   * fetches keep the raw single-shot behavior — their errors belong to the
+   * handler.
+   */
+  const executeFetch = async (rawSpec: FetchSpecWire): Promise<FetchWireResult> => {
+    let { spec, injected } = await substituteSecrets(rawSpec, opts.connectionAuth?.values ?? {});
+    if (!injected) return fetchOnce(spec, false);
+    assertInjectable(spec.url, spec.method ?? 'GET');
+    const auth = opts.connectionAuth!;
+    const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>
+      auth.limit ? auth.limit(() => fetchOnce(s, true)) : fetchOnce(s, true);
+    const retryDelays = opts.fetchRetryDelaysMs ?? [1000, 4000];
+    let transientRetries = 0;
+    let refreshed = false;
+    for (;;) {
+      const result = await gated(spec);
+      if (result.status === 429 || result.status >= 500) {
+        if (transientRetries >= retryDelays.length) return result;
+        const planned = retryDelays[transientRetries]!;
+        const retryAfterMs = Number(result.headers['retry-after']) * 1000;
+        await abortableDelay(
+          Math.min(Number.isFinite(retryAfterMs) ? Math.max(retryAfterMs, planned) : planned, 30_000),
+        );
+        transientRetries += 1;
+        continue;
+      }
+      if (result.status === 401 && auth.refresh && !refreshed) {
+        refreshed = true;
+        // A refusal here means the broker already flipped needs-auth — the
+        // thrown message is what the run records.
+        const values = await auth.refresh();
+        ({ spec } = await substituteSecrets(rawSpec, values));
+        continue;
+      }
+      if (result.status === 401) {
+        await auth
+          .onAuthDead?.('external service rejected the credential (401)')
+          .catch(() => undefined);
+        return result;
+      }
+      if (result.status === 403 && /insufficient.{0,4}(scope|permission)|invalid_scope/i.test(result.text)) {
+        await auth
+          .onAuthDead?.(
+            'permission withdrawn upstream (403 insufficient scope) — reconnect with the scopes this connector needs',
+          )
+          .catch(() => undefined);
+        return result;
+      }
+      return result;
+    }
   };
 
   const emit = opts.onRunEvent ?? noopRunEventSink;
@@ -517,21 +736,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           return;
         }
         logs.push({ level: 'info', msg: `fetch ${msg.spec.method ?? 'GET'} ${msg.spec.url}` });
-        void (async () => {
-          const spec = await substituteSecrets(msg.spec);
-          const response = await fetch(spec.url, {
-            method: spec.method ?? 'GET',
-            ...(spec.headers ? { headers: spec.headers } : {}),
-            ...(spec.body !== undefined ? { body: spec.body } : {}),
-            signal: dispatchCtx.abortSignal,
-          });
-          const text = (await response.text()).slice(0, 2 * 1024 * 1024);
-          return {
-            status: response.status,
-            headers: { 'content-type': response.headers.get('content-type') ?? '' },
-            text,
-          };
-        })()
+        void executeFetch(msg.spec)
           .then((result) => {
             send({ type: 'fetch-reply', id: msg.id, ok: true, result });
           })

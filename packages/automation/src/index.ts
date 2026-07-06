@@ -124,6 +124,7 @@ export {
   type AgentCall,
   type AgentDispatcher,
   type DispatchContext,
+  type ConnectionAuth,
 } from './handler/runner.js';
 // Shared `ctx.agent` answer coercion — every host ends an agent turn with a
 // blob of text and must turn it into the value the handler awaits the same way.
@@ -169,6 +170,7 @@ export {
   type DispatchSurface,
   type OpenDispatch,
   type OpenDispatchArgs,
+  type ResolveConnection,
 } from './fire/fire.js';
 
 // Automation-app scaffolders. The gateway lifecycle routes use the

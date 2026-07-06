@@ -1,0 +1,34 @@
+{
+  "name": "Google Calendar pull",
+  "version": "0.1.0",
+  "description": "Read-only Google Calendar ingestion through the connection broker (issue #304): events land in the staging band as core.event rows, incremental via the Calendar API's syncToken.",
+  "enabled": false,
+  "prompt": "Every hour, pull my primary Google Calendar into the vault. Walk the whole calendar page by page on first runs, then follow the sync token incrementally. Read-only — never create or modify events upstream. Stage everything for my review unless I set the connection to auto-publish.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "10 * * * *"
+    }
+  ],
+  "requires": {
+    "tools": []
+  },
+  "connector": {
+    "kind": "pull.gcal",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages Google Calendar events into the vault's review band and tracks the incremental syncToken cursor on the pull.gcal connection.",
+    "scopes": [{ "schema": "sync", "verbs": "read+act" }]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite over the whole sync command surface — staging consent (#290) and broker-credential lifecycle (#304) share the connection fixture, so the scenarios stay together
 // The one-shot pull consent story (issue #290 phase 3): an agent stages
 // parsed rows freely (risk low), but PUBLISHING them exceeds every agent's
 // ceiling and parks for the owner — the pause between draft and send.
@@ -254,5 +255,267 @@ describe('connection lifecycle (phase 4)', () => {
     expect((next as { output: { cursors: Record<string, unknown> } }).output.cursors).toEqual({
       history_id: { id: 42017 },
     });
+  });
+});
+
+// ── Broker-owned credentials (issue #304) ────────────────────────────────
+
+describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
+  test('oauth2 configure seals the client secret, pins hosts, starts in needs-auth', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        provider: 'google',
+        auth_url: 'https://accounts.google.com/o/oauth2/v2/auth',
+        token_url: 'https://oauth2.googleapis.com/token',
+        scopes: 'https://www.googleapis.com/auth/gmail.readonly',
+        client_id: 'abc.apps.googleusercontent.com',
+        client_secret: 'GOCSPX-super-secret',
+        allowed_hosts: ['gmail.googleapis.com', '*.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+    expect((outcome as { output: { status: string } }).output.status).toBe('needs-auth');
+
+    const cred = db.vault
+      .prepare('SELECT cred_kind, client_secret, allowed_hosts FROM sync_connection_credential')
+      .get() as { cred_kind: string; client_secret: string; allowed_hosts: string };
+    expect(cred.cred_kind).toBe('oauth2');
+    // Sealed at rest — never the plaintext.
+    expect(cred.client_secret).toMatch(/^sealed:v1:/);
+    expect(cred.client_secret).not.toContain('GOCSPX');
+    expect(JSON.parse(cred.allowed_hosts)).toEqual(['gmail.googleapis.com', '*.googleapis.com']);
+    const conn = db.vault.prepare('SELECT status FROM sync_connection').get() as {
+      status: string;
+    };
+    expect(conn.status).toBe('needs-auth');
+    const health = db.vault.prepare('SELECT auth_note FROM sync_connection_health').get() as {
+      auth_note: string;
+    };
+    expect(health.auth_note).toMatch(/authorization pending/);
+  });
+
+  test('a credential without allowed_hosts refuses to configure (anti-exfiltration pin)', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        api_key: 'ghp_secret',
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { reason: string }).reason).toMatch(/allowed_hosts/);
+  });
+
+  test('api_key configure seals the key and the connection is live immediately', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        provider: 'github',
+        api_key: 'ghp_live_key',
+        allowed_hosts: ['api.github.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('executed');
+    const cred = db.vault.prepare('SELECT api_key FROM sync_connection_credential').get() as {
+      api_key: string;
+    };
+    expect(cred.api_key).toMatch(/^sealed:v1:/);
+    const conn = db.vault.prepare('SELECT status FROM sync_connection').get() as {
+      status: string;
+    };
+    expect(conn.status).toBe('active');
+  });
+
+  test('store_tokens seals the pair, keeps the old refresh token when not rotated, and revives the connection', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        auth_url: 'https://a.example/auth',
+        token_url: 'https://a.example/token',
+        client_id: 'cid',
+        allowed_hosts: ['gmail.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const connectionId = (
+      db.vault.prepare('SELECT connection_id FROM sync_connection').get() as {
+        connection_id: string;
+      }
+    ).connection_id;
+
+    const first = gw.invoke(owner, {
+      command: 'sync.store_tokens',
+      input: {
+        connection_id: connectionId,
+        access_token: 'ya29.first',
+        refresh_token: '1//refresh-original',
+        expires_at: '2026-07-06T13:00:00Z',
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(first.status).toBe('executed');
+    let row = db.vault
+      .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
+      .get() as { access_token: string; refresh_token: string };
+    expect(row.access_token).toMatch(/^sealed:v1:/);
+    expect(row.refresh_token).toMatch(/^sealed:v1:/);
+    expect(
+      (db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string }).status,
+    ).toBe('active');
+    // A revived connection carries no stale complaint.
+    expect(db.vault.prepare('SELECT auth_note FROM sync_connection_health').get()).toBeUndefined();
+    const originalRefreshCipher = row.refresh_token;
+
+    // A non-rotating refresh: no refresh_token in the response.
+    const second = gw.invoke(owner, {
+      command: 'sync.store_tokens',
+      input: {
+        connection_id: connectionId,
+        access_token: 'ya29.second',
+        expires_at: '2026-07-06T14:00:00Z',
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(second.status).toBe('executed');
+    row = db.vault
+      .prepare('SELECT access_token, refresh_token FROM sync_connection_credential')
+      .get() as { access_token: string; refresh_token: string };
+    expect(row.refresh_token).toBe(originalRefreshCipher);
+    expect(row.access_token).toMatch(/^sealed:v1:/);
+  });
+
+  test('store_tokens refuses a connection that is not oauth2-kind', () => {
+    const connectionId = (
+      gw.invoke(owner, {
+        command: 'sync.configure_credential',
+        input: {
+          kind: 'pull.github',
+          label: 'personal',
+          cred_kind: 'api_key',
+          api_key: 'ghp_x',
+          allowed_hosts: ['api.github.com'],
+        },
+        purpose: 'dpv:ServiceProvision',
+      }) as { output: { connection_id: string } }
+    ).output.connection_id;
+    const outcome = gw.invoke(owner, {
+      command: 'sync.store_tokens',
+      input: { connection_id: connectionId, access_token: 'ya29.x' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('failed');
+  });
+
+  test('default reads show placeholders for every credential cell, and the journal holds no plaintext', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        auth_url: 'https://a.example/auth',
+        token_url: 'https://a.example/token',
+        client_id: 'cid',
+        client_secret: 'GOCSPX-journal-check',
+        allowed_hosts: ['gmail.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const read = gw.read(owner, {
+      entity: 'sync.connection_credential',
+      purpose: 'dpv:ServiceProvision',
+    });
+    const row = read.rows[0] as Record<string, unknown>;
+    expect(row.client_secret).toBe('«sealed»');
+    expect(row.cred_kind).toBe('oauth2');
+
+    // The append-only journal never carries the plaintext (sealedInput).
+    const journal = db.journal
+      .prepare('SELECT input_json FROM agent_command_invocation ORDER BY rowid DESC LIMIT 1')
+      .get() as { input_json: string };
+    expect(journal.input_json).not.toContain('GOCSPX-journal-check');
+  });
+
+  test('detaching (cred_kind none) shreds every credential cell', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.gmail',
+        label: 'personal',
+        cred_kind: 'oauth2',
+        auth_url: 'https://a.example/auth',
+        token_url: 'https://a.example/token',
+        client_id: 'cid',
+        client_secret: 'GOCSPX-x',
+        allowed_hosts: ['gmail.googleapis.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: { kind: 'pull.gmail', label: 'personal', cred_kind: 'none' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(db.vault.prepare('SELECT * FROM sync_connection_credential').get()).toBeUndefined();
+    expect(db.vault.prepare('SELECT * FROM sync_connection_health').get()).toBeUndefined();
+    // The connection itself survives detachment.
+    expect(db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get()).toEqual({ n: 1 });
+  });
+
+  test('set_connection_status carries a note away from active and clears it on resume', () => {
+    gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        api_key: 'ghp_x',
+        allowed_hosts: ['api.github.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    });
+    const connectionId = (
+      db.vault.prepare('SELECT connection_id FROM sync_connection').get() as {
+        connection_id: string;
+      }
+    ).connection_id;
+    gw.invoke(owner, {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'needs-auth', note: 'token refresh refused (invalid_grant)' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    let status = (
+      db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string }
+    ).status;
+    expect(status).toBe('needs-auth');
+    expect(
+      (db.vault.prepare('SELECT auth_note FROM sync_connection_health').get() as {
+        auth_note: string;
+      }).auth_note,
+    ).toMatch(/invalid_grant/);
+    gw.invoke(owner, {
+      command: 'sync.set_connection_status',
+      input: { connection_id: connectionId, status: 'active' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    status = (db.vault.prepare('SELECT status FROM sync_connection').get() as { status: string })
+      .status;
+    expect(status).toBe('active');
+    expect(db.vault.prepare('SELECT auth_note FROM sync_connection_health').get()).toBeUndefined();
   });
 });

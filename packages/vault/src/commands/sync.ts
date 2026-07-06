@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
 // The agent-facing staging commands (issue #290 phase 3) — how interactive
 // one-shot pulls write. An agent with a live harness session (MCP reach)
 // parses whatever it pulled and STAGES it through `sync.stage_rows` (risk
@@ -504,6 +505,9 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
       // missing or trashed (issue #293) — same honest-liveness state a
       // principal mismatch shows.
       status: { type: 'string', enum: ['paused', 'active', 'needs-auth'] },
+      // WHY the connection left active (issue #304): "refresh refused",
+      // "scope withdrawn"… — what the reconnect surface shows the owner.
+      note: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
@@ -537,12 +541,257 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
 };
 
 function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { connection_id: string; status: string };
+  const input = ctx.input as { connection_id: string; status: string; note?: string };
   ctx.db
     .prepare('UPDATE sync_connection SET status = ? WHERE connection_id = ?')
     .run(input.status, input.connection_id);
+  // A connection back in `active` carries no stale complaint; a flip away
+  // from it records why, so the reconnect surface is actionable. A note-less
+  // non-active flip keeps whatever complaint is already there.
+  if (input.status === 'active') {
+    setAuthNote(ctx, input.connection_id, null);
+  } else if (input.note !== undefined) {
+    setAuthNote(ctx, input.connection_id, input.note);
+  }
   ctx.wrote('sync.connection', input.connection_id);
   return { connection_id: input.connection_id, status: input.status };
+}
+
+// ── Broker-owned credentials (issue #304) ───────────────────────────────
+// A connection may carry its own credential — `oauth2` (BYO client) or
+// `api_key` (a static PAT) — instead of borrowing the harness's ambient
+// auth. The secret cells are sealed columns; the ONLY consumer is the
+// gateway broker, which injects them into `ctx.fetch` toward the
+// connection's `allowed_hosts` and never hands them to connector code.
+// `configure_credential` is the owner attaching/detaching a credential
+// (risk medium: an agent proposing it parks); `store_tokens` is the
+// ceremony/refresh landing a token pair on an already-configured oauth2
+// connection (risk low: it cannot change endpoints or hosts — the blast
+// radius the medium act already pinned).
+
+const CONFIGURE_CREDENTIAL: CommandDefinition = {
+  name: 'sync.configure_credential',
+  ownerSchema: 'sync',
+  inputSchema: {
+    type: 'object',
+    required: ['kind', 'label', 'cred_kind'],
+    additionalProperties: false,
+    properties: {
+      kind: { type: 'string', minLength: 1 },
+      label: { type: 'string', minLength: 1 },
+      // `none` detaches: every credential cell nulls, the connection falls
+      // back to the harness-ambient lane.
+      cred_kind: { type: 'string', enum: ['oauth2', 'api_key', 'none'] },
+      // Wizard/docs key, e.g. `google`, `github` — names which BYO-client
+      // walkthrough applies. Free-form.
+      provider: { type: 'string', minLength: 1 },
+      auth_url: { type: 'string', minLength: 1 },
+      token_url: { type: 'string', minLength: 1 },
+      scopes: { type: 'string', minLength: 1 },
+      client_id: { type: 'string', minLength: 1 },
+      client_secret: { type: 'string', minLength: 1 },
+      api_key: { type: 'string', minLength: 1 },
+      allowed_hosts: {
+        type: 'array',
+        minItems: 1,
+        items: { type: 'string', minLength: 1 },
+      },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['connection_id', 'cred_kind', 'status'],
+    properties: {
+      connection_id: { type: 'string' },
+      cred_kind: { type: 'string' },
+      status: { type: 'string' },
+    },
+  },
+  preconditions: [],
+  postconditions: [],
+  sealedInput: ['client_secret', 'api_key'],
+  idempotency: 'idempotent',
+  // Attaching a credential decides where secrets may flow — an
+  // owner-consequence act; agents proposing it park for confirmation.
+  risk: 'medium',
+  handler: configureCredential,
+};
+
+function configureCredential(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as {
+    kind: string;
+    label: string;
+    cred_kind: 'oauth2' | 'api_key' | 'none';
+    provider?: string;
+    auth_url?: string;
+    token_url?: string;
+    scopes?: string;
+    client_id?: string;
+    client_secret?: string;
+    api_key?: string;
+    allowed_hosts?: string[];
+  };
+  const connectionId = ensureConnectionTx(ctx.db, { kind: input.kind, label: input.label });
+  if (input.cred_kind === 'none') {
+    // Detach = DELETE the sidecar row: no half-shredded credentials, and
+    // the connection is back on the harness-ambient lane.
+    ctx.db
+      .prepare('DELETE FROM sync_connection_credential WHERE connection_id = ?')
+      .run(connectionId);
+    ctx.db.prepare('DELETE FROM sync_connection_health WHERE connection_id = ?').run(connectionId);
+    ctx.wrote('sync.connection', connectionId);
+    ctx.cite({
+      claim: `detached the credential from ${input.kind} "${input.label}" — back on the harness-ambient lane`,
+      entityType: 'sync.connection',
+      entityId: connectionId,
+    });
+    return { connection_id: connectionId, cred_kind: 'none', status: 'active' };
+  }
+  // The host pin is the anti-exfiltration invariant (issue #304 decision 2):
+  // a credential without a host list would be injectable anywhere connector
+  // code points ctx.fetch, so both kinds refuse to configure without one.
+  if (!input.allowed_hosts || input.allowed_hosts.length === 0) {
+    throw new Error(
+      `cred_kind "${input.cred_kind}" requires allowed_hosts — the hosts this credential may be injected toward (issue #304)`,
+    );
+  }
+  if (input.cred_kind === 'oauth2') {
+    if (!input.auth_url || !input.token_url || !input.client_id) {
+      throw new Error(
+        'cred_kind "oauth2" requires auth_url, token_url and client_id (the owner-registered BYO client, issue #304)',
+      );
+    }
+  } else if (!input.api_key) {
+    throw new Error('cred_kind "api_key" requires api_key');
+  }
+  // Switching kinds never leaks the previous credential's cells: the whole
+  // sidecar row is replaced, unset optionals to NULL. oauth2 starts life in
+  // needs-auth — the consent ceremony (authorize + store_tokens) is what
+  // proves reach; an api_key is complete as configured.
+  const status = input.cred_kind === 'oauth2' ? 'needs-auth' : 'active';
+  ctx.db
+    .prepare(
+      `INSERT OR REPLACE INTO sync_connection_credential
+         (connection_id, cred_kind, provider, auth_url, token_url, scopes,
+          client_id, client_secret, access_token, refresh_token, api_key,
+          token_expires_at, allowed_hosts, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, ?)`,
+    )
+    .run(
+      connectionId,
+      input.cred_kind,
+      input.provider ?? null,
+      input.auth_url ?? null,
+      input.token_url ?? null,
+      input.scopes ?? null,
+      input.client_id ?? null,
+      input.client_secret ?? null,
+      input.api_key ?? null,
+      JSON.stringify(input.allowed_hosts),
+      ctx.now,
+    );
+  ctx.db
+    .prepare('UPDATE sync_connection SET status = ? WHERE connection_id = ?')
+    .run(status, connectionId);
+  setAuthNote(
+    ctx,
+    connectionId,
+    input.cred_kind === 'oauth2' ? 'authorization pending — run Connect' : null,
+  );
+  ctx.wrote('sync.connection', connectionId);
+  ctx.wrote('sync.connection_credential', connectionId);
+  ctx.cite({
+    claim: `configured a ${input.cred_kind} credential on ${input.kind} "${input.label}" pinned to ${input.allowed_hosts.join(', ')}`,
+    entityType: 'sync.connection',
+    entityId: connectionId,
+  });
+  return { connection_id: connectionId, cred_kind: input.cred_kind, status };
+}
+
+/** Upsert (or clear) the connection's owner-readable health note. */
+function setAuthNote(ctx: HandlerCtx, connectionId: string, note: string | null): void {
+  if (note === null) {
+    ctx.db.prepare('DELETE FROM sync_connection_health WHERE connection_id = ?').run(connectionId);
+    return;
+  }
+  ctx.db
+    .prepare(
+      `INSERT INTO sync_connection_health (connection_id, auth_note, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT (connection_id) DO UPDATE SET auth_note = excluded.auth_note, updated_at = excluded.updated_at`,
+    )
+    .run(connectionId, note, ctx.now);
+}
+
+const STORE_TOKENS: CommandDefinition = {
+  name: 'sync.store_tokens',
+  ownerSchema: 'sync',
+  inputSchema: {
+    type: 'object',
+    required: ['connection_id', 'access_token'],
+    additionalProperties: false,
+    properties: {
+      connection_id: { type: 'string', minLength: 1 },
+      access_token: { type: 'string', minLength: 1 },
+      // Absent on refresh responses that do not rotate — the stored one
+      // stays. Rotating providers MUST land the new one in the same act.
+      refresh_token: { type: 'string', minLength: 1 },
+      expires_at: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['connection_id', 'status'],
+    properties: { connection_id: { type: 'string' }, status: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'connection_is_oauth2',
+      sql: `SELECT count(*) AS n FROM sync_connection_credential WHERE connection_id = :connection_id AND cred_kind = 'oauth2'`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [],
+  sealedInput: ['access_token', 'refresh_token'],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: storeTokens,
+};
+
+function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as {
+    connection_id: string;
+    access_token: string;
+    refresh_token?: string;
+    expires_at?: string;
+  };
+  ctx.db
+    .prepare(
+      `UPDATE sync_connection_credential SET access_token = ?,
+         refresh_token = COALESCE(?, refresh_token),
+         token_expires_at = ?, updated_at = ?
+       WHERE connection_id = ?`,
+    )
+    .run(
+      input.access_token,
+      input.refresh_token ?? null,
+      input.expires_at ?? null,
+      ctx.now,
+      input.connection_id,
+    );
+  ctx.db
+    .prepare(`UPDATE sync_connection SET status = 'active' WHERE connection_id = ?`)
+    .run(input.connection_id);
+  setAuthNote(ctx, input.connection_id, null);
+  ctx.wrote('sync.connection', input.connection_id);
+  ctx.wrote('sync.connection_credential', input.connection_id);
+  ctx.cite({
+    claim: `landed a fresh token pair on connection ${input.connection_id}${input.expires_at ? ` (expires ${input.expires_at})` : ''}`,
+    entityType: 'sync.connection',
+    entityId: input.connection_id,
+  });
+  return { connection_id: input.connection_id, status: 'active' };
 }
 
 /** Register the staging + connection-lifecycle commands on a gateway. */
@@ -553,4 +802,6 @@ export function registerSyncCommands(gateway: Gateway): void {
   gateway.registerCommand(FINISH_RUN);
   gateway.registerCommand(SET_CURSOR);
   gateway.registerCommand(SET_CONNECTION_STATUS);
+  gateway.registerCommand(CONFIGURE_CREDENTIAL);
+  gateway.registerCommand(STORE_TOKENS);
 }

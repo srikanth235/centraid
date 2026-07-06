@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "github-pull",
+  "name": "GitHub sync",
+  "kind": "automation",
+  "description": "Pulls the GitHub issues and pull requests you're involved in into the vault — read-only, via a fine-grained personal access token (no OAuth dance).",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

@@ -75,6 +75,8 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'import_row',
     'connection_cursor',
     'connection_run',
+    'connection_credential',
+    'connection_health',
   ],
   tally: ['friend', 'group', 'group_member', 'expense', 'expense_split', 'settlement'],
   enrich: ['embedding', 'request'],

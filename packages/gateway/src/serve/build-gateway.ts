@@ -72,9 +72,11 @@ import {
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
+import { ConnectionBroker } from './connection-broker.js';
 import type { VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
 import { makeBlobRouteHandler } from '../routes/blob-routes.js';
@@ -410,6 +412,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
   const runEventBus = new RunEventBus();
 
+  // The connection broker (issue #304): resolves a connector's broker-carried
+  // credential (oauth2/api_key sealed on the connection row) per fire —
+  // refresh under a per-connection single-flight, values injected transport-
+  // side, never handed to handler code. Resolves the CURRENT vault's plane at
+  // call time, exactly like `vaultFor` below.
+  const connectionBroker = new ConnectionBroker(() => vaultRegistry.current());
+
   // The one fire path, shared by "run now" (manual) and the cron schedulers
   // (scheduled). A host can override the fire entirely (Plane B — OpenClaw
   // runs it in-process); the default below runs on THIS host with the
@@ -442,6 +451,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             // Each fire's ctx.vault rides the automation's enrolled
             // agent.agent credential, resolved per app id (duaility §12).
             vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
+            resolveConnection: connectionBroker.resolveForFire,
             runner: runnerPrefs?.kind ?? 'codex',
             triggerKind: opts.triggerKind,
             triggerOrigin: opts.triggerOrigin,
@@ -909,6 +919,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
     makeBlobRouteHandler(vaultRegistry),
+    // Broker-carried connection credentials (issue #304): health list,
+    // configure, pause/resume, and the PKCE consent ceremony. Mounted
+    // BEFORE the generic `_vault` handler (same prefix family).
+    makeConnectionsRouteHandler(vaultRegistry, connectionBroker),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are
