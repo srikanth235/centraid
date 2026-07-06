@@ -18,7 +18,7 @@ on the agent surface.
 - [x] Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
 - [x] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
 - [x] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
-- [ ] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
+- [x] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
 - [ ] Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
 
 ## What changed
@@ -190,6 +190,36 @@ Commit 4 — phase 3: faces in Photos, trip albums:
 - Gallery entries (24 templates) + 3 behavior tests (identity-blind
   proposals + derived ids, deterministic clustering with zero agent
   calls, cron-not-data trigger hygiene for trip-albums).
+
+Commit 5 — phase 4: active documents:
+
+- `packages/blueprints/automations/doc-entity-linker/` (new) — mentions
+  become anchored references with the #282 machinery and a machine author:
+  the model extracts person mentions + exact quoted passages; matching
+  against the vault's parties happens in PLAIN CODE (the model never
+  decides who exists — unmatched mentions drop); each match asserts
+  `core.link_entities` (document —references→ person) with the W3C
+  text-quote selector inline, so the CRM timeline shows "documents
+  mentioning X" and the reference opens at the passage. The command's own
+  no-identical-live-link precondition is the re-run idempotency — a
+  duplicate is a caught refusal.
+- `packages/blueprints/automations/obligation-extractor/` (new) — dated
+  obligations (expiry/renewal/due) out of document text, staged as
+  tentative `core.event` rows (`obligation:<content>:<n>` uids) on
+  `enrichment.obligations`. Dateless obligations drop.
+- `packages/blueprints/automations/renewal-reminders/` (new) — the watch
+  half: a CONDITION trigger (tentative core.event, dtstart
+  within-next-days 14, morning gate) carries the whole reminder logic;
+  the handler only formats the brief from `ctx.input.rows` — reads
+  nothing, writes nothing. Time semantics live in the data (issue #290's
+  condition-trigger doctrine).
+- Anchored-citation Q&A: `vault_content` (commit 1) + the assistant
+  preamble teaching document reads and `ref:core.content_item/<id>`
+  citations are the Q&A surface; citation cards resolve through the
+  existing #272 resolver and #282 anchors open passages in-app.
+- Gallery entries (27 templates) + 4 behavior tests (vault-only person
+  matching + anchor shape, caught duplicate-link refusal, dateless-drop,
+  condition-input brief with zero reads/writes).
 
 ## Decisions of record
 

@@ -288,6 +288,48 @@
       "triggerKind": "cron",
       "triggerLabel": "Daily · 6:00 AM",
       "integrations": []
+    },
+    {
+      "id": "doc-entity-linker",
+      "name": "Document links",
+      "desc": "Links documents to the people they mention, anchored to the exact passage — your CRM timeline grows documents.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔗",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When documents become readable",
+      "integrations": []
+    },
+    {
+      "id": "obligation-extractor",
+      "name": "Document deadlines",
+      "desc": "Finds expiry and renewal dates inside your documents and stages them as calendar entries — your documents watch your deadlines.",
+      "colorKey": "ochre",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "⏰",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When documents become readable",
+      "integrations": []
+    },
+    {
+      "id": "renewal-reminders",
+      "name": "Renewal reminders",
+      "desc": "Watches published deadlines and briefs you when one is inside two weeks.",
+      "colorKey": "indigo",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🔔",
+      "category": "Enrichment",
+      "triggerKind": "condition",
+      "triggerLabel": "When a deadline is 14 days out",
+      "integrations": []
     }
   ]
 }

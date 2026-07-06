@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "obligation-extractor",
+  "name": "Document deadlines",
+  "kind": "automation",
+  "description": "Finds expiry and renewal dates inside your documents and stages them as calendar entries — your documents watch your deadlines.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

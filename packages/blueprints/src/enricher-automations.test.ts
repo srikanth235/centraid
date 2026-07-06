@@ -21,10 +21,15 @@ const ENRICHERS = [
   'doc-filer',
   'face-proposer',
   'trip-albums',
+  'doc-entity-linker',
+  'obligation-extractor',
+  'renewal-reminders',
 ] as const;
 
 /** Trip clustering is deterministic code, so it wakes on cron, not data. */
 const CRON_ENRICHERS = new Set(['trip-albums']);
+/** The reminder's whole logic IS its condition trigger. */
+const CONDITION_ENRICHERS = new Set(['renewal-reminders']);
 
 function automationDir(id: string): string {
   return path.join(PACKAGE_ROOT, 'automations', id, 'automations', id);
@@ -40,6 +45,7 @@ async function loadHandler(id: string): Promise<(args: unknown) => Promise<unkno
 /** A recording stub ctx: canned reads/agent turns, captured invokes. */
 function stubCtx(options: {
   reads: Record<string, Record<string, unknown>[]>;
+  input?: unknown;
   agent?: (call: {
     prompt: string;
     json?: unknown;
@@ -75,7 +81,7 @@ function stubCtx(options: {
       delete: async (k: string) => void state.delete(k),
     },
     runs: { last: async () => undefined, list: async () => [] },
-    input: undefined,
+    input: options.input as never,
   };
   const log = {
     info: (m: string) => logs.push(m),
@@ -92,9 +98,12 @@ describe('enricher template hygiene', () => {
       const manifest = parseManifest(readFileSync(path.join(automationDir(id), 'automation.json'), 'utf8'));
       expect(manifest.enabled).toBe(false); // enabling IS the owner's opt-in
       expect(manifest.vault).toBeDefined();
-      expect(
-        manifest.triggers.some((t) => t.kind === (CRON_ENRICHERS.has(id) ? 'cron' : 'data')),
-      ).toBe(true);
+      const wantKind = CRON_ENRICHERS.has(id)
+        ? 'cron'
+        : CONDITION_ENRICHERS.has(id)
+          ? 'condition'
+          : 'data';
+      expect(manifest.triggers.some((t) => t.kind === wantKind)).toBe(true);
       expect(manifest.connector).toBeUndefined(); // enrichers use ctx.agent — connectors forbid it
     },
   );
@@ -313,6 +322,101 @@ describe('trip-albums behavior', () => {
     expect(input.rows[0]!.payload.name).toContain('Jun');
     expect(input.rows[0]!.payload.members.length).toBe(6);
     expect(result.summary).toContain('1 trip album');
+  });
+});
+
+describe('doc-entity-linker behavior', () => {
+  it('links only people already in the vault, anchored to the exact passage', async () => {
+    const handler = await loadHandler('doc-entity-linker');
+    const harness = stubCtx({
+      reads: {
+        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
+        'core.party': [
+          { party_id: 'p1', kind: 'person', display_name: 'Rahul Mehta' },
+          { party_id: 'p2', kind: 'org', display_name: 'Acme Corp' },
+        ],
+      },
+      agent: () => ({
+        mentions: [
+          { name: 'Rahul Mehta', exact: 'payable to Rahul Mehta by June 30', prefix: 'is ' },
+          { name: 'Sunita Rao', exact: 'witnessed by Sunita Rao' },
+        ],
+      }),
+    });
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    expect(harness.invokes.map((i) => i.command)).toEqual(['core.link_entities']);
+    const input = harness.invokes[0]!.input as Record<string, unknown>;
+    expect(input.from_id).toBe('d1');
+    expect(input.to_id).toBe('p1'); // Rahul exists; Sunita doesn't — dropped
+    expect(input.relation).toBe('references');
+    expect((input.selector as { exact: string }).exact).toContain('Rahul Mehta');
+    expect(result.summary).toContain('1 named nobody');
+  });
+
+  it('an identical-live-link refusal is caught, never a failed fire', async () => {
+    const handler = await loadHandler('doc-entity-linker');
+    const harness = stubCtx({
+      reads: {
+        'core.content_derivative': [{ derivative_id: 'dv2', content_id: 'd2', variant: 'text' }],
+        'core.party': [{ party_id: 'p1', kind: 'person', display_name: 'Rahul Mehta' }],
+      },
+      agent: () => ({ mentions: [{ name: 'Rahul Mehta', exact: 'Rahul Mehta again' }] }),
+    });
+    harness.ctx.vault.invoke = async () => {
+      throw new Error('precondition no_identical_live_link failed');
+    };
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as { summary: string };
+    expect(result.summary).toContain('linked 0');
+  });
+});
+
+describe('obligation-extractor behavior', () => {
+  it('stages dated obligations as tentative events; dateless ones drop', async () => {
+    const handler = await loadHandler('obligation-extractor');
+    const harness = stubCtx({
+      reads: {
+        'core.content_derivative': [{ derivative_id: 'dv1', content_id: 'd1', variant: 'text' }],
+      },
+      agent: () => ({
+        obligations: [
+          { what: 'Home insurance renewal', kind: 'renewal', date: '2027-03-01' },
+          { what: 'Some vague thing', kind: 'due', date: 'soon' },
+        ],
+      }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    const input = harness.invokes[0]!.input as {
+      kind: string;
+      rows: { external_id: string; payload: { status: string; dtstart: string } }[];
+    };
+    expect(input.kind).toBe('enrichment.obligations');
+    expect(input.rows.length).toBe(1); // "soon" is not a date
+    expect(input.rows[0]!.external_id).toBe('obligation:d1:0');
+    expect(input.rows[0]!.payload.status).toBe('tentative');
+    expect(input.rows[0]!.payload.dtstart).toBe('2027-03-01');
+  });
+});
+
+describe('renewal-reminders behavior', () => {
+  it('formats the brief from the condition trigger rows — reads nothing, writes nothing', async () => {
+    const handler = await loadHandler('renewal-reminders');
+    const harness = stubCtx({
+      reads: {},
+      input: {
+        rows: [
+          { summary: 'Passport expiry', dtstart: '2026-07-18', status: 'tentative' },
+          { summary: 'Home insurance renewal (renewal)', dtstart: '2026-07-12', status: 'tentative' },
+        ],
+      },
+    });
+    const result = (await handler({ ctx: harness.ctx, log: harness.log })) as {
+      summary: string;
+      output: { upcoming: { due: string }[] };
+    };
+    expect(harness.invokes.length).toBe(0);
+    expect(harness.agentCalls.length).toBe(0);
+    expect(result.summary).toContain('2 deadlines');
+    expect(result.output.upcoming[0]!.due).toBe('2026-07-12'); // soonest first
   });
 });
 
