@@ -28,6 +28,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
+import { replaceMemo } from './annotations.js';
 
 /** The vault owner's party id — Tally's implicit `me`. */
 function ownerPartyId(ctx: HandlerCtx): string {
@@ -763,6 +764,37 @@ const BIND_TXN: CommandDefinition = {
   },
 };
 
+const SET_EXPENSE_MEMO: CommandDefinition = {
+  name: 'tally.set_expense_memo',
+  ownerSchema: 'tally',
+  inputSchema: {
+    type: 'object',
+    required: ['expense_id', 'note'],
+    additionalProperties: false,
+    properties: {
+      expense_id: { type: 'string', minLength: 1 },
+      // '' clears the memo (the one-running-memo-per-entity semantic).
+      note: { type: 'string' },
+    },
+  },
+  outputSchema: { type: 'object', properties: { expense_id: { type: 'string' } } },
+  preconditions: [
+    { name: 'expense_exists', sql: EXPENSE_EXISTS_SQL, column: 'n', op: 'eq', value: 1 },
+  ],
+  postconditions: [],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    // The owner's remark about an expense is entity-scoped meaning (issue
+    // #310 C6): knowledge.annotation on the canonical row, the same memo
+    // People and Social write — never a prose column.
+    const input = ctx.input as { expense_id: string; note: string };
+    replaceMemo(ctx, 'tally.expense', input.expense_id, input.note);
+    ctx.wrote('tally.expense', input.expense_id);
+    return { expense_id: input.expense_id };
+  },
+};
+
 /** Register the Tally commands on a gateway. */
 export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_FRIEND);
@@ -776,4 +808,5 @@ export function registerTallyCommands(gateway: Gateway): void {
   gateway.registerCommand(DELETE_EXPENSE);
   gateway.registerCommand(SETTLE_UP);
   gateway.registerCommand(BIND_TXN);
+  gateway.registerCommand(SET_EXPENSE_MEMO);
 }

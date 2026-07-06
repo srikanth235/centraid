@@ -26,6 +26,7 @@ import type { Gateway } from '../gateway/gateway.js';
 import { SEALED_PLACEHOLDER } from '../schema/sealed.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { setStarred } from './flags.js';
+import { replaceMemo } from './annotations.js';
 
 export const LOCKER_ITEM_TYPE = 'locker.item';
 
@@ -647,6 +648,37 @@ const WATCHTOWER: CommandDefinition = {
   },
 };
 
+const SET_MEMO: CommandDefinition = {
+  name: 'locker.set_memo',
+  ownerSchema: 'locker',
+  inputSchema: {
+    type: 'object',
+    required: ['item_id', 'note'],
+    additionalProperties: false,
+    properties: {
+      item_id: { type: 'string', minLength: 1 },
+      // '' clears the memo (the one-running-memo-per-entity semantic).
+      note: { type: 'string' },
+    },
+  },
+  outputSchema: { type: 'object', properties: { item_id: { type: 'string' } } },
+  preconditions: [{ name: 'item_live', sql: ITEM_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
+  postconditions: [],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: (ctx) => {
+    // The owner's remark ABOUT an item — "rotated after the breach" — is a
+    // knowledge.annotation on the canonical row (issue #310 C6), plaintext
+    // and searchable. Secret material never belongs here: recovery codes
+    // and the like go in the item's SEALED fields (notes/content), which
+    // stay out of every index by the structural gate.
+    const input = ctx.input as { item_id: string; note: string };
+    replaceMemo(ctx, LOCKER_ITEM_TYPE, input.item_id, input.note);
+    ctx.wrote(LOCKER_ITEM_TYPE, input.item_id);
+    return { item_id: input.item_id };
+  },
+};
+
 /** Register the Locker commands on a gateway. */
 export function registerLockerCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ITEM);
@@ -658,4 +690,5 @@ export function registerLockerCommands(gateway: Gateway): void {
   gateway.registerCommand(UNSTAR_ITEM);
   gateway.registerCommand(TOTP_CODE);
   gateway.registerCommand(WATCHTOWER);
+  gateway.registerCommand(SET_MEMO);
 }

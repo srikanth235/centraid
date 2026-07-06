@@ -146,6 +146,26 @@ const SPECS: readonly FtsEntitySpec[] = [
     idColumn: 'profile_id',
     columns: [{ name: 'role', kind: 'column' }],
   },
+  {
+    // The locker's non-secret face (issue #310 C6): title, username, url.
+    // Sealed columns structurally cannot feed the index — the gate below
+    // throws at DDL-build time (issue #293) — and `notes` stays out
+    // deliberately: it routinely carries recovery codes.
+    entity: 'locker.item',
+    idColumn: 'item_id',
+    columns: [
+      { name: 'title', kind: 'column' },
+      { name: 'username', kind: 'column' },
+      { name: 'url', kind: 'column' },
+    ],
+    deletedColumn: 'deleted_at',
+  },
+  {
+    // "That dinner at Olive we split" is a search question (issue #310 C6).
+    entity: 'tally.expense',
+    idColumn: 'expense_id',
+    columns: [{ name: 'description', kind: 'column' }],
+  },
 ];
 
 /** What the gateway needs to run (and consent-clamp) a search. */

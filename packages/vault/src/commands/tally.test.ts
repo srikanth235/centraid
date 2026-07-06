@@ -325,3 +325,43 @@ test('delete_group removes its circle and membership with it', () => {
   expect(circles.n).toBe(0);
   expect(membersLeft.n).toBe(0);
 });
+
+test('set_expense_memo writes the canonical annotation; empty note clears it (#310 C6)', () => {
+  const priya = addFriend();
+  const gid = out<{ group_id: string }>(
+    invoke('tally.create_group', { name: 'Apt2', icon: '🏠', member_ids: [priya] }),
+  ).group_id;
+  const xid = out<{ expense_id: string }>(
+    invoke('tally.add_expense', {
+      group_id: gid,
+      description: 'Dinner at Olive',
+      amount_minor: 400,
+      paid_by: me,
+      category: 'food',
+      splits: [
+        { party_id: me, share_minor: 200 },
+        { party_id: priya, share_minor: 200 },
+      ],
+    }),
+  ).expense_id;
+  out(invoke('tally.set_expense_memo', { expense_id: xid, note: 'Landlord still owes us' }));
+  const memo = db.vault
+    .prepare(
+      `SELECT body_text FROM knowledge_annotation WHERE target_type = 'tally.expense' AND target_id = ?`,
+    )
+    .get(xid) as { body_text: string } | undefined;
+  expect(memo?.body_text).toBe('Landlord still owes us');
+  out(invoke('tally.set_expense_memo', { expense_id: xid, note: '' }));
+  const gone = db.vault
+    .prepare(
+      `SELECT count(*) AS n FROM knowledge_annotation WHERE target_type = 'tally.expense' AND target_id = ?`,
+    )
+    .get(xid) as { n: number };
+  expect(gone.n).toBe(0);
+
+  // The expense description is searchable (issue #310 C6).
+  const hit = db.vault
+    .prepare(`SELECT expense_id FROM fts_tally_expense WHERE fts_tally_expense MATCH 'olive'`)
+    .get() as { expense_id: string } | undefined;
+  expect(hit?.expense_id).toBe(xid);
+});

@@ -218,3 +218,25 @@ test('tags are shared SKOS concepts — two items reuse one concept', () => {
     .get() as { n: number };
   expect(concepts.n).toBe(2); // 'work' shared, 'dev' minted once
 });
+
+test('set_memo writes the canonical annotation; the item title is searchable (#310 C6)', () => {
+  const id = addLogin();
+  out(invoke('locker.set_memo', { item_id: id, note: 'rotated after the breach' }));
+  const memo = db.vault
+    .prepare(
+      `SELECT body_text FROM knowledge_annotation WHERE target_type = 'locker.item' AND target_id = ?`,
+    )
+    .get(id) as { body_text: string } | undefined;
+  expect(memo?.body_text).toBe('rotated after the breach');
+
+  // title/username/url feed the index; a trashed item leaves it.
+  const hit = db.vault
+    .prepare(`SELECT item_id FROM fts_locker_item WHERE fts_locker_item MATCH 'github'`)
+    .get() as { item_id: string } | undefined;
+  expect(hit?.item_id).toBe(id);
+  out(invoke('locker.trash_item', { item_id: id }));
+  const afterTrash = db.vault
+    .prepare(`SELECT count(*) AS n FROM fts_locker_item WHERE fts_locker_item MATCH 'github'`)
+    .get() as { n: number };
+  expect(afterTrash.n).toBe(0);
+});
