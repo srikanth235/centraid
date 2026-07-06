@@ -62,6 +62,7 @@ const SPECS: readonly FtsEntitySpec[] = [
       { name: 'title', kind: 'column' },
       { name: 'body', kind: 'content', fk: 'body_content_id' },
     ],
+    deletedColumn: 'deleted_at',
   },
   {
     // Canonical bytes double as the documents surface: title + text bodies.
