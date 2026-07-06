@@ -422,9 +422,11 @@
       "kind": "app",
       "files": [
         "actions/add-to-album.js",
+        "actions/confirm-face.js",
         "actions/create-album.js",
         "actions/delete-album.js",
         "actions/delete-asset.js",
+        "actions/reject-face.js",
         "actions/remove-from-album.js",
         "actions/rename-album.js",
         "actions/restore.js",
@@ -435,6 +437,7 @@
         "app.json",
         "index.html",
         "package.json",
+        "queries/faces.js",
         "queries/library.js",
         "wall.css"
       ],
@@ -1063,6 +1066,44 @@
         "app.json",
         "automations/doc-filer/automation.json",
         "automations/doc-filer/handler.js"
+      ]
+    },
+    {
+      "id": "face-proposer",
+      "name": "Face proposals",
+      "desc": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🙂",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When new photos arrive",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/face-proposer/automation.json",
+        "automations/face-proposer/handler.js"
+      ]
+    },
+    {
+      "id": "trip-albums",
+      "name": "Trip albums",
+      "desc": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
+      "colorKey": "teal",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🧳",
+      "category": "Enrichment",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 6:00 AM",
+      "integrations": [],
+      "files": [
+        "app.json",
+        "automations/trip-albums/automation.json",
+        "automations/trip-albums/handler.js"
       ]
     }
   ]

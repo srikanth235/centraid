@@ -260,6 +260,34 @@
       "triggerKind": "data",
       "triggerLabel": "When documents become readable",
       "integrations": []
+    },
+    {
+      "id": "face-proposer",
+      "name": "Face proposals",
+      "desc": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
+      "colorKey": "rose",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🙂",
+      "category": "Enrichment",
+      "triggerKind": "data",
+      "triggerLabel": "When new photos arrive",
+      "integrations": []
+    },
+    {
+      "id": "trip-albums",
+      "name": "Trip albums",
+      "desc": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
+      "colorKey": "teal",
+      "iconKey": "Sparkle",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🧳",
+      "category": "Enrichment",
+      "triggerKind": "cron",
+      "triggerLabel": "Daily · 6:00 AM",
+      "integrations": []
     }
   ]
 }

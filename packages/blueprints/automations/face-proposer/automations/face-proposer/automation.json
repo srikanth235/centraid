@@ -1,0 +1,33 @@
+{
+  "name": "Face proposals",
+  "version": "0.1.0",
+  "description": "Detects faces in new photos (preview only) and lands unconfirmed media.face_region proposals; you name and confirm them in Photos. Confirmed regions are never touched again.",
+  "enabled": false,
+  "prompt": "When new photos arrive, look at each one's preview and mark where the faces are as normalized boxes with confidence scores. Never guess who anyone is — I confirm identities myself in the Photos app. Never touch a region I've already confirmed.",
+  "triggers": [
+    {
+      "kind": "data",
+      "entities": ["media.media_asset"],
+      "every": "*/10 * * * *"
+    }
+  ],
+  "requires": {},
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads new photos' preview/thumb derivatives, detects face regions, and stages unconfirmed proposals for the owner's confirm loop in Photos (issue #299 phase 3).",
+    "scopes": [
+      { "schema": "media", "verbs": "read" },
+      { "schema": "core", "verbs": "read" },
+      { "schema": "sync", "verbs": "read+act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

@@ -139,7 +139,10 @@ const CONFIRM_FACE: CommandDefinition = {
     },
   ],
   idempotency: 'retry-safe',
-  risk: 'medium',
+  // Low by design: confirm/reject operate on DERIVED proposals — the same
+  // curation class as captioning (media.update_asset) — so the in-app
+  // loop stays live under the app ceiling instead of parking every click.
+  risk: 'low',
   handler: confirmFace,
 };
 
@@ -193,7 +196,7 @@ const REJECT_FACE: CommandDefinition = {
     },
   ],
   idempotency: 'once',
-  risk: 'medium',
+  risk: 'low',
   handler: (ctx) => {
     const input = ctx.input as { region_id: string };
     ctx.db.prepare('DELETE FROM media_face_region WHERE region_id = ?').run(input.region_id);

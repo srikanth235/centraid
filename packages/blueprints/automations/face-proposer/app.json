@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "face-proposer",
+  "name": "Face proposals",
+  "kind": "automation",
+  "description": "Spots faces in new photos and proposes regions you confirm as people — nothing is asserted without you.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

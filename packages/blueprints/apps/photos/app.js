@@ -1118,6 +1118,14 @@ function renderLightbox() {
     panel.appendChild(strip);
   }
 
+  // People (issue #299): the enricher's face proposals with the owner's
+  // confirm/reject loop. Loaded async so an empty vault costs nothing; the
+  // section only appears when regions exist.
+  const facesHost = document.createElement('div');
+  facesHost.className = 'lightbox-faces';
+  panel.appendChild(facesHost);
+  renderFaces(facesHost, asset.asset_id, note);
+
   const actions = document.createElement('div');
   actions.className = 'lightbox-actions';
   const fav = ghostBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
@@ -1309,6 +1317,72 @@ $('searchClear').addEventListener('click', () => {
   clearSearch();
   $('searchInput').focus();
 });
+
+// ---------- Faces (issue #299) ----------
+
+// The propose-and-confirm loop over media.face_region: unconfirmed
+// proposals show a person picker + Confirm/Reject; confirmed ones read as
+// facts. Everything here is derived data — rejecting is disposal, and a
+// re-run of the enricher can always propose again.
+async function renderFaces(host, assetId, note) {
+  let data;
+  try {
+    data = await window.centraid.read({ query: 'faces', input: { asset_id: assetId } });
+  } catch {
+    return; // face queries never break the lightbox
+  }
+  const regions = data?.regions ?? [];
+  if (regions.length === 0 || data?.denied) return;
+  host.replaceChildren();
+  const heading = document.createElement('p');
+  heading.className = 'lightbox-faces-title';
+  heading.textContent = 'People';
+  host.appendChild(heading);
+  for (const region of regions) {
+    const row = document.createElement('div');
+    row.className = 'lightbox-face';
+    if (region.confirmed) {
+      const who = document.createElement('span');
+      who.textContent = `✓ ${region.person_name ?? 'Confirmed'}`;
+      row.appendChild(who);
+      host.appendChild(row);
+      continue;
+    }
+    const label = document.createElement('span');
+    const pct = region.confidence != null ? ` · ${Math.round(region.confidence * 100)}%` : '';
+    label.textContent = `Face${region.person_name ? ` — ${region.person_name}?` : ''}${pct}`;
+    row.appendChild(label);
+    const picker = document.createElement('select');
+    picker.setAttribute('aria-label', 'Who is this?');
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Who is this?';
+    picker.appendChild(blank);
+    for (const person of data.people ?? []) {
+      const option = document.createElement('option');
+      option.value = person.party_id;
+      option.textContent = person.name;
+      if (region.party_id === person.party_id) option.selected = true;
+      picker.appendChild(option);
+    }
+    const confirm = ghostBtn('Confirm', async () => {
+      const partyId = picker.value;
+      if (!partyId) {
+        note.textContent = 'Pick a person first.';
+        return;
+      }
+      const outcome = await act('confirm-face', { region_id: region.region_id, party_id: partyId });
+      if (narrate(outcome, note)) await renderFaces(host, assetId, note);
+    });
+    const reject = ghostBtn('✕', async () => {
+      const outcome = await act('reject-face', { region_id: region.region_id });
+      if (narrate(outcome, note)) await renderFaces(host, assetId, note);
+    });
+    reject.setAttribute('aria-label', 'Reject this face proposal');
+    row.append(picker, confirm, reject);
+    host.appendChild(row);
+  }
+}
 
 // ---------- Upload ----------
 

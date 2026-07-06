@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "trip-albums",
+  "name": "Trip albums",
+  "kind": "automation",
+  "description": "Clusters your photos into trip albums by time gaps — proposed as drafts, published only when you approve.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

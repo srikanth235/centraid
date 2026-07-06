@@ -17,7 +17,7 @@ on the agent surface.
 - [x] Commit 1 — vault enrichment core + agent content surfaces (v10 schema, publishers, commands, auto-publish trust, `content` op, ctx.agent attachments, assistant vault_content)
 - [x] Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
 - [x] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
-- [ ] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
+- [x] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
 - [ ] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
 - [ ] Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
 
@@ -160,6 +160,36 @@ Commit 3 — phase 2: cross-domain extraction + filing; Photos client phash:
   templates) and 3 new behavior tests (receipt extraction shape + currency
   normalization, dateless-booking drop, filing proposal shape + folder
   reuse + cursor).
+
+Commit 4 — phase 3: faces in Photos, trip albums:
+
+- `packages/blueprints/automations/face-proposer/` (new) — identity-blind
+  face detection: the model marks WHERE faces are (normalized boxes +
+  confidence), NEVER who — naming a person is the owner's assertion, made
+  in Photos. Proposals land through the face-region publisher (external
+  ids `<asset>:face:<n>`, confirmed rows immune).
+- Photos grows the confirm loop: `queries/faces.js` (regions + a bounded
+  people picker), `actions/confirm-face.js` / `reject-face.js`, a People
+  section in the lightbox panel (picker + Confirm/Reject per proposal,
+  confirmed regions read as facts), scopes for media.face_region read +
+  the two verbs + core.party read.
+- `media.confirm_face` / `media.reject_face` dropped to risk LOW —
+  they curate DERIVED proposals, the same class as captioning
+  (media.update_asset), so the in-app loop stays live under the app
+  ceiling instead of parking every click. Asserting identity happens
+  nowhere else: the enricher is structurally identity-blind.
+- `packages/blueprints/automations/trip-albums/` (new) — deterministic
+  clustering, zero model turns (issue #290 doctrine): runs of photos
+  separated by >36h gaps, ≥5 photos, ≥2 days become staged
+  `core.collection` proposals named by dates (`trip:<start>` external
+  ids); publishing is the review click, top-ups never remove.
+- Near-duplicates ship as capability, not chrome: the phash sidecar +
+  `vault_hamming` are queryable by the assistant today ("find my
+  duplicate photos" is one SQL turn); a Photos duplicates shelf is
+  deliberately deferred UI.
+- Gallery entries (24 templates) + 3 behavior tests (identity-blind
+  proposals + derived ids, deterministic clustering with zero agent
+  calls, cron-not-data trigger hygiene for trip-albums).
 
 ## Decisions of record
 
