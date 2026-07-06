@@ -179,6 +179,22 @@ export class BlobCustody {
   }
 
   /**
+   * Purge EVERY remote object (vault deletion, issue #296 §6). The remote
+   * tier resolves synchronously HERE — before the first await — so callers
+   * may close the vault handles right after invoking and let the deletes
+   * run detached.
+   */
+  purgeRemote(): Promise<string[]> {
+    const remote = this.remoteTier();
+    if (!remote) return Promise.resolve([]);
+    return (async () => {
+      const shas = await remote.store.list();
+      for (const sha of shas) await remote.store.delete(sha);
+      return shas;
+    })();
+  }
+
+  /**
    * Copy the whole local tier into `destDir/blobs` — the self-contained
    * export/backup gesture (issue #296 §6: the exit ramp from S3 is a
    * directory). The local tier is always complete, so no remote pull needed.
