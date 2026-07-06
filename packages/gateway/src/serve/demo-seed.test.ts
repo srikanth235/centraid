@@ -6,8 +6,7 @@
 // first click.
 
 import { afterEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
-import { existsSync } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -80,9 +79,9 @@ test('every shipped scenario seeds through the demo register and purges clean', 
          FROM consent_provenance WHERE prov_activity = 'seed.demo'`,
     )
     .get() as { n: number };
-  const registered = plane.db.vault
-    .prepare('SELECT count(*) AS n FROM consent_seed_row')
-    .get() as { n: number };
+  const registered = plane.db.vault.prepare('SELECT count(*) AS n FROM consent_seed_row').get() as {
+    n: number;
+  };
   expect(provCounts.n).toBe(registered.n);
 
   // Purge everything: registry empty, domain tables empty of demo rows.

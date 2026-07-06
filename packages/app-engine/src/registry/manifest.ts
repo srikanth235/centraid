@@ -120,7 +120,7 @@ export interface ManifestKnob {
 export interface ManifestVaultScope {
   readonly schema: string;
   readonly table?: string;
-  readonly verbs: 'read' | 'read+act' | 'act';
+  readonly verbs: 'read' | 'read+act' | 'act' | 'reveal';
 }
 
 /**
@@ -302,7 +302,7 @@ export const MANIFEST_JSON_SCHEMA: Record<string, unknown> = {
             properties: {
               schema: { type: 'string', minLength: 1 },
               table: { type: 'string', minLength: 1 },
-              verbs: { type: 'string', enum: ['read', 'read+act', 'act'] },
+              verbs: { type: 'string', enum: ['read', 'read+act', 'act', 'reveal'] },
             },
           },
         },

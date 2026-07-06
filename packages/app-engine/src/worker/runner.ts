@@ -28,7 +28,16 @@ interface WorkerRequest {
 interface VaultCallMessage {
   type: 'vault';
   id: number;
-  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve';
+  op:
+    | 'read'
+    | 'search'
+    | 'invoke'
+    | 'query'
+    | 'describe'
+    | 'parked'
+    | 'changes'
+    | 'resolve'
+    | 'reveal';
   payload: unknown;
 }
 
@@ -140,6 +149,10 @@ const vault = {
    */
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('resolve', request);
+  },
+  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
+  reveal(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('reveal', request);
   },
 };
 

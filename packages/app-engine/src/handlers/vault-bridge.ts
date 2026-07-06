@@ -29,7 +29,8 @@ export type VaultOp =
   | 'describe'
   | 'parked'
   | 'changes'
-  | 'resolve';
+  | 'resolve'
+  | 'reveal';
 
 /** One proxied call: the op plus its request payload, verbatim from the worker. */
 export interface VaultCall {

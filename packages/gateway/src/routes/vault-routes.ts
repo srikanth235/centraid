@@ -392,7 +392,7 @@ function parseSelector(raw: unknown): AnchorSelector | undefined {
   return { exact: s.exact, prefix: s.prefix, suffix: s.suffix, start: s.start };
 }
 
-const VERBS = new Set(['read', 'read+act', 'act']);
+const VERBS = new Set(['read', 'read+act', 'act', 'reveal']);
 
 function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefined {
   if (typeof body.purpose !== 'string' || body.purpose.length === 0) return undefined;
@@ -406,7 +406,7 @@ function parseGrantRequest(body: Record<string, unknown>): GrantRequest | undefi
     if (s.table !== undefined && typeof s.table !== 'string') return undefined;
     scopes.push({
       schema: s.schema,
-      verbs: s.verbs as 'read' | 'read+act' | 'act',
+      verbs: s.verbs as 'read' | 'read+act' | 'act' | 'reveal',
       ...(typeof s.table === 'string' ? { table: s.table } : {}),
     });
   }
