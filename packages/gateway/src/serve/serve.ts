@@ -18,6 +18,7 @@
  */
 
 import { startRuntimeHttpServer } from '@centraid/app-engine';
+import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
 import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
 
 export interface ServeOptions extends BuildGatewayOptions {
@@ -57,6 +58,10 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     extraHandlers: [gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
+    // The OAuth consent callback (issue #304) is the one bearer-free path:
+    // a provider redirects the owner's browser here; the route authenticates
+    // by its single-use `state` capability instead.
+    publicPaths: [OAUTH_CALLBACK_PATH],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;

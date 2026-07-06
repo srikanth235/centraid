@@ -76,6 +76,7 @@ import { ConnectionBroker } from './connection-broker.js';
 import type { VaultPlane } from './vault-plane.js';
 import { runWithVaultContext, VAULT_HEADER, type DeviceAccess } from './vault-context.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { makeConnectionsRouteHandler } from '../routes/connections-routes.js';
 import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeImportRouteHandler } from '../routes/import-routes.js';
 import { makeBlobRouteHandler } from '../routes/blob-routes.js';
@@ -918,6 +919,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Range-capable bytes out. Mounted BEFORE the generic `_vault`
     // handler (same prefix family).
     makeBlobRouteHandler(vaultRegistry),
+    // Broker-carried connection credentials (issue #304): health list,
+    // configure, pause/resume, and the PKCE consent ceremony. Mounted
+    // BEFORE the generic `_vault` handler (same prefix family).
+    makeConnectionsRouteHandler(vaultRegistry, connectionBroker),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, rename/presentation). Its `_vault` prefix
     // is disjoint from every other route family. Vault create/delete are

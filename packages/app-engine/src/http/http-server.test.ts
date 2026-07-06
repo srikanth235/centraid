@@ -75,3 +75,32 @@ test('sets CORS headers on a successful authed response', async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get('access-control-allow-origin')).toBe('*');
 });
+
+test('publicPaths serve without the bearer; everything else still 401s (issue #304)', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  const publicServer = await startRuntimeHttpServer({
+    runtime,
+    publicPaths: ['/centraid/_vault/oauth/callback'],
+    extraHandlers: [
+      async (req, res) => {
+        if (!(req.url ?? '').startsWith('/centraid/_vault/oauth/callback')) return false;
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end('<h1>ceremony</h1>');
+        return true;
+      },
+    ],
+  });
+  try {
+    // The exact public path answers with NO Authorization header at all.
+    const open = await fetch(`${publicServer.url}/centraid/_vault/oauth/callback?state=x&code=y`);
+    expect(open.status).toBe(200);
+    expect(await open.text()).toContain('ceremony');
+    // Match is exact — a sibling path is NOT public.
+    const sibling = await fetch(`${publicServer.url}/centraid/_vault/oauth/callback/deeper`);
+    expect(sibling.status).toBe(401);
+    const other = await fetch(`${publicServer.url}/centraid/_apps`);
+    expect(other.status).toBe(401);
+  } finally {
+    await publicServer.close();
+  }
+});

@@ -26,6 +26,7 @@
  *      the fire WITHOUT flipping, because the next fire may simply succeed.
  */
 
+import { createHash, randomBytes } from 'node:crypto';
 import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
 import type { ConnectionAuth, ResolveConnection } from '@centraid/automation';
 import type { VaultPlane } from './vault-plane.js';
@@ -42,7 +43,9 @@ const TRANSIENT_RETRY_DELAY_MS = 500;
 interface ConnectionCredRow {
   connection_id: string;
   cred_kind: 'oauth2' | 'api_key' | null;
+  auth_url: string | null;
   token_url: string | null;
+  scopes: string | null;
   client_id: string | null;
   client_secret: string | null;
   access_token: string | null;
@@ -51,6 +54,18 @@ interface ConnectionCredRow {
   token_expires_at: string | null;
   allowed_hosts: string | null;
 }
+
+/** One in-flight consent ceremony, keyed by its single-use `state`. */
+interface PendingCeremony {
+  plane: VaultPlane;
+  connectionId: string;
+  verifier: string;
+  redirectUri: string;
+  expiresAt: number;
+}
+
+/** A ceremony the owner walked away from is dead after ten minutes. */
+const CEREMONY_TTL_MS = 10 * 60 * 1000;
 
 /** The credential is dead upstream — needs a new consent ceremony. */
 class AuthDeadError extends Error {}
@@ -99,8 +114,105 @@ export class ConnectionBroker {
   /** Single-flight refresh per `<vaultId>:<connectionId>` (rot point 2). */
   private readonly refreshing = new Map<string, Promise<string>>();
   private readonly limiters = new Map<string, ConnectionLimiter>();
+  /** In-flight consent ceremonies, single-use, TTL-bound. */
+  private readonly pending = new Map<string, PendingCeremony>();
 
   constructor(private readonly planeFor: () => VaultPlane) {}
+
+  /**
+   * Start the consent ceremony (issue #304 decision 3): mint the PKCE
+   * verifier + single-use `state` and build the provider consent URL. The
+   * `state` is the capability the (bearer-free) callback authenticates by.
+   * `access_type=offline&prompt=consent` are Google's knobs for issuing a
+   * refresh token — other providers ignore them.
+   */
+  beginAuthorization(
+    plane: VaultPlane,
+    connectionId: string,
+    redirectUri: string,
+  ): { authUrl: string; state: string } {
+    const row = this.readRowById(plane, connectionId);
+    if (!row || row.cred_kind !== 'oauth2') {
+      throw new Error('connection carries no oauth2 credential — configure one first');
+    }
+    if (!row.auth_url || !row.client_id) {
+      throw new Error('oauth2 credential is missing auth_url/client_id');
+    }
+    for (const [key, entry] of this.pending) {
+      if (entry.expiresAt < Date.now()) this.pending.delete(key);
+    }
+    const state = randomBytes(32).toString('hex');
+    const verifier = randomBytes(48).toString('base64url');
+    const challenge = createHash('sha256').update(verifier).digest('base64url');
+    const url = new URL(row.auth_url);
+    url.searchParams.set('client_id', row.client_id);
+    url.searchParams.set('redirect_uri', redirectUri);
+    url.searchParams.set('response_type', 'code');
+    if (row.scopes) url.searchParams.set('scope', row.scopes);
+    url.searchParams.set('code_challenge', challenge);
+    url.searchParams.set('code_challenge_method', 'S256');
+    url.searchParams.set('state', state);
+    url.searchParams.set('access_type', 'offline');
+    url.searchParams.set('prompt', 'consent');
+    this.pending.set(state, {
+      plane,
+      connectionId,
+      verifier,
+      redirectUri,
+      expiresAt: Date.now() + CEREMONY_TTL_MS,
+    });
+    return { authUrl: url.toString(), state };
+  }
+
+  /**
+   * Finish the ceremony: the provider bounced the owner's browser back with
+   * `code` + `state`. The state must match a live pending entry (single-use
+   * — consumed even on failure); the code exchanges at the token endpoint
+   * with the PKCE verifier, and the pair lands via `sync.store_tokens`
+   * (receipted, sealed, connection flips active).
+   */
+  async completeAuthorization(state: string, code: string): Promise<{ connectionId: string }> {
+    const ceremony = this.pending.get(state);
+    this.pending.delete(state);
+    if (!ceremony || ceremony.expiresAt < Date.now()) {
+      throw new Error('unknown or expired authorization state — start Connect again');
+    }
+    const { plane, connectionId } = ceremony;
+    const row = this.readRowById(plane, connectionId);
+    if (!row || row.cred_kind !== 'oauth2' || !row.token_url || !row.client_id) {
+      throw new Error('the connection lost its oauth2 credential mid-ceremony');
+    }
+    const form = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: ceremony.redirectUri,
+      client_id: row.client_id,
+      code_verifier: ceremony.verifier,
+    });
+    if (row.client_secret) {
+      form.set('client_secret', this.unseal(plane, connectionId, 'client_secret', row.client_secret));
+    }
+    const response = await this.postTokenForm(row.token_url, form);
+    if (!response.ok) {
+      throw new Error(`authorization code exchange failed: ${response.detail}`);
+    }
+    const outcome: InvokeOutcome = plane.gateway.invoke(plane.ownerCredential, {
+      command: 'sync.store_tokens',
+      input: {
+        connection_id: connectionId,
+        access_token: response.accessToken,
+        ...(response.refreshToken ? { refresh_token: response.refreshToken } : {}),
+        ...(response.expiresAt ? { expires_at: response.expiresAt } : {}),
+      },
+      purpose: BROKER_PURPOSE,
+    });
+    if (outcome.status !== 'executed') {
+      throw new Error(
+        `tokens did not persist (${outcome.status}: ${'reason' in outcome ? outcome.reason : 'unknown'})`,
+      );
+    }
+    return { connectionId };
+  }
 
   /**
    * The per-fire seam `runFire` calls (issue #304): resolve the connector's
@@ -328,8 +440,9 @@ export class ConnectionBroker {
     // No credential sidecar row = the harness-ambient lane (issue #290).
     return plane.db.vault
       .prepare(
-        `SELECT cc.connection_id, cc.cred_kind, cc.token_url, cc.client_id, cc.client_secret,
-                cc.access_token, cc.refresh_token, cc.api_key, cc.token_expires_at, cc.allowed_hosts
+        `SELECT cc.connection_id, cc.cred_kind, cc.auth_url, cc.token_url, cc.scopes,
+                cc.client_id, cc.client_secret, cc.access_token, cc.refresh_token,
+                cc.api_key, cc.token_expires_at, cc.allowed_hosts
            FROM sync_connection_credential cc
            JOIN sync_connection c ON c.connection_id = cc.connection_id
           WHERE c.kind = ? AND c.label = ?`,
