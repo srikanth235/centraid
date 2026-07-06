@@ -57,9 +57,9 @@ export function assistantCwd(vaults: VaultRegistry): string {
 /**
  * The vault-register tool runners, shared by every register that carries
  * them (assistant, ask, and — issue #286 phase 2 — the builder): reads are
- * the owner's `vault_sql`; writes ride the enrolled `_assistant` agent
- * (medium risk ceiling), so high-risk commands park for the owner instead
- * of executing.
+ * the owner's `vault_sql`; writes ride the enrolled `_assistant` agent,
+ * so confirm-gated (Tier 3/4, issue #306) commands park for the owner
+ * instead of executing.
  */
 export function makeVaultToolRunners(vaults: VaultRegistry): {
   vaultSql: () => VaultSqlRunner;

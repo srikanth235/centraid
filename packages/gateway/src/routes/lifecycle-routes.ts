@@ -21,6 +21,7 @@
 //   POST   /centraid/_automations              scaffold an automation app
 //          body {id, name?, description?, prompt?, triggers?, apps?, …, publish?}
 //   POST   /centraid/_automations/set-enabled?ref=<ref>   toggle enabled
+//   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (issue #306)
 //          body {enabled, publish?}
 //   DELETE /centraid/_automations?ref=<ref>&publish=      remove an automation
 //
@@ -60,6 +61,7 @@ import {
   handleAutomationCreate,
   handleAutomationDelete,
   handleAutomationSetEnabled,
+  handleEnrichmentToggle,
 } from './lifecycle-automation-routes.js';
 import {
   defaultSessionId,
@@ -105,6 +107,9 @@ export function makeLifecycleRouteHandler(
       }
       if (pathname === '/centraid/_automations/set-enabled' && method === 'POST') {
         return await handleAutomationSetEnabled(opts, req, res, url);
+      }
+      if (pathname === '/centraid/_automations/enrichment' && method === 'POST') {
+        return await handleEnrichmentToggle(opts, req, res);
       }
       if (pathname === '/centraid/_automations' && method === 'DELETE') {
         return await handleAutomationDelete(opts, req, res, url);
