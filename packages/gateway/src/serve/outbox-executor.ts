@@ -137,6 +137,9 @@ export class OutboxExecutor {
         refreshed = true;
         try {
           injectedSpec = substitute(spec, await auth.refresh());
+          // Re-assert the pin on the RE-substituted URL: a placeholder in
+          // the URL means new values can move the destination.
+          assertDrainable(injectedSpec.url, auth);
           continue;
         } catch (err) {
           this.logger.warn(`outbox: ${row.item_id} token refresh refused: ${errText(err, auth)}`);
