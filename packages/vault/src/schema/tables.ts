@@ -23,6 +23,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'account',
     'transaction',
     'content_item',
+    'content_derivative',
     'attachment',
     'activity',
     'observation',

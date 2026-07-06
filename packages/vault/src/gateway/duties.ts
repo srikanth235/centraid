@@ -8,6 +8,8 @@
 
 import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
+import { sweepBlobStaging } from '../blob/staging.js';
+import { shaOfBlobUri } from '../blob/store.js';
 import { resolveEntity } from '../schema/tables.js';
 import { retainExtBand } from './ext.js';
 import { writeProvenance, writeReceipt } from './evidence.js';
@@ -92,6 +94,10 @@ export interface SweepResult {
   contentPurged: number;
   assetsPurged: number;
   retentionDeleted: number;
+  /** CAS bytes reclaimed with their purged content items (issue #296). */
+  blobsReclaimed: number;
+  /** Unclaimed blob_staging rows past the TTL, dropped with their bytes. */
+  stagingExpired: number;
   receiptId: string;
 }
 
@@ -138,6 +144,7 @@ function enforceRetention(db: VaultDb, now: string): number {
  */
 export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   const now = nowIso();
+  let blobsReclaimed = 0;
   const grants = db.vault
     .prepare(
       `UPDATE consent_access_grant SET status='expired'
@@ -152,9 +159,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     .run(now, now);
   const purgeable = db.vault
     .prepare(
-      `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
+      `SELECT content_id, content_uri FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
     )
-    .all(now) as { content_id: string }[];
+    .all(now) as { content_id: string; content_uri: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
   // temporal link duty runs here too: live links onto a purged row end-date
   // rather than dangle (issue #272).
@@ -197,7 +204,28 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     db.vault
       .prepare('UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?')
       .run(row.content_id);
+    // Derivatives go with their parent (issue #296): registry rows first
+    // (the FK), then their CAS bytes, then the original's bytes. sha256 is
+    // UNIQUE on content items, so nothing else can claim the original —
+    // remote replicas fall to the reconciliation sweep by design.
+    const variants = db.vault
+      .prepare(
+        'SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL',
+      )
+      .all(row.content_id) as { sha256: string }[];
+    db.vault
+      .prepare('DELETE FROM core_content_derivative WHERE content_id = ?')
+      .run(row.content_id);
     db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
+    for (const v of variants) {
+      db.blobs.deleteLocalSync(v.sha256);
+      blobsReclaimed += 1;
+    }
+    const originalSha = shaOfBlobUri(row.content_uri);
+    if (originalSha) {
+      db.blobs.deleteLocalSync(originalSha);
+      blobsReclaimed += 1;
+    }
     endDateLinks.run(now, 'core.content_item', row.content_id, 'core.content_item', row.content_id);
     dropTags.run('core.content_item', row.content_id);
     dropEntries.run('core.content_item', row.content_id);
@@ -219,6 +247,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     dropTags.run('media.media_asset', a.asset_id);
   }
   const retentionDeleted = enforceRetention(db, now);
+  // The staging TTL (issue #296 §3): bytes nothing claimed leave with their
+  // rows; a batch hold (import review in progress) pins past the TTL.
+  const staging = sweepBlobStaging(db, { now });
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
@@ -233,6 +264,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       contentPurged: purgeable.length,
       assetsPurged: lapsedAssets.length,
       retentionDeleted,
+      blobsReclaimed,
+      stagingExpired: staging.expired.length,
     },
   });
   return {
@@ -241,6 +274,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     contentPurged: purgeable.length,
     assetsPurged: lapsedAssets.length,
     retentionDeleted,
+    blobsReclaimed,
+    stagingExpired: staging.expired.length,
     receiptId,
   };
 }

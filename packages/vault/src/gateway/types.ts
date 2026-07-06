@@ -213,6 +213,44 @@ export interface Citation {
   weight?: number;
 }
 
+/**
+ * The blob surface inside a command (issue #296): pure row work over bytes
+ * that already sit in the local CAS — a command never does byte I/O beyond
+ * the synchronous local tier, so the transaction stays the unit of truth.
+ */
+export interface HandlerBlobs {
+  /** Staged, unclaimed info for a sha (null = nothing staged). */
+  staged(sha256: string): {
+    mediaType: string;
+    byteSize: number;
+    originalName: string | null;
+    meta: Record<string, unknown>;
+  } | null;
+  /**
+   * Claim a staged sha into a canonical content item — the promotion from
+   * "bytes waiting" to "model" (issue #296 §3). Idempotent over dedup:
+   * a live content item already owning the sha restores + returns.
+   */
+  claimStaged(
+    sha256: string,
+    options?: { title?: string },
+  ): {
+    contentId: string;
+    mediaType: string;
+    byteSize: number;
+    meta: Record<string, unknown>;
+    deduped: 0 | 1;
+  };
+  /**
+   * Spill raw bytes into the local CAS and return their sha — the small
+   * data_uri compatibility path (§3): the command already holds the bytes,
+   * custody moves them out of the row.
+   */
+  spill(bytes: Buffer): string;
+  /** Local CAS presence — precondition-grade, no bytes returned. */
+  has(sha256: string): boolean;
+}
+
 /** Transaction-scoped surface handed to command handlers. */
 export interface HandlerCtx {
   /** vault.db handle, inside the command's ACID transaction. */
@@ -238,6 +276,8 @@ export interface HandlerCtx {
    * legacy values return as-is; a missing row/column returns null.
    */
   unseal(entityType: string, entityId: string, column: string): string | null;
+  /** Blob custody surface (issue #296) — staged claims and data_uri spills. */
+  blobs: HandlerBlobs;
 }
 
 /** Domain-owned command implementation, hosted and checked by the gateway. */

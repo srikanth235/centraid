@@ -2,7 +2,44 @@
 // SQLite files) and the gateway that is the only door to it. Consumers import
 // it namespaced (`import * as vault from '@centraid/vault'`).
 
-export { openVaultDb, type VaultDb, type OpenVaultOptions } from './db.js';
+export {
+  openVaultDb,
+  readBlobStoreSettings,
+  type VaultDb,
+  type OpenVaultOptions,
+  type BlobStoreSettings,
+} from './db.js';
+export {
+  BLOB_URI_PREFIX,
+  blobUriFor,
+  isBlobUri,
+  shaOfBlobUri,
+  sha256OfBytes,
+  type BlobStore,
+  type BlobRange,
+  type BlobStat,
+} from './blob/store.js';
+export { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
+export { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
+export { BlobCustody, sealBlob, unsealBlob, type ReconcileResult } from './blob/custody.js';
+export {
+  stageBlobBytes,
+  sweepBlobStaging,
+  releaseBatchHold,
+  mediaLocationPolicy,
+  STAGING_TTL_HOURS,
+  type StageBlobOptions,
+  type StagedBlob,
+} from './blob/staging.js';
+export { MAX_INLINE_DATA_URI_CHARS, decodeDataUri } from './blob/mint.js';
+export { promoteStagedBlob, type PromotedContent } from './blob/promote.js';
+export { sniffMediaType, extractBlobMeta, type BlobMeta } from './blob/pipeline.js';
+export {
+  resolveServableBlob,
+  liveBlobShas,
+  type BlobResolveOutcome,
+  type ServableBlob,
+} from './blob/read.js';
 export { uuidv7, nowIso, sha256Hex } from './ids.js';
 export {
   ONTOLOGY_VERSION,

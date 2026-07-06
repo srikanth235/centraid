@@ -13,11 +13,8 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
-import { sha256Hex } from '../ids.js';
+import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
-
-/** ~8 MB of decoded content; the data: URI is ~4/3 of that in base64. */
-const MAX_DATA_URI_CHARS = 11_000_000;
 
 /** Soft-deleted bytes linger this long before the lifecycle sweep purges. */
 const PURGE_AFTER_DAYS = 30;
@@ -30,21 +27,6 @@ function actorPartyId(ctx: HandlerCtx): string {
     | undefined;
   if (!owner?.owner_party_id) throw new Error('vault has no owner');
   return owner.owner_party_id;
-}
-
-/** Pull the media type and decoded size out of a `data:` URI. */
-function parseDataUri(uri: string): { mediaType: string; byteSize: number } {
-  if (!uri.startsWith('data:')) throw new Error('media must arrive as a data: URI');
-  const comma = uri.indexOf(',');
-  if (comma === -1) throw new Error('malformed data: URI (no comma)');
-  const meta = uri.slice(5, comma);
-  const payload = uri.slice(comma + 1);
-  const isBase64 = meta.split(';').includes('base64');
-  const mediaType = meta.split(';')[0] || 'application/octet-stream';
-  const byteSize = isBase64
-    ? Buffer.from(payload, 'base64').length
-    : Buffer.byteLength(decodeURIComponent(payload), 'utf8');
-  return { mediaType, byteSize };
 }
 
 function assetKindFor(mediaType: string): string {
@@ -102,10 +84,12 @@ const ADD_ASSET: CommandDefinition = {
   ownerSchema: 'media',
   inputSchema: {
     type: 'object',
-    required: ['data_uri'],
     additionalProperties: false,
     properties: {
+      /** Small inline bytes. Exactly one of data_uri / staged_sha (#296). */
       data_uri: { type: 'string', minLength: 6 },
+      /** Staged bytes: claim what POST /_vault/blobs hashed into the CAS. */
+      staged_sha: { type: 'string', minLength: 64, maxLength: 64 },
       kind: { type: 'string', enum: ['photo', 'video', 'audio', 'scan'] },
       captured_at: { type: 'string' },
       title: { type: 'string' },
@@ -125,15 +109,33 @@ const ADD_ASSET: CommandDefinition = {
   },
   preconditions: [
     {
-      name: 'is_data_uri',
-      sql: "SELECT (:data_uri LIKE 'data:%') AS n",
+      name: 'exactly_one_source',
+      sql: 'SELECT ((:data_uri IS NOT NULL) + (:staged_sha IS NOT NULL)) AS n',
       column: 'n',
       op: 'eq',
       value: 1,
     },
     {
+      name: 'is_data_uri',
+      sql: "SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (:data_uri LIKE 'data:%') END AS n",
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // The inline door is for SMALL payloads (issue #296): a 4K video takes
+      // the staging route, never command JSON (the journal records inputs).
       name: 'within_size_cap',
-      sql: `SELECT (length(:data_uri) <= ${MAX_DATA_URI_CHARS}) AS n`,
+      sql: `SELECT CASE WHEN :data_uri IS NULL THEN 1 ELSE (length(:data_uri) <= ${MAX_INLINE_DATA_URI_CHARS}) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'staged_or_owned',
+      sql: `SELECT CASE WHEN :staged_sha IS NULL THEN 1 ELSE
+              (EXISTS(SELECT 1 FROM blob_staging WHERE sha256 = :staged_sha AND variant IS NULL)
+               OR EXISTS(SELECT 1 FROM core_content_item WHERE sha256 = :staged_sha)) END AS n`,
       column: 'n',
       op: 'eq',
       value: 1,
@@ -157,7 +159,8 @@ const ADD_ASSET: CommandDefinition = {
 
 function addAsset(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as {
-    data_uri: string;
+    data_uri?: string;
+    staged_sha?: string;
     kind?: string;
     captured_at?: string;
     title?: string;
@@ -165,43 +168,14 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     height?: number;
     duration_s?: number;
   };
-  const parsed = parseDataUri(input.data_uri);
-  const sha = sha256Hex(input.data_uri);
-  let contentId: string;
-  const existing = ctx.db
-    .prepare('SELECT content_id, deleted_at FROM core_content_item WHERE sha256 = ?')
-    .get(sha) as { content_id: string; deleted_at: string | null } | undefined;
-  if (existing) {
-    contentId = existing.content_id;
-    if (existing.deleted_at !== null) {
-      // Re-uploading trashed bytes restores them — dedup identity survives.
-      ctx.db
-        .prepare(
-          'UPDATE core_content_item SET deleted_at = NULL, purge_at = NULL WHERE content_id = ?',
-        )
-        .run(contentId);
-      ctx.wrote('core.content_item', contentId);
-    }
-  } else {
-    contentId = ctx.newId();
-    ctx.db
-      .prepare(
-        `INSERT INTO core_content_item
-           (content_id, media_type, content_uri, sha256, byte_size, title, language, creator_party_id, origin_device_id, deleted_at, purge_at, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, NULL, ?)`,
-      )
-      .run(
-        contentId,
-        parsed.mediaType,
-        input.data_uri,
-        sha,
-        parsed.byteSize,
-        input.title ?? null,
-        ctx.identity.partyId,
-        ctx.now,
-      );
-    ctx.wrote('core.content_item', contentId);
-  }
+  // Staged claims carry spool metadata (issue #296 §4): the gateway sniffed
+  // the type and read EXIF server-side, so capture time and dimensions no
+  // longer depend on the caller supplying them. Explicit input still wins.
+  const spoolMeta = input.staged_sha ? (ctx.blobs.staged(input.staged_sha)?.meta ?? {}) : {};
+  const minted = input.staged_sha
+    ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
+    : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
+  const contentId = minted.contentId;
   // media_media_asset.content_id is UNIQUE — the same bytes are one asset.
   // A trashed asset over these bytes comes back to life: re-upload = restore.
   const existingAsset = ctx.db
@@ -218,24 +192,39 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     }
     return { asset_id: existingAsset.asset_id, content_id: contentId, deduped: 1 };
   }
+  const meta = spoolMeta as {
+    width?: number;
+    height?: number;
+    captured_at?: string;
+    has_location?: boolean;
+    latitude?: number;
+    longitude?: number;
+  };
+  // Spool EXIF (minus the raw text feed) is worth keeping whole — it is the
+  // camera's testimony about the bytes, and GPS already passed the
+  // media.location policy gate at staging time.
+  const exif = Object.fromEntries(
+    Object.entries(meta).filter(([k, v]) => k !== 'text' && v !== undefined),
+  );
   const assetId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL)`,
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)`,
     )
     .run(
       assetId,
       contentId,
-      input.kind ?? assetKindFor(parsed.mediaType),
-      input.captured_at ?? null,
-      input.width ?? null,
-      input.height ?? null,
+      input.kind ?? assetKindFor(minted.mediaType),
+      input.captured_at ?? meta.captured_at ?? null,
+      input.width ?? meta.width ?? null,
+      input.height ?? meta.height ?? null,
       input.duration_s ?? null,
+      Object.keys(exif).length > 0 ? JSON.stringify(exif) : null,
     );
   ctx.wrote('media.media_asset', assetId);
   ctx.cite({
-    claim: `${parsed.mediaType} (${parsed.byteSize} bytes) entered the library`,
+    claim: `${minted.mediaType} (${minted.byteSize} bytes) entered the library`,
     entityType: 'media.media_asset',
     entityId: assetId,
   });

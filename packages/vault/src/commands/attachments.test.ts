@@ -72,7 +72,11 @@ test('attach pins a data-URI file to a subject as its cover content item', () =>
   expect(content.media_type).toBe('image/png');
   expect(content.title).toBe('preview.png');
   expect(content.byte_size).toBeGreaterThan(0);
-  expect(content.content_uri).toBe(PNG);
+  // Binary bytes spill to the CAS (issue #296): the row keeps the address,
+  // custody keeps the bytes, and the sha is of the RAW bytes.
+  expect(content.content_uri).toMatch(/^blob:sha256-[0-9a-f]{64}$/);
+  const sha = content.content_uri.slice('blob:sha256-'.length);
+  expect(db.blobs.hasSync(sha)).toBe(true);
 });
 
 test('identical bytes dedupe on sha256; a second attachment reuses the content item and is not primary', () => {

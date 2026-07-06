@@ -35,13 +35,16 @@ export interface BackupResult {
   journalPath: string;
   vaultSha256: string;
   journalSha256: string;
+  /** CAS blobs copied into `<destDir>/blobs` (issue #296). */
+  blobsCopied: number;
   receiptId: string;
 }
 
 /**
  * Consistent copies of both files via VACUUM INTO, hashed so the owner can
- * verify the copy independently. Export = copy two files and verify hashes
- * (§03) — this is the "copy" half; portability.ts is the semantic half.
+ * verify the copy independently, plus the blob CAS (issue #296: export =
+ * copy two files and a directory — the self-contained exit ramp, whatever
+ * remote tier settings name). Portability.ts stays the semantic half.
  */
 export function backupVault(db: VaultDb, destDir: string): BackupResult {
   requireDir(db, 'backup');
@@ -52,6 +55,8 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
   const vaultSha256 = sha256Hex(readFileSync(vaultPath).toString('binary'));
   const journalSha256 = sha256Hex(readFileSync(journalPath).toString('binary'));
+  // Blobs are content-addressed: every copy is verifiable by its filename.
+  const { copied } = db.blobs.exportTo(destDir);
   const receiptId = writeReceipt(db.journal, {
     grantId: null,
     invocationId: null,
@@ -60,7 +65,7 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
     objectId: null,
     purpose: null,
     decision: 'allow',
-    detail: { vaultSha256, journalSha256, destDir },
+    detail: { vaultSha256, journalSha256, destDir, blobsCopied: copied },
   });
-  return { vaultPath, journalPath, vaultSha256, journalSha256, receiptId };
+  return { vaultPath, journalPath, vaultSha256, journalSha256, blobsCopied: copied, receiptId };
 }
