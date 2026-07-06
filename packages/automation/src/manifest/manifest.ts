@@ -46,7 +46,8 @@ export interface ManifestRequires {
   readonly model?: string;
   /**
    * Sealed Locker cells this connector's `ctx.fetch` may reference (issue
-   * #293 decision 8), as `locker:<item_id>:<column>`. The allowlist for
+   * #293 decision 8), as `locker:<item_id>:<column>` or the rotation-stable
+   * `locker:@<alias>:<column>` (issue #298 item 4). The allowlist for
    * `{{secret:…}}` placeholders — resolution rides a `reveal` grant on the
    * automation's agent; the plaintext is injected at the transport layer
    * and never enters the handler worker. Connector-only.
@@ -581,10 +582,13 @@ function validateRequires(raw: unknown): ManifestRequires {
   const secrets = optionalStringArray(req.secrets, 'requires.secrets');
   if (secrets) {
     for (const ref of secrets) {
-      if (!/^locker:[^:]+:[a-z_]+$/.test(ref)) {
+      // Two forms: the raw UUID (`locker:<item_id>:<column>`) or a stable
+      // alias that survives delete+recreate (`locker:@<alias>:<column>`,
+      // issue #298 item 4).
+      if (!/^locker:(?:@[A-Za-z0-9._-]{1,64}|[^:@][^:]*):[a-z_]+$/.test(ref)) {
         throw new ManifestError(
           'invalid_field',
-          `manifest.requires.secrets entry "${ref}" must be "locker:<item_id>:<column>" (issue #293)`,
+          `manifest.requires.secrets entry "${ref}" must be "locker:<item_id>:<column>" or "locker:@<alias>:<column>" (issues #293, #298)`,
           'requires.secrets',
         );
       }

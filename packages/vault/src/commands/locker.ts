@@ -92,6 +92,29 @@ function setTags(ctx: HandlerCtx, itemId: string, tags: readonly string[]): void
   }
 }
 
+/**
+ * Set (or clear, on '') this item's connector alias (issue #298 item 4).
+ * Uniqueness AMONG LIVE items is enforced here — the vault is single-writer,
+ * so a check-then-write needs no lock. A trashed item still holding the
+ * alias yields it: reassigning to a live item steals it.
+ */
+function setAlias(ctx: HandlerCtx, itemId: string, alias: string): void {
+  ctx.db.prepare('DELETE FROM locker_item_alias WHERE item_id = ?').run(itemId);
+  const trimmed = alias.trim();
+  if (trimmed.length === 0) return; // cleared
+  const clash = ctx.db
+    .prepare(
+      `SELECT a.item_id FROM locker_item_alias a
+         JOIN locker_item i ON i.item_id = a.item_id
+        WHERE a.alias = ? AND i.deleted_at IS NULL AND a.item_id <> ?`,
+    )
+    .get(trimmed, itemId) as { item_id: string } | undefined;
+  if (clash) throw new Error(`alias "${trimmed}" is already used by another live item`);
+  ctx.db
+    .prepare('INSERT OR REPLACE INTO locker_item_alias (alias, item_id) VALUES (?, ?)')
+    .run(trimmed, itemId);
+}
+
 /** The subset of `input` that is a real column for `type`, as column→value. */
 function fieldValues(type: string, input: Record<string, unknown>): Record<string, string | null> {
   const cols = TYPE_FIELDS[type] ?? [];
@@ -128,6 +151,9 @@ const ADD_ITEM: CommandDefinition = {
       title: { type: 'string', minLength: 1 },
       tags: { type: 'array', items: { type: 'string' } },
       compromised: { type: 'boolean' },
+      // A stable connector-binding name (issue #298 item 4): letters, digits,
+      // dot, dash, underscore — the token in `locker:@<alias>:<column>`.
+      alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{1,64}$' },
       ...FIELD_SCHEMA,
     },
   },
@@ -179,6 +205,9 @@ const ADD_ITEM: CommandDefinition = {
         ctx.now,
         ctx.now,
       );
+    if (typeof input.alias === 'string' && input.alias.length > 0) {
+      setAlias(ctx, itemId, input.alias);
+    }
     ctx.wrote(LOCKER_ITEM_TYPE, itemId);
     if (Array.isArray(input.tags)) setTags(ctx, itemId, input.tags as string[]);
     ctx.cite({
@@ -202,6 +231,8 @@ const EDIT_ITEM: CommandDefinition = {
       title: { type: 'string', minLength: 1 },
       tags: { type: 'array', items: { type: 'string' } },
       compromised: { type: 'boolean' },
+      // Set to re-point a connector binding at this item; '' clears it.
+      alias: { type: 'string', pattern: '^[A-Za-z0-9._-]{0,64}$' },
       ...FIELD_SCHEMA,
     },
   },
@@ -229,6 +260,10 @@ const EDIT_ITEM: CommandDefinition = {
     if (input.compromised != null) {
       sets.push('compromised = :compromised');
       params.compromised = input.compromised ? 1 : 0;
+    }
+    if (input.alias != null) {
+      // Empty string clears the alias (frees it for another item).
+      setAlias(ctx, itemId, String(input.alias));
     }
     for (const [col, val] of Object.entries(f)) {
       if (isPlaceholder(val)) continue; // round-tripped «sealed» = unchanged

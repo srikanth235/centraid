@@ -372,20 +372,28 @@ export async function runFire(
 }
 
 /**
- * Reveal one declared secret ref (`locker:<item_id>:<column>`) through the
- * automation's consented bridge — rides the agent's `reveal` grant, and the
- * vault receipts the reveal per item (issue #293).
+ * Reveal one declared secret ref through the automation's consented bridge —
+ * rides the agent's `reveal` grant, receipted per item (issue #293). Two
+ * ref forms: `locker:<item_id>:<column>` (the raw UUID) and, for stable
+ * bindings that survive delete+recreate, `locker:@<alias>:<column>` (issue
+ * #298 item 4) — the vault resolves the alias to the live item under the
+ * same grant.
  */
 async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
-  const [scheme, itemId, column] = ref.split(':');
-  if (scheme !== 'locker' || !itemId || !column) {
-    throw new Error(`malformed secret ref "${ref}" — expected locker:<item_id>:<column>`);
+  const [scheme, selector, column] = ref.split(':');
+  if (scheme !== 'locker' || !selector || !column) {
+    throw new Error(
+      `malformed secret ref "${ref}" — expected locker:<item_id>:<column> or locker:@<alias>:<column>`,
+    );
   }
+  const target = selector.startsWith('@')
+    ? { alias: selector.slice(1) }
+    : { entityId: selector };
   const reply = await vault({
     op: 'reveal',
     payload: {
       entity: 'locker.item',
-      entityId: itemId,
+      ...target,
       columns: [column],
       purpose: 'dpv:ServiceProvision',
     },
@@ -393,7 +401,7 @@ async function revealSecret(vault: VaultBridge, ref: string): Promise<string> {
   if (!reply.ok) throw new Error(reply.error ?? 'reveal failed');
   const value = (reply.result as { values?: Record<string, string | null> })?.values?.[column];
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`locker item ${itemId} holds no ${column}`);
+    throw new Error(`locker item ${selector} holds no ${column}`);
   }
   return value;
 }

@@ -49,7 +49,7 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-function addLogin(password = 'hunter2-Corr3ct'): string {
+function addLogin(password = 'hunter2-Corr3ct', alias?: string): string {
   const out = gw.invoke(owner, {
     command: 'locker.add_item',
     input: {
@@ -59,6 +59,7 @@ function addLogin(password = 'hunter2-Corr3ct'): string {
       password,
       url: 'https://example.com',
       otp_seed: 'JBSWY3DPEHPK3PXP',
+      ...(alias ? { alias } : {}),
     },
     purpose: PURPOSE,
   });
@@ -318,6 +319,52 @@ test('a normal command still stores its output in the receipt', () => {
     .get() as { detail_json: string } | undefined;
   expect(receipt?.detail_json).toContain('output');
   expect(receipt?.detail_json).not.toContain('transcript-sensitive');
+});
+
+// ── stable connector aliases (issue #298 item 4) ────────────────────────
+
+test('reveal resolves a stable alias to the live item', () => {
+  addLogin('by-alias-secret', 'github-token');
+  const out = gw.reveal(owner, {
+    entity: 'locker.item',
+    alias: 'github-token',
+    columns: ['password'],
+    purpose: PURPOSE,
+  });
+  expect(out.values['password']).toBe('by-alias-secret');
+});
+
+test('delete+recreate heals an alias binding — the rotation gesture', () => {
+  const oldId = addLogin('old-token', 'github-token');
+  // Trash the old login (soft delete) — the alias frees for its successor.
+  gw.invoke(owner, { command: 'locker.trash_item', input: { item_id: oldId }, purpose: PURPOSE });
+  // A reveal by alias now fails: no live item holds it.
+  expect(() =>
+    gw.reveal(owner, { entity: 'locker.item', alias: 'github-token', columns: ['password'], purpose: PURPOSE }),
+  ).toThrow(/no live locker item/);
+  // Add the replacement with the SAME alias — the binding heals, no manifest edit.
+  addLogin('new-token', 'github-token');
+  const healed = gw.reveal(owner, {
+    entity: 'locker.item',
+    alias: 'github-token',
+    columns: ['password'],
+    purpose: PURPOSE,
+  });
+  expect(healed.values['password']).toBe('new-token');
+});
+
+test('a trashed item frees its alias for a live item to claim', () => {
+  const firstId = addLogin('first', 'shared-alias');
+  gw.invoke(owner, { command: 'locker.trash_item', input: { item_id: firstId }, purpose: PURPOSE });
+  // The partial unique index only constrains live rows, so this succeeds.
+  const secondId = addLogin('second', 'shared-alias');
+  expect(secondId).not.toBe(firstId);
+});
+
+test('reveal by alias is locker-only and denies an unknown alias', () => {
+  expect(() =>
+    gw.reveal(owner, { entity: 'locker.item', alias: 'nope', columns: ['password'], purpose: PURPOSE }),
+  ).toThrow(/no live locker item/);
 });
 
 test('writeSealKeyFile + loadSealKey roundtrip', () => {

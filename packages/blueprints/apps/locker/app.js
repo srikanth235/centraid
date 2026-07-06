@@ -1222,6 +1222,21 @@ function renderEdit(root) {
   tagsWrap.appendChild(tagsInput);
   modal.appendChild(tagsWrap);
 
+  // Connector alias (issue #298 item 4): a stable name an automation binds to,
+  // so replacing this item later re-heals the binding without a manifest edit.
+  const aliasWrap = h('div', { class: 'v-field-lg' });
+  aliasWrap.appendChild(h('div', { class: 'v-flabel' }, 'Connector alias (optional)'));
+  const aliasInput = h('input', {
+    class: 'v-in mono',
+    placeholder: 'e.g. github-token',
+    value: e.alias || '',
+  });
+  aliasInput.addEventListener('input', (ev) => {
+    e.alias = ev.target.value.trim();
+  });
+  aliasWrap.appendChild(aliasInput);
+  modal.appendChild(aliasWrap);
+
   const foot = h('div', { class: 'v-modal-foot' });
   foot.appendChild(
     h('button', { type: 'button', class: 'v-btn-ghost', onclick: () => closeEdit() }, 'Cancel'),
@@ -1311,7 +1326,7 @@ function editFieldRow(e, f) {
 // ---------- Edit / new plumbing ----------
 
 function openNew() {
-  state.edit = { mode: 'new', type: 'login', title: '', fields: {}, tags: '' };
+  state.edit = { mode: 'new', type: 'login', title: '', fields: {}, tags: '', alias: '' };
   state.sideOpen = false;
   render();
 }
@@ -1345,6 +1360,7 @@ function openEdit(sel) {
     title: sel.title,
     fields,
     tags: (sel.tags || []).join(', '),
+    alias: sel.alias || '',
   };
   render();
 }
@@ -1372,6 +1388,11 @@ async function saveEdit() {
   for (const [k, v] of Object.entries(e.fields)) {
     if (allowed.has(k) && v != null && v !== '') input[k] = v;
   }
+  // Alias is write-safe from the UI: a non-empty value sets/changes it; a
+  // blank field is left untouched (never clobbers an existing binding).
+  // Clearing or reassigning is an assistant/CLI gesture.
+  const alias = (e.alias || '').trim();
+  if (alias) input.alias = alias;
   let outcome;
   if (e.mode === 'edit') {
     outcome = await act('edit-item', { item_id: e.id, ...input });

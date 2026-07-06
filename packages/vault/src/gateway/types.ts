@@ -325,7 +325,14 @@ export interface CommandDefinition {
 export interface RevealRequest {
   /** Logical entity, e.g. `locker.item`. Must have sealed columns. */
   entity: string;
-  entityId: string;
+  entityId?: string;
+  /**
+   * Resolve the target by a stable alias instead of entityId (issue #298
+   * item 4): `locker.item` only. The gateway maps the alias to the live
+   * item under the same reveal grant, so a connector binding survives the
+   * delete+recreate rotation gesture. Exactly one of entityId/alias.
+   */
+  alias?: string;
   /** Sealed columns to reveal. Default: all of the entity's sealed columns. */
   columns?: string[];
   purpose: string;

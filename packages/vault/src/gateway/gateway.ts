@@ -308,7 +308,7 @@ export class Gateway {
         invocationId: null,
         action: 'reveal',
         objectType: request.entity,
-        objectId: request.entityId,
+        objectId: request.entityId ?? (request.alias ? `@${request.alias}` : null),
         purpose: request.purpose,
         decision: 'deny',
         detail: { failing },
@@ -323,6 +323,23 @@ export class Gateway {
     for (const col of columns) {
       if (!sealedCols.includes(col)) return deny(`${col} is not a sealed column`);
     }
+    // Resolve a stable alias to the live item (issue #298 item 4). Only
+    // locker.item carries aliases; the lookup rides the reveal grant, so no
+    // separate read scope is needed for a connector to survive a rotation.
+    let entityId = request.entityId;
+    if (request.alias !== undefined) {
+      if (request.entity !== 'locker.item') return deny('alias reveal is locker.item only');
+      const hit = this.db.vault
+        .prepare(
+          `SELECT a.item_id FROM locker_item_alias a
+             JOIN locker_item i ON i.item_id = a.item_id
+            WHERE a.alias = ? AND i.deleted_at IS NULL`,
+        )
+        .get(request.alias) as { item_id: string } | undefined;
+      if (!hit) return deny(`no live locker item with alias "${request.alias}"`);
+      entityId = hit.item_id;
+    }
+    if (!entityId) return deny('reveal needs an entityId or alias');
     const consent = evaluateConsent(
       this.db.vault,
       identity,
@@ -339,8 +356,8 @@ export class Gateway {
     const select = columns.map((c) => `"${c}"`).join(', ');
     const row = this.db.vault
       .prepare(`SELECT ${select} FROM "${ref.physical}" WHERE "${pk}" = ? AND ${rowFilter.where}`)
-      .get(request.entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
-    if (!row) return deny(`no revealable ${request.entity} row ${request.entityId}`);
+      .get(entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
+    if (!row) return deny(`no revealable ${request.entity} row ${entityId}`);
     const values: Record<string, string | null> = {};
     let unsealedAny = false;
     for (const col of columns) {
@@ -350,7 +367,7 @@ export class Gateway {
       } else if (isSealedValue(value)) {
         values[col] = unsealValue(
           this.db.sealKey,
-          sealAad(ref.physical, col, request.entityId),
+          sealAad(ref.physical, col, entityId),
           value,
         );
         unsealedAny = true;
@@ -367,10 +384,10 @@ export class Gateway {
       invocationId: null,
       action: 'reveal',
       objectType: request.entity,
-      objectId: request.entityId,
+      objectId: entityId,
       purpose: request.purpose,
       decision: 'allow',
-      detail: { columns },
+      detail: { columns, ...(request.alias !== undefined ? { alias: request.alias } : {}) },
     });
     return { values, receiptId };
   }
