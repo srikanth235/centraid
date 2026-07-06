@@ -55,6 +55,7 @@ type ParentMessage =
   | { type: 'agent-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'state-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | { type: 'runs-reply'; id: number; ok: boolean; result?: unknown; error?: string }
+  | { type: 'fetch-reply'; id: number; ok: boolean; result?: unknown; error?: string }
   | {
       type: 'vault-reply';
       id: number;
@@ -64,6 +65,19 @@ type ParentMessage =
       code?: string;
     }
   | { type: 'abort'; reason?: string };
+
+/**
+ * A `ctx.fetch` request (issue #293 decision 8, connector-only). Any string
+ * may carry `{{secret:locker:<item_id>:<column>}}` placeholders — the PARENT
+ * resolves them after the message leaves this worker, so plaintext secrets
+ * never enter handler memory and cannot be logged from here.
+ */
+export interface FetchSpec {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
 
 type WorkerMessage =
   | { type: 'tool-batch'; id: number; calls: ToolCallWire[] }
@@ -78,9 +92,19 @@ type WorkerMessage =
   | {
       type: 'vault';
       id: number;
-      op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve';
+      op:
+        | 'read'
+        | 'search'
+        | 'invoke'
+        | 'query'
+        | 'describe'
+        | 'parked'
+        | 'changes'
+        | 'resolve'
+        | 'reveal';
       payload: Record<string, unknown>;
     }
+  | { type: 'fetch'; id: number; spec: FetchSpec }
   | { type: 'log'; level: 'info' | 'warn' | 'error'; msg: string }
   | { type: 'result'; ok: boolean; value?: unknown; error?: string };
 
@@ -180,6 +204,7 @@ port.on('message', (msg: ParentMessage) => {
     msg.type === 'agent-reply' ||
     msg.type === 'state-reply' ||
     msg.type === 'runs-reply' ||
+    msg.type === 'fetch-reply' ||
     msg.type === 'vault-reply'
   ) {
     const p = pendingCalls.get(msg.id);
@@ -251,7 +276,16 @@ const runs = {
 // (this agent's invocations awaiting owner confirmation) and `changes`
 // (the consented journal feed data triggers ride).
 function vaultCall(
-  op: 'read' | 'search' | 'invoke' | 'query' | 'describe' | 'parked' | 'changes' | 'resolve',
+  op:
+    | 'read'
+    | 'search'
+    | 'invoke'
+    | 'query'
+    | 'describe'
+    | 'parked'
+    | 'changes'
+    | 'resolve'
+    | 'reveal',
   payload: Record<string, unknown>,
 ): Promise<unknown> {
   return rpcCall({ type: 'vault', op, payload });
@@ -284,6 +318,10 @@ const vault = {
   resolve(request: Record<string, unknown>): Promise<unknown> {
     return vaultCall('resolve', request);
   },
+  /** Plaintext of one entity's sealed columns — `reveal` verb, receipted per item (issue #293). */
+  reveal(request: Record<string, unknown>): Promise<unknown> {
+    return vaultCall('reveal', request);
+  },
 };
 
 const ctx = {
@@ -292,6 +330,21 @@ const ctx = {
       pendingToolBatch.push({ name, args, resolve, reject });
       scheduleBatchFlush();
     });
+  },
+  /**
+   * Transport-level HTTP for connectors (issue #293): strings may reference
+   * declared secrets as `{{secret:locker:<item_id>:<column>}}` — the host
+   * substitutes and performs the request; the secret never enters this
+   * worker. Non-connector runs are refused host-side.
+   */
+  fetch(
+    spec: FetchSpec,
+  ): Promise<{ status: number; headers: Record<string, string>; text: string }> {
+    return rpcCall({ type: 'fetch', spec }) as Promise<{
+      status: number;
+      headers: Record<string, string>;
+      text: string;
+    }>;
   },
   agent(args: { prompt: string; json?: unknown }): Promise<unknown> {
     return rpcCall({
