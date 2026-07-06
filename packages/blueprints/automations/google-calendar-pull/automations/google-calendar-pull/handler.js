@@ -68,8 +68,17 @@ export default async ({ ctx, log }) => {
 
     for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
       const params = new URLSearchParams({ maxResults: '250', singleEvents: 'false' });
-      if (syncToken && mode === 'incremental') params.set('syncToken', String(syncToken));
-      if (pageToken) params.set('pageToken', String(pageToken));
+      // Calendar's contract: syncToken and pageToken are MUTUALLY EXCLUSIVE
+      // (sending both is a 400). A continuation page — whether within this
+      // fire or resumed across fires from a saved pageToken — carries the
+      // pageToken alone; syncToken rides only the first page of an
+      // incremental sync. (People API differs: it repeats both — see the
+      // Contacts connector.)
+      if (pageToken) {
+        params.set('pageToken', String(pageToken));
+      } else if (syncToken && mode === 'incremental') {
+        params.set('syncToken', String(syncToken));
+      }
       const listing = await api(ctx, `/calendars/primary/events?${params.toString()}`);
       if (listing.gone) {
         // Expired sync token: restart the walk from the top, next fire on.

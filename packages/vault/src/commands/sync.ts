@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the staging commands and the broker-credential lifecycle commands (#304) are one sync vocabulary — begin/finish/cursor/status and configure/store share the connection state machine, so splitting scatters the invariants
 // The agent-facing staging commands (issue #290 phase 3) — how interactive
 // one-shot pulls write. An agent with a live harness session (MCP reach)
 // parses whatever it pulled and STAGES it through `sync.stage_rows` (risk

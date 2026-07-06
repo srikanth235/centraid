@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the fire spine is one per-fire orchestration — liveness, secret preflight (#293), broker preflight (#304) and the onFailure cascade share the run bracket
 /**
  * Automation fire spine — the per-fire orchestration, owned here in
  * app-engine (issue #147, Concern 2).

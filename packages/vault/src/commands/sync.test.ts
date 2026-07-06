@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite over the whole sync command surface — staging consent (#290) and broker-credential lifecycle (#304) share the connection fixture, so the scenarios stay together
 // The one-shot pull consent story (issue #290 phase 3): an agent stages
 // parsed rows freely (risk low), but PUBLISHING them exceeds every agent's
 // ceiling and parks for the owner — the pause between draft and send.

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite over the whole connector contract — manifest, tool allowlist, secret injection (#293) and connection-credential injection (#304) share the runFire fixture
 /*
  * Connector broker invariants (issue #290 phase 4): manifest contract
  * (connector needs a resolved requires.tools allowlist + a vault block),

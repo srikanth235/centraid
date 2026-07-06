@@ -31,6 +31,40 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
       credential opts into writes); the per-write parked-approval SEND flow is deferred by the
       issue's own sequencing (wave 1 is read-only ingest; writes "only after ingest earns trust")
 
+## What changed
+
+Commit series (each `(#304)`):
+
+1. `feat(vault): broker credential sidecars …` — `packages/vault/src/schema/sync.ts`
+   (`SYNC_CREDENTIAL_DDL`: v12 `sync_connection_credential` + `sync_connection_health` sidecars),
+   `packages/vault/src/schema/migrate.ts` (v12), `packages/vault/src/schema/sealed.ts`
+   (`sync.connection_credential` sealed cells), `packages/vault/src/schema/tables.ts` (entity
+   registry), `packages/vault/src/commands/sync.ts` (`sync.configure_credential`,
+   `sync.store_tokens`, `set_connection_status` note + `setAuthNote`),
+   `packages/vault/src/commands/sync.test.ts`.
+2. `feat(automation): connection credential injection + injected-fetch failure taxonomy …` —
+   `packages/automation/src/handler/runner.ts` (`ConnectionAuth`, `{{connection:…}}` substitution,
+   `assertInjectable` host-pin + read-only ceiling, `executeFetch` taxonomy),
+   `packages/automation/src/fire/fire.ts` (`ResolveConnection` broker preflight),
+   `packages/automation/src/manifest/manifest.ts` (explicit `requires.tools: []`),
+   `packages/automation/src/index.ts` exports, `packages/automation/src/fire/connector.test.ts`,
+   `packages/agent-runtime/src/automation/run-automation.ts` (pass-through).
+3. `feat(gateway): connection broker …` — `packages/gateway/src/serve/connection-broker.ts`
+   (`ConnectionBroker`: resolve/refresh/single-flight/limiter/ceremony),
+   `packages/gateway/src/serve/build-gateway.ts` (wired into the fire path),
+   `packages/gateway/src/serve/connection-broker.test.ts`.
+4. `feat(gateway): PKCE consent ceremony, connections routes, BYO-client wizard presets …` —
+   `packages/gateway/src/routes/connections-routes.ts`,
+   `packages/gateway/src/routes/connection-providers.ts`,
+   `packages/gateway/src/routes/connections-routes.test.ts`,
+   `packages/app-engine/src/http/http-server.ts` (+`.test.ts`) `publicPaths` seam,
+   `packages/gateway/src/serve/serve.ts` (callback registered public).
+5. `feat(blueprints): Gmail pull …` + `feat(blueprints): Calendar + Contacts + GitHub …` — the four
+   connector templates under `packages/blueprints/automations/{google-gmail-pull,google-calendar-pull,
+   google-contacts-pull,github-pull}/`, `packages/blueprints/index.json` (+ generated `manifest.json`).
+6. `feat(automation): read-only ceiling …` — the `allowWrites` guard + tests (folded into runner.ts /
+   connector.test.ts above) and this receipt.
+
 ## Decisions of record
 
 - **Sidecars, not columns** — `ALTER TABLE ADD COLUMN` breaks migration re-runnability (the ladder
@@ -69,13 +103,23 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
 
 ## Verification
 
+Re-runnable:
+
+```sh
+bun run build
+bun run typecheck                              # 21 tasks green
+bun run test                                   # full battery green
+npx vitest run src/commands/sync.test.ts --root packages/vault
+npx vitest run src/fire/connector.test.ts --root packages/automation
+npx vitest run src/serve/connection-broker.test.ts src/routes/connections-routes.test.ts --root packages/gateway
+```
+
 - `packages/vault`: 365/365 tests green (8 new: configure/store sealing, host-pin refusal,
   placeholder reads, journal redaction, detach shredding, note lifecycle; migration ladder replay
   green — sidecar DDL is re-runnable).
-- `packages/automation`: 204/204 green (7 new: injection + scrub, host-pin refusal with zero
+- `packages/automation`: 206/206 green (9 new: injection + scrub, host-pin refusal with zero
   egress, 401→refresh→retry, 401 auth-dead, 429/5xx backoff, refused-connection skip,
-  placeholder-without-credential error; `requires.tools: []` manifest contract).
-  placeholder-without-credential error; `requires.tools: []` manifest contract; read-only ceiling
+  placeholder-without-credential error, `requires.tools: []` manifest contract; read-only ceiling
   refuses injected POST, write-opted credential lets it through).
 - `packages/gateway`: connection-broker suite 8/8 green (api_key resolve, ambient lane,
   unexpired-token no-op, rotation persist-before-use, single-flight under 3-way concurrency,
@@ -85,3 +129,36 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
 - `packages/app-engine`: http-server 7/7 green (publicPaths exact-match bearer bypass).
 - `packages/blueprints`: 121/121 green (4 new connector templates validate + gallery index agrees).
 - Full `bun run typecheck` (21 tasks) green; `bun run build` green; full test battery green.
+
+## Audit
+
+A fresh-context adversarial reviewer audited token custody/injection, refresh correctness, the PKCE
+ceremony, sealed columns, and the four connector handlers.
+
+**Security-critical machinery: PASS.** Confirmed: handler code never receives a raw token
+(substitution is parent-side, values feed the scrub set); the host-allow check runs on the *final
+substituted* URL before the fetch; the `*.suffix` wildcard rejects `evilgoogleapis.com` and bare
+`.googleapis.com` (endsWith + length guard); injected requests use `redirect: 'manual'` so a 3xx
+Location cannot carry Authorization cross-host; the read-only ceiling gates all injected mutations
+(broker never sets `allowWrites`); single-flight refresh is race-free (no `await` between
+check-and-set, sync sqlite read); the rotated pair is returned only after `sync.store_tokens`
+executes (no unpersisted token used); `invalid_grant`→flip vs 5xx→transient is distinguished
+correctly; `state` is single-use (deleted before any fallible work, consumed on denial); S256 is
+correct; the bearer-free callback is an exact-match `publicPaths` bypass, not a prefix; all four
+secret cells are sealed + `sealedInput`, and the sidecar AAD matches between seal and unseal.
+
+**One functional defect found and FIXED:** the Calendar connector sent `syncToken` + `pageToken`
+together on a paginated incremental resume (>1000 changed events), which Google rejects with a 400
+(they are mutually exclusive), permanently wedging incremental sync until a 410 forced a full
+re-walk. Fixed in `google-calendar-pull/handler.js` — a continuation page now carries `pageToken`
+alone. The auditor noted the Contacts connector shares the code shape but the People API's contract
+*requires* both tokens across pages, so it is correct as-is (comment added cross-referencing both).
+
+## Steering
+
+No corrective steering. The session ran from a `/goal` directive ("get latest code from main, work
+the entire scope of #304, create PR") after an interactive design conversation that produced #304
+itself; the operator did not interrupt or redirect during implementation. The one substantive
+judgment call made autonomously — scoping phase 5 to the enforceable read-only *guard* while
+deferring the parked-approval *send* flow — follows the issue's own sequencing ("writes only after
+ingest earns trust") and is recorded under Out of scope.
