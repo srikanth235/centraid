@@ -900,7 +900,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).
     makeDemoRouteHandler(vaultRegistry, {
-      codeAppsDir: () => requireHost().codeAppsDir(),
+      codeAppsDir: () => currentSettledHost().codeAppsDir(),
     }),
     // File-drop imports (issue #290 phase 2): stage → review → publish.
     makeImportRouteHandler(vaultRegistry),

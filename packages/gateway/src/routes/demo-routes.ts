@@ -51,7 +51,7 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
     const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
     const appId = rest === '' ? null : decodeURIComponent(rest);
     const method = req.method ?? 'GET';
-    const plane = vaults.active();
+    const plane = vaults.current();
 
     if (method === 'GET' && appId === null) {
       const rowsByApp = new Map(plane.demoStatus().map((s) => [s.appId, s.rows]));
@@ -72,7 +72,7 @@ export function makeDemoRouteHandler(vaults: VaultRegistry, deps: DemoRouteDeps)
         return true;
       }
       const outcome = await runHandler({
-        app: { id: appId, dir: path.join(vaults.activeWorkspace().appsDir, appId) },
+        app: { id: appId, dir: path.join(vaults.currentWorkspace().appsDir, appId) },
         handlerFile: seedFile,
         handlerKind: 'action',
         // Deterministic-by-default: generators derive their randomness from

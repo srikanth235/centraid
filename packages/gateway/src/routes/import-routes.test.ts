@@ -22,7 +22,7 @@ async function fixture(): Promise<{ base: string; plane: VaultPlane }> {
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   const plane = openVaultPlane({ dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => plane.stop());
-  const handler = makeImportRouteHandler({ active: () => plane });
+  const handler = makeImportRouteHandler({ current: () => plane });
   const server = http.createServer((req, res) => {
     void handler(req, res).then((handled) => {
       if (!handled) {

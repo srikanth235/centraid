@@ -3,7 +3,7 @@
  * SSE with the assistant preamble (register + live vault map) and records
  * the turn under the reserved `_assistant` ledger scope; `resolve` turns
  * answer refs into owner-resolved cards. The registry is duck-typed — the
- * routes only touch active()/activeWorkspace() — and the runner is a stub,
+ * routes only touch current()/currentWorkspace() — and the runner is a stub,
  * so the tests stay hermetic.
  */
 
