@@ -45,6 +45,7 @@ import {
   sealAad,
   SEALED_PLACEHOLDER,
   sealedColumnsOf,
+  stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
 import { applyFieldMask, compileFilters, compileOrderBy } from './filters.js';
@@ -340,6 +341,7 @@ export class Gateway {
       .get(request.entityId, ...rowFilter.params) as Record<string, unknown> | undefined;
     if (!row) return deny(`no revealable ${request.entity} row ${request.entityId}`);
     const values: Record<string, string | null> = {};
+    let unsealedAny = false;
     for (const col of columns) {
       const value = row[col];
       if (value == null || value === '') {
@@ -350,10 +352,15 @@ export class Gateway {
           sealAad(ref.physical, col, request.entityId),
           value,
         );
+        unsealedAny = true;
       } else {
         values[col] = String(value); // pre-seal legacy plaintext
       }
     }
+    // A successful unseal proves this key sealed this vault's secrets —
+    // stamp the fingerprint if a pre-#298 vault never recorded it, so the
+    // open-time custody check covers legacy vaults too.
+    if (unsealedAny) stampSealKeyFingerprint(this.db.vault, this.db.sealKey);
     const receiptId = writeReceipt(this.db.journal, {
       grantId: consent.grantId,
       invocationId: null,

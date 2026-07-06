@@ -29,12 +29,13 @@ import {
   sealValue,
   sealedColumnsOf,
   sealedPayloadFieldsOf,
+  stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
 import type { Identity } from '../gateway/types.js';
 
 /** AAD of one sealed payload field in the draft band. */
-function payloadAad(rowId: string, field: string): string {
+export function payloadAad(rowId: string, field: string): string {
   return sealAad('sync_import_row', `payload.${field}`, rowId);
 }
 
@@ -208,12 +209,17 @@ export function stageBatchTx(
         );
       }
       payload = { ...payload };
+      let sealedAny = false;
       for (const field of secretFields) {
         const v = payload[field];
         if (typeof v === 'string' && v.length > 0 && !isSealedValue(v)) {
           payload[field] = sealValue(sealKey, payloadAad(rowId, field), v);
+          sealedAny = true;
         }
       }
+      // First sealed draft row = this vault now holds secrets — stamp the
+      // key fingerprint in the same transaction (issue #298 item 1).
+      if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
     }
     insertRow.run(
       rowId,
@@ -357,13 +363,17 @@ export function applyBatchTx(
       )
       .get(entityId) as Record<string, unknown> | undefined;
     if (!live) return;
+    let sealedAny = false;
     for (const col of cols) {
       const v = live[col];
       if (typeof v !== 'string' || v.length === 0 || isSealedValue(v)) continue;
       vault
         .prepare(`UPDATE "${ref.physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
         .run(sealValue(sealKey, sealAad(ref.physical, col, entityId), v), entityId);
+      sealedAny = true;
     }
+    // Live sealed cells now exist — stamp the key fingerprint (issue #298).
+    if (sealedAny) stampSealKeyFingerprint(vault, sealKey);
   };
 
   for (const row of rows) {

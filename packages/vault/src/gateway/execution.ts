@@ -25,9 +25,11 @@ import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
   isSealedValue,
   redactSealedInput,
+  scrubSealedText,
   sealAad,
   sealValue,
   sealedColumnsOf,
+  stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
 import type {
@@ -126,6 +128,7 @@ export function sweepDanglingLinks(
  * are already sealed (re-writes of untouched columns) pass through.
  */
 export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: string }[]): void {
+  let sealedAny = false;
   for (const write of writes) {
     const cols = sealedColumnsOf(write.entityType);
     if (cols.length === 0) continue;
@@ -146,8 +149,14 @@ export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: 
           sealValue(db.sealKey, sealAad(ref.physical, col, write.entityId), value),
           write.entityId,
         );
+      sealedAny = true;
     }
   }
+  // The moment this vault first holds a sealed cell, the key's fingerprint
+  // is stamped into core_vault settings (issue #298 item 1) — inside the
+  // same transaction, so "has secrets" and the secrets themselves commit
+  // together. From here on, opening without the matching key fails loudly.
+  if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
 /** Validate every polymorphic row this invocation wrote. Throws to roll back. */
@@ -281,7 +290,15 @@ export function runContractAndExecute(
       gatewayVersion: ONTOLOGY_VERSION,
     });
   }
-  const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input);
+  const sealedInput = commands.get(command.name)?.sealedInput ?? [];
+  // Error surfaces get the same discipline as input_json (issue #298 item
+  // 7): any text derived from runtime values passes through the sealed
+  // scrub before it reaches the journal, the receipt or the HTTP response.
+  const scrub = (text: string): string =>
+    scrubSealedText(db.sealKey, text, request.input, sealedInput);
+  const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input).map(
+    scrub,
+  );
   if (schemaErrors.length > 0) {
     return denyContract(`input schema violation`, { stage: 'contract', errors: schemaErrors });
   }
@@ -433,7 +450,10 @@ export function runContractAndExecute(
   } catch (err) {
     db.vault.exec('ROLLBACK');
     setInvocationStatus(db, invocationId, 'failed');
-    const reason = err instanceof Error ? err.message : String(err);
+    // A handler (or SQLite constraint message) that echoes its input would
+    // put a submitted secret into the journal and the HTTP error — scrub
+    // declared sealed inputs out of the text first (issue #298 item 7).
+    const reason = scrub(err instanceof Error ? err.message : String(err));
     const receiptId = writeReceipt(db.journal, {
       grantId: consent.grantId,
       invocationId,

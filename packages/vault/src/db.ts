@@ -18,7 +18,7 @@ import { S3BlobStore, type S3Credentials } from './blob/s3.js';
 import { registerHammingFn } from './enrich/similarity.js';
 import { registerContentTextFn } from './schema/fts.js';
 import { JOURNAL_MIGRATIONS, migrate, VAULT_MIGRATIONS } from './schema/migrate.js';
-import { ephemeralSealKey, loadOrCreateSealKey, sealKeyFileFor } from './schema/sealed.js';
+import { ephemeralSealKey, resolveSealKey, sealKeyFileFor } from './schema/sealed.js';
 
 export interface VaultDb {
   vault: DatabaseSync;
@@ -95,18 +95,15 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   const { dir } = options;
   let vault: DatabaseSync;
   let journal: DatabaseSync;
-  let sealKey: Buffer;
   let local: LocalBlobStore;
   if (dir === undefined) {
     vault = openFile(':memory:');
     journal = openFile(':memory:');
-    sealKey = options.sealKey ?? ephemeralSealKey();
     local = options.blobStore ?? new MemoryBlobStore();
   } else {
     mkdirSync(dir, { recursive: true });
     vault = openFile(path.join(dir, 'vault.db'));
     journal = openFile(path.join(dir, 'journal.db'));
-    sealKey = options.sealKey ?? loadOrCreateSealKey(sealKeyFileFor(dir));
     local = options.blobStore ?? new FsBlobStore(path.join(dir, 'blobs'));
   }
   // The FTS sync triggers (and the v2 backfill) decode canonical bodies via
@@ -116,6 +113,13 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
   registerHammingFn(vault);
   migrate(vault, VAULT_MIGRATIONS);
   migrate(journal, JOURNAL_MIGRATIONS);
+  // Key custody resolves AFTER migration so the stamped fingerprint (issue
+  // #298 item 1) is readable: a vault that has ever sealed refuses to open
+  // with a missing or regenerated key, loudly, instead of minting a fresh
+  // DEK that would turn every sealed cell into GCM garbage at reveal time.
+  const sealKey =
+    options.sealKey ??
+    (dir === undefined ? ephemeralSealKey() : resolveSealKey(vault, sealKeyFileFor(dir)));
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
   let cachedRemote: { key: string; tier: RemoteTier | null } | null = null;
