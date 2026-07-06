@@ -151,6 +151,11 @@ export {
 // injects it via `RuntimeOptions.vaultFor`.
 export type { VaultBridge, VaultCall, VaultCallResult, VaultOp } from './handlers/vault-bridge.js';
 
+// The worker-thread handler runner — exported for host surfaces that run an
+// app-authored module outside the dispatcher (the scenario-seed loader,
+// issue #290 phase 1, runs `seed.js` with a demo-register vault bridge).
+export { runHandler, type HandlerOutcome, type RunHandlerOptions } from './handlers/handler-runner.js';
+
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)

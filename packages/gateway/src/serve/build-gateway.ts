@@ -71,6 +71,7 @@ import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import type { VaultPlane } from './vault-plane.js';
 import { makeVaultRouteHandler } from '../routes/vault-routes.js';
+import { makeDemoRouteHandler } from '../routes/demo-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
@@ -798,6 +799,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       conversationStore: conversationHistoryStore,
       runner: assistantRunner,
       conversationLocks: new Map(),
+    }),
+    // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
+    // Mounted BEFORE the generic `_vault` handler (same prefix family).
+    makeDemoRouteHandler(vaultRegistry, {
+      codeAppsDir: () => requireHost().codeAppsDir(),
     }),
     // Owner consent surface for the vault plane (grants, parked
     // confirmations, vault lifecycle). Its `_vault` prefix

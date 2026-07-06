@@ -9883,6 +9883,11 @@ select.input option {
   display: flex;
   gap: 8px;
 }
+.cd-vault-demo-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
 .cd-vault-approve-btn {
   flex: none;
   padding: 4px 10px;

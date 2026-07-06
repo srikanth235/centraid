@@ -232,3 +232,43 @@ export async function confirmVaultParked(input: {
   });
   return readJson<{ status: string }>(res, 'confirm parked invocation');
 }
+
+/** One app's scenario-seed state (issue #290 phase 1). */
+export interface VaultDemoApp {
+  appId: string;
+  rows: number;
+  seedable: boolean;
+}
+
+/** Per-app demo status: which apps ship a scenario, which have rows loaded. */
+export async function vaultDemoStatus(): Promise<VaultDemoApp[]> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_vault/demo', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  const body = await readJson<{ apps: VaultDemoApp[] }>(res, 'read demo status');
+  return body.apps;
+}
+
+/** Run an app's seed.js scenario generator (demo register, owner act). */
+export async function vaultDemoLoad(appId: string): Promise<{ rows: number }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/demo/${enc(appId)}`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return readJson<{ rows: number }>(res, 'load demo data');
+}
+
+/** Purge demo rows — one app's, or every app's when appId is omitted. */
+export async function vaultDemoPurge(
+  appId?: string,
+): Promise<{ purged: number; blocked: unknown[] }> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, `/centraid/_vault/demo${appId ? `/${enc(appId)}` : ''}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return readJson<{ purged: number; blocked: unknown[] }>(res, 'purge demo data');
+}

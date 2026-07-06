@@ -77,8 +77,11 @@ Commit 2 — host wiring, generators, shell:
 - `packages/gateway/src/serve/demo-seed.test.ts` (new) — end-to-end: all
   four shipped generators run in the real worker through the demo bridge,
   provenance/registry agree, purge leaves domain tables empty.
-- `packages/blueprints/apps/{tasks,notes,people,tally}/seed.js` (new) —
-  scenario generators (relative dates, deterministic from `input.seed`).
+- `packages/blueprints/apps/tasks/seed.js`,
+  `packages/blueprints/apps/notes/seed.js`,
+  `packages/blueprints/apps/people/seed.js`,
+  `packages/blueprints/apps/tally/seed.js` (new) — scenario generators
+  (relative dates, deterministic from `input.seed`).
 - `packages/blueprints/manifest.json` — regenerated (seed.js in file lists).
 - `apps/desktop/src/renderer/gateway-client-vault.ts` — demo client calls.
 - `apps/desktop/src/renderer/app-vault.ts` — "Demo data" section in the
@@ -162,3 +165,7 @@ npx turbo run typecheck test \
 | claude-code-18f9dd6d-2f0-1783304890-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 4987 | 344595 | 139 | 5128 | 0.4139 | 64406 | 1678331 | 61460945 | 320239 | feat(vault): the demo register (#290)Issue: #290 |
 | claude-code-18f9dd6d-2f0-1783304916-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 229 | 349582 | 132 | 363 | 0.3591 | 64408 | 1678560 | 61810527 | 320371 | xIssue: #290 |
 | claude-code-18f9dd6d-2f0-1783304982-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 656 | 7426 | 2106176 | 7003 | 15085 | 2.5557 | 65064 | 1685986 | 63916703 | 327374 | feat(vault): the demo register — seed.demo provenance, seed registry, one-act pu |
+| claude-code-18f9dd6d-2f0-1783305013-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 4 | 3134 | 706978 | 1024 | 4162 | 0.7974 | 65068 | 1689120 | 64623681 | 328398 | feat(gateway+blueprints+desktop): scenario seeds — generators, demo bridge, rout |
+| claude-code-18f9dd6d-2f0-1783305041-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 582 | 355056 | 133 | 717 | 0.3690 | 65070 | 1689702 | 64978737 | 328531 | xIssue: #290 |
+| claude-code-18f9dd6d-2f0-1783305072-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 6 | 5166 | 1066914 | 2523 | 7695 | 1.2577 | 65076 | 1694868 | 66045651 | 331054 | feat(gateway+blueprints+desktop): scenario seeds — generators, demo bridge, rout |
+| claude-code-18f9dd6d-2f0-1783305101-1 | claude-code | 18f9dd6d-2f08-4b9f-bf8e-0aad06dc0e88 | #290 | claude-fable-5 | 2 | 1011 | 357360 | 437 | 1450 | 0.3919 | 65078 | 1695879 | 66403011 | 331491 | feat(gateway+blueprints+desktop): scenario seeds — generators, demo bridge, shel |
