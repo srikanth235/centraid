@@ -298,6 +298,42 @@ export interface AppliedBatch {
  * `import.<kind>` provenance + a batch receipt; the `sync.publish_batch`
  * command hands the rows to the command pipeline instead.
  */
+/**
+ * Drop the sealed payload fields from a published batch's rows (issue #298
+ * item 3). Only rows whose entity type declares sealed payload fields are
+ * touched, and only the sealed keys are removed — the rest of the payload
+ * stays for provenance. A published row's secret has already reached its
+ * live home; keeping the staged copy is pure retention risk.
+ */
+export function shredPublishedSecretPayloads(vault: DatabaseSync, batchId: string): number {
+  const rows = vault
+    .prepare(
+      `SELECT row_id, entity_type, payload_json FROM sync_import_row
+        WHERE batch_id = ? AND published_entity_id IS NOT NULL`,
+    )
+    .all(batchId) as { row_id: string; entity_type: string; payload_json: string }[];
+  let shredded = 0;
+  for (const row of rows) {
+    const secretFields = sealedPayloadFieldsOf(row.entity_type);
+    if (secretFields.length === 0) continue;
+    const payload = JSON.parse(row.payload_json) as Record<string, unknown>;
+    let changed = false;
+    for (const field of secretFields) {
+      if (field in payload) {
+        delete payload[field];
+        changed = true;
+      }
+    }
+    if (changed) {
+      vault
+        .prepare('UPDATE sync_import_row SET payload_json = ? WHERE row_id = ?')
+        .run(JSON.stringify(payload), row.row_id);
+      shredded += 1;
+    }
+  }
+  return shredded;
+}
+
 export function applyBatchTx(
   vault: DatabaseSync,
   batchId: string,
@@ -469,6 +505,13 @@ export function applyBatchTx(
   // Publish releases the batch's blob holds (issue #296): claimed shas are
   // model now; anything left (a failed row's attachment) resumes its TTL.
   releaseBatchHold(vault, batchId);
+  // Shred-after-publish for secret imports (issue #298 item 3): a
+  // password-CSV drop seals its rows at stage, but the sealed payload then
+  // sat in sync_import_row indefinitely — a second copy of every secret,
+  // outliving its purpose the moment the live row exists. Once a row with
+  // sealed payload fields has published, drop its payload; the row stays for
+  // provenance (external_id, published_entity_id) carrying no secret.
+  shredPublishedSecretPayloads(vault, batchId);
   vault
     .prepare('UPDATE sync_connection SET last_run_at = ? WHERE connection_id = ?')
     .run(now, batch.connection_id);
