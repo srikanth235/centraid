@@ -74,7 +74,9 @@ describe('demo register', () => {
       app: 'tasks',
     });
     const seed = db.vault
-      .prepare(`SELECT app_id FROM consent_seed_row WHERE entity_type = 'schedule.task' AND entity_id = ?`)
+      .prepare(
+        `SELECT app_id FROM consent_seed_row WHERE entity_type = 'schedule.task' AND entity_id = ?`,
+      )
       .get(taskId) as { app_id: string };
     expect(seed.app_id).toBe('tasks');
   });

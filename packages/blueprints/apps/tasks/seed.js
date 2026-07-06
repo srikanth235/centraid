@@ -20,8 +20,7 @@ export default async ({ input, log, ctx }) => {
   };
 
   const add = (args) => invoke('schedule.add_task', args);
-  const done = (task_id) =>
-    invoke('schedule.set_task_status', { task_id, status: 'completed' });
+  const done = (task_id) => invoke('schedule.set_task_status', { task_id, status: 'completed' });
 
   await add({ title: 'Renew car insurance', due_at: day(-2), priority: 8 });
   await add({ title: 'Book dentist appointment', due_at: day(1), priority: 5, effort_min: 15 });

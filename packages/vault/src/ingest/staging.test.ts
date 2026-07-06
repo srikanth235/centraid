@@ -232,9 +232,12 @@ test('Takeout zip: inner ics + vcf route to one mixed batch; strays reported', (
 
 test('imports stay owner-only (v0)', () => {
   expect(() =>
-    gw.stageImportFile({ kind: 'device', deviceId: 'x', deviceKey: 'y' }, {
-      filename: 'a.ics',
-      data: ICS('x'),
-    }),
+    gw.stageImportFile(
+      { kind: 'device', deviceId: 'x', deviceKey: 'y' },
+      {
+        filename: 'a.ics',
+        data: ICS('x'),
+      },
+    ),
   ).toThrow(/unknown caller/);
 });

@@ -33,9 +33,7 @@ interface SeedRow {
 /** Rows seeded per app — the "demo data present" surface. */
 export function demoStatus(db: VaultDb): { appId: string; rows: number }[] {
   const rows = db.vault
-    .prepare(
-      `SELECT app_id, count(*) AS n FROM consent_seed_row GROUP BY app_id ORDER BY app_id`,
-    )
+    .prepare(`SELECT app_id, count(*) AS n FROM consent_seed_row GROUP BY app_id ORDER BY app_id`)
     .all() as { app_id: string; n: number }[];
   return rows.map((r) => ({ appId: r.app_id, rows: r.n }));
 }

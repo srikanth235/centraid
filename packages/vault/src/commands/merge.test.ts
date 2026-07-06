@@ -75,9 +75,13 @@ test('merge re-points identifiers (primary demoted), FK rows and the map; duplic
   expect(output.repointed).toBeGreaterThanOrEqual(3); // identifier + interaction + map
 
   // Duplicate gone; references live on the survivor.
-  expect(db.vault.prepare('SELECT 1 AS x FROM core_party WHERE party_id = ?').get(dupe)).toBeUndefined();
+  expect(
+    db.vault.prepare('SELECT 1 AS x FROM core_party WHERE party_id = ?').get(dupe),
+  ).toBeUndefined();
   const ids = db.vault
-    .prepare('SELECT value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY value')
+    .prepare(
+      'SELECT value, is_primary FROM core_party_identifier WHERE party_id = ? ORDER BY value',
+    )
     .all(john);
   expect(ids).toEqual([
     { value: 'john@work.example', is_primary: 1 },
