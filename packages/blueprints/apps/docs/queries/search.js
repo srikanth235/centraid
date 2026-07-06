@@ -72,6 +72,12 @@ export default async ({ input, ctx }) => {
         .map((t) => t.target_id),
     );
 
+    // Blob-backed bytes serve as same-origin URLs (issue #296).
+    const srcOf = (c) =>
+      typeof c.content_uri === 'string' && c.content_uri.startsWith('blob:')
+        ? `/centraid/_vault/blobs/${c.content_id}`
+        : c.content_uri;
+
     // Vault order is rank order (best match first) — keep it.
     const documents = hits
       .filter((c) => folderByContent.has(c.content_id))
@@ -82,7 +88,7 @@ export default async ({ input, ctx }) => {
           title: c.title,
           media_type: c.media_type,
           byte_size: c.byte_size,
-          content_uri: c.content_uri,
+          content_uri: srcOf(c),
           created_at: c.created_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
           starred: starredIds.has(c.content_id),

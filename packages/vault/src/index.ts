@@ -136,6 +136,7 @@ export {
   ensureVaultBootstrapped,
   renameVault,
   readVaultSettings,
+  updateBlobStoreSettings,
   readVaultPresentation,
   updateVaultPresentation,
   type VaultPresentation,

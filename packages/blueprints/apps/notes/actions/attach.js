@@ -1,6 +1,7 @@
 /**
- * Pin a file to a note through core.attach. The blueprint reads the File as a
- * base64 data: URI client-side and passes it here; the vault dedupes the
+ * Pin a file to a note through core.attach. Bytes arrive either STAGED
+ * (issue #296: the app streamed them to /_vault/blobs and claims the sha
+ * here — big files) or as a small inline data: URI; the vault dedupes the
  * bytes into a canonical content item and links it. The same handler shape is
  * copied across every app — only the subject_type differs.
  *
@@ -14,7 +15,9 @@ export default async ({ body, ctx }) => {
       input: {
         subject_type: 'knowledge.note',
         subject_id: String(input.subject_id ?? ''),
-        data_uri: String(input.data_uri ?? ''),
+        ...(input.staged_sha != null
+          ? { staged_sha: String(input.staged_sha) }
+          : { data_uri: String(input.data_uri ?? '') }),
         ...(input.title != null ? { title: String(input.title) } : {}),
         ...(input.role != null ? { role: String(input.role) } : {}),
       },

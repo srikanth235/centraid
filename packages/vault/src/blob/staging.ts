@@ -9,7 +9,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
-import { nowIso } from '../ids.js';
+import { nowIso, uuidv7 } from '../ids.js';
 import { extractBlobMeta, sniffMediaType } from './pipeline.js';
 import { blobUriFor } from './store.js';
 
@@ -98,6 +98,28 @@ export function stageBlobBytes(db: VaultDb, options: StageBlobOptions): StagedBl
       options.variantOf ?? null,
       nowIso(),
     );
+  // A derivative arriving AFTER its parent was already claimed (a slow
+  // thumb upload racing the claim) registers immediately — otherwise it
+  // would sit unclaimed until the TTL reaped it.
+  if (options.variant && options.variantOf) {
+    const parent = db.vault
+      .prepare('SELECT content_id FROM core_content_item WHERE sha256 = ?')
+      .get(options.variantOf) as { content_id: string } | undefined;
+    if (parent) {
+      db.vault
+        .prepare(
+          `INSERT INTO core_content_derivative
+             (derivative_id, content_id, variant, sha256, media_type, byte_size, text_content, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+           ON CONFLICT (content_id, variant) DO UPDATE SET
+             sha256 = excluded.sha256, media_type = excluded.media_type,
+             byte_size = excluded.byte_size, created_at = excluded.created_at`,
+        )
+        .run(uuidv7(), parent.content_id, options.variant, sha256, mediaType, byteSize, nowIso());
+      db.vault.prepare('DELETE FROM blob_staging WHERE sha256 = ?').run(sha256);
+    }
+  }
+
   return {
     sha256,
     mediaType,

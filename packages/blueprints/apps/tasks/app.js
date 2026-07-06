@@ -21,6 +21,10 @@ import {
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
+// Small files stay one-call inline; larger files stream to the vault's blob
+// staging route (issue #296).
+const BLOB_ROUTE = '/centraid/_vault/blobs';
+const INLINE_ATTACH_BYTES = 256 * 1024;
 
 const OPEN_STATUSES = new Set(['needs-action', 'in-process']);
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -101,7 +105,7 @@ async function act(action, input) {
 }
 
 // ---------- Attachments (shared pattern across apps) ----------
-// Read a File as a base64 data: URI — the vault stores bytes inline, so the
+// Read a File as a base64 data: URI — small attachments travel inline, so the
 // browser does the encoding before the data ever leaves the app.
 function fileToDataUri(file) {
   return new Promise((resolve, reject) => {
@@ -110,6 +114,22 @@ function fileToDataUri(file) {
     r.onerror = () => reject(r.error);
     r.readAsDataURL(file);
   });
+}
+
+// Stage one file's bytes into the vault's CAS (issue #296): the file
+// streams to the blob route — no base64 through command JSON — and the
+// attach action claims the returned sha (that claim is the receipt).
+async function stageFileBytes(file) {
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return res.json();
 }
 
 function fmtBytes(n) {
@@ -160,18 +180,22 @@ function wireAttachInput(inputEl, getSubjectId) {
     const subjectId = getSubjectId();
     if (!subjectId) return;
     for (const file of [...inputEl.files]) {
-      let dataUri;
+      // Large files stage through the blob route and attach by sha; small
+      // ones keep the one-call inline data: URI path (issue #296).
+      let input;
       try {
-        dataUri = await fileToDataUri(file);
+        if (file.size > INLINE_ATTACH_BYTES) {
+          const staged = await stageFileBytes(file);
+          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+        } else {
+          const dataUri = await fileToDataUri(file);
+          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+        }
       } catch {
         notice('Could not read that file.');
         continue;
       }
-      const outcome = await act('attach', {
-        subject_id: subjectId,
-        data_uri: dataUri,
-        title: file.name,
-      });
+      const outcome = await act('attach', input);
       if (!narrate(outcome)) break;
     }
     inputEl.value = '';

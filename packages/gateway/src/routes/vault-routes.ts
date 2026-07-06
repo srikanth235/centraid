@@ -39,6 +39,11 @@ import type { GrantRequest, VaultPlane } from '../serve/vault-plane.js';
 import type { AnchorSelector } from '../serve/vault-picker.js';
 import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
 import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
+import {
+  mediaLocationPolicy,
+  readBlobStoreSettings,
+  updateBlobStoreSettings,
+} from '@centraid/vault';
 import { readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault';
@@ -92,6 +97,62 @@ export function makeVaultRouteHandler(
 
       if (segments[0] === 'vaults') {
         return handleVaultsRoute(vaults, visibleVaults, req, res, method, segments);
+      }
+
+      // Byte-custody settings (issue #296): where the vault's blobs
+      // replicate (`blob_store`: fs | s3 endpoint/bucket/region/prefix/
+      // encrypt — credentials are harness-ambient, never stored) and the
+      // GPS extraction policy (`media.location`: keep | strip).
+      if (segments[0] === 'blob-store' && segments.length === 1) {
+        if (method === 'GET') {
+          return sendJson(res, 200, {
+            blob_store: readBlobStoreSettings(plane.db.vault),
+            media_location: mediaLocationPolicy(plane.db),
+          });
+        }
+        if (method === 'PUT') {
+          const body = await readJson(req);
+          const blobStore = body.blob_store;
+          if (blobStore !== undefined && blobStore !== null) {
+            if (typeof blobStore !== 'object' || Array.isArray(blobStore)) {
+              return sendJson(res, 400, {
+                error: 'bad_request',
+                message: 'blob_store must be an object or null',
+              });
+            }
+            const kind = (blobStore as Record<string, unknown>).kind;
+            if (kind !== 'fs' && kind !== 's3') {
+              return sendJson(res, 400, {
+                error: 'bad_request',
+                message: 'blob_store.kind must be "fs" or "s3"',
+              });
+            }
+          }
+          const mediaLocation = body.media_location;
+          if (
+            mediaLocation !== undefined &&
+            mediaLocation !== null &&
+            mediaLocation !== 'keep' &&
+            mediaLocation !== 'strip'
+          ) {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message: 'media_location must be "keep" or "strip"',
+            });
+          }
+          updateBlobStoreSettings(plane.db, {
+            ...(blobStore !== undefined
+              ? { blob_store: blobStore as Record<string, unknown> | null }
+              : {}),
+            ...(mediaLocation !== undefined
+              ? { media_location: mediaLocation as 'keep' | 'strip' | null }
+              : {}),
+          });
+          return sendJson(res, 200, {
+            blob_store: readBlobStoreSettings(plane.db.vault),
+            media_location: mediaLocationPolicy(plane.db),
+          });
+        }
       }
 
       if (method === 'GET' && segments[0] === 'apps' && segments.length === 1) {

@@ -108,6 +108,14 @@ export default async ({ input, ctx }) => {
     ]);
     const starredIds = new Set((starTags.rows ?? []).map((t) => t.target_id));
 
+    // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
+    // the client gets same-origin serve URLs (Range, immutable caching, and
+    // iframe-able PDF previews); inline data: URIs pass through.
+    const srcOf = (c) =>
+      typeof c.content_uri === 'string' && c.content_uri.startsWith('blob:')
+        ? `/centraid/_vault/blobs/${c.content_id}`
+        : c.content_uri;
+
     const documents = (contents.rows ?? [])
       .map((c) => {
         const conceptId = folderByContent.get(c.content_id);
@@ -116,7 +124,7 @@ export default async ({ input, ctx }) => {
           title: c.title,
           media_type: c.media_type,
           byte_size: c.byte_size,
-          content_uri: c.content_uri,
+          content_uri: srcOf(c),
           created_at: c.created_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
           starred: starredIds.has(c.content_id),

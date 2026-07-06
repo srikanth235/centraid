@@ -190,6 +190,28 @@ test('client-produced thumb variant rides staging and serves under ?variant=', (
   }
 });
 
+test('a variant staged AFTER its parent was claimed registers immediately', () => {
+  const original = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'late.png' });
+  const doc = executed<{ content_id: string }>(
+    invoke('core.add_document', { staged_sha: original.sha256, title: 'late.png' }),
+  );
+  // The slow thumb arrives after the claim — it must not sit until the TTL.
+  const thumbBytes = Buffer.from('late-thumb-bytes');
+  gw.stageBlob(owner, {
+    bytes: thumbBytes,
+    mediaType: 'image/jpeg',
+    variant: 'thumb',
+    variantOf: original.sha256,
+  });
+  const thumb = gw.resolveBlob(owner, doc.content_id, { variant: 'thumb' });
+  expect(thumb.status).toBe('ok');
+  if (thumb.status === 'ok') {
+    expect(db.blobs.getSync(thumb.blob.sha256)?.equals(thumbBytes)).toBe(true);
+  }
+  // And its staging row was consumed, not left for the sweep.
+  expect(db.vault.prepare('SELECT count(*) AS n FROM blob_staging').get()).toEqual({ n: 0 });
+});
+
 test('purge sweep reclaims CAS bytes and derivative rows; staging TTL sweeps unclaimed', () => {
   const pdf = Buffer.from('%PDF-1.1\nBT (soon to be purged content) Tj ET\n%%EOF');
   const staged = gw.stageBlob(owner, { bytes: pdf });
@@ -217,6 +239,24 @@ test('purge sweep reclaims CAS bytes and derivative rows; staging TTL sweeps unc
   expect(result.expired).toEqual([loose.sha256]);
   expect(db.blobs.hasSync(loose.sha256)).toBe(false);
   expect(db.blobs.hasSync(held.sha256)).toBe(true);
+});
+
+test('blob-store settings: owner sets s3 + GPS policy, custody re-reads live', async () => {
+  const { updateBlobStoreSettings } = await import('../host.js');
+  const { readBlobStoreSettings } = await import('../db.js');
+  const { mediaLocationPolicy } = await import('./staging.js');
+  expect(readBlobStoreSettings(db.vault)).toEqual({});
+  expect(mediaLocationPolicy(db)).toBe('keep');
+  updateBlobStoreSettings(db, {
+    blob_store: { kind: 's3', endpoint: 'http://127.0.0.1:1', bucket: 'b', encrypt: true },
+    media_location: 'strip',
+  });
+  expect(readBlobStoreSettings(db.vault)).toMatchObject({ kind: 's3', bucket: 'b' });
+  expect(mediaLocationPolicy(db)).toBe('strip');
+  // Clearing restores the local-only default.
+  updateBlobStoreSettings(db, { blob_store: null, media_location: null });
+  expect(readBlobStoreSettings(db.vault)).toEqual({});
+  expect(mediaLocationPolicy(db)).toBe('keep');
 });
 
 test('readonly devices cannot stage; blob maintenance sweep replicates and reports', async () => {

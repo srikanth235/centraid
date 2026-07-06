@@ -13,9 +13,15 @@ import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast }
 
 const $ = (id) => document.getElementById(id);
 
-// Client-side ceiling per file. The command caps the data: URI at roughly
-// 11M characters; 8 MB of bytes base64-encodes comfortably under that.
-const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+// Client-side ceiling per file. Bytes stream to the blob staging route
+// (issue #296) — no base64 through command JSON — so a phone video fits;
+// the route itself caps at 512 MB.
+const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+
+// The vault's byte endpoint (issue #296): blob-backed content serves here
+// with Range + immutable caching; the desktop shell authenticates the
+// request at the network layer, so bare <img>/<video> tags just work.
+const BLOB_ROUTE = '/centraid/_vault/blobs';
 
 // Tiles never render the full-resolution bytes — each image is downscaled
 // once to this longest edge and cached; the lightbox keeps the original.
@@ -151,7 +157,9 @@ function isRenderableUri(uri) {
     (uri.startsWith('http:') ||
       uri.startsWith('https:') ||
       uri.startsWith('data:image') ||
-      uri.startsWith('data:video'))
+      uri.startsWith('data:video') ||
+      // Blob-backed bytes arrive as same-origin vault URLs (issue #296).
+      uri.startsWith(BLOB_ROUTE + '/'))
   );
 }
 
@@ -186,6 +194,17 @@ function makeThumb(uri) {
 }
 
 function setThumbSrc(img, asset) {
+  // Blob-backed assets have a server-side variant endpoint (issue #296):
+  // the grid loads ~KB thumbs, never full originals. A 404 (no variant
+  // produced) falls back to the original bytes — a tile never goes blank.
+  if (typeof asset.thumb_uri === 'string') {
+    img.onerror = () => {
+      img.onerror = null;
+      img.src = asset.content_uri;
+    };
+    img.src = asset.thumb_uri;
+    return;
+  }
   const cached = thumbCache.get(asset.asset_id);
   if (typeof cached === 'string') {
     img.src = cached;
@@ -1293,28 +1312,53 @@ $('searchClear').addEventListener('click', () => {
 
 // ---------- Upload ----------
 
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
+// Stage one file's bytes into the vault's CAS (issue #296): the file
+// streams to the blob route — no base64 through command JSON — and the
+// returned sha is what the upload action claims.
+async function stageFileBytes(file, extra = '') {
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type || 'application/octet-stream' },
+    body: file,
   });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return res.json();
 }
 
-// Decode once at upload time so the vault learns the pixel dimensions.
-async function imageDims(dataUri) {
+// The grid's thumbnail, produced at upload time on this device (the canvas
+// is the one raster codec every client has) and staged as the `thumb`
+// variant beside the original. Dimensions ride along for free.
+async function stageClientThumb(file, parentSha) {
   try {
+    const url = URL.createObjectURL(file);
     const img = new Image();
-    img.src = dataUri;
+    img.src = url;
     await img.decode();
-    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-      return { width: img.naturalWidth, height: img.naturalHeight };
+    const dims =
+      img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
+    const long = Math.max(img.naturalWidth, img.naturalHeight);
+    if (long > THUMB_EDGE) {
+      const scale = THUMB_EDGE / long;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
+      if (blob) {
+        await fetch(
+          `${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`,
+          { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: blob },
+        );
+      }
     }
+    URL.revokeObjectURL(url);
+    return dims;
   } catch {
-    // Undecodable is fine — the upload proceeds without dimensions.
+    return null; // no thumb is a slower grid, never a failed upload
   }
-  return null;
 }
 
 async function uploadFiles(files) {
@@ -1324,8 +1368,8 @@ async function uploadFiles(files) {
   if (accepted.length === 0) {
     toast(
       oversized.length === 1
-        ? `Skipped “${oversized[0].name}” — each upload tops out around 8 MB.`
-        : `Skipped ${oversized.length} files — each upload tops out around 8 MB.`,
+        ? `Skipped “${oversized[0].name}” — each upload tops out at 512 MB.`
+        : `Skipped ${oversized.length} files — each upload tops out at 512 MB.`,
     );
     return;
   }
@@ -1344,9 +1388,12 @@ async function uploadFiles(files) {
   for (let i = 0; i < accepted.length; i += 1) {
     btn.textContent = `Uploading ${i + 1} of ${accepted.length}…`;
     const file = accepted[i];
-    let dataUri;
+    // Stage the bytes (issue #296), grow a client thumb beside them, then
+    // claim the sha through the typed command — which is where the receipt
+    // mints and the library learns about the asset.
+    let staged;
     try {
-      dataUri = await fileToDataUri(file);
+      staged = await stageFileBytes(file);
     } catch {
       unreadable += 1;
       continue;
@@ -1356,9 +1403,9 @@ async function uploadFiles(files) {
       : file.type.startsWith('audio/')
         ? 'audio'
         : 'photo';
-    const dims = kind === 'photo' ? await imageDims(dataUri) : null;
+    const dims = kind === 'photo' ? await stageClientThumb(file, staged.sha256) : null;
     const outcome = await act('upload', {
-      data_uri: dataUri,
+      staged_sha: staged.sha256,
       kind,
       captured_at: new Date(file.lastModified || Date.now()).toISOString(),
       ...(file.name ? { title: file.name } : {}),
@@ -1389,7 +1436,7 @@ async function uploadFiles(files) {
   if (parked > 0) parts.push(`${parked} awaiting approval`);
   if (failed > 0) parts.push(`${failed} refused`);
   if (unreadable > 0) parts.push(`${unreadable} unreadable`);
-  if (oversized.length > 0) parts.push(`${oversized.length} over the 8 MB cap`);
+  if (oversized.length > 0) parts.push(`${oversized.length} over the 512 MB cap`);
   toast(parts.join(' · ') || 'Nothing added');
   if (lastBad) narrate(lastBad);
   await refresh();
