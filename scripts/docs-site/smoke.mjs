@@ -1,151 +1,77 @@
 #!/usr/bin/env node
-import fs from 'node:fs';
-import path from 'node:path';
+/**
+ * Static checks on dist/docs-site — run after `bun run docs:build`.
+ *
+ *  1. Every expected page and shared asset exists.
+ *  2. Every internal href/src in every page resolves to a file in the dist
+ *     (anchors and external URLs skipped).
+ *  3. No page still links the dead MDX-era URL space (/docs/...) or the
+ *     retired Duaility branding.
+ */
+import { readFile, readdir, access } from 'node:fs/promises';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = process.cwd();
-const site = path.join(root, 'dist', 'docs-site');
-const expectedOrigin = (
-  process.env.DOCS_SITE_CANONICAL_ORIGIN ??
-  (process.env.DOCS_SITE_CNAME
-    ? `https://${process.env.DOCS_SITE_CNAME}`
-    : 'https://docs.centraid.dev')
-).replace(/\/$/, '');
-const previewOrigin = (
-  process.env.DOCS_SITE_CNAME
-    ? `https://${process.env.DOCS_SITE_CNAME}`
-    : 'https://docs.centraid.dev'
-).replace(/\/$/, '');
-const artifactMode = process.env.DOCS_SITE_ARTIFACT_MODE ?? 'full';
-const shellOnly = artifactMode === 'shell';
-if (!['full', 'shell'].includes(artifactMode)) {
-  throw new Error(`DOCS_SITE_ARTIFACT_MODE must be full or shell, got ${artifactMode}`);
-}
+const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'dist', 'docs-site');
 
-const required = [
+const REQUIRED = [
   'index.html',
-  'getting-started/index.html',
-  '__elements/index.html',
-  'assets/docs-site.css',
-  'assets/docs-site.js',
-  'assets/mermaid.esm.min.mjs',
-  'assets/svg-pan-zoom.min.js',
+  'start.html',
+  'data.html',
+  'apps.html',
+  'devices.html',
+  'ontology.html',
+  '404.html',
+  '_headers',
+  'assets/docs.css',
+  'assets/docs.js',
   'assets/centraid-mark.svg',
 ];
-if (!shellOnly) {
-  required.push(
-    'llms.txt',
-    '.well-known/llms.txt',
-    'robots.txt',
-    'sitemap.xml',
-    'pagefind/pagefind.js',
-    'og-card.png',
-  );
-}
 
-const poison = [
-  /\banalysis\s+to=functions\./iu,
-  /\b(?:commentary|final)\s+to=functions\./iu,
-  /\bfunctions\.(?:read|write|exec|search|run)\b/iu,
-  /CENTRAID_DOCS_MARKER/u,
-  /<\/?centraid_docs_i18n_input>/iu,
-  /\/home\/runner\/work\//u,
-];
+let failures = 0;
+const fail = (msg) => {
+  failures += 1;
+  console.error(`✗ ${msg}`);
+};
 
-for (const rel of required) {
-  const file = path.join(site, rel);
-  if (!fs.existsSync(file)) throw new Error(`missing ${rel}`);
-  if (!rel.endsWith('.html')) continue;
-  const html = fs.readFileSync(file, 'utf8');
-  if (!/<title>[^<]+<\/title>/i.test(html)) throw new Error(`${rel}: missing title`);
-  for (const pattern of poison) {
-    if (pattern.test(html)) throw new Error(`${rel}: poison matched ${pattern}`);
+for (const rel of REQUIRED) {
+  try {
+    await access(join(outDir, rel));
+  } catch {
+    fail(`missing required file: ${rel}`);
   }
 }
 
-const index = fs.readFileSync(path.join(site, 'index.html'), 'utf8');
-if (!index.includes(`<link rel="canonical" href="${expectedOrigin}/">`)) {
-  throw new Error(`index: canonical link should use ${expectedOrigin}`);
-}
-if (!index.includes(`<meta property="og:url" content="${expectedOrigin}/">`)) {
-  throw new Error(`index: og:url should use ${expectedOrigin}`);
-}
-if (previewOrigin !== expectedOrigin && index.includes(previewOrigin)) {
-  throw new Error(`index: preview origin ${previewOrigin} should not be advertised`);
-}
-if (!/class="breadcrumbs"/.test(index) || !/data-copy-page/.test(index)) {
-  throw new Error('index: page reader affordances are missing');
-}
+const pages = (await readdir(outDir)).filter((f) => f.endsWith('.html'));
+const HREF_RE = /(?:href|src)="([^"]+)"/g;
 
-const cssVersion = index.match(/href="[^"]*\/assets\/docs-site\.css\?v=([a-f0-9]{12})"/)?.[1];
-const jsVersion = index.match(/src="[^"]*\/assets\/docs-site\.js\?v=([a-f0-9]{12})"/)?.[1];
-if (!process.env.DOCS_SITE_BASE_PATH && !cssVersion) {
-  throw new Error('index: custom-domain build did not emit root asset paths');
-}
-if (!jsVersion || cssVersion !== jsVersion) {
-  throw new Error('index: docs shell assets do not share a content version');
-}
+for (const page of pages) {
+  const html = await readFile(join(outDir, page), 'utf8');
 
-const siteCss = fs.readFileSync(path.join(site, 'assets/docs-site.css'), 'utf8');
-const siteJs = fs.readFileSync(path.join(site, 'assets/docs-site.js'), 'utf8');
+  if (/duaility/i.test(html)) fail(`${page}: retired "Duaility" branding still present`);
+  if (/href="\/docs\//.test(html)) fail(`${page}: links into the dead /docs/ MDX URL space`);
 
-if (!/\.cd-card/.test(siteCss) || !/\.cd-step/.test(siteCss) || !/\.cd-code/.test(siteCss)) {
-  throw new Error('assets: cd- component styles are missing from site css');
-}
-if (!/function syncSidebar/.test(siteJs) || !/async function navigateTo/.test(siteJs)) {
-  throw new Error('assets: docs PJAX navigation is missing');
-}
-if (!/function runSearch/.test(siteJs)) {
-  throw new Error('assets: search runtime is missing');
-}
-
-if (!shellOnly) {
-  const llms = fs.readFileSync(path.join(site, 'llms.txt'), 'utf8');
-  if (!/Accept: text\/markdown|\.md/.test(llms)) {
-    throw new Error('llms.txt: should advertise page-level Markdown');
-  }
-  if (!llms.includes(`${expectedOrigin}/sitemap.xml`)) {
-    throw new Error(`llms.txt: expected canonical origin ${expectedOrigin}`);
-  }
-  const wellKnownLlms = fs.readFileSync(path.join(site, '.well-known/llms.txt'), 'utf8');
-  if (wellKnownLlms !== llms) throw new Error('.well-known/llms.txt: does not match root llms.txt');
-
-  const robots = fs.readFileSync(path.join(site, 'robots.txt'), 'utf8');
-  if (!robots.includes(`Sitemap: ${expectedOrigin}/sitemap.xml`)) {
-    throw new Error(`robots.txt: sitemap directive missing canonical origin ${expectedOrigin}`);
-  }
-  if (!robots.includes(`LLMS: ${expectedOrigin}/llms.txt`)) {
-    throw new Error('robots.txt: LLMS directive missing');
-  }
-
-  const sitemap = fs.readFileSync(path.join(site, 'sitemap.xml'), 'utf8');
-  if (!sitemap.includes(`<loc>${expectedOrigin}/`)) {
-    throw new Error(`sitemap.xml: expected canonical origin ${expectedOrigin}`);
-  }
-
-  if (
-    /\/__elements/.test(fs.readFileSync(path.join(site, 'sitemap.xml'), 'utf8')) ||
-    /\/__elements/.test(fs.readFileSync(path.join(site, 'llms.txt'), 'utf8'))
-  ) {
-    throw new Error('__elements: hidden component fixture leaked into public indexes');
+  for (const [, url] of html.matchAll(HREF_RE)) {
+    if (
+      url.startsWith('http') ||
+      url.startsWith('#') ||
+      url.startsWith('mailto:') ||
+      url.startsWith('data:')
+    ) {
+      continue;
+    }
+    const clean = url.split('#')[0].split('?')[0];
+    if (clean === '' || clean === './') continue;
+    try {
+      await access(join(outDir, clean));
+    } catch {
+      fail(`${page}: broken internal link → ${url}`);
+    }
   }
 }
 
-const elementsIndex = fs.readFileSync(path.join(site, '__elements/index.html'), 'utf8');
-if (!/<meta name="robots" content="noindex,nofollow">/.test(elementsIndex)) {
-  throw new Error('__elements: hidden component fixture should be noindex');
+if (failures) {
+  console.error(`docs-site smoke: ${failures} failure(s)`);
+  process.exit(1);
 }
-if (/data-pagefind-body/.test(elementsIndex) || !/data-pagefind-ignore/.test(elementsIndex)) {
-  throw new Error('__elements: hidden component fixture should be excluded from Pagefind');
-}
-
-if (process.env.DOCS_SITE_CNAME) {
-  const cnamePath = path.join(site, 'CNAME');
-  if (
-    !fs.existsSync(cnamePath) ||
-    fs.readFileSync(cnamePath, 'utf8').trim() !== process.env.DOCS_SITE_CNAME
-  ) {
-    throw new Error('CNAME: custom domain file missing or wrong');
-  }
-}
-
-console.log('docs smoke ok'); // governance: allow-repo-hygiene #119 — smoke-test exit signal
+console.log(`docs-site smoke: ${pages.length} pages OK, all internal links resolve`);

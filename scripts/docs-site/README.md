@@ -1,88 +1,55 @@
 # Centraid docs site
 
-Static-site renderer for `docs.centraid.dev`. Plain-Node ESM build that turns Mintlify-flavored MDX in [`/docs`](../../docs/) into the HTML you see at `dist/docs-site/`.
-
-> Adapted from [openclaw/docs](https://github.com/openclaw/docs) at commit [`277d774`](https://github.com/openclaw/docs/tree/277d7740cba35423143d51a7587e1313e9afe758) (MIT). See [`docs/NOTICE.md`](../../docs/NOTICE.md) for the full attribution.
-
-## Build locally
-
-```sh
-bun install
-bun run docs:build              # render → search index → pagefind → normalize
-bun run docs:smoke              # static checks on dist/docs-site
-bun run docs:serve              # http.server on 127.0.0.1:4173
-```
-
-Open `http://127.0.0.1:4173/__elements` to review every component variant on a single page (hidden from search and indexing).
-
-## Source layout
+Static site for `docs.centraid.dev`. The docs are **hand-authored HTML/CSS** in
+[`/docs`](../../docs/) — there is no renderer, no MDX, no build-time framework.
+The site is deliberately small and long-form:
 
 ```
 docs/
-├── docs.json           # site config (Mintlify schema): theme, navigation, redirects
-├── index.mdx           # landing page
-├── *.mdx               # all other pages
-├── assets/             # logo, favicon, any image referenced by content
-├── _headers            # Cloudflare Pages headers (cache control)
-└── NOTICE.md           # third-party attribution
+├── index.html      # front door — two personas, three pillars
+├── start.html      # path 1: install → vault → first app → phone → always-on
+├── data.html       # pillar: vault, consent, outbox, sealed, connections, automations, assistant, blobs, search
+├── apps.html       # pillar: blueprints, anatomy, builder, attach/link, agent surface, mobile
+├── devices.html    # pillar: topology, addressing, pairing, iroh, desktop, mobile, runtimes
+├── ontology.html   # the full logical model — self-contained interactive page
+├── 404.html
+├── assets/         # docs.css + docs.js (shared shell) + centraid-mark.svg
+├── _headers        # cache control served by Cloudflare
+└── plans/          # repo-internal notes — excluded from the deploy
 ```
 
-Anything in `docs/` that isn't `.md` / `.mdx` / `.json` gets copied verbatim to the deploy root (so `_headers` is picked up automatically).
+Every chapter page shares `assets/docs.css` / `assets/docs.js` (paper/night
+theme, left section rail, reveals) and matches the visual language of the
+landing page at `scripts/home-site/public/index.html` — same palette, same
+fonts (Fraunces / Newsreader / IBM Plex Mono), same hard-shadow artifacts.
+`ontology.html` carries its own embedded CSS (it predates the shared shell and
+has bespoke interactive components) but uses the same tokens.
 
-## Renderer layout
-
-```
-scripts/docs-site/
-├── build.mjs           # entry — collects pages, renders, writes dist/docs-site/
-├── mdx-ish.mjs         # Mintlify-flavored MDX → HTML
-├── assets.mjs          # bundled site CSS + JS (the look)
-├── config.mjs          # locale + ignore lists
-├── elements-fixture.mjs # /__elements component review page
-├── og-card-template.mjs # per-page OG image template
-├── og-render-worker.mjs # worker thread for resvg PNG rendering
-├── source-index.mjs    # writes .md alternates for every HTML page
-├── pagefind-normalize.mjs # post-process Pagefind output
-├── llms-full.mjs       # generate llms-full.txt corpus (optional)
-└── smoke.mjs           # static checks on dist/docs-site
-```
-
-## Environment variables
-
-| Var | Default | Purpose |
-|---|---|---|
-| `DOCS_SITE_CANONICAL_ORIGIN` | `https://docs.centraid.dev` | Absolute URL baked into canonical links, sitemap, OG tags. |
-| `DOCS_SITE_CNAME` | (unset) | If set and `_ORIGIN` is unset, used as `https://${CNAME}`. Also writes a `CNAME` file. |
-| `DOCS_SITE_BASE_PATH` | `""` | Path prefix when serving under a subdirectory (e.g. `/docs`). |
-| `DOCS_SITE_LEGACY_BASE_PATH` | `/docs` | Legacy prefix that emits compatibility redirects. |
-| `DOCS_SITE_ARTIFACT_MODE` | `full` | `full` builds content, `shell` builds just the chrome. |
-| `DOCS_SITE_SHELL_ASSET_VERSION` | (auto sha256) | Override the asset-fingerprint hash. |
-| `DOCS_SITE_CHAT_API_URL` | `""` (disabled) | If set, mounts a docs-chat sidebar that POSTs to this URL. |
-| `DOCS_SITE_LLMS_FULL_AVAILABLE` | `0` | Set to `1` if you separately publish `/llms-full.txt`. |
-
-## Deploy: Cloudflare Pages
-
-1. **Create the Pages project** in the Cloudflare dashboard, connected to the GitHub repo.
-2. **Framework preset**: None.
-3. **Build command**: `bun install && bun run docs:build`
-4. **Build output directory**: `dist/docs-site`
-5. **Root directory**: `/` (the repo root)
-6. **Environment variables** (production):
-   - `DOCS_SITE_CANONICAL_ORIGIN` = `https://docs.centraid.dev`
-   - `NODE_VERSION` = `22` (or `24`)
-7. **Custom domain**: add `docs.centraid.dev` under the Pages project's *Custom domains* tab. Cloudflare will provision the certificate.
-
-The build is fully static — no Pages Functions or Worker needed. `_headers` in the output controls cache.
-
-## Smoke locally before pushing
+## Build & preview
 
 ```sh
-DOCS_SITE_CANONICAL_ORIGIN=https://docs.centraid.dev bun run docs:build
-DOCS_SITE_CANONICAL_ORIGIN=https://docs.centraid.dev bun run docs:smoke
+bun run docs:build   # copy docs/ → dist/docs-site (excludes *.md, plans/)
+bun run docs:smoke   # required files exist + every internal link resolves
+bun run docs:serve   # http.server on 127.0.0.1:4173
 ```
 
-## Customizing the look
+## Deploy
 
-- **Brand colors / fonts**: top of `assets.mjs` — `:root` and `:root[data-theme="light"]` CSS variables.
-- **Logo**: `docs/assets/centraid-mark.svg`. Used by the header brand, og card, and favicon.
-- **Header links**: edit the hardcoded `topLink(...)` calls in `build.mjs` (search for `header-links`).
-- **OG card design**: `og-card-template.mjs`. Re-run the regenerator (see git history) to refresh the static fallback.
+Cloudflare Worker with static assets binding (see `wrangler.docs.toml`;
+`worker.ts` here is the thin passthrough entry):
+
+```sh
+bun run docs:deploy:dry   # validate config
+bun run docs:deploy       # upload + activate
+```
+
+## Authoring conventions
+
+- Chapter pages are long-form with a fixed left rail (`<nav class="rail">`);
+  keep rail hrefs in sync with section `id`s — `docs.js` scroll-spies them.
+- Link between pages with plain relative `*.html` hrefs (works locally and on
+  Cloudflare).
+- New shared components belong in `docs.css`; page-specific one-offs can stay
+  inline.
+- `docs:smoke` fails on broken internal links, dead `/docs/...` MDX-era URLs,
+  and any resurrected "Duaility" branding — run it before pushing.
