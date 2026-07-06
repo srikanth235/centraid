@@ -10807,6 +10807,52 @@ select.input option {
   color: var(--ink-4);
   margin-left: 1px;
 }
+/* Title stack — "Insights" + the scoped vault name (#289). */
+.cd-ins-title-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cd-ins-vault {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.cd-ins-vault:empty {
+  display: none;
+}
+/* Window selector — a real filter over the trailing window. Styled to sit
+   in the same chip family as .cd-ins-filter. */
+.cd-ins-window {
+  height: 32px;
+  padding: 0 26px 0 10px;
+  border-radius: 8px;
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-4) 50%),
+    linear-gradient(135deg, var(--ink-4) 50%, transparent 50%);
+  background-position:
+    right 12px center,
+    right 7px center;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+}
+.cd-ins-window:hover {
+  border-color: var(--ink-4);
+}
+/* Spend estimate caveat — the amber "unpriced runs" note. */
+.cd-ins-kpi-warn {
+  color: #d98a3d;
+}
 
 /* KPI strip. */
 .cd-ins-kpis {

@@ -260,21 +260,33 @@ test('10.4 — empty Discover renders without cards', async () => {
 test('11.1 — Insights renders the KPI cards', async () => {
   gateway.state.insights = {
     windowDays: 30,
+    vault: { id: 'v1', name: 'Home' },
     kpis: {
       totalTokens: 12345,
-      quotaTokens: 100000,
+      cacheReadTokens: 4000,
       totalCostUsd: 1.23,
       forecastCostUsd: 4.56,
       appsTouched: 3,
       generations: 7,
       retries: 1,
+      unpricedRuns: 1,
+      unpricedTokens: 500,
     },
     daily: [
-      { date: '2024-05-01', tokens: 5000 },
-      { date: '2024-05-02', tokens: 7345 },
+      { date: '2024-05-01', tokens: 5000, costUsd: 0.5, runs: 3 },
+      { date: '2024-05-02', tokens: 7345, costUsd: 0.73, runs: 4 },
     ],
-    byAutomation: [{ name: 'Digest', tokens: 8000, costUsd: 0.8 }],
-    byModel: [{ model: 'tier-deep', tokens: 12345, costUsd: 1.23 }],
+    byAutomation: [
+      {
+        key: 'auto.digest/daily',
+        label: 'Digest',
+        kind: 'automation',
+        runs: 4,
+        tokens: 8000,
+        costUsd: 0.8,
+      },
+    ],
+    byModel: [{ model: 'tier-deep', runs: 7, tokens: 12345, costUsd: 1.23 }],
     recent: [],
   };
   const { app, page } = await launchApp(env);
@@ -283,6 +295,10 @@ test('11.1 — Insights renders the KPI cards', async () => {
     await gotoNav(page, 'Insights');
     await expect(page.locator('.cd-ins-kpis')).toBeVisible();
     await expect(page.locator('.cd-ins-kpis')).toContainText('Generations');
+    // The spend card is honest about being an estimate, not a bill.
+    await expect(page.locator('.cd-ins-kpis')).toContainText('est. USD');
+    // The scoped vault is named in the header (#289).
+    await expect(page.locator('.cd-ins-vault')).toContainText('Home');
   } finally {
     await app.close();
   }

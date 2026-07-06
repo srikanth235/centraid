@@ -13,8 +13,20 @@ export interface InsightsModule {
   renderInsights(): void;
 }
 
+/** Trailing windows the screen offers. `windowDays` is plumbed end-to-end
+ *  (client → route → store), so this is a real filter, not a static label. */
+const WINDOW_OPTIONS: ReadonlyArray<{ days: number; label: string }> = [
+  { days: 7, label: 'Last 7 days' },
+  { days: 30, label: 'Last 30 days' },
+  { days: 90, label: 'Last 90 days' },
+];
+const DEFAULT_WINDOW_DAYS = 30;
+
 export function createInsightsModule(ctx: ShellContext): InsightsModule {
   const { el, clear, pageScroll, mountShellPage, recordRoute, renderSimpleEmpty } = ctx;
+
+  // Selected trailing window — persists across re-renders within the session.
+  let windowDays = DEFAULT_WINDOW_DAYS;
 
   function insLineChart(values: readonly number[]): HTMLElement {
     const W = 760;
@@ -116,7 +128,27 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
     const page = el('div', { class: 'cd-ins-page' });
     scroll.append(page);
 
-    // ── Header — title + window label ────────────────────────────────
+    // ── Header — title + vault scope + window selector ───────────────
+    // Vault name arrives with the payload (#289 — the screen follows the
+    // request's vault); filled in after the fetch resolves.
+    const vaultLabel = el('div', { class: 'cd-ins-vault' }, '');
+    const windowSelect = el('select', {
+      class: 'cd-ins-window',
+      'aria-label': 'Reporting window',
+    }) as HTMLSelectElement;
+    for (const opt of WINDOW_OPTIONS) {
+      windowSelect.append(
+        el('option', { value: String(opt.days) }, opt.label) as HTMLOptionElement,
+      );
+    }
+    windowSelect.value = String(windowDays);
+    windowSelect.addEventListener('change', () => {
+      const next = Number(windowSelect.value);
+      if (Number.isFinite(next) && next > 0 && next !== windowDays) {
+        windowDays = next;
+        void renderInsightsAsync();
+      }
+    });
     page.append(
       el('div', { class: 'cd-ins-head' }, [
         el('div', { class: 'cd-ins-title' }, [
@@ -124,13 +156,11 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
             class: 'cd-ins-title-icon',
             trustedHtml: Icon.Activity({ size: 18, strokeWidth: 2 }),
           }),
-          el('h1', {}, 'Insights'),
+          el('div', { class: 'cd-ins-title-text' }, [el('h1', {}, 'Insights'), vaultLabel]),
         ]),
         el('div', { class: 'cd-ins-filters' }, [
-          el('span', { class: 'cd-ins-filter cd-ins-filter-static' }, [
-            el('span', { class: 'cd-ins-filter-icon', trustedHtml: Icon.History({ size: 13 }) }),
-            el('span', {}, 'Last 30 days'),
-          ]),
+          el('span', { class: 'cd-ins-filter-icon', trustedHtml: Icon.History({ size: 13 }) }),
+          windowSelect,
         ]),
       ]),
     );
@@ -142,7 +172,7 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
 
     let summary: CentraidInsightsSummary;
     try {
-      summary = await getInsightsSummary();
+      summary = await getInsightsSummary({ windowDays });
     } catch (err) {
       if (!document.contains(bodyHost)) return;
       bodyHost.replaceChildren(
@@ -154,48 +184,65 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
     }
     // The user may have navigated away while the IPC was in flight.
     if (!document.contains(bodyHost)) return;
+    if (summary.vault?.name) vaultLabel.textContent = summary.vault.name;
     bodyHost.replaceChildren();
 
     const { kpis } = summary;
+    const windowText = `last ${summary.windowDays} days`;
 
     // ── KPI row ──────────────────────────────────────────────────────
-    const quotaPct =
-      kpis.quotaTokens > 0
-        ? Math.min(100, Math.round((kpis.totalTokens / kpis.quotaTokens) * 100))
+    // Tokens foot shows the real cache-served share (replaces the former
+    // placeholder "included in quota" bar — there is no hosted allowance).
+    const cachePct =
+      kpis.totalTokens > 0
+        ? Math.min(100, Math.round((kpis.cacheReadTokens / kpis.totalTokens) * 100))
         : 0;
+    // Spend is a local estimate frozen from the price table, and it undercounts
+    // by any run on a model the table doesn't know — surface that, don't imply
+    // an authoritative bill.
+    const spendFoot =
+      kpis.unpricedRuns > 0
+        ? el(
+            'span',
+            { class: 'cd-ins-kpi-sub cd-ins-kpi-warn' },
+            `est. — ${insK(kpis.unpricedTokens)} tokens on ${kpis.unpricedRuns} unpriced run${
+              kpis.unpricedRuns === 1 ? '' : 's'
+            } not counted`,
+          )
+        : el('span', { class: 'cd-ins-kpi-sub' }, `estimated · ${windowText}`);
     bodyHost.append(
       el('div', { class: 'cd-ins-kpis' }, [
         insStatCard({
           icon: Icon.Activity({ size: 12 }),
-          label: 'Tokens · 30 days',
+          label: `Tokens · ${summary.windowDays} days`,
           value: insK(kpis.totalTokens),
           foot: el('div', { class: 'cd-ins-meter' }, [
             el('div', { class: 'cd-ins-bar' }, [
-              el('div', { class: 'cd-ins-bar-fill', style: { width: `${quotaPct}%` } }),
+              el('div', { class: 'cd-ins-bar-fill', style: { width: `${cachePct}%` } }),
             ]),
             el('div', { class: 'cd-ins-meter-foot' }, [
-              el('span', {}, `${insK(kpis.totalTokens)} of ${insK(kpis.quotaTokens)} included`),
-              el('span', {}, `${quotaPct}%`),
+              el('span', {}, `${insK(kpis.cacheReadTokens)} from cache`),
+              el('span', {}, `${cachePct}%`),
             ]),
           ]),
         }),
         insStatCard({
           icon: Icon.Coin({ size: 12 }),
-          label: 'Spent · USD',
+          label: 'Spent · est. USD',
           value: insUsd(kpis.totalCostUsd),
-          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'last 30 days'),
+          foot: spendFoot,
         }),
         insStatCard({
           icon: Icon.History({ size: 12 }),
-          label: 'Forecast · USD',
+          label: 'Forecast · est. USD',
           value: insUsd(kpis.forecastCostUsd),
           foot: el('span', { class: 'cd-ins-kpi-sub' }, '30-day run rate'),
         }),
         insStatCard({
           icon: Icon.Folder({ size: 12 }),
-          label: 'Apps touched',
+          label: 'Apps · AI runs',
           value: String(kpis.appsTouched),
-          foot: el('span', { class: 'cd-ins-kpi-sub' }, 'last 30 days'),
+          foot: el('span', { class: 'cd-ins-kpi-sub' }, `with a run · ${windowText}`),
         }),
         insStatCard({
           icon: Icon.Sparkle({ size: 12 }),
@@ -312,7 +359,7 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
     if (summary.byModel.length === 0) {
       modelBody.append(renderSimpleEmpty('No model usage recorded yet.'));
     }
-    colSide.append(insPanel('By model', 'last 30 days', modelBody));
+    colSide.append(insPanel('By model', windowText, modelBody));
 
     // Recent activity --------------------------------------------------
     const actBody = el('div', { class: 'cd-ins-activity' });

@@ -523,14 +523,22 @@ interface CentraidApi {
 export interface CentraidInsightsKpis {
   /** input + output + cache tokens summed over the window. */
   totalTokens: number;
+  /** Locally-estimated spend (frozen from the model-price table, not a bill).
+   *  A lower bound — excludes runs on unpriced models. */
   totalCostUsd: number;
   /** Window run-rate projected to a 30-day month. */
   forecastCostUsd: number;
   generations: number;
   retries: number;
+  /** Distinct apps with an AI run in the window (not app opens/usage). */
   appsTouched: number;
-  /** Placeholder monthly token allowance — no billing model exists yet. */
-  quotaTokens: number;
+  /** Runs that used tokens but whose model was unpriced — their spend is
+   *  missing from `totalCostUsd`. */
+  unpricedRuns: number;
+  /** Tokens attributable to unpriced runs. */
+  unpricedTokens: number;
+  /** Cache-read tokens over the window (served from the prompt cache). */
+  cacheReadTokens: number;
 }
 
 /** One day of the consumption chart. `date` is `YYYY-MM-DD` (UTC). */
@@ -575,6 +583,8 @@ export interface CentraidInsightsActivityRow {
 export interface CentraidInsightsSummary {
   windowDays: number;
   generatedAt: number;
+  /** The vault this payload is scoped to (#289). */
+  vault?: { id: string; name: string };
   kpis: CentraidInsightsKpis;
   daily: CentraidInsightsDailyPoint[];
   byAutomation: CentraidInsightsAutomationRow[];
@@ -902,7 +912,9 @@ declare global {
     generations: number;
     retries: number;
     appsTouched: number;
-    quotaTokens: number;
+    unpricedRuns: number;
+    unpricedTokens: number;
+    cacheReadTokens: number;
   }
   interface CentraidInsightsDailyPoint {
     date: string;
@@ -936,6 +948,7 @@ declare global {
   interface CentraidInsightsSummary {
     windowDays: number;
     generatedAt: number;
+    vault?: { id: string; name: string };
     kpis: CentraidInsightsKpis;
     daily: CentraidInsightsDailyPoint[];
     byAutomation: CentraidInsightsAutomationRow[];
