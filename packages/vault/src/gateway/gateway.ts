@@ -422,7 +422,29 @@ export class Gateway {
    */
   search(cred: Credential, request: SearchRequest): SearchResult {
     const identity = this.identify(cred);
-    return searchEntity(this.db, identity, request);
+    const result = searchEntity(this.db, identity, request);
+    // Search-miss prioritization (issue #299 phase 5): an OWNER search that
+    // found nothing records what was wanted; enrichers drain the queue
+    // before their backlog. Owner-plane only (an app's misses are its own
+    // business), deduped against open requests so repeat searches don't
+    // spam the queue.
+    if (result.rows.length === 0 && identity.kind === 'owner-device') {
+      const open = this.db.vault
+        .prepare(
+          `SELECT 1 AS x FROM enrich_request
+            WHERE entity_type = ? AND reason = 'search-miss' AND detail = ? AND drained_at IS NULL`,
+        )
+        .get(request.entity, request.query);
+      if (!open) {
+        this.db.vault
+          .prepare(
+            `INSERT INTO enrich_request (request_id, entity_type, entity_id, reason, detail, requested_at, drained_at)
+             VALUES (?, ?, NULL, 'search-miss', ?, ?, NULL)`,
+          )
+          .run(uuidv7(), request.entity, request.query, nowIso());
+      }
+    }
+    return result;
   }
 
   /**

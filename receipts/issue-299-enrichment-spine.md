@@ -19,7 +19,7 @@ on the agent surface.
 - [x] Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
 - [x] Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
 - [x] Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
-- [ ] Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
+- [x] Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
 
 ## What changed
 
@@ -220,6 +220,20 @@ Commit 5 — phase 4: active documents:
 - Gallery entries (27 templates) + 4 behavior tests (vault-only person
   matching + anchor shape, caught duplicate-link refusal, dateless-drop,
   condition-input brief with zero reads/writes).
+
+Commit 6 — phase 5: on-demand prioritization:
+
+- `gateway.search` records an OWNER-plane zero-hit search as an open
+  `enrich_request` (reason `search-miss`, detail = the query), deduped
+  against identical open requests — an app or agent's misses are their own
+  business and never queue spam.
+- `enrich.mark_requests_drained` (new command, risk low) closes requests;
+  `enrich.request_enrichment` (commit 1) is the on-view door apps invoke.
+- photo-captioner drains the queue FIRST: open requests naming specific
+  assets jump the cursor backlog, get re-captioned, and are marked
+  drained in the same fire.
+- Tests: owner-miss recorded once + agent-miss ignored + drain closes
+  (vault), and the captioner queue-jump (blueprints).
 
 ## Decisions of record
 

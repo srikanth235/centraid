@@ -570,6 +570,45 @@ describe('phase-5 surfaces', () => {
     expect(open.length).toBe(1);
     expect(open[0]!.reason).toBe('search-miss');
   });
+
+  test('an owner search miss records ONE open request; agent misses record nothing; draining closes it', () => {
+    const miss = () =>
+      gw.search(owner, {
+        entity: 'knowledge.annotation',
+        query: 'sunset lake',
+        purpose: 'dpv:ServiceProvision',
+      }) as { rows: unknown[] };
+    expect(miss().rows.length).toBe(0);
+    expect(miss().rows.length).toBe(0); // repeat search — deduped
+    const open = db.vault
+      .prepare(`SELECT request_id, detail FROM enrich_request WHERE drained_at IS NULL`)
+      .all() as { request_id: string; detail: string }[];
+    expect(open.length).toBe(1);
+    expect(open[0]!.detail).toBe('sunset lake');
+
+    // Agent-plane misses are the agent's business, never queue spam.
+    gw.search(agent, {
+      entity: 'knowledge.annotation',
+      query: 'agent query',
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(
+      (db.vault.prepare('SELECT count(*) AS n FROM enrich_request').get() as { n: number }).n,
+    ).toBe(1);
+
+    const drained = invoke(agent, 'enrich.mark_requests_drained', {
+      request_ids: [open[0]!.request_id],
+    });
+    expect(drained.status).toBe('executed');
+    expect(output<{ drained: number }>(drained).drained).toBe(1);
+    expect(
+      (
+        db.vault
+          .prepare('SELECT count(*) AS n FROM enrich_request WHERE drained_at IS NULL')
+          .get() as { n: number }
+      ).n,
+    ).toBe(0);
+  });
 });
 
 describe('enrich settings', () => {

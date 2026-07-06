@@ -146,6 +146,26 @@ describe('photo-captioner behavior', () => {
     expect(result.summary).toContain('captioned 1');
   });
 
+  it('open enrichment requests jump the backlog and are marked drained', async () => {
+    const handler = await loadHandler('photo-captioner');
+    const harness = stubCtx({
+      reads: {
+        'enrich.request': [
+          { request_id: 'rq1', entity_type: 'media.media_asset', entity_id: 'old1' },
+        ],
+        'media.media_asset': [{ asset_id: 'old1', content_id: 'oc1', kind: 'photo' }],
+        'core.content_derivative': [{ content_id: 'oc1', variant: 'thumb' }],
+      },
+      agent: () => ({ caption: 'An old photo, revisited on demand', tags: [] }),
+    });
+    await handler({ ctx: harness.ctx, log: harness.log });
+    const commands = harness.invokes.map((i) => i.command);
+    expect(commands).toContain('sync.stage_rows');
+    expect(commands).toContain('enrich.mark_requests_drained');
+    const drained = harness.invokes.find((i) => i.command === 'enrich.mark_requests_drained')!;
+    expect(drained.input).toEqual({ request_ids: ['rq1'] });
+  });
+
   it('a photo without derivatives is skipped honestly — no bytes, no agent turn', async () => {
     const handler = await loadHandler('photo-captioner');
     const harness = stubCtx({

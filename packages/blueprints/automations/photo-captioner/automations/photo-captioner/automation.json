@@ -18,7 +18,8 @@
     "scopes": [
       { "schema": "media", "verbs": "read" },
       { "schema": "core", "verbs": "read" },
-      { "schema": "sync", "verbs": "read+act" }
+      { "schema": "sync", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read+act" }
     ]
   },
   "history": {

@@ -399,6 +399,48 @@ const UPSERT_EMBEDDING: CommandDefinition = {
   },
 };
 
+const MARK_REQUESTS_DRAINED: CommandDefinition = {
+  name: 'enrich.mark_requests_drained',
+  ownerSchema: 'enrich',
+  inputSchema: {
+    type: 'object',
+    required: ['request_ids'],
+    additionalProperties: false,
+    properties: {
+      request_ids: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 100,
+        items: { type: 'string', minLength: 1 },
+      },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['drained'],
+    properties: { drained: { type: 'integer' } },
+  },
+  preconditions: [],
+  postconditions: [],
+  idempotency: 'retry-safe',
+  risk: 'low',
+  handler: (ctx) => {
+    const input = ctx.input as { request_ids: string[] };
+    let drained = 0;
+    const mark = ctx.db.prepare(
+      'UPDATE enrich_request SET drained_at = ? WHERE request_id = ? AND drained_at IS NULL',
+    );
+    for (const requestId of input.request_ids) {
+      const changed = mark.run(ctx.now, requestId).changes;
+      if (changed > 0) {
+        drained += Number(changed);
+        ctx.wrote('enrich.request', requestId);
+      }
+    }
+    return { drained };
+  },
+};
+
 /** The vault owner's party — apps and device callers act as the owner. */
 function ownerPartyId(ctx: HandlerCtx): string {
   const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
@@ -415,4 +457,5 @@ export function registerEnrichCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_CONNECTION_TRUST);
   gateway.registerCommand(REQUEST_ENRICHMENT);
   gateway.registerCommand(UPSERT_EMBEDDING);
+  gateway.registerCommand(MARK_REQUESTS_DRAINED);
 }

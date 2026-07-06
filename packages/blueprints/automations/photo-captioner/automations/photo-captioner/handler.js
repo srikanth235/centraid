@@ -49,6 +49,35 @@ const CAPTION_SCHEMA = {
 
 export default async ({ ctx, log }) => {
   const cursor = (await ctx.state.get('cursor')) ?? '';
+  // The on-demand queue drains FIRST (issue #299 phase 5): an owner search
+  // that found nothing, or an opened unenriched photo, names specific
+  // assets — those jump the backlog regardless of the cursor.
+  const requested = await ctx.vault.read({
+    entity: 'enrich.request',
+    where: [
+      { column: 'entity_type', op: 'eq', value: 'media.media_asset' },
+      { column: 'entity_id', op: 'not-null' },
+      { column: 'drained_at', op: 'is-null' },
+    ],
+    orderBy: { column: 'request_id', dir: 'asc' },
+    limit: 5,
+    purpose: PURPOSE,
+  });
+  const requests = requested.rows ?? [];
+  const requestedAssets = [];
+  for (const request of requests) {
+    const hit = await ctx.vault.read({
+      entity: 'media.media_asset',
+      where: [
+        { column: 'asset_id', op: 'eq', value: request.entity_id },
+        { column: 'deleted_at', op: 'is-null' },
+      ],
+      limit: 1,
+      purpose: PURPOSE,
+    });
+    if (hit.rows?.[0]) requestedAssets.push(hit.rows[0]);
+  }
+
   const read = await ctx.vault.read({
     entity: 'media.media_asset',
     where: [
@@ -59,7 +88,9 @@ export default async ({ ctx, log }) => {
     limit: BATCH,
     purpose: PURPOSE,
   });
-  const assets = read.rows ?? [];
+  const fresh = read.rows ?? [];
+  const seen = new Set(requestedAssets.map((a) => a.asset_id));
+  const assets = [...requestedAssets, ...fresh.filter((a) => !seen.has(a.asset_id))];
   if (assets.length === 0) return { summary: 'no new photos — library is fully captioned' };
 
   const rows = [];
@@ -67,7 +98,7 @@ export default async ({ ctx, log }) => {
   let skipped = 0;
   let lastSeen = cursor;
   for (const asset of assets) {
-    lastSeen = asset.asset_id;
+    if (fresh.includes(asset)) lastSeen = asset.asset_id > lastSeen ? asset.asset_id : lastSeen;
     if (asset.kind !== 'photo' && asset.kind !== 'scan') continue;
     // Which derivative exists? Only thumb/preview are agent-readable.
     const derivatives = await ctx.vault.read({
@@ -131,6 +162,13 @@ export default async ({ ctx, log }) => {
     staged = await ctx.vault.invoke({
       command: 'sync.stage_rows',
       input: { kind: 'enrichment.vision', label: 'photos', rows },
+      purpose: PURPOSE,
+    });
+  }
+  if (requests.length > 0) {
+    await ctx.vault.invoke({
+      command: 'enrich.mark_requests_drained',
+      input: { request_ids: requests.map((r) => r.request_id) },
       purpose: PURPOSE,
     });
   }
