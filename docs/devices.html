@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Devices — Centraid docs</title>
+    <meta
+      name="description"
+      content="The Devices pillar: one gateway with devices as clients, (gateway, vault) addressing, one-time pairing, the iroh peer-to-peer tunnel, the desktop shell, the mobile companion, and the agent runtimes a gateway can host."
+    />
+    <link rel="icon" href="assets/centraid-mark.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="assets/docs.css" />
+  </head>
+  <body class="has-rail">
+    <header class="site-head">
+      <div class="head-row">
+        <a class="brand" href="./">
+          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
+          Centraid <span class="docs-tag">docs</span>
+        </a>
+        <nav>
+          <a href="start.html">start</a>
+          <a href="data.html">data</a>
+          <a href="apps.html">apps</a>
+          <a href="devices.html" aria-current="page">devices</a>
+          <a href="ontology.html" class="hide-sm">ontology</a>
+          <a
+            href="https://github.com/srikanth235/centraid"
+            target="_blank"
+            rel="noopener"
+            class="hide-sm"
+            >github</a
+          >
+          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+        </nav>
+      </div>
+    </header>
+
+    <nav class="rail" aria-label="Section index">
+      <a href="#topology" class="on"><span class="n">§01</span>Topology</a>
+      <a href="#addressing"><span class="n">§02</span>Addressing</a>
+      <a href="#pairing"><span class="n">§03</span>Pairing</a>
+      <a href="#iroh"><span class="n">§04</span>Connectivity</a>
+      <a href="#desktop"><span class="n">§05</span>Desktop shell</a>
+      <a href="#mobile"><span class="n">§06</span>Mobile companion</a>
+      <a href="#runtimes"><span class="n">§07</span>Agent runtimes</a>
+    </nav>
+
+    <main>
+      <section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">S</div>
+        <p class="eyebrow r">Chapter 3 · devices</p>
+        <h1 class="r" style="--d: 0.1s">One gateway. <em>Everything else is a client.</em></h1>
+        <p class="lede r" style="--d: 0.22s">
+          Centraid refuses the hardest problem in personal software — multi-master sync — by never
+          having it. There is <b>one always-on gateway</b> per person, holding the vaults and
+          running the automations; every device is a client in a star around it, connected
+          peer-to-peer with no relay service to subscribe to. This chapter is that star, wire by
+          wire.
+        </p>
+      </section>
+
+      <!-- §01 TOPOLOGY -->
+      <section class="sec wrap" id="topology">
+        <p class="eyebrow r">§01 · topology</p>
+        <h2 class="r" style="--d: 0.06s">A star, <em>never a mesh.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The gateway is the sole holder of vault connections — apps, agents, phones and laptops
+            never touch a database file. That single fact buys the consent story (one door to
+            check), the audit story (one place receipts mint), and the sync story (there is nothing
+            to reconcile, because there is one writer). The same gateway core runs in three homes:
+          </p>
+        </div>
+        <div class="grid cols-3" style="margin-top: 26px">
+          <div class="card r" style="--d: 0.1s">
+            <p class="c-no">home 1</p>
+            <h3>Inside the desktop shell</h3>
+            <p>
+              Embedded in the Electron app's main process. Zero setup — this is where everyone
+              starts. Automations fire while the app is open.
+            </p>
+          </div>
+          <div class="card r" style="--d: 0.18s">
+            <p class="c-no">home 2</p>
+            <h3>A headless daemon</h3>
+            <p>
+              <code>centraid-gateway serve</code> on a spare machine or home server. Token persists,
+              scheduler always ticking — the long-term home.
+            </p>
+          </div>
+          <div class="card r" style="--d: 0.26s">
+            <p class="c-no">home 3</p>
+            <h3>Inside another host</h3>
+            <p>
+              The gateway is a mountable core: the OpenClaw plugin mounts it on OpenClaw's own HTTP
+              surface and injects OpenClaw as the agent brain.
+            </p>
+          </div>
+        </div>
+        <p class="aside r" style="--d: 0.3s">
+          The trade is explicit: the gateway becomes the thing to protect — which is why backup is
+          two files plus a key, and why admin actions never ride HTTP.
+        </p>
+      </section>
+
+      <!-- §02 ADDRESSING -->
+      <section class="dark" id="addressing">
+        <div class="wrap">
+          <p class="eyebrow r">§02 · addressing</p>
+          <h2 class="r" style="--d: 0.06s">Clients speak to a <em>(gateway, vault)</em> pair.</h2>
+          <p class="lede r" style="--d: 0.12s">
+            A gateway mounts many vaults, so no request is ever "to the gateway" — it names its
+            vault (<code>x-centraid-vault</code>) or is resolved by device identity, and the whole
+            request runs inside that vault's scope. There is no server-global "active vault": two
+            clients on two vaults can't cross-pollinate by construction.
+          </p>
+          <div class="grid cols-2" style="margin-top: 26px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">who may enter</p>
+              <h3>Enrollment is per-vault</h3>
+              <p>
+                A device's ed25519 endpoint id is enrolled against specific vaults in an ACL the
+                admin CLI and the daemon both watch. Multi-vault access is multiple rows; revocation
+                is one row — and it lands on live connections, not at the next reconnect.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">two planes</p>
+              <h3>Admin is shell, owner is device</h3>
+              <p>
+                Creating and deleting vaults, enrolling devices, exporting keys: shell-only
+                ceremonies (<code>centraid-gateway vault / pair / devices / key</code>). The owner
+                plane — your taps, grants, confirmations — rides authenticated device transport.
+                Compromising the HTTP surface never yields landlord powers.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §03 PAIRING -->
+      <section class="sec wrap" id="pairing">
+        <p class="eyebrow r">§03 · pairing</p>
+        <h2 class="r" style="--d: 0.06s">A ticket that <em>burns on use.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Adding a device is a one-time ticket: minted on the desktop (Settings → Phone) or by
+            <code>centraid-gateway pair</code>, rendered as a QR code, expiring in minutes. The
+            ticket carries the gateway's dialing information, a ticket id, a one-time secret, and
+            the vault it grants — the secret is stored only as a hash, compared in constant time,
+            and burned on redemption.
+          </p>
+          <p>
+            The phone redeems it over a dedicated pairing channel on the gateway's peer-to-peer
+            endpoint, proves the exchange, and comes out the other side <b>enrolled</b>: its
+            endpoint id in the ACL, its line to the gateway permanent until you revoke it. No
+            password, no account, nothing reusable to intercept.
+          </p>
+        </div>
+        <div class="term r" style="--d: 0.2s; margin-top: 24px; max-width: 720px">
+          <div class="term-bar"><span>headless pairing · admin shell</span></div>
+          <div class="term-body">
+            <div class="ln">
+              <span class="p">$</span>
+              <code
+                >centraid-gateway pair --data-dir ~/centraid-data --vault Local --ttl-minutes
+                15</code
+              >
+            </div>
+            <div class="out">
+              { "ticket": "…", "code": "…", "expiresAt": "…" } # scan or type on the phone
+            </div>
+            <div class="ln">
+              <span class="p">$</span>
+              <code
+                >centraid-gateway devices revoke --data-dir ~/centraid-data
+                &lt;enrollment-id&gt;</code
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §04 IROH -->
+      <section class="dark" id="iroh">
+        <div class="wrap">
+          <p class="eyebrow r">§04 · connectivity</p>
+          <h2 class="r" style="--d: 0.06s">Peer-to-peer QUIC, <em>no rented middleman.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Device links run on
+            <a class="u" href="https://www.iroh.computer" target="_blank" rel="noopener">iroh</a> —
+            direct, hole-punched, end-to-end encrypted QUIC between devices that authenticate by
+            key, not by account. It replaces the expensive proprietary layer most products rent: no
+            push relay, no sync fleet, no per-seat tunnel service.
+          </p>
+          <div class="steps r" style="--d: 0.16s; max-width: 880px">
+            <div class="step">
+              <span class="dot">1</span>
+              <div>
+                <h3>One endpoint, two channels</h3>
+                <p>
+                  A gateway exposes a tunnel channel — each HTTP request rides its own QUIC
+                  bi-stream, response bodies streamed so live SSE updates stay live — and a pairing
+                  channel for ticket redemption. Every connection <i>and every stream</i>
+                  re-checks the device allowlist, so revocation bites mid-session.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">2</span>
+              <div>
+                <h3>Transport tiers with a guardrail</h3>
+                <p>
+                  Clients classify their route: <b>local</b> (embedded gateway, loopback),
+                  <b>direct</b> (an https URL + bearer — your Tailscale or LAN), or <b>iroh</b>
+                  (dial by endpoint id; a loopback proxy makes it transparent to the rest of the
+                  app). Plain http to a public hostname is refused outright — loopback and RFC1918
+                  only.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">3</span>
+              <div>
+                <h3>Version handshake, exact-match</h3>
+                <p>
+                  On connect, clients read the gateway's version and schema epoch and refuse a
+                  mismatch. Pre-release policy: exact match or walk away — compatibility windows
+                  arrive with v1, not before.
+                </p>
+              </div>
+            </div>
+          </div>
+          <p class="note r" style="--d: 0.24s; margin-top: 16px">
+            The wire protocol has one TypeScript reference implementation, ported byte-for-byte to
+            Swift and Kotlin for the phone's native module.
+          </p>
+        </div>
+      </section>
+
+      <!-- §05 DESKTOP -->
+      <section class="sec wrap" id="desktop">
+        <p class="eyebrow r">§05 · desktop shell</p>
+        <h2 class="r" style="--d: 0.06s">The everyday <em>front door.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The Electron shell is where you live day to day: the app grid, the assistant, the
+            automations panel with its live run stream, and Settings — vaults, phone pairing,
+            connections, import. It embeds a gateway for the local case and dials remote ones
+            through the same transport tiers, injecting the bearer token and vault header so iframed
+            apps just work. Switching vaults is a client-side act: same gateway, different world.
+          </p>
+          <p class="aside">
+            The shell is also where parked things surface — outbox items, consent requests,
+            confirm-gated commands — one blocking drawer instead of scattered dialogs.
+          </p>
+        </div>
+      </section>
+
+      <!-- §06 MOBILE -->
+      <section class="sec wrap" id="mobile">
+        <p class="eyebrow r">§06 · mobile companion</p>
+        <h2 class="r" style="--d: 0.06s">A thin client with <em>your approvals in it.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The phone app (Expo, iOS and Android) carries no gateway and no database — it scans the
+            pairing QR, holds its device key, and renders your apps over the tunnel: the same
+            responsive HTML, live SSE updates, search across your tiles. Its one native trick is the
+            tunnel module itself (Swift and Kotlin implementations of the wire protocol); everything
+            above that line is the same product you see on the desktop.
+          </p>
+          <p>
+            It also ships an <b>Approvals</b> surface — parked commands and staged outbox items,
+            answerable from your pocket — because consent that can only be granted at a desk is
+            consent that gets rubber-stamped later.
+          </p>
+          <p class="note">
+            Honest beta note: the native module means a dev build (<code>expo prebuild</code> +
+            <code>run:ios / run:android</code>) — Expo Go won't load it, and prebuilt store binaries
+            don't exist yet.
+          </p>
+        </div>
+      </section>
+
+      <!-- §07 RUNTIMES -->
+      <section class="dark" id="runtimes">
+        <div class="wrap">
+          <p class="eyebrow r">§07 · agent runtimes</p>
+          <h2 class="r" style="--d: 0.06s">Bring your own <em>brain.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Chat turns, builder sessions and automation fires all run through one injected turn
+            contract — the gateway doesn't care which agent runtime satisfies it. Three do today:
+          </p>
+          <div class="grid cols-3" style="margin-top: 26px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">in-process</p>
+              <h3>Claude Code</h3>
+              <p>
+                Runs through the Claude Agent SDK inside the gateway process — the default brain for
+                chat, builder and automations.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">spawned</p>
+              <h3>Codex</h3>
+              <p>
+                Spawned as <code>codex app-server</code> over JSON-RPC stdio — an on-device runner
+                with the same turn contract.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.26s">
+              <p class="c-no">host-native</p>
+              <h3>OpenClaw</h3>
+              <p>
+                When the gateway mounts inside OpenClaw, the plugin injects OpenClaw's own agent as
+                the runner and enumerates its models.
+              </p>
+            </div>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              Whatever the brain, the leash is identical: agents see the vault only through
+              <code>vault_sql</code> / <code>vault_invoke</code> / <code>vault_content</code>, and
+              the model tiering is capability-based, not vendor-named — swap the runtime, keep the
+              contract, keep every receipt.
+            </p>
+          </div>
+
+          <div class="chapter-next r" style="margin-top: 40px">
+            <a href="apps.html">← previous: apps</a>
+            <a href="ontology.html">deep-dive: the ontology →</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <div class="wrap">
+        <p class="foot-manifesto r">
+          No relay to rent, no sync to reconcile, no account to lose.
+          <em>Just your machines, talking to each other.</em>
+        </p>
+        <div class="foot-row">
+          <span>© 2026 Centraid</span>
+          <span class="foot-links">
+            <a href="https://centraid.dev">centraid.dev</a>
+            <a href="start.html">start</a>
+            <a href="data.html">data</a>
+            <a href="apps.html">apps</a>
+            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
+              >github</a
+            >
+          </span>
+        </div>
+      </div>
+    </footer>
+
+    <script src="assets/docs.js"></script>
+  </body>
+</html>

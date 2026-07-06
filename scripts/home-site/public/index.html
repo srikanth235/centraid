@@ -6,7 +6,7 @@
     <title>Centraid — software for a market of one</title>
     <meta
       name="description"
-      content="Centraid is a personal app builder. Describe the app your life needs — an agent writes it, a gateway on your own machine runs it, and it appears on your desktop and phone."
+      content="Centraid is personal software with the ownership inverted: one vault on your own machine holds your life's record on a single shared ontology, apps are agent-built projections over it, and every device is a client of a gateway you run."
     />
     <link rel="icon" href="assets/centraid-mark.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -908,14 +908,14 @@
           Centraid
         </a>
         <nav>
-          <a href="/docs/concepts/architecture" class="hide-sm">concepts</a>
-          <a href="/docs/build/app-anatomy" class="hide-sm">build</a>
-          <a href="/docs/automations" class="hide-sm">automations</a>
-          <a href="/docs/templates" class="hide-sm">templates</a>
+          <a href="https://docs.centraid.dev/data.html" class="hide-sm">data</a>
+          <a href="https://docs.centraid.dev/apps.html" class="hide-sm">apps</a>
+          <a href="https://docs.centraid.dev/devices.html" class="hide-sm">devices</a>
+          <a href="https://docs.centraid.dev/ontology.html" class="hide-sm">ontology</a>
           <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
             >github</a
           >
-          <a href="/docs" class="docs-link">docs&nbsp;→</a>
+          <a href="https://docs.centraid.dev" class="docs-link">docs&nbsp;→</a>
           <button class="toggle" id="toggle" aria-label="Toggle theme">
             <svg
               id="toggle-icon"
@@ -937,14 +937,16 @@
       <p class="kicker r" style="--d: 0.05s">Centraid · personal software</p>
       <h1 class="r" style="--d: 0.14s">Software for a <em>market of one.</em></h1>
       <p class="lede r" style="--d: 0.26s">
-        Most software is built for everyone, which is why none of it quite fits you. Centraid is a
-        <b>personal app builder</b>: describe the app your life needs, an agent writes it, a gateway
-        on <b>your own machine</b> runs it, and it appears on your desktop and phone — a folder of
-        plain files and one SQLite database.
+        Most software is built for everyone, which is why none of it quite fits you — and why your
+        life ends up scattered across a hundred vendors' databases. Centraid inverts the ownership:
+        <b>your data</b> lives in one vault on your own machine, on one shared model with no silos;
+        <b>your apps</b> are thin projections over it, written and rewritten by an agent to fit you;
+        <b>your devices</b> connect peer-to-peer to one gateway you run. No accounts, no cloud, no
+        landlord.
       </p>
       <div class="cta-row r" style="--d: 0.38s">
-        <a href="#install" class="btn btn-primary">install in 60 seconds</a>
-        <a href="/docs" class="btn btn-ghost">read the docs</a>
+        <a href="#install" class="btn btn-primary">get it running</a>
+        <a href="https://docs.centraid.dev" class="btn btn-ghost">read the docs</a>
       </div>
       <p class="hero-notes r" style="--d: 0.48s">
         <span>no accounts</span><span class="dot">·</span><span>no cloud</span
@@ -958,46 +960,100 @@
       <div class="rule-label"><span>How it works</span><span>in five chapters</span></div>
     </div>
 
-    <!-- 01 · THE ASK -->
-    <section class="chapter wrap" id="ask">
+    <!-- 01 · YOUR DATA -->
+    <section class="chapter wrap" id="data">
       <div class="prose">
-        <p class="ch-no r"><span class="n">01</span> the ask</p>
-        <h2 class="r" style="--d: 0.08s">You describe it. <em>An agent builds it.</em></h2>
+        <p class="ch-no r"><span class="n">01</span> your data</p>
+        <h2 class="r" style="--d: 0.08s">One vault holds <em>the whole record.</em></h2>
         <p class="r" style="--d: 0.16s">
-          There is no project to scaffold and nothing to configure. You say what you want in a
-          sentence. The builder agent writes the app on a <b>draft branch</b>, you poke at a live
-          preview, and <b>Publish</b> flips it onto every device you own.
+          Your people, money, health, documents, messages and plans live in
+          <b>one vault on your disk</b>, on one shared ontology: "a person", "money moved",
+          "something was measured" are declared exactly once, and every app extends or references
+          them — never re-declares them. Star a document in one app and every other app knows,
+          because there is <b>no silo to copy across</b>.
         </p>
         <p class="r" style="--d: 0.22s">
-          Changed your mind next month? Say that too. The same conversation that built the app can
-          rewrite it.
+          Apps <b>borrow</b> the record through scoped grants you sign, every access leaves a
+          receipt, and secrets are sealed even at rest. Export is honest: copy a directory.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Drafts are git branches in a local store — publish is a fast-forward, and every version
-          stays. <a href="/docs/build/app-anatomy">How apps are put together →</a>
+          One consent-checked door, an append-only journal beside it.
+          <a href="https://docs.centraid.dev/data.html">The data pillar →</a> ·
+          <a href="https://docs.centraid.dev/ontology.html">the full ontology →</a>
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-r r" style="--d: 0.12s">
-          <div class="artifact-head">
-            <span>builder · new app</span><span class="tag">draft</span>
+          <div class="artifact-head"><span>~/vaults/local</span><span class="tag">yours</span></div>
+          <div class="artifact-body">
+            <div class="ft">
+              <div class="ft-row"><span class="ft-l d">local/</span></div>
+              <div class="ft-row">
+                <span class="ft-l">├── <span class="hl">vault.db</span></span>
+                <span class="c">the canonical record — every domain, one model</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── journal.db</span>
+                <span class="c">receipts &amp; provenance, append-only</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">├── <span class="d">blobs/</span></span>
+                <span class="c">photos, PDFs — deduped by hash</span>
+              </div>
+              <div class="ft-row">
+                <span class="ft-l">└── transcripts.db</span>
+                <span class="c">every agent run, readable back</span>
+              </div>
+              <div class="ft-row" style="margin-top: 8px"><span class="ft-l d">keys/</span></div>
+              <div class="ft-row">
+                <span class="ft-l">└── local.sealkey</span>
+                <span class="c">seals your secrets — lives outside backups</span>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 · YOUR APPS -->
+    <section class="chapter flip wrap" id="apps">
+      <div class="prose">
+        <p class="ch-no r"><span class="n">02</span> your apps</p>
+        <h2 class="r" style="--d: 0.08s">Apps are windows, <em>not warehouses.</em></h2>
+        <p class="r" style="--d: 0.16s">
+          Eight blueprints ship in the box —
+          <b>Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks</b> — and none of them owns a
+          byte of your data. An app is a folder of plain HTML and JavaScript that renders vault rows
+          and mutates them through typed commands. Delete one and nothing of yours is lost.
+        </p>
+        <p class="r" style="--d: 0.22s">
+          Don't like how one works? Tell the <b>builder</b>. It edits the app in conversation
+          against a live preview, on a draft — publish flips it onto every device you own.
+          <b>Software that fits, because it's refitted.</b>
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          No private databases, no build step — a folder you can read in an evening.
+          <a href="https://docs.centraid.dev/apps.html">The apps pillar →</a>
+        </p>
+      </div>
+      <div class="artifact-col">
+        <div class="artifact tilt-l r" style="--d: 0.12s">
+          <div class="artifact-head"><span>builder · docs</span><span class="tag">draft</span></div>
           <div class="artifact-body">
             <div class="t-line">
               <span class="t-who you">you</span>
               <span class="t-msg"
-                >Make me an app for the veggie patch — what I planted, when to water, what actually
-                came up.</span
+                >Separate receipts from documents, and show a monthly total next to each
+                folder.</span
               >
             </div>
             <div class="t-line">
               <span class="t-who agent">builder</span>
               <span class="t-msg"
-                >Drafting <b>patch</b> on a branch —
-                <span class="nl">tables&nbsp;&nbsp;&nbsp;plantings, waterings</span>
-                <span class="nl">actions&nbsp;&nbsp;plant · water · harvest</span>
-                <span class="nl">queries&nbsp;&nbsp;due-today · season-review</span>
-                <span class="dim nl">Preview is live on your desktop. Publish?</span></span
+                ><span class="tool-chip">⚙ vault_sql → folders, roles, txn joins</span>
+                Receipts already carry a canonical role — no new table needed. Drafted a filtered
+                view + a query joining receipts to transactions.
+                <span class="dim nl">Preview is live. Publish?</span></span
               >
             </div>
             <div class="t-line">
@@ -1006,123 +1062,51 @@
             </div>
             <div class="t-line">
               <span class="t-who agent">builder</span>
-              <span class="t-msg">Done — <b>patch</b> is on all your devices.</span>
+              <span class="t-msg">Done — <b>docs</b> is updated on all your devices.</span>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- 02 · THE ARTIFACT -->
-    <section class="chapter flip wrap" id="artifact">
+    <!-- 03 · THE ASSISTANT -->
+    <section class="chapter wrap" id="assistant">
       <div class="prose">
-        <p class="ch-no r"><span class="n">02</span> the artifact</p>
-        <h2 class="r" style="--d: 0.08s">Small enough to <em>read in an evening.</em></h2>
+        <p class="ch-no r"><span class="n">03</span> the assistant</p>
+        <h2 class="r" style="--d: 0.08s">Data that's alive, <em>not just stored.</em></h2>
         <p class="r" style="--d: 0.16s">
-          An app is a folder: an HTML page, plain JavaScript handlers, SQL migrations, one manifest.
-          Its entire life's data is <b>one SQLite file on your disk</b>. No
-          <span style="font-style: italic">node_modules</span>, no bundler, no deploy pipeline — the
-          runtime loads the files as they are.
+          The point of one model is that something can finally <b>think across it</b>. The assistant
+          reads your whole vault with plain SQL — receipted, row-capped — and answers questions no
+          siloed app could: joins across your people, money, calendar and documents, because they
+          were never separated.
         </p>
         <p class="r" style="--d: 0.22s">
-          When something feels off, you don't file a ticket. You open the folder and read it.
-          <b>All of it.</b>
+          It writes only through the <b>same typed commands</b> your apps use — consequential acts
+          pause for your confirmation, and when you correct it, the correction becomes a durable
+          rule it consults next time.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Handlers are pure functions over the app's own database. Type hints come from JSDoc, not a
-          compile step. <a href="/docs/build/queries">Queries and actions →</a>
-        </p>
-      </div>
-      <div class="artifact-col">
-        <div class="artifact tilt-l r" style="--d: 0.12s">
-          <div class="artifact-head"><span>~/apps/patch</span><span class="tag">9 files</span></div>
-          <div class="artifact-body">
-            <div class="ft">
-              <div class="ft-row"><span class="ft-l d">patch/</span></div>
-              <div class="ft-row">
-                <span class="ft-l">├── app.json</span>
-                <span class="c">the manifest — what it can be asked</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">├── index.html</span>
-                <span class="c">the whole UI</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">├── <span class="d">queries/</span></span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── due-today.js</span>
-                <span class="c">12 lines</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">├── <span class="d">actions/</span></span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">│&nbsp;&nbsp;&nbsp;├── plant.js</span>
-                <span class="c">18 lines</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">│&nbsp;&nbsp;&nbsp;├── water.js</span>
-                <span class="c">9 lines</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── harvest.js</span>
-                <span class="c">14 lines</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">├── <span class="d">migrations/</span></span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">│&nbsp;&nbsp;&nbsp;└── 0001_init.sql</span>
-                <span class="c">two tables</span>
-              </div>
-              <div class="ft-row">
-                <span class="ft-l">└── <span class="hl">data.sqlite</span></span>
-                <span class="c">every record it will ever hold</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 03 · THE RUNTIME -->
-    <section class="chapter wrap" id="runtime">
-      <div class="prose">
-        <p class="ch-no r"><span class="n">03</span> the runtime</p>
-        <h2 class="r" style="--d: 0.08s">Chat isn't a feature. <em>It's the runtime.</em></h2>
-        <p class="r" style="--d: 0.16s">
-          Every app declares what it can be <b>asked</b> (queries) and what it can be
-          <b>told</b> (actions). The buttons in the UI call that catalog — and so does the agent.
-          Saying it and tapping it are the <b>same code path</b>, so talking to an app is
-          full-fidelity use, not a gimmick bolted on top.
-        </p>
-        <p class="aside r" style="--d: 0.24s">
-          Three generic tools fan out to every app's declared handlers — agents, automations, and
-          the UI share one calling convention.
-          <a href="/docs/concepts/queries-and-actions">The dispatcher →</a>
+          Three tools, no side doors: read with SQL, act with commands, open a document.
+          <a href="https://docs.centraid.dev/data.html#assistant">The assistant →</a>
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-r r" style="--d: 0.12s">
-          <div class="artifact-head"><span>chat · patch</span><span class="tag">live</span></div>
+          <div class="artifact-head"><span>assistant</span><span class="tag">your vault</span></div>
           <div class="artifact-body">
             <div class="t-line">
               <span class="t-who you">you</span>
               <span class="t-msg"
-                >watered the tomatoes and the chillies — and I spotted aphids on the chillies
-                again</span
+                >what did the car cost me this year — and where are the receipts?</span
               >
             </div>
             <div class="t-line">
-              <span class="t-who agent">patch</span>
+              <span class="t-who agent">assistant</span>
               <span class="t-msg"
-                ><span class="tool-chip">⚙ write → water { bed: "tomatoes" }</span>
-                <span class="tool-chip">⚙ write → water { bed: "chillies", note: "aphids" }</span>
-                Both logged for today, chillies flagged.
-                <span class="dim nl"
-                  >You last saw aphids there twelve days ago — that's twice this month.</span
-                ></span
+                ><span class="tool-chip">⚙ vault_sql → transactions ⋈ tags ⋈ attachments</span>
+                ₹86,400 across 14 transactions — insurance, two services, fuel. Eleven have receipts
+                attached in Docs; the December service doesn't.
+                <span class="dim nl">Want a task to chase that invoice?</span></span
               >
             </div>
           </div>
@@ -1134,19 +1118,22 @@
     <section class="chapter flip wrap" id="automations">
       <div class="prose">
         <p class="ch-no r"><span class="n">04</span> the long game</p>
-        <h2 class="r" style="--d: 0.08s">Automations are conversations <em>that don't end.</em></h2>
+        <h2 class="r" style="--d: 0.08s">Automations ferry your life <em>back home.</em></h2>
         <p class="r" style="--d: 0.16s">
-          A morning briefing, an email triage, a nag to water the chillies — each one is an agent on
-          a schedule or a data trigger, working over your apps while you're away. Every run keeps a
-          <b>durable transcript</b>.
+          Agents on schedules and data triggers pull your world into the vault — Gmail, calendars,
+          contacts, GitHub — through <b>your own</b> API credentials, with every imported row staged
+          for review and stamped with where it came from. Drop an <b>.mbox, .ics, .vcf or CSV</b> on
+          the import door and it enters the same way.
         </p>
         <p class="r" style="--d: 0.22s">
-          So when you wonder why it did what it did, you don't dig through logs. You
-          <b>read the conversation back.</b>
+          Writes to the outside world go through an <b>outbox you approve</b> — you read the actual
+          email before it sends. And every run keeps a durable transcript: when you wonder why it
+          did what it did, you <b>read the conversation back</b>.
         </p>
         <p class="aside r" style="--d: 0.28s">
-          Cron, webhook, or a change in your data — ten templates to start from.
-          <a href="/docs/automations">Automations →</a>
+          Cron, webhook, condition, or a change in your data — templates to start from.
+          <a href="https://docs.centraid.dev/data.html#automations">Automations →</a> ·
+          <a href="https://docs.centraid.dev/data.html#connections">connections →</a>
         </p>
       </div>
       <div class="artifact-col">
@@ -1162,15 +1149,15 @@
             <div class="t-line">
               <span class="t-who agent">briefing</span>
               <span class="t-msg"
-                ><span class="tool-chip">⚙ read → agenda.today</span>
-                <span class="tool-chip">⚙ read → patch.due-today</span></span
+                ><span class="tool-chip">⚙ vault_sql → agenda ⋈ tasks ⋈ people</span>
+                <span class="tool-chip">⚙ read → sync.staged batches</span></span
               >
             </div>
             <div class="t-line">
               <span class="t-who agent">briefing</span>
               <span class="t-msg"
-                >Two meetings, both after lunch. The chillies are due for water. Rain from four —
-                bring the washing in.</span
+                >Two meetings, both after lunch. Rent is due Friday. 14 new emails staged from Gmail
+                overnight — one looks like the missing car-service invoice.</span
               >
             </div>
             <div class="t-line">
@@ -1182,47 +1169,55 @@
       </div>
     </section>
 
-    <!-- 05 · THE VAULT -->
-    <section class="chapter wrap" id="vault">
+    <!-- 05 · YOUR DEVICES -->
+    <section class="chapter wrap" id="devices">
       <div class="prose">
-        <p class="ch-no r"><span class="n">05</span> the vault</p>
-        <h2 class="r" style="--d: 0.08s">Your data can <em>say no.</em></h2>
+        <p class="ch-no r"><span class="n">05</span> your devices</p>
+        <h2 class="r" style="--d: 0.08s">One gateway. <em>Everything else is a client.</em></h2>
         <p class="r" style="--d: 0.16s">
-          Apps don't own your records — they <b>borrow</b> them. Your health readings, your people,
-          your notes live in one vault on your machine. Each app asks for exactly the scopes it
-          needs, and you sign the grant.
+          There is no sync service because there is nothing to sync: <b>one gateway</b> holds the
+          vault, and your laptop and phone are clients in a star around it, connected by
+          <b>direct, end-to-end-encrypted peer-to-peer</b> links (iroh) — no relay to rent, no
+          account to lose.
         </p>
         <p class="r" style="--d: 0.22s">
-          Revoke it, and the app goes dark — <b>your data stays.</b> Try asking that of a SaaS
-          account.
+          Pairing a phone is one QR code — a ticket that burns on use. Devices authenticate by key,
+          are enrolled per-vault, and <b>revocation cuts live connections</b>, not just future ones.
+          Your agent runtime is pluggable too: Claude Code, Codex, or OpenClaw behind the same
+          leash.
+        </p>
+        <p class="aside r" style="--d: 0.28s">
+          Desktop shell, always-on daemon, phone in your pocket — one wire protocol.
+          <a href="https://docs.centraid.dev/devices.html">The devices pillar →</a>
         </p>
       </div>
       <div class="artifact-col">
         <div class="artifact tilt-r r" style="--d: 0.12s">
           <div class="artifact-head">
-            <span>consent · vitals</span><span class="tag">grant requested</span>
+            <span>gateway · devices</span><span class="tag">star of 3</span>
           </div>
           <div class="artifact-body">
-            <div class="t-msg" style="margin-bottom: 4px"><b>vitals</b> asks the vault:</div>
+            <div class="t-msg" style="margin-bottom: 4px">enrolled on vault <b>local</b>:</div>
             <div class="consent-rows">
               <div class="consent-row">
-                <span class="scope">health</span><span class="verb">read + act</span>
+                <span class="scope">this machine · desktop shell</span
+                ><span class="verb">owner</span>
               </div>
               <div class="consent-row">
-                <span class="scope">core.observation</span><span class="verb">read</span>
+                <span class="scope">phone · ep_k7va…3q</span><span class="verb">iroh p2p</span>
               </div>
               <div class="consent-row">
-                <span class="scope">core.attachment</span><span class="verb">read</span>
+                <span class="scope">home server · always-on</span><span class="verb">daemon</span>
               </div>
             </div>
             <div class="t-msg dim" style="font-size: 12px">
-              purpose: logs and charts your vital readings
+              pairing ticket expires in 14:32 — scan to add a device
             </div>
             <div class="consent-actions" aria-hidden="true">
-              <span class="consent-btn">grant</span>
-              <span class="consent-btn ghost">decline</span>
+              <span class="consent-btn">show QR</span>
+              <span class="consent-btn ghost">revoke…</span>
             </div>
-            <div class="consent-fine">revoke any time — the app goes dark, your data stays.</div>
+            <div class="consent-fine">revocation lands on live connections, not the next one.</div>
           </div>
         </div>
       </div>
@@ -1238,8 +1233,8 @@
       <div class="strip-head">
         <h2 class="r">It runs where <em>your life runs.</em></h2>
         <p class="strip-note r" style="--d: 0.1s">
-          local-first: per-app SQLite on your machine, a single bearer token, and nothing leaves
-          your devices unless you point it somewhere.
+          local-first: the vault is files on your machine, the gateway is the only door to it, and
+          nothing leaves your devices unless you point it somewhere.
         </p>
       </div>
       <div class="homes r" style="--d: 0.15s">
@@ -1255,7 +1250,7 @@
           <p class="h-no">home 2</p>
           <h3>Always-on daemon</h3>
           <p>
-            <code>centraid serve</code> on a spare machine or home server — your apps and
+            <code>centraid-gateway serve</code> on a spare machine or home server — your apps and
             automations keep working with the laptop closed.
           </p>
         </div>
@@ -1273,29 +1268,34 @@
     <!-- INSTALL -->
     <section class="install wrap" id="install">
       <p class="ch-no r"><span class="n">→</span> get started</p>
-      <h2 class="r" style="--d: 0.08s">Sixty seconds to <em>your first app.</em></h2>
+      <h2 class="r" style="--d: 0.08s">One clone to <em>your own vault.</em></h2>
       <div class="install-grid">
         <div class="term r" style="--d: 0.14s">
           <div class="term-bar" role="tablist">
-            <button class="tab on" data-cmd="oneliner" role="tab">one-liner</button>
-            <button class="tab" data-cmd="source" role="tab">from source</button>
+            <button class="tab on" data-cmd="desktop" role="tab">desktop</button>
+            <button class="tab" data-cmd="server" role="tab">always-on</button>
           </div>
           <div class="term-body">
-            <div class="cmd on" id="cmd-oneliner">
-              <div class="cm"># macOS · Linux · Windows — shell, gateway, and CLI, wired up</div>
-              <div class="ln">
-                <span class="p">$</span>
-                <code>curl -fsSL https://centraid.dev/install.sh | bash</code>
-              </div>
-            </div>
-            <div class="cmd" id="cmd-source">
-              <div class="cm"># needs Bun ≥ 1.3 and Node ≥ 24</div>
+            <div class="cmd on" id="cmd-desktop">
+              <div class="cm"># macOS · Linux · Windows — needs Bun ≥ 1.3 and Node ≥ 24</div>
               <div class="ln">
                 <span class="p">$</span>
                 <code>git clone https://github.com/srikanth235/centraid</code>
               </div>
               <div class="ln"><span class="p">$</span> <code>cd centraid && bun install</code></div>
               <div class="ln"><span class="p">$</span> <code>bun run dev:desktop</code></div>
+            </div>
+            <div class="cmd" id="cmd-server">
+              <div class="cm"># a spare machine or home server — devices pair to this</div>
+              <div class="ln"><span class="p">$</span> <code>bun run build</code></div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway serve --data-dir ~/centraid-data</code>
+              </div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway pair --data-dir ~/centraid-data --vault Local</code>
+              </div>
             </div>
             <button class="copy" id="copy" aria-label="Copy command">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -1307,13 +1307,15 @@
         </div>
         <div class="install-notes r" style="--d: 0.2s">
           <p>
-            Then open the shell with <code>centraid open</code>, or run a shareable gateway with
-            <code>centraid serve</code>.
+            First launch asks your name, mints your vault, and lands on the app grid — clone a
+            blueprint from <code>Discover</code> and it's yours to reshape.
           </p>
           <p>
-            Five minutes in, you can clone a template, watch a write round-trip through the
-            dispatcher, and ask your new app a question.
-            <a class="u" href="/docs/quickstart">The quickstart</a> walks the whole loop.
+            Ten minutes in you can pair your phone from
+            <code>Settings → Phone</code>, drop an .mbox or .ics on the import door, and ask the
+            assistant your first cross-silo question.
+            <a class="u" href="https://docs.centraid.dev/start.html">The start guide</a> walks the
+            whole first day.
           </p>
         </div>
       </div>
@@ -1327,11 +1329,11 @@
           <em>Yours can just fit you.</em>
         </p>
         <div class="foot-row">
-          <span>© 2026 Centraid — personal app builder</span>
+          <span>© 2026 Centraid — your data · your apps · your devices</span>
           <span class="foot-links">
-            <a href="/docs">docs</a>
-            <a href="/docs/quickstart">quickstart</a>
-            <a href="/docs/templates">templates</a>
+            <a href="https://docs.centraid.dev">docs</a>
+            <a href="https://docs.centraid.dev/start.html">start</a>
+            <a href="https://docs.centraid.dev/ontology.html">ontology</a>
             <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
               >github</a
             >
@@ -1382,11 +1384,11 @@
 
       // install tabs
       const commands = {
-        oneliner: 'curl -fsSL https://centraid.dev/install.sh | bash',
-        source:
+        desktop:
           'git clone https://github.com/srikanth235/centraid && cd centraid && bun install && bun run dev:desktop',
+        server: 'bun run build && centraid-gateway serve --data-dir ~/centraid-data',
       };
-      let active = 'oneliner';
+      let active = 'desktop';
       document.querySelectorAll('.tab').forEach((t) =>
         t.addEventListener('click', () => {
           document.querySelectorAll('.tab').forEach((x) => x.classList.remove('on'));

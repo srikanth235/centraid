@@ -1,20 +1,10 @@
-# Cloudflare Pages headers
-# Fingerprinted assets (cache-bust via ?v= query) and per-page OG cards can cache forever.
+# Cloudflare headers for docs.centraid.dev
+# Assets are NOT fingerprinted (hand-authored static site) — cache them for
+# an hour, not forever, so shipped changes actually land.
 
 /assets/*
-  Cache-Control: public, max-age=31536000, immutable
+  Cache-Control: public, max-age=3600, stale-while-revalidate=600
   X-Content-Type-Options: nosniff
-
-/pagefind/*
-  Cache-Control: public, max-age=31536000, immutable
-  X-Content-Type-Options: nosniff
-
-/og/*
-  Cache-Control: public, max-age=31536000, immutable
-  X-Content-Type-Options: nosniff
-
-/og-card.png
-  Cache-Control: public, max-age=86400
 
 # HTML pages — short cache, revalidate often
 /*

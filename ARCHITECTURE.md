@@ -2,7 +2,7 @@
 
 ## Overview
 
-Centraid is a personal app builder. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the app engine, the agent runtime, the SQLite stores, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. That gateway runs three ways from the same code:
+Centraid is personal software over a sovereign vault. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the vault plane, the app engine, the agent runtime, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. That gateway runs three ways from the same code:
 
 - **Embedded** in the Electron desktop's main process (`apps/desktop`). The renderer is a **thin client** that talks to the embedded gateway over HTTP with a Bearer token; Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
 - **Standalone** as the `centraid-gateway` daemon (a bin shipped by `@centraid/gateway`), serving the same HTTP surface under a config-file `dataDir`.
@@ -14,7 +14,7 @@ The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun
 
 ## Runtime model: `conversation ⊃ turn ⊃ item`
 
-Centraid's first principle is that **everything is agentic chat** — automation is a conversation whose other side is a deterministic script instead of a person, and whose transcript is durable. A chat window, an automation, and a builder session are each a single-kind conversation, recorded in one ledger (the per-app `runtime.sqlite`). The vocabulary, per `packages/app-engine/src/conversation/schema.ts` and `packages/app-engine/src/stores/gateway-db.ts`:
+Centraid's first principle is that **everything is agentic chat** — automation is a conversation whose other side is a deterministic script instead of a person, and whose transcript is durable. A chat window, an automation, and a builder session are each a single-kind conversation, recorded in one ledger (the per-vault `transcripts.db` — issue #280 folded the old per-app `runtime.sqlite` and the central `analytics.sqlite` into it). The vocabulary, per `packages/app-engine/src/conversation/schema.ts` and `packages/app-engine/src/stores/gateway-db.ts`:
 
 | Layer            | What it is                                                                 | Chat                   | Automation                       |
 | ---------------- | ------------------------------------------------------------------------- | ---------------------- | -------------------------------- |
@@ -22,11 +22,11 @@ Centraid's first principle is that **everything is agentic chat** — automation
 | **turn**         | one execution under it — `conversation_id` is a NOT-NULL, FK'd, CASCADE spine | one reply round | one fire / `ctx.agent` round     |
 | **item**         | the ordered trace. `kind` ∈ `{message_in, step, tool, agent}`             | inbound message + steps + tool calls | inbound trigger + steps + tool/agent calls |
 
-`kind` lives on the **conversation**, not re-stamped per turn — a thread is single-kind. The inbound message (a person typing, a webhook firing, a cron tick) is a first-class `item` (`kind='message_in'`, ordinal 0); `step` is one primary model-inference call (per-call token + cost accounting); `tool`/`agent` are per-call audit rows. Attachments ride the `message_in` item, content-addressed on disk. The tables are `conversations`, `turns`, `items`, `attachments`, `automation_state` (see `RUNTIME_MIGRATIONS` in `gateway-db.ts`). There is no `run` layer and no `run_nodes` table — those were collapsed in issue #190.
+`kind` lives on the **conversation**, not re-stamped per turn — a thread is single-kind. The inbound message (a person typing, a webhook firing, a cron tick) is a first-class `item` (`kind='message_in'`, ordinal 0); `step` is one primary model-inference call (per-call token + cost accounting); `tool`/`agent` are per-call audit rows. Attachments ride the `message_in` item, content-addressed on disk. The tables are `conversations`, `turns`, `items`, `attachments`, `automation_state`, `run_summary` (see `TRANSCRIPTS_MIGRATIONS` in `gateway-db.ts`). There is no `run` layer and no `run_nodes` table — those were collapsed in issue #190.
 
-## Tool surface: the three-tool dispatcher
+## Tool surface: declared handlers + the vault register
 
-Every non-chat caller (UI buttons, webhooks, automations) and every agent reaches an app's data through three generic tools — `centraid_describe`, `centraid_read`, `centraid_write` — implemented once in `packages/app-engine/src/handlers/dispatcher.ts`. An app declares **queries** (read-only) and **actions** (writes) in its `app.json`; the dispatcher validates input against the per-handler JSON Schema with Ajv, then runs the handler in a worker thread (or the `_sql` built-in escape hatch). The read/write split is enforced by a governance directive. See `docs/reference/three-tool-dispatcher.mdx`.
+An app declares **queries** (bounded reads) and **actions** (typed writes) in its `app.json`; the dispatcher (`packages/app-engine/src/handlers/dispatcher.ts`) validates input against the per-handler JSON Schema with Ajv, then runs the handler in a worker thread. The handler holds no database — every data touch goes through `ctx.vault`, crosses to the host, walks the consent pipeline, and comes back `executed` / `denied` / `parked` with a receipt id (issue #286 deleted the per-app `data.sqlite`, the `_sql` escape hatch, and the old `centraid_describe`/`centraid_read`/`centraid_write` tool trio). Agents see exactly one tool family — the **vault register**: `vault_sql` (one read-only statement over the whole vault), `vault_invoke` (one typed command, including any app's declared handlers), `vault_content` (the text of one document). UI buttons and `vault_invoke` land on the same handler — one calling convention. See `docs/apps.html` §06 and `docs/data.html` §08.
 
 ## Workspace layout
 
@@ -37,11 +37,13 @@ Every non-chat caller (UI buttons, webhooks, automations) and every agent reache
 │   └── mobile/                    # @centraid/mobile — Expo; HTTP client to a gateway
 ├── packages/
 │   ├── gateway/                   # @centraid/gateway — host-agnostic gateway; centraid-gateway daemon bin
+│   ├── vault/                     # @centraid/vault — the ontology: vault.db+journal.db DDL, consent gateway, typed commands
 │   ├── app-engine/                # @centraid/app-engine — handler loader, dispatcher, /centraid HTTP surface, stores
 │   ├── agent-runtime/             # @centraid/agent-runtime — codex/Claude SDK turn driver; centraid CLI bin
 │   ├── automation/                # @centraid/automation — manifest, fire spine, scheduler, webhook ingress
 │   ├── blueprints/                # @centraid/blueprints — scaffolders + bundled template gallery
 │   ├── skills/                    # @centraid/skills — SKILL.md grounding + dynamic renderers
+│   ├── tunnel/                    # @centraid/tunnel — iroh QUIC device tunnel + pairing wire protocol
 │   ├── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
 │   ├── openclaw-plugin/           # @centraid/openclaw-plugin — /centraid prefix on an OpenClaw host
 │   └── tsconfig/                  # @centraid/tsconfig — base.json, electron.json, expo.json
@@ -51,16 +53,16 @@ Every non-chat caller (UI buttons, webhooks, automations) and every agent reache
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + blueprints + skills. `@centraid/openclaw-plugin` depends on the gateway; the desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
+`@centraid/app-engine` is the foundation (depends only on `ajv`), and `@centraid/vault` stands beside it with no workspace dependencies — the gateway is where the two meet (handlers reach the vault through an injected `ctx.vault` bridge, never a package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + blueprints + skills + vault. `@centraid/openclaw-plugin` depends on the gateway; the desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
 
 ## On-disk layout
 
 Each gateway host derives its own paths and passes absolute slots to the gateway (it never derives them itself — see `packages/gateway/src/paths.ts`):
 
-- **Desktop embed**: every gateway gets a subtree at `<userData>/gateways/<id>/` (the local gateway has the fixed id `local`). App **code** lives in a per-gateway git store (`code-store/`, issue #137); app **data** lives at `apps/<appId>/` (`data.sqlite` + per-app `runtime.sqlite`), outside any worktree so it survives version swaps. Identity (`identity.sqlite`), analytics (`analytics.sqlite`), chat-runner session state, and the template cache are per-gateway siblings.
-- **Daemon**: a flat tree under the config `dataDir` — `apps/`, `identity.sqlite`, `analytics.sqlite`, `conversation-runner-sessions/`, `model-catalog.json`, and a persistent `token.bin` (mode 0600). See `packages/gateway/src/cli/paths.ts`.
+- **Desktop embed**: every gateway gets a subtree at `<userData>/gateways/<id>/` (the local gateway has the fixed id `local`). Issue #280 made the **vault the unit**: everything personal lives inside `vault/<vaultId>/` — the sovereign pair (`vault.db` + `journal.db`), the conversation ledger + run rollup (`transcripts.db`), per-app workspace dirs (`apps/`), the app **code** store (`code/` — a bare git repo + worktrees, issue #137), and chat-runner scratch (`runner-sessions/`). What remains at the gateway level is plumbing: `prefs.json` (the old `identity.sqlite` is gone — the vault owner *is* the user), the model catalog, and the template cache. The vault's sealing key lives in a `keys/` sibling, deliberately outside backup scope.
+- **Daemon**: the same tree under the config `dataDir` — `vault/`, `prefs.json`, `model-catalog.json` — plus daemon-only plumbing: a persistent `token.bin` (mode 0600) and the device-pairing files (`devices.json`, `pairing-tickets.json`, `endpoint-key.bin`, `endpoint.json`; issue #289). See `packages/gateway/src/cli/paths.ts`.
 
-App-engine owns two SQLite migration ladders (`packages/app-engine/src/stores/gateway-db.ts`): a gateway-scoped identity store (`users`, `user_prefs`) and the per-app `runtime.sqlite` (the conversation ledger above). A third ladder — one `run_summary` row per run — lives in the `insights/` sub-module. The host picks the on-disk filenames: both the desktop and the daemon write the identity store to `identity.sqlite` and the analytics store to `analytics.sqlite` (see the on-disk layout above).
+App-engine owns one SQLite migration ladder (`packages/app-engine/src/stores/gateway-db.ts`): the per-vault `transcripts.db` — conversations, turns, items, attachments, automation KV, and the `run_summary` rollup that feeds Insights (the old per-app `runtime.sqlite` and the central `analytics.sqlite` both folded into it, issue #280). The vault package owns its own files' DDL: `vault.db` (all ontology schemas, one ACID boundary) and `journal.db` (the append-only receipt/provenance stream).
 
 ## Build orchestration
 
