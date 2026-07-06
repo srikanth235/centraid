@@ -223,6 +223,13 @@ export interface ConnectionAuth {
    * across concurrent fires on the same connection.
    */
   readonly limit?: <T>(fn: () => Promise<T>) => Promise<T>;
+  /**
+   * Whether this credential may be injected toward MUTATING methods (issue
+   * #304 phase 5). Default (unset) = read-only: a POST/PUT/PATCH/DELETE
+   * injected request is refused. Wave-1 connectors never set this — external
+   * writes ride the parked-approval path, not raw ctx.fetch.
+   */
+  readonly allowWrites?: boolean;
 }
 
 export interface HandlerOutcome {
@@ -374,7 +381,8 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     );
   const isLoopback = (url: URL): boolean =>
     url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
-  const assertInjectable = (rawUrl: string): void => {
+  const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+  const assertInjectable = (rawUrl: string, method: string): void => {
     const url = new URL(rawUrl);
     if (url.protocol !== 'https:' && !isLoopback(url)) {
       throw new Error(`injected fetch refuses non-https destination ${url.hostname} (issue #304)`);
@@ -382,6 +390,16 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     if (!hostAllowed(url)) {
       throw new Error(
         `host "${url.hostname}" is outside this connection's allowed_hosts — the credential is pinned to ${(opts.connectionAuth?.allowedHosts ?? []).join(', ')} (issue #304)`,
+      );
+    }
+    // Wave-1 read-only ceiling (issue #304 non-goal / phase 5): a broker
+    // credential injects toward SAFE methods only. A mutating injected
+    // request needs the credential to have opted into writes — the
+    // structural half of "no external writes until ingest earns trust";
+    // the per-write parked-approval send flow is the deferred other half.
+    if (!SAFE_METHODS.has(method.toUpperCase()) && !opts.connectionAuth?.allowWrites) {
+      throw new Error(
+        `injected ${method.toUpperCase()} refused — this connection is read-only; external writes ride the parked-approval path, not raw ctx.fetch (issue #304 phase 5)`,
       );
     }
   };
@@ -445,7 +463,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const executeFetch = async (rawSpec: FetchSpecWire): Promise<FetchWireResult> => {
     let { spec, injected } = await substituteSecrets(rawSpec, opts.connectionAuth?.values ?? {});
     if (!injected) return fetchOnce(spec, false);
-    assertInjectable(spec.url);
+    assertInjectable(spec.url, spec.method ?? 'GET');
     const auth = opts.connectionAuth!;
     const gated = (s: FetchSpecWire): Promise<FetchWireResult> =>
       auth.limit ? auth.limit(() => fetchOnce(s, true)) : fetchOnce(s, true);

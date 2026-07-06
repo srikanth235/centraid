@@ -21,10 +21,15 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
         refresh → retry, 401-dead/403-insufficient-scope → needs-auth flip
   - [x] Fire spine: broker preflight (refused → skip, like honest-liveness), manifest allows
         explicit `requires.tools: []` for fetch-only connectors
-- [ ] Phase 2 — PKCE ceremony + connections routes + Google BYO wizard + Gmail connector template
-- [ ] Phase 3 — Calendar + Contacts + Drive connector templates
-- [ ] Phase 4 — GitHub PAT connector template
-- [ ] Phase 5 — external writes behind parked approvals
+- [x] Phase 2 — PKCE consent ceremony (gateway + loopback callback, single-use state, bearer-free
+      `publicPaths`), connections routes (health list / configure / pause-resume / authorize /
+      callback), Google BYO wizard presets (Testing-status + Photos traps baked in), Gmail connector
+- [x] Phase 3 — Calendar (syncToken) + Contacts (People API → core.party merge candidates) connectors
+      (Drive metadata deferred — see below)
+- [x] Phase 4 — GitHub fine-grained PAT connector (api_key lane in anger)
+- [x] Phase 5 — read-only ceiling ENFORCED (injected fetch refuses mutating methods unless the
+      credential opts into writes); the per-write parked-approval SEND flow is deferred by the
+      issue's own sequencing (wave 1 is read-only ingest; writes "only after ingest earns trust")
 
 ## Decisions of record
 
@@ -46,10 +51,20 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
 
 ## Out of scope
 
+- **The parked-approval SEND flow** (phase 5's other half): the guard makes writes structurally
+  impossible by default; actually performing an approved external write needs a broker-side executor
+  outside the fire loop (stage intent → park → owner approves → broker drains). Deferred per the
+  issue's "only after ingest has earned trust" — the enforceable read-only property ships now.
+- **Drive connector** (phase 3): metadata + selective CAS pull needs a blob-staging bridge from a
+  connector handler (issue #300's staged_sha claim path is owner/import-surface today, not connector
+  ctx). The Google credential already lists the Drive scope + host, so the connector is additive when
+  that bridge lands. Gmail/Calendar/Contacts cover the phase-3 value.
 - Webhook/push ingestion (gateway grows no new inbound surface; polling + cursors only).
 - A hosted redirect relay (rejected in the issue; PKCE + gateway/loopback callback suffice).
 - A shared Centraid-registered OAuth client (BYO only in v0).
-- Bidirectional sync (standing #290 non-goal); Phase 5 covers explicit parked writes only.
+- A desktop Settings→Connections UI: the routes + wizard content are the gateway contract; the
+  renderer panel rides the existing settings-page pattern and is a follow-up (no vault contract change).
+- Bidirectional sync (standing #290 non-goal).
 - Data migrations (standing v0 rule): dev vaults recreate; v12 applies forward.
 
 ## Verification
@@ -60,7 +75,13 @@ through any harness. Credentials the connection carries itself — `oauth2` (own
 - `packages/automation`: 204/204 green (7 new: injection + scrub, host-pin refusal with zero
   egress, 401→refresh→retry, 401 auth-dead, 429/5xx backoff, refused-connection skip,
   placeholder-without-credential error; `requires.tools: []` manifest contract).
+  placeholder-without-credential error; `requires.tools: []` manifest contract; read-only ceiling
+  refuses injected POST, write-opted credential lets it through).
 - `packages/gateway`: connection-broker suite 8/8 green (api_key resolve, ambient lane,
   unexpired-token no-op, rotation persist-before-use, single-flight under 3-way concurrency,
-  invalid_grant flip + note, 5xx transient no-flip, forced refresh).
-- Full `bun run typecheck` (21 tasks) green; `bun run build` green.
+  invalid_grant flip + note, 5xx transient no-flip, forced refresh); connections-routes suite 3/3
+  green (full ceremony configure→authorize→callback→active with sealed tokens + single-use state,
+  declined consent, pause/resume + wizard presets).
+- `packages/app-engine`: http-server 7/7 green (publicPaths exact-match bearer bypass).
+- `packages/blueprints`: 121/121 green (4 new connector templates validate + gallery index agrees).
+- Full `bun run typecheck` (21 tasks) green; `bun run build` green; full test battery green.

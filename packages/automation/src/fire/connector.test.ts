@@ -721,3 +721,119 @@ describe('broker-injected connection credentials (issue #304)', () => {
     });
   });
 });
+
+describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
+  let appsDir: string;
+  let transcriptsDbFile: string;
+
+  beforeEach(async () => {
+    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-ro-'));
+    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+  });
+  afterEach(async () => {
+    await fs.rm(appsDir, { recursive: true, force: true });
+  });
+
+  async function writeAutomation(handler: string): Promise<void> {
+    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    await fs.mkdir(dir, { recursive: true });
+    const manifest = validateManifest(
+      rawManifest({ requires: { tools: [] } }),
+    ) as Manifest;
+    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
+    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+  }
+
+  const noDispatch = () =>
+    Promise.resolve({
+      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) =>
+        batch.map(() => ({ ok: true, result: 'dispatched' })),
+      agentDispatcher: async () => 'never',
+      close: async () => undefined,
+    } satisfies DispatchSurface);
+
+  const activeBridge: VaultBridge = async (call) => {
+    if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
+    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+  };
+
+  const postHandler = `export default async ({ ctx }) => {
+     try {
+       await ctx.fetch({
+         method: 'POST',
+         url: 'https://gmail.googleapis.com/messages/send',
+         headers: { authorization: 'Bearer {{connection:access_token}}' },
+         body: '{}',
+       });
+       return { reached: true };
+     } catch (err) {
+       return { reached: false, reason: err.message };
+     }
+   };`;
+
+  it('a read-only credential refuses an injected POST — external writes are not raw fetch', async () => {
+    await writeAutomation(postHandler);
+    const { outcome } = await runFire(
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        transcriptsDbFile,
+        vaultFor: () => activeBridge,
+        resolveConnection: async () => ({
+          values: { access_token: 'tok' },
+          allowedHosts: ['gmail.googleapis.com'],
+        }),
+      },
+      { openDispatch: noDispatch },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome.value).toMatchObject({
+      reached: false,
+      reason: expect.stringContaining('read-only'),
+    });
+  });
+
+  it('a write-opted credential lets the injected POST through', async () => {
+    const { createServer } = await import('node:http');
+    let method = '';
+    const server = createServer((req, res) => {
+      method = req.method ?? '';
+      res.writeHead(200);
+      res.end('ok');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      await writeAutomation(
+        `export default async ({ ctx }) => {
+           const res = await ctx.fetch({
+             method: 'POST',
+             url: 'http://127.0.0.1:${port}/send',
+             headers: { authorization: 'Bearer {{connection:access_token}}' },
+             body: '{}',
+           });
+           return { status: res.status };
+         };`,
+      );
+      const { outcome } = await runFire(
+        {
+          automationRef: 'mail/pull',
+          appsDir,
+          transcriptsDbFile,
+          vaultFor: () => activeBridge,
+          resolveConnection: async () => ({
+            values: { access_token: 'tok' },
+            allowedHosts: ['127.0.0.1'],
+            allowWrites: true,
+          }),
+        },
+        { openDispatch: noDispatch },
+      );
+      expect(outcome.ok).toBe(true);
+      expect(outcome.value).toMatchObject({ status: 200 });
+      expect(method).toBe('POST');
+    } finally {
+      server.close();
+    }
+  });
+});
