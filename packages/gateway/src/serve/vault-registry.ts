@@ -278,7 +278,7 @@ export class VaultRegistry {
 
   /** The scenario-seed executor against the ACTIVE vault (issue #290). */
   demoBridgeFor(appId: string): VaultBridge {
-    return async (call) => this.active().demoBridgeFor(appId)(call);
+    return async (call) => this.current().demoBridgeFor(appId)(call);
   }
 
   /**

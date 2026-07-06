@@ -22,14 +22,14 @@ const PREFIX = '/centraid/_vault/imports';
 /** Imports carry whole mailboxes / Takeout zips — cap well above chat bodies. */
 const MAX_IMPORT_BYTES = 128 * 1024 * 1024;
 
-export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'active'>): RouteHandler {
+export function makeImportRouteHandler(vaults: Pick<VaultRegistry, 'current'>): RouteHandler {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
     const rest = url.pathname.slice(PREFIX.length).replace(/^\//, '');
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = req.method ?? 'GET';
-    const plane = vaults.active();
+    const plane = vaults.current();
     const owner = plane.ownerCredential;
     const purpose = 'dpv:ServiceProvision';
 
