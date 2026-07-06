@@ -29,8 +29,12 @@ import { OUTBOX_DDL } from './outbox.js';
 import { SEED_DDL } from './seed.js';
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
-/** Ontology contract version stamped on rows (rule R07). */
-export const ONTOLOGY_VERSION = '1.1';
+/**
+ * Ontology contract version stamped on rows (rule R07). Bumped to 1.2 with
+ * issue #310: the tally→finance bridge, outbox graph refs + publish-back,
+ * locker anchoring, groups-as-circles, and the single-rung ladder.
+ */
+export const ONTOLOGY_VERSION = '1.2';
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
