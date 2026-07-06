@@ -24,11 +24,12 @@ import { validateJson } from './json-schema.js';
 import { SEED_DEMO_ACTIVITY } from '../schema/seed.js';
 import {
   isSealedValue,
-  redactSealedInput,
+  redactCommandInput,
   scrubSealedText,
   sealAad,
   sealValue,
   sealedColumnsOf,
+  sealedValuesForCommand,
   stampSealKeyFingerprint,
   unsealValue,
 } from '../schema/sealed.js';
@@ -130,7 +131,7 @@ export function sweepDanglingLinks(
 export function sealWrites(db: VaultDb, writes: { entityType: string; entityId: string }[]): void {
   let sealedAny = false;
   for (const write of writes) {
-    const cols = sealedColumnsOf(write.entityType);
+    const cols = sealedColumnsOf(write.entityType, db.vault);
     if (cols.length === 0) continue;
     const ref = resolveEntity(write.entityType, db.vault);
     if (!ref || ref.file !== 'vault') continue;
@@ -216,7 +217,8 @@ export function insertInvocation(
       grantId,
       // The journal is append-only (issue #293): declared secret inputs land
       // as keyed hash tokens, never as values — a leak here is permanent.
-      JSON.stringify(redactSealedInput(db.sealKey, request.input, sealedInput)),
+      // Command-aware so the ext trio's nested secrets redact too (#298 item 9).
+      JSON.stringify(redactCommandInput(db.sealKey, command.name, request.input, sealedInput, db.vault)),
       status,
       nowIso(),
     );
@@ -294,8 +296,9 @@ export function runContractAndExecute(
   // Error surfaces get the same discipline as input_json (issue #298 item
   // 7): any text derived from runtime values passes through the sealed
   // scrub before it reaches the journal, the receipt or the HTTP response.
-  const scrub = (text: string): string =>
-    scrubSealedText(db.sealKey, text, request.input, sealedInput);
+  // Command-aware so the ext trio's nested secrets scrub too (#298 item 9).
+  const secretValues = sealedValuesForCommand(command.name, request.input, sealedInput, db.vault);
+  const scrub = (text: string): string => scrubSealedText(db.sealKey, text, secretValues);
   const schemaErrors = validateJson(JSON.parse(command.input_schema_json), request.input).map(
     scrub,
   );

@@ -31,6 +31,12 @@ import {
   type ExtTableSpec,
 } from '../schema/ext.js';
 import { resolveEntity } from '../schema/tables.js';
+import {
+  isSealedValue,
+  sealAad,
+  sealValue,
+  stampSealKeyFingerprint,
+} from '../schema/sealed.js';
 import { clearColumnCache } from './filters.js';
 import type { SearchableEntity } from '../schema/fts.js';
 import type { CommandDefinition, HandlerCtx } from './types.js';
@@ -267,6 +273,39 @@ function alterExtTable(
   if (band === 'live' && (spec.searchable?.length ?? 0) > 0) {
     db.vault.exec(extFtsDdl(physical, extPk(spec), spec.searchable ?? []));
   }
+  // A column newly declared sealed must seal the rows already sitting in it
+  // (issue #298 item 9) — otherwise the declaration would protect future
+  // writes while leaving today's plaintext readable. Fresh writes are sealed
+  // by the command seal sweep; this closes the at-declaration gap.
+  const oldSealed = new Set(oldSpec.sealed ?? []);
+  const nowSealed = (spec.sealed ?? []).filter((c) => !oldSealed.has(c) && newCols.has(c));
+  if (nowSealed.length > 0) sealExistingExtColumns(db, physical, extPk(spec), nowSealed);
+}
+
+/** Seal the plaintext already present in ext columns just declared sealed. */
+function sealExistingExtColumns(
+  db: VaultDb,
+  physical: string,
+  pk: string,
+  columns: string[],
+): void {
+  const select = columns.map((c) => `"${c}"`).join(', ');
+  const rows = db.vault
+    .prepare(`SELECT "${pk}" AS __pk, ${select} FROM "${physical}"`)
+    .all() as Record<string, unknown>[];
+  let sealedAny = false;
+  for (const row of rows) {
+    const id = String(row['__pk']);
+    for (const col of columns) {
+      const value = row[col];
+      if (typeof value !== 'string' || value.length === 0 || isSealedValue(value)) continue;
+      db.vault
+        .prepare(`UPDATE "${physical}" SET "${col}" = ? WHERE "${pk}" = ?`)
+        .run(sealValue(db.sealKey, sealAad(physical, col, id), value), id);
+      sealedAny = true;
+    }
+  }
+  if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
 /** ADD COLUMN fragment (PRIMARY KEY is structurally impossible here). */

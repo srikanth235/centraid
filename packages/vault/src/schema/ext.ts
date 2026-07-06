@@ -40,6 +40,15 @@ export interface ExtTableSpec {
   indexes?: ExtIndexSpec[];
   /** Text columns to FTS5-index (opt-in search). */
   searchable?: string[];
+  /**
+   * Text columns holding secret material (issue #298 item 9): declared here,
+   * enforced by the SAME chokepoints as canonical sealed columns — ciphertext
+   * at rest via the seal sweep, placeholder in every default read, plaintext
+   * only under the `reveal` verb, hash tokens in the journal, and never FTS
+   * (sealed ∩ searchable is a validation error). One declaration, the whole
+   * pipeline — a third-party app's API-key column gets the Locker treatment.
+   */
+  sealed?: string[];
 }
 
 /** Which copy of the band: `live` is the app's data; `draft` is the builder
@@ -163,6 +172,31 @@ export function validateExtSpecs(
         throw new ExtSpecError(`table ${spec.name}: searchable column "${c}" must be text`);
       }
     }
+    const searchable = new Set(spec.searchable ?? []);
+    const indexed = new Set((spec.indexes ?? []).flatMap((i) => i.columns));
+    for (const c of spec.sealed ?? []) {
+      const col = spec.columns.find((x) => x.name === c);
+      if (!col) throw new ExtSpecError(`table ${spec.name}: sealed names unknown column "${c}"`);
+      if (col.type !== 'text') {
+        throw new ExtSpecError(`table ${spec.name}: sealed column "${c}" must be text`);
+      }
+      if (col.primaryKey) {
+        throw new ExtSpecError(`table ${spec.name}: the primary key cannot be sealed`);
+      }
+      if (col.references !== undefined) {
+        throw new ExtSpecError(`table ${spec.name}: an FK column ("${c}") cannot be sealed`);
+      }
+      if (searchable.has(c)) {
+        throw new ExtSpecError(
+          `table ${spec.name}: "${c}" cannot be both sealed and searchable — sealed columns are never indexed (issue #293)`,
+        );
+      }
+      if (indexed.has(c)) {
+        throw new ExtSpecError(
+          `table ${spec.name}: sealed column "${c}" cannot be indexed — an index over ciphertext leaks and serves nothing`,
+        );
+      }
+    }
   }
 }
 
@@ -184,6 +218,7 @@ export function canonicalSpecJson(spec: ExtTableSpec): string {
       ...(i.unique ? { unique: true } : {}),
     })),
     searchable: [...(spec.searchable ?? [])].sort(),
+    sealed: [...(spec.sealed ?? [])].sort(),
   });
 }
 

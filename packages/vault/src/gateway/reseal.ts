@@ -37,6 +37,31 @@ import { resolveEntity } from '../schema/tables.js';
 import { writeReceipt } from './evidence.js';
 import { pkColumn } from './execution.js';
 
+/**
+ * Every logical entity that may hold sealed cells: the canonical static
+ * registry plus each live ext table that declared a `sealed` column. Draft
+ * ext bands are the builder's scratch copy — reseal covers durable data.
+ */
+function sealedEntities(db: VaultDb): string[] {
+  const entities = [...Object.keys(SEALED_COLUMNS)];
+  try {
+    const rows = db.vault
+      .prepare(
+        `SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`,
+      )
+      .all() as { app_id: string; table_name: string; spec_json: string }[];
+    for (const row of rows) {
+      const sealed = (JSON.parse(row.spec_json) as { sealed?: unknown }).sealed;
+      if (Array.isArray(sealed) && sealed.length > 0) {
+        entities.push(`ext.${row.app_id}.${row.table_name}`);
+      }
+    }
+  } catch {
+    // no ext band (older vault) — canonical entities are the whole set
+  }
+  return entities;
+}
+
 export interface ResealResult {
   /** Sealed cells re-encrypted, live band. */
   resealedCells: number;
@@ -75,9 +100,11 @@ export function resealVaultKey(db: VaultDb, now: string = new Date().toISOString
   let resealedStaged = 0;
   db.vault.exec('BEGIN');
   try {
-    // Live band: every registered sealed column of every entity.
-    for (const entity of Object.keys(SEALED_COLUMNS)) {
-      const cols = sealedColumnsOf(entity);
+    // Live band: every sealed column of every entity — canonical (static
+    // registry) AND ext-band (declared in consent_app_ext, issue #298 item 9).
+    for (const entity of sealedEntities(db)) {
+      const cols = sealedColumnsOf(entity, db.vault);
+      if (cols.length === 0) continue;
       const ref = resolveEntity(entity, db.vault);
       if (!ref || ref.file !== 'vault') continue;
       const pk = pkColumn(db.vault, ref.physical);

@@ -46,9 +46,42 @@ export const SEALED_COLUMNS: Readonly<Record<string, readonly string[]>> = {
   'locker.item': ['password', 'otp_seed', 'card_number', 'cvv', 'content'],
 };
 
-/** Sealed columns of a logical entity ([] for everything unsealed). */
-export function sealedColumnsOf(entity: string): readonly string[] {
-  return SEALED_COLUMNS[entity] ?? [];
+/**
+ * Sealed columns of a logical entity ([] for everything unsealed). Canonical
+ * entities resolve from the static registry above; ext-band entities (issue
+ * #298 item 9) resolve their declared `sealed` list from `consent_app_ext`
+ * when a vault handle is supplied — so a third-party app's sealed column
+ * reaches the exact same chokepoints (seal sweep, read placeholder, reveal
+ * gate) as `locker.item.password`.
+ */
+export function sealedColumnsOf(entity: string, vault?: DatabaseSync): readonly string[] {
+  const canonical = SEALED_COLUMNS[entity];
+  if (canonical) return canonical;
+  if (vault && (entity.startsWith('ext.') || entity.startsWith('extdraft.'))) {
+    return extSealedColumns(vault, entity);
+  }
+  return [];
+}
+
+/** Read one ext table's declared `sealed` list from the band registry. */
+function extSealedColumns(vault: DatabaseSync, entity: string): readonly string[] {
+  const parts = entity.split('.');
+  if (parts.length !== 3) return [];
+  const [prefix, appId, table] = parts;
+  const band = prefix === 'ext' ? 'live' : prefix === 'extdraft' ? 'draft' : null;
+  if (!band || !appId || !table) return [];
+  try {
+    const row = vault
+      .prepare(
+        `SELECT spec_json FROM consent_app_ext WHERE app_id = ? AND band = ? AND table_name = ?`,
+      )
+      .get(appId, band, table) as { spec_json: string } | undefined;
+    if (!row) return [];
+    const sealed = (JSON.parse(row.spec_json) as { sealed?: unknown }).sealed;
+    return Array.isArray(sealed) ? (sealed.filter((c) => typeof c === 'string') as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -293,14 +326,87 @@ export function redactSealedInput(
 export function scrubSealedText(
   key: Buffer,
   text: string,
-  input: Record<string, unknown>,
-  sealedPaths: readonly string[],
+  values: readonly string[],
 ): string {
   let out = text;
-  for (const p of sealedPaths) {
-    const v = input[p];
-    if (typeof v === 'string' && v.length > 0 && !isSealedValue(v) && out.includes(v)) {
+  for (const v of values) {
+    if (v.length > 0 && !isSealedValue(v) && out.includes(v)) {
       out = out.split(v).join(sealedHashToken(key, v));
+    }
+  }
+  return out;
+}
+
+// The ext write trio nests its payload one level down (issue #298 item 9):
+// `insert` carries secrets in `values`, `update` in `set`. Sealed columns
+// there are per-table and dynamic, so redaction and scrub must look inside
+// the container, keyed by the table's declared sealed list.
+function extSecretContainer(commandName: string): 'values' | 'set' | null {
+  if (/^ext\.[a-z0-9-]+\.insert$/.test(commandName)) return 'values';
+  if (/^ext\.[a-z0-9-]+\.update$/.test(commandName)) return 'set';
+  return null;
+}
+
+function extEntityOfInput(commandName: string, input: Record<string, unknown>): string | null {
+  const appId = commandName.split('.')[1];
+  const table = input['table'];
+  if (!appId || typeof table !== 'string') return null;
+  const prefix = input['band'] === 'draft' ? 'extdraft' : 'ext';
+  return `${prefix}.${appId}.${table}`;
+}
+
+/**
+ * Every plaintext secret string in a command's input — top-level declared
+ * `sealedInput` for canonical commands, plus the nested sealed columns of the
+ * ext trio's `values`/`set` payload. The one source of truth behind both the
+ * journal redaction and the error-text scrub.
+ */
+export function sealedValuesForCommand(
+  commandName: string,
+  input: Record<string, unknown>,
+  sealedInput: readonly string[],
+  vault?: DatabaseSync,
+): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (typeof v === 'string' && v.length > 0 && !isSealedValue(v)) out.push(v);
+  };
+  for (const p of sealedInput) push(input[p]);
+  const container = extSecretContainer(commandName);
+  if (container && vault) {
+    const entity = extEntityOfInput(commandName, input);
+    const payload = input[container];
+    if (entity && payload && typeof payload === 'object') {
+      for (const col of sealedColumnsOf(entity, vault)) {
+        push((payload as Record<string, unknown>)[col]);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Journal-safe copy of a command's input (issue #293 decision 4, extended for
+ * the ext band in #298 item 9): declared secrets — top-level and nested in the
+ * ext `values`/`set` container — become keyed hash tokens, never values.
+ */
+export function redactCommandInput(
+  key: Buffer,
+  commandName: string,
+  input: Record<string, unknown>,
+  sealedInput: readonly string[],
+  vault?: DatabaseSync,
+): Record<string, unknown> {
+  let out = redactSealedInput(key, input, sealedInput);
+  const container = extSecretContainer(commandName);
+  if (container && vault) {
+    const entity = extEntityOfInput(commandName, input);
+    const payload = out[container];
+    if (entity && payload && typeof payload === 'object') {
+      const cols = sealedColumnsOf(entity, vault);
+      if (cols.length > 0) {
+        out = { ...out, [container]: redactSealedInput(key, payload as Record<string, unknown>, cols) };
+      }
     }
   }
   return out;

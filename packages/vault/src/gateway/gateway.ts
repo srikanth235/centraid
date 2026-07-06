@@ -41,7 +41,7 @@ import {
 } from './execution.js';
 import {
   isSealedValue,
-  redactSealedInput,
+  redactCommandInput,
   sealAad,
   SEALED_PLACEHOLDER,
   sealedColumnsOf,
@@ -271,7 +271,7 @@ export class Gateway {
       ) as Record<string, unknown>[];
     // Sealed columns never ride a read (issue #293): default reads show a
     // placeholder; plaintext takes the `reveal` verb and its per-item receipt.
-    const sealedCols = sealedColumnsOf(request.entity);
+    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
     if (sealedCols.length > 0) {
       for (const row of rows) {
         for (const col of sealedCols) {
@@ -316,7 +316,7 @@ export class Gateway {
     };
     const ref = resolveEntity(request.entity, this.db.vault);
     if (!ref || ref.file !== 'vault') return deny(`unknown entity ${request.entity}`);
-    const sealedCols = sealedColumnsOf(request.entity);
+    const sealedCols = sealedColumnsOf(request.entity, this.db.vault);
     if (sealedCols.length === 0) return deny(`${request.entity} has no sealed columns`);
     const columns = request.columns ?? [...sealedCols];
     for (const col of columns) {
@@ -1172,11 +1172,14 @@ export class Gateway {
       callerKind: p.identity.kind,
       caller: this.callerName(p.identity),
       // The confirmation surface shows WHAT is asked, never secret material
-      // (issue #293) — sealed inputs ride as hash tokens here too.
-      input: redactSealedInput(
+      // (issue #293) — sealed inputs ride as hash tokens here too, nested ext
+      // secrets included (issue #298 item 9).
+      input: redactCommandInput(
         this.db.sealKey,
+        p.command.name,
         p.request.input,
         this.commands.get(p.command.name)?.sealedInput ?? [],
+        this.db.vault,
       ),
     }));
   }
