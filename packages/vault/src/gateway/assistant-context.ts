@@ -114,7 +114,7 @@ export function buildAssistantContext(db: VaultDb): string {
   if (commands.length > 0) {
     sections.push(
       `## Typed commands (the ONLY write path — use the vault_invoke tool)\n` +
-        `Invalid input returns the command's schema error; high-risk commands park for the owner's approval.\n` +
+        `Invalid input returns the command's schema error; confirm-gated commands park for the owner's approval (risk is a salience marker, not a gate — issue #306).\n` +
         commands.join('\n'),
     );
   }
@@ -133,9 +133,12 @@ function registeredCommands(db: VaultDb): string[] {
           ORDER BY c.name`,
       )
       .all() as { name: string; risk: string; requires_confirmation: number }[];
+    // Only the capability's confirm flag parks (issue #306; #308 fixed the
+    // annotation) — advertising risk-high as parking would teach the model
+    // a gate that no longer exists.
     return rows.map(
       (r) =>
-        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 || r.risk === 'high' ? ' (parks for owner approval)' : ''}`,
+        `${r.name} — risk ${r.risk}${r.requires_confirmation === 1 ? ' (parks for owner approval)' : ''}`,
     );
   } catch {
     return [];

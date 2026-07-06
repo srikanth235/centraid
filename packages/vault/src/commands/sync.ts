@@ -536,8 +536,10 @@ const SET_CONNECTION_STATUS: CommandDefinition = {
     },
   ],
   idempotency: 'idempotent',
-  // Pausing/resuming a sync is an owner-consequence act: agents proposing
-  // it park for confirmation.
+  // Deliberately NOT confirm-gated (issue #308 A2 sweep): the fire path's
+  // needs-auth honesty flip rides the agent plane and must land unparked,
+  // and no status value moves credentials or hosts. Risk medium keeps the
+  // act salient in the review feed.
   risk: 'medium',
   handler: setConnectionStatus,
 };
@@ -565,11 +567,14 @@ function setConnectionStatus(ctx: HandlerCtx): Record<string, unknown> {
 // auth. The secret cells are sealed columns; the ONLY consumer is the
 // gateway broker, which injects them into `ctx.fetch` toward the
 // connection's `allowed_hosts` and never hands them to connector code.
-// `configure_credential` is the owner attaching/detaching a credential
-// (risk medium: an agent proposing it parks); `store_tokens` is the
-// ceremony/refresh landing a token pair on an already-configured oauth2
-// connection (risk low: it cannot change endpoints or hosts — the blast
-// radius the medium act already pinned).
+// Both commands here are CONFIRM-GATED (issue #308 A1/A2): risk stopped
+// parking anything when #306 made confirmation a command property, and
+// these two touch exactly what must never move on a model's say-so —
+// `configure_credential` can rewrite `allowed_hosts` (the #304 structural
+// pin) and `client_secret`; `store_tokens` can substitute the token pair
+// the drains ride. Every legitimate non-owner path is unaffected: the
+// broker's ceremony/refresh and the connections routes all invoke on the
+// owner plane, which never parks.
 
 const CONFIGURE_CREDENTIAL: CommandDefinition = {
   name: 'sync.configure_credential',
@@ -613,9 +618,11 @@ const CONFIGURE_CREDENTIAL: CommandDefinition = {
   postconditions: [],
   sealedInput: ['client_secret', 'api_key'],
   idempotency: 'idempotent',
-  // Attaching a credential decides where secrets may flow — an
-  // owner-consequence act; agents proposing it park for confirmation.
+  // Attaching a credential decides where secrets may flow: `allowed_hosts`
+  // IS the #304 anti-exfiltration pin, so a non-owner proposing this parks
+  // (issue #308 A1 — `confirm`, not risk, is what parks post-#306).
   risk: 'medium',
+  confirm: true,
   handler: configureCredential,
 };
 
@@ -757,7 +764,11 @@ const STORE_TOKENS: CommandDefinition = {
   postconditions: [],
   sealedInput: ['access_token', 'refresh_token'],
   idempotency: 'idempotent',
+  // Low salience but confirm-gated (issue #308 A2): swapping the stored
+  // token pair re-principals every future drain, and only the broker's
+  // owner-plane ceremony/refresh has business landing tokens.
   risk: 'low',
+  confirm: true,
   handler: storeTokens,
 };
 
