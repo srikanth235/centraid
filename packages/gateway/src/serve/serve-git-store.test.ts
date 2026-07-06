@@ -80,9 +80,9 @@ test('serves an app from the git-store main worktree, not versions/', async () =
 
   // The ACTIVE vault owns the code store (#280) — seed through it, then
   // re-settle the workspace so the registry syncs the published app.
-  const store = await handle.activeAppsStore();
+  const store = await handle.appsStore();
   await seedApp(store, 'gitapp');
-  await handle.vaults.settleActivation();
+  await handle.syncApps();
 
   // Registry list reflects the app synced from main.
   const list = await fetch(`${handle.url}/centraid/_apps`, {
@@ -111,8 +111,8 @@ test('serves an app from the git-store main worktree, not versions/', async () =
 
 test('the code store lives inside the active vault directory (#280)', async () => {
   handle = await serve({ paths: pathsUnder(dataDir) });
-  const store = await handle.activeAppsStore();
-  const vaultId = handle.vaults.active().boot.vaultId;
+  const store = await handle.appsStore();
+  const vaultId = handle.vaults.current().boot.vaultId;
   expect(
     store.getActiveMainLink().startsWith(path.join(dataDir, 'vault', vaultId, 'code')),
   ).toBeTruthy();

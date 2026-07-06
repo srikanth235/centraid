@@ -64,7 +64,11 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     const vaultList = await listVaults()
       .then((v) => v ?? [])
       .catch(() => []);
-    const activeVaultId = vaultList.find((v) => v.active)?.vaultId ?? '';
+    // The addressed vault is client-side state now (#289) — read it from the
+    // gateway auth (the `x-centraid-vault` pointer), not a server flag.
+    const activeVaultId = await window.CentraidApi.getGatewayAuth()
+      .then((a) => a.vaultId ?? vaultList[0]?.vaultId ?? '')
+      .catch(() => vaultList[0]?.vaultId ?? '');
     const connectionList = await window.CentraidApi.listGateways().catch(() => []);
     const activeConnectionId = getGateway()?.activeId ?? 'local';
 

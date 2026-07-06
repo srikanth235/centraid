@@ -196,7 +196,7 @@ export default definePluginEntry({
         // once stays correct.
         appsDir: codeAppsDir(),
         fire: async ({ automationRef, body }) => {
-          const ws = gw.vaults.activeWorkspace();
+          const ws = gw.vaults.currentWorkspace();
           const outcome = await runOpenclawFire(
             {
               automationRef,

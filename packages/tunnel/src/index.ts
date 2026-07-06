@@ -14,6 +14,13 @@ export type {
 } from './desktop-tunnel.js';
 export { DeviceStore, sanitizeDeviceName } from './device-store.js';
 export type { PairedDevice } from './device-store.js';
+export { startGatewayEndpoint, GW_PAIR_ALPN } from './gateway-endpoint.js';
+export type {
+  GatewayEndpointHandle,
+  GatewayEndpointOptions,
+  GatewayPairRequest,
+  GatewayPairResponse,
+} from './gateway-endpoint.js';
 export { parsePairQrPayload, PAIR_ALPN, TUNNEL_ALPN } from './protocol.js';
 export type {
   HeaderMap,

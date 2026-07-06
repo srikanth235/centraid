@@ -12,9 +12,7 @@
 // app-cards, app-appview, app-settings), wired through ./app-shell-context.
 
 import {
-  createVault,
   deleteAutomation,
-  deleteVault,
   getUserPrefs,
   listApps,
   listAutomations,
@@ -463,13 +461,30 @@ import { createAppViewModule } from './app-appview.js';
   // Cached vault list backing the (synchronous) sidebar-head switcher
   // render. Primed at boot and on every gateway change / vault op.
   let vaultProfiles: VaultListEntry[] = [];
+  // The vault this client addresses on the active gateway (#289) — client
+  // state now, not a server flag. Empty = the gateway picks (the default
+  // vault); the switcher resolves it against the list to mark "active".
+  let activeVaultId = '';
 
   async function refreshVaultProfiles(): Promise<void> {
     try {
-      vaultProfiles = (await listVaults()) ?? [];
+      const [vaults, authInfo] = await Promise.all([
+        listVaults(),
+        window.CentraidApi.getGatewayAuth(),
+      ]);
+      vaultProfiles = vaults ?? [];
+      // No explicit pointer → the gateway's default (the oldest vault, which
+      // the filtered list returns first).
+      activeVaultId = authInfo.vaultId ?? vaultProfiles[0]?.vaultId ?? '';
     } catch {
       vaultProfiles = [];
+      activeVaultId = '';
     }
+  }
+
+  /** Whether `v` is the vault this client currently addresses (#289). */
+  function isActiveVault(v: VaultListEntry): boolean {
+    return v.vaultId === activeVaultId;
   }
 
   function activeAppsCount(): number {
@@ -484,17 +499,18 @@ import { createAppViewModule } from './app-appview.js';
       icon: window.Profiles.safeIcon(v.icon),
       blurb: v.blurb ?? '',
       kind: currentGateway?.activeKind ?? 'local',
-      // The active vault can't be deleted (the registry refuses) — model
-      // that as "primordial" so the presentation layer hides Delete.
-      primordial: v.active,
+      // The gateway refuses to delete the LAST vault — model the addressed
+      // vault as "primordial" when it's the only one so Delete stays hidden
+      // (deleting a non-addressed sibling is fine).
+      primordial: isActiveVault(v) && vaultProfiles.length <= 1,
     };
-    if (v.active) view.appsCount = activeAppsCount();
+    if (isActiveVault(v)) view.appsCount = activeAppsCount();
     return view;
   }
 
   // Build the sidebar-head switcher row from the cached vault list.
   function buildProfileSwitcherHead(): HTMLElement {
-    const activeVault = vaultProfiles.find((v) => v.active);
+    const activeVault = vaultProfiles.find(isActiveVault);
     const active: ProfileView = activeVault
       ? toProfileView(activeVault)
       : {
@@ -524,17 +540,15 @@ import { createAppViewModule } from './app-appview.js';
   }
 
   async function openProfileSwitcher(anchor: DOMRect): Promise<void> {
-    const [vaults, gateways, settings] = await Promise.all([
-      listVaults().then((v) => v ?? []),
+    const [, gateways, settings] = await Promise.all([
+      refreshVaultProfiles(),
       window.CentraidApi.listGateways(),
       window.CentraidApi.getSettings(),
     ]);
-    vaultProfiles = vaults;
-    const activeVaultId = vaults.find((v) => v.active)?.vaultId ?? '';
     window.Profiles.openDropdown({
       anchor,
       activeId: activeVaultId,
-      profiles: vaults.map(toProfileView),
+      profiles: vaultProfiles.map(toProfileView),
       onSwitch: (id) => void switchProfile(id),
       onEdit: (p) => openProfileModal('edit', p),
       onAdd: () => openProfileModal('add'),
@@ -549,15 +563,16 @@ import { createAppViewModule } from './app-appview.js';
     });
   }
 
-  // Switch the active VAULT (#280). The PATCH re-roots the gateway's
-  // workspace server-side before responding; every vault-scoped piece of
-  // renderer state is stale after it, so bounce to Home (which refetches
-  // the app list against the new active vault).
+  // Switch the addressed VAULT (#289). A pure client-side pointer flip —
+  // the server holds no active vault, so this just changes the
+  // `x-centraid-vault` header future requests carry. Bounce to Home to
+  // refetch the app list for the newly-addressed vault; the gateway
+  // connection + its editing sessions are untouched.
   async function switchProfile(id: string): Promise<void> {
     const target = vaultProfiles.find((v) => v.vaultId === id);
-    if (target?.active) return;
+    if (id === activeVaultId) return;
     try {
-      await updateVault({ vaultId: id, active: true });
+      await window.CentraidApi.setActiveVault({ vaultId: id });
       await refreshVaultProfiles();
       window.Profiles.toast({ msg: `Switched · ${target?.name ?? 'space'}`, kind: 'ok' });
       applyRoute({ kind: 'home' });
@@ -617,7 +632,10 @@ import { createAppViewModule } from './app-appview.js';
   ): Promise<void> {
     try {
       if (mode === 'add') {
-        const created = await createVault({ name: data.name });
+        // Vault create is an admin act (#289) — over the IPC bridge, which
+        // runs it against the local gateway's registry (remote gateways
+        // reject: their vault lifecycle is the server CLI over SSH).
+        const created = await window.CentraidApi.createVault({ name: data.name });
         await updateVault({
           vaultId: created.vaultId,
           color: data.color,
@@ -627,9 +645,9 @@ import { createAppViewModule } from './app-appview.js';
         profileModalCtl?.close();
         profileModalCtl = null;
         window.Profiles.toast({ msg: `Space created · ${data.name}`, kind: 'ok' });
-        // Mirror the reference: a freshly created space becomes active,
-        // re-scoping the home grid to the (empty) new vault.
-        await updateVault({ vaultId: created.vaultId, active: true });
+        // A freshly created space becomes the addressed vault (client-side
+        // pointer flip), re-scoping the home grid to the empty new vault.
+        await window.CentraidApi.setActiveVault({ vaultId: created.vaultId });
         await refreshVaultProfiles();
         applyRoute({ kind: 'home' });
       } else if (profile) {
@@ -665,7 +683,7 @@ import { createAppViewModule } from './app-appview.js';
 
   async function confirmDeleteProfile(profile: ProfileView): Promise<void> {
     try {
-      await deleteVault({ vaultId: profile.id });
+      await window.CentraidApi.deleteVault({ vaultId: profile.id });
       await refreshVaultProfiles();
       profileDeleteCtl?.close();
       profileDeleteCtl = null;
@@ -1723,13 +1741,13 @@ import { createAppViewModule } from './app-appview.js';
       if (inEditable) return;
       const n = parseInt(e.key, 10) - 1;
       void (async (): Promise<void> => {
-        const vaults = (await listVaults()) ?? [];
-        vaultProfiles = vaults;
-        const target = vaults[n];
-        if (!target || target.active) return;
+        await refreshVaultProfiles();
+        const target = vaultProfiles[n];
+        if (!target || target.vaultId === activeVaultId) return;
         e.preventDefault();
         try {
-          await updateVault({ vaultId: target.vaultId, active: true });
+          // Client-side vault switch (#289): a pointer flip, no server call.
+          await window.CentraidApi.setActiveVault({ vaultId: target.vaultId });
           await refreshVaultProfiles();
           showToast(`Switched to ${target.name}`);
           applyRoute({ kind: 'home' });
@@ -1771,8 +1789,8 @@ import { createAppViewModule } from './app-appview.js';
             avatarColor,
           });
           try {
-            const vaults = (await listVaults()) ?? [];
-            const active = vaults.find((v) => v.active);
+            await refreshVaultProfiles();
+            const active = vaultProfiles.find(isActiveVault) ?? vaultProfiles[0];
             if (active) {
               await updateVault({ vaultId: active.vaultId, name: displayName, color: avatarColor });
             }
@@ -1834,6 +1852,17 @@ import { createAppViewModule } from './app-appview.js';
       } else {
         void reRenderShellForRoute();
       }
+    })();
+  });
+
+  // A vault switch (#289) keeps the same gateway but changes the addressed
+  // vault — re-prime the switcher cache (new active pointer) and re-scope to
+  // Home so the app grid refetches for the new vault. No gateway teardown,
+  // no editing-session loss: the connection and its worktrees are untouched.
+  window.CentraidApi.onVaultChanged?.(() => {
+    void (async (): Promise<void> => {
+      await refreshVaultProfiles();
+      applyRoute({ kind: 'home' });
     })();
   });
 })();

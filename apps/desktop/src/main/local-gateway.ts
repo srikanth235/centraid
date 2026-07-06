@@ -142,3 +142,26 @@ export async function shutdownAllLocalGatewaysExcept(exceptId?: string): Promise
 export function noteRunnerPrefsChanged(): void {
   invalidatePreflightCache();
 }
+
+/**
+ * The local gateway's vault registry — the desktop IS the landlord for its
+ * own in-process gateway (issue #289), so vault create/delete (admin acts,
+ * off the HTTP surface) run against the registry directly, mirroring the
+ * `centraid-gateway vault …` CLI. Throws if the gateway isn't running.
+ */
+function localVaults(gatewayId: string): GatewayServeHandle['vaults'] {
+  const h = handles.get(gatewayId);
+  if (!h) throw new Error(`local gateway ${gatewayId} is not running`);
+  return h.vaults;
+}
+
+/** Create a vault on a running local gateway (admin act, #289). */
+export function createLocalVault(gatewayId: string, name?: string): { vaultId: string } {
+  const info = localVaults(gatewayId).create(name);
+  return { vaultId: info.vaultId };
+}
+
+/** Delete a vault on a running local gateway (admin act, #289). */
+export function deleteLocalVault(gatewayId: string, vaultId: string): void {
+  localVaults(gatewayId).delete(vaultId);
+}

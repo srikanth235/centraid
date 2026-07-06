@@ -44,3 +44,11 @@ export {
   type VaultInfo,
 } from './serve/vault-registry.js';
 export { makeVaultRouteHandler } from './routes/vault-routes.js';
+export {
+  runWithVaultContext,
+  vaultContext,
+  VAULT_HEADER,
+  type VaultRequestContext,
+  type DeviceAccess,
+} from './serve/vault-context.js';
+export { GATEWAY_VERSION, GATEWAY_SCHEMA_EPOCH } from './version.js';

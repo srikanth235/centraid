@@ -71,7 +71,9 @@ export async function renderVaultPane(input: VaultPaneInput): Promise<void> {
     status = undefined;
   }
   if (!host.isConnected) return;
-  if (!status?.active) {
+  // `vaultStatus()` is `undefined` only when the gateway mounts no vault
+  // plane (route 404s); otherwise it names the addressed vault (#289).
+  if (!status) {
     host.replaceChildren(
       renderRequestSection(el, block),
       note('No vault is mounted on this gateway, so this app has nothing to project.'),

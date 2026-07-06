@@ -28,6 +28,11 @@ import {
   sanitizeHeaders,
   TUNNEL_ALPN,
 } from './protocol.js';
+import {
+  GW_PAIR_ALPN,
+  type GatewayPairRequest,
+  type GatewayPairResponse,
+} from './gateway-endpoint.js';
 
 export interface TunnelClientOptions {
   /** 32-byte device secret; omit to generate a fresh device identity. */
@@ -42,7 +47,9 @@ export interface TunnelClient {
   secretKeyBytes(): Uint8Array;
   /** Pair with a desktop using the QR payload's ticket + one-time code. */
   pair(ticket: string, request: PairRequest): Promise<PairResponse>;
-  /** Dial the desktop's tunnel ALPN. */
+  /** Redeem a gateway pairing ticket over `centraid/gw-pair/1` (issue #289). */
+  pairGateway(ticket: string, request: GatewayPairRequest): Promise<GatewayPairResponse>;
+  /** Dial the desktop's/gateway's tunnel ALPN. */
   connect(ticket: string): Promise<Connection>;
   close(): Promise<void>;
 }
@@ -65,6 +72,18 @@ export async function createTunnelClient(options: TunnelClientOptions = {}): Pro
         await bi.send.writeAll(encodeHeaderFrame(request));
         await bi.send.finish();
         return await readHeaderFrame<PairResponse>(bi.recv);
+      } finally {
+        connection.close(0n, []);
+      }
+    },
+    pairGateway: async (ticket, request) => {
+      const addr = iroh.EndpointTicket.fromString(ticket).endpointAddr();
+      const connection = await endpoint.connect(addr, alpnBytes(GW_PAIR_ALPN));
+      try {
+        const bi = await connection.openBi();
+        await bi.send.writeAll(encodeHeaderFrame(request));
+        await bi.send.finish();
+        return await readHeaderFrame<GatewayPairResponse>(bi.recv);
       } finally {
         connection.close(0n, []);
       }

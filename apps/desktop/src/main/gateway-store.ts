@@ -25,6 +25,13 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { LOCAL_GATEWAY_ID, gatewayDir, gatewayProfilePath, gatewaysRoot } from './gateway-paths.js';
 import { clearGatewayToken, getGatewayToken, setGatewayToken } from './gateway-secrets.js';
+import {
+  assertDirectUrlAllowed,
+  resolveTransport,
+  TransportGuardError,
+  type GatewayTransport,
+} from './transport.js';
+import { ensureIrohProxy } from './iroh-dialer.js';
 
 export type GatewayKind = 'local' | 'remote';
 
@@ -48,8 +55,21 @@ export interface GatewayProfile {
    * user manually sets them that way.
    */
   readonly avatarColor?: string;
-  /** Remote endpoint URL. Undefined for the local gateway. */
+  /**
+   * Transport tier (issue #289): `local` (in-process), `iroh` (EndpointId
+   * over the QUIC tunnel), or `direct` (https/http URL + token). Absent on
+   * pre-#289 profiles — `resolveTransport` derives it from kind + url.
+   */
+  readonly transport?: GatewayTransport;
+  /** Remote endpoint URL (direct transport). Undefined for local + iroh. */
   readonly url?: string;
+  /**
+   * Remote iroh EndpointTicket (iroh transport) — the gateway's EndpointId +
+   * relay hint, redeemed from a pairing ticket. Undefined for local + direct.
+   */
+  readonly endpointTicket?: string;
+  /** Remote iroh EndpointId (iroh transport), for display + `devices add`. */
+  readonly endpointId?: string;
   /** ISO timestamp set on first write. */
   readonly createdAt: string;
 }
@@ -195,13 +215,24 @@ async function readProfile(id: string): Promise<GatewayProfile | undefined> {
     const avatarColor = isValidAvatarColor(parsed.avatarColor)
       ? parsed.avatarColor
       : defaultAvatarColor(parsed.id);
+    const transport =
+      parsed.transport === 'local' || parsed.transport === 'iroh' || parsed.transport === 'direct'
+        ? parsed.transport
+        : undefined;
     return {
       id: parsed.id,
       kind: parsed.kind,
       label: parsed.label,
       displayName,
       avatarColor,
+      ...(transport ? { transport } : {}),
       ...(typeof parsed.url === 'string' && parsed.url.length > 0 ? { url: parsed.url } : {}),
+      ...(typeof parsed.endpointTicket === 'string' && parsed.endpointTicket.length > 0
+        ? { endpointTicket: parsed.endpointTicket }
+        : {}),
+      ...(typeof parsed.endpointId === 'string' && parsed.endpointId.length > 0
+        ? { endpointId: parsed.endpointId }
+        : {}),
       createdAt: parsed.createdAt,
     };
   } catch (err) {
@@ -245,8 +276,18 @@ export async function listGateways(): Promise<GatewayProfile[]> {
 export interface AddGatewayInput {
   /** User-visible label. Trimmed; required. */
   label: string;
-  /** Remote endpoint URL. Trimmed; required. */
-  url: string;
+  /**
+   * `direct` remote (https/http URL + token). Required for a direct add;
+   * omit when adding an `iroh` gateway.
+   */
+  url?: string;
+  /**
+   * `iroh` remote (EndpointTicket — EndpointId + relay hint, redeemed from a
+   * pairing ticket). Required for an iroh add; omit for direct.
+   */
+  endpointTicket?: string;
+  /** Iroh EndpointId (for display). Optional; carried alongside the ticket. */
+  endpointId?: string;
   /** Bearer token. Stored in keychain, never on disk. Empty = unauthenticated. */
   token: string;
   /** Optional friendly name. Defaults to `label` at read time. */
@@ -257,22 +298,31 @@ export interface AddGatewayInput {
 
 /**
  * Mint a UUID, persist the profile + token, and create the per-gateway
- * dirs. Caller-side validation is loose — we trim, enforce non-empty
- * label and a parseable URL, but don't probe the gateway here (the UI
- * does its own "Test connection" before calling add).
+ * dirs. Two transports: `direct` (a URL — the plain-http guardrail rejects
+ * cleartext to a public host, #289 decision 6) or `iroh` (an EndpointTicket).
+ * We don't probe the gateway here (the UI does its own "Test connection").
  */
 export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile> {
   const label = input.label.trim();
-  const url = input.url.trim();
   if (!label) throw new GatewayError('invalid_input', 'Gateway label cannot be empty.');
-  if (!url) throw new GatewayError('invalid_input', 'Gateway URL cannot be empty.');
-  try {
-    // URL constructor throws on malformed input — the parsed value
-    // itself is discarded; we just want the validation side-effect.
-    const _ = new URL(url);
-    void _;
-  } catch {
-    throw new GatewayError('invalid_input', `Gateway URL "${url}" is not a valid URL.`);
+  const url = input.url?.trim();
+  const endpointTicket = input.endpointTicket?.trim();
+  if (!url && !endpointTicket) {
+    throw new GatewayError('invalid_input', 'A gateway needs either a URL or an iroh endpoint.');
+  }
+  if (url && endpointTicket) {
+    throw new GatewayError('invalid_input', 'A gateway is reached by URL or by iroh, not both.');
+  }
+  const transport: GatewayTransport = endpointTicket ? 'iroh' : 'direct';
+  if (url) {
+    try {
+      assertDirectUrlAllowed(url);
+    } catch (err) {
+      throw new GatewayError(
+        'invalid_input',
+        err instanceof TransportGuardError ? err.message : String(err),
+      );
+    }
   }
   const id = randomUUID();
   const displayName = input.displayName?.trim() || label;
@@ -285,7 +335,10 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
     label,
     displayName,
     avatarColor,
-    url,
+    transport,
+    ...(url ? { url } : {}),
+    ...(endpointTicket ? { endpointTicket } : {}),
+    ...(input.endpointId ? { endpointId: input.endpointId } : {}),
     createdAt: new Date().toISOString(),
   };
   await fs.mkdir(gatewayDir(id), { recursive: true });
@@ -349,6 +402,9 @@ export async function removeGateway(id: string): Promise<void> {
   // Best-effort token clear — local gateways have no keychain entry, so
   // the call is a no-op for them.
   await clearGatewayToken(id);
+  // Tear down any live iroh proxy for this gateway before its dir goes.
+  const { closeIrohDialer } = await import('./iroh-dialer.js');
+  await closeIrohDialer(id);
   await fs.rm(gatewayDir(id), { recursive: true, force: true });
 }
 
@@ -392,6 +448,18 @@ export async function resolveGateway(id: string): Promise<ResolvedGateway | unde
     };
   }
   const token = (await getGatewayToken(profile.id)) ?? '';
+  // An iroh gateway has no URL — dial it and stand up a loopback proxy so
+  // the HTTP client hits `http://127.0.0.1:<port>` transport-blind (#289).
+  if (resolveTransport(profile) === 'iroh' && profile.endpointTicket) {
+    try {
+      const url = await ensureIrohProxy(profile.id, profile.endpointTicket);
+      return { profile, url, token };
+    } catch {
+      // Dial failure → empty URL; callers surface "unreachable" like any
+      // offline gateway, and the switcher badges it.
+      return { profile, url: '', token };
+    }
+  }
   return {
     profile,
     url: profile.url ?? '',

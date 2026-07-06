@@ -4,6 +4,7 @@ import {
   loadSettings,
   saveSettings,
   setActiveGatewayId,
+  setActiveVaultId,
   type DesktopSettings,
 } from './settings.js';
 import {
@@ -77,6 +78,19 @@ export const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
+  // Vault addressing (issue #289): the active vault is client-side state,
+  // keyed by gateway. Switching is a pure pointer flip — no server call —
+  // that changes the `x-centraid-vault` header the renderer sends. The
+  // VAULT_CHANGED broadcast tells the renderer to re-read + re-render
+  // WITHOUT the wholesale cache wipe a gateway switch triggers.
+  VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
+  VAULT_CHANGED: 'centraid:vaults:changed',
+  // Vault lifecycle is an ADMIN act (issue #289): for a REMOTE gateway it's
+  // the server CLI over SSH (no client surface). For the desktop's own
+  // in-process LOCAL gateway the desktop IS the landlord, so these run
+  // against the embedded registry directly.
+  VAULTS_CREATE: 'centraid:vaults:create',
+  VAULTS_DELETE: 'centraid:vaults:delete',
   // Thin-client: hands the renderer the active gateway's HTTP base URL +
   // bearer token so it can call the runtime/data plane directly. Main
   // still owns where the token lives (keychain-backed settings); this is
@@ -142,6 +156,33 @@ export function registerIpcHandlers(): void {
     await refreshAuthInjector();
   };
 
+  // Vault switch is lighter than a gateway swap (issue #289): the base URL +
+  // token are unchanged, only the addressed vault. Drop the auth caches so
+  // every client re-reads the new `x-centraid-vault` header, and refresh the
+  // iframe injector — but KEEP the app-editing sessions. They are keyed by
+  // gateway (their worktrees live in THIS gateway's store) and survive a
+  // vault flip untouched; that's the keyed-state invariant the switch
+  // preserves.
+  const invalidateVaultCaches = async (): Promise<void> => {
+    resetConversationHistoryAuthCache();
+    resetUserPrefsAuthCache();
+    resetAppsStoreAuthCache();
+    await refreshAuthInjector();
+  };
+
+  // Broadcast "the addressed vault changed" so the renderer re-reads its
+  // gateway auth (new vault header) and re-renders the active vault's world,
+  // without the wholesale wipe a gateway change triggers.
+  const broadcastVaultChanged = (next: DesktopSettings): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      win.webContents.send(Channel.VAULT_CHANGED, {
+        activeGatewayId: next.activeGatewayId,
+        ...(next.activeVaultId !== undefined ? { activeVaultId: next.activeVaultId } : {}),
+      });
+    }
+  };
+
   // ----- Settings -----
   // The bearer token reaches the renderer only through `getGatewayAuth()`
   // (the single bridge crossing post thin-client pivot), so the broad
@@ -173,7 +214,11 @@ export function registerIpcHandlers(): void {
       _e,
       input: {
         label: string;
-        url: string;
+        /** `direct` transport: an https/http URL (guardrail rejects public http). */
+        url?: string;
+        /** `iroh` transport: an EndpointTicket redeemed from a pairing ticket. */
+        endpointTicket?: string;
+        endpointId?: string;
         token: string;
         displayName?: string;
         avatarColor?: string;
@@ -274,9 +319,71 @@ export function registerIpcHandlers(): void {
       await shutdownAllLocalGatewaysExcept(
         next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
       );
+      // Tear down iroh proxies for every gateway but the new active one
+      // (issue #289) — a dormant QUIC dialer per switch would accumulate.
+      const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
+      await closeAllIrohDialersExcept(
+        next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
+      );
       await invalidateGatewayCaches();
       broadcastGatewayChanged(next);
       return next;
+    },
+  );
+
+  // Vault switch (issue #289): a pure client-side pointer flip on the active
+  // gateway. No server call, no re-root, no session/iframe teardown — only
+  // the auth cache drops so the next request carries the new
+  // `x-centraid-vault` header. The renderer keeps its per-(gateway,vault)
+  // state buckets and re-renders on the VAULT_CHANGED broadcast.
+  ipcMain.handle(
+    Channel.VAULTS_SET_ACTIVE,
+    async (_e, input: { vaultId?: string }): Promise<DesktopSettings> => {
+      const next = await setActiveVaultId(input.vaultId);
+      await invalidateVaultCaches();
+      broadcastVaultChanged(next);
+      return next;
+    },
+  );
+
+  // Vault create/delete on the LOCAL gateway only (issue #289): the desktop
+  // is the landlord for its own in-process gateway. A remote gateway's vault
+  // lifecycle is the server CLI's job (admin plane over SSH) — refuse here
+  // with a message pointing at it.
+  const assertLocalAdmin = async (): Promise<string> => {
+    const settings = await loadSettings();
+    if (settings.activeGatewayKind !== 'local') {
+      throw new Error(
+        'Vault create/delete on a remote gateway is a server-side admin act — ' +
+          'run `centraid-gateway vault …` on that box over SSH.',
+      );
+    }
+    return settings.activeGatewayId;
+  };
+
+  ipcMain.handle(
+    Channel.VAULTS_CREATE,
+    async (_e, input: { name?: string }): Promise<{ vaultId: string }> => {
+      const gatewayId = await assertLocalAdmin();
+      const { createLocalVault } = await import('./local-gateway.js');
+      return createLocalVault(gatewayId, input.name);
+    },
+  );
+
+  ipcMain.handle(
+    Channel.VAULTS_DELETE,
+    async (_e, input: { vaultId: string }): Promise<{ deleted: true }> => {
+      const gatewayId = await assertLocalAdmin();
+      const settings = await loadSettings();
+      // Never delete the vault the client is currently addressing — clear
+      // the pointer first so the next request falls back to the default.
+      if (settings.activeVaultId === input.vaultId) {
+        await setActiveVaultId(undefined);
+        await invalidateVaultCaches();
+      }
+      const { deleteLocalVault } = await import('./local-gateway.js');
+      deleteLocalVault(gatewayId, input.vaultId);
+      return { deleted: true };
     },
   );
 
@@ -344,11 +451,14 @@ export function registerIpcHandlers(): void {
   // renderer, and it's re-fetched whenever the active gateway flips.
   ipcMain.handle(
     Channel.GATEWAY_AUTH_GET,
-    async (): Promise<{ baseUrl: string; token?: string }> => {
+    async (): Promise<{ baseUrl: string; token?: string; vaultId?: string }> => {
       const settings = await loadSettings();
       return {
         baseUrl: settings.gatewayUrl.replace(/\/+$/, ''),
         token: settings.gatewayToken || undefined,
+        // The vault the renderer addresses on this gateway (#289) — sent as
+        // the `x-centraid-vault` header. Undefined = let the gateway pick.
+        ...(settings.activeVaultId !== undefined ? { vaultId: settings.activeVaultId } : {}),
       };
     },
   );

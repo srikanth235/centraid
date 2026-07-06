@@ -32,7 +32,7 @@ test('binds to loopback by default and mints a 32-byte random token', () => {
 });
 
 test('activates the vault workspace so its apps dir exists (#280)', async () => {
-  const vaultId = handle.vaults.active().boot.vaultId;
+  const vaultId = handle.vaults.current().boot.vaultId;
   const stat = await fs.stat(path.join(dataDir, 'vault', vaultId, 'apps'));
   expect(stat.isDirectory()).toBeTruthy();
 });

@@ -14,6 +14,9 @@
  * Subcommands:
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
  *   centraid-gateway print-token --data-dir <path>
+ *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (admin plane, #289)
+ *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]
+ *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway --help
  *   centraid-gateway --version
  */
@@ -25,6 +28,9 @@ import { daemonLayoutFor, type DaemonLayout } from './paths.js';
 import { loadConfigFile, validateConfig, type DaemonConfig, DaemonConfigError } from './config.js';
 import { readOrMintToken, readPersistedToken } from './token.js';
 import { seedRunnerPrefs } from './runner-prefs.js';
+import { commandVault } from './vault-admin.js';
+import { commandDevices, commandPair } from './device-admin.js';
+import { makeDaemonDevicePlane } from './endpoint-host.js';
 
 const PKG_VERSION = '0.1.0';
 
@@ -46,8 +52,20 @@ function usage(): never {
       'Usage:',
       '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]',
       '  centraid-gateway print-token --data-dir <path>',
+      '  centraid-gateway vault list --data-dir <path>',
+      '  centraid-gateway vault create --data-dir <path> [--name <name>]',
+      '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
+      '  centraid-gateway vault delete --data-dir <path> <vaultId>',
+      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]',
+      '  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]',
+      '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
+      '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
+      '',
+      'vault/pair/devices are the ADMIN plane (issue #289): vault lifecycle,',
+      'pairing tickets, and device enrollment are landlord acts guarded by',
+      'shell access to this box — they never ride HTTP.',
       '',
       'serve flags override the config file. --data-dir is required if no',
       '--config is supplied (the config file otherwise carries dataDir).',
@@ -131,13 +149,45 @@ async function commandServe(args: string[]): Promise<void> {
 
   const token = await readOrMintToken(layout.tokenFile);
 
+  // Device plane (issue #289): enrollment-scoped vault resolution for
+  // requests arriving over the iroh endpoint. Constructed before serve()
+  // so its `deviceAccess` participates in every request; the endpoint
+  // itself binds after the HTTP listener is up.
+  const logger = {
+    info: (msg: string) => process.stdout.write(`[centraid-gateway] ${msg}\n`),
+    warn: (msg: string) => process.stderr.write(`[centraid-gateway] ${msg}\n`),
+    error: (msg: string) => process.stderr.write(`[centraid-gateway] ${msg}\n`),
+  };
+  let vaultsRef: import('../serve/vault-registry.js').VaultRegistry | undefined;
+  const devicePlane = makeDaemonDevicePlane({
+    layout,
+    vaults: () => vaultsRef,
+    logger,
+  });
+
   const handle = await serve({
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
     token,
     logTag: 'centraid-gateway',
+    deviceAccess: devicePlane.deviceAccess,
   });
+  vaultsRef = handle.vaults;
+
+  // The iroh endpoint (issue #289 phase 3): the gateway's permanent
+  // identity + the first-class remote transport. Best-effort — an HTTP-only
+  // daemon still serves loopback/`direct` clients.
+  const endpoint =
+    config.endpoint === false
+      ? undefined
+      : await devicePlane.startEndpoint({
+          baseUrl: handle.url,
+          token,
+        });
+  if (endpoint) {
+    process.stdout.write(`[centraid-gateway] endpoint: ${endpoint.endpointId}\n`);
+  }
 
   // Seed runner prefs *after* serve(). The write is an atomic JSON
   // replace, so re-seed on every boot is safe.
@@ -155,6 +205,7 @@ async function commandServe(args: string[]): Promise<void> {
 
   const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     process.stderr.write(`[centraid-gateway] ${signal} received — shutting down\n`);
+    await endpoint?.close().catch(() => undefined);
     await handle.close().catch((err) => {
       process.stderr.write(
         `[centraid-gateway] close error: ${err instanceof Error ? err.message : String(err)}\n`,
@@ -196,6 +247,15 @@ async function main(): Promise<void> {
       return;
     case 'print-token':
       await commandPrintToken(rest);
+      return;
+    case 'vault':
+      await commandVault(rest, fail);
+      return;
+    case 'pair':
+      await commandPair(rest, fail);
+      return;
+    case 'devices':
+      await commandDevices(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);

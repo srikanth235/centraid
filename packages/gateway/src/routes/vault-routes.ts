@@ -1,15 +1,16 @@
 /*
- * Owner-facing vault routes (duaility §12, phase P04) — the consent surface
- * over the mounted vault registry. Everything here is an OWNER act: the routes
- * run behind the gateway's host-level auth, and the planes execute them with
- * the owner-device credential. Apps never call these — their door is
- * `ctx.vault` inside handlers.
+ * Owner-facing vault routes (duaility §12) — the consent surface over the
+ * mounted vault registry. Everything here is an OWNER act: the routes run
+ * behind the gateway's host-level auth, resolve the vault the REQUEST is
+ * addressed to (issue #289 — the composed handler already established the
+ * ambient vault scope from the `x-centraid-vault` header / device
+ * enrollment), and the planes execute them with the owner-device
+ * credential. Apps never call these — their door is `ctx.vault` inside
+ * handlers.
  *
- *   GET    /centraid/_vault/status                     — active vault presence + identity
- *   GET    /centraid/_vault/vaults                     — every vault, active flagged
- *   POST   /centraid/_vault/vaults                     — create {name?}
- *   PATCH  /centraid/_vault/vaults/<vaultId>           — update {name?, active?}
- *   DELETE /centraid/_vault/vaults/<vaultId>           — delete (409 while active)
+ *   GET    /centraid/_vault/status                     — the request vault's presence + identity
+ *   GET    /centraid/_vault/vaults                     — vaults this caller may address
+ *   PATCH  /centraid/_vault/vaults/<vaultId>           — update {name?, color?, icon?, blurb?}
  *   GET    /centraid/_vault/apps                       — enrolled apps + active grants
  *   POST   /centraid/_vault/apps/<appId>/grants        — approve {purpose, scopes[], expiresAt?}
  *   POST   /centraid/_vault/apps/<appId>/purge-ext     — drop a retained ext band (issue #286)
@@ -24,22 +25,45 @@
  *   DELETE /centraid/_vault/links/<linkId>             — end a link (temporal, never deletes)
  *   PATCH  /centraid/_vault/links/<linkId>             — move/clear the link's standoff anchor {selector: {...}|null}
  *
- * Per-vault routes (everything below `vaults`) answer for the ACTIVE vault
- * unless `?vault=<vaultId>` names another one. Deny-by-default is structural:
- * until a POST …/grants lands, an enrolled app's every vault call is a
- * receipted deny — per vault.
+ * Vault create/delete left this surface (#289): they are ADMIN acts on the
+ * gateway host (`centraid-gateway vault create|delete` over SSH). The vault
+ * list is filtered to the calling device's enrollments — a family member
+ * sees their vault and no evidence of others. Deny-by-default is
+ * structural: until a POST …/grants lands, an enrolled app's every vault
+ * call is a receipted deny — per vault.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GrantRequest, VaultPlane } from '../serve/vault-plane.js';
 import type { AnchorSelector } from '../serve/vault-picker.js';
-import { VaultRegistryError, type VaultRegistry } from '../serve/vault-registry.js';
+import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
+import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
 import { readJson, sendJson } from './route-helpers.js';
 
 const PREFIX = '/centraid/_vault';
 
-export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
+export interface VaultRouteOptions {
+  /**
+   * Device-plane ACL (issue #289 phase 2). When set, the vault list is
+   * filtered to the calling device's enrollments. Absent → the transport
+   * is implicitly enrolled in every vault (loopback embed).
+   */
+  deviceAccess?: DeviceAccess;
+}
+
+export function makeVaultRouteHandler(
+  vaults: VaultRegistry,
+  options: VaultRouteOptions = {},
+): RouteHandler {
+  /** The vaults the calling device may see — all of them for keyless transports. */
+  const visibleVaults = (): VaultInfo[] => {
+    const deviceKey = vaultContext()?.deviceKey;
+    if (deviceKey === undefined || !options.deviceAccess) return vaults.list();
+    const enrolled = new Set(options.deviceAccess.vaultsFor(deviceKey));
+    return vaults.list().filter((v) => enrolled.has(v.vaultId));
+  };
+
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== PREFIX && !url.pathname.startsWith(`${PREFIX}/`)) return false;
@@ -47,11 +71,11 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
     const segments = rest === '' ? [] : rest.split('/').map(decodeURIComponent);
     const method = req.method ?? 'GET';
 
-    // Per-vault routes answer for the active vault unless ?vault= names one.
-    const vaultParam = url.searchParams.get('vault');
+    // Every per-vault route answers for the vault the request is addressed
+    // to — resolved once by the composed handler, read here (#289).
     let plane: VaultPlane;
     try {
-      plane = vaultParam === null ? vaults.active() : requirePlane(vaults, vaultParam);
+      plane = vaults.current();
     } catch (err) {
       return sendRegistryError(res, err);
     }
@@ -59,7 +83,6 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
     try {
       if (method === 'GET' && (segments.length === 0 || segments[0] === 'status')) {
         return sendJson(res, 200, {
-          active: true,
           vaultId: plane.boot.vaultId,
           name: plane.name,
           ownerPartyId: plane.boot.ownerPartyId,
@@ -68,7 +91,7 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
       }
 
       if (segments[0] === 'vaults') {
-        return handleVaultsRoute(vaults, req, res, method, segments);
+        return handleVaultsRoute(vaults, visibleVaults, req, res, method, segments);
       }
 
       if (method === 'GET' && segments[0] === 'apps' && segments.length === 1) {
@@ -268,9 +291,15 @@ export function makeVaultRouteHandler(vaults: VaultRegistry): RouteHandler {
   };
 }
 
-/** The vault-lifecycle sub-surface: list / create / update / delete. */
+/**
+ * The vault-list sub-surface: list the caller's vaults + owner updates
+ * (rename / presentation). Create/delete are ADMIN acts on the gateway
+ * host (#289) — a POST/DELETE here answers 405 so a stale client fails
+ * loudly rather than silently.
+ */
 async function handleVaultsRoute(
   vaults: VaultRegistry,
+  visibleVaults: () => VaultInfo[],
   req: IncomingMessage,
   res: ServerResponse,
   method: string,
@@ -278,27 +307,38 @@ async function handleVaultsRoute(
 ): Promise<boolean> {
   try {
     if (method === 'GET' && segments.length === 1) {
-      return sendJson(res, 200, { vaults: vaults.list() });
+      return sendJson(res, 200, { vaults: visibleVaults() });
     }
 
-    if (method === 'POST' && segments.length === 1) {
-      const body = await readJson(req);
-      if (body.name !== undefined && typeof body.name !== 'string') {
-        return sendJson(res, 400, { error: 'bad_request', message: 'name must be a string' });
-      }
-      return sendJson(res, 200, vaults.create(body.name as string | undefined));
+    if (
+      (method === 'POST' && segments.length === 1) ||
+      (method === 'DELETE' && segments.length === 2)
+    ) {
+      return sendJson(res, 405, {
+        error: 'admin_plane',
+        message:
+          'vault create/delete are admin acts — run `centraid-gateway vault …` on the gateway host',
+      });
     }
 
     if (method === 'PATCH' && segments.length === 2) {
       const vaultId = segments[1] ?? '';
+      // An owner act on ONE of the caller's vaults — a device may only
+      // touch what it can see.
+      if (!visibleVaults().some((v) => v.vaultId === vaultId)) {
+        return sendJson(res, 404, {
+          error: 'vault_not_found',
+          message: `unknown vault "${vaultId}"`,
+        });
+      }
       const body = await readJson(req);
       const presentationKeys = ['color', 'icon', 'blurb'] as const;
       const hasPresentation = presentationKeys.some((k) => body[k] !== undefined);
-      if (body.name === undefined && body.active === undefined && !hasPresentation) {
+      if (body.name === undefined && !hasPresentation) {
         return sendJson(res, 400, {
           error: 'bad_request',
           message:
-            'update body needs {name?: string, active?: true, color?: string, icon?: string, blurb?: string}',
+            'update body needs {name?: string, color?: string, icon?: string, blurb?: string}',
         });
       }
       if (body.name !== undefined && typeof body.name !== 'string') {
@@ -308,12 +348,6 @@ async function handleVaultsRoute(
         if (body[k] !== undefined && body[k] !== null && typeof body[k] !== 'string') {
           return sendJson(res, 400, { error: 'bad_request', message: `${k} must be a string` });
         }
-      }
-      if (body.active !== undefined && body.active !== true) {
-        return sendJson(res, 400, {
-          error: 'bad_request',
-          message: 'active can only be set to true — activate another vault instead',
-        });
       }
       let info = typeof body.name === 'string' ? vaults.rename(vaultId, body.name) : undefined;
       if (hasPresentation) {
@@ -325,19 +359,7 @@ async function handleVaultsRoute(
         }
         info = vaults.updatePresentation(vaultId, patch);
       }
-      if (body.active === true) {
-        info = vaults.setActive(vaultId);
-        // Re-root the gateway's workspace (#280: apps, transcripts, code all
-        // follow the vault) BEFORE answering, so the renderer sees the new
-        // world fully mounted when it reloads.
-        await vaults.settleActivation();
-      }
-      return sendJson(res, 200, info ?? vaults.list().find((v) => v.vaultId === vaultId));
-    }
-
-    if (method === 'DELETE' && segments.length === 2) {
-      vaults.delete(segments[1] ?? '');
-      return sendJson(res, 200, { deleted: true });
+      return sendJson(res, 200, info);
     }
 
     return sendJson(res, 404, { error: 'not_found', message: 'unknown _vault/vaults route' });
@@ -346,15 +368,9 @@ async function handleVaultsRoute(
   }
 }
 
-function requirePlane(vaults: VaultRegistry, vaultId: string): VaultPlane {
-  const plane = vaults.get(vaultId);
-  if (!plane) throw new VaultRegistryError('vault_not_found', `unknown vault "${vaultId}"`);
-  return plane;
-}
-
 function sendRegistryError(res: ServerResponse, err: unknown): boolean {
   if (err instanceof VaultRegistryError) {
-    const status = err.code === 'vault_not_found' ? 404 : err.code === 'vault_active' ? 409 : 400;
+    const status = err.code === 'vault_not_found' ? 404 : err.code === 'vault_last' ? 409 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
   }
   return sendJson(res, 500, {

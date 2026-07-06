@@ -48,6 +48,8 @@ async function authHeaders(): Promise<AuthCache> {
       const settings = await loadSettings();
       const headers: Record<string, string> = { 'content-type': 'application/json' };
       if (settings.gatewayToken) headers.authorization = `Bearer ${settings.gatewayToken}`;
+      // Address the client's vault (issue #289); reset on gateway/vault flip.
+      if (settings.activeVaultId) headers['x-centraid-vault'] = settings.activeVaultId;
       const next: AuthCache = {
         baseUrl: settings.gatewayUrl.replace(/\/$/, ''),
         headers,

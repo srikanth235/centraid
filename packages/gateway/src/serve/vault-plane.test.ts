@@ -207,7 +207,7 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   // The route handler speaks to the registry; the acts land on its active plane.
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => registry.stop());
-  const plane = registry.active();
+  const plane = registry.current();
   const calendarId = seedCalendar(plane);
   plane.enrollApp('planner');
   const handler = makeVaultRouteHandler(registry);
@@ -226,7 +226,7 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const base = `http://127.0.0.1:${addr.port}/centraid/_vault`;
 
   const status = await (await fetch(`${base}/status`)).json();
-  expect(status).toMatchObject({ active: true, vaultId: plane.boot.vaultId });
+  expect(status).toMatchObject({ vaultId: plane.boot.vaultId });
 
   // Approve the requested scopes over HTTP — the owner act.
   const grantRes = await fetch(`${base}/apps/planner/grants`, {
@@ -669,7 +669,7 @@ test('owner routes (issue #272): picker searches, POST links asserts, DELETE end
   const dir = await tempDir();
   const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
   cleanups.push(() => registry.stop());
-  const plane = registry.active();
+  const plane = registry.current();
   const purpose = 'dpv:ServiceProvision';
   const note = plane.gateway.invoke(plane.ownerCredential, {
     command: 'knowledge.create_note',

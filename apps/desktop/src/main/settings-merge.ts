@@ -29,6 +29,13 @@ export interface PersistedSettingsPatch {
    * preserve; whole field `undefined` → preserve the entire map.
    */
   chatModelByRunner?: Record<string, string>;
+  /**
+   * Client-owned active vault per gateway (issue #289). Set as a whole map
+   * (preserve when `undefined`). The dedicated `setActiveVaultId` path
+   * writes it directly; this merge just carries it through so an unrelated
+   * `saveSettings` never wipes it.
+   */
+  activeVaultByGateway?: Record<string, string>;
   onboardingCompletedAt?: string;
 }
 
@@ -71,10 +78,16 @@ export function mergePersistedSettings(
     current.chatModelByRunner,
     patch.chatModelByRunner,
   );
+  // Whole-map preserve-or-set: the vault pointer map is edited through
+  // `setActiveVaultId`, so a plain `saveSettings` must carry it verbatim.
+  const activeVaultByGateway = patch.activeVaultByGateway ?? current.activeVaultByGateway;
   return {
     activeGatewayId: patch.activeGatewayId?.trim() || current.activeGatewayId,
     ...preserveOrSet('remoteTemplatesUrl', patch.remoteTemplatesUrl, current.remoteTemplatesUrl),
     ...(chatModelByRunner !== undefined ? { chatModelByRunner } : {}),
+    ...(activeVaultByGateway !== undefined && Object.keys(activeVaultByGateway).length
+      ? { activeVaultByGateway }
+      : {}),
     ...preserveOrSet(
       'onboardingCompletedAt',
       patch.onboardingCompletedAt,

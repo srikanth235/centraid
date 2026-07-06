@@ -72,15 +72,14 @@ test('constructs the graph and exposes the lifecycle without binding a socket', 
 test('mounts the vault registry and recovers it across rebuilds (#280)', async () => {
   // The registry is mandatory now — the whole app world is vault-scoped.
   expect(gateway.vaults).toBeDefined();
-  expect(gateway.vaults.active().boot.fresh).toBe(true);
+  expect(gateway.vaults.current().boot.fresh).toBe(true);
   expect(gateway.vaults.list()).toHaveLength(1);
   // The owner consent surface answers through the composed chain.
   const mounted = await mountUnauthed(gateway.composedHandler);
   try {
     const status = await (await fetch(`${mounted.url}/centraid/_vault/status`)).json();
     expect(status).toMatchObject({
-      active: true,
-      vaultId: gateway.vaults.active().boot.vaultId,
+      vaultId: gateway.vaults.current().boot.vaultId,
     });
   } finally {
     await mounted.close();
@@ -89,18 +88,18 @@ test('mounts the vault registry and recovers it across rebuilds (#280)', async (
   // A rebuild over the same paths recovers the same vault, not a new one.
   const again = await buildGateway({ paths: pathsUnder(dataDir) });
   try {
-    expect(again.vaults.active().boot.fresh).toBe(false);
-    expect(again.vaults.active().boot.vaultId).toBe(gateway.vaults.active().boot.vaultId);
+    expect(again.vaults.current().boot.fresh).toBe(false);
+    expect(again.vaults.current().boot.vaultId).toBe(gateway.vaults.current().boot.vaultId);
   } finally {
     await again.stop();
   }
 });
 
 test('the active vault owns a code store — activeAppsStore materializes it', async () => {
-  const store = await gateway.activeAppsStore();
+  const store = await gateway.appsStore();
   expect(store).toBeTruthy();
   // The store lives INSIDE the active vault's directory (#280).
-  const vaultId = gateway.vaults.active().boot.vaultId;
+  const vaultId = gateway.vaults.current().boot.vaultId;
   expect(store.getActiveMainLink().startsWith(path.join(dataDir, 'vault', vaultId, 'code'))).toBe(
     true,
   );
@@ -130,7 +129,7 @@ test('composedHandler routes the chat-history + prefs prefixes', async () => {
     expect(chat.status).not.toBe(404);
     // `/id` answers with the ACTIVE vault's owner party id (#280).
     const id = (await (await fetch(`${srv.url}/_centraid-user/id`)).json()) as { id: string };
-    expect(id.id).toBe(gateway.vaults.active().boot.ownerPartyId);
+    expect(id.id).toBe(gateway.vaults.current().boot.ownerPartyId);
   } finally {
     await srv.close();
   }
@@ -138,7 +137,7 @@ test('composedHandler routes the chat-history + prefs prefixes', async () => {
 
 test('start() activates the vault workspace so its apps dir exists', async () => {
   await gateway.start('http://127.0.0.1:0');
-  const vaultId = gateway.vaults.active().boot.vaultId;
+  const vaultId = gateway.vaults.current().boot.vaultId;
   const stat = await fs.stat(path.join(dataDir, 'vault', vaultId, 'apps'));
   expect(stat.isDirectory()).toBeTruthy();
 });
