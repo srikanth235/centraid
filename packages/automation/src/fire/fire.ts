@@ -31,7 +31,25 @@ import {
 import { parseRef } from '../manifest/ref.js';
 import { handlerPath, readAppOwned } from '../scaffold/app.js';
 import { runHandler } from '../handler/runner.js';
-import type { AgentDispatcher, HandlerOutcome, ToolDispatcher } from '../handler/runner.js';
+import type {
+  AgentDispatcher,
+  ConnectionAuth,
+  HandlerOutcome,
+  ToolDispatcher,
+} from '../handler/runner.js';
+
+/**
+ * The gateway broker's per-fire seam (issue #304). Resolves the connector's
+ * connection to an injectable credential: `undefined` = harness-ambient lane
+ * (no broker credential configured), `ConnectionAuth` = inject away, and
+ * `{ refused }` = the credential exists but cannot serve this fire (dead
+ * refresh token, mid-ceremony) — the run skips, the broker has already
+ * flipped the connection's health state.
+ */
+export type ResolveConnection = (connector: {
+  kind: string;
+  label: string;
+}) => Promise<ConnectionAuth | { refused: string } | undefined>;
 
 /**
  * The live dispatch surface a fire runs against. Provided by the host
@@ -135,6 +153,14 @@ export interface RunFireOptions {
    * refuses to push the chain past depth 3.
    */
   failureDepth?: number;
+  /**
+   * Gateway broker seam (issue #304): resolve the connector's connection to
+   * an injectable credential before the handler runs. Absent → every
+   * connection is treated as harness-ambient (pre-#304 behavior).
+   */
+  resolveConnection?: ResolveConnection;
+  /** Injected-fetch transient backoff schedule (ms) — tests shrink it. */
+  fetchRetryDelaysMs?: readonly number[];
 }
 
 export interface RunRecord {
@@ -270,6 +296,37 @@ export async function runFire(
     }
   }
 
+  // Broker credential preflight (issue #304): a connection carrying an
+  // oauth2/api_key credential resolves it NOW — token refreshed under the
+  // broker's per-connection mutex, values ready for transport injection. A
+  // refusal skips the fire exactly like honest-liveness above (the broker
+  // has already flipped the health state); a transient resolver failure
+  // skips too, without flipping — the next fire retries.
+  let connectionAuth: ConnectionAuth | undefined;
+  if (row.manifest.connector && opts.resolveConnection) {
+    let resolved: Awaited<ReturnType<ResolveConnection>>;
+    try {
+      resolved = await opts.resolveConnection({
+        kind: row.manifest.connector.kind,
+        label: row.manifest.connector.label,
+      });
+    } catch (err) {
+      await dispatch.close().catch(() => undefined);
+      return skipRun(
+        `connection credential did not resolve: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (resolved && 'refused' in resolved) {
+      onLog(
+        'warn',
+        `connector ${opts.automationRef} skipped: connection "${row.manifest.connector.label}" refused — ${resolved.refused}`,
+      );
+      await dispatch.close().catch(() => undefined);
+      return skipRun(resolved.refused);
+    }
+    connectionAuth = resolved;
+  }
+
   let outcome: HandlerOutcome;
   try {
     outcome = await runHandler({
@@ -307,6 +364,8 @@ export async function runFire(
             },
           }
         : {}),
+      ...(connectionAuth ? { connectionAuth } : {}),
+      ...(opts.fetchRetryDelaysMs ? { fetchRetryDelaysMs: opts.fetchRetryDelaysMs } : {}),
     });
   } finally {
     await dispatch.close().catch(() => undefined);

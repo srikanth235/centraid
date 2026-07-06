@@ -94,6 +94,11 @@ export interface RunAutomationOptions {
    * refuses to push the chain past depth 3.
    */
   failureDepth?: number;
+  /**
+   * Gateway broker seam (issue #304) — forwarded to the fire spine so a
+   * connector's connection credential resolves and injects per fire.
+   */
+  resolveConnection?: automation.ResolveConnection;
 }
 
 /**
@@ -139,6 +144,7 @@ export async function runAutomation(
       ...(opts.input !== undefined ? { input: opts.input } : {}),
       ...(opts.parentRunId ? { parentRunId: opts.parentRunId } : {}),
       ...(opts.failureDepth !== undefined ? { failureDepth: opts.failureDepth } : {}),
+      ...(opts.resolveConnection ? { resolveConnection: opts.resolveConnection } : {}),
     },
     { openDispatch },
   );

@@ -392,3 +392,332 @@ describe('connector secrets (issue #293)', () => {
     ]);
   });
 });
+
+describe('broker-injected connection credentials (issue #304)', () => {
+  let appsDir: string;
+  let transcriptsDbFile: string;
+
+  beforeEach(async () => {
+    appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connauth-'));
+    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+  });
+  afterEach(async () => {
+    await fs.rm(appsDir, { recursive: true, force: true });
+  });
+
+  async function writeAutomation(
+    handler: string,
+    over: Record<string, unknown> = {},
+  ): Promise<void> {
+    const dir = path.join(appsDir, 'mail', 'automations', 'pull');
+    await fs.mkdir(dir, { recursive: true });
+    const manifest = validateManifest(
+      rawManifest({ requires: { tools: [] }, ...over }),
+    ) as Manifest;
+    await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
+    await fs.writeFile(path.join(dir, 'handler.js'), handler);
+  }
+
+  const noDispatch = () =>
+    Promise.resolve({
+      toolDispatcher: async (batch: readonly { name: string; args: unknown }[]) =>
+        batch.map(() => ({ ok: true, result: 'dispatched' })),
+      agentDispatcher: async () => 'never',
+      close: async () => undefined,
+    } satisfies DispatchSurface);
+
+  const activeBridge: VaultBridge = async (call) => {
+    if (call.op === 'read') return { ok: true, result: { rows: [{ status: 'active' }] } };
+    return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
+  };
+
+  async function withServer(
+    respond: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void,
+    run: (port: number) => Promise<void>,
+  ): Promise<void> {
+    const { createServer } = await import('node:http');
+    const server = createServer(respond);
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      await run(port);
+    } finally {
+      server.close();
+    }
+  }
+
+  it('a fetch-only connector may declare an explicit empty requires.tools (issue #304)', () => {
+    const m = validateManifest(rawManifest({ requires: { tools: [] } }));
+    expect(m.requires.tools).toEqual([]);
+    const raw = rawManifest();
+    delete (raw.requires as Record<string, unknown>).tools;
+    expect(() => validateManifest(raw)).toThrow(/requires\.tools/);
+  });
+
+  it('injects {{connection:access_token}} toward a pinned host and scrubs everything recorded', async () => {
+    const seen: string[] = [];
+    await withServer(
+      (req, res) => {
+        seen.push(String(req.headers.authorization ?? ''));
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(`echo ${req.headers.authorization ?? ''}`);
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             const res = await ctx.fetch({
+               url: 'http://127.0.0.1:${port}/messages',
+               headers: { authorization: 'Bearer {{connection:access_token}}' },
+             });
+             return { status: res.status, body: res.text };
+           };`,
+        );
+        const { outcome } = await runFire(
+          {
+            automationRef: 'mail/pull',
+            appsDir,
+            transcriptsDbFile,
+            vaultFor: () => activeBridge,
+            resolveConnection: async () => ({
+              values: { access_token: 'tok-live-1' },
+              allowedHosts: ['127.0.0.1'],
+            }),
+          },
+          { openDispatch: noDispatch },
+        );
+        expect(outcome.ok).toBe(true);
+        expect(seen).toEqual(['Bearer tok-live-1']);
+        expect(JSON.stringify(outcome.value)).not.toContain('tok-live-1');
+        expect(JSON.stringify(outcome.value)).toContain('«secret»');
+      },
+    );
+  });
+
+  it('refuses to inject toward a host outside allowed_hosts — nothing leaves', async () => {
+    let reached = 0;
+    await withServer(
+      (_req, res) => {
+        reached += 1;
+        res.writeHead(200);
+        res.end('x');
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             try {
+               await ctx.fetch({
+                 url: 'http://127.0.0.1:${port}/exfil',
+                 headers: { authorization: 'Bearer {{connection:access_token}}' },
+               });
+               return { reached: true };
+             } catch (err) {
+               return { reached: false, reason: err.message };
+             }
+           };`,
+        );
+        const { outcome } = await runFire(
+          {
+            automationRef: 'mail/pull',
+            appsDir,
+            transcriptsDbFile,
+            vaultFor: () => activeBridge,
+            resolveConnection: async () => ({
+              values: { access_token: 'tok-live-2' },
+              allowedHosts: ['gmail.googleapis.com', '*.example.com'],
+            }),
+          },
+          { openDispatch: noDispatch },
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toMatchObject({
+          reached: false,
+          reason: expect.stringContaining('allowed_hosts'),
+        });
+        expect(reached).toBe(0);
+      },
+    );
+  });
+
+  it('a 401 forces one refresh and the retry rides the new token', async () => {
+    const seen: string[] = [];
+    await withServer(
+      (req, res) => {
+        seen.push(String(req.headers.authorization ?? ''));
+        if (req.headers.authorization === 'Bearer tok-stale') {
+          res.writeHead(401);
+          res.end('expired');
+          return;
+        }
+        res.writeHead(200);
+        res.end('fresh data');
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             const res = await ctx.fetch({
+               url: 'http://127.0.0.1:${port}/messages',
+               headers: { authorization: 'Bearer {{connection:access_token}}' },
+             });
+             return { status: res.status, body: res.text };
+           };`,
+        );
+        let refreshes = 0;
+        const { outcome } = await runFire(
+          {
+            automationRef: 'mail/pull',
+            appsDir,
+            transcriptsDbFile,
+            vaultFor: () => activeBridge,
+            resolveConnection: async () => ({
+              values: { access_token: 'tok-stale' },
+              allowedHosts: ['127.0.0.1'],
+              refresh: async () => {
+                refreshes += 1;
+                return { access_token: 'tok-refreshed' };
+              },
+            }),
+          },
+          { openDispatch: noDispatch },
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toMatchObject({ status: 200 });
+        expect(refreshes).toBe(1);
+        expect(seen).toEqual(['Bearer tok-stale', 'Bearer tok-refreshed']);
+      },
+    );
+  });
+
+  it('a 401 with nothing to refresh flips auth-dead and hands the response back', async () => {
+    await withServer(
+      (_req, res) => {
+        res.writeHead(401);
+        res.end('revoked');
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             const res = await ctx.fetch({
+               url: 'http://127.0.0.1:${port}/messages',
+               headers: { authorization: 'token {{connection:api_key}}' },
+             });
+             return { status: res.status };
+           };`,
+        );
+        const dead: string[] = [];
+        const { outcome } = await runFire(
+          {
+            automationRef: 'mail/pull',
+            appsDir,
+            transcriptsDbFile,
+            vaultFor: () => activeBridge,
+            resolveConnection: async () => ({
+              values: { api_key: 'ghp-revoked' },
+              allowedHosts: ['127.0.0.1'],
+              onAuthDead: async (reason) => {
+                dead.push(reason);
+              },
+            }),
+          },
+          { openDispatch: noDispatch },
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toMatchObject({ status: 401 });
+        expect(dead).toEqual([expect.stringContaining('401')]);
+      },
+    );
+  });
+
+  it('429/5xx retries on the backoff schedule, then hands back the last response', async () => {
+    let hits = 0;
+    await withServer(
+      (_req, res) => {
+        hits += 1;
+        if (hits < 3) {
+          res.writeHead(hits === 1 ? 429 : 500);
+          res.end('later');
+          return;
+        }
+        res.writeHead(200);
+        res.end('finally');
+      },
+      async (port) => {
+        await writeAutomation(
+          `export default async ({ ctx }) => {
+             const res = await ctx.fetch({
+               url: 'http://127.0.0.1:${port}/messages',
+               headers: { authorization: 'Bearer {{connection:access_token}}' },
+             });
+             return { status: res.status, body: res.text };
+           };`,
+        );
+        const { outcome } = await runFire(
+          {
+            automationRef: 'mail/pull',
+            appsDir,
+            transcriptsDbFile,
+            vaultFor: () => activeBridge,
+            fetchRetryDelaysMs: [1, 1],
+            resolveConnection: async () => ({
+              values: { access_token: 'tok-x' },
+              allowedHosts: ['127.0.0.1'],
+            }),
+          },
+          { openDispatch: noDispatch },
+        );
+        expect(outcome.ok).toBe(true);
+        expect(outcome.value).toMatchObject({ status: 200, body: 'finally' });
+        expect(hits).toBe(3);
+      },
+    );
+  });
+
+  it('a refused connection skips the fire before the handler runs', async () => {
+    await writeAutomation(`export default async () => ({ ranAnyway: true });`);
+    const { outcome } = await runFire(
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        transcriptsDbFile,
+        vaultFor: () => activeBridge,
+        resolveConnection: async () => ({
+          refused: 'connection "personal" has no usable token: token refresh refused',
+        }),
+      },
+      { openDispatch: noDispatch },
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.error).toMatch(/no usable token/);
+    expect(outcome.value).toBeUndefined();
+  });
+
+  it('a {{connection:…}} placeholder without a broker credential is a loud error', async () => {
+    await writeAutomation(
+      `export default async ({ ctx }) => {
+         try {
+           await ctx.fetch({
+             url: 'https://gmail.googleapis.com/messages',
+             headers: { authorization: 'Bearer {{connection:access_token}}' },
+           });
+           return { reached: true };
+         } catch (err) {
+           return { reached: false, reason: err.message };
+         }
+       };`,
+    );
+    const { outcome } = await runFire(
+      {
+        automationRef: 'mail/pull',
+        appsDir,
+        transcriptsDbFile,
+        vaultFor: () => activeBridge,
+        // No resolveConnection at all — the harness-ambient lane.
+      },
+      { openDispatch: noDispatch },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(outcome.value).toMatchObject({
+      reached: false,
+      reason: expect.stringContaining('no broker credential'),
+    });
+  });
+});
