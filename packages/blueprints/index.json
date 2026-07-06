@@ -330,6 +330,62 @@
       "triggerKind": "condition",
       "triggerLabel": "When a deadline is 14 days out",
       "integrations": []
+    },
+    {
+      "id": "google-gmail-pull",
+      "name": "Gmail sync",
+      "desc": "Your Gmail flows into the vault as messages — read-only, incremental, through your own Google OAuth client.",
+      "colorKey": "red",
+      "iconKey": "EnvelopeSimple",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📬",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Every 30 minutes",
+      "integrations": ["Gmail"]
+    },
+    {
+      "id": "google-calendar-pull",
+      "name": "Google Calendar sync",
+      "desc": "Your Google Calendar lands in the vault as events — read-only, incremental via sync tokens.",
+      "colorKey": "blue",
+      "iconKey": "CalendarBlank",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "📆",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly",
+      "integrations": ["Google Calendar"]
+    },
+    {
+      "id": "google-contacts-pull",
+      "name": "Google Contacts sync",
+      "desc": "Your Google Contacts become people in the vault — merge-aware, read-only, incremental.",
+      "colorKey": "green",
+      "iconKey": "AddressBook",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "👥",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Every 6 hours",
+      "integrations": ["Google Contacts"]
+    },
+    {
+      "id": "github-pull",
+      "name": "GitHub sync",
+      "desc": "Issues and PRs you're involved in flow into the vault as threads — read-only, via a fine-grained PAT.",
+      "colorKey": "slate",
+      "iconKey": "GitBranch",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "🐙",
+      "category": "Connectors",
+      "triggerKind": "cron",
+      "triggerLabel": "Hourly",
+      "integrations": ["GitHub"]
     }
   ]
 }

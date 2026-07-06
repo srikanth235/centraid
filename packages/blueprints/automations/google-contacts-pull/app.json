@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-contacts-pull",
+  "name": "Google Contacts sync",
+  "kind": "automation",
+  "description": "Pulls your Google Contacts into the vault as people — read-only, incremental via syncToken, feeding the People CRM through the merge-aware staging spine.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

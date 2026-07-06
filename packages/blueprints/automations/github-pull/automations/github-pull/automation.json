@@ -1,0 +1,34 @@
+{
+  "name": "GitHub pull",
+  "version": "0.1.0",
+  "description": "Read-only GitHub ingestion through the connection broker's api_key lane (issue #304): issues and PRs you're involved in land in the staging band as threaded messages, incremental via an updated-since cursor.",
+  "enabled": false,
+  "prompt": "Every hour, pull the GitHub issues and pull requests I'm involved in (created, assigned, or mentioned) into the vault as threads. Follow the updated-since cursor incrementally. Read-only — never comment or change anything upstream. Stage everything for my review unless I set the connection to auto-publish.",
+  "triggers": [
+    {
+      "kind": "cron",
+      "expr": "40 * * * *"
+    }
+  ],
+  "requires": {
+    "tools": []
+  },
+  "connector": {
+    "kind": "pull.github",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Stages GitHub issues/PRs into the vault's review band and tracks the incremental updated-since cursor on the pull.github connection.",
+    "scopes": [{ "schema": "sync", "verbs": "read+act" }]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-06T00:00:00.000Z"
+  }
+}

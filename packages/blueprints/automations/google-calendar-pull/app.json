@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-calendar-pull",
+  "name": "Google Calendar sync",
+  "kind": "automation",
+  "description": "Pulls your Google Calendar into the vault as events — read-only, incremental via syncToken, through your own Google OAuth client.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}
