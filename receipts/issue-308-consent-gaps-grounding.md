@@ -62,6 +62,25 @@ the write-path rewrite (Part B).
       previously a false positive on every connector handler; `globalThis.fetch` etc. stay
       flagged).
 
+## What changed
+
+The issue's parts A1–A8 and B1–B6, mirroring the checklist above:
+
+- **A1 — confirm-gate the credential-touching commands**: `sync.configure_credential`
+- **A2 — the sweep**: every medium/high-risk command's park status decided and recorded
+- **A3 — publish scope-widening parks**: the install-grant top-up auto-grants only the
+- **A4 — owner narrowing is durable**: the revocation cascade writes one
+- **A5 — artifact/request atomicity**: `outbox.decide` refuses an edit supplying only
+- **A6 — undo exists**: `knowledge.delete_note` → trash (30-day pair, edges kept, body
+- **A7 — approvals expire**: new owner-plane `outbox.repark`; the executor reparks any
+- **A8 — bounded, cycle-free drains + retro-invalidation**: per-pass total cap (25) and
+- **B1 — builder grounding**: `build-extra-prompt.ts` gains an always-rendered
+- **B2 — assistant grounding**: the prompt teaches stage→owner-approve ("say staged,
+- **B3 — assistant grant written down + narrowable**: documented at the mint point; the
+- **B4 — catalog invalidation**: app publish/install/delete and connection configure
+- **B5 — connection health**: assistant conventions + prompt teach
+- **B6 — lint steers to the outbox**: `no-raw-fetch` names `outbox.stage` as the
+
 ## The A2 sweep — park decisions of record
 
 `confirm: true` (parks for every non-owner): `social.send_message`, `business.send_invoice`,
@@ -93,7 +112,7 @@ the correction act), ext-band rows (app-owned shape). Recorded, not forgotten.
 substituted URL, owner-only outbox decide/drain — all covered by existing tests that still
 pass unchanged.
 
-## Out-of-scope
+## Out of scope
 
 - Re-introducing the risk-ceiling (issue non-goal): the fix was the correct confirm set.
 - `ctx.blob` / `ctx.outbox` primitives (non-seam per the issue).

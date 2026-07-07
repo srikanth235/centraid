@@ -28,6 +28,23 @@ module now carries its final shape. Dev vaults are recreated, not migrated.
 - [x] Commit 11 — this receipt + demo-purge/lint/typecheck fixes
 - [x] C2 — sharing design FILED as [#311](https://github.com/srikanth235/centraid/issues/311)
 
+## What changed
+
+Eleven commits plus the filed design, mirroring the checklist:
+
+- Commit 1 — schema: collapse the migration ladder to one rung (v0)
+- Commit 2 — S1: tally→finance bridge (settle_up emits, bind_txn adopts)
+- Commit 3 — S2: outbox graph refs + drained sends publish back to canon
+- Commit 4 — S3: locker connection anchor + tags→core_tag (item_tag deleted)
+- Commit 5 — S4: tally groups decorate social.circle (group_member deleted)
+- Commit 6 — C6: FTS + memos for locker/tally
+- Commit 7 — C1: judgment loop write surface (record/distill/revoke)
+- Commit 8 — C3: per-class standing consent for enrichment
+- Commit 9 — C4: core.find_duplicate_parties (the convergence sweep)
+- Commit 10 — A/S5/C5/C6: doc v1.2, stances, domain admission checklist
+- Commit 11 — this receipt + demo-purge/lint/typecheck fixes
+- C2 — sharing design FILED as [#311](https://github.com/srikanth235/centraid/issues/311)
+
 ## Decisions of record
 
 - **Groups unify on social.circle, not core.collection** — the #274 comment

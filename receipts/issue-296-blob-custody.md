@@ -22,6 +22,14 @@ when some edge in the model claims them.
 
 ## What changed
 
+Commit map (mirrors the checklist above):
+
+- Commit 1 — vault blob custody core (stores, staging, promotion, spool pipeline, egress rule, GC, S3 driver, encryption)
+- Commit 2 — mbox attachments through the staging door (import spine)
+- Commit 3 — gateway HTTP doors (upload + Range-served bytes), lifecycle sweeps, vault-delete purge, harness-ambient S3 creds
+- Commit 4 — app adoption (photos, docs, notes, tasks, agenda) + blob-store settings surface
+
+
 Commit 1 — vault blob custody core:
 
 - `packages/vault/src/blob/store.ts` (new) — the `BlobStore` driver

@@ -182,6 +182,10 @@ standing rule; whitespace only, no behavior):
   #290-era lines `bun run format` normalized while making `check` green;
   no code change.
 
+## Out of scope
+
+No scope was cut from #293 — the sealed class landed across the whole pipeline. The post-ship gaps and deferred seams (key-lifecycle silent remint sharpest) were split out and tracked as the #298 follow-up receipt; multi-party / shared-vault sealed access stays dormant until the sharing design is filed.
+
 ## Decisions
 
 - **Ciphertext at rest is the load-bearing wall.** `vault_sql` masking is

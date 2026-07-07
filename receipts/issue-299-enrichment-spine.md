@@ -23,6 +23,16 @@ on the agent surface.
 
 ## What changed
 
+Commit map (mirrors the checklist above):
+
+- Commit 1 — vault enrichment core + agent content surfaces (v10 schema, publishers, commands, auto-publish trust, `content` op, ctx.agent attachments, assistant vault_content)
+- Commit 2 — phase 1 enrichers: photo captions + doc text (blueprint automation templates)
+- Commit 3 — phase 2: screenshot/receipt cross-domain extraction + doc filing proposals; Photos client phash
+- Commit 4 — phase 3: face proposal/confirm loop in Photos, near-duplicates, trip albums
+- Commit 5 — phase 4: doc entity links w/ anchors, obligations → schedule, anchored-citation Q&A
+- Commit 6 — phase 5: search-miss/on-view prioritization wiring + receipts polish
+
+
 Commit 1 — vault enrichment core + agent content surfaces:
 
 - `packages/vault/src/schema/enrich.ts` (new, v10) — `media_asset_phash`
