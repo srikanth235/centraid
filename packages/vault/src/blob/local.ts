@@ -7,19 +7,24 @@
 // with a two-hex-char fan-out (a directory detail, not part of any key);
 // in-memory vaults (tests) get a Map with identical semantics.
 
-import { closeSync, fsyncSync, openSync, writeSync } from 'node:fs';
 import {
+  closeSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   renameSync,
   rmSync,
   statSync,
+  writeSync,
 } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
+
+/* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
 
 /** The synchronous surface the command pipeline and sweeps rely on. */
 export interface LocalBlobStore extends BlobStore {

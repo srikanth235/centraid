@@ -43,7 +43,7 @@ import { pkColumn } from './execution.js';
  * ext bands are the builder's scratch copy — reseal covers durable data.
  */
 function sealedEntities(db: VaultDb): string[] {
-  const entities = [...Object.keys(SEALED_COLUMNS)];
+  const entities = Object.keys(SEALED_COLUMNS);
   try {
     const rows = db.vault
       .prepare(`SELECT app_id, table_name, spec_json FROM consent_app_ext WHERE band = 'live'`)

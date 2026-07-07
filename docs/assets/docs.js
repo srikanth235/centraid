@@ -17,7 +17,7 @@
     night:
       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></svg>',
   };
-  const toggle = document.getElementById('theme-toggle');
+  const toggle = document.querySelector('#theme-toggle');
   const syncIcon = () => {
     if (toggle) toggle.innerHTML = icons[root.dataset.theme === 'night' ? 'night' : 'paper'];
   };
@@ -73,7 +73,9 @@
         btn.dataset.copy || btn.closest('.term')?.querySelector('code')?.textContent || '';
       try {
         await navigator.clipboard.writeText(text.trim());
-      } catch {}
+      } catch {
+        /* clipboard unavailable (insecure context / denied) — ignore */
+      }
       btn.classList.add('done');
       btn.innerHTML =
         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7"/></svg>';

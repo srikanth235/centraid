@@ -304,7 +304,7 @@ function startFakeS3(): Promise<FakeS3> {
         url: `http://127.0.0.1:${addr.port}`,
         objects,
         authHeaders,
-        close: () => new Promise((r) => server.close(() => r())),
+        close: () => new Promise<void>((resolve) => server.close(() => resolve())),
       });
     });
   });

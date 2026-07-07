@@ -96,9 +96,11 @@ export function makeBlobRouteHandler(vaults: Pick<VaultRegistry, 'current'>): Ro
 
       if ((method === 'GET' || method === 'HEAD') && segments.length === 1) {
         const variant = url.searchParams.get('variant') ?? undefined;
-        const outcome = plane.gateway.resolveBlob(owner, segments[0] ?? '', {
-          ...(variant ? { variant } : {}),
-        });
+        const outcome = plane.gateway.resolveBlob(
+          owner,
+          segments[0] ?? '',
+          variant ? { variant } : {},
+        );
         if (outcome.status !== 'ok') {
           return sendJson(res, 404, { error: outcome.status });
         }

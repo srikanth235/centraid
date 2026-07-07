@@ -98,15 +98,14 @@ test('the whole ceremony: configure → authorize → callback → active with s
         allowed_hosts: ['gmail.googleapis.com'],
       }),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   expect(configured).toMatchObject({ ok: true, status: 'needs-auth' });
   const connectionId = configured.connection_id as string;
 
   // 2. The health list shows the pending state and NEVER a secret cell.
-  const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<
-    string,
-    any
-  >;
+  const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    connections: Array<Record<string, unknown>>;
+  };
   expect(listing.connections).toHaveLength(1);
   expect(listing.connections[0]).toMatchObject({
     kind: 'pull.gmail',
@@ -125,7 +124,7 @@ test('the whole ceremony: configure → authorize → callback → active with s
       method: 'POST',
       body: JSON.stringify({}),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   const authUrl = new URL(authorize.auth_url as string);
   expect(authUrl.origin + authUrl.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
   expect(authUrl.searchParams.get('client_id')).toBe('cid.apps.googleusercontent.com');
@@ -162,10 +161,9 @@ test('the whole ceremony: configure → authorize → callback → active with s
   );
 
   // 5. The connection is live, tokens sealed on the sidecar.
-  const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<
-    string,
-    any
-  >;
+  const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    connections: Array<Record<string, unknown>>;
+  };
   expect(after.connections[0]).toMatchObject({
     status: 'active',
     auth_note: null,
@@ -207,13 +205,13 @@ test('a declined consent screen lands a readable page and consumes the state', a
         allowed_hosts: ['www.googleapis.com'],
       }),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   const authorize = (await (
     await fetch(`${base}/centraid/_vault/connections/${configured.connection_id}/authorize`, {
       method: 'POST',
       body: JSON.stringify({ redirect_uri: 'http://127.0.0.1:9/cb' }),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   const state = new URL(authorize.auth_url as string).searchParams.get('state')!;
   const denied = await fetch(
     `${base}/centraid/_vault/oauth/callback?state=${state}&error=access_denied`,
@@ -243,18 +241,18 @@ test('pause and resume ride PATCH; providers expose the BYO wizard with the Goog
         allowed_hosts: ['api.github.com'],
       }),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   const paused = (await (
     await fetch(`${base}/centraid/_vault/connections/${configured.connection_id}`, {
       method: 'PATCH',
       body: JSON.stringify({ status: 'paused' }),
     })
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   expect(paused).toMatchObject({ ok: true, status: 'paused' });
 
   const providers = (await (
     await fetch(`${base}/centraid/_vault/connections/providers`)
-  ).json()) as Record<string, any>;
+  ).json()) as Record<string, unknown>;
   const google = (providers.providers as { id: string; setup: string[] }[]).find(
     (p) => p.id === 'google',
   )!;
