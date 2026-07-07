@@ -1,60 +1,4 @@
-<!doctype html>
-<html lang="en" data-theme="paper">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Get started — Centraid docs</title>
-    <meta
-      name="description"
-      content="From git clone to a living vault: install Centraid, open the desktop shell, clone your first app, bring your data in, pair your phone, and run it always-on."
-    />
-    <link rel="icon" href="assets/centraid-mark.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="assets/docs.css" />
-  </head>
-  <body class="has-rail">
-    <header class="site-head">
-      <div class="head-row">
-        <a class="brand" href="./">
-          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
-          Centraid <span class="docs-tag">docs</span>
-        </a>
-        <nav>
-          <a href="start.html" aria-current="page">start</a>
-          <a href="data.html">data</a>
-          <a href="apps.html">apps</a>
-          <a href="devices.html">devices</a>
-          <a href="ontology.html" class="hide-sm">ontology</a>
-          <a
-            href="https://github.com/srikanth235/centraid"
-            target="_blank"
-            rel="noopener"
-            class="hide-sm"
-            >github</a
-          >
-          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
-        </nav>
-      </div>
-    </header>
-
-    <nav class="rail" aria-label="Section index">
-      <a href="#install" class="on"><span class="n">§01</span>Install</a>
-      <a href="#first-open"><span class="n">§02</span>First open</a>
-      <a href="#first-app"><span class="n">§03</span>Your first app</a>
-      <a href="#talk"><span class="n">§04</span>Talk to it</a>
-      <a href="#import"><span class="n">§05</span>Bring your data</a>
-      <a href="#phone"><span class="n">§06</span>Pair your phone</a>
-      <a href="#always-on"><span class="n">§07</span>Go always-on</a>
-      <a href="#backup"><span class="n">§08</span>Back up the keys</a>
-    </nav>
-
-    <main>
-      <section class="ch-hero wrap">
+<section class="ch-hero wrap">
         <div class="ghost" aria-hidden="true">1</div>
         <p class="eyebrow r">Path 1 · use it</p>
         <h1 class="r" style="--d: 0.1s">From clone to a <em>living vault.</em></h1>
@@ -63,7 +7,7 @@
           <code>bun install</code>, one command to open the shell. This page is the whole first day:
           get it running, put an app on it, bring some of your real data in, and put it in your
           pocket. When something here makes you ask <i>why</i>, the
-          <a class="u" href="data.html">understand track</a> has the answer.
+          <a class="u" href="../data/">understand track</a> has the answer.
         </p>
       </section>
 
@@ -129,7 +73,7 @@
           </p>
           <p class="aside">
             What exactly is in that directory, and why the sealing keys live <i>outside</i> it:
-            <a href="data.html#vault">Data § the vault →</a>
+            <a href="../data/#vault">Data § the vault →</a>
           </p>
         </div>
       </section>
@@ -154,7 +98,7 @@
           <p class="aside">
             Try Notes first: type <code>@</code> in a note and link a person, a document, a task —
             cross-references are one mechanism everywhere.
-            <a href="apps.html#blueprints">Apps § the blueprints →</a>
+            <a href="../apps/#blueprints">Apps § the blueprints →</a>
           </p>
         </div>
       </section>
@@ -217,7 +161,7 @@
           </p>
           <p class="aside">
             How staging, the external-id map, and the broker actually work:
-            <a href="data.html#connections">Data § connections &amp; sync →</a>
+            <a href="../data/#connections">Data § connections &amp; sync →</a>
           </p>
         </div>
       </section>
@@ -241,7 +185,7 @@
           </p>
           <p class="aside">
             What's inside the ticket, how devices are enrolled per-vault, and what the tunnel
-            carries: <a href="devices.html#pairing">Devices § pairing →</a>
+            carries: <a href="../devices/#pairing">Devices § pairing →</a>
           </p>
         </div>
       </section>
@@ -283,7 +227,7 @@
         </div>
         <p class="aside r" style="--d: 0.24s">
           Administration is deliberately shell-only — vault create/delete, device enrollment, and
-          key custody never ride HTTP. <a href="devices.html#topology">Devices § topology →</a>
+          key custody never ride HTTP. <a href="../devices/#topology">Devices § topology →</a>
         </p>
       </section>
 
@@ -319,37 +263,11 @@
         </div>
         <p class="aside r" style="--d: 0.24s">
           Lose the vault, keep the key → restore and reveal. Lose the key → the sealed cells are
-          gone; everything unsealed remains. <a href="data.html#sealed">Data § sealed columns →</a>
+          gone; everything unsealed remains. <a href="../data/#sealed">Data § sealed columns →</a>
         </p>
 
         <div class="chapter-next r">
-          <a href="./">← docs home</a>
-          <a href="data.html">next: understand the data pillar →</a>
+          <a href="../">← docs home</a>
+          <a href="../data/">next: understand the data pillar →</a>
         </div>
       </section>
-    </main>
-
-    <footer class="site-foot">
-      <div class="wrap">
-        <p class="foot-manifesto r">
-          Sixty minutes in, the vault is yours.
-          <em>The rest of the manual explains why that matters.</em>
-        </p>
-        <div class="foot-row">
-          <span>© 2026 Centraid</span>
-          <span class="foot-links">
-            <a href="https://centraid.dev">centraid.dev</a>
-            <a href="data.html">data</a>
-            <a href="apps.html">apps</a>
-            <a href="devices.html">devices</a>
-            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
-              >github</a
-            >
-          </span>
-        </div>
-      </div>
-    </footer>
-
-    <script src="assets/docs.js"></script>
-  </body>
-</html>

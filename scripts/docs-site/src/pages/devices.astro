@@ -1,0 +1,86 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/devices.html?raw';
+
+const rail = [
+  {
+    "href": "#topology",
+    "no": "§01",
+    "label": "Topology",
+    "current": true
+  },
+  {
+    "href": "#addressing",
+    "no": "§02",
+    "label": "Addressing",
+    "current": false
+  },
+  {
+    "href": "#pairing",
+    "no": "§03",
+    "label": "Pairing",
+    "current": false
+  },
+  {
+    "href": "#iroh",
+    "no": "§04",
+    "label": "Connectivity",
+    "current": false
+  },
+  {
+    "href": "#desktop",
+    "no": "§05",
+    "label": "Desktop shell",
+    "current": false
+  },
+  {
+    "href": "#mobile",
+    "no": "§06",
+    "label": "Mobile companion",
+    "current": false
+  },
+  {
+    "href": "#runtimes",
+    "no": "§07",
+    "label": "Agent runtimes",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "No relay to rent, no sync to reconcile, no account to lose. <em>Just your machines, talking to each other.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../data/",
+      "label": "data",
+      "external": false
+    },
+    {
+      "href": "../apps/",
+      "label": "apps",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Devices — Centraid docs"
+  description="The Devices pillar: one gateway with devices as clients, (gateway, vault) addressing, one-time pairing, the iroh peer-to-peer tunnel, the desktop shell, the mobile companion, and the agent runtimes a gateway can host."
+  current="devices"
+  canonicalPath="devices/"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

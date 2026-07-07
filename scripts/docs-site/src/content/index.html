@@ -1,49 +1,4 @@
-<!doctype html>
-<html lang="en" data-theme="paper">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Centraid docs — your data, your apps, your devices</title>
-    <meta
-      name="description"
-      content="Documentation for Centraid: a sovereign vault built on one personal ontology, apps that project it, and devices that carry it — all running on your own machine."
-    />
-    <link rel="icon" href="assets/centraid-mark.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="assets/docs.css" />
-  </head>
-  <body>
-    <header class="site-head">
-      <div class="head-row">
-        <a class="brand" href="./">
-          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
-          Centraid <span class="docs-tag">docs</span>
-        </a>
-        <nav>
-          <a href="start.html">start</a>
-          <a href="data.html">data</a>
-          <a href="apps.html">apps</a>
-          <a href="devices.html">devices</a>
-          <a href="ontology.html" class="hide-sm">ontology</a>
-          <a
-            href="https://github.com/srikanth235/centraid"
-            target="_blank"
-            rel="noopener"
-            class="hide-sm"
-            >github</a
-          >
-          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
-        </nav>
-      </div>
-    </header>
-
-    <main>
-      <!-- HERO -->
+<!-- HERO -->
       <section class="ch-hero wrap">
         <div class="ghost" aria-hidden="true">§</div>
         <p class="eyebrow r">Centraid · the manual</p>
@@ -78,7 +33,7 @@
       <!-- PERSONA SPLIT -->
       <section class="sec wrap" style="border: 0">
         <div class="split">
-          <a class="path r" href="start.html">
+          <a class="path r" href="start/">
             <p class="c-no">path 1 · use it</p>
             <h2>I want it running <em>today.</em></h2>
             <p>
@@ -88,7 +43,7 @@
             </p>
             <p class="go">get started →</p>
           </a>
-          <a class="path r" href="data.html" style="--d: 0.1s">
+          <a class="path r" href="data/" style="--d: 0.1s">
             <p class="c-no">path 2 · understand it</p>
             <h2>I want to know <em>how it works.</em></h2>
             <p>
@@ -113,7 +68,7 @@
             If you can name a piece of Centraid, it lives in one of these chapters. Nothing floats.
           </p>
           <div class="grid cols-3" style="margin-top: 34px">
-            <a class="card r" href="data.html" style="--d: 0.1s">
+            <a class="card r" href="data/" style="--d: 0.1s">
               <p class="c-no">chapter 1</p>
               <h3>Data</h3>
               <p>
@@ -127,7 +82,7 @@
                 ><span class="pill">automations</span><span class="pill">assistant</span>
               </div>
             </a>
-            <a class="card r" href="apps.html" style="--d: 0.18s">
+            <a class="card r" href="apps/" style="--d: 0.18s">
               <p class="c-no">chapter 2</p>
               <h3>Apps</h3>
               <p>
@@ -142,7 +97,7 @@
                 ><span class="pill">linking</span>
               </div>
             </a>
-            <a class="card r" href="devices.html" style="--d: 0.26s">
+            <a class="card r" href="devices/" style="--d: 0.26s">
               <p class="c-no">chapter 3</p>
               <h3>Devices</h3>
               <p>
@@ -175,7 +130,7 @@
           </p>
           <p class="aside" style="--d: 0.2s">
             Eleven schemas · one spine · consent checked on every read and write.
-            <a href="ontology.html">Read the ontology →</a>
+            <a href="ontology/">Read the ontology →</a>
           </p>
         </div>
       </section>
@@ -196,7 +151,7 @@
             <tbody>
               <tr>
                 <td>vault files</td>
-                <td><a class="u" href="data.html#vault">Data § the vault</a></td>
+                <td><a class="u" href="data/#vault">Data § the vault</a></td>
                 <td>
                   vault.db, journal.db, blobs/, keys/ — what each file is and why keys live outside
                   backups
@@ -204,97 +159,72 @@
               </tr>
               <tr>
                 <td>ontology</td>
-                <td><a class="u" href="ontology.html">Ontology</a></td>
+                <td><a class="u" href="ontology/">Ontology</a></td>
                 <td>the full logical model, explorable — schemas, entity map, matrix, rules</td>
               </tr>
               <tr>
                 <td>consent &amp; outbox</td>
-                <td><a class="u" href="data.html#consent">Data § consent</a></td>
+                <td><a class="u" href="data/#consent">Data § consent</a></td>
                 <td>
                   install-time grants, confirm-gated commands, the outbox, standing grants, receipts
                 </td>
               </tr>
               <tr>
                 <td>sealed secrets</td>
-                <td><a class="u" href="data.html#sealed">Data § sealed columns</a></td>
+                <td><a class="u" href="data/#sealed">Data § sealed columns</a></td>
                 <td>AES-GCM at rest, the reveal verb, key export and rotation</td>
               </tr>
               <tr>
                 <td>connections &amp; sync</td>
-                <td><a class="u" href="data.html#connections">Data § connections</a></td>
+                <td><a class="u" href="data/#connections">Data § connections</a></td>
                 <td>the broker, sealed credentials, staging batches, the external-id map</td>
               </tr>
               <tr>
                 <td>automations</td>
-                <td><a class="u" href="data.html#automations">Data § automations</a></td>
+                <td><a class="u" href="data/#automations">Data § automations</a></td>
                 <td>four trigger kinds, agent identity, durable transcripts</td>
               </tr>
               <tr>
                 <td>assistant</td>
-                <td><a class="u" href="data.html#assistant">Data § assistant</a></td>
+                <td><a class="u" href="data/#assistant">Data § assistant</a></td>
                 <td>SQL-first reads, typed writes, the judgment loop</td>
               </tr>
               <tr>
                 <td>blueprint apps</td>
-                <td><a class="u" href="apps.html#blueprints">Apps § blueprints</a></td>
+                <td><a class="u" href="apps/#blueprints">Apps § blueprints</a></td>
                 <td>the eight shipped apps and what each proves</td>
               </tr>
               <tr>
                 <td>app anatomy</td>
-                <td><a class="u" href="apps.html#anatomy">Apps § anatomy</a></td>
+                <td><a class="u" href="apps/#anatomy">Apps § anatomy</a></td>
                 <td>manifest, handlers, scopes, the ext band</td>
               </tr>
               <tr>
                 <td>builder</td>
-                <td><a class="u" href="apps.html#builder">Apps § builder</a></td>
+                <td><a class="u" href="apps/#builder">Apps § builder</a></td>
                 <td>describe → draft → preview → publish</td>
               </tr>
               <tr>
                 <td>gateway topology</td>
-                <td><a class="u" href="devices.html#topology">Devices § topology</a></td>
+                <td><a class="u" href="devices/#topology">Devices § topology</a></td>
                 <td>one gateway, star of clients, three hosts</td>
               </tr>
               <tr>
                 <td>pairing</td>
-                <td><a class="u" href="devices.html#pairing">Devices § pairing</a></td>
+                <td><a class="u" href="devices/#pairing">Devices § pairing</a></td>
                 <td>one-time tickets, QR flow, enrollment ACL</td>
               </tr>
               <tr>
                 <td>iroh tunnel</td>
-                <td><a class="u" href="devices.html#iroh">Devices § connectivity</a></td>
+                <td><a class="u" href="devices/#iroh">Devices § connectivity</a></td>
                 <td>the wire protocol, transport tiers, anti-spoof</td>
               </tr>
               <tr>
                 <td>agent runtimes</td>
-                <td><a class="u" href="devices.html#runtimes">Devices § runtimes</a></td>
+                <td><a class="u" href="devices/#runtimes">Devices § runtimes</a></td>
                 <td>Claude Code, Codex, OpenClaw — how a gateway hosts a brain</td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
-    </main>
-
-    <footer class="site-foot">
-      <div class="wrap">
-        <p class="foot-manifesto r">
-          Most software is built for everyone, so none of it fits anyone.
-          <em>Yours can just fit you.</em>
-        </p>
-        <div class="foot-row">
-          <span>© 2026 Centraid</span>
-          <span class="foot-links">
-            <a href="https://centraid.dev">centraid.dev</a>
-            <a href="start.html">start</a>
-            <a href="ontology.html">ontology</a>
-            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
-              >github</a
-            >
-          </span>
-        </div>
-      </div>
-    </footer>
-
-    <script src="assets/docs.js"></script>
-  </body>
-</html>

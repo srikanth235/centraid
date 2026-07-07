@@ -30,7 +30,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     // Today every path is a static file. The asset binding handles:
     //   - exact matches (`/assets/docs-site.css`, `/og-card.png`)
-    //   - directory index resolution (`/concepts/architecture/` -> .../index.html)
+    //   - directory index resolution (`/data/` -> `/data/index.html`)
     //   - `_headers` / `_redirects` parsed at deploy time
     //   - `not_found_handling: "404-page"` -> serves `/404.html` on misses
     return env.ASSETS.fetch(request);

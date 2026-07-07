@@ -4,7 +4,7 @@
 
 Describe an app in a sentence — an agent builds it, a local gateway runs it, and it shows up on your desktop and phone. Every app is a thin projection over one **vault** on your machine — a shared personal ontology where your people, money, documents and plans live once, borrowed through grants you sign. App code is a folder of HTML + JS handlers, versioned in a local git store, operable by you or an AI.
 
-[Docs](https://docs.centraid.dev) · [Get started](docs/start.html) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
+[Docs](https://centraid.dev/docs/) · [Get started](https://centraid.dev/docs/start/) · [Architecture](ARCHITECTURE.md) · [Agents map](AGENTS.md)
 
 ## What it does
 
@@ -59,7 +59,7 @@ centraid-gateway print-token --data-dir ./gw-data   # Bearer token for clients
 
 Mobile companion: `bun run dev:mobile` (Expo dev build), then pair it via Settings → Phone on the desktop (one-time QR).
 
-Full tour: [Get started](docs/start.html) ([docs.centraid.dev/start.html](https://docs.centraid.dev/start.html)) — install → vault → first app → phone → always-on, in one page.
+Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault → first app → phone → always-on, in one page.
 
 ## Layout
 
@@ -97,15 +97,15 @@ Desktop e2e: 59 Playwright tests across 14 scenario sections, driving the real E
 
 ## Documentation
 
-The docs ([docs.centraid.dev](https://docs.centraid.dev)) are hand-authored HTML in [`docs/`](docs/) — two personas, three pillars:
+The docs ([centraid.dev/docs](https://centraid.dev/docs/)) are Astro-built static HTML in [`scripts/docs-site`](scripts/docs-site/) — two personas, three pillars:
 
 | | |
 |---|---|
-| [Start](docs/start.html) | Install → vault → first app → pair a phone → always-on → key backup |
-| [Data](docs/data.html) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
-| [Apps](docs/apps.html) | The eight blueprints, app anatomy, the builder, attach & link, the agent surface, mobile |
-| [Devices](docs/devices.html) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
-| [Ontology](docs/ontology.html) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
+| [Start](https://centraid.dev/docs/start/) | Install → vault → first app → pair a phone → always-on → key backup |
+| [Data](https://centraid.dev/docs/data/) | The vault, consent & the outbox, sealed columns, connections & sync, automations, the assistant, blobs, search |
+| [Apps](https://centraid.dev/docs/apps/) | The eight blueprints, app anatomy, the builder, attach & link, the agent surface, mobile |
+| [Devices](https://centraid.dev/docs/devices/) | Star topology, (gateway, vault) addressing, pairing, iroh, desktop & mobile clients, agent runtimes |
+| [Ontology](https://centraid.dev/docs/ontology/) | The full logical model — schemas, entity map, ownership matrix, gateway contract, rules |
 
 [AGENTS.md](AGENTS.md) maps the durable docs agents and humans use to orient in this repo.
 

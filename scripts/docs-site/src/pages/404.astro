@@ -1,0 +1,15 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/404.html?raw';
+---
+
+<DocsLayout
+  title="Not found — Centraid docs"
+  description="The requested Centraid docs page was not found."
+  current="none"
+  canonicalPath="404.html"
+  bodyClass=""
+  noIndex={true}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

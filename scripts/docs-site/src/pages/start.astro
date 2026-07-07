@@ -1,0 +1,92 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/start.html?raw';
+
+const rail = [
+  {
+    "href": "#install",
+    "no": "§01",
+    "label": "Install",
+    "current": true
+  },
+  {
+    "href": "#first-open",
+    "no": "§02",
+    "label": "First open",
+    "current": false
+  },
+  {
+    "href": "#first-app",
+    "no": "§03",
+    "label": "Your first app",
+    "current": false
+  },
+  {
+    "href": "#talk",
+    "no": "§04",
+    "label": "Talk to it",
+    "current": false
+  },
+  {
+    "href": "#import",
+    "no": "§05",
+    "label": "Bring your data",
+    "current": false
+  },
+  {
+    "href": "#phone",
+    "no": "§06",
+    "label": "Pair your phone",
+    "current": false
+  },
+  {
+    "href": "#always-on",
+    "no": "§07",
+    "label": "Go always-on",
+    "current": false
+  },
+  {
+    "href": "#backup",
+    "no": "§08",
+    "label": "Back up the keys",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "Sixty minutes in, the vault is yours. <em>The rest of the manual explains why that matters.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../data/",
+      "label": "data",
+      "external": false
+    },
+    {
+      "href": "../apps/",
+      "label": "apps",
+      "external": false
+    },
+    {
+      "href": "../devices/",
+      "label": "devices",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Get started — Centraid docs"
+  description="From git clone to a living vault: install Centraid, open the desktop shell, clone your first app, bring your data in, pair your phone, and run it always-on."
+  current="start"
+  canonicalPath="start/"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

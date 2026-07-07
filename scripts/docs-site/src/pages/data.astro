@@ -1,0 +1,104 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/data.html?raw';
+
+const rail = [
+  {
+    "href": "#vault",
+    "no": "§01",
+    "label": "The vault",
+    "current": true
+  },
+  {
+    "href": "#ontology",
+    "no": "§02",
+    "label": "The ontology",
+    "current": false
+  },
+  {
+    "href": "#consent",
+    "no": "§03",
+    "label": "Consent",
+    "current": false
+  },
+  {
+    "href": "#outbox",
+    "no": "§04",
+    "label": "The outbox",
+    "current": false
+  },
+  {
+    "href": "#sealed",
+    "no": "§05",
+    "label": "Sealed columns",
+    "current": false
+  },
+  {
+    "href": "#connections",
+    "no": "§06",
+    "label": "Connections & sync",
+    "current": false
+  },
+  {
+    "href": "#automations",
+    "no": "§07",
+    "label": "Automations",
+    "current": false
+  },
+  {
+    "href": "#assistant",
+    "no": "§08",
+    "label": "The assistant",
+    "current": false
+  },
+  {
+    "href": "#blobs",
+    "no": "§09",
+    "label": "Bytes & blobs",
+    "current": false
+  },
+  {
+    "href": "#search",
+    "no": "§10",
+    "label": "Search",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "The apps are disposable. The devices are replaceable. <em>The vault is the asset.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../apps/",
+      "label": "apps",
+      "external": false
+    },
+    {
+      "href": "../devices/",
+      "label": "devices",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Data — Centraid docs"
+  description="The Data pillar: the vault and its files, the personal ontology, consent and the outbox, sealed secrets, connections and sync, automations, the assistant, blob custody, and search."
+  current="data"
+  canonicalPath="data/"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

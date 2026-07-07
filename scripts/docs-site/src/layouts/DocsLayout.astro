@@ -1,0 +1,53 @@
+---
+import SectionRail from '../components/SectionRail.astro';
+import SiteFooter from '../components/SiteFooter.astro';
+import SiteHead from '../components/SiteHead.astro';
+
+const {
+  title,
+  description,
+  current = 'home',
+  canonicalPath = '',
+  bodyClass = '',
+  rail = [],
+  footer = undefined,
+  noIndex = false,
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const canonical = new URL(canonicalPath, Astro.site ?? 'https://centraid.dev/docs/').toString();
+const asset = (path) => `${base}${path}`;
+---
+
+<!doctype html>
+<html lang="en" data-theme="paper">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noIndex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="article" />
+    <link rel="icon" href={asset('assets/centraid-mark.svg')} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href={asset('assets/docs.css')} />
+  </head>
+  <body class={bodyClass}>
+    <SiteHead current={current} />
+    <SectionRail items={rail} />
+    <main>
+      <slot />
+    </main>
+    <SiteFooter footer={footer} />
+    <script is:inline src={asset('assets/docs.js')}></script>
+  </body>
+</html>

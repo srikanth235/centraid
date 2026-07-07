@@ -1,0 +1,86 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/apps.html?raw';
+
+const rail = [
+  {
+    "href": "#model",
+    "no": "§01",
+    "label": "What an app is",
+    "current": true
+  },
+  {
+    "href": "#blueprints",
+    "no": "§02",
+    "label": "The blueprints",
+    "current": false
+  },
+  {
+    "href": "#anatomy",
+    "no": "§03",
+    "label": "Anatomy",
+    "current": false
+  },
+  {
+    "href": "#builder",
+    "no": "§04",
+    "label": "The builder",
+    "current": false
+  },
+  {
+    "href": "#linking",
+    "no": "§05",
+    "label": "Attach & link",
+    "current": false
+  },
+  {
+    "href": "#agents",
+    "no": "§06",
+    "label": "Agents drive apps",
+    "current": false
+  },
+  {
+    "href": "#mobile",
+    "no": "§07",
+    "label": "On the phone",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "When apps are cheap to generate, projections become disposable — <em>and the model becomes everything.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../data/",
+      "label": "data",
+      "external": false
+    },
+    {
+      "href": "../devices/",
+      "label": "devices",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Apps — Centraid docs"
+  description="The Apps pillar: eight blueprint apps, what an app actually is (a projection over the vault), the conversational builder, attachments and cross-references, and how agents drive the same handlers your buttons do."
+  current="apps"
+  canonicalPath="apps/"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>
