@@ -4,12 +4,12 @@
 /*
  * ConversationStore — the per-vault conversation ledger + automation KV
  * (issue #90, reshaped by #190; moved from per-app `runtime.sqlite` into
- * the vault's `transcripts.db` by #280 — a conversation binds to its vault
+ * the vault's `journal.db` by #280 — a conversation binds to its vault
  * at creation, and app scoping is the `app_id` column, not a file).
  *
  * Five ledger tables — `conversations`, `turns`, `items`, `attachments`,
- * `automation_state` — the `TRANSCRIPTS_MIGRATIONS` shape in `gateway-db.ts`
- * (which also carries the `run_summary` rollup `AnalyticsStore` owns).
+ * `automation_state` — the `CONVERSATION_LEDGER_DDL` shape in `gateway-db.ts`
+ * (which also carries the `run_summary` view `AnalyticsStore` reads).
  *
  *   conversations    — the first-class durable record. `kind` (chat |
  *                      automation | build), `app_id`, `automation_id` live
@@ -27,13 +27,12 @@
  *                      webhook/email file), CASCADE off `items`.
  *   automation_state — per-(automation_id, key) KV.
  *
- * Constructed over a vault's `transcripts.db` `DatabaseProvider` (which may
+ * Constructed over a vault's `journal.db` `DatabaseProvider` (which may
  * resolve "the ACTIVE vault" — the store re-prepares when the handle
  * changes). Runtime-owned: never reachable from the handler `db` proxy or
- * the `centraid_sql_*` agent tools. When a `RunSummarySink` is supplied,
- * `finishTurn` write-throughs a one-row summary (sourcing `kind`/`app_id`/
- * `automation_ref` from the owning conversation) to the `run_summary`
- * table in the same file.
+ * the `centraid_sql_*` agent tools. The `run_summary` Insights source is a
+ * VIEW over these tables (see `CONVERSATION_LEDGER_DDL`) — `finishTurn`
+ * needs no write-through; a finished turn simply appears in the view.
  *
  * Row types live in `schema.ts`; the prepared-statement block +
  * raw-row mappers live in `store-sql.ts`.
@@ -42,7 +41,6 @@
 import { randomUUID } from 'node:crypto';
 import { type DatabaseSync } from 'node:sqlite';
 import type { DatabaseProvider } from '../stores/gateway-db.js';
-import type { RunSummarySink } from './run-summary-sink.js';
 import type {
   Conversation,
   Turn,
@@ -187,18 +185,16 @@ export type ConversationMeta = Conversation & { readonly messageCount: number };
 
 export class ConversationStore {
   private readonly provider: DatabaseProvider;
-  private readonly analytics: RunSummarySink | undefined;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
 
-  constructor(provider: DatabaseProvider, analytics?: RunSummarySink) {
+  constructor(provider: DatabaseProvider) {
     this.provider = provider;
-    this.analytics = analytics;
   }
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
     // The provider may resolve a different handle across calls (the gateway
-    // wires "the ACTIVE vault's transcripts.db") — re-prepare on change so a
+    // wires "the ACTIVE vault's journal.db") — re-prepare on change so a
     // vault switch lands without reconstructing the store.
     const db = this.provider();
     if (this.db === db && this.stmts) return { db, stmts: this.stmts };
@@ -387,7 +383,6 @@ export class ConversationStore {
       outputJson: input.outputJson ?? null,
       tid: input.turnId,
     });
-    if (this.analytics) this.writeRunSummary(input.turnId);
   }
 
   getTurn(turnId: string): Turn | undefined {
@@ -612,65 +607,6 @@ export class ConversationStore {
   stateDelete(automationId: string, key: string): void {
     const { stmts } = this.ensureReady();
     stmts.deleteState.run(automationId, key);
-  }
-
-  /**
-   * Write-through this turn's one-row summary to the `run_summary` rollup
-   * (same per-vault file, #280), sourcing `kind` / `app_id` /
-   * `automation_ref` from the owning conversation (issue #190). Best-effort
-   * — a rollup failure is swallowed so it never fails the turn; the ledger
-   * tables stay authoritative.
-   */
-  private writeRunSummary(turnId: string): void {
-    if (!this.analytics) return;
-    try {
-      const { stmts } = this.ensureReady();
-      const row = this.getTurn(turnId);
-      if (!row) return;
-      const conv = stmts.convForTurn.get(turnId) as
-        | { kind: string; app_id: string | null; automation_id: string | null }
-        | undefined;
-      if (!conv) return;
-      const kind = conv.kind as RunKind;
-      const dom = stmts.dominantModel.get(turnId) as { model: string } | undefined;
-      const automationRef = kind === 'automation' ? (conv.automation_id ?? undefined) : undefined;
-      // For an automation, the `<appId>/<id>` handle's app id is the segment
-      // before the slash; else the conversation's own `app_id`.
-      const slash = automationRef ? automationRef.indexOf('/') : -1;
-      const appId = slash > 0 ? automationRef!.slice(0, slash) : (conv.app_id ?? undefined);
-      this.analytics.recordRunSummary({
-        runId: row.turnId,
-        kind,
-        ...(automationRef !== undefined ? { automationRef } : {}),
-        ...(appId !== undefined ? { appId } : {}),
-        trigger: row.triggerKind,
-        ...(row.triggerOrigin !== undefined ? { triggerOrigin: row.triggerOrigin } : {}),
-        ok: row.ok,
-        pinned: row.pinned,
-        ...(row.summary !== undefined ? { summary: row.summary } : {}),
-        ...(row.note !== undefined ? { note: row.note } : {}),
-        ...(row.error !== undefined ? { error: row.error } : {}),
-        ...(row.retryOf !== undefined ? { retryOf: row.retryOf } : {}),
-        ...(dom?.model ? { model: dom.model } : {}),
-        startedAt: row.startedAt,
-        ...(row.endedAt !== undefined ? { endedAt: row.endedAt } : {}),
-        ...(row.totalInputTokens !== undefined ? { totalInputTokens: row.totalInputTokens } : {}),
-        ...(row.totalOutputTokens !== undefined
-          ? { totalOutputTokens: row.totalOutputTokens }
-          : {}),
-        ...(row.totalCacheReadTokens !== undefined
-          ? { totalCacheReadTokens: row.totalCacheReadTokens }
-          : {}),
-        ...(row.totalCacheWriteTokens !== undefined
-          ? { totalCacheWriteTokens: row.totalCacheWriteTokens }
-          : {}),
-        ...(row.totalCostUsd !== undefined ? { totalCostUsd: row.totalCostUsd } : {}),
-        ...(row.stepCount !== undefined ? { stepCount: row.stepCount } : {}),
-        ...(row.toolCount !== undefined ? { toolCount: row.toolCount } : {}),
-      });
-    } catch {
-      // Best-effort — see the method doc.
-    }
   }
 
   /**

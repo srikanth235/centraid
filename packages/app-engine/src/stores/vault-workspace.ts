@@ -3,7 +3,8 @@
  * (issue #280: the vault is the unit).
  *
  * Everything personal lives inside one vault's directory: the conversation
- * ledger (`transcripts.db`, which also carries the `run_summary` rollup),
+ * ledger (the ledger band of `journal.db`, which also carries the
+ * `run_summary` rollup — the old standalone `transcripts.db` folded in),
  * the per-app state dirs (`apps/<id>/` logs + blobs), and the chat
  * runner's per-conversation scratch files. The gateway resolves the ACTIVE
  * vault and hands app-engine this view of it; a vault switch makes the
@@ -33,12 +34,14 @@ export interface VaultWorkspace {
    */
   appsDir: string;
   /**
-   * Lazy provider for the vault's `transcripts.db` — conversations, turns,
-   * items, attachments, automation state, and the `run_summary` rollup.
+   * Lazy provider for the vault's `journal.db` ledger band — conversations,
+   * turns, items, attachments, automation state, and the `run_summary`
+   * rollup. The handle is the SAME file the vault's audit stream lives in;
+   * the ledger band is ensured before the provider hands it out.
    */
-  transcripts: DatabaseProvider;
-  /** Absolute path of `transcripts.db` (for hosts that spawn workers). */
-  transcriptsDbFile: string;
+  journal: DatabaseProvider;
+  /** Absolute path of `journal.db` (for hosts that spawn workers). */
+  journalDbFile: string;
   /** Scratch dir for the chat runner's per-conversation session files. */
   runnerSessionDir: string;
 }

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit S3+S4+S5 of one invocation — contract / precondition / ACID boundary / evidence are one non-splittable transaction bracket, already carved from gateway.ts
 // S3 + S4 + S5 for one invocation whose consent already allowed: contract
 // validation, precondition checks recorded before anything mutates, the ACID
 // execution boundary with postcondition rollback, then the evidence trail.

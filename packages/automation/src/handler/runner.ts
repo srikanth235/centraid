@@ -478,7 +478,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
         const planned = retryDelays[transientRetries]!;
         const retryAfterMs = Number(result.headers['retry-after']) * 1000;
         await abortableDelay(
-          Math.min(Number.isFinite(retryAfterMs) ? Math.max(retryAfterMs, planned) : planned, 30_000),
+          Math.min(
+            Number.isFinite(retryAfterMs) ? Math.max(retryAfterMs, planned) : planned,
+            30_000,
+          ),
         );
         transientRetries += 1;
         continue;
@@ -497,7 +500,10 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
           .catch(() => undefined);
         return result;
       }
-      if (result.status === 403 && /insufficient.{0,4}(scope|permission)|invalid_scope/i.test(result.text)) {
+      if (
+        result.status === 403 &&
+        /insufficient.{0,4}(scope|permission)|invalid_scope/i.test(result.text)
+      ) {
         await auth
           .onAuthDead?.(
             'permission withdrawn upstream (403 insufficient scope) — reconnect with the scopes this connector needs',

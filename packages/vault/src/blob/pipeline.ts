@@ -222,6 +222,7 @@ function parseJpegExif(bytes: Buffer): JpegExif {
   };
   const ascii = (entry: Entry): string => {
     const at = valueAt(entry);
+    // eslint-disable-next-line no-control-regex -- EXIF ASCII fields are NUL-padded to a fixed length; trim the trailing NULs (#296)
     return bytes.toString('latin1', at, at + entry.count).replace(/\0+$/, '');
   };
   const rationals = (entry: Entry): number[] => {

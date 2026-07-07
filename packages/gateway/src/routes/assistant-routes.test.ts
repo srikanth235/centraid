@@ -17,7 +17,7 @@ import { afterEach, expect, test } from 'vitest';
 import {
   ASSISTANT_APP_ID,
   ConversationHistoryStore,
-  openTranscriptsDb,
+  openJournalDb,
   type ConversationRunner,
   type VaultWorkspace,
 } from '@centraid/app-engine';
@@ -26,7 +26,7 @@ import type { VaultRegistry } from '../serve/vault-registry.js';
 import { makeAssistantRouteHandler } from './assistant-routes.js';
 
 let dir: string;
-let transcripts: DatabaseSync | undefined;
+let journal: DatabaseSync | undefined;
 let server: Server | undefined;
 let store: ConversationHistoryStore;
 
@@ -35,11 +35,11 @@ function fakeRegistry(): VaultRegistry {
     vaultId: 'v-test',
     ownerPartyId: 'owner-party',
     appsDir: path.join(dir, 'apps'),
-    transcripts: () => {
-      transcripts ??= openTranscriptsDb(path.join(dir, 'transcripts.db'));
-      return transcripts;
+    journal: () => {
+      journal ??= openJournalDb(path.join(dir, 'journal.db'));
+      return journal;
     },
-    transcriptsDbFile: path.join(dir, 'transcripts.db'),
+    journalDbFile: path.join(dir, 'journal.db'),
     runnerSessionDir: path.join(dir, 'runner-sessions'),
   };
   const plane = {
@@ -90,8 +90,8 @@ async function bootstrap(runner: ConversationRunner): Promise<string> {
 afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
   server = undefined;
-  transcripts?.close();
-  transcripts = undefined;
+  journal?.close();
+  journal = undefined;
   if (dir) await fs.rm(dir, { recursive: true, force: true });
 });
 

@@ -24,7 +24,9 @@ const MAX_PAGES_PER_RUN = 3;
 async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status !== 200) {
-    throw new Error(`github ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`);
+    throw new Error(
+      `github ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+    );
   }
   return JSON.parse(res.text);
 }

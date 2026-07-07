@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the per-entity publishers are one closed vocabulary — probe/create/update share the provenance-stamping contract (#290)
 // Per-entity-type publishers for the staging spine (issue #290 phase 2).
 // A publisher is the ONLY code that turns a staged payload into vault rows:
 // `probe` adopts rows the vault already holds (domain-native keys — ical_uid,

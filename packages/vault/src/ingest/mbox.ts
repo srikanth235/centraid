@@ -97,8 +97,8 @@ function decodePart(body: string, encoding: string | undefined): Buffer {
   if (enc === 'base64') return Buffer.from(body.replace(/\s+/g, ''), 'base64');
   if (enc === 'quoted-printable') {
     const qp = body
-      .replace(/=\r?\n/g, '')
-      .replace(/=([0-9A-Fa-f]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+      .replace(/[=]\r?\n/g, '')
+      .replace(/[=]([0-9A-Fa-f]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
     return Buffer.from(qp, 'latin1');
   }
   return Buffer.from(body, 'utf8');

@@ -142,4 +142,3 @@ CREATE TABLE IF NOT EXISTS consent_scope_request (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_scope_request_open
   ON consent_scope_request(plane, app_id) WHERE decided_at IS NULL;
 `;
-

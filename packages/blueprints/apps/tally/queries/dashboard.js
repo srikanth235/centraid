@@ -28,22 +28,30 @@ function initials(name) {
 export async function loadTally(ctx, purpose) {
   // A group decorates a social.circle (issue #310 S4): the circle carries
   // the name and the membership, tally.group the icon + colour.
-  const [vaultRes, friendsRes, groupsRes, circlesRes, membersRes, expensesRes, splitsRes, settlesRes] =
-    await Promise.all([
-      ctx.vault.read({ entity: 'core.vault', purpose }),
-      ctx.vault.read({ entity: 'tally.friend', purpose }),
-      ctx.vault.read({ entity: 'tally.group', purpose }),
-      ctx.vault.read({ entity: 'social.circle', purpose }),
-      ctx.vault.read({ entity: 'social.circle_member', purpose }),
-      ctx.vault.read({
-        entity: 'tally.expense',
-        orderBy: { column: 'spent_on', dir: 'desc' },
-        limit: 2000,
-        purpose,
-      }),
-      ctx.vault.read({ entity: 'tally.expense_split', limit: 8000, purpose }),
-      ctx.vault.read({ entity: 'tally.settlement', limit: 2000, purpose }),
-    ]);
+  const [
+    vaultRes,
+    friendsRes,
+    groupsRes,
+    circlesRes,
+    membersRes,
+    expensesRes,
+    splitsRes,
+    settlesRes,
+  ] = await Promise.all([
+    ctx.vault.read({ entity: 'core.vault', purpose }),
+    ctx.vault.read({ entity: 'tally.friend', purpose }),
+    ctx.vault.read({ entity: 'tally.group', purpose }),
+    ctx.vault.read({ entity: 'social.circle', purpose }),
+    ctx.vault.read({ entity: 'social.circle_member', purpose }),
+    ctx.vault.read({
+      entity: 'tally.expense',
+      orderBy: { column: 'spent_on', dir: 'desc' },
+      limit: 2000,
+      purpose,
+    }),
+    ctx.vault.read({ entity: 'tally.expense_split', limit: 8000, purpose }),
+    ctx.vault.read({ entity: 'tally.settlement', limit: 2000, purpose }),
+  ]);
 
   const vaultRow = (vaultRes.rows ?? [])[0] ?? {};
   const me = vaultRow.owner_party_id ?? null;

@@ -19,7 +19,9 @@ async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status === 410) return { gone: true };
   if (res.status !== 200) {
-    throw new Error(`people ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`);
+    throw new Error(
+      `people ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+    );
   }
   return JSON.parse(res.text);
 }
@@ -38,7 +40,11 @@ function toPartyRow(person) {
   }
   for (const phone of person.phoneNumbers || []) {
     if (phone.value) {
-      identifiers.push({ scheme: 'tel', value: String(phone.value).trim(), label: phone.type || null });
+      identifiers.push({
+        scheme: 'tel',
+        value: String(phone.value).trim(),
+        label: phone.type || null,
+      });
     }
   }
   const bday = ((person.birthdays || [])[0] || {}).date;
@@ -52,9 +58,10 @@ function toPartyRow(person) {
       sortName: name.familyName
         ? `${name.familyName}${name.givenName ? `, ${name.givenName}` : ''}`
         : null,
-      bday: bday && bday.month && bday.day
-        ? `${bday.year || '--'}-${String(bday.month).padStart(2, '0')}-${String(bday.day).padStart(2, '0')}`
-        : null,
+      bday:
+        bday && bday.month && bday.day
+          ? `${bday.year || '--'}-${String(bday.month).padStart(2, '0')}-${String(bday.day).padStart(2, '0')}`
+          : null,
       identifiers,
     },
   };

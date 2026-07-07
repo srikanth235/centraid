@@ -69,7 +69,7 @@ export interface RuntimeOptions {
   userStore?: PrefsStore;
   /**
    * Optional conversation-history store backing the chat surface.
-   * Conversations live in the ACTIVE vault's `transcripts.db` (#280;
+   * Conversations live in the ACTIVE vault's `journal.db` (#280;
    * `conversations.user_id` is application-enforced — no cross-file FK).
    * When provided, `startRuntimeHttpServer` mounts
    * `/_centraid-conversations/*` against it.

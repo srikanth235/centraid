@@ -1,3 +1,9 @@
+// governance: allow-repo-hygiene file-size-limit the broker core is one
+// connection lifecycle — resolve → single-flight refresh → placeholder
+// injection → the PKCE consent ceremony — held together by the three
+// rot-point defenses below; the rate gate + auth-dead helper already live in
+// connection-limiter.ts, and splitting the lifecycle itself would scatter
+// the token-correctness invariants across files.
 /**
  * The connection broker (issue #304) — the gateway-side owner of
  * broker-carried credentials. Where issue #290 decision 4 made the gateway
@@ -30,6 +36,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
 import type { ConnectionAuth, ResolveConnection } from '@centraid/automation';
 import type { VaultPlane } from './vault-plane.js';
+import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
 
 /** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = 'dpv:ServiceProvision';
@@ -66,49 +73,6 @@ interface PendingCeremony {
 
 /** A ceremony the owner walked away from is dead after ten minutes. */
 const CEREMONY_TTL_MS = 10 * 60 * 1000;
-
-/** The credential is dead upstream — needs a new consent ceremony. */
-class AuthDeadError extends Error {}
-
-/**
- * Tiny per-connection rate gate: at most `maxConcurrent` injected requests
- * in flight and `minIntervalMs` between request STARTS, shared across every
- * fire on the connection — several automations on one Google connection
- * queue here instead of stampeding one quota (issue #304 decision 5).
- */
-class ConnectionLimiter {
-  private inFlight = 0;
-  private lastStart = 0;
-  private readonly queue: Array<() => void> = [];
-  constructor(
-    private readonly maxConcurrent = 2,
-    private readonly minIntervalMs = 250,
-  ) {}
-
-  async run<T>(fn: () => Promise<T>): Promise<T> {
-    await this.acquire();
-    try {
-      return await fn();
-    } finally {
-      this.inFlight -= 1;
-      this.queue.shift()?.();
-    }
-  }
-
-  private async acquire(): Promise<void> {
-    if (this.inFlight >= this.maxConcurrent) {
-      await new Promise<void>((resolve) => this.queue.push(resolve));
-    }
-    this.inFlight += 1;
-    const wait = this.lastStart + this.minIntervalMs - Date.now();
-    if (wait > 0) await delay(wait);
-    this.lastStart = Date.now();
-  }
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export class ConnectionBroker {
   /** Single-flight refresh per `<vaultId>:<connectionId>` (rot point 2). */
@@ -361,11 +325,11 @@ export class ConnectionBroker {
   ): Promise<string> {
     if (!row.refresh_token) {
       await this.flipNeedsAuth(plane, connectionId, 'no refresh token on record — run Connect');
-      throw new AuthDeadError('no refresh token on record');
+      throw authDeadError('no refresh token on record');
     }
     if (!row.token_url || !row.client_id) {
       await this.flipNeedsAuth(plane, connectionId, 'credential is missing token_url/client_id');
-      throw new AuthDeadError('credential is missing token_url/client_id');
+      throw authDeadError('credential is missing token_url/client_id');
     }
     const form = new URLSearchParams({
       grant_type: 'refresh_token',
@@ -388,7 +352,7 @@ export class ConnectionBroker {
         connectionId,
         `token refresh refused (${response.detail}) — reconnect to re-authorize`,
       );
-      throw new AuthDeadError(`token refresh refused: ${response.detail}`);
+      throw authDeadError(`token refresh refused: ${response.detail}`);
     }
     if (!response.ok) {
       throw new Error(`token refresh failed transiently: ${response.detail}`);

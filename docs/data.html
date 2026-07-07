@@ -104,12 +104,13 @@
               <tr>
                 <td>journal.db</td>
                 <td>
-                  The append-only audit stream: receipts, provenance, command invocations, checks,
-                  evidence.
+                  The append-only audit stream — receipts, provenance, command invocations, checks,
+                  evidence — plus the conversation-and-run ledger (chat, automation and builder
+                  transcripts).
                 </td>
                 <td>
-                  It grows orders of magnitude faster than the model and never rolls back a domain
-                  write — keeping it out keeps the sovereign asset small.
+                  Both bands grow orders of magnitude faster than the model and never roll back a
+                  domain write — keeping them out keeps the sovereign asset small.
                 </td>
               </tr>
               <tr>
@@ -133,14 +134,6 @@
                 <td>
                   Deliberately outside backup scope — a copied vault can't reveal its own secrets.
                   Custody is yours: <code>centraid-gateway key export / restore / rotate</code>.
-                </td>
-              </tr>
-              <tr>
-                <td>transcripts.db</td>
-                <td>Conversation and automation-run transcripts — operational state, per vault.</td>
-                <td>
-                  A standing stance: the runtime store stays <i>outside</i> the graph until an agent
-                  query genuinely needs it.
                 </td>
               </tr>
             </tbody>

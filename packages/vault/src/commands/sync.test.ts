@@ -496,7 +496,11 @@ describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
     ).connection_id;
     gw.invoke(owner, {
       command: 'sync.set_connection_status',
-      input: { connection_id: connectionId, status: 'needs-auth', note: 'token refresh refused (invalid_grant)' },
+      input: {
+        connection_id: connectionId,
+        status: 'needs-auth',
+        note: 'token refresh refused (invalid_grant)',
+      },
       purpose: 'dpv:ServiceProvision',
     });
     let status = (
@@ -504,9 +508,11 @@ describe('sync.configure_credential + sync.store_tokens (issue #304)', () => {
     ).status;
     expect(status).toBe('needs-auth');
     expect(
-      (db.vault.prepare('SELECT auth_note FROM sync_connection_health').get() as {
-        auth_note: string;
-      }).auth_note,
+      (
+        db.vault.prepare('SELECT auth_note FROM sync_connection_health').get() as {
+          auth_note: string;
+        }
+      ).auth_note,
     ).toMatch(/invalid_grant/);
     gw.invoke(owner, {
       command: 'sync.set_connection_status',
@@ -546,9 +552,11 @@ describe('credential commands are confirm-gated (issue #308 A1/A2)', () => {
     const confirmed = gw.confirm(owner, (proposed as { invocationId: string }).invocationId, true);
     expect(confirmed.status).toBe('executed');
     expect(
-      (db.vault.prepare('SELECT allowed_hosts FROM sync_connection_credential').get() as {
-        allowed_hosts: string;
-      }).allowed_hosts,
+      (
+        db.vault.prepare('SELECT allowed_hosts FROM sync_connection_credential').get() as {
+          allowed_hosts: string;
+        }
+      ).allowed_hosts,
     ).toContain('attacker.example');
   });
 

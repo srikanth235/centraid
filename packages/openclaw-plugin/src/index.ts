@@ -125,9 +125,8 @@ export default definePluginEntry({
           {
             automationRef,
             appsDir: ws.appsDir,
-            transcriptsDbFile: ws.transcriptsDbFile,
+            journalDbFile: ws.journalDbFile,
             codeAppsDir: deps.codeAppsDir(),
-            analytics: deps.analytics,
             triggerKind: fireOpts.triggerKind,
             triggerOrigin: fireOpts.triggerOrigin,
           },
@@ -201,9 +200,8 @@ export default definePluginEntry({
             {
               automationRef,
               appsDir: ws.appsDir,
-              transcriptsDbFile: ws.transcriptsDbFile,
+              journalDbFile: ws.journalDbFile,
               codeAppsDir: codeAppsDir(),
-              analytics: gw.analyticsStore,
               triggerKind: 'scheduled',
               triggerOrigin: 'webhook',
               ...(body !== undefined ? { input: body } : {}),

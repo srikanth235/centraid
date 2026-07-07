@@ -30,7 +30,9 @@ async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status === 404) return { notFound: true };
   if (res.status !== 200) {
-    throw new Error(`gmail ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`);
+    throw new Error(
+      `gmail ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+    );
   }
   return JSON.parse(res.text);
 }
@@ -96,7 +98,8 @@ export default async ({ ctx, log }) => {
       do {
         const page = await api(
           ctx,
-          `/messages?q=newer_than:30d&maxResults=100` + (pageToken ? `&pageToken=${pageToken}` : ''),
+          `/messages?q=newer_than:30d&maxResults=100` +
+            (pageToken ? `&pageToken=${pageToken}` : ''),
         );
         for (const m of page.messages || []) ids.push(m.id);
         pageToken = page.nextPageToken || null;

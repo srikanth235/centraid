@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite over the enrichment spine — staging, attribution injection, owner auto-publish, and the content primitive share the one bootstrapped vault (#299)
 // The enrichment spine, vault side (issue #299 phases 1–5 plumbing):
 // derived data lands as ontology rows through the staging spine, attribution
 // is injected server-side and owner assertions are terminal, the owner's

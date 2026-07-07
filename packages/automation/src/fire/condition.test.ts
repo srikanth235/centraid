@@ -50,7 +50,7 @@ describe('evaluateConditionTrigger', () => {
       trigger: TRIGGER,
       triggerIndex: 0,
       purpose: 'dpv:Billing',
-      transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+      journalDbFile: path.join(appsDir, 'journal.db'),
       vault: bridge,
     });
 
@@ -139,7 +139,7 @@ describe('evaluateDataTrigger', () => {
       trigger: DATA_TRIGGER,
       triggerIndex: 0,
       purpose: 'dpv:Billing',
-      transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+      journalDbFile: path.join(appsDir, 'journal.db'),
       vault: bridge,
     });
 

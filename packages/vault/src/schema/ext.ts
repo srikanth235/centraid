@@ -172,7 +172,7 @@ export function validateExtSpecs(
         throw new ExtSpecError(`table ${spec.name}: searchable column "${c}" must be text`);
       }
     }
-    const searchable = new Set(spec.searchable ?? []);
+    const searchable = new Set(spec.searchable);
     const indexed = new Set((spec.indexes ?? []).flatMap((i) => i.columns));
     for (const c of spec.sealed ?? []) {
       const col = spec.columns.find((x) => x.name === c);

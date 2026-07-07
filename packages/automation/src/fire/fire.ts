@@ -22,8 +22,7 @@
 import { randomUUID } from 'node:crypto';
 import {
   ConversationStore,
-  makeTranscriptsDbProvider,
-  type AnalyticsStore,
+  makeJournalDbProvider,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunStreamEvent,
@@ -99,10 +98,10 @@ export interface RunFireOptions {
    */
   appsDir: string;
   /**
-   * The vault's `transcripts.db` file — the run ledger every fire writes
+   * The vault's `journal.db` file — the run ledger every fire writes
    * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
    */
-  transcriptsDbFile: string;
+  journalDbFile: string;
   /**
    * Directory holding the per-app *code* folders — automation manifests +
    * handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/` (issue
@@ -110,11 +109,6 @@ export interface RunFireOptions {
    * when omitted, for the legacy/flat layout where code and data share a tree.
    */
   codeAppsDir?: string;
-  /**
-   * Central analytics store. When set, the per-app run ledger write-throughs
-   * each finished run's summary to it (issue #98).
-   */
-  analytics?: AnalyticsStore;
   /**
    * Host-injected `ctx.vault` executor factory, keyed by the automation's
    * app id: each fire gets a bridge bound to *that* app's enrolled
@@ -204,12 +198,9 @@ export async function runFire(
     throw new Error(`automation ${opts.automationRef}: not found under ${codeAppsDir}`);
   }
 
-  // The automation's run ledger is its vault's `transcripts.db` (#280);
-  // `finishRun` write-throughs a summary to `analytics` (same file).
-  const runsStore = new ConversationStore(
-    makeTranscriptsDbProvider(opts.transcriptsDbFile),
-    opts.analytics,
-  );
+  // The automation's run ledger is its vault's `journal.db` (#280); the
+  // `run_summary` view derives from it, so a finished run needs no write-through.
+  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
   const runId = opts.runId ?? `${opts.automationRef}:${Date.now()}:${randomUUID().slice(0, 8)}`;
   const startedAt = Date.now();
   const failureDepth = opts.failureDepth ?? 0;
@@ -391,9 +382,8 @@ export async function runFire(
             {
               automationRef: next.ref,
               appsDir: opts.appsDir,
-              transcriptsDbFile: opts.transcriptsDbFile,
+              journalDbFile: opts.journalDbFile,
               ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
-              ...(opts.analytics ? { analytics: opts.analytics } : {}),
               ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
               ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
               onLog,

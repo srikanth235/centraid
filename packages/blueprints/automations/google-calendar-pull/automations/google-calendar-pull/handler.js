@@ -20,7 +20,9 @@ async function api(ctx, path) {
   const res = await ctx.fetch({ url: `${API}${path}`, headers: AUTH });
   if (res.status === 410) return { gone: true };
   if (res.status !== 200) {
-    throw new Error(`calendar ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`);
+    throw new Error(
+      `calendar ${path.split('?')[0]} answered ${res.status}: ${res.text.slice(0, 200)}`,
+    );
   }
   return JSON.parse(res.text);
 }

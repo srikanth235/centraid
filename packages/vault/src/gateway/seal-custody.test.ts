@@ -4,7 +4,7 @@
 // verb rotates the DEK across the live and draft bands atomically; and the
 // sealed-value predicate is structural, so user input cannot satisfy it.
 
-import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';

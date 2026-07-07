@@ -263,9 +263,13 @@ const SET_CONNECTION_TRUST: CommandDefinition = {
       trust: 'staged' | 'auto-publish';
       enrich_classes?: string[];
     };
-    const classes = input.enrich_classes ? JSON.stringify([...new Set(input.enrich_classes)]) : null;
+    const classes = input.enrich_classes
+      ? JSON.stringify([...new Set(input.enrich_classes)])
+      : null;
     ctx.db
-      .prepare('UPDATE sync_connection SET trust = ?, enrich_classes_json = ? WHERE connection_id = ?')
+      .prepare(
+        'UPDATE sync_connection SET trust = ?, enrich_classes_json = ? WHERE connection_id = ?',
+      )
       .run(input.trust, classes, input.connection_id);
     ctx.wrote('sync.connection', input.connection_id);
     ctx.cite({

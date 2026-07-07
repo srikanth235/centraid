@@ -74,4 +74,4 @@ if (failures) {
   console.error(`docs-site smoke: ${failures} failure(s)`);
   process.exit(1);
 }
-console.log(`docs-site smoke: ${pages.length} pages OK, all internal links resolve`);
+console.log(`docs-site smoke: ${pages.length} pages OK, all internal links resolve`); // governance: allow-repo-hygiene

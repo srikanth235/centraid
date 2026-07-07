@@ -9,14 +9,14 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { ConversationHistoryStore, deriveTitle, type RecordTurnInput } from './history.js';
 import { makeConversationRouteHandler } from '../http/conversation-routes.js';
 import { ConversationStore } from './store.js';
-import { makeTranscriptsDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
+import { makeJournalDbProvider, type DatabaseProvider } from '../stores/gateway-db.js';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 
 // Tests that don't care about cross-user isolation share this stub owner id.
 const TEST_USER_ID = 'test-user-uuid-0000';
 
 // Chat is app-scoped by the `app_id` column inside ONE per-vault
-// `transcripts.db` (#280). Tests build a workspace over a temp vault dir.
+// `journal.db` (#280). Tests build a workspace over a temp vault dir.
 const APP = 'todos';
 
 /** A fresh temp vault dir with per-app data folders (default `APP`). */
@@ -28,14 +28,14 @@ function freshVaultDir(...appIds: string[]): string {
   return dir;
 }
 
-// One cached transcripts provider per vault dir — mirrors the plane's
+// One cached journal provider per vault dir — mirrors the plane's
 // one-connection-per-file doctrine so two stores over the same dir share
 // the handle.
 const providersByDir = new Map<string, DatabaseProvider>();
-function transcriptsFor(dir: string): DatabaseProvider {
+function journalFor(dir: string): DatabaseProvider {
   let provider = providersByDir.get(dir);
   if (!provider) {
-    provider = makeTranscriptsDbProvider(join(dir, 'transcripts.db'));
+    provider = makeJournalDbProvider(join(dir, 'journal.db'));
     providersByDir.set(dir, provider);
   }
   return provider;
@@ -47,8 +47,8 @@ function workspaceFor(dir: string, ownerPartyId: string = TEST_USER_ID): Workspa
     vaultId: 'vault-test',
     ownerPartyId,
     appsDir: join(dir, 'apps'),
-    transcripts: transcriptsFor(dir),
-    transcriptsDbFile: join(dir, 'transcripts.db'),
+    journal: journalFor(dir),
+    journalDbFile: join(dir, 'journal.db'),
     runnerSessionDir: join(dir, 'runner-sessions'),
   });
 }
@@ -152,7 +152,7 @@ describe('ConversationHistoryStore', () => {
     // The kind moved UP onto the conversation (issue #190): a builder turn
     // sets its thread to `kind: 'build'`; a data chat stays `'chat'`. Read the
     // persisted conversations back through a fresh store on the same file.
-    const conv = new ConversationStore(transcriptsFor(appsDir));
+    const conv = new ConversationStore(journalFor(appsDir));
     expect(conv.getConversation(chat.id)?.kind).toBe('chat');
     expect(conv.getConversation(build.id)?.kind).toBe('build');
 
@@ -349,7 +349,7 @@ describe('ConversationHistoryStore per-app scoping', () => {
 });
 
 describe('ConversationHistoryStore per-user scoping', () => {
-  // Two stores on the same vault's transcripts.db, different owner identities.
+  // Two stores on the same vault's journal.db, different owner identities.
   function pair(): { alice: ConversationHistoryStore; bob: ConversationHistoryStore } {
     const appsDir = freshVaultDir();
     return {

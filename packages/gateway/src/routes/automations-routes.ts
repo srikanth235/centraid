@@ -33,7 +33,7 @@ import {
   ConversationStore,
   AnalyticsStore,
   InsightsStore,
-  makeTranscriptsDbProvider,
+  makeJournalDbProvider,
   type Item,
   type Turn,
   type AutomationTriggerKind,
@@ -49,8 +49,8 @@ import { readJson, sendError, sendJson } from './route-helpers.js';
 export interface AutomationsRouteOptions {
   /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
   store: WorktreeStore;
-  /** The vault's `transcripts.db` — every run's full ledger lives here (#280). */
-  transcriptsDbFile: string;
+  /** The vault's `journal.db` — every run's full ledger lives here (#280). */
+  journalDbFile: string;
   /** The vault's run-summary rollup (same file as the ledger, #280). */
   analytics: AnalyticsStore;
   /** Insights aggregator over the same rollup. */
@@ -248,11 +248,11 @@ export function makeAutomationsRouteHandler(
   const codeAppsDir = (): string => path.join(opts.store.getActiveMainLink(), 'apps');
 
   // Run-ledger store — every run's full ledger is the vault's single
-  // `transcripts.db` (#280), so run-id → file resolution is gone. A ledger
+  // `journal.db` (#280), so run-id → file resolution is gone. A ledger
   // file that doesn't exist yet just means no run ever landed here.
-  const runsStore = new ConversationStore(makeTranscriptsDbProvider(opts.transcriptsDbFile));
+  const runsStore = new ConversationStore(makeJournalDbProvider(opts.journalDbFile));
   const runsStoreForRunId = (_runId: string): ConversationStore | undefined => {
-    if (!existsSync(opts.transcriptsDbFile)) return undefined;
+    if (!existsSync(opts.journalDbFile)) return undefined;
     return runsStore;
   };
 
@@ -437,8 +437,8 @@ export function makeAutomationsRouteHandler(
         const runId = url.searchParams.get('runId') ?? '';
         const body = await readJson(req);
         const pinned = body.pinned === true;
+        // turns.pinned is the source — the run_summary view reflects it.
         runsStoreForRunId(runId)?.setTurnPinned(runId, pinned);
-        opts.analytics.setPinned(runId, pinned);
         return sendJson(res, 200, { ok: true });
       }
 

@@ -109,7 +109,7 @@ error surface, the clipboard, and connector bindings.
 - `packages/blueprints/apps/locker/app.js` — the edit form exposes the alias
   (write-safe: a blank field never clobbers an existing binding).
 
-## Out-of-scope
+## Out of scope
 
 - **The app-engine LLM transcript (item 6)** is accept-and-document, not
   redacted. The model's live tool-result and the durable transcript entry are

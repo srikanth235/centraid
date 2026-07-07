@@ -184,8 +184,6 @@ export interface FireAutomationDeps {
   workspace: () => VaultWorkspace;
   /** Resolves the current fire's vault's live `main` worktree apps dir. */
   codeAppsDir: () => string;
-  /** Run-summary rollup (follows the current vault's transcripts.db). */
-  analytics: AnalyticsStore;
   /** Logger for fire failures. */
   logger: RuntimeLogger;
 }
@@ -218,7 +216,7 @@ export interface BuiltGateway {
   runtime: Runtime;
   /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
   prefs: PrefsStore;
-  /** Run-summary rollup over the current request's transcripts.db. */
+  /** Run-summary rollup over the current request's journal.db. */
   analyticsStore: AnalyticsStore;
   conversationHistoryStore: ConversationHistoryStore;
   /**
@@ -298,10 +296,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // analytics/insights providers resolve the request's vault per call, so
   // every client sees its own vault's ledger (#289).
   const prefs = new PrefsStore(paths.prefsFile);
-  const transcriptsProvider = () => currentWorkspace().transcripts();
-  const analyticsStore = new AnalyticsStore(transcriptsProvider);
-  const insightsStore = new InsightsStore(transcriptsProvider);
-  const conversationHistoryStore = new ConversationHistoryStore(currentWorkspace, analyticsStore);
+  const journalProvider = () => currentWorkspace().journal();
+  const analyticsStore = new AnalyticsStore(journalProvider);
+  const insightsStore = new InsightsStore(journalProvider);
+  const conversationHistoryStore = new ConversationHistoryStore(currentWorkspace);
 
   // Per-turn prefs loader. Re-reads `prefs.json` every chat turn so a
   // settings change lands without a restart.
@@ -486,7 +484,6 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ? options.fireAutomationFactory({
         workspace: currentWorkspace,
         codeAppsDir: () => currentSettledHost().codeAppsDir(),
-        analytics: analyticsStore,
         logger,
       })
     : (automationRef, opts): void => {
@@ -501,9 +498,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
             automationRef,
             runId,
             appsDir: ws.appsDir,
-            transcriptsDbFile: ws.transcriptsDbFile,
+            journalDbFile: ws.journalDbFile,
             codeAppsDir: host.codeAppsDir(),
-            analytics: analyticsStore,
             // Each fire's ctx.vault rides the automation's enrolled
             // agent.agent credential, resolved per app id (duaility §12).
             vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
@@ -673,10 +669,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       }),
       // Automation runtime ops over HTTP (issue #141): list/read/run-now,
       // the run feed + per-run detail, and insights — all over THIS
-      // vault's transcripts ledger.
+      // vault's conversation ledger (the journal.db ledger band).
       makeAutomationsRouteHandler({
         store,
-        transcriptsDbFile: workspace.transcriptsDbFile,
+        journalDbFile: workspace.journalDbFile,
         analytics: analyticsStore,
         insights: insightsStore,
         runAutomation: ({ automationRef, runId }) =>
@@ -815,14 +811,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     if (!trigger) return;
     const purpose = row.manifest.vault.purpose;
     const vault = vaultRegistry.agentBridgeFor(parsed.appId);
-    const transcriptsDbFile = currentWorkspace().transcriptsDbFile;
+    const journalDbFile = currentWorkspace().journalDbFile;
     if (trigger.kind === 'condition') {
       const evaluation = await automation.evaluateConditionTrigger({
         automationRef: ref,
         trigger,
         triggerIndex,
         purpose,
-        transcriptsDbFile,
+        journalDbFile,
         vault,
       });
       if (evaluation.reason) {
@@ -847,7 +843,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         trigger,
         triggerIndex,
         purpose,
-        transcriptsDbFile,
+        journalDbFile,
         vault,
       });
       if (evaluation.reason) {

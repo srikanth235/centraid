@@ -3,11 +3,7 @@ import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import {
-  TRANSCRIPTS_MIGRATIONS,
-  openTranscriptsDb,
-  makeTranscriptsDbProvider,
-} from './gateway-db.js';
+import { openJournalDb, makeJournalDbProvider } from './gateway-db.js';
 
 function freshDbPath(): string {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-db-'));
@@ -39,32 +35,55 @@ function tableNames(path: string): string[] {
   }
 }
 
-describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)', () => {
-  it('advances PRAGMA user_version to TRANSCRIPTS_MIGRATIONS.length on a fresh DB', () => {
+describe('openJournalDb (the conversation-ledger band of the vault journal)', () => {
+  it('NEVER touches PRAGMA user_version — that belongs to the vault audit ladder', () => {
+    // Fresh file: the ensure creates the ledger band and leaves the version 0.
     const path = freshDbPath();
-    openTranscriptsDb(path).close();
-    expect(userVersion(path)).toBe(TRANSCRIPTS_MIGRATIONS.length);
-    expect(TRANSCRIPTS_MIGRATIONS.length).toBe(1);
+    openJournalDb(path).close();
+    expect(userVersion(path)).toBe(0);
   });
 
-  it('creates the ledger tables PLUS run_summary in ONE file (no legacy tables)', () => {
+  it('is safe on a file the vault package already migrated (audit band intact)', () => {
+    // Simulate a journal the vault's own ladder has stamped: a foreign table
+    // plus a nonzero user_version. The ledger ensure must add its band
+    // without disturbing either.
     const path = freshDbPath();
-    openTranscriptsDb(path).close();
+    const seed = new DatabaseSync(path);
+    seed.exec(`CREATE TABLE consent_receipt (receipt_id TEXT PRIMARY KEY);`);
+    seed.exec('PRAGMA user_version = 1');
+    seed.close();
+    openJournalDb(path).close();
+    expect(userVersion(path)).toBe(1);
+    expect(tableNames(path)).toContain('consent_receipt');
+    expect(tableNames(path)).toContain('conversations');
+  });
+
+  it('creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)', () => {
+    const path = freshDbPath();
+    openJournalDb(path).close();
     expect(tableNames(path)).toEqual([
       'attachments',
       'automation_state',
       'conversations',
       'items',
-      'run_summary',
       'turns',
     ]);
+    const db = new DatabaseSync(path);
+    try {
+      const views = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
+        .all() as Array<{ name: string }>;
+      expect(views.map((v) => v.name)).toEqual(['run_summary']);
+    } finally {
+      db.close();
+    }
   });
 
   it('conversations has NO foreign key (user_id carries the vault owner party id)', () => {
     // The owner's party row lives in the vault's separate vault.db file;
     // SQLite has no cross-file FKs, so the scoping is application-enforced.
     const path = freshDbPath();
-    openTranscriptsDb(path).close();
+    openJournalDb(path).close();
     const db = new DatabaseSync(path);
     try {
       expect(db.prepare(`PRAGMA foreign_key_list('conversations')`).all().length).toBe(0);
@@ -75,7 +94,7 @@ describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)',
 
   it('turns→conversations and items→turns and attachments→items are CASCADE FKs', () => {
     const path = freshDbPath();
-    openTranscriptsDb(path).close();
+    openJournalDb(path).close();
     const db = new DatabaseSync(path);
     try {
       const fk = (table: string, parent: string) =>
@@ -100,7 +119,7 @@ describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)',
 
   it('deleting a conversation cascades to its turns, items, and attachments', () => {
     const path = freshDbPath();
-    const db = openTranscriptsDb(path);
+    const db = openJournalDb(path);
     try {
       const now = Date.now();
       db.prepare(
@@ -132,7 +151,7 @@ describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)',
 
   it('CHECK constraints reject unknown conversation kind / turn trigger / item kind', () => {
     const path = freshDbPath();
-    const db = openTranscriptsDb(path);
+    const db = openJournalDb(path);
     try {
       const now = Date.now();
       expect(() =>
@@ -167,27 +186,30 @@ describe('openTranscriptsDb (per-vault conversation ledger + run rollup, #280)',
     }
   });
 
-  it('re-opening an already-migrated DB is a no-op', () => {
+  it('re-opening an already-ensured DB is a no-op (rows survive)', () => {
     const path = freshDbPath();
-    openTranscriptsDb(path).close();
-    const before = userVersion(path);
-    openTranscriptsDb(path).close();
-    expect(userVersion(path)).toBe(before);
-  });
-
-  it('throws when the DB is at a newer version than this build supports', () => {
-    const path = freshDbPath();
-    openTranscriptsDb(path).close();
-    const db = new DatabaseSync(path);
-    db.exec(`PRAGMA user_version = ${TRANSCRIPTS_MIGRATIONS.length + 1}`);
-    db.close();
-    expect(() => openTranscriptsDb(path)).toThrow(/newer|update centraid/i);
+    const first = openJournalDb(path);
+    const now = Date.now();
+    first
+      .prepare(
+        `INSERT INTO conversations (id, kind, user_id, created_at, updated_at)
+         VALUES ('c1', 'chat', 'u1', ?, ?)`,
+      )
+      .run(now, now);
+    first.close();
+    const again = openJournalDb(path);
+    try {
+      const n = again.prepare('SELECT COUNT(*) AS n FROM conversations').get() as { n: number };
+      expect(Number(n.n)).toBe(1);
+    } finally {
+      again.close();
+    }
   });
 });
 
 describe('lazy provider', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
-    const provider = makeTranscriptsDbProvider(freshDbPath());
+    const provider = makeJournalDbProvider(freshDbPath());
     const a = provider();
     const b = provider();
     expect(a).toBe(b);
@@ -196,7 +218,7 @@ describe('lazy provider', () => {
 
   it('does not touch the filesystem until the first call', () => {
     const path = freshDbPath();
-    makeTranscriptsDbProvider(path);
+    makeJournalDbProvider(path);
     expect(existsSync(path)).toBe(false);
   });
 });

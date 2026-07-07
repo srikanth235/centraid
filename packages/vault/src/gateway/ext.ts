@@ -272,7 +272,7 @@ function alterExtTable(
   // (issue #298 item 9) — otherwise the declaration would protect future
   // writes while leaving today's plaintext readable. Fresh writes are sealed
   // by the command seal sweep; this closes the at-declaration gap.
-  const oldSealed = new Set(oldSpec.sealed ?? []);
+  const oldSealed = new Set(oldSpec.sealed);
   const nowSealed = (spec.sealed ?? []).filter((c) => !oldSealed.has(c) && newCols.has(c));
   if (nowSealed.length > 0) sealExistingExtColumns(db, physical, extPk(spec), nowSealed);
 }

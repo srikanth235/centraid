@@ -34,11 +34,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import * as automation from '@centraid/automation';
-import {
-  type AnalyticsStore,
-  type AutomationTriggerKind,
-  type AutomationTriggerOrigin,
-} from '@centraid/app-engine';
+import { type AutomationTriggerKind, type AutomationTriggerOrigin } from '@centraid/app-engine';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { runEmbeddedTurn, payloadText, type EmbeddedConfig } from './openclaw-agent-turn.js';
 
@@ -56,15 +52,13 @@ export interface OpenclawFireOptions {
    * swaps — this is NOT where code lives (issue #137).
    */
   appsDir: string;
-  /** The vault's `transcripts.db` — the run ledger every fire writes (#280). */
-  transcriptsDbFile: string;
+  /** The vault's `journal.db` — the run ledger every fire writes (#280). */
+  journalDbFile: string;
   /**
    * Directory holding the live app CODE on git-store `main`. Resolved per fire
    * from the store's active-main link so a publish/rollback is picked up.
    */
   codeAppsDir: string;
-  /** Central analytics store for run-summary write-through (issue #98). */
-  analytics?: AnalyticsStore;
   triggerKind: AutomationTriggerKind;
   /** Source that fired the run (`cron` / `webhook` / `manual`). */
   triggerOrigin?: AutomationTriggerOrigin;
@@ -196,9 +190,8 @@ export async function runOpenclawFire(
     {
       automationRef: opts.automationRef,
       appsDir: opts.appsDir,
-      transcriptsDbFile: opts.transcriptsDbFile,
+      journalDbFile: opts.journalDbFile,
       codeAppsDir: opts.codeAppsDir,
-      ...(opts.analytics ? { analytics: opts.analytics } : {}),
       onLog: (level, msg) => log[level](msg),
       triggerKind: opts.triggerKind,
       ...(opts.triggerOrigin ? { triggerOrigin: opts.triggerOrigin } : {}),
