@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the staging spine is one pipeline — source→candidates→band→review→publish share the disposition + provenance invariants (#290)
 // The staging spine (issue #290 phase 2) — every path into the vault flows
 // through it: source → candidates → staging band → review → publish/discard.
 // Staging is what turns import from a scary irreversible act into the same

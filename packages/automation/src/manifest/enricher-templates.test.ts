@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite over the whole enricher-template contract — each template’s manifest validity, determinism lint, and stub-ctx spine behavior share the one fixture (#299)
 /*
  * The enricher automation templates (issue #299 phases 1–2): their
  * manifests must parse under the runtime's real validator (vault block +

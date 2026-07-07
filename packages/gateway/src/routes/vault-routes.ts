@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the owner vault-consent surface is one route table — every handler shares the ambient-vault resolution + owner-device credential (#289)
 /*
  * Owner-facing vault routes (duaility §12) — the consent surface over the
  * mounted vault registry. Everything here is an OWNER act: the routes run

@@ -42,5 +42,5 @@ async function copyDir(from, to) {
 await copyDir(srcDir, outDir);
 
 const pages = (await readdir(outDir)).filter((f) => f.endsWith('.html'));
-console.log(`docs-site: copied ${pages.length} pages → ${outDir}`);
-console.log(`  ${pages.sort().join('  ')}`);
+console.log(`docs-site: copied ${pages.length} pages → ${outDir}`); // governance: allow-repo-hygiene
+console.log(`  ${pages.sort().join('  ')}`); // governance: allow-repo-hygiene

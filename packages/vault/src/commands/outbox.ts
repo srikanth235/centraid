@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the outbox lifecycle is one closed set — stage/decide/record_result validate each other’s risk + state invariants (#306)
 // The outbox commands (issue #306): external writes as artifacts. `stage`
 // is risk low — the item is INERT, nothing leaves the vault; `decide` is the
 // owner's act on the thing itself (send / edit-then-send / discard /
