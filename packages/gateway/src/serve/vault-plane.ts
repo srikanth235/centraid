@@ -1199,11 +1199,21 @@ export class VaultPlane {
             });
           case 'describe':
             return this.gateway.discover(this.ownerCredential);
-          default:
+          case 'query':
+          case 'parked':
+          case 'changes':
+          case 'resolve':
+          case 'reveal':
+          case 'content':
+            // The seed surface is read/search/invoke/describe only; every
+            // other op is off-limits to a scenario generator. Listed
+            // explicitly so the switch stays exhaustive over VaultOp.
             throw new GatewayError(
               'consent',
               `seed generators read and invoke — vault op ${call.op} is not part of the scenario surface`,
             );
+          default:
+            throw new Error(`unsupported vault op ${call.op}`);
         }
       });
   }
@@ -1276,6 +1286,10 @@ export class VaultPlane {
               'consent',
               'the provenance feed is agent-plane — automations ride vault changes, apps do not',
             );
+          case 'content':
+            // Unreachable: the async custody path (asVaultCallResultAsync)
+            // above returns first. Listed so the switch stays exhaustive.
+            throw new Error('content op is handled on the async path above');
           default:
             throw new Error(`unsupported vault op ${call.op}`);
         }
@@ -1346,6 +1360,10 @@ export class VaultPlane {
               'consent',
               'registered views belong to apps — automations read entities directly',
             );
+          case 'content':
+            // Unreachable: the async custody path (asVaultCallResultAsync)
+            // above returns first. Listed so the switch stays exhaustive.
+            throw new Error('content op is handled on the async path above');
           default:
             throw new Error(`unsupported vault op ${call.op}`);
         }
