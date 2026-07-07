@@ -33,7 +33,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOCS_SITE_CANONICAL_ORIGIN: https://docs.centraid.dev
+      DOCS_SITE_CANONICAL_ORIGIN: https://centraid.dev/docs
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: docs-production
     env:
-      DOCS_SITE_CANONICAL_ORIGIN: https://docs.centraid.dev
+      DOCS_SITE_CANONICAL_ORIGIN: https://centraid.dev/docs
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2

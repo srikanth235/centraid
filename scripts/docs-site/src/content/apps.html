@@ -1,59 +1,4 @@
-<!doctype html>
-<html lang="en" data-theme="paper">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Apps — Centraid docs</title>
-    <meta
-      name="description"
-      content="The Apps pillar: eight blueprint apps, what an app actually is (a projection over the vault), the conversational builder, attachments and cross-references, and how agents drive the same handlers your buttons do."
-    />
-    <link rel="icon" href="assets/centraid-mark.svg" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <link rel="stylesheet" href="assets/docs.css" />
-  </head>
-  <body class="has-rail">
-    <header class="site-head">
-      <div class="head-row">
-        <a class="brand" href="./">
-          <span class="mark" aria-hidden="true"><img src="assets/centraid-mark.svg" alt="" /></span>
-          Centraid <span class="docs-tag">docs</span>
-        </a>
-        <nav>
-          <a href="start.html">start</a>
-          <a href="data.html">data</a>
-          <a href="apps.html" aria-current="page">apps</a>
-          <a href="devices.html">devices</a>
-          <a href="ontology.html" class="hide-sm">ontology</a>
-          <a
-            href="https://github.com/srikanth235/centraid"
-            target="_blank"
-            rel="noopener"
-            class="hide-sm"
-            >github</a
-          >
-          <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
-        </nav>
-      </div>
-    </header>
-
-    <nav class="rail" aria-label="Section index">
-      <a href="#model" class="on"><span class="n">§01</span>What an app is</a>
-      <a href="#blueprints"><span class="n">§02</span>The blueprints</a>
-      <a href="#anatomy"><span class="n">§03</span>Anatomy</a>
-      <a href="#builder"><span class="n">§04</span>The builder</a>
-      <a href="#linking"><span class="n">§05</span>Attach &amp; link</a>
-      <a href="#agents"><span class="n">§06</span>Agents drive apps</a>
-      <a href="#mobile"><span class="n">§07</span>On the phone</a>
-    </nav>
-
-    <main>
-      <section class="ch-hero wrap">
+<section class="ch-hero wrap">
         <div class="ghost" aria-hidden="true">A</div>
         <p class="eyebrow r">Chapter 2 · apps</p>
         <h1 class="r" style="--d: 0.1s">Apps are <em>projections,</em> not places.</h1>
@@ -87,7 +32,7 @@
           <p class="aside">
             Why the ontology can absorb almost everything without ext tables — and the rule that
             keeps flags, memos and links canonical:
-            <a href="ontology.html#rules">Ontology § implementation rules →</a>
+            <a href="../ontology/#rules">Ontology § implementation rules →</a>
           </p>
         </div>
       </section>
@@ -327,7 +272,7 @@
           <p class="aside">
             Attach = <code>core.attachment</code> (bytes, role) · link = <code>core.link</code>
             (typed relation) · anchor = standoff selector. One judgment, one mechanism —
-            <a href="ontology.html#rules">rule 9 →</a>
+            <a href="../ontology/#rules">rule 9 →</a>
           </p>
         </div>
       </section>
@@ -351,7 +296,7 @@
             Inside each app, the kit's <b>Ask panel</b> runs a scoped conversation with that app's
             surface; parked writes come back as proposal cards you approve or discard in place. The
             vault-wide version of the same loop is the assistant —
-            <a class="u" href="data.html#assistant">Data § the assistant</a>.
+            <a class="u" href="../data/#assistant">Data § the assistant</a>.
           </p>
         </div>
       </section>
@@ -370,38 +315,12 @@
           </p>
           <p class="aside">
             How the tunnel, pairing and the companion actually work:
-            <a href="devices.html">Devices →</a>
+            <a href="../devices/">Devices →</a>
           </p>
         </div>
 
         <div class="chapter-next r">
-          <a href="data.html">← previous: data</a>
-          <a href="devices.html">next chapter: devices →</a>
+          <a href="../data/">← previous: data</a>
+          <a href="../devices/">next chapter: devices →</a>
         </div>
       </section>
-    </main>
-
-    <footer class="site-foot">
-      <div class="wrap">
-        <p class="foot-manifesto r">
-          When apps are cheap to generate, projections become disposable —
-          <em>and the model becomes everything.</em>
-        </p>
-        <div class="foot-row">
-          <span>© 2026 Centraid</span>
-          <span class="foot-links">
-            <a href="https://centraid.dev">centraid.dev</a>
-            <a href="start.html">start</a>
-            <a href="data.html">data</a>
-            <a href="devices.html">devices</a>
-            <a href="https://github.com/srikanth235/centraid" target="_blank" rel="noopener"
-              >github</a
-            >
-          </span>
-        </div>
-      </div>
-    </footer>
-
-    <script src="assets/docs.js"></script>
-  </body>
-</html>

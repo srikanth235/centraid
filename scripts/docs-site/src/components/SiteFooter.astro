@@ -1,0 +1,44 @@
+---
+const { footer = {} } = Astro.props;
+const manifesto =
+  footer.manifesto ||
+  'Most software is built for everyone, so none of it fits anyone. <em>Yours can just fit you.</em>';
+const links = footer.links?.length
+  ? footer.links
+  : [
+      { href: 'https://centraid.dev', label: 'centraid.dev' },
+      { href: 'start/', label: 'start' },
+      { href: 'ontology/', label: 'ontology' },
+      { href: 'https://github.com/srikanth235/centraid', label: 'github', external: true },
+    ];
+
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const hrefFor = (href) => {
+  if (href.startsWith('http') || href.startsWith('#') || href.startsWith('../')) return href;
+  return `${base}${href}`;
+};
+---
+
+<footer class="site-foot">
+  <div class="wrap">
+    <p class="foot-manifesto r" set:html={manifesto} />
+    <div class="foot-row">
+      <span>© 2026 Centraid</span>
+      <span class="foot-links">
+        {
+          links.map((link) => (
+            <a
+              href={hrefFor(link.href)}
+              target={link.external ? '_blank' : undefined}
+              rel={link.external ? 'noopener' : undefined}
+            >
+              {link.label}
+            </a>
+          ))
+        }
+      </span>
+    </div>
+  </div>
+</footer>

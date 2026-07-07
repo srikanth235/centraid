@@ -1,4 +1,4 @@
-# Cloudflare headers for docs.centraid.dev
+# Headers for the generated docs site.
 # Assets are NOT fingerprinted (hand-authored static site) — cache them for
 # an hour, not forever, so shipped changes actually land.
 

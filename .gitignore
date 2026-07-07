@@ -2,6 +2,7 @@ node_modules
 dist
 out
 .turbo
+.astro
 .expo
 .DS_Store
 *.log

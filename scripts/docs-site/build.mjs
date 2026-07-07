@@ -1,46 +1,30 @@
 #!/usr/bin/env node
 /**
- * Centraid docs build — static copy.
+ * Centraid docs build.
  *
- * The docs are hand-authored HTML/CSS in /docs (index, start, data, apps,
- * devices, ontology + assets/). There is no renderer, no MDX, no search
- * index: this script copies the site verbatim into dist/docs-site/ for the
- * Cloudflare Worker assets binding (wrangler.docs.toml) to serve.
- *
- * Excluded from the copy: markdown files and the plans/ directory — those
- * are repo-internal notes that live beside the site source, not on it.
+ * Astro owns the authored docs pages and emits static HTML into
+ * dist/docs-site.
  */
-import { cp, mkdir, rm, readdir, stat } from 'node:fs/promises';
-import { join, dirname, extname } from 'node:path';
+import { spawn } from 'node:child_process';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const srcDir = join(repoRoot, 'docs');
-const outDir = join(repoRoot, 'dist', 'docs-site');
 
-const EXCLUDED_DIRS = new Set(['plans']);
-const EXCLUDED_EXTS = new Set(['.md', '.mdx']);
-
-await rm(outDir, { recursive: true, force: true });
-await mkdir(outDir, { recursive: true });
-
-async function copyDir(from, to) {
-  await mkdir(to, { recursive: true });
-  for (const entry of await readdir(from)) {
-    const src = join(from, entry);
-    const info = await stat(src);
-    if (info.isDirectory()) {
-      if (EXCLUDED_DIRS.has(entry)) continue;
-      await copyDir(src, join(to, entry));
-    } else {
-      if (EXCLUDED_EXTS.has(extname(entry))) continue;
-      await cp(src, join(to, entry));
-    }
-  }
+function run(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: repoRoot,
+      env: process.env,
+      shell: process.platform === 'win32',
+      stdio: 'inherit',
+    });
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} ${args.join(' ')} exited with ${code}`));
+    });
+  });
 }
 
-await copyDir(srcDir, outDir);
-
-const pages = (await readdir(outDir)).filter((f) => f.endsWith('.html'));
-console.log(`docs-site: copied ${pages.length} pages → ${outDir}`); // governance: allow-repo-hygiene
-console.log(`  ${pages.sort().join('  ')}`); // governance: allow-repo-hygiene
+await run('bun', ['x', 'astro', 'build', '--config', 'astro.config.mjs']);

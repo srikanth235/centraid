@@ -1,0 +1,16 @@
+---
+const { items = [] } = Astro.props;
+---
+
+{
+  items.length > 0 && (
+    <nav class="rail" aria-label="Section index">
+      {items.map((item) => (
+        <a href={item.href} class={item.current ? 'on' : undefined}>
+          <span class="n">{item.no}</span>
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  )
+}

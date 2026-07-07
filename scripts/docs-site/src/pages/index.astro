@@ -1,0 +1,38 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/index.html?raw';
+
+const rail = [];
+const footer = {
+  "manifesto": "Most software is built for everyone, so none of it fits anyone. <em>Yours can just fit you.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "ontology/",
+      "label": "ontology",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Centraid docs — your data, your apps, your devices"
+  description="Documentation for Centraid: a sovereign vault built on one personal ontology, apps that project it, and devices that carry it — all running on your own machine."
+  current="home"
+  canonicalPath=""
+  bodyClass=""
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>
