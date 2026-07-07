@@ -26,6 +26,24 @@ const asset = (path) => `${base}${path}`;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {/* Resolve the theme before first paint. The <html> default is `paper`, and
+        docs.js (bottom of body) also syncs it — but on a heavy page like the
+        ontology, docs.js runs late enough that the wrong-theme paint is visible
+        as a light→dark flash. Setting it here, blocking in <head>, means no page
+        ever paints the wrong theme. Keep the storage key in sync with docs.js. */}
+    <script is:inline>
+      (() => {
+        let theme;
+        try {
+          theme = localStorage.getItem('centraid-theme');
+        } catch {
+          /* storage blocked (private mode) — fall through to the media query */
+        }
+        if (!theme)
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'paper';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <title>{title}</title>
     <meta name="description" content={description} />
     {noIndex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
