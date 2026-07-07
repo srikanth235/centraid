@@ -240,8 +240,6 @@ export interface PreparedStatements {
   pruneAutomationByCount: StatementSync;
   pruneAutomationByDays: StatementSync;
   pruneAutomationErrorsOnly: StatementSync;
-  dominantModel: StatementSync;
-  convForTurn: StatementSync;
   insertItem: StatementSync;
   insertMessageIn: StatementSync;
   openItem: StatementSync;
@@ -402,18 +400,6 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       DELETE FROM conversations
       WHERE automation_id = ?
         AND id IN (SELECT conversation_id FROM turns WHERE ok = 1 AND pinned = 0)
-    `),
-    dominantModel: db.prepare(`
-      SELECT model FROM items
-      WHERE turn_id = ? AND model IS NOT NULL AND kind IN ('step','agent')
-      GROUP BY model
-      ORDER BY SUM(COALESCE(input_tokens,0)+COALESCE(output_tokens,0)) DESC
-      LIMIT 1
-    `),
-    convForTurn: db.prepare(`
-      SELECT c.kind, c.app_id, c.automation_id
-      FROM conversations c JOIN turns t ON t.conversation_id = c.id
-      WHERE t.id = ?
     `),
     insertItem: db.prepare(`
       INSERT INTO items (

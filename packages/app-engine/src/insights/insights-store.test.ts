@@ -5,31 +5,26 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from '../conversation/store.js';
-import { AnalyticsStore } from './analytics-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 
 /**
- * `runs` writes to a conversation ledger and — because it is constructed WITH
- * an `AnalyticsStore` — write-throughs each finished turn's summary (sourcing
- * `kind`/`app_id` from the owning conversation, issue #190) to the central
- * analytics DB. `insights` reads only that central DB.
+ * `runs` writes the conversation ledger; `insights` reads the `run_summary`
+ * VIEW that derives from it (same file — `kind`/`app_id` come from the
+ * owning conversation, the dominant model from the step items).
  */
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
-  // One per-vault file (#280): the ledger and the run_summary rollup share it.
   const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
-  const analyticsProvider = ledger;
-  const analytics = new AnalyticsStore(analyticsProvider);
   return {
-    runs: new ConversationStore(ledger, analytics),
-    insights: new InsightsStore(analyticsProvider),
+    runs: new ConversationStore(ledger),
+    insights: new InsightsStore(ledger),
   };
 }
 
 /** Insert a finished turn with one step item (model + tokens), under a
  *  conversation of the given kind. For an automation, each fire is its own
  *  execution conversation tagged with the `<appId>/<id>` ref — the
- *  write-through derives the owning app id from it. Returns the turn id. */
+ *  view derives the owning app id from it. Returns the turn id. */
 function seedRun(
   runs: ConversationStore,
   opts: {
@@ -74,8 +69,8 @@ function seedRun(
     endedAt: startedAt + 100,
     durationMs: 100,
   });
-  // finishTurn rolls the step items up into turns.total_* AND write-throughs
-  // the summary to the central analytics DB.
+  // finishTurn rolls the step items up into turns.total_*; the finished
+  // turn then appears in the run_summary view.
   runs.finishTurn({ turnId: runId, endedAt: startedAt + 200, ok: true });
   return runId;
 }

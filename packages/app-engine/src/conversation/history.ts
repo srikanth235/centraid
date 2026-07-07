@@ -25,7 +25,6 @@ import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
 import type { RunKind } from './schema.js';
-import type { RunSummarySink } from './run-summary-sink.js';
 import { isValidAppId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
 import { parseStepOutput, parseToolArgs, parseToolOutput } from './transcript.js';
@@ -138,13 +137,9 @@ export class ConversationHistoryStore {
   /** Blob CAS for attachment bytes — rooted at the active workspace (#190/#280). */
   private readonly blobs: BlobStore;
 
-  /**
-   * `analytics`, when set, threads into the `ConversationStore` so a chat
-   * turn's `finishTurn` write-throughs a `run_summary` row (same file).
-   */
-  constructor(workspace: WorkspaceProvider, analytics?: RunSummarySink) {
+  constructor(workspace: WorkspaceProvider) {
     this.workspace = workspace;
-    this.store = new ConversationStore(() => workspace().journal(), analytics);
+    this.store = new ConversationStore(() => workspace().journal());
     this.blobs = new BlobStore(() => workspace().appsDir);
   }
 

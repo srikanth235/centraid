@@ -227,12 +227,10 @@ export {
 // call so a vault switch lands without reconstruction.
 export type { VaultWorkspace, WorkspaceProvider } from './stores/vault-workspace.js';
 
-// Run-summary seam — the ledger emits one `RunSummary` per finished run
-// through a `RunSummarySink`. The concrete sink (`AnalyticsStore`) lives in the
-// `insights/` sub-module and is injected by the host; keeping the contract here
-// (package root, not `insights/`) is what keeps the run ledger free of a
-// reporting dependency and the boundary one-way (#151).
-export type { RunSummary, RunSummarySink } from './conversation/run-summary-sink.js';
+// Run-summary DTO — the shape of one `run_summary` row (a VIEW over the
+// ledger tables; the old write-through sink is gone). The type stays at the
+// package root so the `insights/` boundary remains one-way (#151).
+export type { RunSummary } from './conversation/run-summary-sink.js';
 
 // Device-prefs store + HTTP route dispatcher (a JSON file — #280 killed the
 // identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
@@ -290,10 +288,10 @@ export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from '.
 // Insights domain — AnalyticsStore + InsightsStore over the run ledger.
 // Lives in the `insights/` sub-module behind a one-way internal boundary:
 // `insights/` consumes a journal `DatabaseProvider` (`makeJournalDbProvider`
-// above) and implements the `RunSummarySink` contract, while the rest of
-// app-engine emits run summaries through the injected sink and never imports
-// back into `insights/`. Folded in from the former `@centraid/analytics`
-// package (#151), kept as its own folder + barrel.
+// above) and reads the `run_summary` view the ledger DDL declares; the rest
+// of app-engine never imports back into `insights/`. Folded in from the
+// former `@centraid/analytics` package (#151), kept as its own folder +
+// barrel.
 export * from './insights/index.js';
 
 // App scaffolders + clone moved to @centraid/blueprints (#151).

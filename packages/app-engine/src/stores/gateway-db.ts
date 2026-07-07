@@ -40,13 +40,19 @@
  *                        disk at `<workspace appsDir>/<appId>/blobs/<hash>`,
  *                        never in sqlite. CASCADE off `items`.
  *     automation_state — per-automation KV, keyed by (automation_id, key).
- *     run_summary      — one denormalized row per finished run, every kind.
- *                        The Insights source. Best-effort write-through at
- *                        `finishTurn`; the ledger tables above stay
- *                        authoritative for a rebuild. Lives in the SAME
- *                        per-vault file (same derived/append-heavy growth
- *                        profile) so a central store can never aggregate
- *                        across vaults (#280).
+ *                        The band's one semantic misfit: mutable WORKING
+ *                        state (trigger cursors, handler KV), not history.
+ *                        It stays for pragmatics — per-vault, transactional
+ *                        with fires, travels with export; its true kin is
+ *                        the sync spine's cursor sidecars in vault.db, and
+ *                        it can promote there if backup asymmetry ever
+ *                        makes the placement matter.
+ *     run_summary      — a VIEW over turns ⋈ conversations (+ dominant
+ *                        model from items): one row per finished run, every
+ *                        kind — the Insights source. The ledger tables ARE
+ *                        the data; there is no write path and nothing to
+ *                        rebuild. Scoped per vault so a central store can
+ *                        never aggregate across vaults (#280).
  *
  *     `turns.conversation_id` and `items.turn_id` and `attachments.item_id`
  *     are real same-file FKs (CASCADE): deleting a conversation drops its
@@ -211,34 +217,50 @@ export const CONVERSATION_LEDGER_DDL = `
       PRIMARY KEY (automation_id, key)
     );
 
-    CREATE TABLE IF NOT EXISTS run_summary (
-      run_id                   TEXT PRIMARY KEY,
-      kind                     TEXT NOT NULL,
-      automation_ref           TEXT,
-      app_id                   TEXT,
-      trigger                  TEXT NOT NULL,
-      trigger_origin           TEXT,
-      ok                       INTEGER NOT NULL DEFAULT 0,
-      pinned                   INTEGER NOT NULL DEFAULT 0,
-      summary                  TEXT,
-      note                     TEXT,
-      error                    TEXT,
-      retry_of                 TEXT,
-      model                    TEXT,
-      started_at               INTEGER NOT NULL,
-      ended_at                 INTEGER,
-      total_input_tokens       INTEGER,
-      total_output_tokens      INTEGER,
-      total_cache_read_tokens  INTEGER,
-      total_cache_write_tokens INTEGER,
-      total_cost_usd           REAL,
-      step_count               INTEGER,
-      tool_count               INTEGER
-    );
-    CREATE INDEX IF NOT EXISTS idx_run_summary_started
-      ON run_summary(started_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_run_summary_kind_ref
-      ON run_summary(kind, automation_ref, started_at DESC);
+    -- run_summary is a VIEW, not a table: one row per FINISHED run, every
+    -- kind — the Insights/Executions source. It used to be a denormalized
+    -- table maintained by a best-effort dual write at finishTurn, justified
+    -- when the rollup lived in a different file (central analytics.sqlite,
+    -- #280); with the ledger and the rollup in ONE file there is no boundary
+    -- left to denormalize across, so the ledger tables above are simply THE
+    -- source and the view is the lens (no write path, no drift).
+    -- automation_ref/app_id derivation and the dominant-model pick
+    -- mirror the old write-through exactly.
+    CREATE VIEW IF NOT EXISTS run_summary AS
+      SELECT
+        t.id             AS run_id,
+        c.kind           AS kind,
+        CASE WHEN c.kind = 'automation' THEN c.automation_id END AS automation_ref,
+        CASE
+          WHEN c.kind = 'automation' AND instr(c.automation_id, '/') > 1
+            THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
+          ELSE c.app_id
+        END              AS app_id,
+        t.trigger        AS trigger,
+        t.trigger_origin AS trigger_origin,
+        t.ok             AS ok,
+        t.pinned         AS pinned,
+        t.summary        AS summary,
+        t.note           AS note,
+        t.error          AS error,
+        t.retry_of       AS retry_of,
+        (SELECT i.model FROM items i
+          WHERE i.turn_id = t.id AND i.model IS NOT NULL AND i.kind IN ('step','agent')
+          GROUP BY i.model
+          ORDER BY SUM(COALESCE(i.input_tokens,0)+COALESCE(i.output_tokens,0)) DESC
+          LIMIT 1)       AS model,
+        t.started_at               AS started_at,
+        t.ended_at                 AS ended_at,
+        t.total_input_tokens       AS total_input_tokens,
+        t.total_output_tokens      AS total_output_tokens,
+        t.total_cache_read_tokens  AS total_cache_read_tokens,
+        t.total_cache_write_tokens AS total_cache_write_tokens,
+        t.total_cost_usd           AS total_cost_usd,
+        t.step_count               AS step_count,
+        t.tool_count               AS tool_count
+      FROM turns t
+      JOIN conversations c ON c.id = t.conversation_id
+      WHERE t.ended_at IS NOT NULL;
 `;
 
 /**

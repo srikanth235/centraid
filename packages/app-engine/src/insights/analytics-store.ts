@@ -1,17 +1,16 @@
 /*
- * AnalyticsStore — the per-vault run-summary rollup (issue #98, decision 4;
- * moved into the vault's own `journal.db` by #280).
+ * AnalyticsStore — a read-only lens over the per-vault `run_summary` VIEW
+ * (issue #98, decision 4; moved into the vault's own `journal.db` by #280).
  *
- * Push-based analytics: at run completion the runtime write-throughs one
- * summary row here. The `run_summary` table lives INSIDE the vault's
- * `journal.db` — every run, every kind, but only THIS vault's; a
- * central file would aggregate across vaults, which #280 forbids. This
- * store is the single source the Insights screen and the desktop
- * Executions feed read, so neither needs a cross-file scan.
- *
- * The write-through is best-effort: each caller wraps `recordRunSummary`
- * in try/catch so a rollup hiccup never fails the run. The ledger tables
- * in the same file stay authoritative for a rebuild.
+ * `run_summary` used to be a denormalized table maintained by a best-effort
+ * write-through at run completion — justified when the rollup lived in a
+ * DIFFERENT file than the ledger. With both in the vault's `journal.db`
+ * there is no file boundary to denormalize across, so the view (declared in
+ * `CONVERSATION_LEDGER_DDL`) derives every row from `turns ⋈ conversations`
+ * plus the dominant model from `items`: no write path, no drift, nothing to
+ * rebuild. This store is the single source the Insights screen and the
+ * desktop Executions feed read; it is per-vault, so a central store can
+ * never aggregate across vaults (#280).
  *
  * The provider usually resolves "the ACTIVE vault's journal.db", so
  * the handle can change across calls (a vault switch); `ensureReady`
@@ -21,7 +20,7 @@
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';
 import type { DatabaseProvider } from '../stores/gateway-db.js';
 import type { RunKind } from '../conversation/schema.js';
-import type { RunSummary, RunSummarySink } from '../conversation/run-summary-sink.js';
+import type { RunSummary } from '../conversation/run-summary-sink.js';
 
 export interface ListSummariesOptions {
   /** Scope to one automation handle. */
@@ -86,20 +85,19 @@ function fromRaw(raw: RawSummary): RunSummary {
 }
 
 interface PreparedStatements {
-  upsert: StatementSync;
   getOne: StatementSync;
   listAll: StatementSync;
   listByRef: StatementSync;
-  setPinned: StatementSync;
-  deleteByRef: StatementSync;
 }
 
 /**
- * Store over a vault's `run_summary` table. Construct with the vault's
- * journal `DatabaseProvider` (`makeJournalDbProvider`, or the
- * gateway's active-vault resolver).
+ * Read-only store over a vault's `run_summary` view. Construct with the
+ * vault's journal `DatabaseProvider` (`makeJournalDbProvider`, or the
+ * gateway's active-vault resolver). Mutations happen on the ledger tables
+ * the view derives from (`ConversationStore.setTurnPinned`, conversation
+ * deletes) and are visible here immediately.
  */
-export class AnalyticsStore implements RunSummarySink {
+export class AnalyticsStore {
   private readonly provider: DatabaseProvider;
   private db: DatabaseSync | undefined;
   private stmts: PreparedStatements | undefined;
@@ -112,34 +110,6 @@ export class AnalyticsStore implements RunSummarySink {
     const db = this.provider();
     if (this.stmts && this.db === db) return this.stmts;
     this.stmts = {
-      upsert: db.prepare(`
-        INSERT INTO run_summary (
-          run_id, kind, automation_ref, app_id, trigger, trigger_origin,
-          ok, pinned, summary, note, error, retry_of, model, started_at, ended_at,
-          total_input_tokens, total_output_tokens, total_cache_read_tokens,
-          total_cache_write_tokens, total_cost_usd, step_count, tool_count
-        ) VALUES (
-          $runId, $kind, $automationRef, $appId, $trigger, $triggerOrigin,
-          $ok, $pinned, $summary, $note, $error, $retryOf, $model, $startedAt, $endedAt,
-          $totalInputTokens, $totalOutputTokens, $totalCacheReadTokens,
-          $totalCacheWriteTokens, $totalCostUsd, $stepCount, $toolCount
-        )
-        ON CONFLICT(run_id) DO UPDATE SET
-          kind = excluded.kind, automation_ref = excluded.automation_ref,
-          app_id = excluded.app_id, trigger = excluded.trigger,
-          trigger_origin = excluded.trigger_origin, ok = excluded.ok,
-          pinned = excluded.pinned,
-          summary = excluded.summary, note = excluded.note,
-          error = excluded.error, retry_of = excluded.retry_of,
-          model = excluded.model, started_at = excluded.started_at,
-          ended_at = excluded.ended_at,
-          total_input_tokens = excluded.total_input_tokens,
-          total_output_tokens = excluded.total_output_tokens,
-          total_cache_read_tokens = excluded.total_cache_read_tokens,
-          total_cache_write_tokens = excluded.total_cache_write_tokens,
-          total_cost_usd = excluded.total_cost_usd,
-          step_count = excluded.step_count, tool_count = excluded.tool_count
-      `),
       getOne: db.prepare(`SELECT * FROM run_summary WHERE run_id = ?`),
       listAll: db.prepare(`
         SELECT * FROM run_summary ORDER BY started_at DESC LIMIT ?
@@ -148,40 +118,9 @@ export class AnalyticsStore implements RunSummarySink {
         SELECT * FROM run_summary WHERE automation_ref = ?
         ORDER BY started_at DESC LIMIT ?
       `),
-      setPinned: db.prepare(`UPDATE run_summary SET pinned = ? WHERE run_id = ?`),
-      deleteByRef: db.prepare(`DELETE FROM run_summary WHERE automation_ref = ?`),
     };
     this.db = db;
     return this.stmts;
-  }
-
-  /** Write (or overwrite) one run's summary. The run id is the key. */
-  recordRunSummary(s: RunSummary): void {
-    const { upsert } = this.ensureReady();
-    upsert.run({
-      runId: s.runId,
-      kind: s.kind,
-      automationRef: s.automationRef ?? null,
-      appId: s.appId ?? null,
-      trigger: s.trigger,
-      triggerOrigin: s.triggerOrigin ?? null,
-      ok: s.ok ? 1 : 0,
-      pinned: s.pinned ? 1 : 0,
-      summary: s.summary ?? null,
-      note: s.note ?? null,
-      error: s.error ?? null,
-      retryOf: s.retryOf ?? null,
-      model: s.model ?? null,
-      startedAt: s.startedAt,
-      endedAt: s.endedAt ?? null,
-      totalInputTokens: s.totalInputTokens ?? null,
-      totalOutputTokens: s.totalOutputTokens ?? null,
-      totalCacheReadTokens: s.totalCacheReadTokens ?? null,
-      totalCacheWriteTokens: s.totalCacheWriteTokens ?? null,
-      totalCostUsd: s.totalCostUsd ?? null,
-      stepCount: s.stepCount ?? null,
-      toolCount: s.toolCount ?? null,
-    });
   }
 
   /** One run's summary by id, or `undefined`. */
@@ -200,15 +139,5 @@ export class AnalyticsStore implements RunSummarySink {
         ? (listByRef.all(opts.automationRef, limit) as unknown as RawSummary[])
         : (listAll.all(limit) as unknown as RawSummary[]);
     return rows.map(fromRaw);
-  }
-
-  /** Mirror a run's replay-fixture pin into the central summary. */
-  setPinned(runId: string, pinned: boolean): void {
-    this.ensureReady().setPinned.run(pinned ? 1 : 0, runId);
-  }
-
-  /** Drop every summary for one automation handle (the automation is gone). */
-  deleteByRef(automationRef: string): void {
-    this.ensureReady().deleteByRef.run(automationRef);
   }
 }

@@ -1,21 +1,22 @@
 /*
- * InsightsStore — read-only analytics over the central `run_summary`
- * ledger (issue #98, decision 4).
+ * InsightsStore — read-only analytics over the vault's `run_summary` view
+ * (issue #98, decision 4).
  *
- * The Insights screen reads entirely from the push-based
- * `centraid-analytics.sqlite` — one summary row per run, every kind. No
- * cross-file scan, no `run_nodes` descent: the by-model breakdown keys
- * off each run's dominant model. Every figure is scoped to a trailing
+ * The Insights screen reads entirely from `run_summary` in the vault's
+ * `journal.db` — a VIEW deriving one row per finished run, every kind,
+ * from the ledger tables in the same file. No cross-file scan, no items
+ * descent here: the by-model breakdown keys off each run's dominant
+ * model, which the view computes. Every figure is scoped to a trailing
  * `windowDays` window (default 30).
  *
  * The `total_*` rollup is exclusive of child `invoke` sub-runs, so a
  * plain SUM over every summary in the window is the true grand total
- * with no double-count. A run that crashed before `finishRun` has NULL
- * rollups — it still counts as a "generation" but contributes 0
- * tokens/cost (accepted for v0).
+ * with no double-count. A run that crashed before `finishTurn` never
+ * enters the view — it reappears in the ledger tables only (accepted
+ * for v0: Insights counts completed runs).
  *
- * Constructed with the analytics `DatabaseProvider`
- * (`makeAnalyticsDbProvider`).
+ * Constructed with the vault's journal `DatabaseProvider`
+ * (`makeJournalDbProvider`, or the gateway's active-vault resolver).
  */
 
 import { type DatabaseSync, type StatementSync } from 'node:sqlite';

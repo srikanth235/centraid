@@ -13,7 +13,6 @@
  */
 
 import {
-  type AnalyticsStore,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
   type RunStreamEvent,
@@ -45,21 +44,16 @@ export interface RunAutomationOptions {
    */
   appsDir: string;
   /**
-   * The vault's `transcripts.db` file — the run ledger every fire writes
+   * The vault's `journal.db` file — the run ledger every fire writes
    * (issue #280: one per-vault ledger; the per-app `runtime.sqlite` is gone).
    */
-  transcriptsDbFile: string;
+  journalDbFile: string;
   /**
    * Directory holding the per-app *code* folders — automation manifests +
    * handlers resolve from `<codeAppsDir>/<appId>/automations/<id>/` (issue
    * #137). Defaults to `appsDir` for the legacy/flat layout.
    */
   codeAppsDir?: string;
-  /**
-   * Central analytics store. When set, the per-app run ledger write-throughs
-   * each finished run's summary to it (issue #98).
-   */
-  analytics?: AnalyticsStore;
   /**
    * Host-injected `ctx.vault` executor factory keyed by app id (duaility
    * §12) — forwarded to the fire spine. Absent → `ctx.vault` fails closed.
@@ -132,9 +126,8 @@ export async function runAutomation(
       automationRef: opts.automationRef,
       ...(opts.runId ? { runId: opts.runId } : {}),
       appsDir: opts.appsDir,
-      transcriptsDbFile: opts.transcriptsDbFile,
+      journalDbFile: opts.journalDbFile,
       ...(opts.codeAppsDir ? { codeAppsDir: opts.codeAppsDir } : {}),
-      ...(opts.analytics ? { analytics: opts.analytics } : {}),
       ...(opts.vaultFor ? { vaultFor: opts.vaultFor } : {}),
       ...(opts.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
       ...(opts.onLog ? { onLog: opts.onLog } : {}),

@@ -58,7 +58,7 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
     expect(tableNames(path)).toContain('conversations');
   });
 
-  it('creates the ledger tables PLUS run_summary in ONE file (no legacy tables)', () => {
+  it('creates the ledger tables + the run_summary VIEW in ONE file (no legacy tables)', () => {
     const path = freshDbPath();
     openJournalDb(path).close();
     expect(tableNames(path)).toEqual([
@@ -66,9 +66,17 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
       'automation_state',
       'conversations',
       'items',
-      'run_summary',
       'turns',
     ]);
+    const db = new DatabaseSync(path);
+    try {
+      const views = db
+        .prepare(`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
+        .all() as Array<{ name: string }>;
+      expect(views.map((v) => v.name)).toEqual(['run_summary']);
+    } finally {
+      db.close();
+    }
   });
 
   it('conversations has NO foreign key (user_id carries the vault owner party id)', () => {
