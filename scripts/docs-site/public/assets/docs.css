@@ -83,6 +83,24 @@ html {
 section[id] {
   scroll-margin-top: 86px;
 }
+
+/* ---------- smooth navigation ---------- */
+/* Same-origin page loads cross-fade instead of hard-flashing (Chromium today;
+   other browsers fall back to a normal navigation — no regression). The header
+   carries its own transition name so it is snapshotted independently and holds
+   its position across the swap: the chrome reads as fixed while the content
+   turns over, instead of the whole page blinking. */
+@view-transition {
+  navigation: auto;
+}
+.site-head {
+  view-transition-name: site-head;
+}
+@media (prefers-reduced-motion: reduce) {
+  @view-transition {
+    navigation: none;
+  }
+}
 ::selection {
   background: var(--sel);
 }
@@ -619,6 +637,14 @@ body.has-rail main .wrap {
   margin-inline: 0;
   padding-inline: var(--col-pad);
 }
+/* The rail-less pages (home) center their sections on the shared max-width, but
+   `section.sec` / `.ch-hero` zero the horizontal padding — so below the
+   max-width the content ran flush to the viewport edge. Restore the shared
+   gutter here (a higher-specificity selector than section.sec) so those pages
+   keep a left/right margin at every width. */
+body:not(.has-rail) main .wrap {
+  padding-inline: clamp(20px, 4.5vw, 56px);
+}
 /* The footer sits outside <main>; give its wrap the same column box so it
    clears the fixed rail and lines up with the prose above it. */
 body.has-rail .site-foot .wrap {
@@ -786,7 +812,11 @@ section.dark ::selection {
   background: var(--night-amber);
   color: var(--night);
 }
-section.dark .eyebrow {
+/* The ontology page ships its own complete dark-band styling (ontology-style
+   .css); the shell's dark-band component overrides below would double-theme it
+   (e.g. two different ambers in one section), so exclude that page and let its
+   own sheet win. */
+body:not(.ontology-page) section.dark .eyebrow {
   color: var(--night-amber);
 }
 section.dark .lede,
@@ -797,14 +827,14 @@ section.dark .lede b,
 section.dark .prose b {
   color: var(--night-ink);
 }
-section.dark .note {
+body:not(.ontology-page) section.dark .note {
   color: var(--night-ink-3);
 }
 section.dark h2 em {
   color: var(--night-accent);
 }
-section.dark code,
-section.dark .k {
+body:not(.ontology-page) section.dark code,
+body:not(.ontology-page) section.dark .k {
   color: var(--night-accent);
   background: rgba(78, 208, 188, 0.09);
   border-color: rgba(78, 208, 188, 0.28);
@@ -1098,7 +1128,7 @@ section.dark .card p {
   background: color-mix(in oklab, var(--amber) 9%, transparent);
   color: var(--amber);
 }
-section.dark .pill {
+body:not(.ontology-page) section.dark .pill {
   background: rgba(236, 229, 210, 0.06);
   border-color: var(--night-line);
   color: var(--night-ink);
@@ -1159,15 +1189,15 @@ section.dark .pill {
   margin-top: 14px;
   box-shadow: 6px 6px 0 var(--shadow);
 }
-section.dark .step {
+body:not(.ontology-page) section.dark .step {
   border-color: var(--night-line);
 }
-section.dark .step .dot {
+body:not(.ontology-page) section.dark .step .dot {
   background: var(--night-card);
   border-color: var(--night-line);
   color: var(--night-amber);
 }
-section.dark .step p {
+body:not(.ontology-page) section.dark .step p {
   color: var(--night-ink-2);
 }
 
