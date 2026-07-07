@@ -125,9 +125,10 @@ function stageItem(ctx: HandlerCtx): Record<string, unknown> {
     const ref = resolveEntity(input.subject_type, ctx.db);
     if (!ref || ref.file !== 'vault')
       throw new Error(`subject_type names unknown entity "${input.subject_type}"`);
-    const pkRow = ctx.db
-      .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
-      .all() as { name: string; pk: number }[];
+    const pkRow = ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`).all() as {
+      name: string;
+      pk: number;
+    }[];
     const pk = pkRow.find((r) => r.pk === 1)?.name;
     if (!pk) throw new Error(`no primary key on ${ref.physical}`);
     const live = ctx.db
@@ -527,7 +528,9 @@ function ensureParticipant(
   if (!partyId && !handle) return;
   const present = partyId
     ? ctx.db
-        .prepare('SELECT 1 AS x FROM social_thread_participant WHERE thread_id = ? AND party_id = ?')
+        .prepare(
+          'SELECT 1 AS x FROM social_thread_participant WHERE thread_id = ? AND party_id = ?',
+        )
         .get(threadId, partyId)
     : ctx.db
         .prepare(

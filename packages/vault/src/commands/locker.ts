@@ -169,9 +169,7 @@ function setConnection(ctx: HandlerCtx, itemId: string, connectionId: string): v
     .prepare('SELECT 1 AS x FROM sync_connection WHERE connection_id = ?')
     .get(trimmed);
   if (!live) throw new Error(`no sync.connection with id ${trimmed}`);
-  ctx.db
-    .prepare('UPDATE locker_item SET connection_id = ? WHERE item_id = ?')
-    .run(trimmed, itemId);
+  ctx.db.prepare('UPDATE locker_item SET connection_id = ? WHERE item_id = ?').run(trimmed, itemId);
 }
 
 /**

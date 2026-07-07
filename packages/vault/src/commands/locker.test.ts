@@ -192,9 +192,7 @@ test('connection_id anchors an item to a live broker connection, and validates',
     .prepare('SELECT connection_id FROM locker_item WHERE item_id = ?')
     .get(id) as { connection_id: string | null };
   expect(cleared.connection_id).toBeNull();
-  expect(invoke('locker.edit_item', { item_id: id, connection_id: 'ghost' }).status).toBe(
-    'failed',
-  );
+  expect(invoke('locker.edit_item', { item_id: id, connection_id: 'ghost' }).status).toBe('failed');
   expect(
     invoke('locker.add_item', { type: 'login', title: 'X', connection_id: 'ghost' }).status,
   ).toBe('failed');

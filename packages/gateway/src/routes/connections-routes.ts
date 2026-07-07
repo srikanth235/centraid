@@ -194,7 +194,11 @@ export function makeConnectionsRouteHandler(
         body?.redirect_uri ?? `http://${req.headers.host ?? '127.0.0.1'}${OAUTH_CALLBACK_PATH}`;
       try {
         const ceremony = broker.beginAuthorization(plane, segments[0]!, redirectUri);
-        sendJson(res, 200, { auth_url: ceremony.authUrl, state: ceremony.state, redirect_uri: redirectUri });
+        sendJson(res, 200, {
+          auth_url: ceremony.authUrl,
+          state: ceremony.state,
+          redirect_uri: redirectUri,
+        });
       } catch (err) {
         sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
       }

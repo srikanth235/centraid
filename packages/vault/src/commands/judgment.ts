@@ -81,9 +81,10 @@ const RECORD_CORRECTION: CommandDefinition = {
     const ref = resolveEntity(input.target_type, ctx.db);
     if (!ref || ref.file !== 'vault')
       throw new Error(`target_type names unknown entity "${input.target_type}"`);
-    const pkRow = ctx.db
-      .prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`)
-      .all() as { name: string; pk: number }[];
+    const pkRow = ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(ref.physical)})`).all() as {
+      name: string;
+      pk: number;
+    }[];
     const pk = pkRow.find((r) => r.pk === 1)?.name;
     if (!pk) throw new Error(`no primary key on ${ref.physical}`);
     const live = ctx.db
@@ -158,7 +159,7 @@ const DISTILL_JUDGMENT: CommandDefinition = {
   idempotency: 'once',
   risk: 'medium',
   handler: (ctx) => {
-    requireOwner(ctx, 'distilling a standing judgment is the owner\'s act (rule R08)');
+    requireOwner(ctx, "distilling a standing judgment is the owner's act (rule R08)");
     const input = ctx.input as {
       subject_scope: string;
       rule: { veto_command: string };
@@ -233,7 +234,7 @@ const REVOKE_JUDGMENT: CommandDefinition = {
   idempotency: 'once',
   risk: 'low',
   handler: (ctx) => {
-    requireOwner(ctx, 'revoking a judgment is the owner\'s act');
+    requireOwner(ctx, "revoking a judgment is the owner's act");
     const input = ctx.input as { judgment_id: string };
     ctx.db
       .prepare('UPDATE agent_judgment SET active = 0 WHERE judgment_id = ?')

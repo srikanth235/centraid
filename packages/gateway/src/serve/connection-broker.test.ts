@@ -34,7 +34,9 @@ function openPlane(dir: string): VaultPlane {
 interface TokenServer {
   url: string;
   requests: Array<Record<string, string>>;
-  respond: (body: Record<string, unknown> | { status: number; body: Record<string, unknown> }) => void;
+  respond: (
+    body: Record<string, unknown> | { status: number; body: Record<string, unknown> },
+  ) => void;
 }
 
 /** A scriptable token endpoint: push one response per expected request. */
@@ -60,9 +62,11 @@ async function startTokenServer(): Promise<TokenServer> {
     url: `http://127.0.0.1:${port}/token`,
     requests,
     respond: (r) =>
-      responses.push('status' in r && typeof r.status === 'number'
-        ? (r as { status: number; body: Record<string, unknown> })
-        : { status: 200, body: r as Record<string, unknown> }),
+      responses.push(
+        'status' in r && typeof r.status === 'number'
+          ? (r as { status: number; body: Record<string, unknown> })
+          : { status: 200, body: r as Record<string, unknown> },
+      ),
   };
 }
 
@@ -87,11 +91,16 @@ function configureOauth(
     },
     purpose: 'dpv:ServiceProvision',
   });
-  if (outcome.status !== 'executed') throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
+  if (outcome.status !== 'executed')
+    throw new Error(`configure failed: ${JSON.stringify(outcome)}`);
   return (outcome as { output: { connection_id: string } }).output.connection_id;
 }
 
-function storeTokens(plane: VaultPlane, connectionId: string, input: Record<string, unknown>): void {
+function storeTokens(
+  plane: VaultPlane,
+  connectionId: string,
+  input: Record<string, unknown>,
+): void {
   const outcome = plane.gateway.invoke(plane.ownerCredential, {
     command: 'sync.store_tokens',
     input: { connection_id: connectionId, ...input },
@@ -127,7 +136,9 @@ test('api_key connections resolve to injectable values without any network', asy
   });
   const broker = new ConnectionBroker(() => plane);
   const auth = await broker.resolveForFire({ kind: 'pull.github', label: 'personal' });
-  expect(auth && 'values' in auth ? auth.values : undefined).toEqual({ api_key: 'ghp_broker_live' });
+  expect(auth && 'values' in auth ? auth.values : undefined).toEqual({
+    api_key: 'ghp_broker_live',
+  });
   expect(auth && 'allowedHosts' in auth ? auth.allowedHosts : []).toEqual(['api.github.com']);
 });
 
@@ -171,7 +182,9 @@ test('an expired token refreshes; a ROTATED refresh token persists before the ne
   });
   const broker = new ConnectionBroker(() => plane);
   const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
-  expect(auth && 'values' in auth ? auth.values : undefined).toEqual({ access_token: 'ya29.fresh' });
+  expect(auth && 'values' in auth ? auth.values : undefined).toEqual({
+    access_token: 'ya29.fresh',
+  });
   // The refresh grant carried the original token + the client pair.
   expect(tokens.requests).toHaveLength(1);
   expect(tokens.requests[0]).toMatchObject({

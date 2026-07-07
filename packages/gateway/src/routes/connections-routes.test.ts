@@ -103,7 +103,10 @@ test('the whole ceremony: configure → authorize → callback → active with s
   const connectionId = configured.connection_id as string;
 
   // 2. The health list shows the pending state and NEVER a secret cell.
-  const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<string, any>;
+  const listing = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<
+    string,
+    any
+  >;
   expect(listing.connections).toHaveLength(1);
   expect(listing.connections[0]).toMatchObject({
     kind: 'pull.gmail',
@@ -159,7 +162,10 @@ test('the whole ceremony: configure → authorize → callback → active with s
   );
 
   // 5. The connection is live, tokens sealed on the sidecar.
-  const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<string, any>;
+  const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as Record<
+    string,
+    any
+  >;
   expect(after.connections[0]).toMatchObject({
     status: 'active',
     auth_note: null,
@@ -246,7 +252,9 @@ test('pause and resume ride PATCH; providers expose the BYO wizard with the Goog
   ).json()) as Record<string, any>;
   expect(paused).toMatchObject({ ok: true, status: 'paused' });
 
-  const providers = (await (await fetch(`${base}/centraid/_vault/connections/providers`)).json()) as Record<string, any>;
+  const providers = (await (
+    await fetch(`${base}/centraid/_vault/connections/providers`)
+  ).json()) as Record<string, any>;
   const google = (providers.providers as { id: string; setup: string[] }[]).find(
     (p) => p.id === 'google',
   )!;

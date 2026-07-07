@@ -4,7 +4,13 @@
 // auditable and revocable, end to end through typed commands.
 
 import { beforeEach, expect, test } from 'vitest';
-import { bootstrapVault, createGrant, enrollAgent, enrollDevice, type BootstrapResult } from '../bootstrap.js';
+import {
+  bootstrapVault,
+  createGrant,
+  enrollAgent,
+  enrollDevice,
+  type BootstrapResult,
+} from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import type { Credential } from '../gateway/types.js';

@@ -263,9 +263,9 @@ test('bind_txn adopts an imported transaction onto an expense, and validates its
     )
     .run();
   out(invoke('tally.bind_txn', { expense_id: xid, txn_id: 'txn1' }));
-  const e = db.vault
-    .prepare('SELECT txn_id FROM tally_expense WHERE expense_id = ?')
-    .get(xid) as { txn_id: string | null };
+  const e = db.vault.prepare('SELECT txn_id FROM tally_expense WHERE expense_id = ?').get(xid) as {
+    txn_id: string | null;
+  };
   expect(e.txn_id).toBe('txn1');
 
   expect(invoke('tally.bind_txn', { txn_id: 'txn1' }).status).toBe('failed'); // no target
