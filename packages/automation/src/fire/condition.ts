@@ -21,11 +21,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import {
-  ConversationStore,
-  makeTranscriptsDbProvider,
-  type VaultBridge,
-} from '@centraid/app-engine';
+import { ConversationStore, makeJournalDbProvider, type VaultBridge } from '@centraid/app-engine';
 import type { ConditionTrigger, DataTrigger } from '../manifest/manifest.js';
 import { parseRef } from '../manifest/ref.js';
 
@@ -60,23 +56,23 @@ export interface EvaluateConditionOptions {
   triggerIndex: number;
   /** DPV purpose the read declares — the manifest vault block's purpose. */
   purpose: string;
-  /** The vault's `transcripts.db` — trigger cursors live in its automation KV (#280). */
-  transcriptsDbFile: string;
+  /** The vault's `journal.db` — trigger cursors live in its automation KV (#280). */
+  journalDbFile: string;
   /** The automation's agent-credentialed vault executor. */
   vault: VaultBridge;
 }
 
-// One store (→ one lazily-opened connection) per transcripts.db, for the
+// One store (→ one lazily-opened connection) per journal.db, for the
 // scheduler's repeated evaluations — the app-engine doctrine is one
 // connection per file, and a fresh provider per tick would leak handles.
 // Bounded by the number of vaults evaluated on the host.
 const storeByPath = new Map<string, ConversationStore>();
 
-function storeFor(transcriptsDbFile: string): ConversationStore {
-  let store = storeByPath.get(transcriptsDbFile);
+function storeFor(journalDbFile: string): ConversationStore {
+  let store = storeByPath.get(journalDbFile);
   if (!store) {
-    store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
-    storeByPath.set(transcriptsDbFile, store);
+    store = new ConversationStore(makeJournalDbProvider(journalDbFile));
+    storeByPath.set(journalDbFile, store);
   }
   return store;
 }
@@ -136,7 +132,7 @@ export async function evaluateConditionTrigger(
   }
   const rows = ((result.result as { rows?: Record<string, unknown>[] })?.rows ?? []).slice();
 
-  const store = storeFor(opts.transcriptsDbFile);
+  const store = storeFor(opts.journalDbFile);
   const stateKey = `${TRIGGER_STATE_PREFIX}${opts.triggerIndex}:seen`;
   const seen =
     readJsonState(store, opts.automationRef, stateKey, (v) =>
@@ -179,8 +175,8 @@ export interface EvaluateDataOptions {
   trigger: DataTrigger;
   triggerIndex: number;
   purpose: string;
-  /** The vault's `transcripts.db` — the trigger cursor lives in its automation KV (#280). */
-  transcriptsDbFile: string;
+  /** The vault's `journal.db` — the trigger cursor lives in its automation KV (#280). */
+  journalDbFile: string;
   vault: VaultBridge;
 }
 
@@ -198,7 +194,7 @@ export async function evaluateDataTrigger(opts: EvaluateDataOptions): Promise<Da
   if (!parsed) {
     return { fire: false, changes: [], reason: `invalid ref ${opts.automationRef}` };
   }
-  const store = storeFor(opts.transcriptsDbFile);
+  const store = storeFor(opts.journalDbFile);
   const stateKey = `${TRIGGER_STATE_PREFIX}${opts.triggerIndex}:cursor`;
   const cursor =
     readJsonState(store, opts.automationRef, stateKey, (v) =>

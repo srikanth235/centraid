@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   ConversationStore,
-  makeTranscriptsDbProvider,
+  makeJournalDbProvider,
   type RunStreamEvent,
 } from '@centraid/app-engine';
 import { runFire, type DispatchSurface, type OpenDispatchArgs } from './fire.js';
@@ -65,11 +65,11 @@ function stubDispatch(opened: OpenDispatchArgs[], closes: { n: number }) {
 
 describe('runFire', () => {
   let appsDir: string;
-  let transcriptsDbFile: string;
+  let journalDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-fire-'));
-    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+    journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -86,7 +86,7 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome, record } = await runFire(
-      { automationRef: 'notes/digest', appsDir, transcriptsDbFile },
+      { automationRef: 'notes/digest', appsDir, journalDbFile },
       { openDispatch: stubDispatch(opened, closes) },
     );
 
@@ -131,7 +131,7 @@ describe('runFire', () => {
       {
         automationRef: 'notes/flow',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch },
@@ -205,7 +205,7 @@ describe('runFire', () => {
       {
         automationRef: 'notes/ask',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch },
@@ -222,7 +222,7 @@ describe('runFire', () => {
 
     // The usage event was persisted onto the agent node's ledger row, so the
     // run's token rollup is accurate.
-    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const agentNode = store.listItems(record.runId).find((n) => n.kind === 'agent');
     expect(agentNode).toBeTruthy();
     expect(agentNode!.model).toBe('a-capable-model');
@@ -257,11 +257,11 @@ describe('runFire', () => {
       });
 
     const { record } = await runFire(
-      { automationRef: 'notes/send', appsDir, transcriptsDbFile },
+      { automationRef: 'notes/send', appsDir, journalDbFile },
       { openDispatch: dispatch },
     );
 
-    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     expect(toolNode).toBeTruthy();
     // Duration is the dispatcher's per-call window, not the batch span.
@@ -297,7 +297,7 @@ describe('runFire', () => {
       {
         automationRef: 'notes/flaky',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         onRunEvent: (ev) => events.push(ev),
       },
       { openDispatch: dispatch },
@@ -312,7 +312,7 @@ describe('runFire', () => {
     expect(String(end.error)).toMatch(/spawn blew up/);
 
     // And the ledger row is closed (duration set), not stranded open.
-    const store = new ConversationStore(makeTranscriptsDbProvider(transcriptsDbFile));
+    const store = new ConversationStore(makeJournalDbProvider(journalDbFile));
     const toolNode = store.listItems(record.runId).find((n) => n.kind === 'tool');
     expect(toolNode).toBeTruthy();
     expect(toolNode!.ok).toBe(false);
@@ -337,7 +337,7 @@ describe('runFire', () => {
     const closes = { n: 0 };
 
     const { outcome } = await runFire(
-      { automationRef: 'notes/main', appsDir, transcriptsDbFile },
+      { automationRef: 'notes/main', appsDir, journalDbFile },
       { openDispatch: stubDispatch(opened, closes) },
     );
 

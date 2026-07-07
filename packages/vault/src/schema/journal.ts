@@ -7,6 +7,16 @@
 // cross-file FKs cannot be engine-enforced — the gateway validates them (§10
 // S4). Append-only is a contract enforced by the gateway (no UPDATE path),
 // not a trigger.
+//
+// The FILE carries a second band this module does not own: the runtime's
+// conversation ledger (conversations, turns, items, attachments,
+// automation_state, run_summary — the old standalone transcripts.db, folded
+// in because both bands share the append-heavy, derived-growth profile that
+// keeps vault.db small). That band is declared in app-engine
+// (`CONVERSATION_LEDGER_DDL`), created idempotently on open, MUTABLE (turns
+// finish, CASCADE deletes), and never stamps `PRAGMA user_version` — the
+// version ladder below governs the audit band alone. The append-only
+// contract in this header applies only to the audit tables.
 
 export const JOURNAL_DDL = `
 CREATE TABLE consent_provenance (

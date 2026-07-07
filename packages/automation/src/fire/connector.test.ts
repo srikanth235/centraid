@@ -60,11 +60,11 @@ describe('connector manifest contract', () => {
 
 describe('connector runtime gates', () => {
   let appsDir: string;
-  let transcriptsDbFile: string;
+  let journalDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connector-'));
-    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+    journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -103,7 +103,7 @@ describe('connector runtime gates', () => {
     );
     const dispatched: { name: string }[] = [];
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile },
+      { automationRef: 'mail/pull', appsDir, journalDbFile },
       { openDispatch: openDispatch(dispatched) },
     );
     expect(outcome.ok).toBe(true);
@@ -128,7 +128,7 @@ describe('connector runtime gates', () => {
        };`,
     );
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile },
+      { automationRef: 'mail/pull', appsDir, journalDbFile },
       { openDispatch: openDispatch([]) },
     );
     expect(outcome.ok).toBe(true);
@@ -147,7 +147,7 @@ describe('connector runtime gates', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected op' };
     };
     const { outcome, record } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => paused },
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => paused },
       { openDispatch: openDispatch([]) },
     );
     expect(outcome.ok).toBe(false);
@@ -164,7 +164,7 @@ describe('connector runtime gates', () => {
       error: 'deny (receipt r1): no active grant',
     });
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => deny },
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => deny },
       { openDispatch: openDispatch([]) },
     );
     expect(outcome.ok).toBe(true);
@@ -174,11 +174,11 @@ describe('connector runtime gates', () => {
 
 describe('connector secrets (issue #293)', () => {
   let appsDir: string;
-  let transcriptsDbFile: string;
+  let journalDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-secrets-'));
-    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+    journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -256,7 +256,7 @@ describe('connector secrets (issue #293)', () => {
         return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
       };
       const { outcome } = await runFire(
-        { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => bridge },
+        { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
         { openDispatch: noDispatch },
       );
       expect(outcome.ok).toBe(true);
@@ -296,7 +296,7 @@ describe('connector secrets (issue #293)', () => {
       return { ok: false, code: 'VAULT_ERROR', error: `unexpected op ${call.op}` };
     };
     await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => bridge },
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
       { openDispatch: noDispatch },
     );
     expect(aliases).toEqual(['github-token']);
@@ -320,7 +320,7 @@ describe('connector secrets (issue #293)', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => bridge },
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -346,7 +346,7 @@ describe('connector secrets (issue #293)', () => {
       { requires: {}, connector: undefined, vault: undefined },
     );
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile },
+      { automationRef: 'mail/pull', appsDir, journalDbFile },
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(true);
@@ -379,7 +379,7 @@ describe('connector secrets (issue #293)', () => {
       return { ok: false, code: 'VAULT_ERROR', error: 'unexpected' };
     };
     const { outcome } = await runFire(
-      { automationRef: 'mail/pull', appsDir, transcriptsDbFile, vaultFor: () => bridge },
+      { automationRef: 'mail/pull', appsDir, journalDbFile, vaultFor: () => bridge },
       { openDispatch: noDispatch },
     );
     expect(outcome.ok).toBe(false);
@@ -396,11 +396,11 @@ describe('connector secrets (issue #293)', () => {
 
 describe('broker-injected connection credentials (issue #304)', () => {
   let appsDir: string;
-  let transcriptsDbFile: string;
+  let journalDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-connauth-'));
-    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+    journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -433,7 +433,10 @@ describe('broker-injected connection credentials (issue #304)', () => {
   };
 
   async function withServer(
-    respond: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => void,
+    respond: (
+      req: import('node:http').IncomingMessage,
+      res: import('node:http').ServerResponse,
+    ) => void,
     run: (port: number) => Promise<void>,
   ): Promise<void> {
     const { createServer } = await import('node:http');
@@ -477,7 +480,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           {
             automationRef: 'mail/pull',
             appsDir,
-            transcriptsDbFile,
+            journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: 'tok-live-1' },
@@ -520,7 +523,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           {
             automationRef: 'mail/pull',
             appsDir,
-            transcriptsDbFile,
+            journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: 'tok-live-2' },
@@ -567,7 +570,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           {
             automationRef: 'mail/pull',
             appsDir,
-            transcriptsDbFile,
+            journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { access_token: 'tok-stale' },
@@ -609,7 +612,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           {
             automationRef: 'mail/pull',
             appsDir,
-            transcriptsDbFile,
+            journalDbFile,
             vaultFor: () => activeBridge,
             resolveConnection: async () => ({
               values: { api_key: 'ghp-revoked' },
@@ -655,7 +658,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
           {
             automationRef: 'mail/pull',
             appsDir,
-            transcriptsDbFile,
+            journalDbFile,
             vaultFor: () => activeBridge,
             fetchRetryDelaysMs: [1, 1],
             resolveConnection: async () => ({
@@ -678,7 +681,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
       {
         automationRef: 'mail/pull',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
           refused: 'connection "personal" has no usable token: token refresh refused',
@@ -709,7 +712,7 @@ describe('broker-injected connection credentials (issue #304)', () => {
       {
         automationRef: 'mail/pull',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         vaultFor: () => activeBridge,
         // No resolveConnection at all — the harness-ambient lane.
       },
@@ -725,11 +728,11 @@ describe('broker-injected connection credentials (issue #304)', () => {
 
 describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
   let appsDir: string;
-  let transcriptsDbFile: string;
+  let journalDbFile: string;
 
   beforeEach(async () => {
     appsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'centraid-ro-'));
-    transcriptsDbFile = path.join(appsDir, 'transcripts.db');
+    journalDbFile = path.join(appsDir, 'journal.db');
   });
   afterEach(async () => {
     await fs.rm(appsDir, { recursive: true, force: true });
@@ -738,9 +741,7 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
   async function writeAutomation(handler: string): Promise<void> {
     const dir = path.join(appsDir, 'mail', 'automations', 'pull');
     await fs.mkdir(dir, { recursive: true });
-    const manifest = validateManifest(
-      rawManifest({ requires: { tools: [] } }),
-    ) as Manifest;
+    const manifest = validateManifest(rawManifest({ requires: { tools: [] } })) as Manifest;
     await fs.writeFile(path.join(dir, 'automation.json'), JSON.stringify(manifest, null, 2));
     await fs.writeFile(path.join(dir, 'handler.js'), handler);
   }
@@ -778,7 +779,7 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
       {
         automationRef: 'mail/pull',
         appsDir,
-        transcriptsDbFile,
+        journalDbFile,
         vaultFor: () => activeBridge,
         resolveConnection: async () => ({
           values: { access_token: 'tok' },
@@ -820,7 +821,7 @@ describe('read-only ceiling on injected fetches (issue #304 phase 5)', () => {
         {
           automationRef: 'mail/pull',
           appsDir,
-          transcriptsDbFile,
+          journalDbFile,
           vaultFor: () => activeBridge,
           resolveConnection: async () => ({
             values: { access_token: 'tok' },

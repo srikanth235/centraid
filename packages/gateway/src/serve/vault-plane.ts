@@ -98,10 +98,11 @@ import {
   type ExtTableSpec,
   type DemoPurgeResult,
 } from '@centraid/vault';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
-  openTranscriptsDb,
+  ensureConversationLedger,
   type RuntimeLogger,
   type VaultBridge,
   type VaultCallResult,
@@ -257,8 +258,14 @@ export class VaultPlane {
   private sweepTimer: NodeJS.Timeout | undefined;
   private closed = false;
   private displayName: string;
-  /** Lazily-opened `transcripts.db` handle — closed with the plane. */
-  private transcriptsDb: DatabaseSync | undefined;
+  /**
+   * Whether the journal's conversation-ledger band has been ensured on this
+   * plane's handle. The workspace serves the SAME `journal.db` connection the
+   * audit stream uses (the old standalone `transcripts.db` folded in) — the
+   * ledger DDL is idempotent and never touches the audit ladder's
+   * user_version, so ensuring lazily on first workspace use is safe.
+   */
+  private ledgerReady = false;
 
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
@@ -325,6 +332,14 @@ export class VaultPlane {
         ? `vault plane: bootstrapped a fresh vault at ${options.dir}`
         : `vault plane: recovered vault ${this.boot.vaultId} at ${options.dir}`,
     );
+    if (existsSync(path.join(options.dir, 'transcripts.db'))) {
+      // Pre-fold layout (v0: no data migrations) — the conversation ledger
+      // now lives in journal.db; the old file stays put but is never read.
+      this.logger.warn(
+        `vault plane: ignoring legacy transcripts.db at ${options.dir} — ` +
+          'the conversation ledger folded into journal.db',
+      );
+    }
   }
 
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */
@@ -348,8 +363,8 @@ export class VaultPlane {
       vaultId: this.boot.vaultId,
       ownerPartyId: this.boot.ownerPartyId,
       appsDir: path.join(this.dir, 'apps'),
-      transcripts: () => this.transcripts(),
-      transcriptsDbFile: path.join(this.dir, 'transcripts.db'),
+      journal: () => this.journalLedger(),
+      journalDbFile: path.join(this.dir, 'journal.db'),
       runnerSessionDir: path.join(this.dir, 'runner-sessions'),
     };
   }
@@ -363,13 +378,14 @@ export class VaultPlane {
     return path.join(this.dir, 'code');
   }
 
-  /** Lazily open (and cache) this vault's `transcripts.db`. */
-  private transcripts(): DatabaseSync {
+  /** This vault's `journal.db` handle with the ledger band ensured. */
+  private journalLedger(): DatabaseSync {
     if (this.closed) throw new Error(`vault plane ${this.boot.vaultId} is stopped`);
-    if (!this.transcriptsDb) {
-      this.transcriptsDb = openTranscriptsDb(path.join(this.dir, 'transcripts.db'));
+    if (!this.ledgerReady) {
+      ensureConversationLedger(this.db.journal);
+      this.ledgerReady = true;
     }
-    return this.transcriptsDb;
+    return this.db.journal;
   }
 
   /** Rename the vault (owner act). */
@@ -1398,14 +1414,6 @@ export class VaultPlane {
       this.logger.warn(
         `vault plane: checkpoint on stop failed: ${err instanceof Error ? err.message : String(err)}`,
       );
-    }
-    if (this.transcriptsDb) {
-      try {
-        this.transcriptsDb.close();
-      } catch {
-        /* already closed */
-      }
-      this.transcriptsDb = undefined;
     }
     this.db.close();
   }

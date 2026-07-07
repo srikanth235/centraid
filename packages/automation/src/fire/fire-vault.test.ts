@@ -95,7 +95,7 @@ describe('runFire + ctx.vault', () => {
           automationRef: 'notes/filer',
           runId: 'run-fixed',
           appsDir: dataDir,
-          transcriptsDbFile: path.join(dataDir, 'transcripts.db'),
+          journalDbFile: path.join(dataDir, 'journal.db'),
           codeAppsDir: appsDir,
           vaultFor: (appId) => {
             bridgeApps.push(appId);
@@ -150,7 +150,7 @@ describe('runFire + ctx.vault', () => {
       {
         automationRef: 'notes/blind',
         appsDir,
-        transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+        journalDbFile: path.join(appsDir, 'journal.db'),
       },
       { openDispatch: stubDispatch },
     );
@@ -182,7 +182,7 @@ describe('runFire + ctx.vault', () => {
       {
         automationRef: 'notes/denied',
         appsDir,
-        transcriptsDbFile: path.join(appsDir, 'transcripts.db'),
+        journalDbFile: path.join(appsDir, 'journal.db'),
         vaultFor: () => deny,
       },
       { openDispatch: stubDispatch },

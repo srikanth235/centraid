@@ -1,8 +1,10 @@
 // The physical layout from §03, extended by issue #296: vault.db holds all
 // eleven schemas (model rows, engine-enforced FKs, one ACID boundary);
 // journal.db holds the append-only audit stream (receipts, provenance,
-// invocations, checks, evidence, explanations); and the `blobs/` sibling
-// holds content-addressed bytes for everything that is not inline text
+// invocations, checks, evidence, explanations) PLUS the runtime's
+// conversation-ledger band (the old standalone transcripts.db folded in —
+// see journal.ts for the band split); and the `blobs/` sibling holds
+// content-addressed bytes for everything that is not inline text
 // (issue #296 — export = copy two files and a directory, verify hashes).
 //
 // Only the gateway holds these handles — apps, agents and generated views
@@ -71,7 +73,13 @@ export interface OpenVaultOptions {
 function openFile(location: string): DatabaseSync {
   const db = new DatabaseSync(location);
   db.exec('PRAGMA foreign_keys = ON');
-  if (location !== ':memory:') db.exec('PRAGMA journal_mode = WAL');
+  if (location !== ':memory:') {
+    db.exec('PRAGMA journal_mode = WAL');
+    // journal.db also carries the conversation-ledger band (the old
+    // transcripts.db folded in), which worker subprocesses open by path —
+    // wait for their locks instead of failing immediately.
+    db.exec('PRAGMA busy_timeout = 30000');
+  }
   return db;
 }
 

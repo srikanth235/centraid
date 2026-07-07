@@ -7,9 +7,10 @@
  * env-var convention; it just consumes absolute paths.
  *
  * Issue #280 — the vault is the unit. Everything personal lives INSIDE a
- * vault's directory (`<vaultDir>/<vaultId>/`): the ontology pair
- * (`vault.db` + `journal.db`), the conversation ledger + run rollup
- * (`transcripts.db`), the per-app data dirs (`apps/`), the app code store
+ * vault's directory (`<vaultDir>/<vaultId>/`): the sovereign pair
+ * (`vault.db` + `journal.db` — the journal carrying both the audit stream
+ * and the conversation ledger + run rollup, the old `transcripts.db`
+ * folded in), the per-app data dirs (`apps/`), the app code store
  * (`code/` — a bare git repo + worktrees), and the chat runner scratch
  * (`runner-sessions/`). What remains at the gateway level is plumbing:
  * the vault registry root, a device-prefs JSON file, the model catalog,
@@ -25,10 +26,11 @@ export interface GatewayPaths {
    * The personal-vault root (duaility §12, #280). The gateway mounts the
    * vault registry here: each vault lives in its own subdirectory holding
    * BOTH the sovereign pair (`vault.db` + `journal.db`) and the vault's
-   * workspace (`transcripts.db`, `apps/`, `code/`, `runner-sessions/`);
-   * exactly one vault is active at a time (pointer in
-   * `<vaultDir>/vaults.json`). Required — post-#280 the app surface IS
-   * vault-scoped, so a gateway without vaults has nothing to serve.
+   * workspace (`apps/`, `code/`, `runner-sessions/`; the conversation
+   * ledger rides the journal file); exactly one vault is active at a time
+   * (pointer in `<vaultDir>/vaults.json`). Required — post-#280 the app
+   * surface IS vault-scoped, so a gateway without vaults has nothing to
+   * serve.
    */
   vaultDir: string;
 

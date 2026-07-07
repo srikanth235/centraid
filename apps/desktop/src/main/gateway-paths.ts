@@ -26,7 +26,7 @@
 //   - `prefs.json`                — device prefs (runner choice, theme, …)
 //   - `templates-cache/`          — downloaded remote-template tarballs
 //   - `vault/`                    — vault registry root; each vault holds
-//                                   vault.db + journal.db + transcripts.db
+//                                   vault.db + journal.db (audit + conversation ledger)
 //                                   + apps/ (data) + code/ (git store)
 //                                   + runner-sessions/
 
@@ -80,7 +80,7 @@ export function gatewayTemplatesCacheDir(id: string): string {
  * Personal-vault root (duaility §12, #280) — one subdirectory per vault,
  * exactly one active at a time (`vaults.json` pointer). Post-#280 each
  * vault's directory holds its WHOLE world: the sovereign pair (vault.db +
- * journal.db), the conversation ledger (transcripts.db), per-app data
+ * journal.db — the journal also carries the conversation ledger), per-app data
  * (`apps/`), the app code store (`code/`), and runner scratch. Passing
  * this as `GatewayPaths.vaultDir` mounts the registry; the owner surface
  * serves under `/centraid/_vault/*`.
