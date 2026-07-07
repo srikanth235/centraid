@@ -1,0 +1,62 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/understand.html?raw';
+
+const rail = [
+  {
+    "href": "#pillars",
+    "no": "§01",
+    "label": "The three pillars",
+    "current": true
+  },
+  {
+    "href": "#ontology",
+    "no": "§02",
+    "label": "The ontology",
+    "current": false
+  },
+  {
+    "href": "#index",
+    "no": "§03",
+    "label": "Find a subsystem",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "Start wide, then go as deep as you like. <em>Every subsystem has exactly one home.</em>",
+  "links": [
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../data/",
+      "label": "data",
+      "external": false
+    },
+    {
+      "href": "../apps/",
+      "label": "apps",
+      "external": false
+    },
+    {
+      "href": "../devices/",
+      "label": "devices",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Understand it — Centraid docs"
+  description="A guided tour of the whole Centraid system: the three pillars (Data, Apps, Devices), a map of where every subsystem is documented, and the ontology that ties it together."
+  current="understand"
+  canonicalPath="understand/"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

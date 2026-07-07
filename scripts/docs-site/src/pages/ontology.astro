@@ -1,39 +1,53 @@
 ---
+import DocsLayout from '../layouts/DocsLayout.astro';
 import ontologyBodyRaw from '../content/ontology-body.html?raw';
 import ontologyStyle from '../content/ontology-style.css?raw';
 
-const base = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : import.meta.env.BASE_URL + '/';
-const canonical = new URL('ontology/', Astro.site ?? 'https://centraid.dev/docs/').toString();
-const ontologyBody = ontologyBodyRaw.replaceAll('__DOCS_BASE__', base);
+const base = import.meta.env.BASE_URL.endsWith('/')
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+
+const rail = [
+  { href: '#hero', no: '§01', label: 'System map', current: true },
+  { href: '#map', no: '§02', label: 'Unified entity map', current: false },
+  { href: '#schema', no: '§03', label: 'Detailed schema', current: false },
+  { href: '#principles', no: '§04', label: 'Modeling principles', current: false },
+  { href: '#layers', no: '§05', label: 'Ontology layer stack', current: false },
+  { href: '#core', no: '§06', label: 'Canonical core', current: false },
+  { href: '#domains', no: '§07', label: 'Domain explorer', current: false },
+  { href: '#matrix', no: '§08', label: 'Ownership matrix', current: false },
+  { href: '#flow', no: '§09', label: 'Cross-app agent flow', current: false },
+  { href: '#gateway', no: '§10', label: 'The gateway', current: false },
+  { href: '#rules', no: '§11', label: 'Implementation rules', current: false },
+  { href: '#centraid', no: '§12', label: 'Inside the runtime', current: false },
+];
+const footer = {
+  manifesto:
+    'Centraid is one personal ontology with many replaceable projections. <em>The model is the asset.</em>',
+  links: [
+    { href: '../start/', label: 'start', external: false },
+    { href: '../data/', label: 'data', external: false },
+    { href: '../apps/', label: 'apps', external: false },
+    { href: '../devices/', label: 'devices', external: false },
+  ],
+};
+const ontologyBody = ontologyBodyRaw
+  .replaceAll('__DOCS_BASE__', base)
+  .replace(/<header class="topbar">[\s\S]*?<\/header>\s*/, '')
+  .replace(/<nav class="rail"[\s\S]*?<\/nav>\s*/, '')
+  .replace(/^\s*<main>\s*/, '')
+  .replace(/\s*<\/main>\s*<footer>[\s\S]*?<\/footer>\s*/, '\n');
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>The ontology — Centraid docs</title>
-    <meta
-      name="description"
-      content="Centraid's personal ontology: a person-owned canonical data model of a whole life. Apps become projections; agents act through consent-checked typed commands."
-    />
-    <link rel="canonical" href={canonical} />
-    <meta property="og:title" content="The ontology — Centraid docs" />
-    <meta
-      property="og:description"
-      content="Centraid's personal ontology: a person-owned canonical data model of a whole life."
-    />
-    <meta property="og:type" content="article" />
-    <link rel="icon" href={base + 'assets/centraid-mark.svg'} />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,400..700;1,6..72,400..700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap"
-      rel="stylesheet"
-    />
-    <style set:html={ontologyStyle}></style>
-  </head>
-  <body>
-    <Fragment set:html={ontologyBody} />
-  </body>
-</html>
+<DocsLayout
+  title="The ontology — Centraid docs"
+  description="Centraid's personal ontology: a person-owned canonical data model of a whole life. Apps become projections; agents act through consent-checked typed commands."
+  current="ontology"
+  canonicalPath="ontology/"
+  bodyClass="has-rail ontology-page"
+  rail={rail}
+  footer={footer}
+>
+  <style slot="head" is:global set:html={ontologyStyle}></style>
+  <Fragment set:html={ontologyBody} />
+</DocsLayout>

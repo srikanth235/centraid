@@ -35,6 +35,19 @@
   --mono: 'IBM Plex Mono', ui-monospace, monospace;
 
   --rail-w: 224px;
+  /* One shared shell gutter. The header, the section rail, and the prose
+     column all hang off the same centered container, so the logo, the rail,
+     and the body copy left-align (and the nav + prose share a right edge). */
+  --shell-max: 1280px;
+  --shell-pad: clamp(20px, 4.5vw, 56px);
+  --shell-edge: max((100vw - var(--shell-max)) / 2, 0px);
+  --shell-left: calc(var(--shell-edge) + var(--shell-pad));
+  /* gutter between the section rail and the content column, so full-bleed
+     .dark bands don't butt up against the rail */
+  --rail-gap: clamp(22px, 2vw, 40px);
+  /* symmetric inner padding of the content column (breathing room inside
+     full-bleed .dark bands; keeps prose off the column edges) */
+  --col-pad: clamp(20px, 2.2vw, 40px);
   --max: 1120px;
 }
 [data-theme='night'] {
@@ -66,6 +79,9 @@
 }
 html {
   scroll-behavior: smooth;
+}
+section[id] {
+  scroll-margin-top: 86px;
 }
 ::selection {
   background: var(--sel);
@@ -140,9 +156,11 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 13px clamp(20px, 4.5vw, 56px);
-  max-width: 1280px;
-  margin: 0 auto;
+  /* Full-bleed with a symmetric gutter derived from the same 100vw math as
+     the rail, so the logo lines up with the rail exactly (a max-width +
+     margin:auto header would center inside the scrollbar and drift ~half a
+     scrollbar off the rail). */
+  padding: 13px var(--shell-left);
 }
 .brand {
   display: flex;
@@ -179,13 +197,12 @@ button {
   padding: 2px 9px;
   margin-left: 2px;
 }
-.site-head nav {
+.head-nav {
   display: flex;
   align-items: center;
   gap: 2px;
-  flex-wrap: wrap;
 }
-.site-head nav a {
+.head-nav a {
   font-family: var(--mono);
   font-size: 12.5px;
   letter-spacing: 0.05em;
@@ -195,11 +212,12 @@ button {
   padding: 7px 10px;
   border-radius: 6px;
   transition: color 0.15s ease;
+  white-space: nowrap;
 }
-.site-head nav a:hover {
+.head-nav a:hover {
   color: var(--accent);
 }
-.site-head nav a[aria-current='page'] {
+.head-nav a[aria-current='page'] {
   color: var(--paper);
   background: var(--ink);
 }
@@ -230,35 +248,328 @@ button {
   height: 15px;
 }
 
+/* ---------- hamburger + mobile menu ---------- */
+.nav-toggle {
+  display: none; /* revealed at the mobile breakpoint */
+  width: 38px;
+  height: 38px;
+  flex: none;
+  margin-left: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
+}
+.nav-toggle:hover {
+  border-color: var(--accent);
+}
+.nav-toggle .bars {
+  display: grid;
+  gap: 4px;
+  width: 18px;
+}
+.nav-toggle .bars i {
+  height: 2px;
+  border-radius: 2px;
+  background: var(--ink-2);
+  transition:
+    transform 0.25s ease,
+    opacity 0.2s ease;
+}
+.nav-toggle[aria-expanded='true'] .bars i:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+.nav-toggle[aria-expanded='true'] .bars i:nth-child(2) {
+  opacity: 0;
+}
+.nav-toggle[aria-expanded='true'] .bars i:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.mobile-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  display: none; /* opened via .open (the hamburger only exists on mobile) */
+  max-height: min(82vh, 640px);
+  overflow-y: auto;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 22px 44px -24px var(--shadow);
+}
+.mobile-menu.open {
+  display: block;
+  animation: mm-reveal 0.26s cubic-bezier(0.33, 1, 0.68, 1);
+}
+@keyframes mm-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+.mm-inner {
+  padding: 12px clamp(20px, 5vw, 40px) 28px;
+  display: grid;
+  gap: 22px;
+}
+.mm-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.mm-pages,
+.mm-rail {
+  display: grid;
+  gap: 2px;
+}
+.mm-pages a,
+.mm-rail a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  text-decoration: none;
+  border-radius: 9px;
+  border: 1px solid transparent;
+}
+.mm-pages a {
+  padding: 11px 12px;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 560;
+  text-transform: lowercase;
+  color: var(--ink);
+}
+.mm-pages a:hover,
+.mm-rail a:hover {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.mm-pages a[aria-current='page'] {
+  border-color: var(--line);
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
+}
+.mm-arrow {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+.mm-ext .mm-arrow {
+  color: var(--ink-3);
+}
+.mm-rail a {
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  color: var(--ink-2);
+  justify-content: flex-start;
+}
+.mm-rail a.on {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--accent) 9%, transparent);
+}
+.mm-rail a .n {
+  display: inline;
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+}
+
+/* ---------- header search (⌘K) ---------- */
+.doc-search {
+  flex: 0 1 380px;
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 8px 0 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--card) 55%, transparent);
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: text;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.doc-search:hover {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+  color: var(--ink-2);
+}
+.doc-search svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.doc-search-label {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.doc-search-key {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
+  background: color-mix(in oklab, var(--paper) 70%, transparent);
+}
+.doc-search-key span {
+  font-size: 12.5px;
+}
+
+/* ---------- search overlay ---------- */
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: none;
+  justify-content: center;
+  align-items: flex-start;
+  padding: clamp(56px, 12vh, 132px) 20px 20px;
+  background: color-mix(in oklab, var(--ink) 34%, transparent);
+  backdrop-filter: blur(3px);
+}
+.search-overlay.open {
+  display: flex;
+}
+.search-panel {
+  width: min(620px, 100%);
+  max-height: min(64vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 24px 60px -18px var(--shadow);
+  overflow: hidden;
+}
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.search-input-row svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--ink-3);
+}
+.search-input-row input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  outline: none;
+}
+.search-input-row input::placeholder {
+  color: var(--ink-3);
+}
+.search-esc {
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 7px;
+}
+.search-results {
+  overflow-y: auto;
+  padding: 8px;
+}
+.search-results:empty {
+  display: none;
+}
+.search-hit {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 9px;
+  text-decoration: none;
+  color: inherit;
+}
+.search-hit[aria-selected='true'],
+.search-hit:hover {
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.search-hit .hit-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.search-hit .hit-title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+}
+.search-hit .hit-page {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.search-hit .hit-text {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.search-hit mark {
+  background: color-mix(in oklab, var(--amber) 32%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.search-empty {
+  padding: 26px 18px 30px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
 /* ---------- left rail (chapter section index) ---------- */
 .rail {
   position: fixed;
-  left: 0;
+  left: var(--shell-left);
   top: 64px;
   bottom: 0;
   width: var(--rail-w);
-  padding: 34px 0 24px 18px;
+  padding: 34px 24px 24px 0;
   z-index: 40;
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
 }
-.rail::before {
-  content: '';
-  position: absolute;
-  left: 12px;
-  top: 34px;
-  bottom: 24px;
-  width: 2px;
-  background: linear-gradient(var(--accent), var(--amber));
-  opacity: 0.3;
-  border-radius: 2px;
-}
 .rail a {
   position: relative;
   display: block;
-  padding: 6px 10px 6px 16px;
+  padding: 6px 10px 6px 14px;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.35;
@@ -282,22 +593,67 @@ button {
 .rail a.on::before {
   content: '';
   position: absolute;
-  left: -6px;
+  left: -5px;
   top: 8px;
   bottom: 8px;
   width: 3px;
   background: var(--accent);
   border-radius: 3px;
 }
+/* The content column sits to the right of the rail and shares the header
+   nav's right edge, so main's box spans exactly rail-edge → nav-edge. Full-
+   bleed .dark bands paint that whole box; a symmetric inner padding keeps
+   paper prose and dark-band prose on the same left margin with matched
+   breathing room inside the bands. */
 body.has-rail main {
-  margin-left: var(--rail-w);
+  margin-left: calc(var(--shell-left) + var(--rail-w) + var(--rail-gap));
+  margin-right: var(--shell-left);
+}
+/* Section wraps fill the column (rather than re-centering on their own axis)
+   so prose lines up under the header nav and the full-bleed .dark bands span
+   the column. This bounded width also lets the ontology page's internal
+   scroll containers (.mapscroll/.colscroll/.mxscroll) contain their wide
+   diagrams instead of blowing the column out. */
+body.has-rail main .wrap {
+  max-width: none;
+  margin-inline: 0;
+  padding-inline: var(--col-pad);
+}
+/* The footer sits outside <main>; give its wrap the same column box so it
+   clears the fixed rail and lines up with the prose above it. */
+body.has-rail .site-foot .wrap {
+  max-width: none;
+  margin-left: calc(var(--shell-left) + var(--rail-w) + var(--rail-gap));
+  margin-right: var(--shell-left);
+  padding-inline: var(--col-pad);
+}
+/* The ontology page carries its own section padding (88px 26px) and full-bleed
+   bands, so drop the chapter column's inner padding — it would double-indent
+   the section headings otherwise. */
+body.ontology-page main .wrap {
+  padding-inline: 0;
 }
 @media (max-width: 1120px) {
   .rail {
     display: none;
   }
+  /* Below the rail breakpoint the hero column reaches the viewport edge, so
+     the oversized ghost glyph would bleed past it — retire it here. */
+  .ch-hero .ghost {
+    display: none;
+  }
   body.has-rail main {
     margin-left: 0;
+    margin-right: 0;
+  }
+  body.has-rail main .wrap,
+  body.has-rail .site-foot .wrap {
+    max-width: var(--max);
+    margin-inline: auto;
+    padding-inline: var(--shell-pad);
+  }
+  body.ontology-page main .wrap {
+    padding-inline: 0;
   }
 }
 
@@ -411,7 +767,9 @@ code,
   border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
   padding: 0.08em 0.4em;
   border-radius: 4px;
-  white-space: nowrap;
+  /* Short inline code stays on one line; long tokens (file paths, DDL
+     snippets) break instead of overflowing the viewport on phones. */
+  overflow-wrap: anywhere;
 }
 pre code {
   all: unset;
@@ -875,6 +1233,38 @@ section.dark .dt td {
 section.dark .dt td:first-child {
   color: var(--night-ink);
 }
+/* On phones the 3-column index would need a horizontal scroll; collapse each
+   row into a stacked card instead (subsystem · chapter · description). */
+@media (max-width: 640px) {
+  .dt-scroll {
+    overflow-x: visible;
+    border-radius: 10px;
+  }
+  table.dt {
+    min-width: 0;
+  }
+  .dt thead {
+    display: none;
+  }
+  .dt tr {
+    display: block;
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .dt tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .dt td {
+    display: block;
+    border: 0;
+    padding: 2px 0;
+  }
+  .dt td:first-child {
+    white-space: normal;
+    font-size: 14px;
+    margin-bottom: 3px;
+  }
+}
 
 /* ---------- persona split (index) ---------- */
 .split {
@@ -1002,6 +1392,30 @@ footer.site-foot {
   gap: 20px;
   flex-wrap: wrap;
 }
+/* coverage stamp — the commit the docs content is known to reflect */
+.foot-stamp {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: var(--ink-3);
+}
+.foot-stamp code {
+  font-size: 11.5px;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent) 22%, transparent);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.foot-stamp a {
+  text-decoration: none;
+}
+.foot-stamp a:hover code {
+  border-color: var(--accent);
+}
 
 /* ---------- next/prev chapter ---------- */
 .chapter-next {
@@ -1072,10 +1486,25 @@ footer.site-foot {
   body {
     font-size: 17px;
   }
-  .ch-hero .ghost {
+}
+/* Mobile header: the inline chapter links collapse into a hamburger menu, and
+   the search shrinks to an icon, so the row never wraps or overflows. */
+@media (max-width: 1000px) {
+  .head-nav {
     display: none;
   }
-  .site-head nav a.hide-sm {
+  .nav-toggle {
+    display: grid;
+  }
+  .doc-search {
+    flex: none;
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+    margin-inline: auto 0;
+  }
+  .doc-search-label,
+  .doc-search-key {
     display: none;
   }
 }

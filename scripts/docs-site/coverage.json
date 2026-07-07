@@ -1,0 +1,11 @@
+{
+  "coversThroughCommit": "10bc71d",
+  "coversThroughDate": "2026-07-07",
+  "note": "The hand-authored docs content in scripts/docs-site/src/content reflects the Centraid codebase as of coversThroughCommit. It is maintained by hand, so it drifts when product code lands without a matching docs edit.",
+  "howToUpdate": [
+    "1. Find undocumented behaviour: `git log <coversThroughCommit>..HEAD -- packages apps ARCHITECTURE.md '*/README.md'` and read the diffs of the feature commits it lists.",
+    "2. Reflect anything reader-facing in the affected chapter(s): index/start/understand/data/apps/devices (scripts/docs-site/src/content/*.html) or ontology-body.html.",
+    "3. Bump coversThroughCommit to the new HEAD (use the short SHA of the merge/most-recent commit) and coversThroughDate to today.",
+    "The footer of every docs page renders this stamp, so a stale value is visible."
+  ]
+}
