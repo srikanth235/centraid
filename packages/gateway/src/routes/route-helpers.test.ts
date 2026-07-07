@@ -31,7 +31,7 @@ function mockRes(): { res: ServerResponse; out: { status: number; body: string }
     statusCode: 0,
     setHeader() {},
     end(text?: string) {
-      out.status = this.statusCode as number;
+      out.status = res.statusCode;
       out.body = text ?? '';
     },
   } as unknown as ServerResponse;
