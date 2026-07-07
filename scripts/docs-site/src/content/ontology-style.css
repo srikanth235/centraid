@@ -50,7 +50,7 @@ h2{font-size:clamp(1.9rem,3.4vw,2.9rem);font-weight:650;letter-spacing:-.012em;m
 .note{font-size:.85rem;color:var(--ink-faint);max-width:70ch}
 .dark .note{color:var(--bone-soft)}
 .mono{font-family:var(--mono)}
-.k{font-family:var(--mono);font-size:.8em;background:var(--indigo-wash);border:1px solid rgba(13,114,99,.25);border-radius:4px;padding:.06em .34em;white-space:nowrap}
+.k{font-family:var(--mono);font-size:.8em;background:var(--indigo-wash);border:1px solid rgba(13,114,99,.25);border-radius:4px;padding:.06em .34em;overflow-wrap:anywhere}
 .dark .k{background:rgba(13,114,99,.18);border-color:rgba(62,200,180,.4)}
 
 /* reveal */
@@ -297,3 +297,125 @@ table.mx{border-collapse:collapse;width:100%;min-width:960px;font-size:.8rem}
 .gwnot{display:flex;gap:12px;flex-wrap:wrap;margin-top:16px}
 .gwnot > span{border:1px dashed var(--line-strong);border-radius:999px;padding:7px 16px;font-size:.8rem;color:var(--ink-soft);background:transparent}
 .gwnot > span b{color:var(--ink)}
+
+/* ============ responsive: fit the diagrams to the docs column ============ */
+/* The section rail only shows above 1120px, which is exactly where the
+   ontology's content column is narrowest (~745–940px). So the wide diagrams
+   must be fluid rather than fixed-width — they shrink to the column instead of
+   forcing a horizontal scrollbar, and collapse to single-column stacks on
+   phones. The .*scroll wrappers stay as a harmless fallback (no bar shows once
+   the content fits). */
+
+/* ERD schema tables — fluid columns, cells allowed to wrap */
+.colhead,
+.colrow {
+  min-width: 0;
+  grid-template-columns:
+    minmax(92px, 1.35fr) minmax(70px, 1fr) minmax(56px, auto)
+    minmax(70px, 1fr) minmax(120px, 2.1fr);
+}
+.erd.compact .colhead,
+.erd.compact .colrow {
+  min-width: 0;
+  grid-template-columns: minmax(92px, 1.4fr) minmax(70px, 1fr) auto minmax(96px, 1.5fr);
+}
+.colhead > span,
+.colrow > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Entity map — fluid two-column layout (was a fixed 1060px four-column grid) */
+.mapcanvas {
+  min-width: 0;
+  grid-template-columns: 1fr 1fr;
+  grid-template-areas:
+    'health money'
+    'calendar tasks'
+    'corez corez'
+    'contacts photos'
+    'messages home'
+    'notes studio';
+}
+.zone,
+.corezone {
+  min-width: 0;
+}
+
+/* Layer stack — fluid */
+.stack {
+  min-width: 0;
+}
+.layer {
+  min-width: 0;
+}
+
+/* Ownership matrix — shrink to fit typical laptop columns; scroll only when
+   truly cramped (a dense matrix is the one place a scroll bar is acceptable). */
+table.mx {
+  min-width: 720px;
+}
+
+/* Gateway pipeline — fluid stages so five cards shrink to the column instead
+   of forcing a scrollbar (they stack vertically on phones, below). */
+.gwpipe {
+  min-width: 0;
+}
+.gwstage {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  /* ERD rows collapse to stacked cards; the column header no longer applies */
+  .colhead {
+    display: none;
+  }
+  .colrow {
+    grid-template-columns: 1fr;
+    gap: 2px 0;
+    padding: 12px 15px;
+  }
+  .colrow .cn {
+    font-size: 0.9rem;
+  }
+  .colrow .cnote {
+    color: var(--ink-soft);
+  }
+
+  /* Entity map collapses to a single column */
+  .mapcanvas {
+    grid-template-columns: 1fr;
+    grid-template-areas: none;
+    gap: 10px;
+  }
+  .mapcanvas .zone,
+  .mapcanvas .corezone {
+    grid-area: auto !important;
+  }
+
+  /* Layer rows stack their number / title / detail / tag */
+  .layer {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+  .layer .lt {
+    justify-self: start;
+  }
+
+  /* Gateway pipeline turns from a horizontal flow into a vertical one */
+  .gwpipe {
+    flex-direction: column;
+    min-width: 0;
+    gap: 0;
+  }
+  .gwstage + .gwarrow {
+    flex: 0 0 auto;
+    padding: 5px 0;
+    transform: rotate(90deg);
+  }
+
+  /* Tighten the system-map padding so its bands fit a phone exactly */
+  .stack {
+    padding: 16px 14px;
+  }
+}

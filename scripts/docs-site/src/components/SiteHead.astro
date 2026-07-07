@@ -7,11 +7,12 @@ const base = import.meta.env.BASE_URL.endsWith('/')
 const hrefFor = (path = '') => `${base}${path}`;
 const nav = [
   ['start', 'start'],
+  ['understand', 'understand'],
   ['data', 'data'],
   ['apps', 'apps'],
   ['devices', 'devices'],
-  ['ontology', 'ontology'],
 ];
+const github = 'https://github.com/srikanth235/centraid';
 ---
 
 <header class="site-head">
@@ -22,25 +23,63 @@ const nav = [
       >
       Centraid <span class="docs-tag">docs</span>
     </a>
-    <nav>
+    <button
+      type="button"
+      class="doc-search"
+      id="doc-search"
+      data-index={hrefFor('assets/search-index.json')}
+      aria-label="Search the docs"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"
+        ><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.2-3.2"></path></svg
+      >
+      <span class="doc-search-label">Search the docs…</span>
+      <kbd class="doc-search-key"><span>⌘</span>K</kbd>
+    </button>
+    <nav class="head-nav">
       {
         nav.map(([slug, label]) => (
-          <a
-            href={hrefFor(`${slug}/`)}
-            aria-current={current === slug ? 'page' : undefined}
-            class={slug === 'ontology' ? 'hide-sm' : undefined}
-          >
+          <a href={hrefFor(`${slug}/`)} aria-current={current === slug ? 'page' : undefined}>
             {label}
           </a>
         ))
       }
-      <a
-        href="https://github.com/srikanth235/centraid"
-        target="_blank"
-        rel="noopener"
-        class="hide-sm">github</a
-      >
-      <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+      <a href={github} target="_blank" rel="noopener" class="hide-sm">github</a>
     </nav>
+    <button class="toggle" id="theme-toggle" aria-label="Toggle theme"></button>
+    <button
+      type="button"
+      class="nav-toggle"
+      id="nav-toggle"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-menu"
+    >
+      <span class="bars" aria-hidden="true"><i></i><i></i><i></i></span>
+    </button>
+  </div>
+
+  <div class="mobile-menu" id="mobile-menu">
+    <div class="mm-inner">
+      <nav class="mm-pages" aria-label="Chapters">
+        <p class="mm-label">Chapters</p>
+        {
+          nav.map(([slug, label]) => (
+            <a href={hrefFor(`${slug}/`)} aria-current={current === slug ? 'page' : undefined}>
+              <span>{label}</span>
+              <span class="mm-arrow" aria-hidden="true">→</span>
+            </a>
+          ))
+        }
+        <a href={github} target="_blank" rel="noopener" class="mm-ext">
+          <span>github</span>
+          <span class="mm-arrow" aria-hidden="true">↗</span>
+        </a>
+      </nav>
+      <div class="mm-sections" id="mm-sections" hidden>
+        <p class="mm-label">On this page</p>
+        <nav class="mm-rail" id="mm-rail" aria-label="Sections"></nav>
+      </div>
+    </div>
   </div>
 </header>

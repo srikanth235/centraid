@@ -1,4 +1,6 @@
 ---
+import coverage from '../../coverage.json';
+
 const { footer = {} } = Astro.props;
 const manifesto =
   footer.manifesto ||
@@ -40,5 +42,13 @@ const hrefFor = (href) => {
         }
       </span>
     </div>
+    <p class="foot-stamp">
+      <span aria-hidden="true">✎</span> docs current through
+      <a
+        href={`https://github.com/srikanth235/centraid/commit/${coverage.coversThroughCommit}`}
+        target="_blank"
+        rel="noopener"><code>{coverage.coversThroughCommit}</code></a
+      > · {coverage.coversThroughDate}
+    </p>
   </div>
 </footer>

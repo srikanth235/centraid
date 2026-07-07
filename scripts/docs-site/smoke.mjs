@@ -20,6 +20,7 @@ const homeIndex = join(repoRoot, 'scripts', 'home-site', 'public', 'index.html')
 const REQUIRED = [
   'index.html',
   'start/index.html',
+  'understand/index.html',
   'data/index.html',
   'apps/index.html',
   'devices/index.html',
@@ -29,6 +30,7 @@ const REQUIRED = [
   'assets/docs.css',
   'assets/docs.js',
   'assets/centraid-mark.svg',
+  'assets/search-index.json',
 ];
 
 let failures = 0;
