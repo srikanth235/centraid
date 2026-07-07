@@ -70,6 +70,8 @@ PASS - Reviewed the active Codex transcript for issue #315. The steering ledger 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | codex-019f3b6e-c55-1783410795-1 | codex | 019f3b6e-c55b-7cb1-9429-f74bd8a0b318 | #315 | gpt-5.5 | 420293 | 0 | 9773952 | 52375 | 472668 | 8.5597 | 420293 | 0 | 9773952 | 52375 | docs(site): migrate docs to Astro clean routes (#315) -m Move the docs site to A |
 | codex-019f3b6e-c55-1783411029-1 | codex | 019f3b6e-c55b-7cb1-9429-f74bd8a0b318 | #315 | gpt-5.5 | 86603 | 0 | 828288 | 7875 | 94478 | 1.0834 | 506896 | 0 | 10602240 | 60250 | docs(site): migrate docs to Astro clean routes (#315) -m Move the docs site to A |
+| codex-019f3beb-1a2-1783418056-1 | codex | 019f3beb-1a29-73c3-bf5d-a00cb2011b94 | #315 | gpt-5.5 | 584105 | 0 | 7691776 | 27335 | 611440 | 7.5865 | 584105 | 0 | 7691776 | 27335 | fix(docs): align site shell follow-ups (#315) |
+| codex-019f3beb-1a2-1783418111-1 | codex | 019f3beb-1a29-73c3-bf5d-a00cb2011b94 | #315 | gpt-5.5 | 10816 | 0 | 379136 | 552 | 11368 | 0.2602 | 594921 | 0 | 8070912 | 27887 | fix(docs): align site shell follow-ups (#315) -m Keep the docs landing, chapter  |
 
 ### Steering
 

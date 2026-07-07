@@ -40,6 +40,7 @@ const asset = (path) => `${base}${path}`;
       rel="stylesheet"
     />
     <link rel="stylesheet" href={asset('assets/docs.css')} />
+    <slot name="head" />
   </head>
   <body class={bodyClass}>
     <SiteHead current={current} />
