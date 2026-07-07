@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   writeFileMap,
@@ -19,10 +20,7 @@ function tmp(): string {
 
 function mockReq(body: string | Buffer): IncomingMessage {
   const buf = typeof body === 'string' ? Buffer.from(body) : body;
-  async function* gen(): AsyncGenerator<Buffer> {
-    yield buf;
-  }
-  return gen() as unknown as IncomingMessage;
+  return Readable.from([buf]) as unknown as IncomingMessage;
 }
 
 function mockRes(): { res: ServerResponse; out: { status: number; body: string } } {

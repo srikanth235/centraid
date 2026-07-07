@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PrefsStore, makeUserStoreRouteHandler } from './prefs-store.js';
 
@@ -12,10 +13,7 @@ function freshFile(): string {
 /** A minimal async-iterable IncomingMessage carrying an optional JSON body. */
 function mockReq(method: string, url: string, body?: unknown): IncomingMessage {
   const chunks = body === undefined ? [] : [Buffer.from(JSON.stringify(body))];
-  async function* gen(): AsyncGenerator<Buffer> {
-    for (const c of chunks) yield c;
-  }
-  const req = gen() as unknown as IncomingMessage & { url: string; method: string };
+  const req = Readable.from(chunks) as unknown as IncomingMessage & { url: string; method: string };
   req.url = url;
   req.method = method;
   return req;
