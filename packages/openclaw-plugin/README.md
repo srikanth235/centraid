@@ -58,22 +58,24 @@ Either way, every client — the desktop renderer, the mobile companion — sees
 
 ## App layout on disk
 
-App **code** is backed by the gateway-owned git store (issue #137), not a per-app `versions/` tree. `buildGateway` is constructed with `appsStoreRoot` (`<dbDir>/centraid-code`); the store keeps `apps.git` + `worktrees/`, and the runtime serves handlers + static assets from the live `main` worktree's `apps/` dir (`gw.codeAppsDir()`, a stable symlink repointed atomically on each publish). App **state** stays under `appsDir`:
+Post-#280 the **vault is the unit** — everything personal (app code, app data, the conversation ledger, run history) lives inside one vault directory. The plugin's `appsDir` config knob now just anchors the root one level up (`dbDir = dirname(appsDir)`); the plugin passes `buildGateway` a `vaultDir` and `prefsFile` under that root, and the gateway mounts the vault registry there:
 
 ```
-<appsDir>/<id>/
-  logs.jsonl         ← handler logs, never moved on publish
-  settings.json      ← per-app settings (knobs, automation toggles)
+<dbDir>/                       (one level up from the configured appsDir root)
+  centraid-vault/              ← vault registry root: one subdirectory per vault
+    <vaultId>/
+      vault.db                 ← the ontology schemas (one ACID boundary)
+      journal.db               ← audit stream + conversation ledger + run_summary view
+      apps/                    ← per-app DATA
+        <id>/
+          logs.jsonl           ← handler logs, never moved on publish
+          settings.json        ← per-app settings (knobs, automation toggles)
+      code/                    ← app CODE git store: apps.git + worktrees/
+      runner-sessions/         ← codex/claude thread state for in-app chat
+  centraid-prefs.json          ← device prefs (runner choice, binPath, …)
 ```
 
-```
-<dbDir>/                       (one level up from appsDir)
-  centraid-code/               ← git store: apps.git + worktrees/ (app CODE)
-  centraid-gateway.sqlite      ← identity (users + prefs)
-  centraid-analytics.sqlite    ← central analytics
-```
-
-Publishing replaces the legacy tarball-upload + version-flip flow: a draft session stages files into the git store, and a publish commits them onto `main` and repoints the live symlink. There is no upload tarball, no `current.json`, no `versions/` dir.
+App **code** is backed by the per-vault git store (issue #137), not a per-app `versions/` tree. The runtime serves handlers + static assets from the vault's live `main` worktree (`gw.codeAppsDir()`, a stable symlink repointed atomically on each publish). Publishing replaces the legacy tarball-upload + version-flip flow: a draft session stages files into the git store, and a publish commits them onto `main` and repoints the live symlink. There is no upload tarball, no `current.json`, no `versions/` dir. There is no `identity.sqlite` or central `analytics.sqlite`: the vault owner is the user, and the run rollup is the `run_summary` view inside each vault's `journal.db`.
 
 ## App folder layout
 
@@ -146,9 +148,9 @@ The plugin reads exactly one config key at `register()` time:
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Where per-app DATA folders live. Absolute paths are used as-is; relative paths resolve under the OpenClaw state dir. |
+| `appsDir` | `centraid` (resolved under `$OPENCLAW_STATE_DIR`, default `~/.openclaw`) | Anchors the gateway root. Absolute paths are used as-is; relative paths resolve under the OpenClaw state dir. Post-#280 per-app data no longer lives here directly — it lives inside a vault (see the on-disk layout above). |
 
-The sibling SQLite files (`centraid-gateway.sqlite`, `centraid-analytics.sqlite`) and the app-code git store (`centraid-code/`) live one level up from `appsDir`.
+The vault registry (`centraid-vault/`) and device prefs (`centraid-prefs.json`) live one level up from `appsDir` (`dbDir = dirname(appsDir)`). Each vault holds its own `vault.db` + `journal.db` + `apps/` (data) + `code/` (git store) — there are no gateway-root SQLite siblings.
 
 ## Trust & security model
 

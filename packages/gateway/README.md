@@ -25,10 +25,8 @@ import { serve } from '@centraid/gateway';
 
 const handle = await serve({
   paths: {
-    appsDir: '/var/lib/centraid/apps',
-    identityDb: '/var/lib/centraid/identity.sqlite',
-    analyticsDb: '/var/lib/centraid/analytics.sqlite',
-    conversationRunnerSessionDir: '/var/lib/centraid/conversation-runner-sessions',
+    vaultDir: '/var/lib/centraid/vault',
+    prefsFile: '/var/lib/centraid/prefs.json',
     modelCatalogFile: '/var/lib/centraid/model-catalog.json',
   },
   host: '0.0.0.0',
@@ -37,7 +35,13 @@ const handle = await serve({
 console.log(handle.url, handle.token);
 ```
 
-`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`).
+`paths` is the only required option (see `GatewayPaths` in `src/paths.ts`);
+`vaultDir` and `prefsFile` are its required fields. Post-#280 the vault is
+the unit — everything personal (apps, code, conversation ledger, run
+history) lives inside `<vaultDir>/<vaultId>/`, so the gateway level keeps
+only plumbing (device prefs, model catalog). There is no `identity.sqlite`
+or `analytics.sqlite`: the vault owner IS the user, and the run rollup is
+now the `run_summary` view inside each vault's `journal.db`.
 There is no `secrets` injection: the gateway is auth-agnostic about the coding
 agent — codex and Claude Code each own their own auth (`codex login` /
 `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git
@@ -92,23 +96,40 @@ centraid-gateway serve --config /etc/centraid-gateway.json
 ```
 
 Every field is optional except `dataDir` (see `validateConfig` in
-`src/cli/config.ts`). The `runner` block seeds the gateway's identity DB on
-first boot (`agent.runner.kind` / `binPath` / `extraArgs`), so the per-turn
-prefs loader inside `serve()` reads it unchanged; removing the block on a later
-boot clears those prefs. There is **no** `provider` block and no provider-key
-file — model/provider routing is the coding agent CLI's own config.
+`src/cli/config.ts`). The `runner` block seeds the gateway's device prefs
+(`<dataDir>/prefs.json`) on first boot (`agent.runner.kind` / `binPath` /
+`extraArgs`), so the per-turn prefs loader inside `serve()` reads it unchanged;
+removing the block on a later boot clears those prefs. (#280 killed the old
+`identity.sqlite` — the vault owner is the user, so what's left at the gateway
+level is device configuration.) There is **no** `provider` block and no
+provider-key file — model/provider routing is the coding agent CLI's own config.
 
 ## Daemon `<dataDir>` layout
 
+Post-#280 the gateway level holds only plumbing; everything personal lives
+inside a vault (see `daemonLayoutFor` in `src/cli/paths.ts`):
+
 ```
 <dataDir>/
-  apps/                          — registered apps + _registry.json + per-app state (logs, settings)
-  identity.sqlite                — users + per-user prefs
-  analytics.sqlite               — one summary row per run
-  conversation-runner-sessions/  — codex/claude thread state for in-app chat
-  model-catalog.json             — per-runner model + tool catalog
-  token.bin                      — persistent bearer token (mode 0o600)
+  prefs.json             — device prefs (runner choice, binPath, …)
+  model-catalog.json     — chat picker's per-runner model + tool catalog
+  token.bin              — persistent bearer token (mode 0o600)
+  devices.json           — device enrollments: device key ↔ vault (#289)
+  pairing-tickets.json   — one-time pairing tickets, secret hashes only (#289)
+  endpoint-key.bin       — the gateway's persistent iroh secret key (#289)
+  endpoint.json          — the live endpoint's id + dial ticket, for the pair CLI (#289)
+  vault/                 — vault registry root: one subdirectory per vault
+    <vaultId>/
+      vault.db           — the ontology schemas (one ACID boundary)
+      journal.db         — audit stream + conversation ledger + run_summary view
+      apps/              — per-app DATA (logs, settings, attachment blobs)
+      code/              — app code git store (apps.git + worktrees/)
+      runner-sessions/   — codex/claude thread state for in-app chat
 ```
+
+Each vault is sovereign — a backup is `cp -r <dataDir>/vault/<vaultId>`. The
+run rollup that feeds Insights is the `run_summary` VIEW inside `journal.db`,
+not a separate file.
 
 ## v0 scope and gaps
 
