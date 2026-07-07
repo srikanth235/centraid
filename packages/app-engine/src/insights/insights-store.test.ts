@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { makeTranscriptsDbProvider } from '../stores/gateway-db.js';
+import { makeJournalDbProvider } from '../stores/gateway-db.js';
 import { ConversationStore } from '../conversation/store.js';
 import { AnalyticsStore } from './analytics-store.js';
 import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
@@ -17,7 +17,7 @@ import { InsightsStore, INSIGHTS_QUOTA_TOKENS } from './insights-store.js';
 function setup(): { runs: ConversationStore; insights: InsightsStore } {
   const dir = mkdtempSync(join(tmpdir(), 'centraid-insights-'));
   // One per-vault file (#280): the ledger and the run_summary rollup share it.
-  const ledger = makeTranscriptsDbProvider(join(dir, 'transcripts.db'));
+  const ledger = makeJournalDbProvider(join(dir, 'journal.db'));
   const analyticsProvider = ledger;
   const analytics = new AnalyticsStore(analyticsProvider);
   return {

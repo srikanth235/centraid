@@ -8,7 +8,7 @@
  *
  * A chat session IS a `conversations` row (`kind='chat'` | `'build'`).
  * Conversations + their turns/items/attachments live in the ACTIVE vault's
- * `transcripts.db` — a conversation binds to its vault at creation, so
+ * `journal.db` — a conversation binds to its vault at creation, so
  * switching vaults switches the visible history, and a mid-thread switch
  * fails closed (the thread's row isn't in the new vault's file). App scoping
  * is the `app_id` column. Conversations are stamped with the vault owner's
@@ -130,7 +130,7 @@ export const ASSISTANT_APP_ID = '_assistant';
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
   /**
-   * ONE ledger store over "the ACTIVE vault's transcripts.db" — the provider
+   * ONE ledger store over "the ACTIVE vault's journal.db" — the provider
    * resolves the workspace per call and the store re-prepares on handle
    * change, so a vault switch needs no reconstruction here.
    */
@@ -144,7 +144,7 @@ export class ConversationHistoryStore {
    */
   constructor(workspace: WorkspaceProvider, analytics?: RunSummarySink) {
     this.workspace = workspace;
-    this.store = new ConversationStore(() => workspace().transcripts(), analytics);
+    this.store = new ConversationStore(() => workspace().journal(), analytics);
     this.blobs = new BlobStore(() => workspace().appsDir);
   }
 
@@ -299,7 +299,7 @@ export class ConversationHistoryStore {
   /**
    * Persist one completed chat turn: a `turns` row, its ordinal-0 `message_in`
    * item (plus any attachments), and the assistant/tool `items`, in the active
-   * vault's `transcripts.db`. Returns `undefined` when the conversation doesn't
+   * vault's `journal.db`. Returns `undefined` when the conversation doesn't
    * exist there — including the mid-turn vault-switch case, which thereby fails
    * closed (#280) — or is owned by another user. The first turn names the
    * conversation.

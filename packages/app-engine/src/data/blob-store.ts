@@ -6,7 +6,7 @@
  * content — never base64'd into a `*_json` column (which would bloat every
  * transcript read). Content addressing buys free dedup: the same file uploaded
  * twice (or arriving on two turns) lands once. The `attachments` rows in the
- * vault's `transcripts.db` carry the metadata + `hash`; this store owns the
+ * vault's `journal.db` carry the metadata + `hash`; this store owns the
  * bytes. The root is a provider — it resolves the ACTIVE vault's workspace
  * per call (#280), so the bytes are vault-scoped and export with the vault.
  *

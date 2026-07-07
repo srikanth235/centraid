@@ -4,11 +4,11 @@
 /*
  * ConversationStore — the per-vault conversation ledger + automation KV
  * (issue #90, reshaped by #190; moved from per-app `runtime.sqlite` into
- * the vault's `transcripts.db` by #280 — a conversation binds to its vault
+ * the vault's `journal.db` by #280 — a conversation binds to its vault
  * at creation, and app scoping is the `app_id` column, not a file).
  *
  * Five ledger tables — `conversations`, `turns`, `items`, `attachments`,
- * `automation_state` — the `TRANSCRIPTS_MIGRATIONS` shape in `gateway-db.ts`
+ * `automation_state` — the `CONVERSATION_LEDGER_DDL` shape in `gateway-db.ts`
  * (which also carries the `run_summary` rollup `AnalyticsStore` owns).
  *
  *   conversations    — the first-class durable record. `kind` (chat |
@@ -27,7 +27,7 @@
  *                      webhook/email file), CASCADE off `items`.
  *   automation_state — per-(automation_id, key) KV.
  *
- * Constructed over a vault's `transcripts.db` `DatabaseProvider` (which may
+ * Constructed over a vault's `journal.db` `DatabaseProvider` (which may
  * resolve "the ACTIVE vault" — the store re-prepares when the handle
  * changes). Runtime-owned: never reachable from the handler `db` proxy or
  * the `centraid_sql_*` agent tools. When a `RunSummarySink` is supplied,
@@ -198,7 +198,7 @@ export class ConversationStore {
 
   private ensureReady(): { db: DatabaseSync; stmts: PreparedStatements } {
     // The provider may resolve a different handle across calls (the gateway
-    // wires "the ACTIVE vault's transcripts.db") — re-prepare on change so a
+    // wires "the ACTIVE vault's journal.db") — re-prepare on change so a
     // vault switch lands without reconstructing the store.
     const db = this.provider();
     if (this.db === db && this.stmts) return { db, stmts: this.stmts };

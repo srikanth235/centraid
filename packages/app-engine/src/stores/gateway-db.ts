@@ -1,15 +1,19 @@
 /*
- * Centraid SQLite state. app-engine owns one migration ladder — the
- * per-vault transcripts file — plus the shared open primitive
- * (`openMigratedDb` / `makeMigratedDbProvider`) that downstream ladders
- * (the vault package's own files stay vault-owned) reuse for the same
- * WAL/busy_timeout/FK pragmas.
+ * Centraid SQLite state. app-engine owns the CONVERSATION-LEDGER BAND of the
+ * vault's `journal.db` — the old standalone `transcripts.db` folded into the
+ * journal file (one fewer file per vault; both carry the same append-heavy,
+ * derived-growth profile that keeps `vault.db` — the sovereign asset — small).
  *
- *   transcripts (`<vaultDir>/<vaultId>/transcripts.db`) — one per vault,
- *                the vault's conversation ledger + automation KV + the
- *                run-summary rollup (issue #280: the vault is the unit;
- *                the old per-app `runtime.sqlite` and the central
- *                `analytics.sqlite` both folded into this file)
+ *   journal.db (`<vaultDir>/<vaultId>/journal.db`) — one per vault, TWO bands:
+ *     · the audit band (consent receipts, provenance, invocations, checks) —
+ *       owned by the vault package, versioned by ITS single-rung ladder via
+ *       `PRAGMA user_version`, append-only by contract;
+ *     · the conversation-ledger band (this module) — the vault's conversation
+ *       ledger + automation KV + the run-summary rollup. Runtime-owned and
+ *       mutable (turns finish, titles change, CASCADE deletes), so it is NOT
+ *       part of the append-only audit contract.
+ *
+ *   Ledger-band tables:
  *     conversations    — the first-class spine: one durable thread per
  *                        chat window, automation, or builder session.
  *                        `kind` (chat|automation|build) lives here — a
@@ -51,25 +55,33 @@
  *     the same transaction batch). Runtime-owned; never reachable from
  *     handler `db` or the `centraid_sql_*` agent tools.
  *
+ * Versioning: the file's `PRAGMA user_version` belongs to the vault package's
+ * audit-band ladder — this module must never stamp it. The ledger band is
+ * instead ENSURED on open: every statement below is `IF NOT EXISTS`, so
+ * `ensureConversationLedger` is idempotent, safe against a file the vault has
+ * already migrated, and safe in the reverse order too (a worker that opens the
+ * journal before the vault does creates only the ledger band; the vault's
+ * ladder still runs from user_version 0 when the plane mounts). Pre-1.0 a
+ * ledger shape change edits the DDL in place and dev vaults are recreated
+ * (v0: no data migrations); post-1.0 the band gets its own versioning story.
+ *
  * The old gateway identity file (`identity.sqlite`: users + user_prefs) is
  * gone — the vault owner IS the user (`core_vault.owner_party_id`), and
  * device-level prefs live in a plain JSON file (see `prefs-store.ts`).
  *
- * Each file gets one connection and one provider. The OpenClaw plugin's
- * worker subprocesses (which construct the runtime in every context but
- * only the gateway worker serves HTTP) never open a file unless they
- * actually serve a route, because providers open lazily.
- *
- * Migration policy: pre-1.0, the baseline slot can absorb shape changes.
- * Once we ship 1.0 we flip to strict append-only.
+ * Each opener gets one connection per file. The OpenClaw plugin's worker
+ * subprocesses (which construct the runtime in every context but only the
+ * gateway worker serves HTTP) never open a file unless they actually serve a
+ * route, because providers open lazily. A worker connection coexists with the
+ * gateway's own journal handle via WAL + busy_timeout.
  */
 
 import { DatabaseSync } from 'node:sqlite';
 
 /**
  * Lazy provider for a `DatabaseSync` handle. Stores call this once on
- * their first method invocation; the provider opens the file (and runs
- * migrations) on first call and caches the handle.
+ * their first method invocation; the provider opens the file (and ensures
+ * the ledger band) on first call and caches the handle.
  *
  * Lazy because the OpenClaw plugin's `register()` runs in every worker
  * subprocess — only the gateway worker actually serves the HTTP routes
@@ -77,23 +89,19 @@ import { DatabaseSync } from 'node:sqlite';
  * out of workers that never read or write.
  *
  * NOTE (#280): a provider may resolve to a DIFFERENT handle across calls —
- * the gateway wires "the ACTIVE vault's transcripts.db" as one provider, so
+ * the gateway wires "the ACTIVE vault's journal.db" as one provider, so
  * a vault switch changes what it returns. Stores that cache prepared
  * statements must compare the handle per call and re-prepare on change.
  */
 export type DatabaseProvider = () => DatabaseSync;
 
 /**
- * Per-vault transcripts migration ladder — `transcripts.db`
- * (issue #98 → #190 shape, moved per-vault and merged with the run-summary
- * rollup by #280).
+ * The conversation-ledger band of the vault's `journal.db` (issue #98 → #190
+ * shape, moved per-vault and merged with the run-summary rollup by #280,
+ * folded from the standalone `transcripts.db` into the journal file).
+ * Every statement is `IF NOT EXISTS` — see the versioning note above.
  */
-export const TRANSCRIPTS_MIGRATIONS: readonly string[] = [
-  // 0 → 1: the per-vault conversation ledger + run-summary rollup. Pre-1.0
-  // baseline (no production rows to migrate) — the move from per-app
-  // `runtime.sqlite` + central `analytics.sqlite` is absorbed by this slot,
-  // not a data migration (#280).
-  `
+export const CONVERSATION_LEDGER_DDL = `
     CREATE TABLE IF NOT EXISTS conversations (
       id                 TEXT PRIMARY KEY,
       kind               TEXT NOT NULL,
@@ -231,96 +239,54 @@ export const TRANSCRIPTS_MIGRATIONS: readonly string[] = [
       ON run_summary(started_at DESC);
     CREATE INDEX IF NOT EXISTS idx_run_summary_kind_ref
       ON run_summary(kind, automation_ref, started_at DESC);
-  `,
-];
+`;
 
 /**
- * Run the pending migration tail of `migrations` against `db`. `label`
- * names the file in the version-mismatch error. Idempotent on an
- * already-current DB; throws if the DB is at a version newer than this
- * build understands.
+ * Idempotently create the conversation-ledger band on an open journal
+ * handle. Never touches `PRAGMA user_version` — that belongs to the vault
+ * package's audit-band ladder on the same file. Callers that already hold
+ * the vault's own journal handle (the gateway's vault plane) use this
+ * directly instead of opening a second connection.
  */
-function migrate(db: DatabaseSync, migrations: readonly string[], label: string): void {
-  const row = db.prepare('PRAGMA user_version').get() as { user_version: number } | undefined;
-  const current = row?.user_version ?? 0;
-  if (current > migrations.length) {
-    throw new Error(
-      `${label} DB is at version ${current} but this build only supports up to ${migrations.length}. ` +
-        `Please update centraid before opening this database.`,
-    );
-  }
-  if (current === migrations.length) return;
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    for (let v = current; v < migrations.length; v++) {
-      db.exec(migrations[v]!);
-      // v is a loop index bounded by migrations.length, never user input,
-      // so it's safe to interpolate into the PRAGMA (which doesn't accept
-      // bind parameters).
-      db.exec(`PRAGMA user_version = ${v + 1}`);
-    }
-    db.exec('COMMIT');
-  } catch (err) {
-    try {
-      db.exec('ROLLBACK');
-    } catch {
-      /* already rolled back */
-    }
-    throw err;
-  }
+export function ensureConversationLedger(db: DatabaseSync): void {
+  db.exec(CONVERSATION_LEDGER_DDL);
 }
 
 /**
- * Open a centraid DB file at `dbPath`, set the per-connection pragmas
- * (WAL journal, FK enforcement), and run the pending migration tail of
- * `migrations`. Idempotent on an already-current DB; throws if the DB is
- * at a version newer than this build understands.
+ * Open a vault's `journal.db` at `dbPath` for ledger-band use: set the
+ * per-connection pragmas (WAL journal, FK enforcement, busy_timeout) and
+ * ensure the conversation-ledger tables exist. Safe on a file the vault
+ * package has already migrated (the audit band and its user_version are
+ * untouched) and on a bare path (only the ledger band is created; the
+ * vault's ladder still runs when the plane mounts the file).
  *
- * Pragmas must run outside any transaction (journal_mode in particular),
- * so they happen before migrate() opens its BEGIN IMMEDIATE block.
+ * Pragmas run outside any transaction (journal_mode in particular), then
+ * the ensure executes its `IF NOT EXISTS` DDL.
  */
-export function openMigratedDb(
-  dbPath: string,
-  migrations: readonly string[],
-  label: string,
-): DatabaseSync {
+export function openJournalDb(dbPath: string): DatabaseSync {
   const db = new DatabaseSync(dbPath);
   // busy_timeout: wait up to 30s for a lock instead of failing
-  // immediately. Multi-client gateway (standalone daemon) makes this
-  // load-bearing; the Electron embed sees only one client so the gap
-  // was previously latent.
+  // immediately. Load-bearing twice over: the multi-client gateway
+  // (standalone daemon) and the worker subprocesses that open the SAME
+  // journal file the gateway's vault plane holds open.
   db.exec(`
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
     PRAGMA busy_timeout=30000;
   `);
-  migrate(db, migrations, label);
+  ensureConversationLedger(db);
   return db;
 }
 
 /**
  * Wrap a fixed `dbPath` into a lazy `DatabaseProvider`. The provider
- * opens the file on the first call (running migrations as a side effect)
- * and caches the handle for subsequent calls.
+ * opens the journal file on the first call (ensuring the ledger band as a
+ * side effect) and caches the handle for subsequent calls.
  */
-export function makeMigratedDbProvider(
-  dbPath: string,
-  migrations: readonly string[],
-  label: string,
-): DatabaseProvider {
+export function makeJournalDbProvider(dbPath: string): DatabaseProvider {
   let db: DatabaseSync | undefined;
   return () => {
-    if (!db) db = openMigratedDb(dbPath, migrations, label);
+    if (!db) db = openJournalDb(dbPath);
     return db;
   };
-}
-
-/** Open a vault's `transcripts.db` (conversations + turns + items + attachments + ctx.state + run_summary). */
-export function openTranscriptsDb(dbPath: string): DatabaseSync {
-  return openMigratedDb(dbPath, TRANSCRIPTS_MIGRATIONS, 'transcripts');
-}
-
-/** Lazy provider for a vault's `transcripts.db` ledger. */
-export function makeTranscriptsDbProvider(dbPath: string): DatabaseProvider {
-  return makeMigratedDbProvider(dbPath, TRANSCRIPTS_MIGRATIONS, 'transcripts');
 }

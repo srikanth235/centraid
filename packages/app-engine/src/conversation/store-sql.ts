@@ -280,7 +280,7 @@ export function prepare(db: DatabaseSync): PreparedStatements {
       FROM conversations c WHERE c.id = ? AND c.user_id = ?
     `),
     // App scoping is a column filter (`?3 IS NULL OR c.app_id = ?`): the
-    // ledger file is per VAULT, one shared `transcripts.db` (#280).
+    // ledger file is per VAULT, one shared `journal.db` (#280).
     listConversations: db.prepare(`
       SELECT ${CONV_COLS},
         (SELECT COUNT(*) FROM items WHERE turn_id IN

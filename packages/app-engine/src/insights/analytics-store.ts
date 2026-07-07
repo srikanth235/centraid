@@ -1,10 +1,10 @@
 /*
  * AnalyticsStore — the per-vault run-summary rollup (issue #98, decision 4;
- * moved into the vault's own `transcripts.db` by #280).
+ * moved into the vault's own `journal.db` by #280).
  *
  * Push-based analytics: at run completion the runtime write-throughs one
  * summary row here. The `run_summary` table lives INSIDE the vault's
- * `transcripts.db` — every run, every kind, but only THIS vault's; a
+ * `journal.db` — every run, every kind, but only THIS vault's; a
  * central file would aggregate across vaults, which #280 forbids. This
  * store is the single source the Insights screen and the desktop
  * Executions feed read, so neither needs a cross-file scan.
@@ -13,7 +13,7 @@
  * in try/catch so a rollup hiccup never fails the run. The ledger tables
  * in the same file stay authoritative for a rebuild.
  *
- * The provider usually resolves "the ACTIVE vault's transcripts.db", so
+ * The provider usually resolves "the ACTIVE vault's journal.db", so
  * the handle can change across calls (a vault switch); `ensureReady`
  * re-prepares when it does.
  */
@@ -96,7 +96,7 @@ interface PreparedStatements {
 
 /**
  * Store over a vault's `run_summary` table. Construct with the vault's
- * transcripts `DatabaseProvider` (`makeTranscriptsDbProvider`, or the
+ * journal `DatabaseProvider` (`makeJournalDbProvider`, or the
  * gateway's active-vault resolver).
  */
 export class AnalyticsStore implements RunSummarySink {

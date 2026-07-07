@@ -11,7 +11,7 @@
  *
  *   - AnalyticsStore — push-based run summaries. Implements app-engine's
  *     `RunSummarySink`, so `finishTurn` can write-through one row per run.
- *     Backed by the vault's own `transcripts.db` `run_summary` table
+ *     Backed by the vault's own `journal.db` `run_summary` table
  *     (issue #280 — the central `analytics.sqlite` is gone; a per-vault
  *     rollup can never aggregate across vaults).
  *   - InsightsStore — read-only aggregation over those summaries; the single

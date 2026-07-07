@@ -202,23 +202,23 @@ export { isValidConversationId } from './http/turn-routes.js';
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
-// sha256; the `attachments` rows in the vault's `transcripts.db` carry the
+// sha256; the `attachments` rows in the vault's `journal.db` carry the
 // metadata. GC is refcount-by-hash off `ConversationStore.referencedHashes`.
 export { BlobStore, blobUrl, hashBytes, type PutResult } from './data/blob-store.js';
 
-// SQLite state — app-engine owns ONE migration ladder (#280):
-//   - transcripts (`<vaultDir>/<vaultId>/transcripts.db`): conversations,
-//     turns, items, attachments, automation_state, run_summary — the
-//     per-vault ledger + rollup. The old identity.sqlite (users/user_prefs)
-//     and central analytics.sqlite are gone.
+// SQLite state — app-engine owns the conversation-ledger BAND of the vault's
+// `journal.db` (#280 shape, transcripts.db folded into the journal file):
+//   conversations, turns, items, attachments, automation_state, run_summary —
+//   the per-vault ledger + rollup. Ensured idempotently on open; the file's
+//   user_version belongs to the vault package's audit-band ladder. The old
+//   identity.sqlite (users/user_prefs) and central analytics.sqlite are gone.
 // Cross-file FKs aren't possible in SQLite, so `conversations.user_id` (the
 // vault owner's party id) is application-enforced.
 export {
-  openTranscriptsDb,
-  makeTranscriptsDbProvider,
-  openMigratedDb,
-  makeMigratedDbProvider,
-  TRANSCRIPTS_MIGRATIONS,
+  openJournalDb,
+  makeJournalDbProvider,
+  ensureConversationLedger,
+  CONVERSATION_LEDGER_DDL,
   type DatabaseProvider,
 } from './stores/gateway-db.js';
 
@@ -287,10 +287,10 @@ export type {
 // records NULL (distinct from a genuine $0). See issue #90 question 4.
 export { priceForModel, costForUsage, type ModelPrice, type TokenUsage } from './model-pricing.js';
 
-// Insights domain — AnalyticsStore + InsightsStore + the analytics DB ladder.
+// Insights domain — AnalyticsStore + InsightsStore over the run ledger.
 // Lives in the `insights/` sub-module behind a one-way internal boundary:
-// `insights/` builds its provider through the shared `makeMigratedDbProvider`
-// above and implements the `RunSummarySink` contract, while the rest of
+// `insights/` consumes a journal `DatabaseProvider` (`makeJournalDbProvider`
+// above) and implements the `RunSummarySink` contract, while the rest of
 // app-engine emits run summaries through the injected sink and never imports
 // back into `insights/`. Folded in from the former `@centraid/analytics`
 // package (#151), kept as its own folder + barrel.
