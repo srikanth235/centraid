@@ -22,6 +22,7 @@ import {
   type TurnStreamEvent,
 } from './gateway-client.js';
 import { relativeTime } from './app-format.js';
+import type { AssistantSnapshot, AsstMsgDTO } from './react/bridge.js';
 import type { ShellContext } from './app-shell-context.js';
 
 interface AsstToolCall {
@@ -310,6 +311,13 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     let streamEl: HTMLElement | null = null;
     let disposed = false;
 
+    // Phase 3 (#325) — when the React bridge is present, this route keeps the
+    // stream, the message model, and the `richAnswer` renderer, and pushes a
+    // snapshot into React on every change. The vanilla DOM below is retained as
+    // a runnable fallback for any build without the bundle.
+    const mountReact = window.CentraidReact?.mountAssistant;
+    let reactUpdate: ((s: AssistantSnapshot) => void) | null = null;
+
     registerCleanup(() => {
       disposed = true;
       abort?.abort();
@@ -317,7 +325,7 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
 
     const main = el('div', { class: 'has-wall' });
     const body = el('div', { class: 'cd-asst' });
-    main.append(body);
+    if (!mountReact) main.append(body);
 
     // Left: threads.
     const threadList = el('div', { class: 'cd-asst-threads' });
@@ -342,16 +350,87 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     ) as HTMLButtonElement;
     const composer = el('div', { class: 'cd-asst-composer' }, [input, sendBtn]);
     const chat = el('section', { class: 'cd-asst-chat' }, [scroll, composer]);
-    body.append(listWrap, chat);
+    if (!mountReact) body.append(listWrap, chat);
+
+    // ── React snapshot derivation ────────────────────────────────────────
+
+    const toMsgDTO = (m: AsstMsg): AsstMsgDTO => {
+      if (m.kind === 'user') return { kind: 'user', text: m.text };
+      if (m.kind === 'tools') {
+        const n = m.calls.length;
+        const running = m.calls.some((c) => c.state === 'run');
+        const failed = m.calls.filter((c) => c.state === 'error').length;
+        const ms = m.calls.reduce((a, c) => a + (c.durationMs ?? 0), 0);
+        const label = running
+          ? 'querying the vault…'
+          : `${n} ${n === 1 ? 'query' : 'queries'}${ms ? ` · ${ms}ms` : ''}${failed ? ` · ${failed} failed` : ''}`;
+        return {
+          kind: 'tools',
+          label,
+          calls: m.calls.map((c) => ({
+            tool: c.tool,
+            ...(c.sql ? { sql: c.sql } : {}),
+            state: c.state,
+            meta:
+              c.state === 'error'
+                ? (c.errorText ?? 'failed')
+                : c.state === 'ok'
+                  ? `${c.totalRows ?? '?'} rows${c.durationMs ? ` · ${c.durationMs}ms` : ''}`
+                  : 'running…',
+          })),
+        };
+      }
+      if (m.streaming) return { kind: 'ai', streaming: true, text: m.text };
+      return { kind: 'ai', streaming: false, html: richAnswer(m.text).outerHTML, error: Boolean(m.error) };
+    };
+
+    const buildSnapshot = (): AssistantSnapshot => ({
+      threads: threads.map((t) => ({
+        id: t.id,
+        title: t.title || 'New conversation',
+        timeLabel: relativeTime(new Date(t.updatedAt).toISOString()),
+        active: t.id === currentId,
+      })),
+      empty: msgs.length === 0,
+      busy,
+      messages: msgs.map(toMsgDTO),
+    });
+
+    const pushReact = (): void => {
+      if (reactUpdate) reactUpdate(buildSnapshot());
+    };
 
     const setBusy = (b: boolean): void => {
       busy = b;
+      if (reactUpdate) {
+        pushReact();
+        return;
+      }
       sendBtn.textContent = b ? '■' : '↑';
       sendBtn.setAttribute('aria-label', b ? 'Stop' : 'Send');
       input.toggleAttribute('data-busy', b);
     };
 
+    async function deleteThread(id: string): Promise<void> {
+      const t = threads.find((x) => x.id === id);
+      const yes = await ctx.openConfirm({
+        title: 'Delete conversation?',
+        message: `“${t?.title || 'New conversation'}” will be removed from this vault's history.`,
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!yes) return;
+      await deleteConversation(ASSISTANT_APP_ID, id).catch(() => undefined);
+      threads = threads.filter((x) => x.id !== id);
+      if (currentId === id) await selectThread(null);
+      else renderThreads();
+    }
+
     function renderThreads(): void {
+      if (reactUpdate) {
+        pushReact();
+        return;
+      }
       threadList.replaceChildren(
         ...threads.map((t) => {
           const row = el(
@@ -373,20 +452,7 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
           );
           row.addEventListener('contextmenu', (e) => {
             e.preventDefault();
-            void ctx
-              .openConfirm({
-                title: 'Delete conversation?',
-                message: `“${t.title || 'New conversation'}” will be removed from this vault's history.`,
-                confirmLabel: 'Delete',
-                danger: true,
-              })
-              .then(async (yes) => {
-                if (!yes) return;
-                await deleteConversation(ASSISTANT_APP_ID, t.id).catch(() => undefined);
-                threads = threads.filter((x) => x.id !== t.id);
-                if (currentId === t.id) await selectThread(null);
-                else renderThreads();
-              });
+            void deleteThread(t.id);
           });
           return row;
         }),
@@ -481,6 +547,10 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     }
 
     function renderChat(): void {
+      if (reactUpdate) {
+        pushReact();
+        return;
+      }
       streamEl = null;
       scroll.replaceChildren(...(msgs.length === 0 ? [emptyState()] : msgs.map(messageNode)));
       scroll.scrollTop = scroll.scrollHeight;
@@ -549,10 +619,10 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
       return out;
     }
 
-    async function submit(): Promise<void> {
-      const text = input.value.trim();
+    async function submit(textArg?: string): Promise<void> {
+      const text = (textArg ?? input.value).trim();
       if (!text || busy) return;
-      input.value = '';
+      if (textArg === undefined) input.value = '';
       if (!currentId) {
         try {
           const created = await createConversation(ASSISTANT_APP_ID, '');
@@ -669,6 +739,28 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
           void loadThreads(); // pick up the auto-derived title
         }
       }
+    }
+
+    if (mountReact) {
+      const dispose = mountReact(main, {
+        suggestions: SUGGESTIONS,
+        onReady: (update) => {
+          reactUpdate = update;
+          update(buildSnapshot());
+        },
+        onSend: (text) => void submit(text),
+        onStop: () => {
+          abort?.abort();
+          setBusy(false);
+        },
+        onSelectThread: (id) => void selectThread(id),
+        onDeleteThread: (id) => void deleteThread(id),
+        hydrateRefs: (node) => hydrateRefs(node),
+      });
+      registerCleanup(dispose);
+      mountShellPage('assistant', main);
+      void loadThreads();
+      return;
     }
 
     sendBtn.addEventListener('click', () => {

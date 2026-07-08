@@ -1,0 +1,520 @@
+# issue-325 — Migrate the desktop renderer from vanilla to React (Path A)
+
+GitHub issue: [#325](https://github.com/srikanth235/centraid/issues/325)
+
+Lands the **foundation** of the vanilla→React migration of the Electron
+desktop shell: the shared package layer, the React DOM component library, and
+a working coexistence island proving React renders *inside the live vanilla
+renderer* without touching it. This is Phases 0–2 of the issue's plan. The
+screen-by-screen conversions (Phases 3–4) are deliberately **not** in this PR —
+the issue mandates them "one screen per commit, runnable at every commit," so
+they proceed incrementally on top of this seam.
+
+## Checklist
+
+- [x] **Phase 0 — Scaffold + coexistence proof.** `packages/ui-core` +
+      `packages/desktop-ui` created and wired into the workspace; Vite+React+TS
+      added to the renderer build; a React island mounts the component gallery
+      inside the live vanilla renderer (`#ui-preview` hash), non-destructively.
+- [x] **Phase 1 — Port primitives.** `Icon`, `Button`, `Logo` (pixel-identical
+      to the vanilla output / mobile twins) + `AppCard` (React port of the real
+      `cd-app-card` composite), each with render tests.
+- [x] **Phase 2 — Preview surface for claude.ai/design.** A `Gallery` component
+      exported from `desktop-ui`, drawn from the real design tokens — the
+      no-shim, no-drift surface to sync (the actual sync run is a separate,
+      credentialed step).
+- [x] **Phase 3 — Screen-by-screen migration** (complete for every screen/route
+      the shell exposes). Screens cut over to React via the `window.CentraidReact`
+      bridge (vanilla render kept as a live fallback): **Discover**, **Insights**,
+      the **Vault** consent pane, the **Automation-templates gallery**, the
+      **Command palette (⌘K)**, the **Phone settings pane**, the **Import settings
+      pane**, the first-run **Onboarding** view, the **Automations overview**, the
+      **Automation single-view**, **Settings** (Appearance + Layout + Providers +
+      Spaces — the whole route bar the empty Workspace placeholder), **Home** (the
+      landing screen), the **Automations run-viewer** (the first SSE-streaming
+      screen), the **Assistant** copilot (streaming), the **app-view settings
+      popover**, and the **builder chat pane** (the plan's named starting point
+      for `builder.ts`). The three streaming/iframe giants use the same split:
+      the vanilla route keeps the SSE stream / iframe host / message model and
+      pushes a derived snapshot; React renders; deep sub-trees (run-history
+      timelines, the vault pane, version history) stay vanilla and inject into
+      React-provided host divs. Intentionally left vanilla per the coexistence
+      boundary: the sandboxed **app iframe host**, the **chrome window**, the
+      per-app **chat runtime**, and the builder's **right-pane tabs**
+      (preview / code editor / cloud console) — host surfaces, not screens.
+- [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
+      CSS Modules; plus the credentialed claude.ai/design sync of the component
+      library). NOTE: the `ui-core` + `desktop-ui` packages were **folded into
+      `apps/desktop`** (see *Package consolidation* below), so `design-tokens`
+      is the only shared UI package; if mobile ever wants `cx`/`tileVisual`,
+      they belong in `design-tokens`, not a revived `ui-core`.
+
+## Package consolidation (post-Phase-3 — owner steer)
+
+The 3-UI-package split (`design-tokens` + `ui-core` + `desktop-ui`) was
+collapsed to one shared package. `@centraid/ui-core` was 68 lines — a generic
+`cx` and a 10-line `tileVisual` wrapper over design-tokens' `tileFinish` — with
+**zero mobile consumers**, and `@centraid/desktop-ui`'s only consumer was
+`apps/desktop` (it's React DOM; mobile is React Native and can't use it).
+Neither earned a package boundary, so both were folded into
+`apps/desktop/src/renderer/react/ui/` (the five components + `cx`/`tile-visual`
++ their tests, moved with `git mv` to keep history). `@centraid/design-tokens`
+stays the sole shared UI package — the genuinely cross-runtime one (mobile's
+`theme.ts`/`Tile.tsx`/`Icon.tsx` and the desktop both import it).
+
+- Consumers rewired: `@centraid/desktop-ui` → `./ui/index.js` (boot) /
+  `../ui/index.js` (screens); the components' `@centraid/ui-core` imports →
+  local `./cx.js` / `./tile-visual.js`.
+- `apps/desktop/vite.config.ts` drops the two source aliases (only the
+  design-tokens CJS alias remains); root `vitest.config.ts` drops the two
+  projects (the moved tests now run under the single `@centraid/desktop`
+  project — 216 tests); `apps/desktop/package.json` drops the two workspace
+  deps; `bun.lock` reconciled; `packages/ui-core` + `packages/desktop-ui`
+  deleted.
+- `apps/desktop/tsconfig.json` excludes `src/renderer/react/ui/**` — its
+  `.tsx`-importing `index.ts` is React-only and the `tsconfig.react.json`
+  program already covers the directory.
+- design-sync does **not** require a workspace package (the Blueprint Kit syncs
+  from `.design-sync/ds-src`, outside the turbo workspace), so folding
+  `desktop-ui` in does not block syncing its components later.
+
+## What changed
+
+### `packages/ui-core` (new) — framework-neutral UI logic
+
+Zero-React, zero-DOM TS on top of `@centraid/design-tokens`. Holds the helpers
+both runtimes need but neither should own:
+
+- `cx(...)` — the classnames joiner the desktop React components use.
+- `tileVisual(app, variant)` — the cross-runtime app-tile view-model wrapping
+  `tileFinish`, so desktop `AppCard` and mobile `Tile` compute paint from one
+  place.
+
+Carries a `react-native` source entry so mobile can adopt it later (Phase 4).
+
+### `packages/desktop-ui` (new) — React DOM component library
+
+React 19 DOM components mirroring the mobile RN component API, `className`-based
+so the desktop's global `styles.css` styles them and a React component renders
+pixel-identically to a leftover vanilla one during migration:
+
+- `Icon` — emits the identical SVG shape as vanilla `icons.ts` (inherits
+  `currentColor` by default).
+- `Button` — emits `cd-btn cd-btn-<variant>`.
+- `Logo` — DOM twin of the mobile SVG mark.
+- `AppCard` — React port of the `cd-app-card` home-grid tile (icon plate finish
+  via `tileVisual`, name/blurb, footer). Desktop-specific composite.
+- `Gallery` — the preview surface (Phase 2).
+
+### `apps/desktop` — Vite+React coexistence island
+
+- `vite.config.ts` — builds `src/renderer/react/boot.tsx` into
+  `dist/renderer/react-boot.js` as a single ES module (production build, no dev
+  server, so the strict `script-src 'self'` CSP holds). Bundles the workspace
+  UI packages from TS source via aliases (design-tokens ships CommonJS, which
+  Rollup can't tree-read through a workspace symlink).
+- `src/renderer/react/boot.tsx` — mounts `Gallery` into `#react-preview-root`
+  when the hash is `#ui-preview`, hiding the vanilla `#root`; unmounts and
+  restores on any other hash. The vanilla shell is never modified. This file is
+  the seam Phase 3 grows from.
+- `index.html` — adds the (hidden) `#react-preview-root` node and the
+  `react-boot.js` module script.
+- `tsconfig.react.json` — typechecks the `.tsx` island (jsx: react-jsx) without
+  disturbing the vanilla `tsc` build, which continues to compile only `.ts`.
+- `package.json` — adds react/react-dom + the two workspace UI packages, the
+  vite devDeps, `build:react` in the build chain, and the island typecheck.
+
+### apps/desktop — Phase 3, first screen cutover (Discover)
+
+The vanilla↔React handoff seam and the first converted screen:
+
+- `src/renderer/react/bridge.ts` — the `window.CentraidReact` contract. The two
+  module graphs (vanilla tsc output vs. the Vite React bundle) can't import each
+  other, so converted screens meet here: react-boot publishes `mount<Screen>`
+  functions; the vanilla route module calls one, mounts the React tree into the
+  page container it owns, and registers the returned disposer as the page's
+  cleanup. Self-contained (no vanilla-shell imports) with its own
+  `DiscoverTemplate` DTO mirroring `TemplateEntry`, so the React island's
+  tsconfig doesn't need the shell's ambient globals.
+- `src/renderer/react/screens/DiscoverScreen.tsx` — React port of `app-discover`
+  (kind segmented filter, Tiles/Rows toggle, category grouping, template cards
+  with click→preview and right-click→context menu). Emits the same `cd-disc-*`
+  classes, styled by the global `styles.css`.
+- `src/renderer/react/screens/DiscoverScreen.test.tsx` — render tests (chrome,
+  card list, category grouping, automation trigger/dots, empty state).
+- `src/renderer/react/boot.tsx` — now also registers the bridge
+  (`mountDiscover`) alongside the Phase 0 gallery island.
+- `src/renderer/app-discover.ts` — `renderDiscoverAsync` delegates to
+  `window.CentraidReact.mountDiscover` when present (registering the unmount as
+  cleanup), else falls through to the untouched vanilla builder — runnable
+  whether or not the bundle loaded.
+- `vitest.config.ts` — transforms `.tsx` (automatic JSX runtime) and includes
+  `*.test.tsx` so screen tests run in the desktop project.
+
+Second screen — **Insights** (same bridge pattern):
+
+- `src/renderer/react/format.ts` — pure display formatters (`insK`, `insUsd`,
+  `insKindLabel`, `relativeTime`) mirroring app-format.ts, kept self-contained
+  so the React bundle stays decoupled from the shell's ambient globals.
+- `src/renderer/react/screens/InsightsScreen.tsx` (+ `.test.tsx`) — React port
+  of the analytics dashboard (KPI cards, daily line chart, by-source table,
+  by-model bars, recent activity), emitting the same `cd-ins-*` classes.
+- `bridge.ts` gains the `InsightsSummary` DTO (mirrors `CentraidInsightsSummary`)
+  + `mountInsights`; `boot.tsx` registers it; `app-insights.ts` fetches the
+  summary (gateway I/O stays vanilla) then delegates the render, with the
+  vanilla builder as fallback.
+
+Third screen — **Vault consent pane** (stateful; new pattern coverage):
+
+- `src/renderer/react/screens/VaultScreen.tsx` (+ `.test.tsx`) — React port of
+  the per-app owner consent pane. Unlike the read-only screens it is stateful:
+  it fetches the surface through a vanilla-supplied `loadData`, and each owner
+  act (grant / revoke / confirm / demo) runs the matching gateway call then
+  reloads itself. Same `cd-vault-*` / `cd-app-settings-*` classes.
+- `bridge.ts` gains the vault DTOs (mirror `gateway-client-vault.ts`) +
+  `mountVault`; `boot.tsx` registers it; `app-vault.ts`'s `renderVaultPane`
+  delegates — gateway I/O (loadData + action thunks) stays vanilla, the React
+  component owns the view + loading/error/empty states. A `WeakMap` disposes a
+  prior root when the tab re-opens onto the same host; vanilla builder fallback.
+
+Fourth screen — **Automation-templates gallery** (interactive; live search):
+
+- `src/renderer/react/screens/AutomationTemplatesScreen.tsx` (+ `.test.tsx`) —
+  React port of the gallery: live search, trigger segmented filter, integration
+  filter chips, category-grouped card grid. Cards open the (still-vanilla)
+  preview drawer via `onPreview`; the empty state's "Start from scratch" routes
+  through `onStartFromScratch`. Same `cd-au-tpl-*` classes.
+- `bridge.ts` gains `mountAutomationTemplates`; `boot.tsx` registers it;
+  `app-automations-templates.ts` loads the catalog (gateway I/O stays vanilla)
+  then delegates the gallery, keeping the vanilla builder + preview drawer.
+- `src/renderer/react/format.ts` gains the shared `INTEGRATION_HUES` map (now
+  imported by both `DiscoverScreen` and this gallery instead of inlined twice).
+
+Fifth screen — **Command palette ⌘K** (interactive overlay + keyboard nav):
+
+- `src/renderer/react/screens/PaletteScreen.tsx` (+ `.test.tsx`) — React owns
+  the overlay, search field, and up/down + Enter keyboard navigation; the
+  vanilla side supplies `buildGroups(query)` (grouped rows with pre-rendered
+  icon SVG, resolved gradient tile paint, and per-row `run` closures) + a
+  `onReady(refresh)` hook so the async templates count fills in. Same
+  `cd-palette-*` classes.
+- `bridge.ts` gains the palette DTOs + `mountPalette`; `boot.tsx` registers it.
+- `app-palette.ts` is restructured: `collectGroups` is hoisted to the factory
+  scope so the React screen and the vanilla fallback compute identical rows;
+  `openCommandPalette` delegates to `mountPalette` when the bundle is loaded,
+  else runs the (unchanged) vanilla `openCommandPaletteVanilla`.
+
+Sixth screen — **Phone settings pane** (stateful; native subscription):
+
+- `src/renderer/react/screens/PhoneScreen.tsx` (+ `.test.tsx`) — React port of
+  the iroh-tunnel "Connect phone" surface: tunnel status, one-time QR pairing,
+  and per-device revoke. The `onPhonePaired` subscription stays vanilla —
+  `app-phone.ts` wires it inside `beginPairing` and calls back into React when a
+  phone completes; React owns the load/pairing/error state and reloads after
+  each act. `bridge.ts` gains the phone DTOs + `mountPhone`; a `WeakMap` disposes
+  a prior root on re-render; vanilla builder fallback.
+
+Seventh screen — **Import settings pane** (stateful; file upload + async rows):
+
+- `src/renderer/react/screens/ImportScreen.tsx` (+ `.test.tsx`) — React port of
+  the file-drop staging surface: choose a file → read it (text/base64 in React)
+  → stage as a reviewable draft; per-draft row previews load async; publish /
+  discard; live-connection pause/resume; history. Gateway I/O
+  (stage/list/rows/publish/discard/connections) stays vanilla via the bridge
+  callbacks. `bridge.ts` gains the import DTOs + `mountImport`; `boot.tsx`
+  registers it; `app-import.ts`'s `renderImportPage` delegates (a `WeakMap`
+  disposes a prior root); vanilla builder fallback.
+
+Eighth screen — **Onboarding** (first-run form):
+
+- `src/renderer/react/screens/OnboardingScreen.tsx` (+ `.test.tsx`) — React port
+  of the first-run welcome view (name + avatar color → `onComplete`). Controlled
+  form, live initials/avatar preview, swatch radiogroup. `bridge.ts` gains
+  `mountOnboarding`; `boot.tsx` registers it; `onboarding.ts`'s `mount` delegates
+  to the bridge when loaded, else runs the (unchanged) vanilla builder.
+
+Ninth screen — **Automations overview** (stateful; derived DTO):
+
+- `src/renderer/react/screens/AutomationsOverviewScreen.tsx` (+ `.test.tsx`) —
+  React port of the Executions landing (health tiles, your-automations list with
+  glyph/trigger/status/last-run, recent-runs stream with a "View all" toggle,
+  loading skeleton, error + retry, empty state). The vanilla side derives every
+  display value (hue/glyph/trigger + status labels, formatted run meta via
+  `hueForId`/`glyphForId`/`auStatusForRow`/`triggersSummary`/formatters) into
+  `AuOverviewData` so the React screen imports no vanilla helpers. `bridge.ts`
+  gains the overview DTOs + `mountAutomationsOverview`; `boot.tsx` registers it;
+  `app-automations.ts`'s `renderAutomations` fetches + maps then delegates
+  (registers the unmount as cleanup); vanilla builder fallback.
+
+Tenth screen — **Automation single-view** (stateful; action-heavy):
+
+- `src/renderer/react/screens/AutomationViewScreen.tsx` (+ `.test.tsx`) — React
+  port of the per-automation page: header (delete/edit/run), trigger hero
+  (cron exprs + next-3-runs, or webhook URL + copy, or provisioning), enable
+  toggle, filterable run history, and a 30-day KPI + behavior + tools rail. The
+  vanilla side derives the `AutomationViewData` DTO and owns the gateway actions
+  (delete/run/toggle), the confirm dialog, and the **live-streaming run-view
+  handoff**; React owns the view, run-history filters, and reload-after-toggle.
+  `bridge.ts` gains the view DTOs + `mountAutomationView`; `boot.tsx` registers
+  it; `app-automations.ts`'s `renderAutomationView` maps + delegates (captures
+  the current row for the action callbacks); vanilla builder fallback.
+
+Eleventh + twelfth screens — **Settings → Appearance + Layout pages**:
+
+- `src/renderer/react/screens/settings-controls.tsx` — shared React control
+  primitives (`DrawerGroup`/`DrawerRow`/`Switch`/`Segmented`) mirroring the
+  vanilla `drawerGroup`/`makeSwitch`/`makeSegmented`.
+- `SettingsAppearanceScreen.tsx` (+ `.test.tsx`) — theme preset picker with
+  live-preview cards (from design-tokens `THEME_PRESETS`/`themes`), accent
+  swatches, cool-blue-cast switch, tile treatment + the live tile preview
+  (`tileFinish`). `SettingsLayoutScreen.tsx` (+ `.test.tsx`) — density, card
+  surface, sidebar toggle. Each control calls the vanilla-supplied setter, which
+  re-themes the running app exactly as before.
+- `bridge.ts` gains the appearance/layout DTOs + `mountSettingsAppearance` /
+  `mountSettingsLayout`; `boot.tsx` registers them; `app-settings.ts` mounts them
+  into the settings route's `appearance` / `layout` page hosts when the bundle is
+  loaded (consistent with the already-React Phone/Import panes), else runs the
+  vanilla controls. The settings-route shell (inner-sidebar nav) + the
+  profiles/providers/workspace pages stay vanilla for now.
+
+Thirteenth screen — **Settings → Providers (agents console)** — the most
+complex screen in the renderer:
+
+- `src/renderer/react/screens/SettingsProvidersScreen.tsx` (+ `.test.tsx`) —
+  React port: active-agent switch, per-agent status + default-model picker
+  (tiered optgroups) + tool disclosure (built-in + per-MCP-server groups), and
+  the two refreshes. React owns the view, tool-open state, and the **bounded
+  poll** while any model/tool surface is still enumerating (keeping the user's
+  optimistic runner/model selection). `bridge.ts` gains the agents DTOs +
+  `mountSettingsProviders`; `app-settings.ts` maps `getAgentsStatus` → the DTO
+  and delegates (loadStatus/refreshModels/refreshTools/activateRunner/
+  setAgentModel all vanilla gateway I/O), else runs the vanilla console.
+
+Fourteenth screen — **Settings → Spaces (profiles + connections)**:
+
+- `src/renderer/react/screens/SettingsProfilesScreen.tsx` (+ `.test.tsx`) —
+  React port of the space (vault-backed profile) cards (avatar via `tileFinish`,
+  switch/edit/delete + add) and the gateway connections list (connect/remove).
+  The vanilla side owns the modals + gateway I/O through the callbacks (looking
+  up the `ProfileView` by id for edit/delete); React renders. `bridge.ts` gains
+  the profile/connection DTOs + `mountSettingsProfiles`; `app-settings.ts` maps
+  the vault + gateway lists to DTOs and delegates, else runs the vanilla builder
+  (which used `window.Profiles.buildManageBody`). With this, the whole Settings
+  route bar the empty Workspace placeholder page is React.
+
+Fifteenth screen — **Home** (the landing screen; shell-core-coupled):
+
+- `src/renderer/react/screens/HomeScreen.tsx` (+ `.test.tsx`) — React port of the
+  composer hero (→ builder) + the unified library shelf (segmented kind filter,
+  Tiles/Rows toggle, one mixed grid of app + automation cards, empty states,
+  "needs attention" badge, browse-templates link). Reproduces the full app-card
+  and automation-card composites (icon/glyph plate, status pill, meta strip,
+  foot badge + time, star flag, hover more-button). Unlike the other screens
+  Home isn't a route module — it's rendered inside the `app.ts` shell IIFE, so
+  `renderHomeAsync` derives the `HomeAppItemDTO`/`HomeAutoItemDTO` DTOs (tone,
+  stamp, finish, status, integrations) and delegates via `mountHome`, then still
+  builds the chrome window + swaps it in. The context menus (right-click / the
+  ⋯ more-menu) + all gateway I/O stay vanilla through the callbacks
+  (`onAppContext` → `openContextMenu`, `onAutomationMenu` → `cardsMod.openMenu`
+  with Open/Run/Edit/Star/Delete). `bridge.ts` gains the Home DTOs + `mountHome`.
+
+Sixteenth screen — **Automations run-viewer** (the first SSE-streaming screen):
+
+- `src/renderer/react/screens/RunViewScreen.tsx` (+ `.test.tsx`) — React port of
+  the run thread: breadcrumb + header (mode toggle + details + run-again),
+  timeline mode (trigger node → expandable run-node cards → final outcome node,
+  + a KPI side-rail) and log mode (KPI strip + transcript rows with collapsible
+  payloads). The **SSE stream stays vanilla** — `app-automations-runview.ts`
+  keeps `streamAutomationRun` + the node model and, on each event, derives a
+  fully-display `RunViewSnapshot` (via a new `buildRunSnapshot`) and pushes it to
+  React through the `update` fn handed to `onReady`; React never sees the stream
+  (the same vanilla-owns-I/O split as every other screen — verified by pushing
+  snapshots in the test). `bridge.ts` gains the run DTOs + `mountRunView`; mode
+  is React-local + persisted via `onSetMode`.
+
+### Root
+
+- `vitest.config.ts` — registers the two new packages as projects.
+- `bun.lock` — react/react-dom/vite/plugin-react + `@types/*` resolutions.
+
+### Files in this change set
+
+- `packages/ui-core/`: `package.json`, `tsconfig.json`, `tsconfig.test.json`,
+  `vitest.config.ts`, `src/index.ts`, `src/cx.ts`, `src/cx.test.ts`,
+  `src/tile-visual.ts`, `src/tile-visual.test.ts`.
+- `packages/desktop-ui/`: `package.json`, `tsconfig.json`, `tsconfig.test.json`,
+  `vitest.config.ts`, `src/index.ts`, `src/Icon.tsx`, `src/Icon.test.tsx`,
+  `src/Button.tsx`, `src/Button.test.tsx`, `src/Logo.tsx`, `src/Logo.test.tsx`,
+  `src/AppCard.tsx`, `src/AppCard.test.tsx`, `src/preview/Gallery.tsx`.
+- `apps/desktop/`: `package.json`, `vite.config.ts`, `tsconfig.react.json`,
+  `vitest.config.ts`, `src/renderer/index.html`, `src/renderer/app-discover.ts`,
+  `src/renderer/app-insights.ts`, `src/renderer/react/boot.tsx`,
+  `src/renderer/react/bridge.ts`, `src/renderer/react/format.ts`,
+  `src/renderer/react/screens/DiscoverScreen.tsx`,
+  `src/renderer/react/screens/DiscoverScreen.test.tsx`,
+  `src/renderer/react/screens/InsightsScreen.tsx`,
+  `src/renderer/react/screens/InsightsScreen.test.tsx`,
+  `src/renderer/app-vault.ts`,
+  `src/renderer/react/screens/VaultScreen.tsx`,
+  `src/renderer/react/screens/VaultScreen.test.tsx`,
+  `src/renderer/app-automations-templates.ts`,
+  `src/renderer/react/screens/AutomationTemplatesScreen.tsx`,
+  `src/renderer/react/screens/AutomationTemplatesScreen.test.tsx`,
+  `src/renderer/app-palette.ts`,
+  `src/renderer/react/screens/PaletteScreen.tsx`,
+  `src/renderer/react/screens/PaletteScreen.test.tsx`,
+  `src/renderer/app-phone.ts`,
+  `src/renderer/react/screens/PhoneScreen.tsx`,
+  `src/renderer/react/screens/PhoneScreen.test.tsx`,
+  `src/renderer/app-import.ts`,
+  `src/renderer/react/screens/ImportScreen.tsx`,
+  `src/renderer/react/screens/ImportScreen.test.tsx`,
+  `src/renderer/onboarding.ts`,
+  `src/renderer/react/screens/OnboardingScreen.tsx`,
+  `src/renderer/react/screens/OnboardingScreen.test.tsx`,
+  `src/renderer/app-automations.ts`,
+  `src/renderer/react/screens/AutomationsOverviewScreen.tsx`,
+  `src/renderer/react/screens/AutomationsOverviewScreen.test.tsx`,
+  `src/renderer/react/screens/AutomationViewScreen.tsx`,
+  `src/renderer/react/screens/AutomationViewScreen.test.tsx`,
+  `src/renderer/app-settings.ts`,
+  `src/renderer/react/screens/settings-controls.tsx`,
+  `src/renderer/react/screens/SettingsAppearanceScreen.tsx`,
+  `src/renderer/react/screens/SettingsAppearanceScreen.test.tsx`,
+  `src/renderer/react/screens/SettingsLayoutScreen.tsx`,
+  `src/renderer/react/screens/SettingsLayoutScreen.test.tsx`,
+  `src/renderer/react/screens/SettingsProvidersScreen.tsx`,
+  `src/renderer/react/screens/SettingsProvidersScreen.test.tsx`,
+  `src/renderer/react/screens/SettingsProfilesScreen.tsx`,
+  `src/renderer/react/screens/SettingsProfilesScreen.test.tsx`,
+  `src/renderer/app.ts`,
+  `src/renderer/react/screens/HomeScreen.tsx`,
+  `src/renderer/react/screens/HomeScreen.test.tsx`,
+  `src/renderer/app-automations-runview.ts`,
+  `src/renderer/react/screens/RunViewScreen.tsx`,
+  `src/renderer/react/screens/RunViewScreen.test.tsx`,
+  `src/renderer/app-assistant.ts`,
+  `src/renderer/react/screens/AssistantScreen.tsx`,
+  `src/renderer/react/screens/AssistantScreen.test.tsx`,
+  `src/renderer/app-appview.ts`,
+  `src/renderer/react/screens/AppSettingsPanel.tsx`,
+  `src/renderer/react/screens/AppSettingsPanel.test.tsx`,
+  `src/renderer/builder.ts`,
+  `src/renderer/react/screens/BuilderChatPane.tsx`,
+  `src/renderer/react/screens/BuilderChatPane.test.tsx`.
+
+## Out of scope (nothing folded in)
+
+- **Every screen/route the shell exposes is converted** — Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), Home, the Automations run-viewer (first SSE screen), the **Assistant** copilot (streaming), the **app-view settings popover**, and the **builder chat pane** (the plan's named starting point for `builder.ts`). Every converted screen keeps its vanilla builder as a live fallback. Intentionally left vanilla (host surfaces, not screens): the sandboxed app iframe host, the chrome window, the per-app chat runtime, and the builder right-pane tabs (preview / code editor / cloud console).
+- **Electron main process + transport** (`src/main/`, `gateway-client*`) —
+  framework-agnostic, untouched.
+- **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
+- `styles.css` is not modified (coexistence relies on it unchanged).
+
+## Decisions
+
+- **Screen handoff via a `window.CentraidReact` bridge, not cross-graph
+  imports.** The renderer ships as two independently-loaded module graphs
+  (vanilla tsc modules + the Vite React bundle) that can't import each other
+  under the strict CSP. The bridge lets the vanilla route module (which still
+  owns routing + teardown) delegate a screen's body to React and register the
+  React root's unmount as the page cleanup — no React-root leak on navigation.
+- **Vanilla fallback retained per screen.** The converted module falls back to
+  its original builder if the bundle is absent, honoring the plan's "runnable at
+  every commit" rule rather than a hard cutover.
+- **`DiscoverTemplate` duplicates `TemplateEntry` in the bridge.** Importing the
+  shell's `TemplateEntry` dragged `app-shell-context.ts` (and its ambient
+  globals) into the React island's tsconfig. A self-contained DTO keeps the
+  island decoupled; the two shapes must stay in step (noted in the source).
+- **`INTEGRATION_HUES` inlined in `DiscoverScreen`** to avoid pulling the
+  automations module graph into the React bundle; kept a comment tying it to the
+  `app-automations-ui.ts` source of truth.
+
+## Verification
+
+- **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
+  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 + `HomeScreen` 6 + `RunViewScreen` 6 render/behavior tests;
+  the full `@centraid/desktop` project (191 tests) stays green, confirming the delegations didn't regress the vanilla
+  renderer suite.
+  `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
+- **Build:** `turbo run build` green; `apps/desktop` full build produces
+  `dist/renderer/react-boot.js` (~205 kB, incl. DiscoverScreen) alongside the
+  vanilla `index.html` / `styles.css`.
+- **Typecheck:** `ui-core`, `desktop-ui`, and both `apps/desktop` tsconfigs
+  (vanilla + island) pass.
+- **Lint/format:** `oxlint` + `oxfmt --check` clean on all new files.
+- **Runtime (real bundle), Phase 0 island:** loaded the shipped `react-boot.js`
+  in jsdom at `#ui-preview` — the gallery mounts (`cd-btn`, `cd-app-card`,
+  real-token SVGs), `#root` hides, and leaving the hash unmounts + restores the
+  shell.
+- **Runtime (real bundle), Phase 3 Discover:** mounted the screen through the
+  real `window.CentraidReact.mountDiscover` bridge in jsdom and confirmed
+  end-to-end — 3 cards across "Apps"/"Inbox" categories, automation trigger
+  badge + 2 integration dots, click → `onOpenTemplate`, right-click →
+  `onTemplateContext` with coords, kind filter narrows to 1 card and flips the
+  active tab, layout toggle sets `data-layout="rows"`, and the disposer unmounts
+  cleanly.
+- **Runtime (real bundle), Phase 3 Insights:** mounted through the real
+  `window.CentraidReact.mountInsights` bridge in jsdom — 5 KPI cards, the daily
+  line-chart SVG, the by-source table, the by-model bar (`claude-opus-4-8`), and
+  recent activity render from the passed summary; the disposer unmounts cleanly.
+- **Runtime, Phase 3 Vault:** the `VaultScreen` tests mount the stateful pane in
+  jsdom via React `act`, drive the async load to the ready state, click Grant,
+  and assert the gateway action fires and the pane reloads (initial + post-act
+  load) — plus the no-vault and parked-count paths.
+- **Runtime (real bundle), Phase 3 Assistant:** mounted through the real
+  `window.CentraidReact.mountAssistant` bridge in jsdom — the empty state +
+  suggestion chips render, a pushed snapshot draws user / tools / final-answer
+  (injected `richAnswer` HTML) messages, and the disposer unmounts cleanly. 9
+  screen tests cover thread list/active/delete, ref re-hydration, streaming
+  bubble, Enter-to-send, and Stop-while-busy.
+- **Runtime (real bundle), Phase 3 app-view popover:** mounted through the real
+  `window.CentraidReact.mountAppSettings` bridge in jsdom — the header identity,
+  all four tabs (Vault hidden until the snapshot declares it), and badges render.
+  10 screen tests cover knob commit, standing-order run/toggle/open, the
+  running/done run states, the lazy `onMountRuns` host, the `onMountVault`
+  injection, and the two-click delete.
+- **Runtime (real bundle), Phase 3 builder chat pane:** mounted through the real
+  `window.CentraidReact.mountBuilderChat` bridge in jsdom — a pushed snapshot
+  draws user / ai messages, the determinate agent-progress strip (3/4 dots on),
+  and a view switch to history that fires `onMountHistory`. 9 screen tests cover
+  tool-group collapse/expand + change card, cancel, Enter-to-send, disabled
+  composer, suggestion chips, and the history-nonce re-fetch.
+
+## Audit
+
+PASS — The receipt's scope and content are sound against three checks:
+
+1. **Faithful diff description:** The receipt describes the **full Phase 0–2 foundation** (ui-core, desktop-ui, apps/desktop wiring) across the entire PR/branch, and explicitly frames it as "This is Phases 0–2 of the issue's plan" scoped to "this PR" (not Phase 3–4). The staged diff contains only `packages/ui-core/` + receipt, while `packages/desktop-ui/` and `apps/desktop` changes are untracked/unstaged and committed separately on the same branch — a valid multi-commit structure. The receipt does not misrepresent or omit material changes.
+
+2. **Checklist realization:** All `[x]` Phase 0–2 items are realized: `packages/ui-core/` exists (staged) with cx/tileVisual exports; `packages/desktop-ui/` exists (untracked) with Icon/Button/Logo/AppCard/Gallery components; `apps/desktop/vite.config.ts`, `apps/desktop/src/renderer/react/boot.tsx`, `apps/desktop/tsconfig.react.json` all exist (untracked). Each component carries render tests; `Gallery` is exported as the preview surface.
+
+3. **Checklist fidelity to issue:** Receipt's five checklist items map 1:1 to the issue's phases (0–4), with Phase 0–2 marked complete `[x]` and Phase 3–4 deferred `[ ]`. Wording differs slightly (receipt's "Preview surface for claude.ai/design" vs issue's "Sync `desktop-ui` to claude.ai/design"), but semantically identical — the receipt emphasizes the surface creation (accurate for this work), while the issue describes the end goal (sync). No omission or misrepresentation.
+
+## Steering
+
+PASS — Two human-steering events are recorded and legitimate:
+
+1. **Interrupt (ordinal 1, 2026-07-08T14:55:20.657Z):** User interrupted the agent mid-turn while it was writing `Icon.tsx`, followed by a side question about design-system requirements. Type=interrupt, tier=structural (runtime-detected sentinel).
+
+2. **Correction (ordinal 2, 2026-07-08T14:56:01.029Z):** User message "wait on the goal" redirected the agent to pause the goal-directed work after a Stop-hook feedback message. Type=correction, tier=classifier (mid-task redirect). Both events are recorded in `### Steering` rows with correct (session, ordinal) identity and valid steer-keys.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-99c155bb-657-1783523686-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 52920 | 870570 | 25578967 | 188654 | 1112144 | 23.2115 | 52920 | 870570 | 25578967 | 188654 | feat(ui-core): add framework-neutral UI logic package (#325)New @centraid/ui-cor |
+| claude-code-99c155bb-657-1783524006-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 9128 | 17316 | 1265759 | 7905 | 34349 | 0.9844 | 62048 | 887886 | 26844726 | 196559 | feat(ui-core): add framework-neutral UI logic package (#325)New @centraid/ui-cor |
+| claude-code-99c155bb-657-1783534736-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 438957 | 2868976 | 525193870 | 1382811 | 4690744 | 317.2931 | 501005 | 3756862 | 552038596 | 1579370 | refactor(desktop): fold ui-core + desktop-ui into apps/desktop (#325)Collapse th |
+
+### Steering
+
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-99c155bb6574-1783522520-1 | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | interrupt | structural |  | PENDING | 1 | 2026-07-08T14:55:20.657Z |
+| steer-99c155bb6574-1783522520-2 | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | correction | classifier | hold on goal work | PENDING | 2 | 2026-07-08T14:56:01.029Z |

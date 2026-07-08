@@ -49,6 +49,7 @@ import {
 import { inferAppVisual } from './app-format.js';
 import { cronNextRuns, describeCron } from './cron.js';
 import { lineDiff } from './diff.js';
+import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
 
 (function () {
   // A single tool invocation. Multiple of these are consolidated into a
@@ -321,6 +322,22 @@ import { lineDiff } from './diff.js';
     ]);
     let appVersionCount = 0;
     let appLastEditedAt: number | undefined;
+
+    // Phase 3 (#325) — React chat pane. The right pane (preview/code/cloud/…)
+    // stays vanilla; only the left chat pane delegates to React. This closure
+    // keeps the SSE stream, the `chat` model, and all turn state, and pushes a
+    // snapshot through `renderChat()` (the single funnel); the vanilla DOM
+    // builders below are the runnable fallback for any build without the bundle.
+    const mountBuilderChat = window.CentraidReact?.mountBuilderChat;
+    let chatReactUpdate: ((s: BuilderChatSnapshot) => void) | null = null;
+    let chatReactDispose: (() => void) | null = null;
+    let builderHistoryNonce = 0;
+    const BUILDER_SUGGESTIONS = [
+      'Improve the layout',
+      'Add saved data',
+      'Polish the visual style',
+      'Prepare to publish',
+    ];
     function relTime(ts: number): string {
       const diff = Math.max(0, Date.now() - ts);
       if (diff < 60_000) return 'just now';
@@ -923,7 +940,69 @@ import { lineDiff } from './diff.js';
       );
     }
 
+    // ── React snapshot derivation ────────────────────────────────────────
+    function toBuilderMsg(m: ConversationMsg): BuilderMsgDTO {
+      if (m.kind === 'divider') return { kind: 'divider', text: m.text };
+      if (m.kind === 'status') return { kind: 'status', text: m.text, spinning: !!m.spinning };
+      if (m.kind === 'user') return { kind: 'user', text: m.text };
+      if (m.kind === 'thinking') {
+        return {
+          kind: 'thinking',
+          text: m.text || (m.streaming ? '…' : ''),
+          streaming: !!m.streaming,
+          header: m.streaming ? 'Thinking…' : 'Thought',
+        };
+      }
+      if (m.kind === 'toolGroup') {
+        const running = m.calls.some((c) => c.state === 'running');
+        const error = m.calls.some((c) => c.state === 'error');
+        const writes = m.calls.filter(
+          (c) => FILE_WRITING_TOOLS.has(c.tool) && c.state === 'ok' && c.summary,
+        );
+        let change: { count: number; subtitle: string; version: string } | null = null;
+        if (writes.length > 0) {
+          const basenames = writes.map((c) => (c.summary ?? '').split('/').pop() ?? '');
+          const shown = basenames.slice(0, 3);
+          const moreCount = basenames.length - shown.length;
+          const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
+          const version = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
+          change = { count: writes.length, subtitle, version };
+        }
+        return {
+          kind: 'toolGroup',
+          id: m.id,
+          label: summarizeGroup(m.calls),
+          open: m.open,
+          running,
+          error,
+          rows: m.open
+            ? m.calls.map((c) => ({ state: c.state, verb: toolVerb(c.tool), target: c.summary ?? '' }))
+            : [],
+          change,
+        };
+      }
+      const text = m.text || (m.streaming ? '…' : '');
+      return { kind: 'ai', paras: text.split('\n\n') };
+    }
+
+    function buildChatSnapshot(): BuilderChatSnapshot {
+      return {
+        view: chatView,
+        messages: chat.map(toBuilderMsg),
+        generating,
+        progress: generating ? turnProgress() : null,
+        suggestions: BUILDER_SUGGESTIONS,
+        composerDisabled: generating || !appId,
+        historyNonce: builderHistoryNonce,
+      };
+    }
+
     function renderChat(): void {
+      if (chatReactUpdate) {
+        chatReactUpdate(buildChatSnapshot());
+        refreshSyncStatus();
+        return;
+      }
       chatScroll.innerHTML = '';
       for (const m of chat) chatScroll.append(renderMessage(m));
       if (generating) {
@@ -1035,6 +1114,36 @@ import { lineDiff } from './diff.js';
 
     // ---------- Chat pane swap (chat ↔ history) ----------
     function renderChatPane(): void {
+      if (mountBuilderChat) {
+        if (!chatReactDispose) {
+          chatReactDispose = mountBuilderChat(chatBody, {
+            onReady: (u) => {
+              chatReactUpdate = u;
+              u(buildChatSnapshot());
+            },
+            onSend: (text) => void sendUserPrompt(text),
+            onCancel: () => agentAbort?.abort(),
+            onToggleGroup: (id) => {
+              chat = chat.map((x) =>
+                x.kind === 'toolGroup' && x.id === id ? { ...x, open: !x.open } : x,
+              );
+              renderChat();
+            },
+            onSetView: (view) => {
+              chatView = view;
+              renderChat();
+              refreshTopbarToggles();
+            },
+            onMountHistory: (host) => void renderHistoryInto(host),
+          });
+        } else if (chatReactUpdate) {
+          // A re-entrant call while mounted means a caller wants a repaint —
+          // for the history view that means a fresh fetch, so bump the nonce.
+          if (chatView === 'history') builderHistoryNonce += 1;
+          chatReactUpdate(buildChatSnapshot());
+        }
+        return;
+      }
       chatBody.innerHTML = '';
       if (chatView === 'history') {
         const head = el('div', { class: 'chatpane-head' }, [
@@ -3861,6 +3970,7 @@ import { lineDiff } from './diff.js';
       document.removeEventListener('keydown', onChatToggleKey);
       // Cancel any in-flight chat turn (the gateway aborts the streamed run).
       agentAbort?.abort();
+      chatReactDispose?.();
     };
   }
 

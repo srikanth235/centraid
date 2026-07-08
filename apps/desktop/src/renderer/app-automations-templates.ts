@@ -15,7 +15,7 @@ export interface TemplatesGalleryModule {
 }
 
 export function createTemplatesGallery(ctx: ShellContext): TemplatesGalleryModule {
-  const { el, clear, showToast, recordRoute, pageScroll, mountShellPage } = ctx;
+  const { el, clear, showToast, recordRoute, registerCleanup, pageScroll, mountShellPage } = ctx;
 
   // The automation slice of the unified template catalog (Discover reuses this
   // loader via the module's exposed binding).
@@ -171,7 +171,24 @@ export function createTemplatesGallery(ctx: ShellContext): TemplatesGalleryModul
     );
     scroll.append(el('div', { class: 'cd-au-loading' }, 'Loading templates…'));
     mountShellPage('automations', main);
+
+    // Phase 3 (#325): render the gallery via the ported React screen when the
+    // bundle is loaded (the preview drawer stays vanilla — a body-level modal
+    // opened through onPreview); vanilla builder below is the fallback.
+    const bridge = window.CentraidReact;
     void loadAutomationTemplates().then((tmpls) => {
+      if (bridge?.mountAutomationTemplates) {
+        const host = el('div');
+        scroll.replaceChildren(host);
+        registerCleanup(
+          bridge.mountAutomationTemplates(host, {
+            onPreview: (t) => openAutomationTemplatePreview(t),
+            onStartFromScratch: () => void ctx.shell.createAndOpenAutomationBuilder(),
+            templates: tmpls,
+          }),
+        );
+        return;
+      }
       scroll.replaceChildren(buildTemplatesGallery(tmpls));
     });
   }

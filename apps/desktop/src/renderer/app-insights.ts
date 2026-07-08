@@ -14,7 +14,8 @@ export interface InsightsModule {
 }
 
 export function createInsightsModule(ctx: ShellContext): InsightsModule {
-  const { el, clear, pageScroll, mountShellPage, recordRoute, renderSimpleEmpty } = ctx;
+  const { el, clear, pageScroll, mountShellPage, recordRoute, registerCleanup, renderSimpleEmpty } =
+    ctx;
 
   function insLineChart(values: readonly number[]): HTMLElement {
     const W = 760;
@@ -112,6 +113,33 @@ export function createInsightsModule(ctx: ShellContext): InsightsModule {
     // pageScroll seeds an empty cd-page-head; the Insights page owns its
     // own header treatment, so drop it.
     scroll.replaceChildren();
+
+    // Phase 3 (#325): when the React bundle is loaded, fetch the summary here
+    // (gateway I/O stays vanilla) and render the whole dashboard via the ported
+    // InsightsScreen; the vanilla builder below is the fallback.
+    const bridge = window.CentraidReact;
+    if (bridge?.mountInsights) {
+      const host = el('div');
+      scroll.append(host);
+      host.append(el('div', { class: 'cd-au-loading' }, 'Loading insights…'));
+      mountShellPage('insights', main);
+      let reactSummary: CentraidInsightsSummary;
+      try {
+        reactSummary = await getInsightsSummary();
+      } catch (err) {
+        if (!document.contains(host)) return;
+        host.replaceChildren(
+          renderSimpleEmpty(
+            `Couldn’t load insights: ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
+        return;
+      }
+      if (!document.contains(host)) return;
+      host.replaceChildren();
+      registerCleanup(bridge.mountInsights(host, { summary: reactSummary }));
+      return;
+    }
 
     const page = el('div', { class: 'cd-ins-page' });
     scroll.append(page);
