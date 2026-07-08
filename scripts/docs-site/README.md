@@ -34,13 +34,26 @@ bun run docs:serve   # http.server on 127.0.0.1:4173
 
 ## Deploy
 
-Cloudflare Worker with static assets binding (see `wrangler.docs.toml`;
-`worker.ts` here is the thin passthrough entry):
+Deployment lives in **Cloudflare's Git integration** (Workers Builds), not in
+GitHub Actions. Connect the repo in the Cloudflare dashboard with:
 
-```sh
-bun run docs:deploy:dry   # validate config
-bun run docs:deploy       # upload + activate
-```
+- **Build command:** `bun run docs:bundle` — builds with `DOCS_SITE_BASE_PATH=/docs`,
+  assembles one tree (home at root, docs under `/docs/`), and writes a root
+  `_headers` into `./dist/site`.
+- **Deploy command:** `wrangler deploy` — reads the repo-root `wrangler.json`
+  (assets-only: `assets.directory = ./dist/site`, no Worker script).
+
+`centraid.dev/` serves the home; `centraid.dev/docs/` the docs. The custom domain
+is bound to the Worker in the Cloudflare dashboard (or via a `routes` entry in
+`wrangler.json`). No GitHub secrets are needed — Cloudflare holds the credentials.
+
+`.github/workflows/docs.yml` is a **CI gate only**: it runs `docs:bundle` +
+`docs:smoke` on PRs and pushes so a broken tree never merges, and never deploys.
+
+Workers static assets honors `_headers` natively (GitHub Pages did not), so the
+authoritative rules are authored at the assets root by `docs:bundle`.
+`docs.css`/`docs.js` ship with a `?v=<contenthash>` so they can be cached hard
+without going stale.
 
 ## Authoring conventions
 

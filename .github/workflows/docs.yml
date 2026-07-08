@@ -28,51 +28,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # CI gate only. This workflow does NOT deploy — Cloudflare's own Git
+  # integration builds (`bun run docs:bundle` → ./dist/site) and runs
+  # `wrangler deploy` on push. Here we just build the site exactly as production
+  # does (base=/docs) and run the smoke checks so a broken tree never merges.
   build:
     runs-on: ubuntu-latest
     env:
-      DOCS_SITE_CANONICAL_ORIGIN: https://centraid.dev/docs
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: oven-sh/setup-bun@4bc047ad259df6fc24a6c9b0f9a0cb08cf17fbe5 # v2.0.2
-        with:
-          bun-version: 1.3.13
-      - run: bun install --frozen-lockfile
-      - run: bun run docs:build
-      - run: bun run docs:smoke
-      # Persist the built site so the deploy job can pick it up without
-      # re-running the build (and re-shelling Pagefind, OG cards, etc.).
-      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
-        with:
-          name: docs-site
-          path: dist/docs-site
-          if-no-files-found: error
-          retention-days: 7
-
-  # GitHub Pages publish — the live site at the apex custom domain
-  # https://centraid.dev/. One repo's Pages serves a single artifact under one
-  # domain, so home and docs are assembled into ONE tree:
-  #   dist/site/            → home landing (scripts/home-site/public, root)
-  #   dist/site/docs/       → docs, built with DOCS_SITE_BASE_PATH=/docs
-  # centraid.dev/ serves the home; centraid.dev/docs/ serves the docs.
-  deploy-pages:
-    # Only deploy off main. Skipped on PRs and feature branches. On forks the
-    # deploy step is a no-op — Pages isn't configured there.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    concurrency:
-      group: docs-pages
-      cancel-in-progress: false
-    env:
-      # Docs live under /docs on the apex domain.
       DOCS_SITE_BASE_PATH: /docs
       DOCS_SITE_CANONICAL_ORIGIN: https://centraid.dev/docs
     steps:
@@ -81,21 +43,5 @@ jobs:
         with:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
-      - run: bun run docs:build
+      - run: bun run docs:bundle
       - run: bun run docs:smoke
-      # Assemble the combined tree: home at root, docs under /docs.
-      - run: |
-          rm -rf dist/site
-          mkdir -p dist/site
-          cp -R scripts/home-site/public/. dist/site/
-          mkdir -p dist/site/docs
-          cp -R dist/docs-site/. dist/site/docs/
-          # Persist the custom domain in the artifact so a deploy can't silently
-          # drop it (Pages serves the CNAME file as the domain of record).
-          echo centraid.dev > dist/site/CNAME
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        with:
-          path: dist/site
-      - id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

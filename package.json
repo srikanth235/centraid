@@ -28,6 +28,7 @@
     "fix": "ultracite fix",
     "ci": "bun run check && bun run typecheck && bun run lint:types",
     "docs:build": "node scripts/docs-site/build.mjs",
+    "docs:bundle": "DOCS_SITE_BASE_PATH=/docs node scripts/docs-site/build.mjs && node scripts/docs-site/assemble.mjs",
     "docs:serve": "python3 -m http.server 4173 --bind 127.0.0.1 -d dist/docs-site",
     "docs:smoke": "node scripts/docs-site/smoke.mjs"
   },
