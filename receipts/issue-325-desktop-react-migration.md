@@ -25,8 +25,9 @@ they proceed incrementally on top of this seam.
       credentialed step).
 - [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
       to React via the `window.CentraidReact` bridge (vanilla render kept as a
-      fallback): **Discover** and **Insights**. Remaining (`builder.ts`, Home,
-      automations, vault, settings) follow the same pattern incrementally.
+      fallback): **Discover**, **Insights**, and the **Vault** consent pane.
+      Remaining (`builder.ts`, Home, automations, settings) follow the same
+      pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -116,6 +117,19 @@ Second screen — **Insights** (same bridge pattern):
   summary (gateway I/O stays vanilla) then delegates the render, with the
   vanilla builder as fallback.
 
+Third screen — **Vault consent pane** (stateful; new pattern coverage):
+
+- `src/renderer/react/screens/VaultScreen.tsx` (+ `.test.tsx`) — React port of
+  the per-app owner consent pane. Unlike the read-only screens it is stateful:
+  it fetches the surface through a vanilla-supplied `loadData`, and each owner
+  act (grant / revoke / confirm / demo) runs the matching gateway call then
+  reloads itself. Same `cd-vault-*` / `cd-app-settings-*` classes.
+- `bridge.ts` gains the vault DTOs (mirror `gateway-client-vault.ts`) +
+  `mountVault`; `boot.tsx` registers it; `app-vault.ts`'s `renderVaultPane`
+  delegates — gateway I/O (loadData + action thunks) stays vanilla, the React
+  component owns the view + loading/error/empty states. A `WeakMap` disposes a
+  prior root when the tab re-opens onto the same host; vanilla builder fallback.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -137,14 +151,17 @@ Second screen — **Insights** (same bridge pattern):
   `src/renderer/react/screens/DiscoverScreen.tsx`,
   `src/renderer/react/screens/DiscoverScreen.test.tsx`,
   `src/renderer/react/screens/InsightsScreen.tsx`,
-  `src/renderer/react/screens/InsightsScreen.test.tsx`.
+  `src/renderer/react/screens/InsightsScreen.test.tsx`,
+  `src/renderer/app-vault.ts`,
+  `src/renderer/react/screens/VaultScreen.tsx`,
+  `src/renderer/react/screens/VaultScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Only Discover + Insights are converted.** Every other vanilla builder —
-  `builder.ts`, `app.ts`, Home, automations, vault, settings — is untouched and
-  renders exactly as before. Both converted screens keep their vanilla builders
-  as live fallbacks.
+- **Only Discover + Insights + the Vault pane are converted.** Every other
+  vanilla builder — `builder.ts`, `app.ts`, Home, automations, settings — is
+  untouched and renders exactly as before. Every converted screen keeps its
+  vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -172,8 +189,8 @@ Second screen — **Insights** (same bridge pattern):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 render tests; the full `@centraid/desktop` project (100
-  tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 render/behavior tests; the full
+  `@centraid/desktop` project (105 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces
@@ -197,6 +214,10 @@ Second screen — **Insights** (same bridge pattern):
   `window.CentraidReact.mountInsights` bridge in jsdom — 5 KPI cards, the daily
   line-chart SVG, the by-source table, the by-model bar (`claude-opus-4-8`), and
   recent activity render from the passed summary; the disposer unmounts cleanly.
+- **Runtime, Phase 3 Vault:** the `VaultScreen` tests mount the stateful pane in
+  jsdom via React `act`, drive the async load to the ready state, click Grant,
+  and assert the gateway action fires and the pane reloads (initial + post-act
+  load) — plus the no-vault and parked-count paths.
 
 ## Audit
 

@@ -102,11 +102,67 @@ export interface InsightsBridgeProps {
   summary: InsightsSummary;
 }
 
+// ── Vault pane ────────────────────────────────────────────────────────────
+// DTOs mirror the gateway-client-vault.ts types so the React island stays
+// decoupled from the vanilla client module (and its ambient globals).
+export interface VaultScopeDTO {
+  schema: string;
+  table?: string | null;
+  verbs: string;
+}
+export interface VaultGrantDTO {
+  grantId: string;
+  purposeConceptId: string;
+  purpose: string | null;
+  expiresAt: string | null;
+  scopes: VaultScopeDTO[];
+}
+export interface VaultParkedDTO {
+  invocationId: string;
+  command: string;
+  parkedAt: string;
+  callerKind: 'app' | 'agent' | 'owner-device';
+  caller: string | null;
+  input: Record<string, unknown>;
+}
+export interface VaultDemoDTO {
+  appId: string;
+  rows: number;
+  seedable: boolean;
+}
+export interface VaultBlockDTO {
+  purpose: string;
+  why: string;
+  scopes: VaultScopeDTO[];
+}
+/** Loaded snapshot; `null` from `loadData` = no vault plane is mounted. */
+export interface VaultData {
+  vaultName: string;
+  grants: VaultGrantDTO[];
+  parked: VaultParkedDTO[];
+  demo?: VaultDemoDTO;
+}
+export interface VaultBridgeProps {
+  block: VaultBlockDTO;
+  /** Re-fetch the consent surface (gateway I/O lives on the vanilla side). */
+  loadData: () => Promise<VaultData | null>;
+  grant: () => Promise<void>;
+  revoke: (grantId: string) => Promise<void>;
+  confirm: (invocationId: string, approve: boolean) => Promise<void>;
+  demoLoad: () => Promise<void>;
+  demoPurge: () => Promise<void>;
+  showToast?: (message: string) => void;
+  onAccessChanged?: () => void;
+  onParkedCount?: (count: number) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
   /** Mount the React Insights dashboard into `host`; returns an unmount disposer. */
   mountInsights(host: HTMLElement, props: InsightsBridgeProps): () => void;
+  /** Mount the React Vault consent pane into `host`; returns an unmount disposer. */
+  mountVault(host: HTMLElement, props: VaultBridgeProps): () => void;
 }
 
 declare global {

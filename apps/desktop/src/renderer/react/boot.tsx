@@ -21,6 +21,7 @@ import { Gallery } from '@centraid/desktop-ui';
 import type { CentraidReactBridge } from './bridge.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
 import InsightsScreen from './screens/InsightsScreen.js';
+import VaultScreen from './screens/VaultScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
 const HOST_SELECTOR = '#react-preview-root';
@@ -83,10 +84,15 @@ const bridge: CentraidReactBridge = {
     screenRoot.render(<InsightsScreen {...props} />);
     return () => screenRoot.unmount();
   },
+  mountVault(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<VaultScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
 };
 window.CentraidReact = bridge;
 
 console.log(
-  '[react] renderer bridge ready — screens: discover, insights; open %s for the component gallery',
+  '[react] renderer bridge ready — screens: discover, insights, vault; open %s for the component gallery',
   PREVIEW_HASH,
 );

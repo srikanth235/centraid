@@ -62,9 +62,54 @@ export interface VaultPaneInput {
   showToast?: (message: string) => void;
 }
 
+// Tracks the React root mounted on a given host so re-opening the tab onto the
+// same node disposes the previous root before mounting a fresh one.
+const reactDisposers = new WeakMap<HTMLElement, () => void>();
+
 /** Populate the Vault pane. Re-renders itself after every owner act. */
 export async function renderVaultPane(input: VaultPaneInput): Promise<void> {
   const { el, appId, block, host } = input;
+
+  // Phase 3 (#325): delegate the pane to the React VaultScreen when the bundle
+  // is loaded. gateway I/O stays here (loadData + the action thunks); the React
+  // component owns the view, its own loading/error/empty states, and reloads
+  // itself after each owner act. Falls back to the vanilla builder below.
+  const bridge = window.CentraidReact;
+  if (bridge?.mountVault) {
+    reactDisposers.get(host)?.();
+    const dispose = bridge.mountVault(host, {
+      block,
+      confirm: (invocationId, approve) =>
+        confirmVaultParked({ approve, invocationId }).then(() => undefined),
+      demoLoad: () => vaultDemoLoad(appId).then(() => undefined),
+      demoPurge: () => vaultDemoPurge(appId).then(() => undefined),
+      grant: () =>
+        approveVaultGrant({ appId, purpose: block.purpose, scopes: block.scopes }).then(
+          () => undefined,
+        ),
+      loadData: async () => {
+        const s = await vaultStatus().catch(() => undefined);
+        if (!s) return null;
+        const [apps, allParked, demoApps] = await Promise.all([
+          vaultApps(),
+          vaultParked(),
+          vaultDemoStatus().catch(() => [] as VaultDemoApp[]),
+        ]);
+        return {
+          demo: demoApps.find((d) => d.appId === appId),
+          grants: apps.find((a) => a.name === appId)?.grants ?? [],
+          parked: allParked.filter((p) => p.callerKind === 'app' && p.caller === appId),
+          vaultName: s.name,
+        };
+      },
+      onAccessChanged: input.onAccessChanged,
+      onParkedCount: input.onParkedCount,
+      revoke: (grantId) => revokeVaultGrant({ grantId }).then(() => undefined),
+      showToast: input.showToast,
+    });
+    reactDisposers.set(host, dispose);
+    return;
+  }
 
   const note = (text: string): HTMLElement => el('div', { class: 'cd-app-settings-note' }, text);
 
