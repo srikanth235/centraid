@@ -43,8 +43,40 @@ they proceed incrementally on top of this seam.
       per-app **chat runtime**, and the builder's **right-pane tabs**
       (preview / code editor / cloud console) — host surfaces, not screens.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
-      CSS Modules, grow `ui-core`; plus the credentialed claude.ai/design sync
-      of `desktop-ui`).
+      CSS Modules; plus the credentialed claude.ai/design sync of the component
+      library). NOTE: the `ui-core` + `desktop-ui` packages were **folded into
+      `apps/desktop`** (see *Package consolidation* below), so `design-tokens`
+      is the only shared UI package; if mobile ever wants `cx`/`tileVisual`,
+      they belong in `design-tokens`, not a revived `ui-core`.
+
+## Package consolidation (post-Phase-3 — owner steer)
+
+The 3-UI-package split (`design-tokens` + `ui-core` + `desktop-ui`) was
+collapsed to one shared package. `@centraid/ui-core` was 68 lines — a generic
+`cx` and a 10-line `tileVisual` wrapper over design-tokens' `tileFinish` — with
+**zero mobile consumers**, and `@centraid/desktop-ui`'s only consumer was
+`apps/desktop` (it's React DOM; mobile is React Native and can't use it).
+Neither earned a package boundary, so both were folded into
+`apps/desktop/src/renderer/react/ui/` (the five components + `cx`/`tile-visual`
++ their tests, moved with `git mv` to keep history). `@centraid/design-tokens`
+stays the sole shared UI package — the genuinely cross-runtime one (mobile's
+`theme.ts`/`Tile.tsx`/`Icon.tsx` and the desktop both import it).
+
+- Consumers rewired: `@centraid/desktop-ui` → `./ui/index.js` (boot) /
+  `../ui/index.js` (screens); the components' `@centraid/ui-core` imports →
+  local `./cx.js` / `./tile-visual.js`.
+- `apps/desktop/vite.config.ts` drops the two source aliases (only the
+  design-tokens CJS alias remains); root `vitest.config.ts` drops the two
+  projects (the moved tests now run under the single `@centraid/desktop`
+  project — 216 tests); `apps/desktop/package.json` drops the two workspace
+  deps; `bun.lock` reconciled; `packages/ui-core` + `packages/desktop-ui`
+  deleted.
+- `apps/desktop/tsconfig.json` excludes `src/renderer/react/ui/**` — its
+  `.tsx`-importing `index.ts` is React-only and the `tsconfig.react.json`
+  program already covers the directory.
+- design-sync does **not** require a workspace package (the Blueprint Kit syncs
+  from `.design-sync/ds-src`, outside the turbo workspace), so folding
+  `desktop-ui` in does not block syncing its components later.
 
 ## What changed
 
