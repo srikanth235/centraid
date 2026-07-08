@@ -715,11 +715,66 @@ export interface AppSettingsBridgeProps {
   onMountVault: (host: HTMLElement) => void;
 }
 
+// ── Builder chat pane ────────────────────────────────────────────────────────
+// The builder's right pane (preview / code / cloud / config / runs / flow) stays
+// vanilla — iframe host, code editor, cloud rail. Only the left CHAT pane moves
+// to React. The vanilla `openBuilder` closure keeps the SSE agent stream, the
+// `chat` message model, and all turn state; it derives a snapshot on every
+// change (the single `renderChat()` funnel) and pushes it. React renders the
+// transcript, the determinate agent-progress strip, and the composer. The
+// version-history view stays a vanilla async renderer, injected into a host div
+// via `onMountHistory`.
+export type BuilderMsgDTO =
+  | { kind: 'divider'; text: string }
+  | { kind: 'status'; text: string; spinning: boolean }
+  | { kind: 'user'; text: string }
+  | { kind: 'ai'; paras: string[] }
+  | { kind: 'thinking'; text: string; streaming: boolean; header: string }
+  | {
+      kind: 'toolGroup';
+      id: string;
+      label: string;
+      open: boolean;
+      running: boolean;
+      error: boolean;
+      rows: { state: 'running' | 'ok' | 'error'; verb: string; target: string }[];
+      change: { count: number; subtitle: string; version: string } | null;
+    };
+export interface BuilderProgressDTO {
+  verb: string;
+  file: string;
+  sub: string;
+  filled: number;
+}
+export interface BuilderChatSnapshot {
+  view: 'chat' | 'history';
+  messages: BuilderMsgDTO[];
+  generating: boolean;
+  /** Live turn progress; present only while `generating`. */
+  progress: BuilderProgressDTO | null;
+  suggestions: string[];
+  /** `true` while a turn is in flight or before an app id exists. */
+  composerDisabled: boolean;
+  /** Bumps to force a history-view re-fetch after a version op. */
+  historyNonce: number;
+}
+export interface BuilderChatBridgeProps {
+  onReady: (update: (s: BuilderChatSnapshot) => void) => void;
+  onSend: (text: string) => void;
+  onCancel: () => void;
+  onToggleGroup: (id: string) => void;
+  onSetView: (view: 'chat' | 'history') => void;
+  /** Fill the version-history host — vanilla owns the async renderer. */
+  onMountHistory: (host: HTMLElement) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
   /** Mount the React app-view settings popover; returns an unmount disposer. */
   mountAppSettings(host: HTMLElement, props: AppSettingsBridgeProps): () => void;
+  /** Mount the React builder chat pane (SSE-driven); returns a disposer. */
+  mountBuilderChat(host: HTMLElement, props: BuilderChatBridgeProps): () => void;
   /** Mount the React Assistant copilot (streaming); returns a disposer. */
   mountAssistant(host: HTMLElement, props: AssistantBridgeProps): () => void;
   /** Mount the React automation run-viewer (SSE-driven); returns a disposer. */

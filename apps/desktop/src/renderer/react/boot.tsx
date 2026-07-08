@@ -24,6 +24,7 @@ import AssistantScreen from './screens/AssistantScreen.js';
 import AutomationsOverviewScreen from './screens/AutomationsOverviewScreen.js';
 import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import AutomationViewScreen from './screens/AutomationViewScreen.js';
+import BuilderChatPane from './screens/BuilderChatPane.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
 import HomeScreen from './screens/HomeScreen.js';
 import ImportScreen from './screens/ImportScreen.js';
@@ -97,6 +98,11 @@ const bridge: CentraidReactBridge = {
   mountAppSettings(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<AppSettingsPanel {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountBuilderChat(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<BuilderChatPane {...props} />);
     return () => screenRoot.unmount();
   },
   mountDiscover(host, props) {
