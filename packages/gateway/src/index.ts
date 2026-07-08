@@ -44,6 +44,13 @@ export {
   type VaultInfo,
 } from './serve/vault-registry.js';
 export { makeVaultRouteHandler } from './routes/vault-routes.js';
+// The vault-register tool runners + the embedded-turn grounding block —
+// reused by the in-process OpenClaw plugin to give its embedded chat turns
+// the same `vault_sql` / `vault_invoke` / `vault_content` capability the
+// codex/claude runners get, executed through the same consent/receipt
+// pipeline (issue #319).
+export { makeVaultToolRunners, assistantCwd } from './runs/assistant-conversation-runner.js';
+export { buildVaultToolsGrounding } from './runs/assistant-prompt.js';
 export {
   runWithVaultContext,
   vaultContext,
