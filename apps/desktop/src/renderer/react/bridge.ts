@@ -400,9 +400,53 @@ export interface SettingsLayoutBridgeProps {
   onSetSidebar: (open: boolean) => void;
 }
 
+// ── Settings: providers (agents console) ────────────────────────────────────
+export type AgentRunnerKind = 'codex' | 'claude-code';
+export interface AgentModelDTO {
+  id: string;
+  name?: string;
+  default?: boolean;
+  tier?: 'smart' | 'balanced' | 'fast';
+}
+export interface AgentToolDTO {
+  name: string;
+  source: 'native' | 'mcp';
+  server?: string;
+  description?: string;
+  hasArgs: boolean;
+}
+export interface AgentCardDTO {
+  kind: AgentRunnerKind;
+  title: string;
+  accent: string;
+  subtitle: string;
+  connected: boolean;
+  models: AgentModelDTO[];
+  tools: AgentToolDTO[];
+  modelsLoading: boolean;
+  toolsLoading: boolean;
+}
+export interface AgentsStatusDTO {
+  selectedKind: AgentRunnerKind;
+  cards: AgentCardDTO[];
+  anyLoading: boolean;
+  savedModelByKind: Record<string, string>;
+}
+export interface SettingsProvidersBridgeProps {
+  loadStatus: () => Promise<AgentsStatusDTO>;
+  refreshModels: () => Promise<AgentsStatusDTO>;
+  refreshTools: () => Promise<AgentsStatusDTO>;
+  /** Switch the active agent; resolves true on success. */
+  activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;
+  /** Persist this agent's default model ('' = gateway default). */
+  setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Settings → Providers (agents) page; returns a disposer. */
+  mountSettingsProviders(host: HTMLElement, props: SettingsProvidersBridgeProps): () => void;
   /** Mount the React Settings → Appearance page; returns an unmount disposer. */
   mountSettingsAppearance(host: HTMLElement, props: SettingsAppearanceBridgeProps): () => void;
   /** Mount the React Settings → Layout page; returns an unmount disposer. */

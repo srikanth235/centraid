@@ -16,6 +16,7 @@ import type {
   ThemeName,
   TileVariant,
 } from './app-shell-context.js';
+import type { AgentRunnerKind, AgentsStatusDTO } from './react/bridge.js';
 
 export interface SettingsModule {
   renderSettings(initialPage?: string): void;
@@ -300,486 +301,586 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     // the gateway (`GET /centraid/_agents/status`) — it's colocated with the
     // runner, so a remote gateway reports its own host's agents. This panel
     // just reads that snapshot and shows which backends are ready.
-    const authStatusHost = el('div', {
-      style: { display: 'flex', flexDirection: 'column', gap: '8px' },
-    });
+    // Phase 3 (#325): render the Providers (agents) console via the ported
+    // React screen when the bundle is loaded; gateway I/O stays vanilla in the
+    // callbacks. The vanilla builder below is the fallback.
+    const providersBridge = window.CentraidReact;
+    if (providersBridge?.mountSettingsProviders) {
+      const RUNNER_META = [
+        { kind: 'codex', title: 'Codex', bin: 'codex', accent: '#10b981' },
+        { kind: 'claude-code', title: 'Claude Code', bin: 'claude', accent: '#a855f7' },
+      ] as const;
+      type Snap = Awaited<ReturnType<typeof getAgentsStatus>>;
+      const toDTO = (
+        status: Snap,
+        kind: AgentRunnerKind,
+        modelMap: Record<string, string>,
+      ): AgentsStatusDTO => ({
+        anyLoading: [
+          status.codexModelsStatus,
+          status.claudeModelsStatus,
+          status.codexToolsStatus,
+          status.claudeToolsStatus,
+        ].some((s) => s === 'loading'),
+        cards: RUNNER_META.map((r) => {
+          const available = r.kind === 'codex' ? status.codexAvailable : status.claudeAvailable;
+          const ver = r.kind === 'codex' ? status.codexVersion : status.claudeVersion;
+          const models = (r.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
+          const tools = (r.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
+          const modelsStatus =
+            r.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
+          const toolsStatus =
+            r.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
+          return {
+            accent: r.accent,
+            connected: available,
+            kind: r.kind,
+            models: models.map((m) => ({
+              default: m.default,
+              id: m.id,
+              name: m.name,
+              tier: m.tier,
+            })),
+            modelsLoading: modelsStatus === 'loading' && models.length === 0,
+            subtitle: available ? (ver ?? `${r.bin} · detected`) : `${r.bin} CLI not found on PATH`,
+            title: r.title,
+            tools: tools.map((t) => ({
+              description: t.description,
+              hasArgs: t.inputSchema !== undefined,
+              name: t.name,
+              server: t.server,
+              source: t.source,
+            })),
+            toolsLoading: toolsStatus === 'loading' && tools.length === 0,
+          };
+        }),
+        savedModelByKind: modelMap,
+        selectedKind: kind,
+      });
+      const loadProviders = async (opts?: {
+        refresh?: boolean;
+        refreshTools?: boolean;
+      }): Promise<AgentsStatusDTO> => {
+        const [status, kindRaw, modelMap] = await Promise.all([
+          getAgentsStatus(opts).catch(
+            () => ({ codexAvailable: false, claudeAvailable: false }) as Snap,
+          ),
+          getUserPrefs()
+            .then((p) => p['agent.runner.kind'])
+            .catch(() => undefined),
+          window.CentraidApi.getSettings()
+            .then((s) => s.chatModelByRunner)
+            .catch(() => undefined),
+        ]);
+        return toDTO(status, kindRaw === 'claude-code' ? 'claude-code' : 'codex', modelMap ?? {});
+      };
+      registerCleanup(
+        providersBridge.mountSettingsProviders(pageHosts.providers, {
+          activateRunner: async (kind) => {
+            try {
+              await saveUserPrefs({ 'agent.runner.kind': kind });
+              showToast(
+                kind === 'codex'
+                  ? 'Codex is now the active agent'
+                  : 'Claude Code is now the active agent',
+              );
+              return true;
+            } catch (err) {
+              showToast(`Couldn’t switch agent: ${String(err)}`);
+              return false;
+            }
+          },
+          loadStatus: () => loadProviders(),
+          refreshModels: () => loadProviders({ refresh: true }),
+          refreshTools: () => loadProviders({ refreshTools: true }),
+          setAgentModel: (kind, v) => {
+            void window.CentraidApi.saveSettings({ chatModelByRunner: { [kind]: v } });
+          },
+        }),
+      );
+    } else {
+      const authStatusHost = el('div', {
+        style: { display: 'flex', flexDirection: 'column', gap: '8px' },
+      });
 
-    type AuthStatusSnapshot = Awaited<ReturnType<typeof getAgentsStatus>>;
-    // Which CLI the gateway actually drives, mirroring the gateway pref
-    // `agent.runner.kind` (default `codex` when unset — see build-gateway's
-    // prefs loader). Switching writes that pref back; the badges below
-    // reflect THIS selection, not a hardcoded codex-first ordering.
-    type ActiveRunnerKind = 'codex' | 'claude-code';
-    type AgentTool = NonNullable<AuthStatusSnapshot['claudeTools']>[number];
-    let selectedRunnerKind: ActiveRunnerKind = 'codex';
-    let lastStatus: AuthStatusSnapshot | null = null;
-    let switchingRunner = false;
-    // Which agents' tool lists are expanded — kept across re-renders so a
-    // Refresh doesn't collapse an open panel.
-    const toolsOpen = new Set<ActiveRunnerKind>();
+      type AuthStatusSnapshot = Awaited<ReturnType<typeof getAgentsStatus>>;
+      // Which CLI the gateway actually drives, mirroring the gateway pref
+      // `agent.runner.kind` (default `codex` when unset — see build-gateway's
+      // prefs loader). Switching writes that pref back; the badges below
+      // reflect THIS selection, not a hardcoded codex-first ordering.
+      type ActiveRunnerKind = 'codex' | 'claude-code';
+      type AgentTool = NonNullable<AuthStatusSnapshot['claudeTools']>[number];
+      let selectedRunnerKind: ActiveRunnerKind = 'codex';
+      let lastStatus: AuthStatusSnapshot | null = null;
+      let switchingRunner = false;
+      // Which agents' tool lists are expanded — kept across re-renders so a
+      // Refresh doesn't collapse an open panel.
+      const toolsOpen = new Set<ActiveRunnerKind>();
 
-    // Persist the picked agent and re-render. Optimistic: flip the local
-    // selection first so the badges move immediately, revert on failure.
-    const activateRunner = async (kind: ActiveRunnerKind): Promise<void> => {
-      if (kind === selectedRunnerKind || switchingRunner) return;
-      const prev = selectedRunnerKind;
-      selectedRunnerKind = kind;
-      switchingRunner = true;
-      renderAuthStatus(lastStatus);
-      try {
-        await saveUserPrefs({ 'agent.runner.kind': kind });
-        showToast(
-          kind === 'codex'
-            ? 'Codex is now the active agent'
-            : 'Claude Code is now the active agent',
-        );
-      } catch (err) {
-        selectedRunnerKind = prev;
-        showToast(`Couldn’t switch agent: ${String(err)}`);
-      } finally {
-        switchingRunner = false;
+      // Persist the picked agent and re-render. Optimistic: flip the local
+      // selection first so the badges move immediately, revert on failure.
+      const activateRunner = async (kind: ActiveRunnerKind): Promise<void> => {
+        if (kind === selectedRunnerKind || switchingRunner) return;
+        const prev = selectedRunnerKind;
+        selectedRunnerKind = kind;
+        switchingRunner = true;
         renderAuthStatus(lastStatus);
-      }
-    };
-
-    const RUNNERS: ReadonlyArray<{
-      kind: ActiveRunnerKind;
-      title: string;
-      bin: string;
-      accent: string;
-      available: (s: AuthStatusSnapshot) => boolean;
-      version: (s: AuthStatusSnapshot) => string | undefined;
-    }> = [
-      {
-        kind: 'codex',
-        title: 'Codex',
-        bin: 'codex',
-        accent: '#10b981',
-        available: (s) => s.codexAvailable,
-        version: (s) => s.codexVersion,
-      },
-      {
-        kind: 'claude-code',
-        title: 'Claude Code',
-        bin: 'claude',
-        accent: '#a855f7',
-        available: (s) => s.claudeAvailable,
-        version: (s) => s.claudeVersion,
-      },
-    ];
-
-    // Per-agent default model. Each agent's models come from the agents-status
-    // snapshot (`codexModels` / `claudeModels`); the choice is stored per-runner
-    // in `chatModelByRunner` and is independent of which agent is active — you
-    // can set each agent's default without switching the active one.
-    const MODEL_TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
-    const MODEL_TIER_LABEL: Record<(typeof MODEL_TIER_ORDER)[number], string> = {
-      smart: 'Most capable',
-      balanced: 'Balanced',
-      fast: 'Fastest',
-    };
-    type AgentModelOpt = {
-      id: string;
-      name?: string;
-      default?: boolean;
-      tier?: 'smart' | 'balanced' | 'fast';
-    };
-    let agentModelByRunner: Record<string, string> = {};
-
-    // Active-agent switch — the single, obvious control for which agent runs.
-    // Built once and updated in place (not recreated on each render) so the
-    // accent pill SLIDES under the active segment instead of jumping.
-    const RUNNER_INDEX: Record<ActiveRunnerKind, number> = { codex: 0, 'claude-code': 1 };
-    const agentSwitchInd = el('span', { class: 'agent-switch-ind' });
-    const agentSwitchSegs = {} as Record<ActiveRunnerKind, HTMLButtonElement>;
-    for (const runner of RUNNERS) {
-      agentSwitchSegs[runner.kind] = el(
-        'button',
-        {
-          class: 'agent-switch-seg',
-          type: 'button',
-          role: 'tab',
-          title: `Make ${runner.title} the active agent`,
-          onClick: () => void activateRunner(runner.kind),
-        },
-        [
-          el('span', { class: 'agent-switch-dot', style: { background: runner.accent } }),
-          el('span', {}, runner.title),
-        ],
-      ) as HTMLButtonElement;
-    }
-    const agentSwitch = el(
-      'div',
-      { class: 'agent-switch', role: 'tablist', 'aria-label': 'Active agent' },
-      [agentSwitchInd, agentSwitchSegs.codex, agentSwitchSegs['claude-code']],
-    );
-    const updateAgentSwitch = (status: AuthStatusSnapshot | null): void => {
-      const activeAccent =
-        RUNNERS.find((r) => r.kind === selectedRunnerKind)?.accent ?? 'var(--accent)';
-      agentSwitch.style.setProperty('--seg-accent', activeAccent);
-      agentSwitch.dataset.activeIndex = String(RUNNER_INDEX[selectedRunnerKind]);
-      for (const runner of RUNNERS) {
-        const seg = agentSwitchSegs[runner.kind];
-        const available = status ? runner.available(status) : false;
-        const active = runner.kind === selectedRunnerKind;
-        seg.dataset.active = active ? 'true' : '';
-        seg.dataset.unavail = available ? '' : 'true';
-        seg.setAttribute('aria-selected', active ? 'true' : 'false');
-        // Only an available, non-active agent is switchable.
-        if (available && !active) seg.removeAttribute('disabled');
-        else seg.setAttribute('disabled', '');
-      }
-    };
-
-    // The agent cards (status + per-agent model picker) live in their own host
-    // so renderAuthStatus can rebuild them without recreating the switch above.
-    const agentCardsHost = el('div', { class: 'agents-panel' });
-    authStatusHost.append(
-      el(
-        'div',
-        { class: 'settings-note' },
-        'Switch the active agent above; set each agent’s default model below. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
-      ),
-      agentSwitch,
-      agentCardsHost,
-    );
-
-    const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
-      lastStatus = status;
-      updateAgentSwitch(status);
-      if (!status) {
-        agentCardsHost.replaceChildren(
-          el('div', { class: 'settings-note' }, 'Reading credential status…'),
-        );
-        return;
-      }
-      // Each agent is a row in the panel: accent dot + name/version on the left,
-      // its OWN default-model picker on the right. Activation is the switch
-      // above — the row isn't clickable, so the select never fights a tap.
-      // Group an agent's tools into a "Built-in" group then one group per MCP
-      // server (servers sorted), each a labelled list of name + optional args
-      // chip + description. Returns the group elements (empty array → caller
-      // shows the empty state).
-      const renderToolGroups = (tools: readonly AgentTool[]): HTMLElement[] => {
-        const native = tools.filter((t) => t.source === 'native');
-        const mcp = new Map<string, AgentTool[]>();
-        for (const t of tools) {
-          if (t.source !== 'mcp') continue;
-          const server = t.server ?? 'mcp';
-          const list = mcp.get(server) ?? [];
-          list.push(t);
-          mcp.set(server, list);
+        try {
+          await saveUserPrefs({ 'agent.runner.kind': kind });
+          showToast(
+            kind === 'codex'
+              ? 'Codex is now the active agent'
+              : 'Claude Code is now the active agent',
+          );
+        } catch (err) {
+          selectedRunnerKind = prev;
+          showToast(`Couldn’t switch agent: ${String(err)}`);
+        } finally {
+          switchingRunner = false;
+          renderAuthStatus(lastStatus);
         }
-        const groups: Array<{ label: string; items: AgentTool[] }> = [];
-        if (native.length) groups.push({ label: 'Built-in', items: native });
-        for (const server of [...mcp.keys()].sort((a, b) => a.localeCompare(b))) {
-          groups.push({ label: server, items: mcp.get(server) ?? [] });
-        }
-        return groups.map((g) => {
-          const items = g.items
-            .slice()
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map((t) =>
-              el('div', { class: 'tool-item' }, [
-                el('div', { class: 'tool-item-head' }, [
-                  el('span', { class: 'tool-name' }, t.name),
-                  t.inputSchema !== undefined
-                    ? el('span', { class: 'tool-args', title: 'Takes JSON arguments' }, 'args')
-                    : false,
-                ]),
-                t.description ? el('span', { class: 'tool-desc' }, t.description) : false,
-              ]),
-            );
-          return el('div', { class: 'tools-group' }, [
-            el('div', { class: 'tools-group-head' }, [
-              el('span', { class: 'tools-group-label' }, g.label),
-              el('span', { class: 'tools-group-count' }, String(g.items.length)),
-            ]),
-            el('div', { class: 'tools-list' }, items),
-          ]);
-        });
       };
 
-      const providerCard = (params: {
+      const RUNNERS: ReadonlyArray<{
         kind: ActiveRunnerKind;
         title: string;
-        subtitle: string;
-        connected: boolean;
-        active: boolean;
+        bin: string;
         accent: string;
-        models: AgentModelOpt[];
-        tools: AgentTool[];
-        modelsStatus?: AuthStatusSnapshot['codexModelsStatus'];
-        toolsStatus?: AuthStatusSnapshot['codexToolsStatus'];
-      }): HTMLElement => {
-        const modelsLoading = params.modelsStatus === 'loading' && params.models.length === 0;
-        const toolsLoading = params.toolsStatus === 'loading' && params.tools.length === 0;
-        const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
+        available: (s: AuthStatusSnapshot) => boolean;
+        version: (s: AuthStatusSnapshot) => string | undefined;
+      }> = [
+        {
+          kind: 'codex',
+          title: 'Codex',
+          bin: 'codex',
+          accent: '#10b981',
+          available: (s) => s.codexAvailable,
+          version: (s) => s.codexVersion,
+        },
+        {
+          kind: 'claude-code',
+          title: 'Claude Code',
+          bin: 'claude',
+          accent: '#a855f7',
+          available: (s) => s.claudeAvailable,
+          version: (s) => s.claudeVersion,
+        },
+      ];
 
-        // Default-model select for THIS agent — populated from its own catalog
-        // (agents-status), saved to chatModelByRunner[kind]. A pinned id the
-        // agent no longer offers is kept visible, flagged "· unavailable".
-        const select = el('select', {
-          class: 'agent-model-select',
-          'aria-label': `Default model for ${params.title}`,
-        }) as HTMLSelectElement;
-        const saved = agentModelByRunner[params.kind] ?? '';
-        select.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
-        if (saved && !params.models.some((m) => m.id === saved)) {
-          select.append(
-            el('option', { value: saved }, `${saved} · unavailable`) as HTMLOptionElement,
-          );
-        }
-        const mkOpt = (m: AgentModelOpt): HTMLOptionElement =>
-          el(
-            'option',
-            { value: m.id },
-            (m.name ?? m.id) + (m.default ? ' · default' : ''),
-          ) as HTMLOptionElement;
-        if (params.models.some((m) => m.tier)) {
-          for (const tier of MODEL_TIER_ORDER) {
-            const inTier = params.models.filter((m) => m.tier === tier);
-            if (inTier.length) {
-              select.append(el('optgroup', { label: MODEL_TIER_LABEL[tier] }, inTier.map(mkOpt)));
-            }
-          }
-          const untiered = params.models.filter((m) => !m.tier);
-          if (untiered.length) {
-            select.append(el('optgroup', { label: 'Other' }, untiered.map(mkOpt)));
-          }
-        } else {
-          for (const m of params.models) select.append(mkOpt(m));
-        }
-        // Still discovering the runner's catalog (the seed is gone). Show a
-        // disabled hint option; Gateway default above stays selectable.
-        if (modelsLoading) {
-          select.append(
-            el(
-              'option',
-              { value: '__loading', disabled: '' },
-              'Discovering models…',
-            ) as HTMLOptionElement,
-          );
-        }
-        select.value = saved;
-        if (!params.connected) select.setAttribute('disabled', '');
-        select.addEventListener('change', () => {
-          const v = select.value;
-          const nextMap = { ...agentModelByRunner };
-          if (v) nextMap[params.kind] = v;
-          else delete nextMap[params.kind];
-          agentModelByRunner = nextMap;
-          // Patch just this runner's entry; '' clears it (back to Gateway default).
-          void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
-        });
+      // Per-agent default model. Each agent's models come from the agents-status
+      // snapshot (`codexModels` / `claudeModels`); the choice is stored per-runner
+      // in `chatModelByRunner` and is independent of which agent is active — you
+      // can set each agent's default without switching the active one.
+      const MODEL_TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
+      const MODEL_TIER_LABEL: Record<(typeof MODEL_TIER_ORDER)[number], string> = {
+        smart: 'Most capable',
+        balanced: 'Balanced',
+        fast: 'Fastest',
+      };
+      type AgentModelOpt = {
+        id: string;
+        name?: string;
+        default?: boolean;
+        tier?: 'smart' | 'balanced' | 'fast';
+      };
+      let agentModelByRunner: Record<string, string> = {};
 
-        // Tools disclosure — a quiet "N tools" affordance that expands a
-        // grouped list under the row. Open state persists across re-renders.
-        const isOpen = toolsOpen.has(params.kind);
-        const toolCount = params.tools.length;
-        const toggle = el('button', {
-          class: 'agent-tools-toggle',
-          type: 'button',
-          'aria-expanded': isOpen ? 'true' : 'false',
-          title: 'Show tools this agent exposes (builtins + MCP)',
-        }) as HTMLButtonElement;
-        toggle.innerHTML =
-          Icon.Code({ size: 12 }) +
-          `<span class="agent-tools-count">${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}</span>` +
-          `<span class="agent-tools-chev">${Icon.ChevronDown({ size: 12 })}</span>`;
-
-        const groups = renderToolGroups(params.tools);
-        const panel = el('div', { class: 'agent-tools', hidden: isOpen ? null : 'true' }, [
-          groups.length
-            ? el('div', { class: 'tools-groups' }, groups)
-            : el(
-                'div',
-                { class: 'agent-tools-empty' },
-                toolsLoading
-                  ? 'Scanning tools…'
-                  : toolCount === 0
-                    ? 'No tools scanned yet — use Refresh tools below.'
-                    : 'No tools to show.',
-              ),
-        ]) as HTMLElement;
-
-        const row = el(
-          'div',
+      // Active-agent switch — the single, obvious control for which agent runs.
+      // Built once and updated in place (not recreated on each render) so the
+      // accent pill SLIDES under the active segment instead of jumping.
+      const RUNNER_INDEX: Record<ActiveRunnerKind, number> = { codex: 0, 'claude-code': 1 };
+      const agentSwitchInd = el('span', { class: 'agent-switch-ind' });
+      const agentSwitchSegs = {} as Record<ActiveRunnerKind, HTMLButtonElement>;
+      for (const runner of RUNNERS) {
+        agentSwitchSegs[runner.kind] = el(
+          'button',
           {
-            class: 'agent-row',
-            'data-active': params.active ? 'true' : '',
-            'data-unavail': params.connected ? '' : 'true',
+            class: 'agent-switch-seg',
+            type: 'button',
+            role: 'tab',
+            title: `Make ${runner.title} the active agent`,
+            onClick: () => void activateRunner(runner.kind),
           },
           [
-            el('span', { class: 'agent-row-dot', style: { background: dotColor } }),
-            el('div', { class: 'agent-row-meta' }, [
-              el('div', { class: 'agent-row-name' }, [
-                params.title,
-                params.active ? el('span', { class: 'agent-row-active' }, 'Active') : false,
-              ]),
-              el('span', { class: 'agent-row-sub' }, params.subtitle),
-            ]),
-            el('div', { class: 'agent-row-tools' }, [toggle]),
-            el('div', { class: 'agent-row-model' }, [select]),
+            el('span', { class: 'agent-switch-dot', style: { background: runner.accent } }),
+            el('span', {}, runner.title),
           ],
-        );
-
-        const entry = el('div', { class: 'agent-entry', 'data-tools-open': isOpen ? 'true' : '' }, [
-          row,
-          panel,
-        ]);
-        entry.style.setProperty('--row-accent', params.accent);
-
-        toggle.addEventListener('click', () => {
-          const next = !toolsOpen.has(params.kind);
-          if (next) toolsOpen.add(params.kind);
-          else toolsOpen.delete(params.kind);
-          toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
-          if (next) panel.removeAttribute('hidden');
-          else panel.setAttribute('hidden', 'true');
-          entry.dataset.toolsOpen = next ? 'true' : '';
-        });
-
-        return entry;
+        ) as HTMLButtonElement;
+      }
+      const agentSwitch = el(
+        'div',
+        { class: 'agent-switch', role: 'tablist', 'aria-label': 'Active agent' },
+        [agentSwitchInd, agentSwitchSegs.codex, agentSwitchSegs['claude-code']],
+      );
+      const updateAgentSwitch = (status: AuthStatusSnapshot | null): void => {
+        const activeAccent =
+          RUNNERS.find((r) => r.kind === selectedRunnerKind)?.accent ?? 'var(--accent)';
+        agentSwitch.style.setProperty('--seg-accent', activeAccent);
+        agentSwitch.dataset.activeIndex = String(RUNNER_INDEX[selectedRunnerKind]);
+        for (const runner of RUNNERS) {
+          const seg = agentSwitchSegs[runner.kind];
+          const available = status ? runner.available(status) : false;
+          const active = runner.kind === selectedRunnerKind;
+          seg.dataset.active = active ? 'true' : '';
+          seg.dataset.unavail = available ? '' : 'true';
+          seg.setAttribute('aria-selected', active ? 'true' : 'false');
+          // Only an available, non-active agent is switchable.
+          if (available && !active) seg.removeAttribute('disabled');
+          else seg.setAttribute('disabled', '');
+        }
       };
 
-      const cards = RUNNERS.map((runner) => {
-        const available = runner.available(status);
-        const isActive = runner.kind === selectedRunnerKind;
-        const ver = runner.version(status);
-        const subtitle = available
-          ? (ver ?? `${runner.bin} · detected`)
-          : `${runner.bin} CLI not found on PATH`;
-        const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
-        const tools = (runner.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
-        const modelsStatus =
-          runner.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
-        const toolsStatus =
-          runner.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
-        return providerCard({
-          kind: runner.kind,
-          title: runner.title,
-          subtitle,
-          connected: available,
-          active: isActive,
-          accent: runner.accent,
-          models,
-          tools,
-          modelsStatus,
-          toolsStatus,
-        });
-      });
-      agentCardsHost.replaceChildren(...cards);
-    };
-
-    // Poll the agents snapshot while any surface is still being enumerated, so
-    // a Refresh (or a cold boot) fills the picker in / swaps in the fresh list
-    // without the user re-clicking. Bounded by `agentsPollDeadline`.
-    let agentsPollTimer: ReturnType<typeof setTimeout> | undefined;
-    let agentsPollDeadline = 0;
-    const anyAgentSurfaceLoading = (s: AuthStatusSnapshot | null): boolean =>
-      !!s &&
-      [s.codexModelsStatus, s.claudeModelsStatus, s.codexToolsStatus, s.claudeToolsStatus].some(
-        (st) => st === 'loading',
+      // The agent cards (status + per-agent model picker) live in their own host
+      // so renderAuthStatus can rebuild them without recreating the switch above.
+      const agentCardsHost = el('div', { class: 'agents-panel' });
+      authStatusHost.append(
+        el(
+          'div',
+          { class: 'settings-note' },
+          'Switch the active agent above; set each agent’s default model below. Detection is CLI-only — the gateway ran `<bin> --version`; Centraid doesn’t inspect how each agent authenticates.',
+        ),
+        agentSwitch,
+        agentCardsHost,
       );
-    const pollAgentsUntilSettled = (): void => {
-      if (agentsPollTimer) {
-        clearTimeout(agentsPollTimer);
-        agentsPollTimer = undefined;
-      }
-      if (!anyAgentSurfaceLoading(lastStatus) || Date.now() >= agentsPollDeadline) return;
-      agentsPollTimer = setTimeout(() => {
-        void getAgentsStatus()
-          .then((s) => {
-            renderAuthStatus(s);
-            pollAgentsUntilSettled();
-          })
-          .catch(() => {});
-      }, 800);
-    };
 
-    // Two independent refreshes. Models (?refresh=1) is a zero-token CLI
-    // self-report — fast. Tools (?refreshTools=1) re-probes each agent's tool
-    // surface by spawning the CLI against a mock server, so it's slower and
-    // kept on its own button. Both re-render the panel in place.
-    const refreshModelsBtn = el('button', {
-      class: 'btn btn-soft',
-      type: 'button',
-    }) as HTMLButtonElement;
-    refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh models</span>';
-    refreshModelsBtn.addEventListener('click', () => {
-      void (async () => {
-        refreshModelsBtn.setAttribute('disabled', '');
-        try {
-          // Fire-and-forget: the gateway kicks the warm and returns `loading`;
-          // we render that (keeping any current list visible) and poll it in.
-          agentsPollDeadline = Date.now() + 30_000;
-          renderAuthStatus(await getAgentsStatus({ refresh: true }));
-          pollAgentsUntilSettled();
-        } catch (err) {
-          showToast(`Refresh failed: ${String(err)}`);
-          renderAuthStatus({
-            codexAvailable: false,
-            claudeAvailable: false,
+      const renderAuthStatus = (status: AuthStatusSnapshot | null): void => {
+        lastStatus = status;
+        updateAgentSwitch(status);
+        if (!status) {
+          agentCardsHost.replaceChildren(
+            el('div', { class: 'settings-note' }, 'Reading credential status…'),
+          );
+          return;
+        }
+        // Each agent is a row in the panel: accent dot + name/version on the left,
+        // its OWN default-model picker on the right. Activation is the switch
+        // above — the row isn't clickable, so the select never fights a tap.
+        // Group an agent's tools into a "Built-in" group then one group per MCP
+        // server (servers sorted), each a labelled list of name + optional args
+        // chip + description. Returns the group elements (empty array → caller
+        // shows the empty state).
+        const renderToolGroups = (tools: readonly AgentTool[]): HTMLElement[] => {
+          const native = tools.filter((t) => t.source === 'native');
+          const mcp = new Map<string, AgentTool[]>();
+          for (const t of tools) {
+            if (t.source !== 'mcp') continue;
+            const server = t.server ?? 'mcp';
+            const list = mcp.get(server) ?? [];
+            list.push(t);
+            mcp.set(server, list);
+          }
+          const groups: Array<{ label: string; items: AgentTool[] }> = [];
+          if (native.length) groups.push({ label: 'Built-in', items: native });
+          for (const server of [...mcp.keys()].sort((a, b) => a.localeCompare(b))) {
+            groups.push({ label: server, items: mcp.get(server) ?? [] });
+          }
+          return groups.map((g) => {
+            const items = g.items
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((t) =>
+                el('div', { class: 'tool-item' }, [
+                  el('div', { class: 'tool-item-head' }, [
+                    el('span', { class: 'tool-name' }, t.name),
+                    t.inputSchema !== undefined
+                      ? el('span', { class: 'tool-args', title: 'Takes JSON arguments' }, 'args')
+                      : false,
+                  ]),
+                  t.description ? el('span', { class: 'tool-desc' }, t.description) : false,
+                ]),
+              );
+            return el('div', { class: 'tools-group' }, [
+              el('div', { class: 'tools-group-head' }, [
+                el('span', { class: 'tools-group-label' }, g.label),
+                el('span', { class: 'tools-group-count' }, String(g.items.length)),
+              ]),
+              el('div', { class: 'tools-list' }, items),
+            ]);
           });
-        } finally {
-          refreshModelsBtn.removeAttribute('disabled');
+        };
+
+        const providerCard = (params: {
+          kind: ActiveRunnerKind;
+          title: string;
+          subtitle: string;
+          connected: boolean;
+          active: boolean;
+          accent: string;
+          models: AgentModelOpt[];
+          tools: AgentTool[];
+          modelsStatus?: AuthStatusSnapshot['codexModelsStatus'];
+          toolsStatus?: AuthStatusSnapshot['codexToolsStatus'];
+        }): HTMLElement => {
+          const modelsLoading = params.modelsStatus === 'loading' && params.models.length === 0;
+          const toolsLoading = params.toolsStatus === 'loading' && params.tools.length === 0;
+          const dotColor = params.connected ? params.accent : 'var(--ink-4, var(--ink-3))';
+
+          // Default-model select for THIS agent — populated from its own catalog
+          // (agents-status), saved to chatModelByRunner[kind]. A pinned id the
+          // agent no longer offers is kept visible, flagged "· unavailable".
+          const select = el('select', {
+            class: 'agent-model-select',
+            'aria-label': `Default model for ${params.title}`,
+          }) as HTMLSelectElement;
+          const saved = agentModelByRunner[params.kind] ?? '';
+          select.append(el('option', { value: '' }, 'Gateway default') as HTMLOptionElement);
+          if (saved && !params.models.some((m) => m.id === saved)) {
+            select.append(
+              el('option', { value: saved }, `${saved} · unavailable`) as HTMLOptionElement,
+            );
+          }
+          const mkOpt = (m: AgentModelOpt): HTMLOptionElement =>
+            el(
+              'option',
+              { value: m.id },
+              (m.name ?? m.id) + (m.default ? ' · default' : ''),
+            ) as HTMLOptionElement;
+          if (params.models.some((m) => m.tier)) {
+            for (const tier of MODEL_TIER_ORDER) {
+              const inTier = params.models.filter((m) => m.tier === tier);
+              if (inTier.length) {
+                select.append(el('optgroup', { label: MODEL_TIER_LABEL[tier] }, inTier.map(mkOpt)));
+              }
+            }
+            const untiered = params.models.filter((m) => !m.tier);
+            if (untiered.length) {
+              select.append(el('optgroup', { label: 'Other' }, untiered.map(mkOpt)));
+            }
+          } else {
+            for (const m of params.models) select.append(mkOpt(m));
+          }
+          // Still discovering the runner's catalog (the seed is gone). Show a
+          // disabled hint option; Gateway default above stays selectable.
+          if (modelsLoading) {
+            select.append(
+              el(
+                'option',
+                { value: '__loading', disabled: '' },
+                'Discovering models…',
+              ) as HTMLOptionElement,
+            );
+          }
+          select.value = saved;
+          if (!params.connected) select.setAttribute('disabled', '');
+          select.addEventListener('change', () => {
+            const v = select.value;
+            const nextMap = { ...agentModelByRunner };
+            if (v) nextMap[params.kind] = v;
+            else delete nextMap[params.kind];
+            agentModelByRunner = nextMap;
+            // Patch just this runner's entry; '' clears it (back to Gateway default).
+            void window.CentraidApi.saveSettings({ chatModelByRunner: { [params.kind]: v } });
+          });
+
+          // Tools disclosure — a quiet "N tools" affordance that expands a
+          // grouped list under the row. Open state persists across re-renders.
+          const isOpen = toolsOpen.has(params.kind);
+          const toolCount = params.tools.length;
+          const toggle = el('button', {
+            class: 'agent-tools-toggle',
+            type: 'button',
+            'aria-expanded': isOpen ? 'true' : 'false',
+            title: 'Show tools this agent exposes (builtins + MCP)',
+          }) as HTMLButtonElement;
+          toggle.innerHTML =
+            Icon.Code({ size: 12 }) +
+            `<span class="agent-tools-count">${toolCount} ${toolCount === 1 ? 'tool' : 'tools'}</span>` +
+            `<span class="agent-tools-chev">${Icon.ChevronDown({ size: 12 })}</span>`;
+
+          const groups = renderToolGroups(params.tools);
+          const panel = el('div', { class: 'agent-tools', hidden: isOpen ? null : 'true' }, [
+            groups.length
+              ? el('div', { class: 'tools-groups' }, groups)
+              : el(
+                  'div',
+                  { class: 'agent-tools-empty' },
+                  toolsLoading
+                    ? 'Scanning tools…'
+                    : toolCount === 0
+                      ? 'No tools scanned yet — use Refresh tools below.'
+                      : 'No tools to show.',
+                ),
+          ]) as HTMLElement;
+
+          const row = el(
+            'div',
+            {
+              class: 'agent-row',
+              'data-active': params.active ? 'true' : '',
+              'data-unavail': params.connected ? '' : 'true',
+            },
+            [
+              el('span', { class: 'agent-row-dot', style: { background: dotColor } }),
+              el('div', { class: 'agent-row-meta' }, [
+                el('div', { class: 'agent-row-name' }, [
+                  params.title,
+                  params.active ? el('span', { class: 'agent-row-active' }, 'Active') : false,
+                ]),
+                el('span', { class: 'agent-row-sub' }, params.subtitle),
+              ]),
+              el('div', { class: 'agent-row-tools' }, [toggle]),
+              el('div', { class: 'agent-row-model' }, [select]),
+            ],
+          );
+
+          const entry = el(
+            'div',
+            { class: 'agent-entry', 'data-tools-open': isOpen ? 'true' : '' },
+            [row, panel],
+          );
+          entry.style.setProperty('--row-accent', params.accent);
+
+          toggle.addEventListener('click', () => {
+            const next = !toolsOpen.has(params.kind);
+            if (next) toolsOpen.add(params.kind);
+            else toolsOpen.delete(params.kind);
+            toggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+            if (next) panel.removeAttribute('hidden');
+            else panel.setAttribute('hidden', 'true');
+            entry.dataset.toolsOpen = next ? 'true' : '';
+          });
+
+          return entry;
+        };
+
+        const cards = RUNNERS.map((runner) => {
+          const available = runner.available(status);
+          const isActive = runner.kind === selectedRunnerKind;
+          const ver = runner.version(status);
+          const subtitle = available
+            ? (ver ?? `${runner.bin} · detected`)
+            : `${runner.bin} CLI not found on PATH`;
+          const models = (runner.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
+          const tools = (runner.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
+          const modelsStatus =
+            runner.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
+          const toolsStatus =
+            runner.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
+          return providerCard({
+            kind: runner.kind,
+            title: runner.title,
+            subtitle,
+            connected: available,
+            active: isActive,
+            accent: runner.accent,
+            models,
+            tools,
+            modelsStatus,
+            toolsStatus,
+          });
+        });
+        agentCardsHost.replaceChildren(...cards);
+      };
+
+      // Poll the agents snapshot while any surface is still being enumerated, so
+      // a Refresh (or a cold boot) fills the picker in / swaps in the fresh list
+      // without the user re-clicking. Bounded by `agentsPollDeadline`.
+      let agentsPollTimer: ReturnType<typeof setTimeout> | undefined;
+      let agentsPollDeadline = 0;
+      const anyAgentSurfaceLoading = (s: AuthStatusSnapshot | null): boolean =>
+        !!s &&
+        [s.codexModelsStatus, s.claudeModelsStatus, s.codexToolsStatus, s.claudeToolsStatus].some(
+          (st) => st === 'loading',
+        );
+      const pollAgentsUntilSettled = (): void => {
+        if (agentsPollTimer) {
+          clearTimeout(agentsPollTimer);
+          agentsPollTimer = undefined;
         }
-      })();
-    });
+        if (!anyAgentSurfaceLoading(lastStatus) || Date.now() >= agentsPollDeadline) return;
+        agentsPollTimer = setTimeout(() => {
+          void getAgentsStatus()
+            .then((s) => {
+              renderAuthStatus(s);
+              pollAgentsUntilSettled();
+            })
+            .catch(() => {});
+        }, 800);
+      };
 
-    const refreshToolsBtn = el('button', {
-      class: 'btn btn-soft',
-      type: 'button',
-    }) as HTMLButtonElement;
-    refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
-    refreshToolsBtn.addEventListener('click', () => {
-      void (async () => {
-        refreshToolsBtn.setAttribute('disabled', '');
-        refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
-        try {
-          // Keep the current snapshot visible (don't blank the panel) — tools can
-          // take a few seconds to probe; only the tool lists change. The gateway
-          // returns `loading`; we poll the result in.
-          agentsPollDeadline = Date.now() + 30_000;
-          renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
-          pollAgentsUntilSettled();
-        } catch (err) {
-          showToast(`Tool refresh failed: ${String(err)}`);
-        } finally {
-          refreshToolsBtn.removeAttribute('disabled');
-          refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
-        }
-      })();
-    });
+      // Two independent refreshes. Models (?refresh=1) is a zero-token CLI
+      // self-report — fast. Tools (?refreshTools=1) re-probes each agent's tool
+      // surface by spawning the CLI against a mock server, so it's slower and
+      // kept on its own button. Both re-render the panel in place.
+      const refreshModelsBtn = el('button', {
+        class: 'btn btn-soft',
+        type: 'button',
+      }) as HTMLButtonElement;
+      refreshModelsBtn.innerHTML = Icon.Reset({ size: 13 }) + '<span>Refresh models</span>';
+      refreshModelsBtn.addEventListener('click', () => {
+        void (async () => {
+          refreshModelsBtn.setAttribute('disabled', '');
+          try {
+            // Fire-and-forget: the gateway kicks the warm and returns `loading`;
+            // we render that (keeping any current list visible) and poll it in.
+            agentsPollDeadline = Date.now() + 30_000;
+            renderAuthStatus(await getAgentsStatus({ refresh: true }));
+            pollAgentsUntilSettled();
+          } catch (err) {
+            showToast(`Refresh failed: ${String(err)}`);
+            renderAuthStatus({
+              codexAvailable: false,
+              claudeAvailable: false,
+            });
+          } finally {
+            refreshModelsBtn.removeAttribute('disabled');
+          }
+        })();
+      });
 
-    pageHosts.providers.append(
-      drawerGroup('Connected', [authStatusHost]),
-      el('div', { class: 'sheet-actions' }, [refreshModelsBtn, refreshToolsBtn]),
-    );
+      const refreshToolsBtn = el('button', {
+        class: 'btn btn-soft',
+        type: 'button',
+      }) as HTMLButtonElement;
+      refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
+      refreshToolsBtn.addEventListener('click', () => {
+        void (async () => {
+          refreshToolsBtn.setAttribute('disabled', '');
+          refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Scanning tools…</span>';
+          try {
+            // Keep the current snapshot visible (don't blank the panel) — tools can
+            // take a few seconds to probe; only the tool lists change. The gateway
+            // returns `loading`; we poll the result in.
+            agentsPollDeadline = Date.now() + 30_000;
+            renderAuthStatus(await getAgentsStatus({ refreshTools: true }));
+            pollAgentsUntilSettled();
+          } catch (err) {
+            showToast(`Tool refresh failed: ${String(err)}`);
+          } finally {
+            refreshToolsBtn.removeAttribute('disabled');
+            refreshToolsBtn.innerHTML = Icon.Refresh({ size: 13 }) + '<span>Refresh tools</span>';
+          }
+        })();
+      });
 
-    // Initial load — read the active-runner pref, the agents snapshot (now
-    // carrying each agent's models), and the persisted per-runner model map so
-    // the first render shows the right "Active" badge and each agent's saved
-    // default model.
-    renderAuthStatus(null);
-    void Promise.all([
-      getAgentsStatus().catch(
-        () => ({ codexAvailable: false, claudeAvailable: false }) as AuthStatusSnapshot,
-      ),
-      getUserPrefs()
-        .then((p) => p['agent.runner.kind'])
-        .catch(() => undefined),
-      window.CentraidApi.getSettings()
-        .then((s) => s.chatModelByRunner)
-        .catch(() => undefined),
-    ]).then(([status, kindRaw, modelMap]) => {
-      selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
-      agentModelByRunner = modelMap ?? {};
-      agentsPollDeadline = Date.now() + 30_000;
-      renderAuthStatus(status);
-      pollAgentsUntilSettled();
-    });
+      pageHosts.providers.append(
+        drawerGroup('Connected', [authStatusHost]),
+        el('div', { class: 'sheet-actions' }, [refreshModelsBtn, refreshToolsBtn]),
+      );
+
+      // Initial load — read the active-runner pref, the agents snapshot (now
+      // carrying each agent's models), and the persisted per-runner model map so
+      // the first render shows the right "Active" badge and each agent's saved
+      // default model.
+      renderAuthStatus(null);
+      void Promise.all([
+        getAgentsStatus().catch(
+          () => ({ codexAvailable: false, claudeAvailable: false }) as AuthStatusSnapshot,
+        ),
+        getUserPrefs()
+          .then((p) => p['agent.runner.kind'])
+          .catch(() => undefined),
+        window.CentraidApi.getSettings()
+          .then((s) => s.chatModelByRunner)
+          .catch(() => undefined),
+      ]).then(([status, kindRaw, modelMap]) => {
+        selectedRunnerKind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
+        agentModelByRunner = modelMap ?? {};
+        agentsPollDeadline = Date.now() + 30_000;
+        renderAuthStatus(status);
+        pollAgentsUntilSettled();
+      });
+    }
 
     // Spaces (#280: profiles are vaults) — full manage surface. Each space
     // is a VAULT: its own apps, transcripts, and data, all inside the vault

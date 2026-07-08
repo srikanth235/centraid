@@ -30,6 +30,7 @@ import PaletteScreen from './screens/PaletteScreen.js';
 import PhoneScreen from './screens/PhoneScreen.js';
 import SettingsAppearanceScreen from './screens/SettingsAppearanceScreen.js';
 import SettingsLayoutScreen from './screens/SettingsLayoutScreen.js';
+import SettingsProvidersScreen from './screens/SettingsProvidersScreen.js';
 import VaultScreen from './screens/VaultScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
@@ -141,6 +142,11 @@ const bridge: CentraidReactBridge = {
   mountSettingsLayout(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<SettingsLayoutScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountSettingsProviders(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<SettingsProvidersScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };
