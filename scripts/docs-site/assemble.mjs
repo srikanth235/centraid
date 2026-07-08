@@ -22,20 +22,25 @@ const siteDir = join(repoRoot, 'dist', 'site');
 // Cloudflare Workers static assets reads ONE _headers at the assets root; its
 // rules are site-absolute, so they must carry the /docs/ prefix of the combined
 // tree (the inert copy at dist/site/docs/_headers is ignored).
+//
+// Cloudflare COMBINES every matching rule (it does not do most-specific-wins),
+// so a header set on both /* and a narrower rule concatenates into one value.
+// To keep it clean: set Cache-Control ONLY on the non-overlapping asset
+// prefixes, and let /* own the security headers (and, by being the only rule
+// that matches HTML, HTML's caching — via Cloudflare's short-lived default).
 const headers = `# Pagefind search bundle — hashed filenames, safe to pin forever.
 /docs/pagefind/*
   Cache-Control: public, max-age=31536000, immutable
-  X-Content-Type-Options: nosniff
 
 # docs.css/docs.js carry a ?v=<contenthash>, so a long cache is safe; any
 # other (unhashed) asset here refreshes within the day.
 /docs/assets/*
   Cache-Control: public, max-age=86400, stale-while-revalidate=600
-  X-Content-Type-Options: nosniff
 
-# HTML — short cache, revalidate often so shipped changes land fast.
+# Security headers for every response. Cache-Control is deliberately omitted:
+# setting it here would concatenate onto the asset rules above. HTML matches
+# only this rule and falls back to Cloudflare's default (revalidated) caching.
 /*
-  Cache-Control: public, max-age=300, s-maxage=300, stale-while-revalidate=60
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
 `;
