@@ -23,8 +23,12 @@ they proceed incrementally on top of this seam.
       exported from `desktop-ui`, drawn from the real design tokens — the
       no-shim, no-drift surface to sync (the actual sync run is a separate,
       credentialed step).
-- [ ] **Phase 3 — Screen-by-screen migration** (deferred — incremental, starts
-      with `builder.ts`).
+- [~] **Phase 3 — Screen-by-screen migration** (in progress). First screen
+      cut over: **Discover** — the vanilla route module now delegates its body
+      to a ported React `DiscoverScreen` through a `window.CentraidReact`
+      bridge, with the vanilla render kept as a fallback. Remaining screens
+      (`builder.ts`, Home, automations, vault, insights, settings) follow the
+      same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -74,6 +78,33 @@ pixel-identically to a leftover vanilla one during migration:
 - `package.json` — adds react/react-dom + the two workspace UI packages, the
   vite devDeps, `build:react` in the build chain, and the island typecheck.
 
+### apps/desktop — Phase 3, first screen cutover (Discover)
+
+The vanilla↔React handoff seam and the first converted screen:
+
+- `src/renderer/react/bridge.ts` — the `window.CentraidReact` contract. The two
+  module graphs (vanilla tsc output vs. the Vite React bundle) can't import each
+  other, so converted screens meet here: react-boot publishes `mount<Screen>`
+  functions; the vanilla route module calls one, mounts the React tree into the
+  page container it owns, and registers the returned disposer as the page's
+  cleanup. Self-contained (no vanilla-shell imports) with its own
+  `DiscoverTemplate` DTO mirroring `TemplateEntry`, so the React island's
+  tsconfig doesn't need the shell's ambient globals.
+- `src/renderer/react/screens/DiscoverScreen.tsx` — React port of `app-discover`
+  (kind segmented filter, Tiles/Rows toggle, category grouping, template cards
+  with click→preview and right-click→context menu). Emits the same `cd-disc-*`
+  classes, styled by the global `styles.css`.
+- `src/renderer/react/screens/DiscoverScreen.test.tsx` — render tests (chrome,
+  card list, category grouping, automation trigger/dots, empty state).
+- `src/renderer/react/boot.tsx` — now also registers the bridge
+  (`mountDiscover`) alongside the Phase 0 gallery island.
+- `src/renderer/app-discover.ts` — `renderDiscoverAsync` delegates to
+  `window.CentraidReact.mountDiscover` when present (registering the unmount as
+  cleanup), else falls through to the untouched vanilla builder — runnable
+  whether or not the bundle loaded.
+- `vitest.config.ts` — transforms `.tsx` (automatic JSX runtime) and includes
+  `*.test.tsx` so screen tests run in the desktop project.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -89,32 +120,64 @@ pixel-identically to a leftover vanilla one during migration:
   `src/Button.tsx`, `src/Button.test.tsx`, `src/Logo.tsx`, `src/Logo.test.tsx`,
   `src/AppCard.tsx`, `src/AppCard.test.tsx`, `src/preview/Gallery.tsx`.
 - `apps/desktop/`: `package.json`, `vite.config.ts`, `tsconfig.react.json`,
-  `src/renderer/react/boot.tsx`, `src/renderer/index.html`.
+  `vitest.config.ts`, `src/renderer/index.html`, `src/renderer/app-discover.ts`,
+  `src/renderer/react/boot.tsx`, `src/renderer/react/bridge.ts`,
+  `src/renderer/react/screens/DiscoverScreen.tsx`,
+  `src/renderer/react/screens/DiscoverScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **No renderer screen was converted.** `builder.ts`, `app.ts`, and every other
-  vanilla builder are untouched; the app runs exactly as before (the island is
-  invisible until you open `#ui-preview`).
+- **Only Discover is converted.** Every other vanilla builder — `builder.ts`,
+  `app.ts`, Home, automations, vault, insights, settings — is untouched and
+  renders exactly as before. Discover itself keeps its vanilla builder as a
+  live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
 - `styles.css` is not modified (coexistence relies on it unchanged).
 
+## Decisions
+
+- **Screen handoff via a `window.CentraidReact` bridge, not cross-graph
+  imports.** The renderer ships as two independently-loaded module graphs
+  (vanilla tsc modules + the Vite React bundle) that can't import each other
+  under the strict CSP. The bridge lets the vanilla route module (which still
+  owns routing + teardown) delegate a screen's body to React and register the
+  React root's unmount as the page cleanup — no React-root leak on navigation.
+- **Vanilla fallback retained per screen.** The converted module falls back to
+  its original builder if the bundle is absent, honoring the plan's "runnable at
+  every commit" rule rather than a hard cutover.
+- **`DiscoverTemplate` duplicates `TemplateEntry` in the bridge.** Importing the
+  shell's `TemplateEntry` dragged `app-shell-context.ts` (and its ambient
+  globals) into the React island's tsconfig. A self-contained DTO keeps the
+  island decoupled; the two shapes must stay in step (noted in the source).
+- **`INTEGRATION_HUES` inlined in `DiscoverScreen`** to avoid pulling the
+  automations module graph into the React bundle; kept a comment tying it to the
+  `app-automations-ui.ts` source of truth.
+
 ## Verification
 
-- **Unit tests:** 25 new tests pass (`ui-core` 9, `desktop-ui` 16) —
-  `vitest run --project @centraid/ui-core --project @centraid/desktop-ui`.
-- **Build:** `turbo run build` green for both packages; `apps/desktop` full
-  build produces `dist/renderer/react-boot.js` (199 kB) alongside the vanilla
-  `index.html` / `styles.css`.
+- **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + 5 new `DiscoverScreen` render
+  tests; the full `@centraid/desktop` project (96 tests) stays green, confirming
+  the `app-discover.ts` delegation didn't regress the vanilla renderer suite.
+  `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
+- **Build:** `turbo run build` green; `apps/desktop` full build produces
+  `dist/renderer/react-boot.js` (~205 kB, incl. DiscoverScreen) alongside the
+  vanilla `index.html` / `styles.css`.
 - **Typecheck:** `ui-core`, `desktop-ui`, and both `apps/desktop` tsconfigs
   (vanilla + island) pass.
 - **Lint/format:** `oxlint` + `oxfmt --check` clean on all new files.
-- **Runtime (real bundle):** loaded the shipped `react-boot.js` in jsdom with
-  `location.hash = '#ui-preview'` and confirmed end-to-end — the gallery mounts
-  (`cd-btn`, `cd-app-card`, SVG glyphs from real tokens), `#root` is hidden, and
-  clearing the hash unmounts the island and restores the shell.
+- **Runtime (real bundle), Phase 0 island:** loaded the shipped `react-boot.js`
+  in jsdom at `#ui-preview` — the gallery mounts (`cd-btn`, `cd-app-card`,
+  real-token SVGs), `#root` hides, and leaving the hash unmounts + restores the
+  shell.
+- **Runtime (real bundle), Phase 3 Discover:** mounted the screen through the
+  real `window.CentraidReact.mountDiscover` bridge in jsdom and confirmed
+  end-to-end — 3 cards across "Apps"/"Inbox" categories, automation trigger
+  badge + 2 integration dots, click → `onOpenTemplate`, right-click →
+  `onTemplateContext` with coords, kind filter narrows to 1 card and flips the
+  active tab, layout toggle sets `data-layout="rows"`, and the disposer unmounts
+  cleanly.
 
 ## Audit
 

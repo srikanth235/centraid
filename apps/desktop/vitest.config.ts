@@ -10,9 +10,12 @@ import { defineProject } from 'vitest/config';
 // units the DOM globals they may reach for, while node builtins (fs, sqlite)
 // stay available so the main-process logic tests keep working (TESTING.md §2).
 export default defineProject({
+  // The React island/screens (issue #325) are .tsx; transform them with the
+  // automatic JSX runtime so their render tests run in this same project.
+  esbuild: { jsx: 'automatic' },
   test: {
     name: '@centraid/desktop',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     environment: 'jsdom',
   },
 });

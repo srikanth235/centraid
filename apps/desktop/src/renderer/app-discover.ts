@@ -17,6 +17,7 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
     clear,
     teardownCurrent,
     recordRoute,
+    registerCleanup,
     mountShellPage,
     pageScroll,
     renderSimpleEmpty,
@@ -46,6 +47,27 @@ export function createDiscoverModule(ctx: ShellContext): DiscoverModule {
       loadAutomationTemplates(),
     ]);
     const all = [...appTemplates, ...automationTemplates];
+
+    // Phase 3 (#325): when the React bundle is loaded, delegate the screen body
+    // to the ported DiscoverScreen via the window.CentraidReact bridge; the
+    // vanilla builder below is the fallback so the app is runnable even if the
+    // bundle is absent. Routing/teardown stay here (the vanilla shell owns
+    // them); the React root's disposer is registered as the page cleanup.
+    const bridge = window.CentraidReact;
+    if (bridge?.mountDiscover) {
+      const host = el('div', { class: 'has-wall' });
+      const unmount = bridge.mountDiscover(host, {
+        appTemplates,
+        automationTemplates,
+        onOpenAutomationTemplate: (t) => ctx.shell.openAutomationTemplatePreview(t),
+        onOpenTemplate: (t) => ctx.shell.openTemplatePreview(t),
+        onTemplateContext: (t, anchor) => ctx.shell.openTemplateContextMenu(t, anchor),
+        tileVariant: getPrefs().tileVariant,
+      });
+      registerCleanup(unmount);
+      mountShellPage('discover', host, seq);
+      return;
+    }
 
     const main = el('div', { class: 'has-wall' });
     // cd-disc-scroll drops the cd-main-scroll padding so the width envelope is

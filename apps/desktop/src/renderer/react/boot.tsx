@@ -1,15 +1,16 @@
-// React coexistence island — issue #325, Phase 0.
+// React entry for the renderer — issue #325.
 //
-// This is the proof (and the seam) that React renders *inside the live
-// vanilla renderer*: same document, same styles.css, same design-tokens.
-// It is deliberately non-destructive — the vanilla shell owns `#root` and is
-// never touched. When the URL hash is `#ui-preview`, this island hides the
-// vanilla shell and renders the @centraid/desktop-ui component Gallery as a
-// full-window overlay; on any other hash it unmounts and restores the shell.
+// Two jobs, both proving React runs *inside the live vanilla renderer* (same
+// document, same styles.css, same design-tokens):
 //
-// Screen-by-screen migration (Phases 3–4) grows out of this file: each screen
-// converts by mounting its React tree into its own island the same way, while
-// the rest of the shell stays vanilla and runnable.
+//   1. Phase 0 coexistence island — on the `#ui-preview` hash, hide the vanilla
+//      shell (`#root`) and render the @centraid/desktop-ui Gallery as an
+//      overlay; restore on any other hash. Non-destructive proof + preview
+//      surface.
+//   2. Phase 3 screen bridge — publish `window.CentraidReact`, the handoff seam
+//      converted screens use (see ./bridge.ts). Each `mount<Screen>` renders a
+//      React screen into a host the vanilla route module owns and returns an
+//      unmount disposer the module registers as the page's cleanup.
 //
 // Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
 // loaded as a plain <script type="module"> — no dev server, so the strict
@@ -17,6 +18,8 @@
 
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from '@centraid/desktop-ui';
+import type { CentraidReactBridge } from './bridge.js';
+import DiscoverScreen from './screens/DiscoverScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
 const HOST_SELECTOR = '#react-preview-root';
@@ -67,7 +70,17 @@ function sync(): void {
 window.addEventListener('hashchange', sync);
 sync();
 
+// Phase 3 bridge — the vanilla route modules delegate converted screens here.
+const bridge: CentraidReactBridge = {
+  mountDiscover(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<DiscoverScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+};
+window.CentraidReact = bridge;
+
 console.log(
-  '[react] desktop-ui island ready — open %s to preview the component gallery',
+  '[react] renderer bridge ready — screens: discover; open %s for the component gallery',
   PREVIEW_HASH,
 );
