@@ -1264,34 +1264,6 @@ section.dark .dt td:first-child {
   color: var(--night-ink);
 }
 
-/* ---------- glossary ---------- */
-.term-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  background: var(--line);
-  margin-top: 22px;
-}
-.term-grid > div {
-  background: var(--card);
-  padding: 18px 20px 20px;
-}
-.term-grid h3 {
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.3;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-.term-grid p {
-  margin-top: 9px;
-  font-size: 15px;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-
 /* On phones the 3-column index would need a horizontal scroll; collapse each
    row into a stacked card instead (subsystem · chapter · description). */
 @media (max-width: 640px) {
@@ -1370,46 +1342,6 @@ section.dark .dt td:first-child {
   font-family: var(--mono);
   font-size: 13px;
   color: var(--accent);
-}
-
-/* ---------- common task links ---------- */
-.task-strip {
-  border-top: 1px solid var(--line-soft);
-}
-.task-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1px;
-  border: 1px solid var(--line);
-  background: var(--line);
-  max-width: 920px;
-  margin-top: 22px;
-}
-.task-grid a {
-  display: grid;
-  gap: 4px;
-  padding: 17px 18px;
-  background: var(--card);
-  text-decoration: none;
-  transition:
-    background 0.16s ease,
-    color 0.16s ease;
-}
-.task-grid a:hover {
-  background: color-mix(in oklab, var(--accent) 9%, var(--card));
-}
-.task-grid span {
-  font-family: var(--display);
-  font-weight: 560;
-  font-size: 18px;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.task-grid small {
-  font-family: var(--mono);
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-3);
 }
 
 /* ---------- chips (interactive filters) ---------- */
