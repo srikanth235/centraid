@@ -1,0 +1,33 @@
+/* Bridge: map @centraid/design-tokens vars onto the kit's app-level var
+ * contract. The blueprint apps do this per-app (--surface: var(--bg-elev),
+ * etc.); kit.css reads the app names, so a design system that ships kit.css
+ * must provide the same bridge or every .kit-* component renders unstyled. */
+:root {
+  /* Surfaces */
+  --surface: var(--bg-elev);
+  --surface-2: var(--bg-sunken);
+  /* Text */
+  --text: var(--ink);
+  --muted: var(--ink-3);
+  --ink-faint: var(--ink-4);
+  /* Lines are already emitted by tokens (--line, --line-strong). */
+  /* Accent — --accent / --accent-deep come from tokens; add the soft tint. */
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* Warn has no token; borrow the amber icon hue. */
+  --warn: var(--c-amber);
+  /* Radius + easing the kit derives from. */
+  --radius: var(--r-lg);
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  /* Type families (brand fonts shipped in fonts/). */
+  --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "Space Grotesk", var(--sans);
+
+  /* Base page look so previews/designs inherit brand type + surface. */
+  color: var(--text);
+  background: var(--bg-app);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.47;
+  -webkit-font-smoothing: antialiased;
+}

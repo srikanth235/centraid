@@ -1,0 +1,25 @@
+{
+  "name": "@centraid/blueprint-kit-ds",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React wrappers over the Centraid blueprint kit (kit.js/kit.css) — a design-sync input for claude.ai/design. Each component renders the kit's exact .kit-* DOM/classes so the shipped kit.css styles it identically.",
+  "module": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "typescript": "^5.4.0"
+  }
+}

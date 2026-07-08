@@ -16,3 +16,13 @@ coverage
 # Python bytecode created by .governance/ hook scripts (not source).
 __pycache__
 *.pyc
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
+.design-sync/ds-src/node_modules
+.design-sync/ds-src/dist
+.design-sync/ds-src/styles/tokens.css
+.design-sync/ds-src/styles/kit.css
+.design-sync/ds-src/styles/bundle.css

@@ -1,0 +1,14 @@
+{
+  "pkg": "@centraid/blueprint-kit-ds",
+  "globalName": "CentraidKit",
+  "projectId": "c1d89c3a-f2d6-4556-aea2-0bbcb76d7af5",
+  "shape": "package",
+  "buildCmd": "node .design-sync/ds-src/build.mjs",
+  "entry": ".design-sync/ds-src/dist/index.js",
+  "cssEntry": "styles/bundle.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "AskPanel": { "cardMode": "single", "viewport": "440x600" },
+    "MentionPopover": { "cardMode": "single", "viewport": "380x300" }
+  }
+}
