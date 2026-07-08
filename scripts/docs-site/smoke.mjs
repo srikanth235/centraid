@@ -5,9 +5,11 @@
  *  1. Every expected clean route and shared asset exists.
  *  2. Every internal href/src in every page resolves to a file in the dist
  *     (anchors and external URLs skipped).
- *  3. The homepage links to canonical `/docs/<route>/` URLs, never the old
+ *  3. Indexed pages carry the baseline SEO head: title, description, canonical,
+ *     Open Graph, Twitter, and JSON-LD.
+ *  4. The homepage links to canonical `/docs/<route>/` URLs, never the old
  *     docs subdomain or `.html` docs filenames.
- *  4. No page resurrects retired Duaility branding.
+ *  5. No page resurrects retired Duaility branding.
  */
 import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
@@ -30,7 +32,8 @@ const REQUIRED = [
   'assets/docs.css',
   'assets/docs.js',
   'assets/centraid-mark.svg',
-  'assets/search-index.json',
+  'assets/og-docs.svg',
+  'pagefind/pagefind.js',
 ];
 
 let failures = 0;
@@ -88,11 +91,68 @@ for (const rel of REQUIRED) {
 
 const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
 const HREF_RE = /(?:href|src)="([^"]+)"/g;
+const tagAttr = (html, tag, attr, value, readAttr = 'content') => {
+  const re = new RegExp(
+    `<${tag}\\b(?=[^>]*\\b${attr}="${value}")[^>]*\\b${readAttr}="([^"]*)"[^>]*>`,
+    'i',
+  );
+  return html.match(re)?.[1] || '';
+};
+const titleValues = new Map();
+const descriptionValues = new Map();
 
 for (const page of pages) {
   const html = await readFile(join(outDir, page), 'utf8');
 
   if (/duaility/i.test(html)) fail(`${page}: retired "Duaility" branding still present`);
+
+  const title = html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() || '';
+  const description = tagAttr(html, 'meta', 'name', 'description');
+  const noIndex = /<meta\b(?=[^>]*\bname="robots")(?=[^>]*\bcontent="[^"]*noindex)/i.test(html);
+
+  if (!title) fail(`${page}: missing <title>`);
+  if (title.length > 70)
+    fail(`${page}: <title> is too long for a clean search result (${title.length})`);
+  if (!description) fail(`${page}: missing meta description`);
+
+  if (!noIndex) {
+    if (description && (description.length < 80 || description.length > 170)) {
+      fail(
+        `${page}: meta description should stay between 80 and 170 characters (${description.length})`,
+      );
+    }
+    const canonical = tagAttr(html, 'link', 'rel', 'canonical', 'href');
+    if (!canonical) fail(`${page}: missing canonical link`);
+    if (canonical && !canonical.startsWith('https://centraid.dev/docs/')) {
+      fail(`${page}: canonical must stay under https://centraid.dev/docs/`);
+    }
+    if (!tagAttr(html, 'meta', 'property', 'og:title')) fail(`${page}: missing og:title`);
+    if (!tagAttr(html, 'meta', 'property', 'og:description'))
+      fail(`${page}: missing og:description`);
+    if (!tagAttr(html, 'meta', 'property', 'og:url')) fail(`${page}: missing og:url`);
+    if (!tagAttr(html, 'meta', 'property', 'og:image')) fail(`${page}: missing og:image`);
+    if (!tagAttr(html, 'meta', 'name', 'twitter:card')) fail(`${page}: missing twitter:card`);
+    if (!tagAttr(html, 'meta', 'name', 'twitter:image')) fail(`${page}: missing twitter:image`);
+    if (!/<main\b[^>]*data-pagefind-body(?:[=>\s]|$)/.test(html)) {
+      fail(`${page}: missing Pagefind body marker`);
+    }
+    if (!/<meta\b(?=[^>]*\bdata-pagefind-meta="label\[content\]")/.test(html)) {
+      fail(`${page}: missing Pagefind label metadata`);
+    }
+    if (!/<script\b[^>]*type="application\/ld\+json"[^>]*>/.test(html)) {
+      fail(`${page}: missing JSON-LD structured data`);
+    }
+    if (titleValues.has(title))
+      fail(`${page}: duplicate SEO title also used by ${titleValues.get(title)}`);
+    else titleValues.set(title, page);
+    if (descriptionValues.has(description)) {
+      fail(
+        `${page}: duplicate meta description also used by ${descriptionValues.get(description)}`,
+      );
+    } else {
+      descriptionValues.set(description, page);
+    }
+  }
 
   for (const [, url] of html.matchAll(HREF_RE)) {
     if (

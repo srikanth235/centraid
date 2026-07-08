@@ -88,6 +88,46 @@
         </div>
       </section>
 
+      <!-- CORE TERMS -->
+      <section class="sec wrap" id="glossary">
+        <p class="eyebrow r">Core terms</p>
+        <h2 class="r" style="--d: 0.06s">The vocabulary you keep seeing.</h2>
+        <div class="term-grid r" style="--d: 0.12s">
+          <div>
+            <h3>Vault</h3>
+            <p>The owned SQLite directory that holds your canonical model, journal, blob pointers, grants, receipts and identity rows.</p>
+          </div>
+          <div>
+            <h3>Gateway</h3>
+            <p>The single door to a vault. It mounts vaults, enforces consent, runs handlers, hosts agents, and emits receipts.</p>
+          </div>
+          <div>
+            <h3>Ontology</h3>
+            <p>The shared personal data model: people, money, content, time, activity and relationships declared once.</p>
+          </div>
+          <div>
+            <h3>Projection</h3>
+            <p>An app surface over the vault. It renders rows and invokes typed commands, but it is not where the data lives.</p>
+          </div>
+          <div>
+            <h3>Grant</h3>
+            <p>The signed permission boundary for an app or device: what it may read, which commands it may call, and why.</p>
+          </div>
+          <div>
+            <h3>Receipt</h3>
+            <p>The audit record for a read, write, allow, deny, confirmation or agent action. It is the paper trail.</p>
+          </div>
+          <div>
+            <h3>Ext band</h3>
+            <p>Per-app tables inside the vault for genuinely app-local state. They may reference the canon; the canon never depends on them.</p>
+          </div>
+          <div>
+            <h3>Device</h3>
+            <p>A client enrolled to one or more vaults. It talks to the gateway over authenticated local or peer-to-peer transport.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- QUICK INDEX -->
       <section class="sec wrap" id="index">
         <p class="eyebrow r">Find a subsystem</p>
