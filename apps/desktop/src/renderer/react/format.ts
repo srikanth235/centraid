@@ -1,7 +1,23 @@
-// Pure display formatters for the React screens. Mirror the same-named
-// helpers in app-format.ts (which reaches ambient globals the React island's
-// tsconfig doesn't carry) — kept as a tiny self-contained copy so the React
-// bundle stays decoupled from the vanilla shell. Keep the two in step.
+// Pure display formatters + small shared data for the React screens. Mirror
+// the same-named helpers in app-format.ts / app-automations-ui.ts (which reach
+// ambient globals the React island's tsconfig doesn't carry) — kept as tiny
+// self-contained copies so the React bundle stays decoupled from the vanilla
+// shell. Keep the two in step.
+
+/** Integration name → app-icon hue. Mirrors INTEGRATION_HUES in
+ * app-automations-ui.ts. */
+export const INTEGRATION_HUES: Readonly<Record<string, string>> = {
+  Datadog: 'violet',
+  Gmail: 'rose',
+  GitHub: 'slate',
+  'Google Calendar': 'indigo',
+  Linear: 'indigo',
+  Notion: 'slate',
+  PagerDuty: 'forest',
+  Sentry: 'ochre',
+  Slack: 'violet',
+  npm: 'ochre',
+};
 
 /** Compact token count — 12_300 → "12k", 2_500_000 → "2.50M". */
 export function insK(v: number): string {

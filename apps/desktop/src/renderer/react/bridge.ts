@@ -156,9 +156,20 @@ export interface VaultBridgeProps {
   onParkedCount?: (count: number) => void;
 }
 
+// ── Automation templates gallery ────────────────────────────────────────────
+export interface AutomationTemplatesBridgeProps {
+  templates: readonly DiscoverTemplate[];
+  /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
+  onPreview: (t: DiscoverTemplate) => void;
+  /** "Start from scratch" → the conversational automation builder. */
+  onStartFromScratch: () => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React automation-templates gallery; returns an unmount disposer. */
+  mountAutomationTemplates(host: HTMLElement, props: AutomationTemplatesBridgeProps): () => void;
   /** Mount the React Insights dashboard into `host`; returns an unmount disposer. */
   mountInsights(host: HTMLElement, props: InsightsBridgeProps): () => void;
   /** Mount the React Vault consent pane into `host`; returns an unmount disposer. */

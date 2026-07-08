@@ -19,6 +19,7 @@
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from '@centraid/desktop-ui';
 import type { CentraidReactBridge } from './bridge.js';
+import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
 import InsightsScreen from './screens/InsightsScreen.js';
 import VaultScreen from './screens/VaultScreen.js';
@@ -87,6 +88,11 @@ const bridge: CentraidReactBridge = {
   mountVault(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<VaultScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountAutomationTemplates(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<AutomationTemplatesScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };

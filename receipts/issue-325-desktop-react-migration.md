@@ -25,9 +25,9 @@ they proceed incrementally on top of this seam.
       credentialed step).
 - [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
       to React via the `window.CentraidReact` bridge (vanilla render kept as a
-      fallback): **Discover**, **Insights**, and the **Vault** consent pane.
-      Remaining (`builder.ts`, Home, automations, settings) follow the same
-      pattern incrementally.
+      fallback): **Discover**, **Insights**, the **Vault** consent pane, and the
+      **Automation-templates gallery**. Remaining (`builder.ts`, Home,
+      Automations overview, settings) follow the same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -130,6 +130,19 @@ Third screen — **Vault consent pane** (stateful; new pattern coverage):
   component owns the view + loading/error/empty states. A `WeakMap` disposes a
   prior root when the tab re-opens onto the same host; vanilla builder fallback.
 
+Fourth screen — **Automation-templates gallery** (interactive; live search):
+
+- `src/renderer/react/screens/AutomationTemplatesScreen.tsx` (+ `.test.tsx`) —
+  React port of the gallery: live search, trigger segmented filter, integration
+  filter chips, category-grouped card grid. Cards open the (still-vanilla)
+  preview drawer via `onPreview`; the empty state's "Start from scratch" routes
+  through `onStartFromScratch`. Same `cd-au-tpl-*` classes.
+- `bridge.ts` gains `mountAutomationTemplates`; `boot.tsx` registers it;
+  `app-automations-templates.ts` loads the catalog (gateway I/O stays vanilla)
+  then delegates the gallery, keeping the vanilla builder + preview drawer.
+- `src/renderer/react/format.ts` gains the shared `INTEGRATION_HUES` map (now
+  imported by both `DiscoverScreen` and this gallery instead of inlined twice).
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -154,14 +167,14 @@ Third screen — **Vault consent pane** (stateful; new pattern coverage):
   `src/renderer/react/screens/InsightsScreen.test.tsx`,
   `src/renderer/app-vault.ts`,
   `src/renderer/react/screens/VaultScreen.tsx`,
-  `src/renderer/react/screens/VaultScreen.test.tsx`.
+  `src/renderer/react/screens/VaultScreen.test.tsx`,
+  `src/renderer/app-automations-templates.ts`,
+  `src/renderer/react/screens/AutomationTemplatesScreen.tsx`,
+  `src/renderer/react/screens/AutomationTemplatesScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Only Discover + Insights + the Vault pane are converted.** Every other
-  vanilla builder — `builder.ts`, `app.ts`, Home, automations, settings — is
-  untouched and renders exactly as before. Every converted screen keeps its
-  vanilla builder as a live fallback.
+- **Only Discover, Insights, the Vault pane, and the automation-templates gallery are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations overview/viewers, settings — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -189,8 +202,8 @@ Third screen — **Vault consent pane** (stateful; new pattern coverage):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 + `VaultScreen` 5 render/behavior tests; the full
-  `@centraid/desktop` project (105 tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4
+  render/behavior tests; the full `@centraid/desktop` project (109 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

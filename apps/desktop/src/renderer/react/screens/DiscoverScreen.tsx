@@ -3,22 +3,7 @@ import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
 import { Icon } from '@centraid/desktop-ui';
 import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../bridge.js';
-
-// Integration name → app-icon hue. Mirrors INTEGRATION_HUES in
-// app-automations-ui.ts (kept inline so the React bundle doesn't pull the
-// automations module graph); the two should stay in step.
-const INTEGRATION_HUES: Readonly<Record<string, string>> = {
-  Datadog: 'violet',
-  Gmail: 'rose',
-  GitHub: 'slate',
-  'Google Calendar': 'indigo',
-  Linear: 'indigo',
-  Notion: 'slate',
-  PagerDuty: 'forest',
-  Sentry: 'ochre',
-  Slack: 'violet',
-  npm: 'ochre',
-};
+import { INTEGRATION_HUES } from '../format.js';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
