@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { AppKnobDTO, AppSettingsBridgeProps, AppSettingsSnapshot } from '../bridge.js';
 
 type Tab = 'appearance' | 'automations' | 'vault' | 'manage';

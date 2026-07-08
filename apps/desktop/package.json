@@ -2,7 +2,7 @@
   "name": "@centraid/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid desktop — Electron shell + renderer (vanilla TS, migrating to React per #325). Consumes @centraid/design-tokens, @centraid/ui-core, @centraid/desktop-ui.",
+  "description": "Centraid desktop — Electron shell + renderer (vanilla TS, migrating to React per #325). Consumes @centraid/design-tokens.",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
@@ -23,10 +23,8 @@
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
     "@centraid/design-tokens": "workspace:*",
-    "@centraid/desktop-ui": "workspace:*",
     "@centraid/gateway": "workspace:*",
     "@centraid/tunnel": "workspace:*",
-    "@centraid/ui-core": "workspace:*",
     "qrcode": "^1.5.4",
     "react": "19.1.0",
     "react-dom": "19.1.0"

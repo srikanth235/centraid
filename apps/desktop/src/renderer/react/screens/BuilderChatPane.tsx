@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../bridge.js';
 
 // Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs

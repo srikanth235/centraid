@@ -478,6 +478,7 @@ PASS — Two human-steering events are recorded and legitimate:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-99c155bb-657-1783523686-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 52920 | 870570 | 25578967 | 188654 | 1112144 | 23.2115 | 52920 | 870570 | 25578967 | 188654 | feat(ui-core): add framework-neutral UI logic package (#325)New @centraid/ui-cor |
 | claude-code-99c155bb-657-1783524006-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 9128 | 17316 | 1265759 | 7905 | 34349 | 0.9844 | 62048 | 887886 | 26844726 | 196559 | feat(ui-core): add framework-neutral UI logic package (#325)New @centraid/ui-cor |
+| claude-code-99c155bb-657-1783534736-1 | claude-code | 99c155bb-6574-4f2e-b563-75cbe1994330 | #325 | claude-opus-4-8 | 438957 | 2868976 | 525193870 | 1382811 | 4690744 | 317.2931 | 501005 | 3756862 | 552038596 | 1579370 | refactor(desktop): fold ui-core + desktop-ui into apps/desktop (#325)Collapse th |
 
 ### Steering
 

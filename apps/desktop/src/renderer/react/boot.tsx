@@ -4,7 +4,7 @@
 // document, same styles.css, same design-tokens):
 //
 //   1. Phase 0 coexistence island — on the `#ui-preview` hash, hide the vanilla
-//      shell (`#root`) and render the @centraid/desktop-ui Gallery as an
+//      shell (`#root`) and render the local UI Gallery as an
 //      overlay; restore on any other hash. Non-destructive proof + preview
 //      surface.
 //   2. Phase 3 screen bridge — publish `window.CentraidReact`, the handoff seam
@@ -17,7 +17,7 @@
 // `script-src 'self'` CSP holds.
 
 import { createRoot, type Root } from 'react-dom/client';
-import { Gallery } from '@centraid/desktop-ui';
+import { Gallery } from './ui/index.js';
 import type { CentraidReactBridge } from './bridge.js';
 import AppSettingsPanel from './screens/AppSettingsPanel.js';
 import AssistantScreen from './screens/AssistantScreen.js';

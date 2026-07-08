@@ -1,10 +1,10 @@
 import type { JSX, ReactNode } from 'react';
 import { apps, icons } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
-import AppCard from '../AppCard.js';
-import Button from '../Button.js';
-import Icon from '../Icon.js';
-import Logo from '../Logo.js';
+import AppCard from './AppCard.js';
+import Button from './Button.js';
+import Icon from './Icon.js';
+import Logo from './Logo.js';
 
 const SAMPLE_ICONS = Object.keys(icons).slice(0, 12) as IconName[];
 
@@ -31,7 +31,7 @@ function Section({ title, children }: { title: string; children: ReactNode }): J
 }
 
 /**
- * Component gallery — the single preview surface for @centraid/desktop-ui.
+ * Component gallery — the single preview surface for the local UI library.
  * Rendered both by the in-shell coexistence island (Phase 0 proof) and, once
  * synced, by claude.ai/design (Phase 2). Every primitive is drawn from the
  * real design tokens so the gallery matches the shell exactly.

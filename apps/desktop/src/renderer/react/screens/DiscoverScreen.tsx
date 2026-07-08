@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
 

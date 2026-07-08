@@ -12,16 +12,15 @@ import { defineConfig } from 'vite';
 const fromHere = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
-  // Bundle the workspace UI packages from their TS source, not their built
-  // dist. design-tokens emits CommonJS (it's also consumed by the Electron
-  // preload), and Rollup can't statically read named exports from a CJS file
-  // reached through a workspace symlink. Pulling source also frees the island
-  // build from depending on the packages being built first.
+  // Bundle @centraid/design-tokens from its TS source, not its built dist: it
+  // emits CommonJS (it's also consumed by the Electron preload), and Rollup
+  // can't statically read named exports from a CJS file reached through a
+  // workspace symlink. Pulling source also frees the island build from
+  // depending on the package being built first. (The former desktop-ui/ui-core
+  // packages now live locally under src/renderer/react/ui — no alias needed.)
   resolve: {
     alias: {
       '@centraid/design-tokens': fromHere('../../packages/design-tokens/src/index.ts'),
-      '@centraid/desktop-ui': fromHere('../../packages/desktop-ui/src/index.ts'),
-      '@centraid/ui-core': fromHere('../../packages/ui-core/src/index.ts'),
     },
   },
   build: {

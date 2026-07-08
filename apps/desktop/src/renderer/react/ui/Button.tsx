@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { cx } from '@centraid/ui-core';
+import { cx } from './cx.js';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from './Icon.js';
 

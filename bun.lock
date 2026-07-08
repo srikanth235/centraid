@@ -26,10 +26,8 @@
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@centraid/design-tokens": "workspace:*",
-        "@centraid/desktop-ui": "workspace:*",
         "@centraid/gateway": "workspace:*",
         "@centraid/tunnel": "workspace:*",
-        "@centraid/ui-core": "workspace:*",
         "qrcode": "^1.5.4",
         "react": "19.1.0",
         "react-dom": "19.1.0",
@@ -146,26 +144,6 @@
         "typescript": "catalog:",
       },
     },
-    "packages/desktop-ui": {
-      "name": "@centraid/desktop-ui",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-        "@centraid/ui-core": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
-        "@types/react": "~19.1.0",
-        "@types/react-dom": "~19.1.0",
-        "react": "19.1.0",
-        "react-dom": "19.1.0",
-        "typescript": "catalog:",
-      },
-      "peerDependencies": {
-        "react": "^19.0.0",
-        "react-dom": "^19.0.0",
-      },
-    },
     "packages/gateway": {
       "name": "@centraid/gateway",
       "version": "0.1.0",
@@ -233,17 +211,6 @@
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",
         "@types/node": "^22.0.0",
-        "typescript": "catalog:",
-      },
-    },
-    "packages/ui-core": {
-      "name": "@centraid/ui-core",
-      "version": "0.1.0",
-      "dependencies": {
-        "@centraid/design-tokens": "workspace:*",
-      },
-      "devDependencies": {
-        "@centraid/tsconfig": "workspace:*",
         "typescript": "catalog:",
       },
     },
@@ -628,8 +595,6 @@
 
     "@centraid/desktop": ["@centraid/desktop@workspace:apps/desktop"],
 
-    "@centraid/desktop-ui": ["@centraid/desktop-ui@workspace:packages/desktop-ui"],
-
     "@centraid/gateway": ["@centraid/gateway@workspace:packages/gateway"],
 
     "@centraid/mobile": ["@centraid/mobile@workspace:apps/mobile"],
@@ -641,8 +606,6 @@
     "@centraid/tsconfig": ["@centraid/tsconfig@workspace:packages/tsconfig"],
 
     "@centraid/tunnel": ["@centraid/tunnel@workspace:packages/tunnel"],
-
-    "@centraid/ui-core": ["@centraid/ui-core@workspace:packages/ui-core"],
 
     "@centraid/vault": ["@centraid/vault@workspace:packages/vault"],
 

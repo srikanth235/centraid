@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX } from 'react';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
 import type {
   AuStatusKind,

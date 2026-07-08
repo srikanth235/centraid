@@ -15,8 +15,6 @@ export default defineConfig({
       'packages/openclaw-plugin',
       'packages/skills',
       'packages/tunnel',
-      'packages/ui-core',
-      'packages/desktop-ui',
       'packages/vault',
       'apps/desktop',
     ],

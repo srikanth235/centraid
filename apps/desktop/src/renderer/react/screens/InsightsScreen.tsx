@@ -1,5 +1,5 @@
 import type { JSX, ReactNode } from 'react';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { InsightsBridgeProps } from '../bridge.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 

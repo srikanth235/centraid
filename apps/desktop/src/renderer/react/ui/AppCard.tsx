@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { cx, tileVisual } from '@centraid/ui-core';
+import { cx } from './cx.js';
+import { tileVisual } from './tile-visual.js';
 import type { AppMetaResolved, TileVariant } from '@centraid/design-tokens';
 import Icon from './Icon.js';
 

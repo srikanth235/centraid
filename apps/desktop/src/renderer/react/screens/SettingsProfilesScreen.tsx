@@ -1,7 +1,7 @@
 import type { CSSProperties, JSX } from 'react';
 import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../bridge.js';
 
 function Avatar({

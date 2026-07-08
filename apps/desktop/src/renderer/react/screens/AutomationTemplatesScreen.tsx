@@ -1,5 +1,5 @@
 import { useMemo, useState, type JSX } from 'react';
-import { Icon } from '@centraid/desktop-ui';
+import { Icon } from '../ui/index.js';
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
 
