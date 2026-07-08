@@ -162,10 +162,12 @@
       "name": "@centraid/openclaw-plugin",
       "version": "0.1.0",
       "dependencies": {
+        "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
         "@centraid/gateway": "workspace:*",
         "@sinclair/typebox": "^0.27.0",
+        "typebox": "^1.1.37",
       },
       "devDependencies": {
         "@centraid/tsconfig": "workspace:*",

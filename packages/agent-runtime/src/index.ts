@@ -55,6 +55,12 @@ export {
   type ToolContext,
 } from './runtime.js';
 
+// The backend-neutral vault-register tool specs (name / description /
+// inputSchema). Both coding-agent backends declare their tools from these,
+// and the in-process OpenClaw plugin reuses the same names + descriptions so
+// its embedded-turn tools stay identical to the CLI ones (issue #319).
+export { VAULT_SQL_TOOL, VAULT_INVOKE_TOOL, VAULT_CONTENT_TOOL } from './vault-sql-tool.js';
+
 export {
   runCodexTurn,
   type CodexTurnInput,

@@ -37,10 +37,11 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
 import { resolveStateDir } from 'openclaw/plugin-sdk/state-paths';
 import { makeWebhookRouteHandler } from '@centraid/automation';
-import { buildGateway, type BuiltGateway } from '@centraid/gateway';
+import { buildGateway, type BuiltGateway, type VaultRegistry } from '@centraid/gateway';
 import { makeOpenClawConversationRunner } from './lib/openclaw-conversation-runner.js';
 import { runOpenclawFire } from './lib/openclaw-fire.js';
 import { resolveOpenClawModels } from './lib/openclaw-models.js';
+import { registerVaultTools } from './lib/vault-tools.js';
 
 // Re-export the public handler & payload types from app-engine so apps
 // authored against the historical `@centraid/openclaw-plugin` import path
@@ -95,6 +96,16 @@ export default definePluginEntry({
     // `gateway_start` in the single HTTP-serving process. The construction
     // itself is cheap (no git I/O, lazy DB handles), so doing it in every
     // process is safe.
+    // The gateway core is built with the OpenClaw conversation runner injected,
+    // but that runner (and the vault_* tools) need the built gateway's vault
+    // REGISTRY — a chicken-and-egg the deferred `vaultRegistryReady` breaks:
+    // the runner/tools await it, and we resolve it from `gwPromise` right after
+    // the build call returns (issue #319, WS3).
+    let resolveVaultRegistry!: (registry: VaultRegistry) => void;
+    const vaultRegistryReady = new Promise<VaultRegistry>((resolve) => {
+      resolveVaultRegistry = resolve;
+    });
+
     const gwPromise: Promise<BuiltGateway> = buildGateway({
       paths: {
         vaultDir: path.join(dbDir, 'centraid-vault'),
@@ -104,7 +115,7 @@ export default definePluginEntry({
       logTag: 'centraid',
       // Plane B (in-process): chat drives OpenClaw's embedded agent, not a
       // codex/claude CLI puppet.
-      conversationRunner: makeOpenClawConversationRunner(api),
+      conversationRunner: makeOpenClawConversationRunner(api, vaultRegistryReady),
       // OpenClaw chat runs in-process regardless of any local CLI, so report
       // ready rather than running a codex/claude preflight. Models are
       // enumerated from `openclaw models list --json` and classified into
@@ -140,6 +151,14 @@ export default definePluginEntry({
       },
     });
 
+    // Hand the built gateway's vault registry to the injected runner + the
+    // vault_* tools (both awaited `vaultRegistryReady`). `register()` also runs
+    // in OpenClaw worker subprocesses, where `gwPromise` still resolves (the
+    // build is cheap + lazy) — the registry it yields is inert there because
+    // only the HTTP-serving process runs `gw.start()`, and vault tools only
+    // fire inside a request's vault scope, so resolving in every process is safe.
+    void gwPromise.then((gw) => resolveVaultRegistry(gw.vaults));
+
     api.on('gateway_start', async () => {
       const gw = await gwPromise;
       // `runOpenclawFire` reads `api.config` directly via the captured `api`
@@ -168,10 +187,13 @@ export default definePluginEntry({
       });
     }
 
-    // The pre-vault centraid_* agent tools died with the per-app silo
-    // (issue #286 phase 2). The OpenClaw agent gets vault-register tools
-    // when the OpenClaw re-platform wires the runners; until then its
-    // turns carry no data tools.
+    // Vault-register tools for the embedded chat turn (issue #319, WS3). The
+    // pre-vault centraid_* trio died with the per-app silo (#286 phase 2);
+    // these give each centraid conversation turn `vault_sql` / `vault_invoke` /
+    // `vault_content`, executed in-process through the gateway's owner-side
+    // consent/receipt pipeline. Registered with a session-scoped factory so
+    // they never appear in the user's own OpenClaw agent's tool list.
+    registerVaultTools(api, vaultRegistryReady);
 
     // Webhook-trigger route (issue #96). Not part of `composedHandler`: one
     // prefix route fronts every automation with a `webhook` trigger — the path

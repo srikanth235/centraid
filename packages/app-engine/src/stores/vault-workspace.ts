@@ -42,7 +42,11 @@ export interface VaultWorkspace {
   journal: DatabaseProvider;
   /** Absolute path of `journal.db` (for hosts that spawn workers). */
   journalDbFile: string;
-  /** Scratch dir for the chat runner's per-conversation session files. */
+  /**
+   * Disposable scratch dir for the chat runner's per-conversation session
+   * files (resume state). Derived cache — journal.db is the authoritative
+   * ledger — so the gateway homes it OUTSIDE the vault dir; still per-vault.
+   */
   runnerSessionDir: string;
 }
 

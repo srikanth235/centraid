@@ -69,3 +69,16 @@ export function buildAssistantPrompt(
     `# The vault ("${vaultName}")\n${context}`,
   ].join('\n\n');
 }
+
+/**
+ * The vault-register grounding WITHOUT the shell's fenced-block answer format
+ * (issue #319). The OpenClaw embedded per-app chat turn wires the same
+ * `vault_sql` / `vault_invoke` / `vault_content` tools the assistant uses, so
+ * it needs the same register (how to use them + parking/outbox semantics) and
+ * the live schema map — but it renders inside an app's own chat UI, not the
+ * assistant shell, so it must NOT be told to emit `block:table` / `block:chart`
+ * frames the app UI won't draw. Appended after the app-context preamble.
+ */
+export function buildVaultToolsGrounding(vaultName: string, context: string): string {
+  return [REGISTER, `# The vault ("${vaultName}")\n${context}`].join('\n\n');
+}

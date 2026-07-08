@@ -26,13 +26,26 @@ export interface GatewayPaths {
    * The personal-vault root (duaility §12, #280). The gateway mounts the
    * vault registry here: each vault lives in its own subdirectory holding
    * BOTH the sovereign pair (`vault.db` + `journal.db`) and the vault's
-   * workspace (`apps/`, `code/`, `runner-sessions/`; the conversation
-   * ledger rides the journal file); exactly one vault is active at a time
-   * (pointer in `<vaultDir>/vaults.json`). Required — post-#280 the app
-   * surface IS vault-scoped, so a gateway without vaults has nothing to
-   * serve.
+   * workspace (`apps/`, `code/`; the conversation ledger rides the journal
+   * file); exactly one vault is active at a time (pointer in
+   * `<vaultDir>/vaults.json`). The chat runner scratch (`runner-sessions/`)
+   * does NOT live here — it is disposable cache under `cacheDir`. Required —
+   * post-#280 the app surface IS vault-scoped, so a gateway without vaults
+   * has nothing to serve.
    */
   vaultDir: string;
+
+  /**
+   * Optional root for the per-vault DISPOSABLE runner cache
+   * (`<cacheDir>/<vaultId>/runner-sessions/`) — the embedded chat runner's
+   * per-conversation resume files and scratch cwd. Kept OUTSIDE `vaultDir` so
+   * the sovereign vault tree holds only `vault.db` + `journal.db`, app data,
+   * and code; journal.db is the authoritative conversation ledger and this
+   * cache is derived, safe to wipe, and never backed up with the vault. Omit
+   * to default to a `-cache` sibling of `vaultDir`; a host may point it at an
+   * OS cache location instead.
+   */
+  cacheDir?: string;
 
   /**
    * Device-prefs JSON file (`prefs.json`) — runner choice, binary path,

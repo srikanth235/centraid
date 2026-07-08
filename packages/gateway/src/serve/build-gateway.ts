@@ -288,6 +288,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // vault-less mode.
   const vaultRegistry: VaultRegistry = openVaultRegistry({
     rootDir: paths.vaultDir,
+    // Disposable runner cache lives outside the vault tree (defaults to a
+    // `-cache` sibling of `vaultDir` when the host doesn't pin one).
+    ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
     logger,
   });
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
