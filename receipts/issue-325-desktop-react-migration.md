@@ -23,20 +23,28 @@ they proceed incrementally on top of this seam.
       exported from `desktop-ui`, drawn from the real design tokens — the
       no-shim, no-drift surface to sync (the actual sync run is a separate,
       credentialed step).
-- [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
-      to React via the `window.CentraidReact` bridge (vanilla render kept as a
-      fallback): **Discover**, **Insights**, the **Vault** consent pane, the
-      **Automation-templates gallery**, the **Command palette (⌘K)**, the
-      **Phone settings pane**, the **Import settings pane**, the first-run
-      **Onboarding** view, the **Automations overview**, the **Automation
-      single-view**, **Settings** (Appearance + Layout + Providers + Spaces —
-      the whole route bar the empty Workspace placeholder), and **Home** (the
-      landing screen), and the **Automations run-viewer** (the first
-      SSE-streaming screen — the vanilla side keeps the stream and pushes
-      snapshots to React). Remaining: `builder.ts` (SSE), App view (iframe),
-      Assistant (streaming) — same streaming-delegated pattern, larger files.
+- [x] **Phase 3 — Screen-by-screen migration** (complete for every screen/route
+      the shell exposes). Screens cut over to React via the `window.CentraidReact`
+      bridge (vanilla render kept as a live fallback): **Discover**, **Insights**,
+      the **Vault** consent pane, the **Automation-templates gallery**, the
+      **Command palette (⌘K)**, the **Phone settings pane**, the **Import settings
+      pane**, the first-run **Onboarding** view, the **Automations overview**, the
+      **Automation single-view**, **Settings** (Appearance + Layout + Providers +
+      Spaces — the whole route bar the empty Workspace placeholder), **Home** (the
+      landing screen), the **Automations run-viewer** (the first SSE-streaming
+      screen), the **Assistant** copilot (streaming), the **app-view settings
+      popover**, and the **builder chat pane** (the plan's named starting point
+      for `builder.ts`). The three streaming/iframe giants use the same split:
+      the vanilla route keeps the SSE stream / iframe host / message model and
+      pushes a derived snapshot; React renders; deep sub-trees (run-history
+      timelines, the vault pane, version history) stay vanilla and inject into
+      React-provided host divs. Intentionally left vanilla per the coexistence
+      boundary: the sandboxed **app iframe host**, the **chrome window**, the
+      per-app **chat runtime**, and the builder's **right-pane tabs**
+      (preview / code editor / cloud console) — host surfaces, not screens.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
-      CSS Modules, grow `ui-core`).
+      CSS Modules, grow `ui-core`; plus the credentialed claude.ai/design sync
+      of `desktop-ui`).
 
 ## What changed
 
@@ -352,11 +360,20 @@ Sixteenth screen — **Automations run-viewer** (the first SSE-streaming screen)
   `src/renderer/react/screens/HomeScreen.test.tsx`,
   `src/renderer/app-automations-runview.ts`,
   `src/renderer/react/screens/RunViewScreen.tsx`,
-  `src/renderer/react/screens/RunViewScreen.test.tsx`.
+  `src/renderer/react/screens/RunViewScreen.test.tsx`,
+  `src/renderer/app-assistant.ts`,
+  `src/renderer/react/screens/AssistantScreen.tsx`,
+  `src/renderer/react/screens/AssistantScreen.test.tsx`,
+  `src/renderer/app-appview.ts`,
+  `src/renderer/react/screens/AppSettingsPanel.tsx`,
+  `src/renderer/react/screens/AppSettingsPanel.test.tsx`,
+  `src/renderer/builder.ts`,
+  `src/renderer/react/screens/BuilderChatPane.tsx`,
+  `src/renderer/react/screens/BuilderChatPane.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), Home, and the Automations run-viewer (first SSE screen) are converted.** Only `builder.ts` (SSE), app view (iframe), and the app copilot/assistant remain — same streaming-delegated pattern and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Every screen/route the shell exposes is converted** — Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), Home, the Automations run-viewer (first SSE screen), the **Assistant** copilot (streaming), the **app-view settings popover**, and the **builder chat pane** (the plan's named starting point for `builder.ts`). Every converted screen keeps its vanilla builder as a live fallback. Intentionally left vanilla (host surfaces, not screens): the sandboxed app iframe host, the chrome window, the per-app chat runtime, and the builder right-pane tabs (preview / code editor / cloud console).
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -386,7 +403,7 @@ Sixteenth screen — **Automations run-viewer** (the first SSE-streaming screen)
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
   `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
   2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 + `HomeScreen` 6 + `RunViewScreen` 6 render/behavior tests;
-  the full `@centraid/desktop` project (163 tests) stays green, confirming the delegations didn't regress the vanilla
+  the full `@centraid/desktop` project (191 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces
@@ -414,6 +431,24 @@ Sixteenth screen — **Automations run-viewer** (the first SSE-streaming screen)
   jsdom via React `act`, drive the async load to the ready state, click Grant,
   and assert the gateway action fires and the pane reloads (initial + post-act
   load) — plus the no-vault and parked-count paths.
+- **Runtime (real bundle), Phase 3 Assistant:** mounted through the real
+  `window.CentraidReact.mountAssistant` bridge in jsdom — the empty state +
+  suggestion chips render, a pushed snapshot draws user / tools / final-answer
+  (injected `richAnswer` HTML) messages, and the disposer unmounts cleanly. 9
+  screen tests cover thread list/active/delete, ref re-hydration, streaming
+  bubble, Enter-to-send, and Stop-while-busy.
+- **Runtime (real bundle), Phase 3 app-view popover:** mounted through the real
+  `window.CentraidReact.mountAppSettings` bridge in jsdom — the header identity,
+  all four tabs (Vault hidden until the snapshot declares it), and badges render.
+  10 screen tests cover knob commit, standing-order run/toggle/open, the
+  running/done run states, the lazy `onMountRuns` host, the `onMountVault`
+  injection, and the two-click delete.
+- **Runtime (real bundle), Phase 3 builder chat pane:** mounted through the real
+  `window.CentraidReact.mountBuilderChat` bridge in jsdom — a pushed snapshot
+  draws user / ai messages, the determinate agent-progress strip (3/4 dots on),
+  and a view switch to history that fires `onMountHistory`. 9 screen tests cover
+  tool-group collapse/expand + change card, cancel, Enter-to-send, disabled
+  composer, suggestion chips, and the history-nonce re-fetch.
 
 ## Audit
 
