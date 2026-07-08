@@ -612,9 +612,51 @@ export interface RunViewBridgeProps {
   onSetMode: (m: 'timeline' | 'log') => void;
 }
 
+// ── Assistant (streaming copilot) ───────────────────────────────────────────
+// The vanilla side owns the stream (streamAssistantTurn), the message model,
+// and the rich-answer renderer; it pushes a snapshot to React on each change.
+// Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
+// React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
+export interface AsstToolCallDTO {
+  tool: string;
+  sql?: string;
+  state: 'run' | 'ok' | 'error';
+  meta: string;
+}
+export type AsstMsgDTO =
+  | { kind: 'user'; text: string }
+  | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
+  | { kind: 'ai'; streaming: true; text: string }
+  | { kind: 'ai'; streaming: false; html: string; error: boolean };
+export interface AsstThreadDTO {
+  id: string;
+  title: string;
+  timeLabel: string;
+  active: boolean;
+}
+export interface AssistantSnapshot {
+  threads: AsstThreadDTO[];
+  empty: boolean;
+  busy: boolean;
+  messages: AsstMsgDTO[];
+}
+export interface AssistantBridgeProps {
+  suggestions: string[];
+  onReady: (update: (s: AssistantSnapshot) => void) => void;
+  onSend: (text: string) => void;
+  onStop: () => void;
+  /** `null` = new conversation. */
+  onSelectThread: (id: string | null) => void;
+  onDeleteThread: (id: string) => void;
+  /** Wire the interactive vault refs inside a just-rendered answer node. */
+  hydrateRefs: (node: HTMLElement) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Assistant copilot (streaming); returns a disposer. */
+  mountAssistant(host: HTMLElement, props: AssistantBridgeProps): () => void;
   /** Mount the React automation run-viewer (SSE-driven); returns a disposer. */
   mountRunView(host: HTMLElement, props: RunViewBridgeProps): () => void;
   /** Mount the React Home screen (composer hero + unified library grid). */

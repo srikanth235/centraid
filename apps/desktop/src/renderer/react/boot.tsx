@@ -19,6 +19,7 @@
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from '@centraid/desktop-ui';
 import type { CentraidReactBridge } from './bridge.js';
+import AssistantScreen from './screens/AssistantScreen.js';
 import AutomationsOverviewScreen from './screens/AutomationsOverviewScreen.js';
 import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import AutomationViewScreen from './screens/AutomationViewScreen.js';
@@ -87,6 +88,11 @@ sync();
 
 // Phase 3 bridge — the vanilla route modules delegate converted screens here.
 const bridge: CentraidReactBridge = {
+  mountAssistant(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<AssistantScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
   mountDiscover(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<DiscoverScreen {...props} />);
