@@ -442,9 +442,39 @@ export interface SettingsProvidersBridgeProps {
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
 }
 
+// ── Settings: profiles (spaces + connections) ───────────────────────────────
+export interface ProfileRowDTO {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  subLine: string;
+  active: boolean;
+  primordial: boolean;
+}
+export interface ConnectionRowDTO {
+  id: string;
+  displayName: string;
+  sub: string;
+  active: boolean;
+  removable: boolean;
+}
+export interface SettingsProfilesBridgeProps {
+  profiles: ProfileRowDTO[];
+  connections: ConnectionRowDTO[];
+  onSwitch: (id: string) => void;
+  onEdit: (id: string) => void;
+  onDelete: (id: string) => void;
+  onAdd: () => void;
+  onConnect: (id: string) => void;
+  onRemoveConnection: (id: string) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Settings → Spaces (profiles + connections) page. */
+  mountSettingsProfiles(host: HTMLElement, props: SettingsProfilesBridgeProps): () => void;
   /** Mount the React Settings → Providers (agents) page; returns a disposer. */
   mountSettingsProviders(host: HTMLElement, props: SettingsProvidersBridgeProps): () => void;
   /** Mount the React Settings → Appearance page; returns an unmount disposer. */

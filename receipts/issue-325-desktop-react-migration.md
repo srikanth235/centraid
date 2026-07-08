@@ -29,10 +29,10 @@ they proceed incrementally on top of this seam.
       **Automation-templates gallery**, the **Command palette (⌘K)**, the
       **Phone settings pane**, the **Import settings pane**, the first-run
       **Onboarding** view, the **Automations overview**, the **Automation
-      single-view**, and the **Settings → Appearance + Layout + Providers
-      pages**. Remaining (`builder.ts`, Home, Automations run-viewer, the
-      Settings profiles/workspace pages, app view) follow the same pattern
-      incrementally.
+      single-view**, and **Settings** (Appearance + Layout + Providers + Spaces
+      pages — the whole route bar the empty Workspace placeholder). Remaining
+      (`builder.ts`, Home, Automations run-viewer, app view) follow the same
+      pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -248,6 +248,18 @@ complex screen in the renderer:
   and delegates (loadStatus/refreshModels/refreshTools/activateRunner/
   setAgentModel all vanilla gateway I/O), else runs the vanilla console.
 
+Fourteenth screen — **Settings → Spaces (profiles + connections)**:
+
+- `src/renderer/react/screens/SettingsProfilesScreen.tsx` (+ `.test.tsx`) —
+  React port of the space (vault-backed profile) cards (avatar via `tileFinish`,
+  switch/edit/delete + add) and the gateway connections list (connect/remove).
+  The vanilla side owns the modals + gateway I/O through the callbacks (looking
+  up the `ProfileView` by id for edit/delete); React renders. `bridge.ts` gains
+  the profile/connection DTOs + `mountSettingsProfiles`; `app-settings.ts` maps
+  the vault + gateway lists to DTOs and delegates, else runs the vanilla builder
+  (which used `window.Profiles.buildManageBody`). With this, the whole Settings
+  route bar the empty Workspace placeholder page is React.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -300,11 +312,13 @@ complex screen in the renderer:
   `src/renderer/react/screens/SettingsLayoutScreen.tsx`,
   `src/renderer/react/screens/SettingsLayoutScreen.test.tsx`,
   `src/renderer/react/screens/SettingsProvidersScreen.tsx`,
-  `src/renderer/react/screens/SettingsProvidersScreen.test.tsx`.
+  `src/renderer/react/screens/SettingsProvidersScreen.test.tsx`,
+  `src/renderer/react/screens/SettingsProfilesScreen.tsx`,
+  `src/renderer/react/screens/SettingsProfilesScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, the Settings Appearance+Layout+Providers pages are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, the Settings profiles/workspace pages, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces) are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -333,8 +347,8 @@ complex screen in the renderer:
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
   `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
-  2 + `SettingsProvidersScreen` 4 render/behavior tests; the full
-  `@centraid/desktop` project (148 tests) stays green, confirming the delegations didn't regress the vanilla
+  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 render/behavior tests;
+  the full `@centraid/desktop` project (151 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

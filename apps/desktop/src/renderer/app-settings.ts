@@ -886,85 +886,136 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
     // is a VAULT: its own apps, transcripts, and data, all inside the vault
     // directory. Switching re-roots the shell. The sidebar-head switcher
     // (⌘⇧G or click the active space) is the other entry point.
-    pageHosts.profiles.append(
-      drawerGroup('Spaces', [
-        el(
-          'div',
-          { class: 'settings-note' },
-          'Each space is a vault — its own apps, chats, and data, deny-by-default to every app until you grant access. Switch from here or from the switcher at the top of the sidebar (⌘⇧G).',
-        ),
-        window.Profiles.buildManageBody({
-          profiles: vaultList.map((v) => toProfileView(v)),
-          activeId: activeVaultId,
-          onSwitch: (id) => void switchProfile(id),
-          onEdit: (p) => openProfileModal('edit', p),
-          onDelete: (p) => requestDeleteProfile(p),
+    // Phase 3 (#325): render via the ported React screen when the bundle is
+    // loaded (modals + gateway I/O stay vanilla in the callbacks); else vanilla.
+    const profilesBridge = window.CentraidReact;
+    if (profilesBridge?.mountSettingsProfiles) {
+      const pvs = vaultList.map((v) => toProfileView(v));
+      const pvById = new Map(pvs.map((p) => [p.id, p]));
+      registerCleanup(
+        profilesBridge.mountSettingsProfiles(pageHosts.profiles, {
+          connections: connectionList.map((g) => ({
+            active: g.id === activeConnectionId,
+            displayName: g.displayName,
+            id: g.id,
+            removable: g.id !== 'local',
+            sub: g.kind === 'remote' ? (g.url ?? 'Remote gateway') : 'This computer',
+          })),
           onAdd: () => openProfileModal('add'),
+          onConnect: (id) => void window.CentraidApi.setActiveGateway({ id }),
+          onDelete: (id) => {
+            const p = pvById.get(id);
+            if (p) requestDeleteProfile(p);
+          },
+          onEdit: (id) => {
+            const p = pvById.get(id);
+            if (p) openProfileModal('edit', p);
+          },
+          onRemoveConnection: (id) => void window.CentraidApi.removeGateway({ id }),
+          onSwitch: (id) => void switchProfile(id),
+          profiles: pvs.map((p) => {
+            const lead = p.blurb.trim() || (p.kind === 'remote' ? 'Remote' : 'Local');
+            const subLine =
+              typeof p.appsCount === 'number'
+                ? `${lead} · ${p.appsCount} app${p.appsCount === 1 ? '' : 's'}`
+                : lead;
+            return {
+              active: p.id === activeVaultId,
+              color: p.color,
+              icon: p.icon,
+              id: p.id,
+              name: p.name,
+              primordial: !!p.primordial,
+              subLine,
+            };
+          }),
         }),
-      ]),
-    );
-
-    // Connections — the gateway endpoints hosting vault registries (#280
-    // demoted gateways to plumbing). Switching one swaps the whole world;
-    // the primordial local connection can't be removed.
-    const connectionRows = connectionList.map((g) => {
-      const isActive = g.id === activeConnectionId;
-      const row = el('div', { class: 'cd-prof-row', 'data-active': isActive ? 'true' : 'false' }, [
-        el('div', { class: 'cd-prof-row-text' }, [
-          el('div', { class: 'cd-prof-row-titlerow' }, [
-            el('span', { class: 'cd-prof-row-name' }, g.displayName),
-            ...(isActive ? [el('span', { class: 'cd-prof-row-badge' }, 'Connected')] : []),
-          ]),
+      );
+    } else {
+      pageHosts.profiles.append(
+        drawerGroup('Spaces', [
           el(
             'div',
-            { class: 'cd-prof-row-sub' },
-            g.kind === 'remote' ? (g.url ?? 'Remote gateway') : 'This computer',
+            { class: 'settings-note' },
+            'Each space is a vault — its own apps, chats, and data, deny-by-default to every app until you grant access. Switch from here or from the switcher at the top of the sidebar (⌘⇧G).',
           ),
+          window.Profiles.buildManageBody({
+            profiles: vaultList.map((v) => toProfileView(v)),
+            activeId: activeVaultId,
+            onSwitch: (id) => void switchProfile(id),
+            onEdit: (p) => openProfileModal('edit', p),
+            onDelete: (p) => requestDeleteProfile(p),
+            onAdd: () => openProfileModal('add'),
+          }),
         ]),
-        el('div', { class: 'cd-prof-row-actions' }, [
-          ...(isActive
-            ? []
-            : [
-                el(
-                  'button',
-                  {
-                    class: 'cd-chip cd-prof-row-switch',
-                    type: 'button',
-                    onClick: () => {
-                      void window.CentraidApi.setActiveGateway({ id: g.id });
-                    },
-                  },
-                  'Connect',
-                ),
-              ]),
-          ...(g.id !== 'local'
-            ? [
-                el('button', {
-                  class: 'cd-icon-btn cd-prof-row-del',
-                  type: 'button',
-                  title: 'Remove connection',
-                  'aria-label': `Remove ${g.displayName}`,
-                  trustedHtml: Icon.Trash({ size: 13 }),
-                  onClick: () => {
-                    void window.CentraidApi.removeGateway({ id: g.id });
-                  },
-                }),
-              ]
-            : []),
-        ]),
-      ]);
-      return row;
-    });
-    pageHosts.profiles.append(
-      drawerGroup('Connections', [
-        el(
+      );
+
+      // Connections — the gateway endpoints hosting vault registries (#280
+      // demoted gateways to plumbing). Switching one swaps the whole world;
+      // the primordial local connection can't be removed.
+      const connectionRows = connectionList.map((g) => {
+        const isActive = g.id === activeConnectionId;
+        const row = el(
           'div',
-          { class: 'settings-note' },
-          'Gateways this desktop can talk to. Each connection hosts its own set of spaces.',
-        ),
-        el('div', { class: 'cd-prof-manage-list' }, connectionRows),
-      ]),
-    );
+          { class: 'cd-prof-row', 'data-active': isActive ? 'true' : 'false' },
+          [
+            el('div', { class: 'cd-prof-row-text' }, [
+              el('div', { class: 'cd-prof-row-titlerow' }, [
+                el('span', { class: 'cd-prof-row-name' }, g.displayName),
+                ...(isActive ? [el('span', { class: 'cd-prof-row-badge' }, 'Connected')] : []),
+              ]),
+              el(
+                'div',
+                { class: 'cd-prof-row-sub' },
+                g.kind === 'remote' ? (g.url ?? 'Remote gateway') : 'This computer',
+              ),
+            ]),
+            el('div', { class: 'cd-prof-row-actions' }, [
+              ...(isActive
+                ? []
+                : [
+                    el(
+                      'button',
+                      {
+                        class: 'cd-chip cd-prof-row-switch',
+                        type: 'button',
+                        onClick: () => {
+                          void window.CentraidApi.setActiveGateway({ id: g.id });
+                        },
+                      },
+                      'Connect',
+                    ),
+                  ]),
+              ...(g.id !== 'local'
+                ? [
+                    el('button', {
+                      class: 'cd-icon-btn cd-prof-row-del',
+                      type: 'button',
+                      title: 'Remove connection',
+                      'aria-label': `Remove ${g.displayName}`,
+                      trustedHtml: Icon.Trash({ size: 13 }),
+                      onClick: () => {
+                        void window.CentraidApi.removeGateway({ id: g.id });
+                      },
+                    }),
+                  ]
+                : []),
+            ]),
+          ],
+        );
+        return row;
+      });
+      pageHosts.profiles.append(
+        drawerGroup('Connections', [
+          el(
+            'div',
+            { class: 'settings-note' },
+            'Gateways this desktop can talk to. Each connection hosts its own set of spaces.',
+          ),
+          el('div', { class: 'cd-prof-manage-list' }, connectionRows),
+        ]),
+      );
+    }
 
     // Phone (issue #263) — the "Connect phone" pairing QR + paired-device
     // allowlist over the iroh tunnel. Rendered on page SHOW like Vaults:
