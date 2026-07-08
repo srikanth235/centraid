@@ -531,9 +531,92 @@ export interface HomeBridgeProps {
   onBrowseTemplates: () => void;
 }
 
+// ── Automation run-viewer (SSE, live) ───────────────────────────────────────
+// The vanilla side owns the SSE stream + node model and derives a fully-display
+// snapshot on each event; React renders it (timeline / log). React never sees
+// the stream — same split as every other screen.
+export interface RunNodeDTO {
+  ordinal: number;
+  status: 'running' | 'ok' | 'fail';
+  typeIcon: string;
+  name: string;
+  kind: string;
+  meta: string;
+  error?: string;
+  response?: string;
+  input?: string;
+  output?: string;
+  liveText?: string;
+  streaming: boolean;
+}
+export interface RunLogRowDTO {
+  time: string;
+  tone: string;
+  label: string;
+  sub?: string;
+  input?: string;
+  output?: string;
+  error?: string;
+  response?: string;
+}
+export interface RunViewSnapshot {
+  crumbName: string;
+  glyphIcon: string;
+  hue: string;
+  headerName: string;
+  startedLabel: string;
+  model: string;
+  statusKind: AuStatusKind;
+  statusLabel: string;
+  inFlight: boolean;
+  triggerLabel: string;
+  triggersSummary: string;
+  triggerHeroIcon: string;
+  promptInstr: string;
+  nodes: RunNodeDTO[];
+  final: {
+    kind: 'pending' | 'ok' | 'fail';
+    model: string;
+    summary?: string;
+    output?: string;
+    error?: string;
+  };
+  side: {
+    outcomeKind: AuStatusKind;
+    outcomeLabel: string;
+    trigger: string;
+    duration: string;
+    started: string;
+    runId: string;
+    tokens: string;
+    cost: string;
+    steps: string;
+    model: string;
+  };
+  logKpi: {
+    triggerIcon: string;
+    triggerLabel: string;
+    tokens: string;
+    cost: string;
+    duration: string;
+  };
+  logRows: RunLogRowDTO[];
+}
+export interface RunViewBridgeProps {
+  initialMode: 'timeline' | 'log';
+  /** Handed an `update` fn on mount; the vanilla side calls it per stream event. */
+  onReady: (update: (snap: RunViewSnapshot | null) => void) => void;
+  onBack: () => void;
+  onOpenAutomation: () => void;
+  onRunAgain: () => void;
+  onSetMode: (m: 'timeline' | 'log') => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React automation run-viewer (SSE-driven); returns a disposer. */
+  mountRunView(host: HTMLElement, props: RunViewBridgeProps): () => void;
   /** Mount the React Home screen (composer hero + unified library grid). */
   mountHome(host: HTMLElement, props: HomeBridgeProps): () => void;
   /** Mount the React Settings → Spaces (profiles + connections) page. */

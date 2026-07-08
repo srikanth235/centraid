@@ -31,9 +31,10 @@ they proceed incrementally on top of this seam.
       **Onboarding** view, the **Automations overview**, the **Automation
       single-view**, **Settings** (Appearance + Layout + Providers + Spaces —
       the whole route bar the empty Workspace placeholder), and **Home** (the
-      landing screen). Remaining: only the **streaming/iframe surfaces** —
-      `builder.ts` (SSE), the Automations run-viewer (live), App view (iframe),
-      Assistant (streaming) — which need a running Electron app to verify.
+      landing screen), and the **Automations run-viewer** (the first
+      SSE-streaming screen — the vanilla side keeps the stream and pushes
+      snapshots to React). Remaining: `builder.ts` (SSE), App view (iframe),
+      Assistant (streaming) — same streaming-delegated pattern, larger files.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -277,6 +278,20 @@ Fifteenth screen — **Home** (the landing screen; shell-core-coupled):
   (`onAppContext` → `openContextMenu`, `onAutomationMenu` → `cardsMod.openMenu`
   with Open/Run/Edit/Star/Delete). `bridge.ts` gains the Home DTOs + `mountHome`.
 
+Sixteenth screen — **Automations run-viewer** (the first SSE-streaming screen):
+
+- `src/renderer/react/screens/RunViewScreen.tsx` (+ `.test.tsx`) — React port of
+  the run thread: breadcrumb + header (mode toggle + details + run-again),
+  timeline mode (trigger node → expandable run-node cards → final outcome node,
+  + a KPI side-rail) and log mode (KPI strip + transcript rows with collapsible
+  payloads). The **SSE stream stays vanilla** — `app-automations-runview.ts`
+  keeps `streamAutomationRun` + the node model and, on each event, derives a
+  fully-display `RunViewSnapshot` (via a new `buildRunSnapshot`) and pushes it to
+  React through the `update` fn handed to `onReady`; React never sees the stream
+  (the same vanilla-owns-I/O split as every other screen — verified by pushing
+  snapshots in the test). `bridge.ts` gains the run DTOs + `mountRunView`; mode
+  is React-local + persisted via `onSetMode`.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -334,11 +349,14 @@ Fifteenth screen — **Home** (the landing screen; shell-core-coupled):
   `src/renderer/react/screens/SettingsProfilesScreen.test.tsx`,
   `src/renderer/app.ts`,
   `src/renderer/react/screens/HomeScreen.tsx`,
-  `src/renderer/react/screens/HomeScreen.test.tsx`.
+  `src/renderer/react/screens/HomeScreen.test.tsx`,
+  `src/renderer/app-automations-runview.ts`,
+  `src/renderer/react/screens/RunViewScreen.tsx`,
+  `src/renderer/react/screens/RunViewScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), and Home are converted.** Only the streaming/iframe surfaces — `builder.ts` (SSE), the Automations run-viewer, app view (iframe), the app copilot/assistant — are untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), Home, and the Automations run-viewer (first SSE screen) are converted.** Only `builder.ts` (SSE), app view (iframe), and the app copilot/assistant remain — same streaming-delegated pattern and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -367,8 +385,8 @@ Fifteenth screen — **Home** (the landing screen; shell-core-coupled):
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
   `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
-  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 + `HomeScreen` 6 render/behavior tests;
-  the full `@centraid/desktop` project (157 tests) stays green, confirming the delegations didn't regress the vanilla
+  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 + `HomeScreen` 6 + `RunViewScreen` 6 render/behavior tests;
+  the full `@centraid/desktop` project (163 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

@@ -29,6 +29,7 @@ import InsightsScreen from './screens/InsightsScreen.js';
 import OnboardingScreen from './screens/OnboardingScreen.js';
 import PaletteScreen from './screens/PaletteScreen.js';
 import PhoneScreen from './screens/PhoneScreen.js';
+import RunViewScreen from './screens/RunViewScreen.js';
 import SettingsAppearanceScreen from './screens/SettingsAppearanceScreen.js';
 import SettingsLayoutScreen from './screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from './screens/SettingsProfilesScreen.js';
@@ -94,6 +95,11 @@ const bridge: CentraidReactBridge = {
   mountHome(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<HomeScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountRunView(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<RunViewScreen {...props} />);
     return () => screenRoot.unmount();
   },
   mountInsights(host, props) {
