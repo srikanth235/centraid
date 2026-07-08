@@ -203,9 +203,42 @@ export interface PaletteBridgeProps {
   onReady?: (refresh: () => void) => void;
 }
 
+// ── Phone settings pane ─────────────────────────────────────────────────────
+export interface PhoneDeviceDTO {
+  deviceId: string;
+  name: string;
+  platform: string;
+  endpointId: string;
+  addedAt: string;
+}
+export interface PhoneStatusDTO {
+  running: boolean;
+  error?: string;
+  devices: PhoneDeviceDTO[];
+}
+export interface PhonePairingDTO {
+  qrDataUrl: string;
+  expiresAt: number;
+}
+export interface PhoneBridgeProps {
+  /** Read the tunnel status + paired devices. `null` = could not read. */
+  loadStatus: () => Promise<PhoneStatusDTO | null>;
+  /**
+   * Begin pairing; `onPaired` fires with the device name when a phone
+   * completes. Resolves to pairing info + a `cancel` fn, or `null` on failure.
+   */
+  beginPairing: (
+    onPaired: (deviceName: string) => void,
+  ) => Promise<{ info: PhonePairingDTO; cancel: () => void } | null>;
+  revoke: (deviceId: string) => Promise<boolean>;
+  showToast?: (message: string) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Phone settings pane; returns an unmount disposer. */
+  mountPhone(host: HTMLElement, props: PhoneBridgeProps): () => void;
   /** Mount the React command palette overlay; returns an unmount disposer. */
   mountPalette(host: HTMLElement, props: PaletteBridgeProps): () => void;
   /** Mount the React automation-templates gallery; returns an unmount disposer. */

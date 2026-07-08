@@ -16,10 +16,63 @@ export interface PhonePageInput {
   showToast?: (message: string) => void;
 }
 
+// Tracks the React root mounted on a host so a re-render disposes the prior one.
+const phoneReactDisposers = new WeakMap<HTMLElement, () => void>();
+
 /** Populate the Phone page. Re-renders itself after pairing/revocation. */
 export async function renderPhonePage(input: PhonePageInput): Promise<void> {
   const { el, host } = input;
   const note = (text: string): HTMLElement => el('div', { class: 'cd-app-settings-note' }, text);
+
+  // Phase 3 (#325): delegate the pane to the React PhoneScreen when the bundle
+  // is loaded. IPC (window.CentraidApi.*) + the onPhonePaired subscription stay
+  // vanilla, threaded through the bridge callbacks; React owns the view + its
+  // own load/pairing state. Vanilla builder below is the fallback.
+  const bridge = window.CentraidReact;
+  if (bridge?.mountPhone) {
+    phoneReactDisposers.get(host)?.();
+    const dispose = bridge.mountPhone(host, {
+      beginPairing: async (onPaired) => {
+        const pairing = await window.CentraidApi.beginPhonePairing().catch(() => undefined);
+        if (!pairing) return null;
+        const stop = window.CentraidApi.onPhonePaired(({ device }) => {
+          stop();
+          onPaired(device.name);
+        });
+        return {
+          cancel: () => {
+            stop();
+            void window.CentraidApi.cancelPhonePairing();
+          },
+          info: { expiresAt: pairing.expiresAt, qrDataUrl: pairing.qrDataUrl },
+        };
+      },
+      loadStatus: async () => {
+        const s = await window.CentraidApi.getPhoneLinkStatus().catch(() => undefined);
+        if (!s) return null;
+        return {
+          devices: s.devices.map((d) => ({
+            addedAt: d.addedAt,
+            deviceId: d.deviceId,
+            endpointId: d.endpointId,
+            name: d.name,
+            platform: d.platform,
+          })),
+          error: s.error,
+          running: s.running,
+        };
+      },
+      revoke: async (deviceId) => {
+        const result = await window.CentraidApi.revokePhoneDevice({ deviceId }).catch(
+          () => undefined,
+        );
+        return result?.removed ?? false;
+      },
+      showToast: input.showToast,
+    });
+    phoneReactDisposers.set(host, dispose);
+    return;
+  }
 
   const status = await window.CentraidApi.getPhoneLinkStatus().catch(() => undefined);
   if (!host.isConnected) return;

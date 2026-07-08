@@ -23,6 +23,7 @@ import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
 import InsightsScreen from './screens/InsightsScreen.js';
 import PaletteScreen from './screens/PaletteScreen.js';
+import PhoneScreen from './screens/PhoneScreen.js';
 import VaultScreen from './screens/VaultScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
@@ -99,6 +100,11 @@ const bridge: CentraidReactBridge = {
   mountPalette(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<PaletteScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountPhone(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<PhoneScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };
