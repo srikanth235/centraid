@@ -24,6 +24,7 @@ import {
 } from './gateway-client.js';
 import { formatDuration, prettyJson, triggersSummary } from './app-format.js';
 import { manifestVaultBlock, renderVaultPane } from './app-vault.js';
+import type { AppSettingsSnapshot } from './react/bridge.js';
 import type { ShellContext } from './app-shell-context.js';
 
 export interface AppViewModule {
@@ -389,12 +390,247 @@ export function createAppViewModule(ctx: ShellContext): AppViewModule {
     frame.src = src;
   }
 
+  // Phase 3 (#325) — React app-settings popover. The vanilla app-view keeps the
+  // iframe host, chrome, and per-app chat; only this popover moves to React. The
+  // gateway I/O (knob persistence + live iframe push, automation run/toggle
+  // streams) stays here and pushes a snapshot; the two deep sub-trees (the lazy
+  // run-history timeline and the vault consent pane) stay vanilla and are
+  // injected into React-provided host divs. The DOM builder below is the runnable
+  // fallback for any build without the React bundle.
+  function openAppSettingsReact(
+    app: AppMetaResolvedType,
+    anchor: HTMLElement,
+    view: HTMLElement,
+    appId: string | undefined,
+    mount: NonNullable<Window['CentraidReact']>['mountAppSettings'],
+  ): void {
+    closeAppSettings();
+    anchor.dataset.open = 'true';
+
+    const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
+    const iconSvg = Icon[app.iconKey] ? Icon[app.iconKey]({ size: 15, strokeWidth: 1.85 }) : '';
+
+    let knobs: AppKnob[] | null = null;
+    const knobValues: Record<string, string> = {};
+    let orders: CentraidAutomationRow[] = [];
+    let vaultVisible = false;
+    let automationsBadge: number | null = null;
+    let vaultBadge: number | null = null;
+    let update: ((s: AppSettingsSnapshot) => void) | null = null;
+
+    const runDto = (ref: string): AppSettingsSnapshot['orders'][number]['run'] => {
+      const s = automationRunState.get(ref);
+      if (!s) return { kind: 'idle' };
+      if (s.kind === 'running') return { kind: 'running' };
+      const label = s.ok
+        ? `Ran in ${formatDuration(s.durationMs)}`
+        : s.error
+          ? `Failed: ${s.error}`
+          : `Failed in ${formatDuration(s.durationMs)}`;
+      return { kind: 'done', ok: s.ok, label };
+    };
+
+    const buildSnapshot = (): AppSettingsSnapshot => ({
+      appName: app.name,
+      iconSvg,
+      iconBg: finish.background,
+      iconColor: finish.glyphColor,
+      iconShadow: finish.boxShadow ?? null,
+      accent: app.color,
+      vaultVisible,
+      automationsBadge,
+      vaultBadge,
+      knobs: knobs
+        ? knobs.map((k) => ({
+            key: k.key,
+            label: k.label,
+            type: k.type,
+            value: knobValues[k.key] ?? k.default,
+            options: k.options,
+          }))
+        : null,
+      orders: orders.map((row) => ({
+        id: row.id,
+        ref: row.ref,
+        name: row.name,
+        schedule: triggersSummary(row.triggers),
+        prompt: row.manifest.prompt,
+        appsLabel:
+          (row.manifest.apps ?? []).length > 0
+            ? `Apps: ${(row.manifest.apps ?? []).join(', ')}`
+            : 'No apps linked',
+        enabled: row.enabled,
+        run: runDto(row.ref),
+      })),
+    });
+
+    const push = (): void => {
+      if (update) update(buildSnapshot());
+    };
+
+    const host = el('div', {});
+
+    // Live-push a knob to the iframe, persist it, revert + toast on failure.
+    const commitKnob = (key: string, value: string): void => {
+      pushKnobToAppFrame(view, key, value);
+      const def = knobs?.find((k) => k.key === key)?.default ?? '';
+      const prior = knobValues[key] ?? def;
+      knobValues[key] = value;
+      if (!appId) return;
+      void writeAppKnobValue(appId, key, value).catch((err) => {
+        showToast(`Saving ${key} failed: ${String(err)}`);
+        if (document.contains(host)) {
+          knobValues[key] = prior;
+          pushKnobToAppFrame(view, key, prior);
+          push();
+        }
+      });
+    };
+
+    const runOrder = async (ref: string): Promise<void> => {
+      automationRunState.set(ref, { kind: 'running' });
+      push();
+      try {
+        const { runId } = await runAutomationNow({ automationId: ref });
+        const rec = await waitForAutomationRun(runId);
+        automationRunState.set(ref, {
+          kind: 'done',
+          ok: rec.ok,
+          durationMs: (rec.endedAt ?? Date.now()) - rec.startedAt,
+          ...(rec.error ? { error: rec.error } : {}),
+          finishedAt: Date.now(),
+        });
+      } catch (err) {
+        automationRunState.set(ref, {
+          kind: 'done',
+          ok: false,
+          durationMs: 0,
+          error: err instanceof Error ? err.message : String(err),
+          finishedAt: Date.now(),
+        });
+      }
+      if (document.contains(host)) push();
+    };
+
+    const toggleOrder = async (ref: string, enabled: boolean): Promise<void> => {
+      const row = orders.find((r) => r.ref === ref);
+      if (!row) return;
+      const prior = row.enabled;
+      row.enabled = enabled;
+      push();
+      try {
+        await setAutomationEnabled({ automationId: ref, enabled });
+      } catch (err) {
+        row.enabled = prior;
+        if (document.contains(host)) {
+          push();
+          showToast(
+            `Could not ${enabled ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    };
+
+    const dispose = mount(host, {
+      onReady: (u) => {
+        update = u;
+        u(buildSnapshot());
+      },
+      onClose: closeAppSettings,
+      onKnobCommit: commitKnob,
+      onRunOrder: (ref) => void runOrder(ref),
+      onToggleOrder: (ref, enabled) => void toggleOrder(ref, enabled),
+      onOpenOrder: (ref) => ctx.shell.renderAutomationView(ref),
+      onOpenAutomations: () => {
+        closeAppSettings();
+        ctx.shell.renderAutomations();
+      },
+      onRename: () => {
+        closeAppSettings();
+        void renameAppFromSettings(app);
+      },
+      onShare: () => {
+        closeAppSettings();
+        ctx.shell.openShareDialog(app);
+      },
+      onReveal: () => {
+        closeAppSettings();
+        void ctx.revealApp(app);
+      },
+      onDelete: () => {
+        closeAppSettings();
+        void ctx.handleDeleteApp(app);
+      },
+      onMountRuns: (ref, runsHost) => void loadRunsInto(ref, runsHost),
+      onMountVault: (vaultHost) => {
+        if (!appId) return;
+        void fetchAppManifestRaw(appId).then((raw) => {
+          const block = manifestVaultBlock(raw);
+          if (!block || !document.contains(host)) return;
+          void renderVaultPane({
+            el,
+            appId,
+            block,
+            host: vaultHost,
+            onAccessChanged: () => reloadAppFrame(view),
+            onParkedCount: (count) => {
+              vaultBadge = count === 0 ? null : count;
+              push();
+            },
+            showToast,
+          });
+        });
+      },
+    });
+
+    view.append(host);
+
+    appSettingsCleanup = (): void => {
+      dispose();
+      host.remove();
+      delete anchor.dataset.open;
+    };
+
+    // Resolve appearance knobs, the vault tab's visibility, and linked
+    // automations, then push each result into the live snapshot.
+    if (appId) {
+      const manifestRaw = fetchAppManifestRaw(appId);
+      void Promise.all([manifestRaw, fetchAppKnobValues(appId)]).then(([raw, stored]) => {
+        if (!document.contains(host)) return;
+        const manifest = knobsManifestFrom(raw);
+        if (manifest && manifest.knobs.length > 0) {
+          knobs = manifest.knobs;
+          Object.assign(knobValues, stored);
+        }
+        push();
+      });
+      void manifestRaw.then((raw) => {
+        if (!document.contains(host)) return;
+        if (manifestVaultBlock(raw)) {
+          vaultVisible = true;
+          push();
+        }
+      });
+      void listAutomations().then((all) => {
+        if (!document.contains(host)) return;
+        orders = all.filter((r) => r.manifest.apps?.includes(appId));
+        automationsBadge = orders.length === 0 ? null : orders.length;
+        push();
+      });
+    }
+  }
+
   function openAppSettings(
     app: AppMetaResolvedType,
     anchor: HTMLElement,
     view: HTMLElement,
     appId: string | undefined,
   ): void {
+    const mount = window.CentraidReact?.mountAppSettings;
+    if (mount) {
+      openAppSettingsReact(app, anchor, view, appId, mount);
+      return;
+    }
     closeAppSettings();
     anchor.dataset.open = 'true';
 

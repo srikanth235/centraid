@@ -652,9 +652,74 @@ export interface AssistantBridgeProps {
   hydrateRefs: (node: HTMLElement) => void;
 }
 
+// ── App-view settings popover ────────────────────────────────────────────────
+// The app-view keeps the sandboxed iframe host, the chrome window, and the
+// per-app chat vanilla; only the gear popover is React. The vanilla side owns
+// all gateway I/O — knob persistence + the live iframe postMessage push, the
+// automation run/toggle streams — and the two deep sub-trees the popover embeds
+// (the lazy run-history timeline and the vault consent pane), which it injects
+// into React-provided host divs via `onMountRuns` / `onMountVault`.
+export interface AppKnobDTO {
+  key: string;
+  label: string;
+  type: 'segmented' | 'swatch';
+  value: string;
+  options: { value: string; label: string }[];
+}
+export interface AppOrderRunDTO {
+  kind: 'idle' | 'running' | 'done';
+  ok?: boolean;
+  /** e.g. "Ran in 1.2s" / "Failed: …" — present only when `kind === 'done'`. */
+  label?: string;
+}
+export interface AppOrderDTO {
+  id: string;
+  ref: string;
+  name: string;
+  schedule: string;
+  prompt: string;
+  appsLabel: string;
+  enabled: boolean;
+  run: AppOrderRunDTO;
+}
+export interface AppSettingsSnapshot {
+  appName: string;
+  iconSvg: string;
+  /** Gradient tile finish for the header app icon. */
+  iconBg: string;
+  iconColor: string;
+  iconShadow: string | null;
+  accent: string;
+  vaultVisible: boolean;
+  automationsBadge: number | null;
+  vaultBadge: number | null;
+  /** Resolved appearance knobs; `null` while loading or when the app has none. */
+  knobs: AppKnobDTO[] | null;
+  orders: AppOrderDTO[];
+}
+export interface AppSettingsBridgeProps {
+  onReady: (update: (s: AppSettingsSnapshot) => void) => void;
+  onClose: () => void;
+  onKnobCommit: (key: string, value: string) => void;
+  onRunOrder: (ref: string) => void;
+  onToggleOrder: (ref: string, enabled: boolean) => void;
+  onOpenOrder: (ref: string) => void;
+  onOpenAutomations: () => void;
+  onRename: () => void;
+  onShare: () => void;
+  onReveal: () => void;
+  onDelete: () => void;
+  /** Fill the per-order run-history host — vanilla owns the deep timeline. */
+  onMountRuns: (ref: string, host: HTMLElement) => void;
+  /** Fill the vault consent pane host — vanilla `renderVaultPane`. */
+  onMountVault: (host: HTMLElement) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React app-view settings popover; returns an unmount disposer. */
+  mountAppSettings(host: HTMLElement, props: AppSettingsBridgeProps): () => void;
   /** Mount the React Assistant copilot (streaming); returns a disposer. */
   mountAssistant(host: HTMLElement, props: AssistantBridgeProps): () => void;
   /** Mount the React automation run-viewer (SSE-driven); returns a disposer. */
