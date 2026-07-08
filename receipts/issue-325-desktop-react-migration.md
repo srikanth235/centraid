@@ -28,9 +28,9 @@ they proceed incrementally on top of this seam.
       fallback): **Discover**, **Insights**, the **Vault** consent pane, the
       **Automation-templates gallery**, the **Command palette (⌘K)**, the
       **Phone settings pane**, the **Import settings pane**, the first-run
-      **Onboarding** view, and the **Automations overview**. Remaining
-      (`builder.ts`, Home, Automations single/run viewers, settings, app view)
-      follow the same pattern incrementally.
+      **Onboarding** view, the **Automations overview**, and the **Automation
+      single-view**. Remaining (`builder.ts`, Home, Automations run-viewer,
+      settings, app view) follow the same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -202,6 +202,19 @@ Ninth screen — **Automations overview** (stateful; derived DTO):
   `app-automations.ts`'s `renderAutomations` fetches + maps then delegates
   (registers the unmount as cleanup); vanilla builder fallback.
 
+Tenth screen — **Automation single-view** (stateful; action-heavy):
+
+- `src/renderer/react/screens/AutomationViewScreen.tsx` (+ `.test.tsx`) — React
+  port of the per-automation page: header (delete/edit/run), trigger hero
+  (cron exprs + next-3-runs, or webhook URL + copy, or provisioning), enable
+  toggle, filterable run history, and a 30-day KPI + behavior + tools rail. The
+  vanilla side derives the `AutomationViewData` DTO and owns the gateway actions
+  (delete/run/toggle), the confirm dialog, and the **live-streaming run-view
+  handoff**; React owns the view, run-history filters, and reload-after-toggle.
+  `bridge.ts` gains the view DTOs + `mountAutomationView`; `boot.tsx` registers
+  it; `app-automations.ts`'s `renderAutomationView` maps + delegates (captures
+  the current row for the action callbacks); vanilla builder fallback.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -244,11 +257,13 @@ Ninth screen — **Automations overview** (stateful; derived DTO):
   `src/renderer/react/screens/OnboardingScreen.test.tsx`,
   `src/renderer/app-automations.ts`,
   `src/renderer/react/screens/AutomationsOverviewScreen.tsx`,
-  `src/renderer/react/screens/AutomationsOverviewScreen.test.tsx`.
+  `src/renderer/react/screens/AutomationsOverviewScreen.test.tsx`,
+  `src/renderer/react/screens/AutomationViewScreen.tsx`,
+  `src/renderer/react/screens/AutomationViewScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, and the Automations overview are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations single/run viewers, settings, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, and the Automation single-view are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, settings, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -276,8 +291,8 @@ Ninth screen — **Automations overview** (stateful; derived DTO):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 render/behavior tests; the
-  full `@centraid/desktop` project (131 tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 render/behavior
+  tests; the full `@centraid/desktop` project (138 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

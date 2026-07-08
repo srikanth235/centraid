@@ -331,9 +331,57 @@ export interface AutomationsOverviewBridgeProps {
   onNewAutomation: () => void;
 }
 
+// ── Automation single-view ──────────────────────────────────────────────────
+export interface AuViewRunDTO {
+  runId: string;
+  automationId: string | null;
+  ok: boolean;
+  summary: string;
+  trigIcon: string;
+  trigLabel: string;
+  whenLabel: string;
+  metaLabel: string;
+  filterKey: 'cron' | 'webhook' | 'manual' | 'other';
+}
+export interface AutomationViewData {
+  name: string;
+  description: string | null;
+  glyphIcon: string;
+  hue: string;
+  kindEyebrow: string;
+  heroIcon: string;
+  when: string;
+  cronExprs: string[];
+  nextRuns: string[];
+  webhook: { pending: boolean; url: string | null } | null;
+  enabled: boolean;
+  statusKind: AuStatusKind;
+  statusLabel: string;
+  runs: AuViewRunDTO[];
+  kpis: { total: string; successPct: string; avg: string; cost: string };
+  behavior: { model: string; historyLabel: string; onFailure: string };
+  tools: string[];
+}
+export interface AutomationViewBridgeProps {
+  /** Load the automation + its runs. `null` = not found. */
+  loadData: () => Promise<AutomationViewData | null>;
+  onBack: () => void;
+  onEdit: () => void;
+  /** Confirm + delete; resolves true when deleted (view is navigating away). */
+  onDelete: () => Promise<boolean>;
+  /** Run now; resolves true when started (handing off to the run viewer). */
+  onRun: () => Promise<boolean>;
+  /** Toggle enabled; resolves true on success (the view reloads). */
+  onToggleEnabled: (next: boolean) => Promise<boolean>;
+  onCopyWebhook: (url: string) => void;
+  onOpenRun: (automationId: string, runId: string) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React automation single-view; returns an unmount disposer. */
+  mountAutomationView(host: HTMLElement, props: AutomationViewBridgeProps): () => void;
   /** Mount the React Automations overview; returns an unmount disposer. */
   mountAutomationsOverview(host: HTMLElement, props: AutomationsOverviewBridgeProps): () => void;
   /** Mount the React first-run onboarding view; returns an unmount disposer. */
