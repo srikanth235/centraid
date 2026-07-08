@@ -23,6 +23,7 @@ import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
 import ImportScreen from './screens/ImportScreen.js';
 import InsightsScreen from './screens/InsightsScreen.js';
+import OnboardingScreen from './screens/OnboardingScreen.js';
 import PaletteScreen from './screens/PaletteScreen.js';
 import PhoneScreen from './screens/PhoneScreen.js';
 import VaultScreen from './screens/VaultScreen.js';
@@ -111,6 +112,11 @@ const bridge: CentraidReactBridge = {
   mountImport(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<ImportScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountOnboarding(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<OnboardingScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };

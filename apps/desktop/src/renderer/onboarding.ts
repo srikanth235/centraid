@@ -70,6 +70,13 @@
     root: HTMLElement;
     onComplete: (input: { displayName: string; avatarColor: string }) => Promise<void> | void;
   }): () => void {
+    // Phase 3 (#325): delegate to the React OnboardingScreen when the bundle is
+    // loaded; the vanilla builder below is the fallback.
+    const bridge = window.CentraidReact;
+    if (bridge?.mountOnboarding) {
+      return bridge.mountOnboarding(opts.root, { onComplete: opts.onComplete });
+    }
+
     let displayName = '';
     // Random initial color so two fresh installs on the same machine
     // (e.g. dev resets) don't both start on the same swatch.

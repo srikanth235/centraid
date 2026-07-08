@@ -281,9 +281,20 @@ export interface ImportBridgeProps {
   showToast?: (message: string) => void;
 }
 
+// ── Onboarding (first run) ──────────────────────────────────────────────────
+export interface OnboardingCompleteInput {
+  displayName: string;
+  avatarColor: string;
+}
+export interface OnboardingBridgeProps {
+  onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React first-run onboarding view; returns an unmount disposer. */
+  mountOnboarding(host: HTMLElement, props: OnboardingBridgeProps): () => void;
   /** Mount the React Import settings pane; returns an unmount disposer. */
   mountImport(host: HTMLElement, props: ImportBridgeProps): () => void;
   /** Mount the React Phone settings pane; returns an unmount disposer. */
