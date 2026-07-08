@@ -15,7 +15,8 @@ import {
   runAutomationNow,
   setAutomationEnabled,
 } from './gateway-client.js';
-import { auStatusForRow, hueForId } from './automation-identity.js';
+import { auStatusForRow, glyphForId, hueForId } from './automation-identity.js';
+import type { AuOverviewData, AuStatusKind } from './react/bridge.js';
 import { cronNextRuns } from './cron.js';
 import {
   fmtRetention,
@@ -63,7 +64,95 @@ export interface AutomationsModule {
 }
 
 export function createAutomationsModule(ctx: ShellContext): AutomationsModule {
-  const { el, clear, showToast, mountShellPage, recordRoute, chromeNav, openConfirm, root } = ctx;
+  const {
+    el,
+    clear,
+    showToast,
+    mountShellPage,
+    recordRoute,
+    registerCleanup,
+    chromeNav,
+    openConfirm,
+    root,
+  } = ctx;
+
+  const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
+    active: 'Active',
+    paused: 'Paused',
+    draft: 'Draft',
+    running: 'Running',
+    success: 'Success',
+    failed: 'Failed',
+  };
+
+  // Derive the React overview DTO from the loaded rows + run feed. Every display
+  // value (hue, glyph, trigger/status labels, formatted run meta) is computed
+  // here so the React screen imports no vanilla formatters.
+  function buildOverviewData(
+    rows: readonly CentraidAutomationRow[],
+    entries: readonly AutomationFeedEntry[],
+  ): AuOverviewData {
+    const runs = entries
+      .filter((e) => e.automationId)
+      .slice()
+      .sort((a, b) => b.run.startedAt - a.run.startedAt);
+    const lastByRef = new Map<string, AutomationFeedEntry>();
+    for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+
+    let active = 0;
+    let paused = 0;
+    let drafts = 0;
+    let attention = 0;
+    for (const r of rows) {
+      const lastEntry = lastByRef.get(r.ref);
+      if (r.enabled) active += 1;
+      else if (lastEntry) paused += 1;
+      else drafts += 1;
+      if (lastEntry && !lastEntry.run.ok) attention += 1;
+    }
+    const subParts = [`${active} active`, `${paused + drafts} paused`];
+    if (runs.length > 0) subParts.push(`${runs.length} recent runs`);
+
+    return {
+      health: { active, attention, drafts, paused },
+      rows: rows.map((r) => {
+        const last = lastByRef.get(r.ref);
+        const hasCron = r.triggers.some((t) => t.kind === 'cron');
+        const hasWebhook = r.triggers.some((t) => t.kind === 'webhook');
+        const statusKind = auStatusForRow(r.enabled, !!last) as AuStatusKind;
+        return {
+          glyphIcon: glyphForId(r.id),
+          hue: hueForId(r.id),
+          id: r.id,
+          integrations: [...(r.manifest.requires.mcps ?? [])],
+          lastRunLabel: last
+            ? `Last run ${relativeTime(new Date(last.run.startedAt).toISOString())}`
+            : 'No runs yet',
+          name: r.name,
+          ref: r.ref,
+          statusKind,
+          statusLabel: AU_STATUS_LABEL[statusKind],
+          triggerIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
+          triggerLabel: triggersSummary(r.triggers),
+        };
+      }),
+      runs: runs.map((entry) => {
+        const { run, automationName, automationId } = entry;
+        const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
+        const dur = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : '—';
+        return {
+          automationId,
+          metaLabel: `${run.triggerOrigin ?? run.triggerKind} · ${dur} · ${fmtTokens(tokens)}`,
+          name: automationName,
+          ok: run.ok,
+          runId: run.runId,
+          summary: run.ok ? (run.summary ?? '—') : (run.error ?? 'Failed'),
+          whenLabel: relativeTime(new Date(run.startedAt).toISOString()),
+        };
+      }),
+      subtitle: rows.length > 0 ? subParts.join('  ·  ') : 'Conversations that run on their own.',
+    };
+  }
 
   // Templates gallery is its own module; the overview's "Browse templates"
   // action + Discover reach it through these bindings.
@@ -108,6 +197,29 @@ export function createAutomationsModule(ctx: ShellContext): AutomationsModule {
     const main = el('div', { class: 'has-wall' });
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
+
+    // Phase 3 (#325): render the overview via the ported React screen when the
+    // bundle is loaded. The vanilla side fetches + derives the DTO (loadData);
+    // React owns loading/error/data + the "View all" toggle. Vanilla builder
+    // below is the fallback.
+    const bridge = window.CentraidReact;
+    if (bridge?.mountAutomationsOverview) {
+      mountShellPage('automations', main);
+      registerCleanup(
+        bridge.mountAutomationsOverview(scroll, {
+          loadData: async () => {
+            const [rows, entries] = await Promise.all([listAutomations(), collectAutomationRuns()]);
+            return buildOverviewData(rows, entries);
+          },
+          onBrowseTemplates: () => renderAutomationTemplates(),
+          onNewAutomation: () => void createAndOpenAutomationBuilder(),
+          onOpenAutomation: (ref) => ctx.shell.renderAutomationView(ref),
+          onOpenRun: (automationId, runId) => ctx.shell.renderRunView(automationId, runId),
+        }),
+      );
+      return;
+    }
+
     scroll.append(automationsSkeleton());
     mountShellPage('automations', main);
     void (async () => {

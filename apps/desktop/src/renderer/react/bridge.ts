@@ -290,9 +290,52 @@ export interface OnboardingBridgeProps {
   onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
 }
 
+// ── Automations overview ────────────────────────────────────────────────────
+// The vanilla side derives every display value (hue, glyph, trigger + status
+// labels, formatted run meta) so the React screen needs no app-format /
+// automation-identity imports.
+export type AuStatusKind = 'active' | 'paused' | 'draft' | 'running' | 'success' | 'failed';
+export interface AuOverviewRowDTO {
+  ref: string;
+  id: string;
+  name: string;
+  hue: string;
+  glyphIcon: string;
+  triggerIcon: string;
+  triggerLabel: string;
+  integrations: string[];
+  lastRunLabel: string;
+  statusKind: AuStatusKind;
+  statusLabel: string;
+}
+export interface AuOverviewRunDTO {
+  runId: string;
+  automationId: string;
+  ok: boolean;
+  name: string;
+  summary: string;
+  whenLabel: string;
+  metaLabel: string;
+}
+export interface AuOverviewData {
+  rows: AuOverviewRowDTO[];
+  runs: AuOverviewRunDTO[];
+  health: { active: number; paused: number; drafts: number; attention: number };
+  subtitle: string;
+}
+export interface AutomationsOverviewBridgeProps {
+  loadData: () => Promise<AuOverviewData>;
+  onOpenAutomation: (ref: string) => void;
+  onOpenRun: (automationId: string, runId: string) => void;
+  onBrowseTemplates: () => void;
+  onNewAutomation: () => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Automations overview; returns an unmount disposer. */
+  mountAutomationsOverview(host: HTMLElement, props: AutomationsOverviewBridgeProps): () => void;
   /** Mount the React first-run onboarding view; returns an unmount disposer. */
   mountOnboarding(host: HTMLElement, props: OnboardingBridgeProps): () => void;
   /** Mount the React Import settings pane; returns an unmount disposer. */
