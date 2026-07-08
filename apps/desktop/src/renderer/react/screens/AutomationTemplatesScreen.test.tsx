@@ -85,7 +85,10 @@ describe('AutomationTemplatesScreen', () => {
     const card = el.querySelector('.cd-au-tpl-card') as HTMLButtonElement;
     act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onPreview).toHaveBeenCalledTimes(1);
-    expect((props.onPreview as ReturnType<typeof vi.fn>).mock.calls[0][0].id).toBe('digest');
+    const firstArg = (props.onPreview as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
+      | DiscoverTemplate
+      | undefined;
+    expect(firstArg?.id).toBe('digest');
   });
 
   it('filters by trigger kind', () => {

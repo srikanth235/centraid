@@ -25,9 +25,10 @@ they proceed incrementally on top of this seam.
       credentialed step).
 - [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
       to React via the `window.CentraidReact` bridge (vanilla render kept as a
-      fallback): **Discover**, **Insights**, the **Vault** consent pane, and the
-      **Automation-templates gallery**. Remaining (`builder.ts`, Home,
-      Automations overview, settings) follow the same pattern incrementally.
+      fallback): **Discover**, **Insights**, the **Vault** consent pane, the
+      **Automation-templates gallery**, and the **Command palette (⌘K)**.
+      Remaining (`builder.ts`, Home, Automations overview, settings) follow the
+      same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -143,6 +144,20 @@ Fourth screen — **Automation-templates gallery** (interactive; live search):
 - `src/renderer/react/format.ts` gains the shared `INTEGRATION_HUES` map (now
   imported by both `DiscoverScreen` and this gallery instead of inlined twice).
 
+Fifth screen — **Command palette ⌘K** (interactive overlay + keyboard nav):
+
+- `src/renderer/react/screens/PaletteScreen.tsx` (+ `.test.tsx`) — React owns
+  the overlay, search field, and up/down + Enter keyboard navigation; the
+  vanilla side supplies `buildGroups(query)` (grouped rows with pre-rendered
+  icon SVG, resolved gradient tile paint, and per-row `run` closures) + a
+  `onReady(refresh)` hook so the async templates count fills in. Same
+  `cd-palette-*` classes.
+- `bridge.ts` gains the palette DTOs + `mountPalette`; `boot.tsx` registers it.
+- `app-palette.ts` is restructured: `collectGroups` is hoisted to the factory
+  scope so the React screen and the vanilla fallback compute identical rows;
+  `openCommandPalette` delegates to `mountPalette` when the bundle is loaded,
+  else runs the (unchanged) vanilla `openCommandPaletteVanilla`.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -170,11 +185,14 @@ Fourth screen — **Automation-templates gallery** (interactive; live search):
   `src/renderer/react/screens/VaultScreen.test.tsx`,
   `src/renderer/app-automations-templates.ts`,
   `src/renderer/react/screens/AutomationTemplatesScreen.tsx`,
-  `src/renderer/react/screens/AutomationTemplatesScreen.test.tsx`.
+  `src/renderer/react/screens/AutomationTemplatesScreen.test.tsx`,
+  `src/renderer/app-palette.ts`,
+  `src/renderer/react/screens/PaletteScreen.tsx`,
+  `src/renderer/react/screens/PaletteScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Only Discover, Insights, the Vault pane, and the automation-templates gallery are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations overview/viewers, settings — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, and the ⌘K command palette are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations overview/viewers, settings — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -202,8 +220,8 @@ Fourth screen — **Automation-templates gallery** (interactive; live search):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4
-  render/behavior tests; the full `@centraid/desktop` project (109 tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 render/behavior tests; the
+  full `@centraid/desktop` project (114 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

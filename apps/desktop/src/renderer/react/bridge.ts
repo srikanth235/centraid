@@ -165,9 +165,49 @@ export interface AutomationTemplatesBridgeProps {
   onStartFromScratch: () => void;
 }
 
+// ── Command palette (⌘K) ────────────────────────────────────────────────────
+// The vanilla side owns the data + actions: it computes the grouped rows for a
+// query (`buildGroups`) with pre-rendered icon SVG + resolved tile paint and a
+// `run` closure per row. React owns the overlay chrome, the search field, and
+// keyboard navigation.
+export interface PaletteTileDTO {
+  background: string;
+  glyphColor: string;
+  boxShadow?: string;
+}
+export interface PaletteRowDTO {
+  label: string;
+  sub?: string;
+  /** Pre-rendered icon SVG markup (from the vanilla `Icon` set). */
+  iconHtml: string;
+  variant: 'action' | 'app' | 'chat';
+  /** For `variant: 'app'` — the gradient tile paint. */
+  tile?: PaletteTileDTO;
+  meta?: string;
+  kbd?: string;
+  accent?: boolean;
+  run: () => void;
+}
+export interface PaletteGroupDTO {
+  group: string;
+  items: PaletteRowDTO[];
+}
+export interface PaletteBridgeProps {
+  /** Recompute the grouped results for the current query. */
+  buildGroups: (query: string) => PaletteGroupDTO[];
+  onClose: () => void;
+  /**
+   * Handed a `refresh` fn on mount — the vanilla side calls it when
+   * async data (templates) arrives so `buildGroups` re-runs.
+   */
+  onReady?: (refresh: () => void) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React command palette overlay; returns an unmount disposer. */
+  mountPalette(host: HTMLElement, props: PaletteBridgeProps): () => void;
   /** Mount the React automation-templates gallery; returns an unmount disposer. */
   mountAutomationTemplates(host: HTMLElement, props: AutomationTemplatesBridgeProps): () => void;
   /** Mount the React Insights dashboard into `host`; returns an unmount disposer. */
