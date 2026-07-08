@@ -1,4 +1,7 @@
 ---
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import SectionRail from '../components/SectionRail.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHead from '../components/SiteHead.astro';
@@ -23,7 +26,26 @@ const base = import.meta.env.BASE_URL.endsWith('/')
 const canonical = new URL(canonicalPath, Astro.site ?? 'https://centraid.dev/docs/').toString();
 const docsHome = new URL('', Astro.site ?? 'https://centraid.dev/docs/').toString();
 const shareImage = new URL('assets/og-docs.svg', Astro.site ?? 'https://centraid.dev/docs/').toString();
-const asset = (path) => `${base}${path}`;
+// docs.css/docs.js live in public/ and ship UN-fingerprinted, so a returning
+// visitor can run a cached old script against fresh HTML — which is exactly how
+// the header search "broke" (old JS reads a data-index that no longer exists,
+// fetches `undefined`, shows no results). Stamp each asset with a short hash of
+// its own bytes so any change mints a new URL and defeats the stale cache. The
+// smoke test strips `?query` before resolving links, so this stays valid.
+// The docs build always runs from the repo root (see scripts/docs-site/build.mjs),
+// where the un-fingerprinted source assets live under scripts/docs-site/public.
+const assetHash = (path) => {
+  try {
+    const abs = join(process.cwd(), 'scripts', 'docs-site', 'public', path);
+    return createHash('sha1').update(readFileSync(abs)).digest('hex').slice(0, 10);
+  } catch {
+    return '';
+  }
+};
+const asset = (path) => {
+  const v = assetHash(path);
+  return `${base}${path}${v ? `?v=${v}` : ''}`;
+};
 const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/, '').trim();
 const pageLabel = searchLabel ?? pageName;
 const breadcrumbItems = [
