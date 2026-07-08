@@ -68,11 +68,13 @@
   // ---------- header search (⌘K) ----------
   const searchBtn = document.querySelector('#doc-search');
   if (searchBtn) {
-    const indexUrl = searchBtn.dataset.index;
-    let records = null;
+    const pagefindUrl = searchBtn.dataset.pagefind;
+    const baseUrl = searchBtn.dataset.base || '/';
+    let pagefind = null;
     let loading = null;
     let selected = 0;
     let hits = [];
+    let searchSeq = 0;
 
     const overlay = document.createElement('div');
     overlay.className = 'search-overlay';
@@ -94,47 +96,78 @@
         /[&<>"']/g,
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
       );
-    const terms = () => input.value.toLowerCase().split(/\s+/).filter(Boolean);
-    const highlight = (text, ts) => {
-      let out = esc(text);
-      for (const t of ts) {
-        const re = new RegExp(`(${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-        out = out.replace(re, '<mark>$1</mark>');
+    const loadSearch = async () => {
+      if (!loading) {
+        loading = import(pagefindUrl)
+          .then(async (mod) => {
+            pagefind = mod;
+            await pagefind.options({
+              baseUrl,
+              excerptLength: 32,
+              ranking: {
+                metaWeights: {
+                  title: 6,
+                  label: 4,
+                  description: 2,
+                  keywords: 2,
+                },
+              },
+            });
+            await pagefind.init();
+            return pagefind;
+          })
+          .catch(() => {
+            pagefind = null;
+            return null;
+          });
       }
-      return out;
+      return loading;
     };
 
-    const render = () => {
-      const ts = terms();
-      if (!ts.length) {
+    const searchableResults = (data) => {
+      const label = data.meta?.label || data.meta?.title || '';
+      const primary = {
+        title: data.meta?.title || data.title || label || 'Docs',
+        page: label,
+        href: data.url,
+        text: data.excerpt || data.plain_excerpt || '',
+      };
+      const subResults = (data.sub_results || []).map((sub) => ({
+        title: sub.title || primary.title,
+        page: label,
+        href: sub.url || data.url,
+        text: sub.excerpt || sub.plain_excerpt || data.excerpt || '',
+      }));
+      return subResults.length ? subResults : [primary];
+    };
+
+    const render = async () => {
+      const q = input.value.trim();
+      const seq = ++searchSeq;
+      if (!q) {
         hits = [];
         results.innerHTML = '';
         return;
       }
-      hits = (records || [])
-        .map((r) => {
-          const fields = {
-            title: (r.title || '').toLowerCase(),
-            kicker: (r.kicker || '').toLowerCase(),
-            page: (r.page || '').toLowerCase(),
-            text: (r.text || '').toLowerCase(),
-          };
-          let score = 0;
-          for (const t of ts) {
-            const s =
-              (fields.title.includes(t) ? 6 : 0) +
-              (fields.kicker.includes(t) ? 3 : 0) +
-              (fields.page.includes(t) ? 2 : 0) +
-              (fields.text.includes(t) ? 1 : 0);
-            if (s === 0) return null;
-            score += s;
-          }
-          return { r, score };
-        })
-        .filter(Boolean)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 12)
-        .map((x) => x.r);
+      results.innerHTML = '<p class="search-empty">Searching…</p>';
+
+      const pf = await loadSearch();
+      if (seq !== searchSeq) return;
+      if (!pf) {
+        hits = [];
+        results.innerHTML = '<p class="search-empty">Search is unavailable in this build.</p>';
+        return;
+      }
+
+      const search = await pf.search(q);
+      if (seq !== searchSeq) return;
+      const pageResults = await Promise.all(search.results.slice(0, 8).map((r) => r.data()));
+      if (seq !== searchSeq) return;
+
+      hits = pageResults
+        .flatMap(searchableResults)
+        .filter((hit, index, all) => all.findIndex((other) => other.href === hit.href) === index)
+        .slice(0, 12);
       selected = 0;
       if (!hits.length) {
         results.innerHTML = `<p class="search-empty">No matches for “${esc(input.value)}”.</p>`;
@@ -144,8 +177,8 @@
         .map(
           (r, i) => `
         <a class="search-hit" href="${esc(r.href)}" role="option" aria-selected="${i === 0}">
-          <span class="hit-top"><span class="hit-title">${highlight(r.title || '', ts)}</span><span class="hit-page">${esc(r.page || '')}</span></span>
-          ${r.text ? `<span class="hit-text">${highlight(r.text, ts)}</span>` : ''}
+          <span class="hit-top"><span class="hit-title">${esc(r.title || '')}</span><span class="hit-page">${esc(r.page || '')}</span></span>
+          ${r.text ? `<span class="hit-text">${r.text}</span>` : ''}
         </a>`,
         )
         .join('');
@@ -166,17 +199,7 @@
       input.value = '';
       results.innerHTML = '';
       input.focus();
-      if (!records && !loading) {
-        loading = fetch(indexUrl)
-          .then((r) => (r.ok ? r.json() : []))
-          .then((data) => {
-            records = data;
-          })
-          .catch(() => {
-            records = [];
-          });
-      }
-      await loading;
+      await loadSearch();
     };
     const close = () => {
       overlay.classList.remove('open');

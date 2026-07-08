@@ -3,9 +3,9 @@
  * Centraid docs build.
  *
  * Astro owns the authored docs pages and emits static HTML into
- * dist/docs-site. A second pass walks that output and distills a tiny
- * client-side search index (assets/search-index.json) — one entry per
- * anchored section — so the header search box works with no server.
+ * dist/docs-site. A second pass normalizes section anchors for Pagefind and
+ * runs Pagefind over that output so the header search box gets a durable
+ * static full-text index with no server.
  */
 import { spawn } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -52,51 +52,49 @@ async function walk(dir, prefix = '') {
   return out;
 }
 
-const collapse = (s) => (s || '').replace(/\s+/g, ' ').trim();
-
-async function buildSearchIndex() {
-  const base = basePrefix();
-  const pages = (await walk(outDir)).filter(
-    (f) => f.endsWith('index.html') && !f.startsWith('404'),
-  );
-
-  const records = [];
+async function normalizePagefindAnchors() {
+  const pages = (await walk(outDir)).filter((f) => f.endsWith('.html'));
+  let moved = 0;
   for (const page of pages) {
-    const route = posix.dirname(page); // "start", "data", … or "." for root
-    const href = route === '.' ? base : `${base}${route}/`;
-    const dom = new JSDOM(await readFile(join(outDir, page), 'utf8'));
+    const abs = join(outDir, page);
+    const dom = new JSDOM(await readFile(abs, 'utf8'));
     const doc = dom.window.document;
+    let changed = false;
 
-    const rawTitle = collapse(doc.querySelector('title')?.textContent);
-    const pageLabel = rawTitle.split('—')[0].trim() || rawTitle || route;
-    const h1 = collapse(doc.querySelector('main h1')?.textContent);
+    for (const section of doc.querySelectorAll('main section[id]')) {
+      const id = section.getAttribute('id');
+      const heading = section.querySelector('h1, h2, h3, h4, h5, h6');
+      if (!id || !heading || heading.id) continue;
+      heading.id = id;
+      section.removeAttribute('id');
+      changed = true;
+      moved += 1;
+    }
 
-    // Page-level entry (lands at the top of the page).
-    records.push({
-      title: h1 || pageLabel,
-      page: pageLabel,
-      kicker: '',
-      href,
-      text: collapse(doc.querySelector('main p:not(.eyebrow)')?.textContent).slice(0, 260),
-    });
-
-    // One entry per anchored section.
-    for (const sec of doc.querySelectorAll('main section[id]')) {
-      const heading = collapse(sec.querySelector('h1, h2, h3')?.textContent);
-      if (!heading) continue;
-      const kicker = collapse(sec.querySelector('.eyebrow')?.textContent);
-      const text = collapse(sec.textContent)
-        .replace(kicker, '')
-        .replace(heading, '')
-        .trim()
-        .slice(0, 260);
-      records.push({ title: heading, page: pageLabel, kicker, href: `${href}#${sec.id}`, text });
+    if (changed) {
+      await writeFile(abs, `<!doctype html>\n${doc.documentElement.outerHTML}`, 'utf8');
     }
   }
+  console.log(`docs-site search: moved ${moved} section anchors onto headings`);
+}
 
-  await writeFile(join(outDir, 'assets', 'search-index.json'), JSON.stringify(records), 'utf8');
-  console.log(`docs-site search: indexed ${records.length} sections across ${pages.length} pages`);
+async function buildSearchIndex() {
+  await run('bun', [
+    'x',
+    'pagefind',
+    '--site',
+    outDir,
+    '--output-subdir',
+    'pagefind',
+    '--force-language',
+    'en',
+    '--include-characters',
+    '._:/<>-',
+    '--quiet',
+  ]);
+  console.log(`docs-site search: Pagefind index built for ${basePrefix()} routes`);
 }
 
 await run('bun', ['x', 'astro', 'build', '--config', 'astro.config.mjs']);
+await normalizePagefindAnchors();
 await buildSearchIndex();

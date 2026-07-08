@@ -16,8 +16,14 @@ const rail = [
     "current": false
   },
   {
-    "href": "#index",
+    "href": "#glossary",
     "no": "§03",
+    "label": "Core terms",
+    "current": false
+  },
+  {
+    "href": "#index",
+    "no": "§04",
     "label": "Find a subsystem",
     "current": false
   }
@@ -50,10 +56,12 @@ const footer = {
 ---
 
 <DocsLayout
-  title="Understand it — Centraid docs"
-  description="A guided tour of the whole Centraid system: the three pillars (Data, Apps, Devices), a map of where every subsystem is documented, and the ontology that ties it together."
+  title="How Centraid Works: Vault, Apps, and Devices"
+  description="Understand Centraid's architecture: a private data vault, generated app projections, peer-to-peer devices, and the personal ontology tying them together."
   current="understand"
   canonicalPath="understand/"
+  searchLabel="Understand"
+  searchKeywords="architecture overview glossary core terms vault gateway grant ontology app projection device tunnel"
   bodyClass="has-rail"
   rail={rail}
   footer={footer}

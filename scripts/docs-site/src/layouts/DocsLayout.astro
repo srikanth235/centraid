@@ -12,13 +12,73 @@ const {
   rail = [],
   footer = undefined,
   noIndex = false,
+  pageType = 'TechArticle',
+  searchLabel = undefined,
+  searchKeywords = '',
 } = Astro.props;
 
 const base = import.meta.env.BASE_URL.endsWith('/')
   ? import.meta.env.BASE_URL
   : `${import.meta.env.BASE_URL}/`;
 const canonical = new URL(canonicalPath, Astro.site ?? 'https://centraid.dev/docs/').toString();
+const docsHome = new URL('', Astro.site ?? 'https://centraid.dev/docs/').toString();
+const shareImage = new URL('assets/og-docs.svg', Astro.site ?? 'https://centraid.dev/docs/').toString();
 const asset = (path) => `${base}${path}`;
+const pageName = title.replace(/\s+[—-]\s+Centraid docs.*$/, '').trim();
+const pageLabel = searchLabel ?? pageName;
+const breadcrumbItems = [
+  { name: 'Centraid', url: 'https://centraid.dev/' },
+  { name: 'Docs', url: docsHome },
+];
+if (canonical !== docsHome) {
+  breadcrumbItems.push({ name: pageName, url: canonical });
+}
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'Organization',
+      '@id': 'https://centraid.dev/#organization',
+      name: 'Centraid',
+      url: 'https://centraid.dev/',
+    },
+    {
+      '@type': 'WebSite',
+      '@id': `${docsHome}#website`,
+      url: docsHome,
+      name: 'Centraid documentation',
+      description:
+        'Docs for Centraid, a local-first personal app builder with a private data vault, generated apps, and peer-to-peer devices.',
+      publisher: { '@id': 'https://centraid.dev/#organization' },
+      inLanguage: 'en',
+    },
+    {
+      '@type': 'BreadcrumbList',
+      '@id': `${canonical}#breadcrumb`,
+      itemListElement: breadcrumbItems.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.name,
+        item: item.url,
+      })),
+    },
+    {
+      '@type': pageType,
+      '@id': `${canonical}#primary`,
+      name: pageName,
+      headline: pageName,
+      description,
+      image: shareImage,
+      url: canonical,
+      isPartOf: { '@id': `${docsHome}#website` },
+      breadcrumb: { '@id': `${canonical}#breadcrumb` },
+      publisher: { '@id': 'https://centraid.dev/#organization' },
+      mainEntityOfPage: canonical,
+      inLanguage: 'en',
+    },
+  ],
+};
+const jsonLdHtml = JSON.stringify(jsonLd);
 ---
 
 <!doctype html>
@@ -46,10 +106,39 @@ const asset = (path) => `${base}${path}`;
     </script>
     <title>{title}</title>
     <meta name="description" content={description} />
-    {noIndex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    {
+      noIndex ? (
+        <meta name="robots" content="noindex, nofollow" />
+      ) : (
+        <>
+          <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large" />
+          <link rel="canonical" href={canonical} />
+        </>
+      )
+    }
+    <meta name="application-name" content="Centraid docs" />
+    <meta name="theme-color" content="#fbf7ef" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1118" media="(prefers-color-scheme: dark)" />
+    <meta data-pagefind-meta="label[content]" content={pageLabel} />
+    <meta data-pagefind-meta="description[content]" content={description} />
+    <meta data-pagefind-meta="keywords[content]" content={searchKeywords} />
+    <meta data-pagefind-default-meta="image[content]" content={shareImage} />
+    <meta data-pagefind-default-meta="image_alt[content]" content="Centraid documentation" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="article" />
+    <meta property="og:type" content={pageType === 'CollectionPage' ? 'website' : 'article'} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Centraid docs" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content={shareImage} />
+    <meta property="og:image:alt" content="Centraid documentation" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={shareImage} />
+    <meta name="twitter:image:alt" content="Centraid documentation" />
     <link rel="icon" href={asset('assets/centraid-mark.svg')} />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -58,12 +147,13 @@ const asset = (path) => `${base}${path}`;
       rel="stylesheet"
     />
     <link rel="stylesheet" href={asset('assets/docs.css')} />
+    {!noIndex && <script type="application/ld+json" set:html={jsonLdHtml}></script>}
     <slot name="head" />
   </head>
   <body class={bodyClass}>
     <SiteHead current={current} />
     <SectionRail items={rail} />
-    <main>
+    <main data-pagefind-body={noIndex ? undefined : true}>
       <slot />
     </main>
     <SiteFooter footer={footer} />

@@ -38,6 +38,7 @@
     "oxfmt": "^0.43.0",
     "oxlint": "1.57.0",
     "oxlint-tsgolint": "^0.23.0",
+    "pagefind": "^1.5.2",
     "turbo": "^2.5.4",
     "typescript": "catalog:",
     "ultracite": "7.4.0",

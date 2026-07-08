@@ -3,7 +3,10 @@
 Static site for `centraid.dev/docs/`. The docs are Astro-built static HTML with
 hand-authored body fragments in [`src/content`](src/content/) and shared shell
 components in [`src/components`](src/components/) + [`src/layouts`](src/layouts/).
-There is no client framework; interactivity stays vanilla JS.
+There is no client framework; interactivity stays vanilla JS. Search is
+Pagefind-backed: the build runs Astro first, moves generated section anchors
+onto headings for section-level results, then indexes the generated HTML into
+`dist/docs-site/pagefind/` for the custom `⌘K` modal.
 
 ```
 scripts/docs-site/
@@ -11,7 +14,7 @@ scripts/docs-site/
 ├── src/content/    # hand-authored HTML body fragments
 ├── src/components/ # shared header, footer, section rail
 ├── src/layouts/    # shared SEO/head/body shell
-└── public/         # docs.css + docs.js + centraid-mark.svg + _headers
+└── public/         # docs.css + docs.js + shared assets + _headers
 ```
 
 Every chapter page shares `public/assets/docs.css` / `public/assets/docs.js` (paper/night
@@ -46,7 +49,10 @@ bun run docs:deploy       # upload + activate
   `docs.js` scroll-spies those anchors.
 - Public routes are clean directories: `/docs/data/`, `/docs/apps/`, and so on.
   This is v0, so no legacy `.html` aliases are emitted.
+- Searchable pages opt in through `DocsLayout`'s `data-pagefind-body` marker.
+  Keep `searchLabel` short (`Start`, `Data`, `Apps`, …) so results scan well.
 - New shared shell belongs in Astro components/layouts; visual primitives belong
   in `public/assets/docs.css`; browser behavior belongs in `public/assets/docs.js`.
 - `docs:smoke` fails on broken internal links, homepage links to the old docs
-  subdomain or `.html` filenames, and any resurrected "Duaility" branding.
+  subdomain or `.html` filenames, missing SEO/search metadata, and any
+  resurrected "Duaility" branding.
