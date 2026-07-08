@@ -1,0 +1,23 @@
+{
+  // Cloudflare Workers static-assets deploy for the public site: the home
+  // landing at / plus the docs under /docs. Cloudflare's Git integration runs
+  // `bun run docs:bundle` (build command → ./dist/site) then `wrangler deploy`;
+  // GitHub Actions only runs the CI gate. Modeled on the duaility-home worker.
+  //
+  // Assets-only — there is no Worker script, so Cloudflare serves ./dist/site
+  // directly (and honors its _headers file). To gate work-in-progress pages
+  // behind auth like duaility-home, add "main": "src/worker.ts" +
+  // "run_worker_first": true and a GUARDED_PATHS check; unguarded paths fall
+  // straight through to env.ASSETS.
+  "name": "centraid-site",
+  "compatibility_date": "2024-11-01",
+  "compatibility_flags": [],
+  "assets": {
+    "directory": "./dist/site"
+  },
+  // Bind the apex once centraid.dev's DNS lives in this Cloudflare account:
+  // "routes": [{ "pattern": "centraid.dev", "custom_domain": true }],
+  "observability": {
+    "enabled": true
+  }
+}
