@@ -36,11 +36,72 @@ function summaryLine(summary: Record<string, number>): string {
   return parts.length > 0 ? parts.join(' · ') : 'empty';
 }
 
+// Tracks the React root mounted on a host so a re-render disposes the prior one.
+const importReactDisposers = new WeakMap<HTMLElement, () => void>();
+
 /** Populate the Import pane. Re-renders itself after every act. */
 export async function renderImportPage(input: ImportPageInput): Promise<void> {
   const { el, host } = input;
   const note = (text: string): HTMLElement => el('div', { class: 'cd-app-settings-note' }, text);
   const rerender = (): void => void renderImportPage(input);
+
+  // Phase 3 (#325): delegate the pane to the React ImportScreen when the bundle
+  // is loaded. File reading happens in React; gateway I/O stays vanilla, threaded
+  // through the bridge callbacks. Vanilla builder below is the fallback.
+  const bridge = window.CentraidReact;
+  if (bridge?.mountImport) {
+    importReactDisposers.get(host)?.();
+    const dispose = bridge.mountImport(host, {
+      discard: (batchId) => vaultImportDiscard(batchId).then(() => undefined),
+      loadData: async () => {
+        const s = await vaultStatus().catch(() => undefined);
+        if (!s) return null;
+        const [batches, connections] = await Promise.all([
+          vaultImportsList(),
+          vaultConnections().catch(() => [] as VaultConnection[]),
+        ]);
+        return {
+          batches: batches.map((b) => ({
+            batchId: b.batchId,
+            createdAt: b.createdAt,
+            kind: b.kind,
+            label: b.label,
+            status: b.status,
+            summary: b.summary,
+          })),
+          connections: connections.map((c) => ({
+            connectionId: c.connectionId,
+            kind: c.kind,
+            label: c.label,
+            lastRunAt: c.lastRunAt,
+            lastRunError: c.lastRun?.error ?? null,
+            principal: c.principal,
+            status: c.status,
+          })),
+          vaultName: s.name,
+        };
+      },
+      loadRows: async (batchId) => {
+        const rows = await vaultImportRows(batchId);
+        return rows.map((r) => ({
+          disposition: r.disposition,
+          entityType: r.entityType,
+          externalId: r.externalId,
+          note: r.note,
+        }));
+      },
+      publish: (batchId) => vaultImportPublish(batchId).then(() => undefined),
+      setConnectionStatus: (connectionId, next) =>
+        vaultConnectionSetStatus(connectionId, next).then(() => undefined),
+      showToast: input.showToast,
+      stage: async (payload) => {
+        const staged = await vaultImportStage(payload);
+        return staged.total;
+      },
+    });
+    importReactDisposers.set(host, dispose);
+    return;
+  }
 
   let status;
   try {

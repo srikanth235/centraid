@@ -21,6 +21,7 @@ import { Gallery } from '@centraid/desktop-ui';
 import type { CentraidReactBridge } from './bridge.js';
 import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
 import DiscoverScreen from './screens/DiscoverScreen.js';
+import ImportScreen from './screens/ImportScreen.js';
 import InsightsScreen from './screens/InsightsScreen.js';
 import PaletteScreen from './screens/PaletteScreen.js';
 import PhoneScreen from './screens/PhoneScreen.js';
@@ -105,6 +106,11 @@ const bridge: CentraidReactBridge = {
   mountPhone(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<PhoneScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountImport(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<ImportScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };

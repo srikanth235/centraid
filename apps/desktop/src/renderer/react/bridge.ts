@@ -234,9 +234,58 @@ export interface PhoneBridgeProps {
   showToast?: (message: string) => void;
 }
 
+// ── Import pane ─────────────────────────────────────────────────────────────
+export interface ImportBatchDTO {
+  batchId: string;
+  status: 'draft' | 'published' | 'discarded';
+  createdAt: string;
+  summary: Record<string, number>;
+  kind: string | null;
+  label: string | null;
+}
+export interface ImportConnectionDTO {
+  connectionId: string;
+  kind: string;
+  label: string;
+  principal: string | null;
+  status: 'active' | 'needs-auth' | 'failing' | 'paused';
+  lastRunAt: string | null;
+  lastRunError: string | null;
+}
+export interface ImportRowDTO {
+  entityType: string;
+  externalId: string;
+  disposition: 'create' | 'update' | 'skip' | 'merge-candidate';
+  note: string | null;
+}
+export interface ImportData {
+  vaultName: string;
+  batches: ImportBatchDTO[];
+  connections: ImportConnectionDTO[];
+}
+export interface ImportStagePayload {
+  filename: string;
+  text?: string;
+  base64?: string;
+}
+export interface ImportBridgeProps {
+  /** Read the import surface. `null` = no vault plane mounted. */
+  loadData: () => Promise<ImportData | null>;
+  /** Stage a dropped file; resolves to the staged row count. */
+  stage: (payload: ImportStagePayload) => Promise<number>;
+  /** Load a bounded row preview for a draft batch. */
+  loadRows: (batchId: string) => Promise<ImportRowDTO[]>;
+  publish: (batchId: string) => Promise<void>;
+  discard: (batchId: string) => Promise<void>;
+  setConnectionStatus: (connectionId: string, status: 'active' | 'paused') => Promise<void>;
+  showToast?: (message: string) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Import settings pane; returns an unmount disposer. */
+  mountImport(host: HTMLElement, props: ImportBridgeProps): () => void;
   /** Mount the React Phone settings pane; returns an unmount disposer. */
   mountPhone(host: HTMLElement, props: PhoneBridgeProps): () => void;
   /** Mount the React command palette overlay; returns an unmount disposer. */

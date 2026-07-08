@@ -26,9 +26,10 @@ they proceed incrementally on top of this seam.
 - [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
       to React via the `window.CentraidReact` bridge (vanilla render kept as a
       fallback): **Discover**, **Insights**, the **Vault** consent pane, the
-      **Automation-templates gallery**, the **Command palette (⌘K)**, and the
-      **Phone settings pane**. Remaining (`builder.ts`, Home, Automations
-      overview, settings, app view) follow the same pattern incrementally.
+      **Automation-templates gallery**, the **Command palette (⌘K)**, the
+      **Phone settings pane**, and the **Import settings pane**. Remaining
+      (`builder.ts`, Home, Automations overview, settings, app view) follow the
+      same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -168,6 +169,17 @@ Sixth screen — **Phone settings pane** (stateful; native subscription):
   each act. `bridge.ts` gains the phone DTOs + `mountPhone`; a `WeakMap` disposes
   a prior root on re-render; vanilla builder fallback.
 
+Seventh screen — **Import settings pane** (stateful; file upload + async rows):
+
+- `src/renderer/react/screens/ImportScreen.tsx` (+ `.test.tsx`) — React port of
+  the file-drop staging surface: choose a file → read it (text/base64 in React)
+  → stage as a reviewable draft; per-draft row previews load async; publish /
+  discard; live-connection pause/resume; history. Gateway I/O
+  (stage/list/rows/publish/discard/connections) stays vanilla via the bridge
+  callbacks. `bridge.ts` gains the import DTOs + `mountImport`; `boot.tsx`
+  registers it; `app-import.ts`'s `renderImportPage` delegates (a `WeakMap`
+  disposes a prior root); vanilla builder fallback.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -201,11 +213,14 @@ Sixth screen — **Phone settings pane** (stateful; native subscription):
   `src/renderer/react/screens/PaletteScreen.test.tsx`,
   `src/renderer/app-phone.ts`,
   `src/renderer/react/screens/PhoneScreen.tsx`,
-  `src/renderer/react/screens/PhoneScreen.test.tsx`.
+  `src/renderer/react/screens/PhoneScreen.test.tsx`,
+  `src/renderer/app-import.ts`,
+  `src/renderer/react/screens/ImportScreen.tsx`,
+  `src/renderer/react/screens/ImportScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, and the Phone pane are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations overview/viewers, settings, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, and the Import pane are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations overview/viewers, settings, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -233,8 +248,8 @@ Sixth screen — **Phone settings pane** (stateful; native subscription):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4
-  render/behavior tests; the full `@centraid/desktop` project (118 tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 render/behavior tests; the full
+  `@centraid/desktop` project (122 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces
