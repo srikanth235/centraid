@@ -41,6 +41,23 @@
   --kit-mono: var(--mono, ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace);
 }
 
+/* ---------- Native Web Component hosts (issue #327) ----------------------- */
+/* The kit's presentation primitives are custom elements (elements.js) that
+   render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
+   is `display: contents` so it contributes no box of its own — the emitted
+   `.kit-*` tree lays out exactly as the former vanilla builders' output did,
+   and every rule in this file continues to style it unchanged. */
+kit-avatar,
+kit-meter,
+kit-line-chart,
+kit-bar-chart,
+kit-skeleton,
+kit-toast,
+kit-mention-chip,
+kit-reference-strip {
+  display: contents;
+}
+
 /* ---------- Toasts -------------------------------------------------------- */
 /* Bottom-center. Solid (never blurred) — a toast has a job to do. Rises in on
    a short spring-free curve; a leading dot carries tone. */

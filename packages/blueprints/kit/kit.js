@@ -11,6 +11,19 @@
 // with drift: outcome toasts, loading/error states, confirm-to-act, money
 // and local-date formatting, letter avatars, and small SVG charts. App
 // logic stays in each app.js.
+//
+// The presentation PRIMITIVES (avatar, meter, charts, skeleton, toast, mention
+// chip, reference strip) are now native Web Components defined in `elements.js`
+// (issue #327). Importing it here runs the `customElements.define()` calls; the
+// factory functions below (`letterAvatar`, `lineChart`, `toast`, …) construct +
+// configure those elements, so app code that calls them is unchanged. The
+// live-network controllers (Ask driver, @-mention popover/field) stay as the
+// imperative controllers they always were — see the excluded set in issue #327.
+import { entityKindLabel } from './elements.js';
+
+// Re-export the shared kind-label helper (its definition moved to elements.js,
+// where the mention-chip and reference-strip components also need it).
+export { entityKindLabel };
 
 // ---------- Native haptics (feature-detected, best-effort) ----------
 
@@ -47,34 +60,21 @@ function ensureToastHost() {
 export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
   haptic('success');
   const host = ensureToastHost();
-  const el = document.createElement('div');
-  el.className = 'kit-toast';
-  const span = document.createElement('span');
-  span.textContent = text;
-  el.appendChild(span);
+  const el = document.createElement('kit-toast');
+  el.text = text;
   let timer = 0;
   const dismiss = () => {
     clearTimeout(timer);
     el.remove();
   };
   if (undoLabel && onUndo) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'kit-toast-action';
-    btn.textContent = undoLabel;
-    btn.addEventListener('click', () => {
+    el.undoLabel = undoLabel;
+    el.addEventListener('kit-undo', () => {
       dismiss();
       onUndo();
     });
-    el.appendChild(btn);
   }
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'kit-toast-close';
-  close.textContent = '×';
-  close.setAttribute('aria-label', 'Dismiss');
-  close.addEventListener('click', dismiss);
-  el.appendChild(close);
+  el.addEventListener('kit-dismiss', dismiss);
   host.appendChild(el);
   if (duration > 0) timer = setTimeout(dismiss, duration);
   return dismiss;
@@ -99,11 +99,9 @@ export function outcomeMessage(outcome) {
 /** Fill a container with shimmer rows while the first read is in flight. */
 export function showSkeleton(container, rows = 3) {
   container.innerHTML = '';
-  for (let i = 0; i < rows; i += 1) {
-    const row = document.createElement('div');
-    row.className = 'kit-skeleton';
-    container.appendChild(row);
-  }
+  const el = document.createElement('kit-skeleton');
+  el.rows = rows;
+  container.appendChild(el);
 }
 
 /**
@@ -189,116 +187,47 @@ export function debounce(fn, ms = 200) {
 
 // ---------- Letter avatars ----------
 
-/** Deterministic hue from a name so the same person is always the same color. */
+/** A letter avatar element with a deterministic hashed hue (see `<kit-avatar>`). */
 export function letterAvatar(name, { size = '2.25rem' } = {}) {
-  const text = String(name ?? '?').trim() || '?';
-  let hash = 0;
-  for (let i = 0; i < text.length; i += 1) hash = (hash * 31 + text.charCodeAt(i)) | 0;
-  const hue = ((hash % 360) + 360) % 360;
-  const el = document.createElement('span');
-  el.className = 'kit-avatar';
-  el.style.width = size;
-  el.style.height = size;
-  el.style.background = `hsl(${hue} 45% 42%)`;
-  el.setAttribute('aria-hidden', 'true');
-  const parts = text.split(/\s+/);
-  el.textContent = (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  const el = document.createElement('kit-avatar');
+  el.name = String(name ?? '?');
+  el.size = size;
   return el;
 }
 
-// ---------- SVG chart primitives (no libraries — hand-rolled, themed) ----------
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-function svgEl(tag, attrs) {
-  const el = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
-  return el;
-}
+// ---------- SVG chart primitives (native elements — see elements.js) ----------
+// The chart geometry now lives in the `<kit-line-chart>` / `<kit-bar-chart>`
+// custom elements; these factories build + configure them so callers that
+// append the returned element keep working.
 
 /**
- * A time-aware line chart: points are {x: epochMs, y: number}. Renders a
- * line, soft area fill, an emphasized last point, and min/max y labels.
+ * A time-aware line chart element: points are {x: epochMs, y: number}. Renders a
+ * line, soft area fill, and an emphasized last point (see `<kit-line-chart>`).
  */
 export function lineChart(points, { width = 640, height = 160, label = 'Trend' } = {}) {
-  const svg = svgEl('svg', {
-    viewBox: `0 0 ${width} ${height}`,
-    class: 'kit-chart',
-    role: 'img',
-    'aria-label': label,
-  });
-  if (points.length < 2) return svg;
-  const pad = 8;
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
-  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
-  const sx = (x) => pad + ((x - x0) / (x1 - x0 || 1)) * (width - pad * 2);
-  const sy = (y) => height - pad - ((y - y0) / (y1 - y0 || 1)) * (height - pad * 2);
-  const d = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`)
-    .join(' ');
-  svg.appendChild(
-    svgEl('path', {
-      d: `${d} L${sx(x1).toFixed(1)},${height - pad} L${sx(x0).toFixed(1)},${height - pad} Z`,
-      class: 'kit-chart-area',
-    }),
-  );
-  svg.appendChild(svgEl('path', { d, class: 'kit-chart-line' }));
-  const last = points[points.length - 1];
-  svg.appendChild(
-    svgEl('circle', { cx: sx(last.x), cy: sy(last.y), r: 3, class: 'kit-chart-dot' }),
-  );
-  return svg;
-}
-
-/** Horizontal proportion bar (e.g. cost share behind a row's amount). */
-export function barSpan(ratio) {
-  const el = document.createElement('span');
-  el.className = 'kit-bar';
-  const fill = document.createElement('span');
-  fill.className = 'kit-bar-fill';
-  fill.style.width = `${Math.max(0, Math.min(1, ratio)) * 100}%`;
-  el.appendChild(fill);
-  el.setAttribute('aria-hidden', 'true');
+  const el = document.createElement('kit-line-chart');
+  el.points = points ?? [];
+  el.width = width;
+  el.height = height;
+  el.label = label;
   return el;
 }
 
-/** Vertical bar chart for period totals: items are {label, value}. */
+/** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
+export function barSpan(ratio) {
+  const el = document.createElement('kit-meter');
+  el.ratio = ratio;
+  return el;
+}
+
+/** Vertical bar chart element for period totals: items are {label, value} (see `<kit-bar-chart>`). */
 export function barChart(items, { width = 640, height = 160, label = 'Totals' } = {}) {
-  const svg = svgEl('svg', {
-    viewBox: `0 0 ${width} ${height}`,
-    class: 'kit-chart',
-    role: 'img',
-    'aria-label': label,
-  });
-  if (items.length === 0) return svg;
-  const pad = 8;
-  const labelBand = 16;
-  const max = Math.max(...items.map((i) => i.value), 1);
-  const band = (width - pad * 2) / items.length;
-  items.forEach((item, i) => {
-    const h = ((height - pad * 2 - labelBand) * item.value) / max;
-    svg.appendChild(
-      svgEl('rect', {
-        x: pad + i * band + band * 0.15,
-        y: height - pad - labelBand - h,
-        width: band * 0.7,
-        height: Math.max(h, 1),
-        rx: 2,
-        class: 'kit-chart-barrect',
-      }),
-    );
-    const text = svgEl('text', {
-      x: pad + i * band + band / 2,
-      y: height - pad,
-      class: 'kit-chart-ticklabel',
-      'text-anchor': 'middle',
-    });
-    text.textContent = item.label;
-    svg.appendChild(text);
-  });
-  return svg;
+  const el = document.createElement('kit-bar-chart');
+  el.items = items ?? [];
+  el.width = width;
+  el.height = height;
+  el.label = label;
+  return el;
 }
 
 // ============================================================================
@@ -922,29 +851,9 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
 // entity later rides ctx.vault.resolve's resolvable-if-linked rule.
 // ============================================================================
 
-const PICK_KIND_LABELS = {
-  'core.party': 'Person',
-  'core.place': 'Place',
-  'core.event': 'Event',
-  'core.transaction': 'Transaction',
-  'core.content_item': 'File',
-  'schedule.task': 'Task',
-  'knowledge.note': 'Note',
-  'core.collection': 'Collection',
-  'social.thread': 'Thread',
-  'media.media_asset': 'Photo',
-  'home.asset_item': 'Belonging',
-  'business.client': 'Client',
-  'business.project': 'Project',
-  'business.invoice': 'Invoice',
-};
-
-/** Human label for an entity kind — falls back to the table name. */
-export function entityKindLabel(type) {
-  if (PICK_KIND_LABELS[type]) return PICK_KIND_LABELS[type];
-  const table = String(type).split('.')[1] ?? String(type);
-  return table.replace(/_/g, ' ');
-}
+// `entityKindLabel` (and its `PICK_KIND_LABELS` table) moved to elements.js,
+// where the mention-chip and reference-strip components need it; it is imported
+// and re-exported at the top of this file.
 
 /**
  * Assert a link as the owner (the pick already carried the intent):
@@ -995,81 +904,24 @@ export async function removeReference(linkId) {
  * vs "in strip". Plain picker links (no selector) wear no flag.
  *
  * Options: {inlineIds?: Set<string>, onRemove?: (ref) => void, emptyText?: string}.
+ *
+ * The tile rendering lives in the `<kit-reference-strip>` custom element
+ * (elements.js); this adapter mounts a single instance inside `stripEl` and
+ * feeds it the props, so existing callers that pass their own container keep
+ * working while the DOM/behaviour is owned by one component.
  */
 export function renderReferenceStrip(stripEl, refs, options = {}) {
   const { inlineIds, onRemove, emptyText } = options;
-  stripEl.classList.add('kit-ref-strip');
-  stripEl.innerHTML = '';
-  const list = refs ?? [];
-  if (list.length === 0) {
-    if (emptyText) {
-      const empty = document.createElement('p');
-      empty.className = 'kit-ref-empty';
-      empty.textContent = emptyText;
-      stripEl.appendChild(empty);
-    }
-    return;
+  let strip = stripEl.firstElementChild;
+  if (!strip || strip.tagName !== 'KIT-REFERENCE-STRIP') {
+    stripEl.innerHTML = '';
+    strip = document.createElement('kit-reference-strip');
+    stripEl.appendChild(strip);
   }
-  for (const ref of list) {
-    const card = ref.card ?? {};
-    const tile = document.createElement('div');
-    tile.className = 'kit-ref-tile';
-
-    const kind = document.createElement('span');
-    kind.className = 'kit-ref-kind';
-    kind.textContent = entityKindLabel(card.type);
-    tile.appendChild(kind);
-
-    // Anchored references wear their state: resolved inline in the body, or
-    // orphaned to the strip (their words left the text). Plain links don't.
-    if (ref.selector) {
-      const flag = document.createElement('span');
-      const inline = inlineIds?.has(ref.link_id);
-      flag.className = `kit-ref-flag${inline ? ' is-inline' : ''}`;
-      flag.textContent = inline ? 'in text' : 'in strip';
-      flag.title = inline
-        ? 'Shown inline in the text above'
-        : "This reference's words are no longer in the text";
-      tile.appendChild(flag);
-    }
-
-    const label = document.createElement('span');
-    label.className = 'kit-ref-title';
-    if (card.status === 'missing') {
-      tile.classList.add('is-gone');
-      label.textContent = 'removed from the vault';
-    } else if (card.status === 'denied') {
-      tile.classList.add('is-gone');
-      label.textContent = 'access not granted';
-    } else {
-      label.textContent = card.title ?? entityKindLabel(card.type);
-      if (card.status === 'trashed') {
-        tile.classList.add('is-gone');
-        label.textContent += ' (in trash)';
-      }
-    }
-    tile.appendChild(label);
-
-    if (card.subtitle && card.status === 'live') {
-      const sub = document.createElement('span');
-      sub.className = 'kit-ref-sub';
-      sub.textContent = card.subtitle;
-      tile.appendChild(sub);
-    }
-
-    if (onRemove) {
-      const rm = document.createElement('button');
-      rm.type = 'button';
-      rm.className = 'kit-ref-remove';
-      rm.textContent = '×';
-      rm.title = 'Remove reference';
-      rm.setAttribute('aria-label', `Remove reference to ${label.textContent}`);
-      rm.addEventListener('click', () => onRemove(ref));
-      tile.appendChild(rm);
-    }
-
-    stripEl.appendChild(tile);
-  }
+  strip.refs = refs ?? [];
+  strip.inlineIds = inlineIds ?? null;
+  strip.onRemove = onRemove ?? null;
+  strip.emptyText = emptyText ?? '';
 }
 
 /**
@@ -1497,19 +1349,10 @@ export function attachMentionPopover(textarea, options = {}) {
 // read view reuses; the app supplies its own block/markdown layout and calls
 // appendWithChips for each rendered text chunk.
 
-/** The live-card chip for one resolved anchor span (`{card}` on the span). */
+/** The live-card chip element for one resolved anchor span (see `<kit-mention-chip>`). */
 export function mentionChip(ref) {
-  const card = ref.card ?? {};
-  const chip = document.createElement('span');
-  chip.className = 'kit-mention-chip';
-  if (card.status === 'missing') {
-    chip.classList.add('ref-gone');
-    chip.textContent = 'removed from the vault';
-  } else {
-    chip.textContent = card.title ?? entityKindLabel(card.type);
-    if (card.status === 'trashed') chip.classList.add('ref-gone');
-  }
-  chip.title = `${entityKindLabel(card.type)} — linked reference`;
+  const chip = document.createElement('kit-mention-chip');
+  chip.card = ref.card ?? {};
   return chip;
 }
 

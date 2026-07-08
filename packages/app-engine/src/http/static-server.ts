@@ -13,8 +13,13 @@ import { sendError } from './http-utils.js';
  * `import './kit.js'` are unchanged), and `serveStatic` falls back to the
  * shared dir when the app folder has no copy of its own. An app *may* still
  * ship its own file to override — the per-app copy wins.
+ *
+ * `kit.js` imports `elements.js` (the kit's native Web Components, issue #327),
+ * which in turn imports `lit-core.min.js` (the vendored runtime-only Lit
+ * bundle). Both are relative same-origin ESM imports resolved the same way as
+ * `kit.js`, so they must fall back to the shared dir too.
  */
-const SHARED_ASSET_FILES = new Set(['kit.js', 'kit.css']);
+const SHARED_ASSET_FILES = new Set(['kit.js', 'kit.css', 'elements.js', 'lit-core.min.js']);
 
 /**
  * Settings to bake into the served HTML's `<html>` tag. Two parallel maps:
