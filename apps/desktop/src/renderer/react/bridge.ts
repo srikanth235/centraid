@@ -47,9 +47,66 @@ export interface DiscoverBridgeProps {
   onTemplateContext: (t: DiscoverTemplate, anchor: DiscoverMenuAnchor) => void;
 }
 
+// ── Insights ────────────────────────────────────────────────────────────────
+// DTOs mirror CentraidInsightsSummary & friends (centraid-api.d.ts) field for
+// field, so the vanilla side's fetched summary passes through unchanged without
+// the island tsconfig needing the ambient global types.
+export interface InsightsKpis {
+  totalTokens: number;
+  totalCostUsd: number;
+  forecastCostUsd: number;
+  generations: number;
+  retries: number;
+  appsTouched: number;
+  quotaTokens: number;
+}
+export interface InsightsDailyPoint {
+  date: string;
+  tokens: number;
+  costUsd: number;
+  runs: number;
+}
+export interface InsightsAutomationRow {
+  key: string;
+  label: string;
+  kind: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+export interface InsightsModelRow {
+  model: string;
+  runs: number;
+  tokens: number;
+  costUsd: number;
+}
+export interface InsightsActivityRow {
+  runId: string;
+  kind: string;
+  label: string;
+  ok: boolean;
+  startedAt: number;
+  tokens: number;
+  costUsd: number;
+}
+export interface InsightsSummary {
+  windowDays: number;
+  generatedAt: number;
+  kpis: InsightsKpis;
+  daily: InsightsDailyPoint[];
+  byAutomation: InsightsAutomationRow[];
+  byModel: InsightsModelRow[];
+  recent: InsightsActivityRow[];
+}
+export interface InsightsBridgeProps {
+  summary: InsightsSummary;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Insights dashboard into `host`; returns an unmount disposer. */
+  mountInsights(host: HTMLElement, props: InsightsBridgeProps): () => void;
 }
 
 declare global {

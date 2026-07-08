@@ -23,12 +23,10 @@ they proceed incrementally on top of this seam.
       exported from `desktop-ui`, drawn from the real design tokens — the
       no-shim, no-drift surface to sync (the actual sync run is a separate,
       credentialed step).
-- [~] **Phase 3 — Screen-by-screen migration** (in progress). First screen
-      cut over: **Discover** — the vanilla route module now delegates its body
-      to a ported React `DiscoverScreen` through a `window.CentraidReact`
-      bridge, with the vanilla render kept as a fallback. Remaining screens
-      (`builder.ts`, Home, automations, vault, insights, settings) follow the
-      same pattern incrementally.
+- [~] **Phase 3 — Screen-by-screen migration** (in progress). Screens cut over
+      to React via the `window.CentraidReact` bridge (vanilla render kept as a
+      fallback): **Discover** and **Insights**. Remaining (`builder.ts`, Home,
+      automations, vault, settings) follow the same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -105,6 +103,19 @@ The vanilla↔React handoff seam and the first converted screen:
 - `vitest.config.ts` — transforms `.tsx` (automatic JSX runtime) and includes
   `*.test.tsx` so screen tests run in the desktop project.
 
+Second screen — **Insights** (same bridge pattern):
+
+- `src/renderer/react/format.ts` — pure display formatters (`insK`, `insUsd`,
+  `insKindLabel`, `relativeTime`) mirroring app-format.ts, kept self-contained
+  so the React bundle stays decoupled from the shell's ambient globals.
+- `src/renderer/react/screens/InsightsScreen.tsx` (+ `.test.tsx`) — React port
+  of the analytics dashboard (KPI cards, daily line chart, by-source table,
+  by-model bars, recent activity), emitting the same `cd-ins-*` classes.
+- `bridge.ts` gains the `InsightsSummary` DTO (mirrors `CentraidInsightsSummary`)
+  + `mountInsights`; `boot.tsx` registers it; `app-insights.ts` fetches the
+  summary (gateway I/O stays vanilla) then delegates the render, with the
+  vanilla builder as fallback.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -121,16 +132,19 @@ The vanilla↔React handoff seam and the first converted screen:
   `src/AppCard.tsx`, `src/AppCard.test.tsx`, `src/preview/Gallery.tsx`.
 - `apps/desktop/`: `package.json`, `vite.config.ts`, `tsconfig.react.json`,
   `vitest.config.ts`, `src/renderer/index.html`, `src/renderer/app-discover.ts`,
-  `src/renderer/react/boot.tsx`, `src/renderer/react/bridge.ts`,
+  `src/renderer/app-insights.ts`, `src/renderer/react/boot.tsx`,
+  `src/renderer/react/bridge.ts`, `src/renderer/react/format.ts`,
   `src/renderer/react/screens/DiscoverScreen.tsx`,
-  `src/renderer/react/screens/DiscoverScreen.test.tsx`.
+  `src/renderer/react/screens/DiscoverScreen.test.tsx`,
+  `src/renderer/react/screens/InsightsScreen.tsx`,
+  `src/renderer/react/screens/InsightsScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Only Discover is converted.** Every other vanilla builder — `builder.ts`,
-  `app.ts`, Home, automations, vault, insights, settings — is untouched and
-  renders exactly as before. Discover itself keeps its vanilla builder as a
-  live fallback.
+- **Only Discover + Insights are converted.** Every other vanilla builder —
+  `builder.ts`, `app.ts`, Home, automations, vault, settings — is untouched and
+  renders exactly as before. Both converted screens keep their vanilla builders
+  as live fallbacks.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -157,9 +171,10 @@ The vanilla↔React handoff seam and the first converted screen:
 
 ## Verification
 
-- **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + 5 new `DiscoverScreen` render
-  tests; the full `@centraid/desktop` project (96 tests) stays green, confirming
-  the `app-discover.ts` delegation didn't regress the vanilla renderer suite.
+- **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
+  `InsightsScreen` 4 render tests; the full `@centraid/desktop` project (100
+  tests) stays green, confirming the delegations didn't regress the vanilla
+  renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces
   `dist/renderer/react-boot.js` (~205 kB, incl. DiscoverScreen) alongside the
@@ -178,6 +193,10 @@ The vanilla↔React handoff seam and the first converted screen:
   `onTemplateContext` with coords, kind filter narrows to 1 card and flips the
   active tab, layout toggle sets `data-layout="rows"`, and the disposer unmounts
   cleanly.
+- **Runtime (real bundle), Phase 3 Insights:** mounted through the real
+  `window.CentraidReact.mountInsights` bridge in jsdom — 5 KPI cards, the daily
+  line-chart SVG, the by-source table, the by-model bar (`claude-opus-4-8`), and
+  recent activity render from the passed summary; the disposer unmounts cleanly.
 
 ## Audit
 
