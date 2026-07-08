@@ -28,9 +28,10 @@ they proceed incrementally on top of this seam.
       fallback): **Discover**, **Insights**, the **Vault** consent pane, the
       **Automation-templates gallery**, the **Command palette (⌘K)**, the
       **Phone settings pane**, the **Import settings pane**, the first-run
-      **Onboarding** view, the **Automations overview**, and the **Automation
-      single-view**. Remaining (`builder.ts`, Home, Automations run-viewer,
-      settings, app view) follow the same pattern incrementally.
+      **Onboarding** view, the **Automations overview**, the **Automation
+      single-view**, and the **Settings → Appearance + Layout pages**. Remaining
+      (`builder.ts`, Home, Automations run-viewer, the Settings
+      profiles/providers pages, app view) follow the same pattern incrementally.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -215,6 +216,24 @@ Tenth screen — **Automation single-view** (stateful; action-heavy):
   it; `app-automations.ts`'s `renderAutomationView` maps + delegates (captures
   the current row for the action callbacks); vanilla builder fallback.
 
+Eleventh + twelfth screens — **Settings → Appearance + Layout pages**:
+
+- `src/renderer/react/screens/settings-controls.tsx` — shared React control
+  primitives (`DrawerGroup`/`DrawerRow`/`Switch`/`Segmented`) mirroring the
+  vanilla `drawerGroup`/`makeSwitch`/`makeSegmented`.
+- `SettingsAppearanceScreen.tsx` (+ `.test.tsx`) — theme preset picker with
+  live-preview cards (from design-tokens `THEME_PRESETS`/`themes`), accent
+  swatches, cool-blue-cast switch, tile treatment + the live tile preview
+  (`tileFinish`). `SettingsLayoutScreen.tsx` (+ `.test.tsx`) — density, card
+  surface, sidebar toggle. Each control calls the vanilla-supplied setter, which
+  re-themes the running app exactly as before.
+- `bridge.ts` gains the appearance/layout DTOs + `mountSettingsAppearance` /
+  `mountSettingsLayout`; `boot.tsx` registers them; `app-settings.ts` mounts them
+  into the settings route's `appearance` / `layout` page hosts when the bundle is
+  loaded (consistent with the already-React Phone/Import panes), else runs the
+  vanilla controls. The settings-route shell (inner-sidebar nav) + the
+  profiles/providers/workspace pages stay vanilla for now.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -259,11 +278,17 @@ Tenth screen — **Automation single-view** (stateful; action-heavy):
   `src/renderer/react/screens/AutomationsOverviewScreen.tsx`,
   `src/renderer/react/screens/AutomationsOverviewScreen.test.tsx`,
   `src/renderer/react/screens/AutomationViewScreen.tsx`,
-  `src/renderer/react/screens/AutomationViewScreen.test.tsx`.
+  `src/renderer/react/screens/AutomationViewScreen.test.tsx`,
+  `src/renderer/app-settings.ts`,
+  `src/renderer/react/screens/settings-controls.tsx`,
+  `src/renderer/react/screens/SettingsAppearanceScreen.tsx`,
+  `src/renderer/react/screens/SettingsAppearanceScreen.test.tsx`,
+  `src/renderer/react/screens/SettingsLayoutScreen.tsx`,
+  `src/renderer/react/screens/SettingsLayoutScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, and the Automation single-view are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, settings, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, and the Settings Appearance+Layout pages are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, the Settings profiles/providers/workspace pages, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -291,8 +316,8 @@ Tenth screen — **Automation single-view** (stateful; action-heavy):
 ## Verification
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
-  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 render/behavior
-  tests; the full `@centraid/desktop` project (138 tests) stays green, confirming the delegations didn't regress the vanilla
+  `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
+  2 render/behavior tests; the full `@centraid/desktop` project (144 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces

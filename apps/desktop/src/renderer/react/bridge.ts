@@ -377,9 +377,36 @@ export interface AutomationViewBridgeProps {
   onOpenRun: (automationId: string, runId: string) => void;
 }
 
+// ── Settings: appearance + layout pages ─────────────────────────────────────
+export type SettingsTileVariant = 'solid' | 'gradient' | 'glassy' | 'flat';
+export interface SettingsAppearanceBridgeProps {
+  theme: string;
+  coolBlueCast: boolean;
+  accent: string;
+  tileVariant: SettingsTileVariant;
+  onSetTheme: (theme: string) => void;
+  onSetCoolCast: (on: boolean) => void;
+  onSetAccent: (key: string) => void;
+  onSetTile: (v: SettingsTileVariant) => void;
+  /** Resolve the OS appearance to a theme name + apply it; returns the name. */
+  onMatchSystem: () => string;
+}
+export interface SettingsLayoutBridgeProps {
+  density: 'compact' | 'regular' | 'comfy';
+  cardVariant: 'flat' | 'outlined' | 'elevated';
+  sidebarOpen: boolean;
+  onSetDensity: (v: 'compact' | 'regular' | 'comfy') => void;
+  onSetCards: (v: 'flat' | 'outlined' | 'elevated') => void;
+  onSetSidebar: (open: boolean) => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Settings → Appearance page; returns an unmount disposer. */
+  mountSettingsAppearance(host: HTMLElement, props: SettingsAppearanceBridgeProps): () => void;
+  /** Mount the React Settings → Layout page; returns an unmount disposer. */
+  mountSettingsLayout(host: HTMLElement, props: SettingsLayoutBridgeProps): () => void;
   /** Mount the React automation single-view; returns an unmount disposer. */
   mountAutomationView(host: HTMLElement, props: AutomationViewBridgeProps): () => void;
   /** Mount the React Automations overview; returns an unmount disposer. */

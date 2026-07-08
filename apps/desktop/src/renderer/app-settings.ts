@@ -172,74 +172,115 @@ export function createSettingsModule(ctx: ShellContext): SettingsModule {
       });
       previewHost.replaceChildren(el('div', { class: 'ap-preview' }, tiles));
     };
-    renderAppearancePreview();
-    // Chain both refresh hooks behind `onAppearanceApplied` so a setPrefs
-    // call from elsewhere (e.g. Match-system) keeps the theme picker's
-    // active highlight in lockstep with the live tile preview.
-    const refreshPicker = (themePicker as HTMLElement & { _refresh?: () => void })._refresh;
-    setOnAppearanceApplied(() => {
+    // Phase 3 (#325): render the Appearance + Layout pages via the ported React
+    // screens when the bundle is loaded (mounted into their page hosts, like the
+    // Phone/Import panes). The rest of the settings route — inner-sidebar nav,
+    // profiles, providers — stays vanilla. Each control calls setPrefs, which
+    // re-themes the running app exactly as before.
+    const settingsBridge = window.CentraidReact;
+    if (settingsBridge?.mountSettingsAppearance && settingsBridge.mountSettingsLayout) {
+      registerCleanup(
+        settingsBridge.mountSettingsAppearance(pageHosts.appearance, {
+          accent: getPrefs().accent,
+          coolBlueCast: getPrefs().coolBlueCast,
+          onMatchSystem: () => {
+            const next: ThemeName = window.matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+            setPrefs({ theme: next });
+            return next;
+          },
+          onSetAccent: (k) => setPrefs({ accent: k as AccentKey }),
+          onSetCoolCast: (v) => setPrefs({ coolBlueCast: v }),
+          onSetTheme: (t) => setPrefs({ theme: t as ThemeName }),
+          onSetTile: (v) => setPrefs({ tileVariant: v }),
+          theme: getPrefs().theme,
+          tileVariant: getPrefs().tileVariant,
+        }),
+      );
+      registerCleanup(
+        settingsBridge.mountSettingsLayout(pageHosts.layout, {
+          cardVariant: getPrefs().cardVariant,
+          density: getPrefs().density,
+          onSetCards: (v) => setPrefs({ cardVariant: v }),
+          onSetDensity: (v) => setPrefs({ density: v }),
+          onSetSidebar: (v) => {
+            setPrefs({ sidebarOpen: v });
+            ctx.applySidebarOpen(v);
+          },
+          sidebarOpen: getPrefs().sidebarOpen,
+        }),
+      );
+    } else {
       renderAppearancePreview();
-      refreshPicker?.();
-    });
-    registerCleanup(() => {
-      setOnAppearanceApplied(null);
-    });
+      // Chain both refresh hooks behind `onAppearanceApplied` so a setPrefs
+      // call from elsewhere (e.g. Match-system) keeps the theme picker's
+      // active highlight in lockstep with the live tile preview.
+      const refreshPicker = (themePicker as HTMLElement & { _refresh?: () => void })._refresh;
+      setOnAppearanceApplied(() => {
+        renderAppearancePreview();
+        refreshPicker?.();
+      });
+      registerCleanup(() => {
+        setOnAppearanceApplied(null);
+      });
 
-    pageHosts.appearance.append(
-      drawerGroup('Theme', [
-        drawerRowH(
-          'Color theme',
-          'Pick a preset for the Centraid shell. Apps stay in their own light/dark palette.',
-          themePicker,
-          true,
-        ),
-        drawerRowH(
-          'Match system',
-          'Snap the theme to your OS appearance right now.',
-          matchSystemBtn,
-        ),
-        drawerRowH(
-          'Cool blue cast',
-          'Tint dark surfaces toward blue. Off = neutral graphite. Centraid Dark only.',
-          coolCastSwitch,
-        ),
-      ]),
-      drawerGroup('Accent', [
-        drawerRowH(
-          'Color',
-          'Used for the build button, sparkle, focus rings, and version badges.',
-          accentSwatches,
-        ),
-      ]),
-      drawerGroup('App tiles', [
-        drawerRowH('Treatment', 'How icon tiles on the home grid look.', tileSeg),
-        drawerRowH(
-          'Preview',
-          'How the home grid looks with your current choices.',
-          previewHost,
-          true,
-        ),
-      ]),
-    );
-    pageHosts.layout.append(
-      drawerGroup('Density', [
-        drawerRowH(
-          'Spacing',
-          'Affects row height, type sizes, and spacing across all apps.',
-          densitySeg,
-        ),
-      ]),
-      drawerGroup('Cards', [
-        drawerRowH(
-          'Surface',
-          'Affects every card-shaped surface — app tiles, message rows, settings groups.',
-          cardsSeg,
-        ),
-      ]),
-      drawerGroup('Sidebar', [
-        drawerRowH('Show sidebar', 'Toggle the apps + chats panel.', sidebarSwitch),
-      ]),
-    );
+      pageHosts.appearance.append(
+        drawerGroup('Theme', [
+          drawerRowH(
+            'Color theme',
+            'Pick a preset for the Centraid shell. Apps stay in their own light/dark palette.',
+            themePicker,
+            true,
+          ),
+          drawerRowH(
+            'Match system',
+            'Snap the theme to your OS appearance right now.',
+            matchSystemBtn,
+          ),
+          drawerRowH(
+            'Cool blue cast',
+            'Tint dark surfaces toward blue. Off = neutral graphite. Centraid Dark only.',
+            coolCastSwitch,
+          ),
+        ]),
+        drawerGroup('Accent', [
+          drawerRowH(
+            'Color',
+            'Used for the build button, sparkle, focus rings, and version badges.',
+            accentSwatches,
+          ),
+        ]),
+        drawerGroup('App tiles', [
+          drawerRowH('Treatment', 'How icon tiles on the home grid look.', tileSeg),
+          drawerRowH(
+            'Preview',
+            'How the home grid looks with your current choices.',
+            previewHost,
+            true,
+          ),
+        ]),
+      );
+      pageHosts.layout.append(
+        drawerGroup('Density', [
+          drawerRowH(
+            'Spacing',
+            'Affects row height, type sizes, and spacing across all apps.',
+            densitySeg,
+          ),
+        ]),
+        drawerGroup('Cards', [
+          drawerRowH(
+            'Surface',
+            'Affects every card-shaped surface — app tiles, message rows, settings groups.',
+            cardsSeg,
+          ),
+        ]),
+        drawerGroup('Sidebar', [
+          drawerRowH('Show sidebar', 'Toggle the apps + chats panel.', sidebarSwitch),
+        ]),
+      );
+    }
 
     // Gateway selection + lifecycle (add / rename / remove) lives on the
     // Profiles page (profiles are backed by gateways). Paths are fixed under

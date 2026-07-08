@@ -28,6 +28,8 @@ import InsightsScreen from './screens/InsightsScreen.js';
 import OnboardingScreen from './screens/OnboardingScreen.js';
 import PaletteScreen from './screens/PaletteScreen.js';
 import PhoneScreen from './screens/PhoneScreen.js';
+import SettingsAppearanceScreen from './screens/SettingsAppearanceScreen.js';
+import SettingsLayoutScreen from './screens/SettingsLayoutScreen.js';
 import VaultScreen from './screens/VaultScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
@@ -129,6 +131,16 @@ const bridge: CentraidReactBridge = {
   mountOnboarding(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<OnboardingScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountSettingsAppearance(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<SettingsAppearanceScreen {...props} />);
+    return () => screenRoot.unmount();
+  },
+  mountSettingsLayout(host, props) {
+    const screenRoot = createRoot(host);
+    screenRoot.render(<SettingsLayoutScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };
