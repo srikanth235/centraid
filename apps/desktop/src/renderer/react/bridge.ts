@@ -470,9 +470,72 @@ export interface SettingsProfilesBridgeProps {
   onRemoveConnection: (id: string) => void;
 }
 
+// ── Home ────────────────────────────────────────────────────────────────────
+export interface HomeMenuAnchor {
+  kind: 'point' | 'rect';
+  x?: number;
+  y?: number;
+  rect?: {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+    width: number;
+    height: number;
+  };
+}
+export interface HomeTileDTO {
+  background: string;
+  glyphColor: string;
+  boxShadow?: string;
+}
+export interface HomeAppItemDTO {
+  id: string;
+  name: string;
+  desc: string;
+  iconKey: string;
+  tile: HomeTileDTO;
+  tone: 'new' | 'draft' | null;
+  stamp: string;
+  starred: boolean;
+  draft: boolean;
+}
+export interface HomeAutoItemDTO {
+  ref: string;
+  name: string;
+  blurb: string;
+  glyphIcon: string;
+  hue: string;
+  statusKind: AuStatusKind;
+  statusLabel: string;
+  triggerIcon: string;
+  triggerLabel: string;
+  integrations: string[];
+  footTimeLabel: string;
+  footOk: boolean;
+  starred: boolean;
+}
+export interface HomeBridgeProps {
+  suggestions: string[];
+  dateLabel: string;
+  appItems: HomeAppItemDTO[];
+  automationItems: HomeAutoItemDTO[];
+  counts: { all: number; apps: number; automations: number };
+  attention: number;
+  onBuild: (prompt: string) => void;
+  onOpenApp: (id: string) => void;
+  onEnterDraft: (id: string) => void;
+  onAppContext: (id: string, anchor: HomeMenuAnchor) => void;
+  onOpenAutomation: (ref: string) => void;
+  onAutomationMenu: (ref: string, anchor: HomeMenuAnchor) => void;
+  onBrowseTemplates: () => void;
+}
+
 export interface CentraidReactBridge {
   /** Mount the React Discover screen into `host`; returns an unmount disposer. */
   mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
+  /** Mount the React Home screen (composer hero + unified library grid). */
+  mountHome(host: HTMLElement, props: HomeBridgeProps): () => void;
   /** Mount the React Settings → Spaces (profiles + connections) page. */
   mountSettingsProfiles(host: HTMLElement, props: SettingsProfilesBridgeProps): () => void;
   /** Mount the React Settings → Providers (agents) page; returns a disposer. */

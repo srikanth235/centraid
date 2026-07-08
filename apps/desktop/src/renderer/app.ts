@@ -30,7 +30,8 @@ import {
   triggersSummary,
 } from './app-format.js';
 import { buildLayoutToggle } from './app-glyphs.js';
-import { auStatusForRow } from './automation-identity.js';
+import { auStatusForRow, glyphForId, hueForId } from './automation-identity.js';
+import type { AuStatusKind, HomeAppItemDTO, HomeAutoItemDTO } from './react/bridge.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
   AccentKey,
@@ -980,6 +981,173 @@ import { createAppViewModule } from './app-appview.js';
     const main = el('div', { class: 'has-wall' });
     const scroll = el('div', { class: 'cd-main-scroll' });
     main.append(scroll);
+
+    // Phase 3 (#325): render Home via the ported React screen when the bundle
+    // is loaded. The vanilla shell derives the card DTOs + owns the context/more
+    // menus and the gateway I/O through the callbacks; React renders. The
+    // vanilla `renderDay1Home` below is the fallback.
+    const homeBridge = window.CentraidReact;
+    if (homeBridge?.mountHome) {
+      const apps = [...getApps(), ...drafts];
+      const runs = runEntries
+        .filter((e) => e.automationId)
+        .slice()
+        .sort((a, b) => b.run.startedAt - a.run.startedAt);
+      const lastByRef = new Map<string, AutomationFeedEntry>();
+      for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+      let attention = 0;
+      for (const r of automationRows) {
+        const last = lastByRef.get(r.ref);
+        if (last && !last.run.ok) attention += 1;
+      }
+      const recent = (iso?: string): boolean => {
+        if (!iso) return false;
+        const t = new Date(iso).getTime();
+        return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+      };
+      const AU_LABEL: Record<AuStatusKind, string> = {
+        active: 'Active',
+        draft: 'Draft',
+        failed: 'Failed',
+        paused: 'Paused',
+        running: 'Running',
+        success: 'Success',
+      };
+      const appItems: HomeAppItemDTO[] = apps.map((a) => {
+        const draft = isDraft(a);
+        const ua = draft ? undefined : findUserApp(a.id);
+        const tone = draft ? 'draft' : recent(ua?.createdAt) ? 'new' : null;
+        const finish = window.CentraidTokens.tileFinish(a.color, prefs.tileVariant);
+        return {
+          desc: a.desc || '',
+          draft,
+          iconKey: a.iconKey,
+          id: a.id,
+          name: a.name,
+          starred: isStarred(a.id),
+          stamp: draft ? 'saved' : relativeTime(ua?.updatedAt),
+          tile: {
+            background: finish.background,
+            boxShadow: finish.boxShadow,
+            glyphColor: finish.glyphColor,
+          },
+          tone,
+        };
+      });
+      const automationItems: HomeAutoItemDTO[] = automationRows.map((row) => {
+        const last = lastByRef.get(row.ref);
+        const isWebhook =
+          row.triggers.some((t) => t.kind === 'webhook') &&
+          !row.triggers.some((t) => t.kind === 'cron');
+        const statusKind = auStatusForRow(row.enabled, !!last) as AuStatusKind;
+        return {
+          blurb: row.manifest.description || triggersSummary(row.triggers),
+          footOk: !!last?.run.ok,
+          footTimeLabel: last
+            ? relativeTime(new Date(last.run.startedAt).toISOString())
+            : 'No runs yet',
+          glyphIcon: glyphForId(row.id),
+          hue: hueForId(row.id),
+          integrations: [...(row.manifest.requires.mcps ?? [])],
+          name: row.name,
+          ref: row.ref,
+          starred: isStarred(row.ref),
+          statusKind,
+          statusLabel: AU_LABEL[statusKind],
+          triggerIcon: isWebhook ? 'Webhook' : 'Clock',
+          triggerLabel: triggersSummary(row.triggers),
+        };
+      });
+      registerCleanup(
+        homeBridge.mountHome(scroll, {
+          appItems,
+          attention,
+          automationItems,
+          counts: {
+            all: apps.length + automationRows.length,
+            apps: apps.length,
+            automations: automationRows.length,
+          },
+          dateLabel: heroDateLabel(),
+          onAppContext: (id, anchor) => {
+            const a = apps.find((x) => x.id === id);
+            if (a) openContextMenu(a, anchor as Parameters<typeof openContextMenu>[1]);
+          },
+          onAutomationMenu: (ref, anchor) => {
+            const row = automationRows.find((r) => r.ref === ref);
+            if (!row) return;
+            const isStar = isStarred(ref);
+            cardsMod.openMenu(
+              [
+                { icon: 'Eye', id: 'open', label: 'Open' },
+                { icon: 'Play', id: 'run', label: 'Run now' },
+                { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
+                { icon: 'Star', id: 'star', label: isStar ? 'Unstar' : 'Star' },
+                'sep',
+                { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
+              ],
+              anchor as Parameters<typeof cardsMod.openMenu>[1],
+              (menuId) => {
+                if (menuId === 'open') renderAutomationView(row.ref);
+                else if (menuId === 'run')
+                  void runAutomationNow({ automationId: row.ref })
+                    .then(({ runId }) => autoMod.renderRunView(row.ref, runId))
+                    .catch((err: unknown) =>
+                      showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
+                    );
+                else if (menuId === 'edit') enterAutomationBuilder({ automationId: row.id });
+                else if (menuId === 'star') {
+                  toggleStar(row.ref);
+                  renderHome();
+                } else if (menuId === 'delete')
+                  void cardsMod
+                    .openConfirm({
+                      confirmLabel: 'Delete',
+                      danger: true,
+                      message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
+                      title: 'Delete automation?',
+                    })
+                    .then((ok) => {
+                      if (!ok) return;
+                      void deleteAutomation({ automationId: row.ref })
+                        .then(() => {
+                          showToast(`Deleted "${row.name}"`);
+                          renderHome();
+                        })
+                        .catch((err: unknown) =>
+                          showToast(
+                            `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+                          ),
+                        );
+                    });
+              },
+            );
+          },
+          onBrowseTemplates: () => renderDiscover(),
+          onBuild: (p) => enterBuilder({ initialPrompt: p }),
+          onEnterDraft: (id) => {
+            const a = apps.find((x) => x.id === id);
+            if (a) enterBuilder({ appContext: a });
+          },
+          onOpenApp: (id) => openApp(id),
+          onOpenAutomation: (ref) => renderAutomationView(ref),
+          suggestions: [...HERO_SUGGESTIONS],
+        }),
+      );
+      const sidebarR = buildHomeSidebar({ page: 'home' });
+      const built = window.Chrome.buildWindow({
+        ...chromeNav(),
+        main,
+        onNewChat: openNewAppSheet,
+        onToggleSidebar: toggleSidebar,
+        showNewChat: true,
+        sidebar: sidebarR,
+        sidebarOpen: prefs.sidebarOpen,
+      });
+      currentSetSidebarOpen = built.setSidebarOpen;
+      root.replaceChildren(built.root);
+      return;
+    }
 
     // Home is always the composer-led layout — centered composer hero +
     // tabbed discovery shelf — regardless of how many apps exist. The

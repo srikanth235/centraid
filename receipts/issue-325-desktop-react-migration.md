@@ -29,10 +29,11 @@ they proceed incrementally on top of this seam.
       **Automation-templates gallery**, the **Command palette (⌘K)**, the
       **Phone settings pane**, the **Import settings pane**, the first-run
       **Onboarding** view, the **Automations overview**, the **Automation
-      single-view**, and **Settings** (Appearance + Layout + Providers + Spaces
-      pages — the whole route bar the empty Workspace placeholder). Remaining
-      (`builder.ts`, Home, Automations run-viewer, app view) follow the same
-      pattern incrementally.
+      single-view**, **Settings** (Appearance + Layout + Providers + Spaces —
+      the whole route bar the empty Workspace placeholder), and **Home** (the
+      landing screen). Remaining: only the **streaming/iframe surfaces** —
+      `builder.ts` (SSE), the Automations run-viewer (live), App view (iframe),
+      Assistant (streaming) — which need a running Electron app to verify.
 - [ ] **Phase 4 — Cleanup** (deferred — retire vanilla scaffolding, optional
       CSS Modules, grow `ui-core`).
 
@@ -260,6 +261,22 @@ Fourteenth screen — **Settings → Spaces (profiles + connections)**:
   (which used `window.Profiles.buildManageBody`). With this, the whole Settings
   route bar the empty Workspace placeholder page is React.
 
+Fifteenth screen — **Home** (the landing screen; shell-core-coupled):
+
+- `src/renderer/react/screens/HomeScreen.tsx` (+ `.test.tsx`) — React port of the
+  composer hero (→ builder) + the unified library shelf (segmented kind filter,
+  Tiles/Rows toggle, one mixed grid of app + automation cards, empty states,
+  "needs attention" badge, browse-templates link). Reproduces the full app-card
+  and automation-card composites (icon/glyph plate, status pill, meta strip,
+  foot badge + time, star flag, hover more-button). Unlike the other screens
+  Home isn't a route module — it's rendered inside the `app.ts` shell IIFE, so
+  `renderHomeAsync` derives the `HomeAppItemDTO`/`HomeAutoItemDTO` DTOs (tone,
+  stamp, finish, status, integrations) and delegates via `mountHome`, then still
+  builds the chrome window + swaps it in. The context menus (right-click / the
+  ⋯ more-menu) + all gateway I/O stay vanilla through the callbacks
+  (`onAppContext` → `openContextMenu`, `onAutomationMenu` → `cardsMod.openMenu`
+  with Open/Run/Edit/Star/Delete). `bridge.ts` gains the Home DTOs + `mountHome`.
+
 ### Root
 
 - `vitest.config.ts` — registers the two new packages as projects.
@@ -314,11 +331,14 @@ Fourteenth screen — **Settings → Spaces (profiles + connections)**:
   `src/renderer/react/screens/SettingsProvidersScreen.tsx`,
   `src/renderer/react/screens/SettingsProvidersScreen.test.tsx`,
   `src/renderer/react/screens/SettingsProfilesScreen.tsx`,
-  `src/renderer/react/screens/SettingsProfilesScreen.test.tsx`.
+  `src/renderer/react/screens/SettingsProfilesScreen.test.tsx`,
+  `src/renderer/app.ts`,
+  `src/renderer/react/screens/HomeScreen.tsx`,
+  `src/renderer/react/screens/HomeScreen.test.tsx`.
 
 ## Out of scope (nothing folded in)
 
-- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces) are converted.** Every other vanilla builder — `builder.ts`, `app.ts`, Home, the Automations run-viewer, app view — is untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
+- **Discover, Insights, the Vault pane, the automation-templates gallery, the ⌘K command palette, the Phone pane, the Import pane, the first-run Onboarding view, the Automations overview, the Automation single-view, all Settings pages (Appearance+Layout+Providers+Spaces), and Home are converted.** Only the streaming/iframe surfaces — `builder.ts` (SSE), the Automations run-viewer, app view (iframe), the app copilot/assistant — are untouched and renders exactly as before. Every converted screen keeps its vanilla builder as a live fallback.
 - **Electron main process + transport** (`src/main/`, `gateway-client*`) —
   framework-agnostic, untouched.
 - **Blueprint kit + blueprint apps** — stay vanilla by design, untouched.
@@ -347,8 +367,8 @@ Fourteenth screen — **Settings → Spaces (profiles + connections)**:
 
 - **Unit tests:** `ui-core` 9 + `desktop-ui` 16 + `DiscoverScreen` 5 +
   `InsightsScreen` 4 + `VaultScreen` 5 + `AutomationTemplatesScreen` 4 + `PaletteScreen` 5 + `PhoneScreen` 4 + `ImportScreen` 4 + `OnboardingScreen` 4 + `AutomationsOverviewScreen` 5 + `AutomationViewScreen` 7 + `SettingsAppearanceScreen` 4 + `SettingsLayoutScreen`
-  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 render/behavior tests;
-  the full `@centraid/desktop` project (151 tests) stays green, confirming the delegations didn't regress the vanilla
+  2 + `SettingsProvidersScreen` 4 + `SettingsProfilesScreen` 3 + `HomeScreen` 6 render/behavior tests;
+  the full `@centraid/desktop` project (157 tests) stays green, confirming the delegations didn't regress the vanilla
   renderer suite.
   `vitest run --project @centraid/ui-core --project @centraid/desktop-ui --project @centraid/desktop`
 - **Build:** `turbo run build` green; `apps/desktop` full build produces
