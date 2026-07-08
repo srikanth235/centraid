@@ -17,6 +17,9 @@
   </head>
   <body>
     <main id="root"></main>
+    <!-- React coexistence island (issue #325, Phase 0). Hidden until the URL
+         hash is #ui-preview; the vanilla shell above owns everything else. -->
+    <div id="react-preview-root" style="display: none"></div>
 
     <script type="module" src="theme-vars.js"></script>
     <script type="module" src="icons.js"></script>
@@ -27,5 +30,8 @@
     <script type="module" src="app-chat.js"></script>
     <script type="module" src="onboarding.js"></script>
     <script type="module" src="app.js"></script>
+    <!-- React island bundle (Vite → dist/renderer/react-boot.js). Loads after
+         the vanilla shell; renders only into #react-preview-root. -->
+    <script type="module" src="react-boot.js"></script>
   </body>
 </html>
