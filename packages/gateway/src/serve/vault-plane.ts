@@ -122,6 +122,15 @@ import {
 export interface VaultPlaneOptions {
   /** Directory holding `vault.db` + `journal.db`. Created if absent. */
   dir: string;
+  /**
+   * Per-vault DISPOSABLE cache dir, OUTSIDE the vault tree — home for the chat
+   * runner scratch (`runner-sessions/`: the embedded runner's per-conversation
+   * resume files + `assistant-cwd`). journal.db is the authoritative
+   * conversation ledger; this is derived cache, so it lives beside the vault,
+   * not inside it (safe to wipe, never backed up with the sovereign pair).
+   * Defaults to the vault dir itself when omitted (tests / legacy callers).
+   */
+  cacheDir?: string;
   logger: RuntimeLogger;
   /** Owner display name used only on first boot. */
   ownerName?: string;
@@ -253,6 +262,8 @@ export class VaultPlane {
   readonly boot: HostBootstrap;
   /** The vault's directory — the registry deletes it on vault removal. */
   readonly dir: string;
+  /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
+  readonly cacheDir: string;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
   private sweepTimer: NodeJS.Timeout | undefined;
@@ -271,6 +282,9 @@ export class VaultPlane {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
     this.dir = options.dir;
+    // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
+    // back to the vault dir only for callers that don't supply one (tests).
+    this.cacheDir = options.cacheDir ?? options.dir;
     // S3 blob-store credentials are HARNESS-AMBIENT (issue #296 §2, the
     // #290 broker posture): they live in the gateway process environment,
     // never in settings or vault rows. A vault whose settings name an s3
@@ -353,10 +367,12 @@ export class VaultPlane {
   }
 
   /**
-   * The vault's workspace (#280 — the vault is the unit): the ledger,
-   * per-app data dirs, and runner scratch that live BESIDE the sovereign
-   * pair inside this vault's directory. app-engine operates entirely
-   * through this view; the registry hands out the active one.
+   * The vault's workspace (#280 — the vault is the unit): the ledger and
+   * per-app data dirs that live BESIDE the sovereign pair inside this vault's
+   * directory. The runner scratch (`runner-sessions/`) is the exception — it
+   * is disposable cache derived from journal.db, so it lives in `cacheDir`
+   * OUTSIDE the vault tree. app-engine operates entirely through this view;
+   * the registry hands out the active one.
    */
   get workspace(): VaultWorkspace {
     return {
@@ -365,7 +381,7 @@ export class VaultPlane {
       appsDir: path.join(this.dir, 'apps'),
       journal: () => this.journalLedger(),
       journalDbFile: path.join(this.dir, 'journal.db'),
-      runnerSessionDir: path.join(this.dir, 'runner-sessions'),
+      runnerSessionDir: path.join(this.cacheDir, 'runner-sessions'),
     };
   }
 

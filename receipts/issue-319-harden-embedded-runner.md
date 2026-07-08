@@ -11,6 +11,7 @@ assessed and deferred with rationale below.
 
 - [x] WS1 — turn accounting: usage events + real tool names on the OpenClaw chat path
 - [x] WS2 — session/workspace state off shared-global paths
+- [x] WS2 follow-up — relocate the runner cache OUT of the vault dir (post-review)
 - [x] WS3 — vault tools on the embedded turn
 - [x] WS4 — complementary gateway hooks (assessed, deferred)
 
@@ -45,6 +46,36 @@ assessed and deferred with rationale below.
 - `sessionFile` and the assistant `assistant-cwd` were **already** per-vault
   (both under `currentWorkspace().runnerSessionDir`); confirmed, nothing to
   change there. `workspaceDir` was the only cross-vault leak.
+
+### WS2 follow-up — relocate the runner cache OUT of the vault dir (post-review)
+
+Owner call after review: the runner-session `.jsonl` files are the embedded
+runner's per-conversation *resume* cache — derived from journal.db (the source
+of truth), not sovereign data — so they have no business living inside the
+vault directory. WS2's first pass only scoped them per-vault *inside* the vault;
+this moves the whole runner scratch to a per-vault-keyed cache root **outside**
+the vault tree, gateway-wide (desktop + daemon + openclaw), so a vault dir
+carries only `vault.db` + `journal.db` + `apps/` + `code/`.
+
+- `packages/gateway/src/serve/vault-plane.ts` — `VaultPlaneOptions.cacheDir`
+  (per-vault disposable cache; defaults to the vault dir for legacy/test
+  callers); `workspace.runnerSessionDir` now resolves under `cacheDir`, not
+  `this.dir`.
+- `packages/gateway/src/serve/vault-registry.ts` — `VaultRegistryOptions.cacheRootDir`
+  (defaults to a `<rootDir>-cache` sibling); each plane gets
+  `<cacheRootDir>/<vaultId>/`; `delete()` now also `rmSync`s the cache dir
+  (outside the vault tree, so the vault-dir purge can't reach it).
+- `packages/gateway/src/serve/build-gateway.ts` — threads `paths.cacheDir` →
+  `cacheRootDir`.
+- `packages/gateway/src/paths.ts` — new optional `GatewayPaths.cacheDir` (omit
+  → the `-cache` sibling default; a host may point it at an OS cache dir).
+- `packages/app-engine/src/stores/vault-workspace.ts` — doc: `runnerSessionDir`
+  is disposable cache homed outside the vault.
+- `packages/gateway/src/serve/vault-registry.test.ts` — asserts the runner
+  cache is a `-cache` sibling (not under the vault dir) and is purged on delete.
+
+The OpenClaw runner + `assistantCwd` are unaffected in code — both derive from
+`workspace.runnerSessionDir`, which now points outside the vault.
 
 ### WS3 — vault tools on the embedded turn
 
@@ -154,8 +185,13 @@ files (13 new tests); the affected package suites:
 ```sh
 cd packages/openclaw-plugin && bun run test   # 23 passed
 cd packages/agent-runtime && bun run test     # 68 passed
-cd packages/gateway && bun run test           # 213 passed, 1 skipped
+cd packages/gateway && bun run test           # 214 passed, 1 skipped
 ```
+
+The WS2 follow-up (runner cache relocated out of the vault) adds one gateway
+test asserting the `-cache` sibling layout + delete purge, and re-runs the full
+battery green (21/21) after the `VaultPlane`/`VaultRegistry`/`GatewayPaths`
+change.
 
 ## Residual runtime note
 
@@ -167,11 +203,11 @@ worktree). The wiring, scoping, and in-process execution are unit-covered.
 
 ## Audit
 
-PASS - The receipt's "## What changed" faithfully describes the staged diff across all four workstreams (tool event mapping + usage folding for WS1, workspaceDir scoping for WS2, vault-tools registration + exports for WS3, and deferred assessment for WS4); all [x] checklist items are realized in the code; the checklist mirrors the issue's four-workstream structure exactly.
+PASS - The receipt's "## What changed" faithfully describes the branch diff + staged changes across all five checklist items (tool event mapping + usage folding for WS1, workspaceDir per-vault scoping for WS2, vault-tools registration + exports for WS3, runner cache relocation outside vault for WS2 follow-up, and deferred assessment for WS4); all [x] items are realized in code; structure mirrors the issue exactly.
 
 ## Steering
 
-PASS - No human-steering events in the session: a single initial goal directive, no interrupts or mid-task corrections.
+PASS - One genuine mid-task correction (2026-07-08T06:51:20.729Z): user clarified that runner-session transcripts should NOT live inside the vault dir, only journal.db is source of truth, which redirected the agent into the WS2 follow-up work to relocate runner cache outside the vault tree.
 
 ## Accounting
 
@@ -183,8 +219,11 @@ PASS - No human-steering events in the session: a single initial goal directive,
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-125b3273-480-1783492877-1 | claude-code | 125b3273-4806-4305-89ed-b86aebfc4b89 | #319 | claude-opus-4-8 | 22325 | 80037 | 5291053 | 36438 | 138800 | 4.1683 | 108576 | 870479 | 53218700 | 323879 |  |
 | claude-code-125b3273-480-1783492914-1 | claude-code | 125b3273-4806-4305-89ed-b86aebfc4b89 | #319 | claude-opus-4-8 | 6 | 5595 | 927192 | 3831 | 9432 | 0.5944 | 108582 | 876074 | 54145892 | 327710 |  |
+| claude-code-125b3273-480-1783494444-1 | claude-code | 125b3273-4806-4305-89ed-b86aebfc4b89 | #319 | claude-opus-4-8 | 15726 | 159018 | 38854901 | 113027 | 287771 | 23.3256 | 124308 | 1035092 | 93000793 | 440737 |  |
+| claude-code-125b3273-480-1783494495-1 | claude-code | 125b3273-4806-4305-89ed-b86aebfc4b89 | #319 | claude-opus-4-8 | 12 | 9354 | 2319989 | 4458 | 13824 | 1.3300 | 124320 | 1044446 | 95320782 | 445195 |  |
 
 ### Steering
 
 | steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-125b32734806-1783493480-1 | 125b3273-4806-4305-89ed-b86aebfc4b89 | #319 | correction | classifier | runner-session transcripts should NOT live in vault dir |  | 1 | 2026-07-08T06:51:20.729Z |

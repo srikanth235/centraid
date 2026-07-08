@@ -61,6 +61,30 @@ test('create / rename / delete — and the LAST vault is undeletable', async () 
   expect(() => registry.delete(family.vaultId)).toThrow(VaultRegistryError);
 });
 
+test('runner cache lives OUTSIDE the vault tree (a `-cache` sibling) and is purged on delete', async () => {
+  const root = await tempDir();
+  const cacheRoot = path.join(path.dirname(root), `${path.basename(root)}-cache`);
+  cleanups.push(() => fs.rm(cacheRoot, { recursive: true, force: true }));
+  const registry = openRegistry(root);
+  const first = registry.list()[0]!;
+
+  const ws = registry.get(first.vaultId)!.workspace;
+  // The runner scratch is NOT under the vault dir (journal.db is the source of
+  // truth; this is disposable cache) — it's the per-vault `-cache` sibling.
+  expect(ws.runnerSessionDir.startsWith(path.join(root, first.vaultId) + path.sep)).toBe(false);
+  expect(ws.runnerSessionDir).toBe(path.join(cacheRoot, first.vaultId, 'runner-sessions'));
+
+  // Deleting a vault also purges its cache dir (which the vault-dir rmSync
+  // can't reach).
+  const family = registry.create('Family');
+  const famCache = path.join(cacheRoot, family.vaultId);
+  await fs.mkdir(path.join(famCache, 'runner-sessions'), { recursive: true });
+  await fs.writeFile(path.join(famCache, 'runner-sessions', 'w1.jsonl'), 'resume-state');
+  expect(existsSync(famCache)).toBe(true);
+  registry.delete(family.vaultId);
+  expect(existsSync(famCache)).toBe(false);
+});
+
 test('the registry survives a restart: same vaults, same names', async () => {
   const root = await tempDir();
   const first = openVaultRegistry({ rootDir: root, logger: silentLogger, ownerName: 'Priya' });

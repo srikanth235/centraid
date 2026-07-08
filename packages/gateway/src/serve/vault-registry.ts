@@ -29,6 +29,14 @@ import { vaultContext } from './vault-context.js';
 export interface VaultRegistryOptions {
   /** Root directory: one subdirectory per vault. */
   rootDir: string;
+  /**
+   * Root for per-vault DISPOSABLE runner cache (`<cacheRootDir>/<vaultId>/`),
+   * kept OUTSIDE `rootDir` so the sovereign vault tree holds only the
+   * `vault.db` + `journal.db` pair, app data, and code. Defaults to a sibling
+   * of `rootDir` (`<rootDir>-cache`). journal.db is the source of truth; this
+   * cache is derived and safe to wipe.
+   */
+  cacheRootDir?: string;
   logger: RuntimeLogger;
   /** Owner display name used when bootstrapping fresh vaults. */
   ownerName?: string;
@@ -61,6 +69,7 @@ export class VaultRegistryError extends Error {
 
 export class VaultRegistry {
   private readonly rootDir: string;
+  private readonly cacheRootDir: string;
   private readonly logger: RuntimeLogger;
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
@@ -71,6 +80,11 @@ export class VaultRegistry {
 
   constructor(options: VaultRegistryOptions) {
     this.rootDir = options.rootDir;
+    // Runner cache lives OUTSIDE the vault tree — default to a `-cache` sibling
+    // of the vault root so a vault dir carries only sovereign + code state.
+    this.cacheRootDir =
+      options.cacheRootDir ??
+      path.join(path.dirname(this.rootDir), `${path.basename(this.rootDir)}-cache`);
     this.logger = options.logger;
     this.ownerName = options.ownerName;
     this.sweepIntervalMs = options.sweepIntervalMs;
@@ -122,6 +136,9 @@ export class VaultRegistry {
   private openPlane(dir: string, boot: { vaultId?: string; vaultName?: string }): VaultPlane {
     return openVaultPlane({
       dir,
+      // Vault dir name IS the vault id (create() names it so), so the cache
+      // dir keys per-vault without needing the bootstrapped id up front.
+      cacheDir: path.join(this.cacheRootDir, path.basename(dir)),
       logger: this.logger,
       ...(this.ownerName ? { ownerName: this.ownerName } : {}),
       ...(this.sweepIntervalMs !== undefined ? { sweepIntervalMs: this.sweepIntervalMs } : {}),
@@ -262,6 +279,9 @@ export class VaultRegistry {
     this.planes.delete(vaultId);
     this.scannedDirs.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });
+    // Drop the vault's disposable runner cache too (it lives outside the
+    // vault dir, so the rmSync above doesn't reach it).
+    rmSync(plane.cacheDir, { recursive: true, force: true });
     void purge
       .then((shas) => {
         if (shas.length > 0) {
