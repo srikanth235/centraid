@@ -49,6 +49,7 @@ import {
 import { inferAppVisual } from './app-format.js';
 import { cronNextRuns, describeCron } from './cron.js';
 import { lineDiff } from './diff.js';
+import { requireReactBridge } from './react/bridge.js';
 import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
 
 (function () {
@@ -88,14 +89,6 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2.5"/><line x1="11" y1="18" x2="13" y2="18"/></svg>`;
   const MonitorIcon = (size = 13): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
-  // Paperclip glyph for the chat composer's attach control — the shared
-  // icon set has no paperclip, so it lives inline here.
-  const PaperclipIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
-  // File-with-edit glyph for the change card that surfaces below tool-group
-  // pills when the agent wrote files. Page outline + a small pen overlay.
-  const FileEditIcon = (size = 14): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><polyline points="14 3 14 9 20 9"/><path d="M18 13l3 3-5 5h-3v-3z"/></svg>`;
   // Cloud-surface icons. The Cloud surface is the app's gateway status
   // panel reached from the sidebar; these glyphs label its left-rail
   // sub-sections (Overview, Automations, Logs, etc.).
@@ -113,12 +106,6 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>`;
   const AutomationsIcon = (size = 14): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>`;
-  // Tool-group icons. Bolt = activity glyph on the consolidated pill;
-  // ChevronDownIcon = expand/collapse affordance (rotates 180° when open).
-  const BoltIcon = (size = 13): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z"/></svg>`;
-  const ChevronDownIcon = (size = 13): string =>
-    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
   // File-tree icons (used by the Code view).
   const ChevronIcon = (size = 12): string =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
@@ -323,12 +310,11 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
     let appVersionCount = 0;
     let appLastEditedAt: number | undefined;
 
-    // Phase 3 (#325) — React chat pane. The right pane (preview/code/cloud/…)
-    // stays vanilla; only the left chat pane delegates to React. This closure
-    // keeps the SSE stream, the `chat` model, and all turn state, and pushes a
-    // snapshot through `renderChat()` (the single funnel); the vanilla DOM
-    // builders below are the runnable fallback for any build without the bundle.
-    const mountBuilderChat = window.CentraidReact?.mountBuilderChat;
+    // React chat pane. The right pane (preview/code/cloud/…) stays vanilla;
+    // only the left chat pane delegates to React. This closure keeps the SSE
+    // stream, the `chat` model, and all turn state, and pushes a snapshot
+    // through `renderChat()` (the single funnel).
+    const mountBuilderChat = requireReactBridge().mountBuilderChat;
     let chatReactUpdate: ((s: BuilderChatSnapshot) => void) | null = null;
     let chatReactDispose: (() => void) | null = null;
     let builderHistoryNonce = 0;
@@ -733,130 +719,52 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
     body.append(chatPane);
     body.append(rightPane);
 
-    // chat-scroll + chat-input-wrap are recreated by renderChatPane() each
-    // time chatView changes, so the same pane can host either view without
-    // leaking listeners. We hold references for renderChat() / renderInput().
-    let chatScroll: HTMLElement = el('div', { class: 'chat-scroll' });
-    let inputWrap: HTMLElement = el('div', { class: 'chat-input-wrap' });
-
-    function renderMessage(m: ConversationMsg): HTMLElement {
-      if (m.kind === 'divider') {
-        return el('div', { class: 'chat-divider' }, [el('span', {}, m.text)]);
-      }
-      if (m.kind === 'status') {
-        return el('div', { class: 'chat-status-row' }, [
-          el('span', { class: 'msg-status' }, [
-            m.spinning
-              ? el('span', { class: 'pulse' })
-              : el('span', { trustedHtml: Icon.Check({ size: 12, strokeWidth: 2.5 }) }),
-            ' ' + m.text,
-          ]),
-        ]);
+    function toBuilderMsg(m: ConversationMsg): BuilderMsgDTO {
+      if (m.kind === 'divider') return { kind: 'divider', text: m.text };
+      if (m.kind === 'status') return { kind: 'status', text: m.text, spinning: !!m.spinning };
+      if (m.kind === 'user') return { kind: 'user', text: m.text };
+      if (m.kind === 'thinking') {
+        return {
+          kind: 'thinking',
+          text: m.text || (m.streaming ? '…' : ''),
+          streaming: !!m.streaming,
+          header: m.streaming ? 'Thinking…' : 'Thought',
+        };
       }
       if (m.kind === 'toolGroup') {
-        const groupId = m.id;
-        const isRunning = m.calls.some((c) => c.state === 'running');
-        const hasError = m.calls.some((c) => c.state === 'error');
-        // File-writing calls that completed successfully — these become the
-        // "change card" rendered below the pill so the user sees which files
-        // changed without expanding the group.
+        const running = m.calls.some((c) => c.state === 'running');
+        const error = m.calls.some((c) => c.state === 'error');
         const writes = m.calls.filter(
           (c) => FILE_WRITING_TOOLS.has(c.tool) && c.state === 'ok' && c.summary,
         );
-        const wrap = el('div', {
-          class: 'tool-group',
-          'data-open': String(m.open),
-          'data-running': String(isRunning),
-          'data-error': String(hasError),
-          'data-has-changes': String(writes.length > 0),
-        });
-        const pill = el('button', {
-          class: 'tool-group-pill',
-          type: 'button',
-          'aria-expanded': String(m.open),
-        });
-        // Bolt + label + chevron, in that order, matching the design.
-        pill.innerHTML =
-          `<span class="tg-bolt">${BoltIcon(13)}</span>` +
-          `<span class="tg-label">${escapeHtml(summarizeGroup(m.calls))}</span>` +
-          `<span class="tg-chev">${ChevronDownIcon(13)}</span>`;
-        pill.addEventListener('click', () => {
-          // Re-find by stable id — `m` may be a stale reference after
-          // sibling chat updates rebuild the array.
-          chat = chat.map((x) =>
-            x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
-          );
-          renderChat();
-        });
-        wrap.append(pill);
+        let change: { count: number; subtitle: string; version: string } | null = null;
         if (writes.length > 0) {
-          // Inline change card. Surfaces "N files updated" with up to three
-          // file basenames, so the user sees what shipped without expanding
-          // the row-by-row tool list. Clicking the card toggles the group.
-          const card = el('button', {
-            class: 'tg-change-card',
-            type: 'button',
-            'aria-label': `${writes.length} file${writes.length === 1 ? '' : 's'} updated — toggle details`,
-            onClick: () => {
-              chat = chat.map((x) =>
-                x.kind === 'toolGroup' && x.id === groupId ? { ...x, open: !x.open } : x,
-              );
-              renderChat();
-            },
-          });
           const basenames = writes.map((c) => (c.summary ?? '').split('/').pop() ?? '');
           const shown = basenames.slice(0, 3);
           const moreCount = basenames.length - shown.length;
           const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
-          // Version stamp on the card right edge — gives the user a
-          // sense of "what version this lands as" without expanding the
-          // tool list. Falls back to "draft" before the first publish.
-          const versionLabel = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
-          card.innerHTML =
-            `<span class="tg-card-icon">${FileEditIcon(14)}</span>` +
-            `<span class="tg-card-meta">` +
-            `<span class="tg-card-title">${writes.length} file${writes.length === 1 ? '' : 's'} updated</span>` +
-            `<span class="tg-card-sub">${escapeHtml(subtitle)}</span>` +
-            `</span>` +
-            `<span class="tg-card-version">→ ${escapeHtml(versionLabel)}</span>`;
-          wrap.append(card);
+          const version = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
+          change = { count: writes.length, subtitle, version };
         }
-        if (m.open) {
-          const list = el('div', { class: 'tg-list' });
-          for (const c of m.calls) {
-            const dot = el('span', { class: 'tg-dot', 'data-state': c.state });
-            const name = el('span', { class: 'tg-row-name' }, toolVerb(c.tool));
-            const target = el('span', { class: 'tg-row-target' }, c.summary ?? '');
-            list.append(el('div', { class: 'tg-row', 'data-state': c.state }, [dot, name, target]));
-          }
-          wrap.append(list);
-        }
-        return wrap;
+        return {
+          kind: 'toolGroup',
+          id: m.id,
+          label: summarizeGroup(m.calls),
+          open: m.open,
+          running,
+          error,
+          rows: m.open
+            ? m.calls.map((c) => ({
+                state: c.state,
+                verb: toolVerb(c.tool),
+                target: c.summary ?? '',
+              }))
+            : [],
+          change,
+        };
       }
-      if (m.kind === 'thinking') {
-        const txt = m.text || (m.streaming ? '…' : '');
-        return el('div', { class: 'chat-thinking', 'data-streaming': String(!!m.streaming) }, [
-          el('div', { class: 'thinking-header' }, [
-            el('span', { class: 'thinking-dot' }),
-            el('span', {}, m.streaming ? 'Thinking…' : 'Thought'),
-          ]),
-          el('div', { class: 'thinking-body' }, txt),
-        ]);
-      }
-      if (m.kind === 'user') {
-        return el('div', { class: 'msg-user' }, [el('div', { class: 'msg-user-bubble' }, m.text)]);
-      }
-      // AI message — flat prose with a small sparkle avatar at the lead
-      // (matches RBChat's agent message). The avatar grounds the turn in
-      // the conversation; the body reads as plain prose, no bubble.
-      const avatar = el('span', {
-        class: 'msg-ai-avatar',
-        trustedHtml: Icon.Sparkle({ size: 11 }),
-      });
-      const para = el('div', { class: 'msg-ai-text' });
       const text = m.text || (m.streaming ? '…' : '');
-      text.split('\n\n').forEach((p) => para.append(el('p', {}, p)));
-      return el('div', { class: 'msg-ai' }, [avatar, para]);
+      return { kind: 'ai', paras: text.split('\n\n') };
     }
 
     // Derive the live state of the current turn for the progress strip:
@@ -905,86 +813,6 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
       return { verb: 'Thinking', file: '', sub: 'Reading your request', filled: 1 };
     }
 
-    // The single determinate agent-progress strip shown for the whole turn:
-    // 4 dots + a live verb + a mono filename + a sub-line + cancel.
-    function buildAgentProgress(): HTMLElement {
-      const p = turnProgress();
-      const dots = el('span', { class: 'ab-progress-dots', 'aria-hidden': 'true' });
-      for (let i = 0; i < 4; i += 1) {
-        dots.append(el('i', { 'data-on': i < p.filled ? 'true' : undefined }));
-      }
-      const line = el('div', { class: 'ab-progress-line' }, [
-        el('span', { class: 'ab-progress-verb' }, p.verb),
-      ]);
-      if (p.file) line.append(el('code', { class: 'ab-progress-file' }, p.file));
-      const cancel = el(
-        'button',
-        {
-          class: 'ab-progress-cancel',
-          type: 'button',
-          onClick: () => agentAbort?.abort(),
-        },
-        'Cancel',
-      );
-      return el(
-        'div',
-        { class: 'ab-progress', role: 'status', 'aria-label': `${p.verb} — running` },
-        [
-          dots,
-          el('div', { class: 'ab-progress-main' }, [
-            line,
-            el('div', { class: 'ab-progress-sub' }, p.sub),
-          ]),
-          cancel,
-        ],
-      );
-    }
-
-    // ── React snapshot derivation ────────────────────────────────────────
-    function toBuilderMsg(m: ConversationMsg): BuilderMsgDTO {
-      if (m.kind === 'divider') return { kind: 'divider', text: m.text };
-      if (m.kind === 'status') return { kind: 'status', text: m.text, spinning: !!m.spinning };
-      if (m.kind === 'user') return { kind: 'user', text: m.text };
-      if (m.kind === 'thinking') {
-        return {
-          kind: 'thinking',
-          text: m.text || (m.streaming ? '…' : ''),
-          streaming: !!m.streaming,
-          header: m.streaming ? 'Thinking…' : 'Thought',
-        };
-      }
-      if (m.kind === 'toolGroup') {
-        const running = m.calls.some((c) => c.state === 'running');
-        const error = m.calls.some((c) => c.state === 'error');
-        const writes = m.calls.filter(
-          (c) => FILE_WRITING_TOOLS.has(c.tool) && c.state === 'ok' && c.summary,
-        );
-        let change: { count: number; subtitle: string; version: string } | null = null;
-        if (writes.length > 0) {
-          const basenames = writes.map((c) => (c.summary ?? '').split('/').pop() ?? '');
-          const shown = basenames.slice(0, 3);
-          const moreCount = basenames.length - shown.length;
-          const subtitle = shown.join(' · ') + (moreCount > 0 ? ` · +${moreCount} more` : '');
-          const version = appVersionCount > 0 ? `v${appVersionCount + 1}` : 'draft';
-          change = { count: writes.length, subtitle, version };
-        }
-        return {
-          kind: 'toolGroup',
-          id: m.id,
-          label: summarizeGroup(m.calls),
-          open: m.open,
-          running,
-          error,
-          rows: m.open
-            ? m.calls.map((c) => ({ state: c.state, verb: toolVerb(c.tool), target: c.summary ?? '' }))
-            : [],
-          change,
-        };
-      }
-      const text = m.text || (m.streaming ? '…' : '');
-      return { kind: 'ai', paras: text.split('\n\n') };
-    }
-
     function buildChatSnapshot(): BuilderChatSnapshot {
       return {
         view: chatView,
@@ -998,20 +826,11 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
     }
 
     function renderChat(): void {
-      if (chatReactUpdate) {
-        chatReactUpdate(buildChatSnapshot());
-        refreshSyncStatus();
-        return;
-      }
-      chatScroll.innerHTML = '';
-      for (const m of chat) chatScroll.append(renderMessage(m));
-      if (generating) {
-        chatScroll.append(buildAgentProgress());
-      }
-      chatScroll.scrollTop = chatScroll.scrollHeight;
-      // The header sync indicator mirrors `generating` — refreshing it
-      // here covers every place that toggles the flag (agent events,
-      // sendUserPrompt, error paths) without a callback per site.
+      // Push a derived snapshot into the React chat pane. The header sync
+      // indicator mirrors `generating`; refreshing it here covers every place
+      // that toggles the flag (agent events, sendUserPrompt, error paths)
+      // without a callback per site.
+      if (chatReactUpdate) chatReactUpdate(buildChatSnapshot());
       refreshSyncStatus();
     }
 
@@ -1028,83 +847,6 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
       renderChat();
     }
 
-    // ---------- Input ----------
-    function renderInput(): void {
-      inputWrap.innerHTML = '';
-      const ta = el('textarea', {
-        placeholder: 'Describe a change…',
-        rows: 1,
-      }) as HTMLTextAreaElement;
-
-      const send = (): void => {
-        const text = ta.value.trim();
-        if (!text || generating || !appId) return;
-        ta.value = '';
-        void sendUserPrompt(text);
-      };
-      ta.addEventListener('keydown', (e) => {
-        const k = e as KeyboardEvent;
-        if (k.key === 'Enter' && !k.shiftKey) {
-          k.preventDefault();
-          send();
-        }
-      });
-
-      const sendBtn = el('button', {
-        'aria-label': 'Send',
-        class: 'send-btn',
-        trustedHtml: Icon.ArrowRight({ size: 14, strokeWidth: 2.5 }),
-        onClick: send,
-      });
-
-      const controls = el('div', { class: 'chat-input-controls' }, [
-        // Composer carries the attach control only (refined proposal RBChat).
-        el('button', {
-          'aria-label': 'Attach',
-          class: 'input-pill input-pill-icon',
-          title: 'Attach',
-          trustedHtml: PaperclipIcon(14),
-        }),
-        el('div', { class: 'spacer' }),
-        el('span', { class: 'chat-input-kbd' }, '⌘↵'),
-        sendBtn,
-      ]);
-
-      const wrap = el('div', { class: 'chat-input' }, [ta, controls]);
-      // Contextual follow-ups — anchored just above the input under a
-      // "Suggested next moves" eyebrow so they read as a labelled group
-      // (matches RBChat). Same hardcoded set today; future work can swap
-      // in turn-aware suggestions from the agent.
-      const followupChips = el('div', { class: 'prompt-starters' });
-      for (const suggestion of [
-        'Improve the layout',
-        'Add saved data',
-        'Polish the visual style',
-        'Prepare to publish',
-      ]) {
-        followupChips.append(
-          el(
-            'button',
-            {
-              class: 'prompt-starter',
-              onClick: () => {
-                ta.value = suggestion;
-                ta.focus();
-              },
-            },
-            suggestion,
-          ),
-        );
-      }
-      inputWrap.append(
-        el('div', { class: 'prompt-starters-group' }, [
-          el('div', { class: 'prompt-starters-label' }, 'Suggested next moves'),
-          followupChips,
-        ]),
-      );
-      inputWrap.append(wrap);
-    }
-
     // The chat pane has no header row of its own — app identity
     // (icon + name + status) and the app actions live in the window
     // titlebar (refined proposal RefinedBuilder). The chat pane is just a
@@ -1114,65 +856,33 @@ import type { BuilderChatSnapshot, BuilderMsgDTO } from './react/bridge.js';
 
     // ---------- Chat pane swap (chat ↔ history) ----------
     function renderChatPane(): void {
-      if (mountBuilderChat) {
-        if (!chatReactDispose) {
-          chatReactDispose = mountBuilderChat(chatBody, {
-            onReady: (u) => {
-              chatReactUpdate = u;
-              u(buildChatSnapshot());
-            },
-            onSend: (text) => void sendUserPrompt(text),
-            onCancel: () => agentAbort?.abort(),
-            onToggleGroup: (id) => {
-              chat = chat.map((x) =>
-                x.kind === 'toolGroup' && x.id === id ? { ...x, open: !x.open } : x,
-              );
-              renderChat();
-            },
-            onSetView: (view) => {
-              chatView = view;
-              renderChat();
-              refreshTopbarToggles();
-            },
-            onMountHistory: (host) => void renderHistoryInto(host),
-          });
-        } else if (chatReactUpdate) {
-          // A re-entrant call while mounted means a caller wants a repaint —
-          // for the history view that means a fresh fetch, so bump the nonce.
-          if (chatView === 'history') builderHistoryNonce += 1;
-          chatReactUpdate(buildChatSnapshot());
-        }
-        return;
+      if (!chatReactDispose) {
+        chatReactDispose = mountBuilderChat(chatBody, {
+          onReady: (u) => {
+            chatReactUpdate = u;
+            u(buildChatSnapshot());
+          },
+          onSend: (text) => void sendUserPrompt(text),
+          onCancel: () => agentAbort?.abort(),
+          onToggleGroup: (id) => {
+            chat = chat.map((x) =>
+              x.kind === 'toolGroup' && x.id === id ? { ...x, open: !x.open } : x,
+            );
+            renderChat();
+          },
+          onSetView: (view) => {
+            chatView = view;
+            renderChat();
+            refreshTopbarToggles();
+          },
+          onMountHistory: (host) => void renderHistoryInto(host),
+        });
+      } else if (chatReactUpdate) {
+        // A re-entrant call while mounted means a caller wants a repaint —
+        // for the history view that means a fresh fetch, so bump the nonce.
+        if (chatView === 'history') builderHistoryNonce += 1;
+        chatReactUpdate(buildChatSnapshot());
       }
-      chatBody.innerHTML = '';
-      if (chatView === 'history') {
-        const head = el('div', { class: 'chatpane-head' }, [
-          el('button', {
-            'aria-label': 'Back to chat',
-            class: 'btn-icon',
-            trustedHtml: Icon.ArrowLeft({ size: 14 }),
-            onClick: () => {
-              chatView = 'chat';
-              renderChatPane();
-              refreshTopbarToggles();
-            },
-          }),
-          el('span', { class: 'chatpane-head-title' }, 'Version history'),
-        ]);
-        const list = el('div', { class: 'history-list chatpane-history' });
-        chatBody.append(head);
-        chatBody.append(list);
-        void renderHistoryInto(list);
-        return;
-      }
-      // Default: live chat view. Recreate fresh containers; renderChat /
-      // renderInput repopulate them.
-      chatScroll = el('div', { class: 'chat-scroll' });
-      inputWrap = el('div', { class: 'chat-input-wrap' });
-      chatBody.append(chatScroll);
-      chatBody.append(inputWrap);
-      renderChat();
-      renderInput();
     }
 
     // ---------- Right pane ----------

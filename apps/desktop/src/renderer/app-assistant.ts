@@ -22,6 +22,7 @@ import {
   type TurnStreamEvent,
 } from './gateway-client.js';
 import { relativeTime } from './app-format.js';
+import { requireReactBridge } from './react/bridge.js';
 import type { AssistantSnapshot, AsstMsgDTO } from './react/bridge.js';
 import type { ShellContext } from './app-shell-context.js';
 
@@ -308,14 +309,11 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     let msgs: AsstMsg[] = [];
     let busy = false;
     let abort: AbortController | null = null;
-    let streamEl: HTMLElement | null = null;
     let disposed = false;
 
-    // Phase 3 (#325) — when the React bridge is present, this route keeps the
-    // stream, the message model, and the `richAnswer` renderer, and pushes a
-    // snapshot into React on every change. The vanilla DOM below is retained as
-    // a runnable fallback for any build without the bundle.
-    const mountReact = window.CentraidReact?.mountAssistant;
+    // This route owns the SSE stream, the message model, and the `richAnswer`
+    // renderer, and pushes a derived snapshot into the React AssistantScreen on
+    // every change.
     let reactUpdate: ((s: AssistantSnapshot) => void) | null = null;
 
     registerCleanup(() => {
@@ -324,33 +322,6 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     });
 
     const main = el('div', { class: 'has-wall' });
-    const body = el('div', { class: 'cd-asst' });
-    if (!mountReact) main.append(body);
-
-    // Left: threads.
-    const threadList = el('div', { class: 'cd-asst-threads' });
-    const newBtn = el(
-      'button',
-      { class: 'cd-asst-new', type: 'button', onClick: () => void selectThread(null) },
-      '+ New conversation',
-    );
-    const listWrap = el('aside', { class: 'cd-asst-side' }, [newBtn, threadList]);
-
-    // Right: transcript + composer.
-    const scroll = el('div', { class: 'cd-asst-scroll' });
-    const input = el('textarea', {
-      class: 'cd-asst-input',
-      rows: '1',
-      placeholder: 'Ask your vault anything…',
-    }) as HTMLTextAreaElement;
-    const sendBtn = el(
-      'button',
-      { class: 'cd-asst-send', type: 'button', 'aria-label': 'Send' },
-      '↑',
-    ) as HTMLButtonElement;
-    const composer = el('div', { class: 'cd-asst-composer' }, [input, sendBtn]);
-    const chat = el('section', { class: 'cd-asst-chat' }, [scroll, composer]);
-    if (!mountReact) body.append(listWrap, chat);
 
     // ── React snapshot derivation ────────────────────────────────────────
 
@@ -381,7 +352,12 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
         };
       }
       if (m.streaming) return { kind: 'ai', streaming: true, text: m.text };
-      return { kind: 'ai', streaming: false, html: richAnswer(m.text).outerHTML, error: Boolean(m.error) };
+      return {
+        kind: 'ai',
+        streaming: false,
+        html: richAnswer(m.text).outerHTML,
+        error: Boolean(m.error),
+      };
     };
 
     const buildSnapshot = (): AssistantSnapshot => ({
@@ -402,13 +378,7 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
 
     const setBusy = (b: boolean): void => {
       busy = b;
-      if (reactUpdate) {
-        pushReact();
-        return;
-      }
-      sendBtn.textContent = b ? '■' : '↑';
-      sendBtn.setAttribute('aria-label', b ? 'Stop' : 'Send');
-      input.toggleAttribute('data-busy', b);
+      pushReact();
     };
 
     async function deleteThread(id: string): Promise<void> {
@@ -427,133 +397,11 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     }
 
     function renderThreads(): void {
-      if (reactUpdate) {
-        pushReact();
-        return;
-      }
-      threadList.replaceChildren(
-        ...threads.map((t) => {
-          const row = el(
-            'button',
-            {
-              class: 'cd-asst-thread',
-              type: 'button',
-              'data-active': t.id === currentId ? 'true' : undefined,
-              onClick: () => void selectThread(t.id),
-            },
-            [
-              el('span', { class: 'cd-asst-thread-title' }, t.title || 'New conversation'),
-              el(
-                'span',
-                { class: 'cd-asst-thread-time' },
-                relativeTime(new Date(t.updatedAt).toISOString()),
-              ),
-            ],
-          );
-          row.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            void deleteThread(t.id);
-          });
-          return row;
-        }),
-      );
-      if (threads.length === 0) {
-        threadList.append(el('div', { class: 'cd-asst-threads-empty' }, 'No conversations yet'));
-      }
-    }
-
-    function toolPill(calls: AsstToolCall[]): HTMLElement {
-      const n = calls.length;
-      const running = calls.some((c) => c.state === 'run');
-      const failed = calls.filter((c) => c.state === 'error').length;
-      const ms = calls.reduce((a, c) => a + (c.durationMs ?? 0), 0);
-      const label = running
-        ? `querying the vault…`
-        : `${n} ${n === 1 ? 'query' : 'queries'}${ms ? ` · ${ms}ms` : ''}${failed ? ` · ${failed} failed` : ''}`;
-      const pill = el('details', { class: 'cd-asst-tools' }, [
-        el('summary', {}, label),
-        el(
-          'div',
-          { class: 'cd-asst-tools-body' },
-          calls.map((c) =>
-            el('div', { class: 'cd-asst-tool', 'data-state': c.state }, [
-              c.sql ? el('pre', { class: 'cd-asst-pre' }, c.sql) : el('span', {}, c.tool),
-              el(
-                'div',
-                { class: 'cd-asst-tool-meta' },
-                c.state === 'error'
-                  ? (c.errorText ?? 'failed')
-                  : c.state === 'ok'
-                    ? `${c.totalRows ?? '?'} rows${c.durationMs ? ` · ${c.durationMs}ms` : ''}`
-                    : 'running…',
-              ),
-            ]),
-          ),
-        ),
-      ]);
-      return pill;
-    }
-
-    function messageNode(m: AsstMsg): HTMLElement {
-      if (m.kind === 'user') {
-        return el('div', { class: 'cd-asst-msg cd-asst-msg-user' }, el('div', {}, m.text));
-      }
-      if (m.kind === 'tools') {
-        return el('div', { class: 'cd-asst-msg cd-asst-msg-tools' }, toolPill(m.calls));
-      }
-      const node = el('div', {
-        class: 'cd-asst-msg cd-asst-msg-ai',
-        'data-error': m.error ? 'true' : undefined,
-      });
-      if (m.streaming) {
-        const live = el('div', { class: 'cd-asst-live' }, m.text);
-        streamEl = live;
-        node.append(live, el('span', { class: 'cd-asst-cursor' }));
-      } else {
-        const rich = richAnswer(m.text);
-        node.append(rich);
-        hydrateRefs(rich);
-      }
-      return node;
-    }
-
-    function emptyState(): HTMLElement {
-      return el('div', { class: 'cd-asst-empty' }, [
-        el('div', { class: 'cd-asst-empty-title' }, 'Ask your vault'),
-        el(
-          'div',
-          { class: 'cd-asst-empty-sub' },
-          'Questions can span everything the vault holds — people, notes, money, events — and their connections.',
-        ),
-        el(
-          'div',
-          { class: 'cd-asst-suggest' },
-          SUGGESTIONS.map((q) =>
-            el(
-              'button',
-              {
-                class: 'cd-asst-suggest-chip',
-                type: 'button',
-                onClick: () => {
-                  input.value = q;
-                  input.focus();
-                },
-              },
-              q,
-            ),
-          ),
-        ),
-      ]);
+      pushReact();
     }
 
     function renderChat(): void {
-      if (reactUpdate) {
-        pushReact();
-        return;
-      }
-      streamEl = null;
-      scroll.replaceChildren(...(msgs.length === 0 ? [emptyState()] : msgs.map(messageNode)));
-      scroll.scrollTop = scroll.scrollHeight;
+      pushReact();
     }
 
     async function loadThreads(): Promise<void> {
@@ -573,10 +421,8 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
       renderThreads();
       if (!id) {
         renderChat();
-        input.focus();
         return;
       }
-      scroll.replaceChildren(el('div', { class: 'cd-asst-loading' }, 'Loading…'));
       try {
         const loaded = await loadConversation(ASSISTANT_APP_ID, id);
         if (disposed || currentId !== id) return;
@@ -620,9 +466,8 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
     }
 
     async function submit(textArg?: string): Promise<void> {
-      const text = (textArg ?? input.value).trim();
+      const text = (textArg ?? '').trim();
       if (!text || busy) return;
-      if (textArg === undefined) input.value = '';
       if (!currentId) {
         try {
           const created = await createConversation(ASSISTANT_APP_ID, '');
@@ -655,10 +500,7 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
           case 'assistant.delta': {
             const msg = ensureAi();
             msg.text += event.delta;
-            if (streamEl) {
-              streamEl.textContent = msg.text;
-              scroll.scrollTop = scroll.scrollHeight;
-            } else renderChat();
+            renderChat();
             return;
           }
           case 'tool.start': {
@@ -741,47 +583,24 @@ export function createAssistantModule(ctx: ShellContext): AssistantModule {
       }
     }
 
-    if (mountReact) {
-      const dispose = mountReact(main, {
-        suggestions: SUGGESTIONS,
-        onReady: (update) => {
-          reactUpdate = update;
-          update(buildSnapshot());
-        },
-        onSend: (text) => void submit(text),
-        onStop: () => {
-          abort?.abort();
-          setBusy(false);
-        },
-        onSelectThread: (id) => void selectThread(id),
-        onDeleteThread: (id) => void deleteThread(id),
-        hydrateRefs: (node) => hydrateRefs(node),
-      });
-      registerCleanup(dispose);
-      mountShellPage('assistant', main);
-      void loadThreads();
-      return;
-    }
-
-    sendBtn.addEventListener('click', () => {
-      if (busy) {
+    const dispose = requireReactBridge().mountAssistant(main, {
+      suggestions: SUGGESTIONS,
+      onReady: (update) => {
+        reactUpdate = update;
+        update(buildSnapshot());
+      },
+      onSend: (text) => void submit(text),
+      onStop: () => {
         abort?.abort();
         setBusy(false);
-        return;
-      }
-      void submit();
+      },
+      onSelectThread: (id) => void selectThread(id),
+      onDeleteThread: (id) => void deleteThread(id),
+      hydrateRefs: (node) => hydrateRefs(node),
     });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        void submit();
-      }
-    });
-
-    renderChat();
+    registerCleanup(dispose);
     mountShellPage('assistant', main);
     void loadThreads();
-    input.focus();
   }
 
   return { renderAssistant };
