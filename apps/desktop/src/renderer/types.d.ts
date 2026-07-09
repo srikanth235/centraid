@@ -78,7 +78,6 @@ declare global {
     el: ElHelper;
     openApp: (id: string) => void;
     renderHome: () => void;
-    openBuilder: () => void;
     openShare: (app: AppMetaResolved) => void;
     openSettings: () => void | Promise<void>;
     /**
@@ -392,7 +391,6 @@ declare global {
     Centraid: CentraidRoot;
     Chrome: ChromeApi;
     Profiles: ProfilesApi;
-    openBuilder: (opts: BuilderOptions) => () => void;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
   }
 

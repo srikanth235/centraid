@@ -32,12 +32,11 @@
     <script type="module" src="store.js"></script>
     <script type="module" src="chrome.js"></script>
     <script type="module" src="profiles.js"></script>
-    <script type="module" src="builder.js"></script>
     <script type="module" src="app-chat.js"></script>
     <!-- app.js (the vanilla shell IIFE) retired at the #325 flip — React owns
-         #root now, and first-run onboarding is a React screen mounted by
-         react-boot. chrome/profiles/builder/app-chat stay: they register the
-         window globals the delegated builder + per-app chat use. -->
+         #root now; onboarding and the builder are React screens mounted by
+         react-boot. chrome/profiles/app-chat stay: they register the window
+         globals the per-app chat + remaining vanilla surfaces use. -->
     <!-- React shell bundle (Vite → dist/renderer/react-boot.js): mounts the App
          on #root and hosts the #ui-preview gallery. -->
     <script type="module" src="react-boot.js"></script>

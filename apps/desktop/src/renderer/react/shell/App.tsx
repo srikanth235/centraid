@@ -204,7 +204,9 @@ export default function App(): JSX.Element {
               nav={nav}
               userApps={userApps}
               setUserApps={setUserApps}
-              drafts={drafts}
+              renderSidebar={renderSidebar}
+              prefs={prefs}
+              onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
             />
           );
         case 'starred':
