@@ -44,12 +44,12 @@ function mount(props: SettingsAppearanceBridgeProps): HTMLDivElement {
 describe('SettingsAppearanceScreen', () => {
   it('renders a theme card per preset, 5 accents, 4 tile treatments, and 4 preview tiles', () => {
     const el = mount(makeProps());
-    expect(el.querySelectorAll('.cd-theme-card').length).toBe(THEME_PRESETS.length);
+    expect(el.querySelectorAll('.themeCard').length).toBe(THEME_PRESETS.length);
     expect(el.querySelectorAll('.cd-swatch').length).toBe(5);
     expect(el.querySelectorAll('.ap-preview-tile').length).toBe(4);
     // active theme marked
     expect(
-      (el.querySelector('.cd-theme-card[data-name="light"]') as HTMLElement).dataset.active,
+      (el.querySelector('.themeCard[data-name="light"]') as HTMLElement).dataset.active,
     ).toBe('true');
     // active accent
     expect(el.querySelectorAll('.cd-swatch[data-active="true"]').length).toBe(1);
@@ -60,7 +60,7 @@ describe('SettingsAppearanceScreen', () => {
     const el = mount(props);
     const other = THEME_PRESETS.find((p) => p.name !== 'light');
     if (!other) throw new Error('need a second preset');
-    const card = el.querySelector(`.cd-theme-card[data-name="${other.name}"]`) as HTMLButtonElement;
+    const card = el.querySelector(`.themeCard[data-name="${other.name}"]`) as HTMLButtonElement;
     act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetTheme).toHaveBeenCalledWith(other.name);
     expect(card.dataset.active).toBe('true');
