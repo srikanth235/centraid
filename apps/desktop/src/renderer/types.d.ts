@@ -152,13 +152,6 @@ declare global {
     | 'automations'
     | 'settings';
 
-  interface AppChatMountOptions {
-    view: HTMLElement;
-    app: AppMetaResolved;
-    appId: string;
-    el: ElHelper;
-  }
-
   interface Window {
     CentraidTokens: CentraidTokensBridge;
     Icon: Record<IconName, IconRenderer>;
@@ -166,7 +159,6 @@ declare global {
     Store: CentraidStore;
     DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
-    AppChat: { mount: (opts: AppChatMountOptions) => () => void };
   }
 
   // Convenience type aliases reachable inside renderer scripts.
@@ -175,8 +167,8 @@ declare global {
   type ColorHexType = ColorHex;
   type ColorKeyType = ColorKey;
 
-  // Convenience values — set by store.ts / icons.ts on the window.
-  // Declared as `var` so renderer scripts can reference them unprefixed.
+  // Convenience values — set by store.ts / icons.ts on the window. Declared
+  // as `var` so renderer scripts can reference them unprefixed.
   var Icon: Record<IconName, IconRenderer>;
   var ICON_PALETTE: Palette;
   var Store: CentraidStore;

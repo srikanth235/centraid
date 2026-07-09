@@ -1,9 +1,9 @@
-import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type JSX, type ReactNode, useState } from 'react';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
 import { useShellActions } from '../actions.js';
-import { el } from '../el.js';
 import { iconSvg } from '../iconSvg.js';
+import AppChatPanel from './appchat/AppChatPanel.js';
 import { openPrompt } from '../prompt.js';
 import type { ShellNav } from '../ShellApp.js';
 import ShellFrame from '../ShellFrame.js';
@@ -11,13 +11,10 @@ import AppFrame from './AppFrame.js';
 import AppSettingsController from './AppSettingsController.js';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
-// vanilla openApp (app-appview.ts): its own .cd-window with a brand-chip lead +
-// Use/Build switch, the sandboxed iframe (AppFrame, native), and the per-app
-// agentic chat. The chat is window.AppChat — a large vanilla subsystem that
-// appends a FAB + panel to the app-view container; React renders that container
-// and delegates the chat mount into it via an effect (it survives as foreign
-// DOM at the container tail). The gear opens the React app-settings popover
-// (AppSettingsController) — knobs, linked automations, and the vault pane.
+// vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
+// sandboxed app iframe (AppFrame, native), the per-app agentic chat
+// (AppChatPanel — its own FAB + slide-out panel), and the gear popover
+// (AppSettingsController — knobs, linked automations, the vault pane).
 export interface AppViewRouteProps {
   app: AppMetaResolvedType;
   appId: string;
@@ -36,7 +33,6 @@ export default function AppViewRoute({
   onToggleSidebar,
 }: AppViewRouteProps): JSX.Element {
   const { confirm, enterBuilder, openNewAppSheet, showToast } = useShellActions();
-  const viewRef = useRef<HTMLDivElement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const renameFlow = async (): Promise<void> => {
@@ -71,17 +67,6 @@ export default function AppViewRoute({
       showToast(`Could not delete: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
-
-  // Delegate the per-app agentic chat to the vanilla window.AppChat, mounted
-  // into the app-view container (it appends its FAB + panel; React keeps the
-  // AppFrame child stable so the foreign nodes persist).
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!view || !appId || !window.AppChat) return;
-    const dispose = window.AppChat.mount({ view, app, appId, el });
-    return () => dispose();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appId]);
 
   const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
   const brandChip = (
@@ -148,7 +133,6 @@ export default function AppViewRoute({
       titlebarRight={titlebarRight}
     >
       <div
-        ref={viewRef}
         className="app-view"
         style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
@@ -157,6 +141,7 @@ export default function AppViewRoute({
             <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
           </div>
         </div>
+        {appId ? <AppChatPanel app={app} appId={appId} /> : null}
         {settingsOpen ? (
           <AppSettingsController
             app={app}
