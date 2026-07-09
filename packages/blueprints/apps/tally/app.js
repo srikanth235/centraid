@@ -19,34 +19,10 @@ import {
   readFailed,
   showSkeleton,
   toast,
+  wireThemeToggle,
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-
-// ---------- Tiny DOM helpers ----------
-
-function el(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
-}
-function h(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
-      e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const kid of kids.flat()) {
-    if (kid == null || kid === false) continue;
-    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return e;
-}
 
 // ---------- Constants ----------
 
@@ -89,10 +65,6 @@ const FRIEND_COLORS = [
 
 const CHECK_SVG =
   '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 6"/></svg>';
-const SUN_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>';
-const MOON_SVG =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
 
 function cat(c) {
   return CATS[c] || CATS.general;
@@ -440,7 +412,7 @@ function renderTopbar() {
 function render() {
   renderSidebar();
   renderTopbar();
-  $('themeBtn').innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
+  setThemeIcon();
   const wrap = $('wrap');
   wrap.replaceChildren();
 
@@ -1667,22 +1639,6 @@ async function refreshAll() {
   await loadView();
 }
 
-// ---------- Theme ----------
-
-function isDarkNow() {
-  const t = document.documentElement.dataset.theme;
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-}
-function toggleTheme() {
-  const dark = !isDarkNow();
-  const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
-  $('themeBtn').innerHTML = dark ? SUN_SVG : MOON_SVG;
-}
-
 // ---------- Search wiring ----------
 
 const applySearch = debounce(async () => {
@@ -1715,7 +1671,8 @@ $('addExpenseBtn').addEventListener('click', openAddExpense);
 $('newGroupBtn').addEventListener('click', openNewGroup);
 $('addFriendBtn').addEventListener('click', openAddFriend);
 $('settleBtn').addEventListener('click', openSettle);
-$('themeBtn').addEventListener('click', toggleTheme);
+// Kit theme toggle; setThemeIcon also refreshes after shell-driven theme flips.
+const setThemeIcon = wireThemeToggle($('themeBtn'));
 $('hamburger').addEventListener('click', () => $('root').classList.add('side-open'));
 $('sideClose').addEventListener('click', () => $('root').classList.remove('side-open'));
 $('scrim').addEventListener('click', () => $('root').classList.remove('side-open'));
@@ -1757,7 +1714,6 @@ window.addEventListener('resize', measure);
 
 // ---------- Boot ----------
 
-$('themeBtn').innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
 state.narrow = $('root').clientWidth < 900;
 $('root').classList.toggle('is-narrow', state.narrow);
 showSkeleton($('wrap'), 4);

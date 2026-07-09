@@ -15,6 +15,8 @@ import {
   armConfirm,
   barSpan,
   debounce,
+  el,
+  h,
   outcomeMessage,
   readFailed,
   showSkeleton,
@@ -22,31 +24,6 @@ import {
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-
-// ---------- Tiny DOM helpers ----------
-
-function el(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
-}
-function h(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
-      e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const kid of kids.flat()) {
-    if (kid == null || kid === false) continue;
-    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return e;
-}
 
 // ---------- Icons ----------
 

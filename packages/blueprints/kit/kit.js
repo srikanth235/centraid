@@ -25,6 +25,37 @@ import { entityKindLabel } from './elements.js';
 // where the mention-chip and reference-strip components also need it).
 export { entityKindLabel };
 
+// ---------- Tiny DOM builders (the h()/el() every app copied from Docs) -----
+
+/** Parse an HTML string and return its first element. */
+export function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+/**
+ * Hyperscript element builder: `h('div', { class, html, style, on* }, ...kids)`.
+ * Null/false props and kids are skipped; string kids become text nodes.
+ */
+export function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style') e.setAttribute('style', v);
+    else if (k.startsWith('on') && typeof v === 'function')
+      e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+
 // ---------- Native haptics (feature-detected, best-effort) ----------
 
 // The mobile shell exposes `window.centraid.haptic.*` on its native bridge;
@@ -237,6 +268,309 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
   el.height = height;
   el.label = label;
   return el;
+}
+
+// ---------- Attachments (the "shared pattern across apps", now actually shared) ----------
+// Small files travel inline as data: URIs through the command JSON; larger
+// ones stream to the vault's blob staging route and attach by sha (issue #296).
+
+export const BLOB_ROUTE = '/centraid/_vault/blobs';
+export const INLINE_ATTACH_BYTES = 256 * 1024;
+
+/** Read a File into a data: URI (the inline path for small attachments). */
+export function fileToDataUri(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+/**
+ * Stream a File to the blob staging route; resolves the staging receipt
+ * ({sha256, …}). `extra` appends pre-encoded query params (e.g. `&kind=…`).
+ */
+export async function stageFileBytes(file, extra = '') {
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return res.json();
+}
+
+/** "812 B" / "24 KB" / "1.3 MB" — `empty` is returned for 0/absent sizes. */
+export function fmtBytes(n, empty = '') {
+  if (!n || !Number.isFinite(Number(n))) return empty;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Fill `stripEl` with attachment tiles (image thumb or file link + size
+ * badge). The remove control arms on first click (kit armConfirm) and calls
+ * `onRemove(attachment_id)`; when that resolves to an executed outcome the
+ * tile drops immediately. Pass `onRemove: null` for a read-only strip (no
+ * remove control at all). `onZoom(attachment)`, when given, makes image
+ * thumbs zoomable.
+ */
+export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
+  stripEl.innerHTML = '';
+  for (const a of list ?? []) {
+    const tile = document.createElement('div');
+    tile.className = 'kit-attach-tile';
+    if (String(a.media_type).startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = a.content_uri;
+      img.alt = a.title ?? 'attachment';
+      if (onZoom) {
+        img.className = 'kit-attach-zoom';
+        img.addEventListener('click', () => onZoom(a));
+      }
+      tile.appendChild(img);
+    } else {
+      const link = document.createElement('a');
+      link.className = 'kit-attach-file';
+      link.href = a.content_uri;
+      link.download = a.title ?? 'file';
+      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
+      tile.appendChild(link);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'kit-attach-meta';
+    meta.textContent = fmtBytes(a.byte_size);
+    tile.appendChild(meta);
+    if (onRemove) {
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'kit-attach-remove';
+      rm.textContent = '×';
+      rm.title = 'Remove';
+      rm.setAttribute('aria-label', 'Remove attachment');
+      rm.addEventListener('click', async () => {
+        if (!armConfirm(rm, { armedLabel: 'Sure?' })) return;
+        const outcome = await onRemove(a.attachment_id);
+        if (outcome?.status === 'executed') tile.remove();
+      });
+      tile.appendChild(rm);
+    }
+    stripEl.appendChild(tile);
+  }
+}
+
+/**
+ * Wire a hidden `<input type=file>` to the attach flow: stage-or-inline each
+ * picked file, run the app's `attach` action, narrate each outcome. The app
+ * supplies its own consent voice: `act(action, input) → outcome`,
+ * `narrate(outcome) → bool` (false stops the batch), `notice(text)` for read
+ * errors, `refresh()` after the batch.
+ */
+export function wireAttachInput(inputEl, getSubjectId, { act, narrate, notice, refresh }) {
+  inputEl.addEventListener('change', async () => {
+    const subjectId = getSubjectId();
+    if (!subjectId) return;
+    for (const file of [...inputEl.files]) {
+      let input;
+      try {
+        if (file.size > INLINE_ATTACH_BYTES) {
+          const staged = await stageFileBytes(file);
+          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+        } else {
+          const dataUri = await fileToDataUri(file);
+          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+        }
+      } catch {
+        notice?.('Could not read that file.');
+        continue;
+      }
+      const outcome = await act('attach', input);
+      if (!narrate(outcome)) break;
+    }
+    inputEl.value = '';
+    await refresh?.();
+  });
+}
+
+// ---------- Anchored popover menu (Docs' openPopover, shared) ----------
+
+let popoverEl = null;
+let popoverCleanup = null;
+
+/** Whether a kit popover is open — layered Escape handlers ask before closing. */
+export function isPopoverOpen() {
+  return popoverEl != null;
+}
+
+/** Close the open kit popover (no-op when none is open). */
+export function closePopover() {
+  if (!popoverEl) return;
+  popoverCleanup?.();
+  popoverEl.remove();
+  popoverEl = null;
+  popoverCleanup = null;
+}
+
+/**
+ * Open a menu popover anchored to `anchor`: right-aligned, flips above when
+ * the viewport runs out, closes on outside click / scroll / resize. `build`
+ * receives the popover box and appends its content (see `popItem`).
+ */
+export function openPopover(anchor, build) {
+  closePopover();
+  const box = h('div', { class: 'kit-popover', role: 'menu' });
+  build(box);
+  document.body.appendChild(box);
+  const rect = anchor.getBoundingClientRect();
+  const left = Math.max(
+    8,
+    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
+  );
+  let top = rect.bottom + 4;
+  if (top + box.offsetHeight > window.innerHeight - 8)
+    top = Math.max(8, rect.top - box.offsetHeight - 4);
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
+  const onDoc = (e) => {
+    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
+  };
+  const onScroll = (e) => {
+    if (!box.contains(e.target)) closePopover();
+  };
+  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
+  window.addEventListener('resize', closePopover);
+  window.addEventListener('scroll', onScroll, true);
+  popoverEl = box;
+  popoverCleanup = () => {
+    clearTimeout(timer);
+    document.removeEventListener('click', onDoc);
+    window.removeEventListener('resize', closePopover);
+    window.removeEventListener('scroll', onScroll, true);
+  };
+}
+
+/** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
+export function popItem(
+  label,
+  onClick,
+  { danger = false, disabled = false, iconHtml = null, dotColor = null } = {},
+) {
+  const btn = h('button', {
+    type: 'button',
+    class: `kit-popover-item${danger ? ' danger' : ''}`,
+    role: 'menuitem',
+    disabled: disabled || undefined,
+    onclick: onClick,
+  });
+  if (iconHtml) btn.appendChild(el(iconHtml));
+  if (dotColor)
+    btn.appendChild(h('span', { class: 'kit-dotmini', style: `background:${dotColor};` }));
+  btn.appendChild(document.createTextNode(label));
+  return btn;
+}
+
+// ---------- Empty state ----------
+
+/**
+ * Fill `container` with the canonical empty state (icon tile, title, sub,
+ * optional action element) and unhide it.
+ */
+export function emptyState(container, { icon, title, sub, action } = {}) {
+  const subEl = h('div', { class: 'kit-empty-sub' }, sub ?? '');
+  if (action) subEl.appendChild(action);
+  const kids = [];
+  if (icon) {
+    kids.push(h('div', { class: 'kit-empty-icon' }, typeof icon === 'string' ? el(icon) : icon));
+  }
+  kids.push(h('div', { class: 'kit-empty-title' }, title ?? ''), subEl);
+  container.replaceChildren(...kids);
+  container.hidden = false;
+}
+
+// ---------- Search-hit snippets ----------
+
+/** Render a `⟦hit⟧` search snippet into `target`, marking the hits. */
+export function snippetInto(target, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      target.appendChild(mark);
+    } else {
+      target.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
+// ---------- Bulk runner (selection-bar actions) ----------
+
+/**
+ * Run `run(id)` over `ids` sequentially, narrating progress and the final
+ * tally. The app supplies its voice + cleanup: `notice(text)`,
+ * `friendly(outcome) → string|null` for failure copy, `after()` once done.
+ */
+export async function runBulk(ids, run, { progress, done, suffix = '', notice, friendly, after }) {
+  const n = ids.length;
+  let ok = 0;
+  let parked = 0;
+  const failures = [];
+  for (let i = 0; i < n; i += 1) {
+    notice(`${progress} ${i + 1} of ${n}…`);
+    const outcome = await run(ids[i]);
+    if (outcome?.status === 'executed') ok += 1;
+    else if (outcome?.status === 'parked') parked += 1;
+    else failures.push(friendly?.(outcome) ?? 'The write failed.');
+  }
+  notice(
+    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
+  );
+  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
+  if (parked > 0) parts.push(`${parked} waiting for approval.`);
+  toast(parts.join(' '));
+  await after?.();
+}
+
+// ---------- Theme toggle ----------
+
+const SUN_SVG =
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>';
+const MOON_SVG =
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
+
+/** Effective theme right now: the explicit data-theme, else the OS scheme. */
+export function isDarkNow() {
+  const t = document.documentElement.dataset.theme;
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/**
+ * Wire a header button as the app's light/dark toggle: sets `data-theme`,
+ * seeds `--bg-l` on first dark flip (the wall gradient's knob), and keeps a
+ * sun/moon icon in the button. `onChange(dark)` runs after each flip.
+ */
+export function wireThemeToggle(btn, { onChange } = {}) {
+  const setIcon = () => {
+    btn.innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
+  };
+  btn.addEventListener('click', () => {
+    const dark = !isDarkNow();
+    const root = document.documentElement;
+    root.dataset.theme = dark ? 'dark' : 'light';
+    if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
+    setIcon();
+    onChange?.(dark);
+  });
+  setIcon();
+  return setIcon;
 }
 
 // ============================================================================

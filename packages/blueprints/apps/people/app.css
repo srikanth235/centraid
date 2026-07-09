@@ -961,87 +961,8 @@ button {
   color: var(--ink);
 }
 
-/* ---------- Empty ---------- */
-
-.d-empty {
-  text-align: center;
-  padding: 64px 20px;
-  animation: d-fade 0.3s ease;
-}
-.d-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--r-card);
-  background: var(--bg-sunken);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 16px;
-  color: var(--ink-3);
-}
-.d-empty-title {
-  font: var(--t-strong);
-  margin-bottom: 4px;
-}
-.d-empty-sub {
-  font: var(--t-small);
-  color: var(--ink-2);
-  max-width: 38ch;
-  margin: 0 auto;
-}
-
-/* ---------- Popover ---------- */
-
-.d-popover {
-  position: fixed;
-  z-index: 55;
-  min-width: 206px;
-  max-width: 260px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-  padding: 5px;
-  animation: d-rise 0.14s var(--ease);
-}
-.d-popover-head {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  padding: 8px 10px 6px;
-}
-.d-popover-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 8px 11px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink);
-  font: var(--t-body);
-  text-align: left;
-}
-.d-popover-item:hover:not(:disabled) {
-  background: var(--bg-sunken);
-}
-.d-popover-item:disabled {
-  color: var(--ink-3);
-  cursor: default;
-}
-.d-popover-sep {
-  height: 1px;
-  background: var(--line);
-  margin: 4px 8px;
-}
-.d-dotmini {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
+/* Empty state + popover + status dot come from kit.css
+   (.kit-empty*, .kit-popover*, .kit-dotmini). */
 
 /* ---------- Details drawer ---------- */
 

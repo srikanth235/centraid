@@ -112,7 +112,9 @@ export class KitAvatar extends KitElement {
       style=${style}
       aria-hidden="true"
       data-shape=${this.shape || nothing}
-      >${this.src ? html`<img src=${this.src} alt="" />` : this.initials || avatarInitials(text)}</span
+      >${this.src
+        ? html`<img src=${this.src} alt="" />`
+        : this.initials || avatarInitials(text)}</span
     >`;
   }
 }
@@ -122,7 +124,7 @@ customElements.define('kit-avatar', KitAvatar);
 
 /**
  * `<kit-meter ratio tone>` — a slim proportion bar (former `barSpan()`).
- * `ratio` is 0–1 (clamped); `tone` is `warn` | `danger`.
+ * `ratio` is 0–1 (clamped); `tone` is `warn` | `danger` | `ok`.
  */
 export class KitMeter extends KitElement {
   static properties = {

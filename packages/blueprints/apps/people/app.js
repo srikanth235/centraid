@@ -14,41 +14,26 @@
 
 import {
   armConfirm,
+  closePopover,
   debounce,
+  el,
+  emptyState,
   fmtMoney,
+  h,
+  isPopoverOpen,
   letterAvatar,
+  openPopover,
   outcomeMessage,
+  popItem,
   readFailed,
+  runBulk,
   showSkeleton,
+  snippetInto,
   toast,
+  wireThemeToggle,
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-
-// ---------- Tiny DOM helpers (Docs' exact h()/el()) ----------
-
-function el(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
-}
-function h(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
-      e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const kid of kids.flat()) {
-    if (kid == null || kid === false) continue;
-    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return e;
-}
 
 // ---------- Icons (copied from the prototype) ----------
 
@@ -87,8 +72,6 @@ const I = {
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>',
   gift: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7S9 2 6.5 4 8 7 12 7zM12 7s3-5 5.5-3S16 7 12 7z"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-  sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>',
-  moon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
 };
 
 // The per-contact palette (prototype). Avatar hues come from here or a name
@@ -301,21 +284,6 @@ function statusOf(p) {
   return { key: 'ok', label: 'on track', color: 'var(--ok)' };
 }
 
-// Render a vault search snippet: ⟦…⟧ hit markers → <mark> (Docs' snippetInto).
-function snippetInto(elm, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      elm.appendChild(mark);
-    } else {
-      elm.appendChild(document.createTextNode(parts[i]));
-    }
-  }
-}
-
 // ---------- Row derivation (client-side, like the prototype's in-memory list) ----------
 
 function currentRows() {
@@ -369,62 +337,6 @@ function toggleSelect(id) {
 
 // ---------- Popover (kebab + move-to-circle) ----------
 
-let popoverEl = null;
-let popoverCleanup = null;
-
-function closePopover() {
-  if (!popoverEl) return;
-  popoverCleanup?.();
-  popoverEl.remove();
-  popoverEl = null;
-  popoverCleanup = null;
-}
-function openPopover(anchor, build) {
-  closePopover();
-  const box = h('div', { class: 'd-popover', role: 'menu' });
-  build(box);
-  document.body.appendChild(box);
-  const rect = anchor.getBoundingClientRect();
-  const left = Math.max(
-    8,
-    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
-  );
-  let top = rect.bottom + 4;
-  if (top + box.offsetHeight > window.innerHeight - 8)
-    top = Math.max(8, rect.top - box.offsetHeight - 4);
-  box.style.left = `${left}px`;
-  box.style.top = `${top}px`;
-  const onDoc = (e) => {
-    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
-  };
-  const onScroll = (e) => {
-    if (!box.contains(e.target)) closePopover();
-  };
-  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
-  window.addEventListener('resize', closePopover);
-  window.addEventListener('scroll', onScroll, true);
-  popoverEl = box;
-  popoverCleanup = () => {
-    clearTimeout(timer);
-    document.removeEventListener('click', onDoc);
-    window.removeEventListener('resize', closePopover);
-    window.removeEventListener('scroll', onScroll, true);
-  };
-}
-function popItem(label, onClick, { disabled = false, dotColor = null } = {}) {
-  const btn = h('button', {
-    type: 'button',
-    class: 'd-popover-item',
-    role: 'menuitem',
-    disabled: disabled || undefined,
-    onclick: onClick,
-  });
-  if (dotColor)
-    btn.appendChild(h('span', { class: 'd-dotmini', style: `background:${dotColor};` }));
-  btn.appendChild(document.createTextNode(label));
-  return btn;
-}
-
 function openPersonMenu(anchor, p) {
   openPopover(anchor, (box) => {
     box.appendChild(
@@ -439,8 +351,8 @@ function openPersonMenu(anchor, p) {
         toggleStar(p);
       }),
     );
-    box.appendChild(h('div', { class: 'd-popover-sep' }));
-    box.appendChild(h('p', { class: 'd-popover-head' }, 'Move to circle'));
+    box.appendChild(h('div', { class: 'kit-popover-sep' }));
+    box.appendChild(h('p', { class: 'kit-popover-head' }, 'Move to circle'));
     box.appendChild(
       popItem(
         'No circle',
@@ -490,29 +402,15 @@ async function logInteraction(p, kind, text) {
   await refresh();
 }
 
-// Loop an action over many rows: live progress, keep going past failures, one
-// summary toast (Docs' runBulk).
-async function runBulk(ids, run, { progress, done, suffix = '' }) {
-  const n = ids.length;
-  let ok = 0;
-  let parked = 0;
-  const failures = [];
-  for (let i = 0; i < n; i += 1) {
-    notice(`${progress} ${i + 1} of ${n}…`);
-    const outcome = await run(ids[i]);
-    if (outcome?.status === 'executed') ok += 1;
-    else if (outcome?.status === 'parked') parked += 1;
-    else failures.push(outcome?.reason ?? outcome?.predicate ?? 'The write failed.');
-  }
-  notice(
-    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
-  );
-  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
-  if (parked > 0) parts.push(`${parked} waiting for approval.`);
-  toast(parts.join(' '));
-  clearSelection();
-  await refresh();
-}
+// Bulk actions run through the kit's runBulk with the app's own voice.
+const bulkOpts = {
+  notice,
+  friendly: (outcome) => outcome?.reason ?? outcome?.predicate ?? null,
+  after: async () => {
+    clearSelection();
+    await refresh();
+  },
+};
 
 // ---------- Circle writes ----------
 
@@ -817,6 +715,7 @@ function renderBulk() {
     runBulk([...state.selected], (id) => act('star-person', { party_id: id }), {
       progress: 'Favoriting',
       done: 'Favorited',
+      ...bulkOpts,
     }),
   );
   const clear = h(
@@ -889,7 +788,7 @@ function gridCard(p) {
     h(
       'div',
       { class: 'd-card-meta' },
-      h('span', { class: 'd-dotmini', style: `background:${st.color};` }),
+      h('span', { class: 'kit-dotmini', style: `background:${st.color};` }),
       metaLine(p),
     ),
   );
@@ -955,7 +854,7 @@ function listRow(p) {
     h(
       'span',
       { class: 'd-cell status' },
-      h('span', { class: 'd-dotmini', style: `background:${st.color};` }),
+      h('span', { class: 'kit-dotmini', style: `background:${st.color};` }),
       st.label,
     ),
   );
@@ -973,16 +872,6 @@ function listRow(p) {
   });
   row.appendChild(h('div', { class: 'd-row-end' }, kebab));
   return row;
-}
-
-function emptyState(icon, title, sub) {
-  const box = $('empty');
-  box.replaceChildren(
-    h('div', { class: 'd-empty-icon' }, el(icon)),
-    h('div', { class: 'd-empty-title' }, title),
-    h('div', { class: 'd-empty-sub' }, sub),
-  );
-  box.hidden = false;
 }
 
 function renderListHead(rows) {
@@ -1054,7 +943,7 @@ function renderRows() {
       : nav.kind === 'reconnect'
         ? 'Nobody is overdue right now — nice.'
         : 'Add someone from the New button to start keeping in touch.';
-    emptyState(I.people, title, sub);
+    emptyState($('empty'), { icon: I.people, title, sub });
     return;
   }
 
@@ -1211,12 +1100,12 @@ function renderActivity(root) {
     root.replaceChildren(
       h(
         'div',
-        { class: 'd-empty' },
-        h('div', { class: 'd-empty-icon' }, el(I.activity)),
-        h('div', { class: 'd-empty-title' }, 'Nothing logged yet'),
+        { class: 'kit-empty' },
+        h('div', { class: 'kit-empty-icon' }, el(I.activity)),
+        h('div', { class: 'kit-empty-title' }, 'Nothing logged yet'),
         h(
           'div',
-          { class: 'd-empty-sub' },
+          { class: 'kit-empty-sub' },
           'Log a message or call from anyone’s profile and it shows up here.',
         ),
       ),
@@ -2145,23 +2034,6 @@ async function refresh() {
 
 // ---------- Chrome wiring ----------
 
-function isDarkNow() {
-  const t = document.documentElement.dataset.theme;
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-}
-function setThemeIcon() {
-  $('themeBtn').innerHTML = isDarkNow() ? I.sun : I.moon;
-}
-function toggleTheme() {
-  const dark = !isDarkNow();
-  const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
-  setThemeIcon();
-}
-
 $('newBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   state.newMenuOpen = !state.newMenuOpen;
@@ -2181,7 +2053,7 @@ $('viewList').addEventListener('click', () => {
   state.view = 'list';
   render();
 });
-$('themeBtn').addEventListener('click', toggleTheme);
+wireThemeToggle($('themeBtn'));
 $('sortBtn').addEventListener('click', () => {
   const keys = ['last', 'name', 'cadence'];
   const i = keys.indexOf(state.sortKey);
@@ -2212,7 +2084,7 @@ window.addEventListener('focus', refresh);
 // Layered Escape.
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (popoverEl) {
+  if (isPopoverOpen()) {
     closePopover();
     return;
   }
@@ -2248,7 +2120,6 @@ function measure() {
 
 // ---------- Boot ----------
 
-setThemeIcon();
 state.narrow = $('root').clientWidth < 860;
 $('root').classList.toggle('is-narrow', state.narrow);
 showSkeleton($('list'), 6);

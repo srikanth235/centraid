@@ -1,8 +1,9 @@
 /* ============================================================================
-   Centraid blueprint kit — shared UX primitives, synced across all 14 apps.
-   Canonical copy: packages/blueprints/kit/kit.css; each template carries a copy
-   next to index.html (like wall.css). Run `node scripts/sync-kit.mjs` after
-   editing.
+   Centraid blueprint kit — shared UX primitives for every template app.
+   Canonical (and ONLY) copy: packages/blueprints/kit/kit.css. Apps don't carry
+   their own copies — the app-engine runtime serves kit.css from this dir
+   (sharedAssetsDir → KIT_DIR) when the app folder has no override. Edit here
+   and every app picks it up on next load.
 
    ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
    Calm, instrument-grade, personal. Humanist system sans for content; system
@@ -417,6 +418,198 @@ kit-reference-strip {
 /* Healthy / passing reading (e.g. a strong password). */
 .kit-bar-fill[data-tone='ok'] {
   background: var(--ok, #16a34a);
+}
+
+/* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
+
+.kit-popover {
+  position: fixed;
+  z-index: 55;
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 12px;
+  box-shadow: var(--kit-shadow);
+  padding: 5px;
+  animation: kit-rise 0.14s var(--kit-ease);
+}
+.kit-popover-head {
+  font-family: var(--kit-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kit-faint);
+  padding: 8px 10px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-popover-scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.kit-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--text, #16181d);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-popover-item:hover:not(:disabled) {
+  background: var(--kit-surface-2);
+}
+.kit-popover-item:disabled {
+  color: var(--kit-faint);
+  cursor: default;
+}
+.kit-popover-item.danger {
+  color: var(--danger, #f04452);
+}
+.kit-popover-sep {
+  height: 1px;
+  background: var(--line, rgba(127, 127, 127, 0.25));
+  margin: 4px 8px;
+}
+/* Colour swatch dot inside a menu row (e.g. "move to circle"). */
+.kit-dotmini {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+@keyframes kit-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-popover {
+    animation: none;
+  }
+}
+
+/* ---------- Empty state (emptyState) --------------------------------------- */
+
+.kit-empty {
+  text-align: center;
+  padding: 64px 20px;
+}
+.kit-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--kit-radius);
+  background: var(--kit-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--kit-faint);
+}
+.kit-empty-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.kit-empty-sub {
+  font-size: 0.82rem;
+  color: var(--muted, #667085);
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.kit-empty-sub button {
+  margin-top: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+/* ---------- Attachment tiles (renderAttachments) --------------------------- */
+
+.kit-attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.kit-attach-strip:empty {
+  display: none;
+}
+.kit-attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: var(--radius-sm, 0.5rem);
+  overflow: hidden;
+  background: var(--kit-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kit-attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kit-attach-zoom {
+  cursor: zoom-in;
+}
+.kit-attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--kit-accent-deep);
+  word-break: break-word;
+  text-decoration: none;
+}
+.kit-attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--kit-mono);
+  font-size: 0.58rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0;
+}
+.kit-attach-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (prefers-reduced-motion: reduce) {

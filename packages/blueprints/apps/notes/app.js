@@ -18,17 +18,16 @@ import {
   readFailed,
   relTime,
   removeReference,
+  renderAttachments,
   renderReferenceStrip,
   resolveInlineSpans,
   showSkeleton,
+  snippetInto,
   toast,
+  wireAttachInput,
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-// Small files stay one-call inline; larger files stream to the vault's blob
-// staging route (issue #296).
-const BLOB_ROUTE = '/centraid/_vault/blobs';
-const INLINE_ATTACH_BYTES = 256 * 1024;
 
 let notes = [];
 let notebooks = [];
@@ -92,108 +91,6 @@ async function act(action, input) {
 
 function currentNote() {
   return notes.find((n) => n.note_id === viewingId) ?? null;
-}
-
-// ---------- Attachments (shared pattern across apps) ----------
-// Read a File as a base64 data: URI — small attachments travel inline, so the
-// browser does the encoding before the data ever leaves the app.
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
-
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// attach action claims the returned sha (that claim is the receipt).
-async function stageFileBytes(file) {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
-
-function fmtBytes(n) {
-  if (!n) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Render an attachment strip: images as thumbnails that open the lightbox,
-// everything else as a download tile, each with a remove control wired to
-// the detach action.
-function renderAttachments(stripEl, list, onRemove) {
-  stripEl.innerHTML = '';
-  for (const a of list ?? []) {
-    const tile = document.createElement('div');
-    tile.className = 'attach-tile';
-    if (String(a.media_type).startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = a.content_uri;
-      img.alt = a.title ?? 'attachment';
-      img.className = 'attach-zoom';
-      img.addEventListener('click', () => openLightbox(a.content_uri, a.title ?? ''));
-      tile.appendChild(img);
-    } else {
-      const link = document.createElement('a');
-      link.className = 'attach-file';
-      link.href = a.content_uri;
-      link.download = a.title ?? 'file';
-      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
-      tile.appendChild(link);
-    }
-    const meta = document.createElement('span');
-    meta.className = 'attach-meta';
-    meta.textContent = fmtBytes(a.byte_size);
-    tile.appendChild(meta);
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'attach-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove';
-    rm.addEventListener('click', () => onRemove(a.attachment_id));
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
-}
-
-// Wire a file <input> so each chosen file is attached to the current subject.
-function wireAttachInput(inputEl, getSubjectId) {
-  inputEl.addEventListener('change', async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
-      // Large files stage through the blob route and attach by sha; small
-      // ones keep the one-call inline data: URI path (issue #296).
-      let input;
-      try {
-        if (file.size > INLINE_ATTACH_BYTES) {
-          const staged = await stageFileBytes(file);
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
-        } else {
-          const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
-        }
-      } catch {
-        notice('Could not read that file.');
-        continue;
-      }
-      const outcome = await act('attach', input);
-      if (!narrate(outcome, refresh)) break;
-    }
-    inputEl.value = '';
-    await refresh();
-  });
 }
 
 // ---------- Cross-references (issue #272) ----------
@@ -436,22 +333,6 @@ function previewText(body, term) {
     if (at > 100) return `…${flat.slice(at - 40, at - 40 + 200)}`;
   }
   return flat.slice(0, 200);
-}
-
-// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// the vault returns become <mark>, and note content never parses as HTML.
-function snippetInto(el, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      el.appendChild(mark);
-    } else {
-      el.appendChild(document.createTextNode(parts[i]));
-    }
-  }
 }
 
 // Searching asks the vault, not a local copy: the FTS5 index matches over
@@ -850,7 +731,9 @@ function renderNoteView(note) {
   $('pinButton').textContent = note.pinned === 1 ? 'Unpin' : 'Pin';
   renderNoteBody(note);
   renderMoveSelect(note);
-  renderAttachments($('attachStrip'), note.attachments, removeAttachment);
+  renderAttachments($('attachStrip'), note.attachments, removeAttachment, {
+    onZoom: (a) => openLightbox(a.content_uri, a.title ?? ''),
+  });
   renderReferences($('refStrip'), note.references, inlineLinkIds(draft.body, note.references));
 }
 
@@ -1204,9 +1087,15 @@ $('cancelNotebook').addEventListener('click', () => {
 async function removeAttachment(attachmentId) {
   const outcome = await act('detach', { attachment_id: attachmentId });
   if (narrate(outcome, refresh)) await refresh();
+  return outcome;
 }
 
-wireAttachInput($('attachInput'), () => viewingId);
+wireAttachInput($('attachInput'), () => viewingId, {
+  act,
+  narrate: (o) => narrate(o, refresh),
+  notice,
+  refresh,
+});
 
 $('addRefButton').addEventListener('click', startMention);
 

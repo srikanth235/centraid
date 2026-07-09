@@ -792,77 +792,11 @@ input.chip-rename-input {
 }
 
 /* ---------- Attachments -------------------------------------------------- */
+/* The strip + tiles are the kit's .kit-attach-* primitive (kit.css); only the
+   app-chrome wrapper and add control live here. */
 
 .attach-block {
   margin-top: 1rem;
-}
-.attach-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.attach-strip:empty {
-  display: none;
-}
-.attach-tile {
-  position: relative;
-  width: 5rem;
-  height: 5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.attach-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.attach-tile img.attach-zoom {
-  cursor: zoom-in;
-}
-.attach-file {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  padding: 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  color: var(--accent-deep);
-  word-break: break-word;
-  text-decoration: none;
-}
-.attach-meta {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  font-family: var(--mono);
-  font-size: 0.56rem;
-  text-align: center;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 0.05rem 0;
-}
-.attach-remove {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
-  width: 1.3rem;
-  height: 1.3rem;
-  line-height: 1;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .attach-add {
   display: inline-block;

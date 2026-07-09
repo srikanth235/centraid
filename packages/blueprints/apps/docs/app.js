@@ -14,38 +14,30 @@
 // Sharing still has no vault signal (no per-person "shared" edge), so there
 // is honestly no sharing UI at all.
 
-import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  closePopover,
+  debounce,
+  el,
+  emptyState,
+  fmtBytes as fmtBytesBase,
+  h,
+  openPopover,
+  outcomeMessage,
+  popItem,
+  readFailed,
+  runBulk as runBulkBase,
+  showSkeleton,
+  snippetInto,
+  stageFileBytes,
+  toast,
+  wireThemeToggle,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 // Bytes stream to the blob staging route (issue #296) — no base64 through
 // command JSON — so big documents fit; the route itself caps at 512 MB.
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
-const BLOB_ROUTE = '/centraid/_vault/blobs';
-
-// ---------- Tiny DOM helpers ----------
-
-function el(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
-}
-function h(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
-      e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const kid of kids.flat()) {
-    if (kid == null || kid === false) continue;
-    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return e;
-}
 
 // ---------- Icons ----------
 
@@ -74,8 +66,6 @@ const I = {
     '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
   download:
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
-  sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>',
-  moon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
 };
 
 // ---------- State ----------
@@ -158,12 +148,8 @@ async function act(action, input) {
 
 // ---------- Formatting ----------
 
-function fmtBytes(n) {
-  if (!n) return '—';
-  if (n < 1024) return `${n} B`;
-  if (n < 1048576) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1048576).toFixed(1)} MB`;
-}
+// The drive shows an em dash for absent sizes everywhere it prints bytes.
+const fmtBytes = (n) => fmtBytesBase(n, '—');
 function fmtDate(iso) {
   if (!iso) return '';
   try {
@@ -193,22 +179,6 @@ function purgeCountdown(iso) {
   if (days <= 0) return 'purges today';
   if (days === 1) return 'purges tomorrow';
   return `purges in ${days} days`;
-}
-
-// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// become <mark>; document text never parses as HTML.
-function snippetInto(elm, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      elm.appendChild(mark);
-    } else {
-      elm.appendChild(document.createTextNode(parts[i]));
-    }
-  }
 }
 
 // ---------- File types ----------
@@ -335,61 +305,6 @@ function toggleSelect(id, index, shift) {
 
 // ---------- Popover (kebab + move) ----------
 
-let popoverEl = null;
-let popoverCleanup = null;
-
-function closePopover() {
-  if (!popoverEl) return;
-  popoverCleanup?.();
-  popoverEl.remove();
-  popoverEl = null;
-  popoverCleanup = null;
-}
-function openPopover(anchor, build) {
-  closePopover();
-  const box = h('div', { class: 'd-popover', role: 'menu' });
-  build(box);
-  document.body.appendChild(box);
-  const rect = anchor.getBoundingClientRect();
-  const left = Math.max(
-    8,
-    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
-  );
-  let top = rect.bottom + 4;
-  if (top + box.offsetHeight > window.innerHeight - 8)
-    top = Math.max(8, rect.top - box.offsetHeight - 4);
-  box.style.left = `${left}px`;
-  box.style.top = `${top}px`;
-  const onDoc = (e) => {
-    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
-  };
-  const onScroll = (e) => {
-    if (!box.contains(e.target)) closePopover();
-  };
-  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
-  window.addEventListener('resize', closePopover);
-  window.addEventListener('scroll', onScroll, true);
-  popoverEl = box;
-  popoverCleanup = () => {
-    clearTimeout(timer);
-    document.removeEventListener('click', onDoc);
-    window.removeEventListener('resize', closePopover);
-    window.removeEventListener('scroll', onScroll, true);
-  };
-}
-function popItem(label, onClick, { danger = false, disabled = false, iconHtml = null } = {}) {
-  const btn = h('button', {
-    type: 'button',
-    class: `d-popover-item${danger ? ' danger' : ''}`,
-    role: 'menuitem',
-    disabled: disabled || undefined,
-    onclick: onClick,
-  });
-  if (iconHtml) btn.appendChild(el(iconHtml));
-  btn.appendChild(document.createTextNode(label));
-  return btn;
-}
-
 // One shared "Move to…" tree for the kebab and the bulk toolbar.
 function openMovePopover(anchor, docs) {
   const ids = docs.map((d) => d.content_id);
@@ -398,11 +313,11 @@ function openMovePopover(anchor, docs) {
     box.appendChild(
       h(
         'p',
-        { class: 'd-popover-head' },
+        { class: 'kit-popover-head' },
         single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
       ),
     );
-    const scroll = h('div', { class: 'd-popover-scroll' });
+    const scroll = h('div', { class: 'kit-popover-scroll' });
     const target = (folderId, name, depth) => {
       const btn = popItem(name, async () => {
         closePopover();
@@ -430,7 +345,7 @@ function openDocMenu(anchor, doc) {
     const dl = h(
       'a',
       {
-        class: 'd-popover-item',
+        class: 'kit-popover-item',
         role: 'menuitem',
         href: doc.content_uri,
         download: doc.title ?? 'file',
@@ -452,7 +367,7 @@ function openDocMenu(anchor, doc) {
       }),
     );
     box.appendChild(popItem('Move to…', () => openMovePopover(anchor, [doc])));
-    box.appendChild(h('div', { class: 'd-popover-sep' }));
+    box.appendChild(h('div', { class: 'kit-popover-sep' }));
     box.appendChild(
       popItem(
         'Trash',
@@ -531,29 +446,19 @@ async function startRenameDoc(doc) {
   }
 }
 
-// Loop an action over many rows: live progress, keep going past failures,
-// one summary toast at the end.
-async function runBulk(ids, run, { progress, done, suffix = '' }) {
-  const n = ids.length;
-  let ok = 0;
-  let parked = 0;
-  const failures = [];
-  for (let i = 0; i < n; i += 1) {
-    notice(`${progress} ${i + 1} of ${n}…`);
-    const outcome = await run(ids[i]);
-    if (outcome?.status === 'executed') ok += 1;
-    else if (outcome?.status === 'parked') parked += 1;
-    else failures.push(friendlyOutcome(outcome) ?? 'The write failed.');
-  }
-  notice(
-    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
-  );
-  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
-  if (parked > 0) parts.push(`${parked} waiting for approval.`);
-  toast(parts.join(' '));
-  clearSelection();
-  await refresh();
-}
+// Loop an action over many rows (kit runBulk) in this app's voice: our
+// notice banner, our friendly failure copy, and the old hard-wired tail —
+// clear the selection, then refresh.
+const runBulk = (ids, run, opts) =>
+  runBulkBase(ids, run, {
+    ...opts,
+    notice,
+    friendly: friendlyOutcome,
+    after: async () => {
+      clearSelection();
+      await refresh();
+    },
+  });
 
 // ---------- Folder writes ----------
 
@@ -589,22 +494,9 @@ async function deleteFolder(folder) {
 
 // ---------- Upload (picker + drag-and-drop) ----------
 
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// upload action claims the returned sha (that claim is the receipt).
-async function stageFileBytes(file) {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
-
+// Each file's bytes stage into the vault's CAS via kit stageFileBytes
+// (issue #296); the upload action claims the returned sha — that claim is
+// the receipt.
 async function uploadFiles(fileList) {
   if (uploading) return;
   const files = [...fileList];
@@ -1125,18 +1017,6 @@ function listRow(doc, index) {
   return row;
 }
 
-function emptyState(icon, title, sub, actionEl) {
-  const box = $('empty');
-  const subEl = h('div', { class: 'd-empty-sub' }, sub);
-  if (actionEl) subEl.appendChild(actionEl);
-  box.replaceChildren(
-    h('div', { class: 'd-empty-icon' }, el(icon)),
-    h('div', { class: 'd-empty-title' }, title),
-    subEl,
-  );
-  box.hidden = false;
-}
-
 function renderRows() {
   const rows = visibleRows;
   const grid = $('grid');
@@ -1154,46 +1034,59 @@ function renderRows() {
 
   if (rows.length === 0) {
     if (state.nav.kind === 'starred' && state.type === 'all') {
-      emptyState(
-        I.star,
-        'Nothing starred yet',
-        'Star a document from its menu to pin it here. It is one star across your vault — photos you favorite land here too.',
-      );
+      emptyState(empty, {
+        icon: I.star,
+        title: 'Nothing starred yet',
+        sub: 'Star a document from its menu to pin it here. It is one star across your vault — photos you favorite land here too.',
+      });
     } else if (state.search.trim()) {
-      emptyState(
-        I.allDocs,
-        'No matches',
-        `No documents match “${state.search.trim()}”. Try fewer words.`,
-      );
+      emptyState(empty, {
+        icon: I.allDocs,
+        title: 'No matches',
+        sub: `No documents match “${state.search.trim()}”. Try fewer words.`,
+      });
     } else if (state.nav.kind === 'trash') {
-      emptyState(I.trash, 'Trash is empty', 'Trashed documents purge after about 30 days.');
+      emptyState(empty, {
+        icon: I.trash,
+        title: 'Trash is empty',
+        sub: 'Trashed documents purge after about 30 days.',
+      });
     } else if (state.type !== 'all') {
-      emptyState(
-        I.allDocs,
-        'No matches',
-        'No documents of this type here. Clear the filter to see everything.',
-      );
+      emptyState(empty, {
+        icon: I.allDocs,
+        title: 'No matches',
+        sub: 'No documents of this type here. Clear the filter to see everything.',
+      });
     } else if (state.nav.kind === 'folder') {
       const up = h(
         'button',
         { type: 'button', onclick: () => $('uploadInput').click() },
         'Upload to this folder',
       );
-      emptyState(I.folder, 'Empty folder', 'Nothing filed here yet.', up);
+      emptyState(empty, {
+        icon: I.folder,
+        title: 'Empty folder',
+        sub: 'Nothing filed here yet.',
+        action: up,
+      });
     } else if (activeFiles().length === 0) {
       const up = h(
         'button',
         { type: 'button', onclick: () => $('uploadInput').click() },
         'Upload your first document',
       );
-      emptyState(
-        I.allDocs,
-        'Your drive is empty',
-        'Leases, IDs, warranties, tax forms — file the important stuff here.',
-        up,
-      );
+      emptyState(empty, {
+        icon: I.allDocs,
+        title: 'Your drive is empty',
+        sub: 'Leases, IDs, warranties, tax forms — file the important stuff here.',
+        action: up,
+      });
     } else {
-      emptyState(I.allDocs, 'Nothing here', 'No documents to show.');
+      emptyState(empty, {
+        icon: I.allDocs,
+        title: 'Nothing here',
+        sub: 'No documents to show.',
+      });
     }
     return;
   }
@@ -1665,23 +1558,6 @@ async function refresh() {
 
 // ---------- Chrome wiring ----------
 
-function isDarkNow() {
-  const t = document.documentElement.dataset.theme;
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-}
-function setThemeIcon() {
-  $('themeBtn').innerHTML = isDarkNow() ? I.sun : I.moon;
-}
-function toggleTheme() {
-  const dark = !isDarkNow();
-  const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
-  setThemeIcon();
-}
-
 $('newBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   state.newMenuOpen = !state.newMenuOpen;
@@ -1701,7 +1577,7 @@ $('viewList').addEventListener('click', () => {
   state.view = 'list';
   render();
 });
-$('themeBtn').addEventListener('click', toggleTheme);
+wireThemeToggle($('themeBtn'));
 $('sortBtn').addEventListener('click', () => {
   const order = ['added', 'name', 'size'];
   if (state.sortDir === -1 && state.sortKey !== 'name') {
@@ -1813,7 +1689,6 @@ function measure() {
 
 // ---------- Boot ----------
 
-setThemeIcon();
 $('root').classList.toggle('is-narrow', $('root').clientWidth < 860);
 state.narrow = $('root').clientWidth < 860;
 showSkeleton($('list'), 6);

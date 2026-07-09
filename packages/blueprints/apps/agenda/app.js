@@ -11,15 +11,14 @@ import {
   localDayKey,
   outcomeMessage,
   readFailed,
+  renderAttachments,
   showSkeleton,
+  snippetInto,
   toast,
+  wireAttachInput,
 } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
-// Small files stay one-call inline; larger files stream to the vault's blob
-// staging route (issue #296).
-const BLOB_ROUTE = '/centraid/_vault/blobs';
-const INLINE_ATTACH_BYTES = 256 * 1024;
 
 let calendars = [];
 let events = [];
@@ -225,109 +224,7 @@ async function act(action, input) {
   }
 }
 
-// ---------- Attachments (shared pattern across apps) ----------
-
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
-
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// attach action claims the returned sha (that claim is the receipt).
-async function stageFileBytes(file) {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
-
-function fmtBytes(n) {
-  if (!n) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Render an attachment strip: images as thumbnails, everything else as a
-// download tile, each with an arm-to-confirm remove wired to detach.
-function renderAttachments(stripEl, list, onRemove) {
-  stripEl.innerHTML = '';
-  for (const a of list ?? []) {
-    const tile = document.createElement('div');
-    tile.className = 'attach-tile';
-    if (String(a.media_type).startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = a.content_uri;
-      img.alt = a.title ?? 'attachment';
-      tile.appendChild(img);
-    } else {
-      const link = document.createElement('a');
-      link.className = 'attach-file';
-      link.href = a.content_uri;
-      link.download = a.title ?? 'file';
-      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
-      tile.appendChild(link);
-    }
-    const meta = document.createElement('span');
-    meta.className = 'attach-meta';
-    meta.textContent = fmtBytes(a.byte_size);
-    tile.appendChild(meta);
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'attach-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove';
-    rm.setAttribute('aria-label', 'Remove attachment');
-    rm.addEventListener('click', async () => {
-      if (!armConfirm(rm, { armedLabel: 'Sure?' })) return;
-      const outcome = await onRemove(a.attachment_id);
-      if (outcome?.status === 'executed') tile.remove();
-    });
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
-}
-
-// Wire the shared file <input> so each chosen file is attached to the
-// current subject (set by whichever attach button was pressed last).
-function wireAttachInput(inputEl, getSubjectId) {
-  inputEl.addEventListener('change', async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
-      // Large files stage through the blob route and attach by sha; small
-      // ones keep the one-call inline data: URI path (issue #296).
-      let input;
-      try {
-        if (file.size > INLINE_ATTACH_BYTES) {
-          const staged = await stageFileBytes(file);
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
-        } else {
-          const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
-        }
-      } catch {
-        notice('Could not read that file.');
-        continue;
-      }
-      const outcome = await act('attach', input);
-      if (!narrate(outcome)) break;
-    }
-    inputEl.value = '';
-    await load();
-  });
-}
+// ---------- Attachments (shared pattern, now served by the kit) ----------
 
 let attachTarget = null;
 
@@ -755,19 +652,6 @@ function renderWeek() {
 
 // Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
 // the vault returns become <mark>, and event text never parses as HTML.
-function snippetInto(el, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      el.appendChild(mark);
-    } else {
-      el.appendChild(document.createTextNode(parts[i]));
-    }
-  }
-}
 
 function renderList() {
   const list = $('dayList');
@@ -854,7 +738,7 @@ function renderRow(seg) {
     const frag = document.createDocumentFragment();
     frag.appendChild(row);
     const strip = document.createElement('div');
-    strip.className = 'attach-strip row-attachments';
+    strip.className = 'kit-attach-strip row-attachments';
     renderAttachments(strip, ev.attachments, removeAttachment);
     frag.appendChild(strip);
     return frag;
@@ -943,7 +827,7 @@ function buildEventDetail(panel, ev) {
 
   if (ev.attachments?.length) {
     const strip = document.createElement('div');
-    strip.className = 'attach-strip panel-attachments';
+    strip.className = 'kit-attach-strip panel-attachments';
     renderAttachments(strip, ev.attachments, removeAttachment);
     panel.appendChild(strip);
   }
@@ -1266,7 +1150,7 @@ window.addEventListener('keydown', (e) => {
 
 // One hidden file input serves the whole app; attach buttons set
 // attachTarget just before triggering it.
-wireAttachInput($('attachInput'), () => attachTarget);
+wireAttachInput($('attachInput'), () => attachTarget, { act, narrate, notice, refresh: load });
 
 window.addEventListener('focus', () => load());
 setSmartDefaults();

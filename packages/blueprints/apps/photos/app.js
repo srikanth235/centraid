@@ -11,11 +11,14 @@
 
 import {
   armConfirm,
+  BLOB_ROUTE,
   debounce,
+  fmtBytes,
   localDayKey,
   outcomeMessage,
   readFailed,
   showSkeleton,
+  stageFileBytes,
   toast,
 } from './kit.js';
 
@@ -25,11 +28,6 @@ const $ = (id) => document.getElementById(id);
 // (issue #296) — no base64 through command JSON — so a phone video fits;
 // the route itself caps at 512 MB.
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
-
-// The vault's byte endpoint (issue #296): blob-backed content serves here
-// with Range + immutable caching; the desktop shell authenticates the
-// request at the network layer, so bare <img>/<video> tags just work.
-const BLOB_ROUTE = '/centraid/_vault/blobs';
 
 // Tiles never render the full-resolution bytes — each image is downscaled
 // once to this longest edge and cached; the lightbox keeps the original.
@@ -127,13 +125,6 @@ function toLocalInputValue(iso) {
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function fmtBytes(n) {
-  if (n == null || !Number.isFinite(n)) return null;
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Byte size straight off the asset row when the vault recorded one,
@@ -1391,22 +1382,6 @@ async function renderFaces(host, assetId, note) {
 }
 
 // ---------- Upload ----------
-
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// returned sha is what the upload action claims.
-async function stageFileBytes(file, extra = '') {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
 
 // 64-bit dHash (issue #299 Tier 0): 9×8 grayscale, each bit = "left pixel
 // brighter than its right neighbour". The canvas is the client's raster
