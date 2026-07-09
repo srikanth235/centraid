@@ -17,6 +17,7 @@ import DiscoverRoute from './routes/DiscoverRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
+import SettingsRoute from './routes/SettingsRoute.js';
 import TemplatesRoute from './routes/TemplatesRoute.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast +
@@ -123,6 +124,8 @@ export default function App(): JSX.Element {
           return <DiscoverRoute />;
         case 'templates':
           return <TemplatesRoute />;
+        case 'settings':
+          return <SettingsRoute prefs={prefs} setPrefs={setPrefs} />;
         case 'starred':
           // Port of the vanilla renderStarred — a pure empty-state page.
           return (
@@ -135,7 +138,7 @@ export default function App(): JSX.Element {
           return <PageEmpty message="This screen is being migrated to React." />;
       }
     },
-    [userApps, drafts, prefs.tileVariant, isStarred, toggleStar, refresh],
+    [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh],
   );
 
   return (
