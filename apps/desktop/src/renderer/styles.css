@@ -1453,10 +1453,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3402,10 +3404,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -5115,12 +5119,6 @@ select.input option {
    --sidebar-divider / --bg-l were added in the previous pass).
    ============================================================ */
 
-.cd-shell-host {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
 .cd-window {
   position: relative;
   flex: 1;
@@ -6264,33 +6262,6 @@ select.input option {
    the apps shelf the rest of the column rather than vertically centering. */
 
 /* Day1Composer — bg-elev card with descriptive placeholder + toolbar. */
-.cd-composer-attach,
-.cd-composer-mic {
-  width: 28px;
-  height: 28px;
-}
-
-.cd-hero-build-btn {
-  height: 30px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-weight: 600;
-  font-size: 13px;
-}
-.cd-hero-build-btn[disabled] {
-  opacity: 0.45;
-  cursor: default;
-}
-.cd-hero-build-btn:hover:not([disabled]) {
-  background: color-mix(in oklab, var(--accent) 88%, white 12%);
-}
 .cd-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -6342,68 +6313,10 @@ select.input option {
 .cd-hsec-spacer {
   flex: 1;
 }
-.cd-hsec-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--success);
-}
 
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
-.cd-home-header {
-  max-width: 1080px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-.cd-home-header-text {
-  min-width: 0;
-  flex: 1;
-}
-.cd-home-header h1 {
-  margin: 6px 0 0;
-  font: var(--t-display-1);
-  font-size: 34px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-}
 
 /* "Starred" + "All apps" sections */
-.cd-section {
-  max-width: 1080px;
-  margin: 36px auto 0;
-}
-.cd-section-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-.cd-section-head h2 {
-  margin: 0;
-  font: var(--t-h2);
-  font-size: 16px;
-  letter-spacing: -0.015em;
-  color: var(--ink);
-}
-.cd-section-head .cd-section-meta {
-  font-family: var(--font-mono);
-  color: var(--ink-4);
-  font-size: 11px;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-.cd-section-spacer {
-  flex: 1;
-}
-.cd-section-sort {
-  font-size: 11.5px;
-  padding: 3px 9px;
-  background: transparent;
-  border: 0.5px solid var(--line);
-}
 .cd-eyebrow {
   font-family: var(--font-mono);
   font-size: 10.5px;
@@ -6469,58 +6382,6 @@ select.input option {
 
 /* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
    the right of the greeting; expanded it swaps in a composer card. */
-.cd-build-pill {
-  width: 360px;
-  max-width: 540px;
-}
-.cd-build-pill[data-expanded='true'] {
-  width: 100%;
-}
-.cd-build-pill-collapsed {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 14px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  color: var(--ink-3);
-  cursor: text;
-  font: inherit;
-  transition:
-    background 140ms,
-    border-color 140ms;
-}
-.cd-build-pill-collapsed:hover {
-  border-color: var(--line-strong);
-}
-.cd-build-pill[data-expanded='true'] .cd-build-pill-collapsed {
-  display: none;
-}
-.cd-build-pill-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-.cd-build-pill-label {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body);
-  font-size: 13px;
-  color: var(--ink-3);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .cd-build-pill-label + .cd-kbd,
 .cd-build-pill .cd-kbd {
   font-size: 10.5px;
@@ -6530,167 +6391,11 @@ select.input option {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink-4);
 }
-.cd-build-pill-expanded {
-  display: none;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 12px 10px;
-  border-radius: 14px;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 86%, transparent);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18);
-}
-.cd-build-pill[data-expanded='true'] .cd-build-pill-expanded {
-  display: flex;
-}
-.cd-build-pill-expanded textarea {
-  width: 100%;
-  resize: none;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.5;
-  padding: 4px 4px 8px;
-}
-.cd-build-pill-expanded textarea::placeholder {
-  color: var(--ink-4);
-}
 
 /* §A1 — HomeShelf: tabbed shelf at the bottom of the Day-1 home. Same
    surface as the rest of Home; same RefinedAppTile the All apps page uses. */
-.cd-shelf {
-  padding: 44px 56px 56px;
-}
-.cd-shelf-inner {
-  max-width: 1180px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.cd-shelf-tabrow {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.cd-shelf-tabs {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-}
-.cd-shelf-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 14px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-3);
-  font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.cd-shelf-tab[data-active='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-  color: var(--ink);
-  font-weight: 600;
-}
-.cd-shelf-tab-count {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0;
-  color: var(--ink-4);
-}
-.cd-shelf-tab[data-active='true'] .cd-shelf-tab-count {
-  color: var(--ink-3);
-}
-.cd-shelf-spacer {
-  flex: 1;
-}
-.cd-shelf-browse {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: none;
-  background: transparent;
-  color: var(--ink-2);
-  font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.cd-shelf-browse:hover {
-  color: var(--ink);
-}
-.cd-shelf-browse svg {
-  display: block;
-}
-.cd-shelf-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
-}
 /* Automations tab: morph the dense tile grid into roomier cards so the
    trigger + integration metadata each automation carries has space. */
-.cd-shelf-grid[data-layout='cards'] {
-  grid-template-columns: repeat(3, 1fr);
-  gap: 13px;
-}
-@media (max-width: 1024px) {
-
-
-
-
-
-
-
-
-
-
-  .cd-shelf-grid[data-layout='cards'] {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-
-
-
-
-
-
-
-
-
-@media (max-width: 640px) {
-
-
-
-
-
-
-
-
-
-
-  .cd-shelf-grid[data-layout='cards'] {
-    grid-template-columns: 1fr;
-  }
-}
 
 
 
@@ -6704,10 +6409,6 @@ select.input option {
 /* Staggered rise-in applied per cell on each tab switch (see renderTab).
    `both` holds the hidden `from` state through the per-cell delay; the JS
    strips the class on animationend so hover transforms aren't pinned. */
-.cd-shelf-reveal {
-  animation: cd-shelf-rise 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  animation-delay: var(--d, 0ms);
-}
 @keyframes cd-shelf-rise {
   from {
     opacity: 0;
@@ -6718,53 +6419,10 @@ select.input option {
     transform: none;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-
-
-
-
-
-
-
-
-
-
-  .cd-shelf-reveal {
-    animation: none;
-  }
-}
 
 
 
 /* §A2 — quiet inspiration footer. */
-.cd-home-footer {
-  max-width: 1080px;
-  margin: 40px auto 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-top: 24px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-home-footer-text {
-  min-width: 0;
-  flex: 1;
-}
-.cd-home-footer-title {
-  font: var(--t-body);
-  font-size: 13.5px;
-  color: var(--ink);
-}
-.cd-home-footer-sub {
-  margin-top: 2px;
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cd-home-footer-btn {
-  font-size: 12.5px;
-  padding: 6px 12px;
-}
 
 /* Wrap is the grid item; it hosts the card and a sibling `•••` action
    button so we don't nest a button inside a button. The wrap itself is
@@ -6914,14 +6572,6 @@ select.input option {
   justify-content: space-between;
   gap: 8px;
 }
-.cd-app-card-foot-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  font-size: 11.5px;
-  color: var(--ink-4);
-}
 .cd-app-card-foot .cd-status {
   font-size: 9.5px;
   letter-spacing: 0.06em;
@@ -7059,11 +6709,6 @@ select.input option {
 /* Discover-page template grid — same 6-column uniform-height layout as
    the Home shelf (`.cd-shelf-grid`); the cards themselves are the shared
    `.cd-app-card` RefinedAppTile built by `buildShelfTile`. */
-.cd-tmpl-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
-}
 
 /* ── Discover / Templates page ───────────────────────────────────────────
    Eyebrow + title + blurb on the left, a kind segmented filter on the
@@ -7375,34 +7020,6 @@ select.input option {
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   flex: none;
-}
-.cd-app-strip-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.cd-app-strip-icon svg {
-  width: 12px;
-  height: 12px;
-}
-.cd-app-strip-meta {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-.cd-app-strip-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-app-strip-sub {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-  margin-top: 1px;
 }
 
 /* Builder titlebar identity lockup — a soft ink-washed pill carrying the
@@ -8490,11 +8107,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -8784,124 +8403,6 @@ select.input option {
 
 /* Settings → Vaults (duaility §12): the vault registry manage surface —
  * one row per vault (rename inline, switch, arm-to-delete) + a create row. */
-.cd-vaults-list {
-  display: flex;
-  flex-direction: column;
-}
-.cd-vaults-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 2px;
-}
-.cd-vaults-row + .cd-vaults-row {
-  border-top: 0.5px solid var(--line);
-}
-.cd-vaults-name {
-  min-width: 0;
-  flex: 1;
-}
-.cd-vaults-name-btn {
-  border: none;
-  background: none;
-  padding: 0;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-1, var(--ink));
-  cursor: text;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
-.cd-vaults-name-input,
-.cd-vaults-create-input {
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink-1, var(--ink));
-  min-width: 0;
-}
-.cd-vaults-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: none;
-}
-.cd-vaults-active-badge {
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-.cd-vaults-switch-btn {
-  flex: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 0.5px solid var(--line);
-  background: none;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-vaults-switch-btn:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
-}
-.cd-vaults-delete-btn {
-  flex: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-vaults-delete-btn[data-armed='true'] {
-  background: var(--danger);
-  color: #fff;
-}
-.cd-vaults-switch-btn:disabled,
-.cd-vaults-delete-btn:disabled,
-.cd-vaults-create-btn:disabled {
-  opacity: 0.55;
-  cursor: default;
-}
-.cd-vaults-create {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-vaults-create-input {
-  flex: 1;
-}
-.cd-vaults-create-btn {
-  flex: none;
-  padding: 6px 14px;
-  border-radius: 7px;
-  border: none;
-  background: var(--accent);
-  color: var(--accent-ink, #fff);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-vaults-create-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
 
 /* Settings → Phone (issue #263). "Connect phone" pairing QR + the paired
  * device allowlist — one row per phone with a transport-level Revoke. */
@@ -8973,11 +8474,6 @@ select.input option {
   padding: 4px 10px 8px;
   border-top: 1px solid color-mix(in oklab, var(--ink) 6%, transparent);
 }
-.cd-app-run-node-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 .cd-app-run-node {
   font-family: var(--font-mono, monospace);
   font-size: 10px;
@@ -9001,10 +8497,6 @@ select.input option {
   text-transform: uppercase;
   font-size: 9px;
   color: color-mix(in oklab, var(--ink) 50%, transparent);
-}
-.cd-app-run-node-batch {
-  font-size: 9px;
-  color: color-mix(in oklab, var(--accent, #0a84ff) 70%, transparent);
 }
 .cd-app-run-node-duration {
   margin-left: auto;
@@ -9039,34 +8531,6 @@ select.input option {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-.cd-app-runs-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  border-radius: 6px;
-  background: color-mix(in oklab, var(--accent, #0a84ff) 8%, transparent);
-}
-.cd-app-runs-bar-note {
-  color: color-mix(in oklab, var(--ink) 60%, transparent);
-}
-.cd-app-runs-replay {
-  margin-left: auto;
-  font-size: 11px;
-  padding: 3px 10px;
-  border-radius: 5px;
-  border: 1px solid color-mix(in oklab, var(--accent, #0a84ff) 45%, transparent);
-  background: none;
-  color: var(--accent, #0a84ff);
-  cursor: pointer;
-}
-.cd-app-runs-replay:hover {
-  background: color-mix(in oklab, var(--accent, #0a84ff) 12%, transparent);
-}
-.cd-app-runs-replay:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 .cd-app-run[data-pinned='true'] {
   border-color: color-mix(in oklab, var(--accent, #0a84ff) 40%, transparent);
@@ -9138,12 +8602,6 @@ select.input option {
   margin-top: 4px;
   padding-left: 8px;
   border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
-}
-.cd-app-run-node-note {
-  margin-top: 4px;
-  font-size: 9px;
-  font-style: italic;
-  color: color-mix(in oklab, var(--ink) 50%, transparent);
 }
 
 /* Pill toggle — custom, not a native checkbox. Matches the dignity
@@ -9253,10 +8711,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -9853,10 +9313,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -9951,35 +9413,6 @@ select.input option {
 /* viewer columns */
 
 /* cards */
-.cd-au-card-h {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 14px 18px;
-  border-bottom: 0.5px solid var(--line);
-}
-.cd-au-card-h h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-au-card-count {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  padding: 2px 7px;
-  border-radius: 5px;
-}
-.cd-au-instr {
-  padding: 18px;
-  font-size: 13.5px;
-  line-height: 1.7;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
 
 /* run filters — segmented pills living in the Run history header. */
 
@@ -9992,20 +9425,6 @@ select.input option {
 
 
 /* ── Run history rows become clickable threads ── */
-.cd-au-run-go {
-  flex: none;
-  display: inline-flex;
-  color: var(--ink-3);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-}
-button.cd-au-run:hover .cd-au-run-go {
-  opacity: 1;
-  transform: none;
-}
 
 /* ── Run viewer (chat thread) ── */
 
@@ -10017,105 +9436,13 @@ button.cd-au-run:hover .cd-au-run-go {
 /* Transcript panel — the rows live inside one elevated card. */
 /* Kind reads as a quiet inline prefix (STEP / TOOL / AGENT) — no chip box, so
    the eye lands on the node name, not the label. */
-.cd-au-log-kind {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.cd-au-log-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-au-log-meta {
-  margin-left: auto;
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.cd-au-log-body {
-  margin-top: 6px;
-}
 /* Agent reply — flows inline as prose (streams live, then settles). */
-.cd-au-log-reply {
-  margin-top: 8px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  white-space: pre-wrap;
-}
 /* Collapsible payload chips — "{ } args ⌄" / "{ } out ⌄". */
-.cd-au-log-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.cd-au-log-chip:hover,
-.cd-au-log-chip--open {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
-.cd-au-log-chip-chev {
-  display: inline-flex;
-  color: var(--ink-4);
-  transition: transform 0.16s ease;
-}
-.cd-au-log-chip--open .cd-au-log-chip-chev {
-  transform: rotate(180deg);
-}
-.cd-au-log-pres {
-  display: flex;
-  flex-direction: column;
-}
 /* Footer — the settled "✓ Run finished · <summary>" line. */
-.cd-au-log-foot {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 13px 0 8px;
-  margin-top: 2px;
-  border-top: 0.5px solid var(--line);
-  font-size: 13px;
-  color: var(--ink-2);
-}
-.cd-au-log-foot[data-status='ok'] .cd-au-log-foot-ic {
-  color: var(--success);
-}
-.cd-au-log-foot[data-status='fail'] .cd-au-log-foot-ic,
-.cd-au-log-foot[data-status='fail'] .cd-au-log-foot-tx {
-  color: var(--danger);
-}
-.cd-au-log-foot-ic {
-  display: inline-flex;
-  flex: none;
-}
-.cd-au-log-foot-tx {
-  flex: 1;
-  min-width: 0;
-}
-.cd-au-log-foot .cd-au-log-chip {
-  flex: none;
-}
-.cd-au-log-foot-pre {
-  padding-bottom: 8px;
-}
 
 /* ── Run timeline (Direction A) — vertical rail + node cards ── */
 /* Rail column — status circle + connector line drawn down to the next node. */
 /* agent response prose (ink) vs the italic ink-3 thinking variant */
-.cd-au-tl-thinking {
-  font-style: italic;
-  color: var(--ink-3);
-  border-left: 2px solid var(--line-strong);
-  padding-left: 10px;
-}
 /* live token-by-token stream with a blinking caret */
 /* trigger + final outcome cards */
 
@@ -10184,20 +9511,6 @@ button.cd-au-run:hover .cd-au-run-go {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
 }
-.cd-au-ov-glyph {
-  width: 38px;
-  height: 38px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink-3);
-}
-.cd-au-ov-glyph[data-on='true'] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
 .cd-au-ov-body {
   flex: 1;
   min-width: 0;
@@ -10209,17 +9522,6 @@ button.cd-au-run:hover .cd-au-run-go {
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
-}
-.cd-au-ov-trig {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.cd-au-ov-trig-ic {
-  display: inline-flex;
 }
 .cd-au-ov-right {
   flex: none;
@@ -10344,10 +9646,6 @@ button.cd-au-run:hover .cd-au-run-go {
    Two-pane chat: past conversations left, active thread right. Answers
    are markdown-lite prose plus renderer-drawn blocks (table / chart /
    stat), entity ref chips, and a collapsible per-turn queries pill. */
-.cd-asst-loading {
-  color: var(--ink-3);
-  font-size: 12.5px;
-}
 @keyframes cd-asst-blink {
   50% {
     opacity: 0;
