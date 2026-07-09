@@ -1,4 +1,4 @@
-import { type JSX, useCallback } from 'react';
+import { type JSX, useCallback, useEffect, useRef } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
@@ -74,6 +74,50 @@ export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const { isStarred, toggleStar } = useStarred();
+  const navRef = useRef<ShellNav | null>(null);
+
+  // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
+  // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
+  // gateway (#109) or vault (#289) change invalidates every gateway-scoped piece
+  // of renderer state — drop it by re-listing apps + bouncing to Home.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const meta = e.metaKey || e.ctrlKey;
+      if (meta && e.key === '[') {
+        e.preventDefault();
+        navRef.current?.back();
+      } else if (meta && e.key === ']') {
+        e.preventDefault();
+        navRef.current?.forward();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+
+    // The delegated builder (window.openBuilder) reaches back through
+    // window.Centraid for nav actions (optional-chained). React owns routing
+    // now, so publish a nav-backed shim in place of the retired vanilla app.ts.
+    const go = (route: ShellRoute) => (): void => void navRef.current?.navigate(route);
+    (window as unknown as { Centraid: unknown }).Centraid = {
+      openApp: (id: string) => navRef.current?.navigate({ kind: 'app', id }),
+      openSettings: go({ kind: 'settings' }),
+      openSearch: () => {},
+      openDiscover: go({ kind: 'discover' }),
+      openStarred: go({ kind: 'starred' }),
+      openAutomations: go({ kind: 'automations' }),
+      openInsights: go({ kind: 'insights' }),
+      renderHome: go({ kind: 'home' }),
+      getRuntimeMode: () => undefined,
+    };
+
+    const reScope = (): void => {
+      void refresh();
+      navRef.current?.navigate({ kind: 'home' });
+    };
+    window.CentraidApi.onGatewayChanged?.(reScope);
+    window.CentraidApi.onVaultChanged?.(reScope);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const renderSidebar = useCallback(
     (nav: ShellNav) => {
@@ -180,6 +224,9 @@ export default function App(): JSX.Element {
       sidebarOpen={prefs.sidebarOpen}
       onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
       renderSidebar={renderSidebar}
+      onNavReady={(nav) => {
+        navRef.current = nav;
+      }}
       renderScreen={(nav) => (
         <ShellActionsProvider value={makeActions(nav)}>{renderRoute(nav)}</ShellActionsProvider>
       )}

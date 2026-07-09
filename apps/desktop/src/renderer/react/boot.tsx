@@ -18,6 +18,7 @@
 
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from './ui/index.js';
+import App from './shell/App.js';
 import type { CentraidReactBridge } from './bridge.js';
 import AppSettingsPanel from './screens/AppSettingsPanel.js';
 import AssistantScreen from './screens/AssistantScreen.js';
@@ -87,6 +88,42 @@ function sync(): void {
 
 window.addEventListener('hashchange', sync);
 sync();
+
+// ── The shell (#325 flip) ────────────────────────────────────────────────
+// React now owns #root: mount the App shell here, replacing the retired vanilla
+// app.ts IIFE. First-run gate — when onboarding hasn't completed we show the
+// welcome view (window.Onboarding, itself React via the bridge) and mount the
+// App only after the user submits, persisting their identity like app.ts did.
+let shellMounted = false;
+function mountShell(shell: HTMLElement): void {
+  if (shellMounted) return;
+  shellMounted = true;
+  createRoot(shell).render(<App />);
+}
+
+void (async (): Promise<void> => {
+  const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
+  if (!shell) return;
+  const settings = await window.CentraidApi.getSettings().catch(
+    () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
+  );
+  if (!settings.onboardingCompletedAt && window.Onboarding) {
+    window.Onboarding.mount({
+      root: shell,
+      onComplete: async ({ displayName, avatarColor }) => {
+        await window.CentraidApi.updateProfileMetadata({ id: 'local', displayName, avatarColor }).catch(
+          () => undefined,
+        );
+        await window.CentraidApi.saveSettings({
+          onboardingCompletedAt: new Date().toISOString(),
+        }).catch(() => undefined);
+        mountShell(shell);
+      },
+    });
+    return;
+  }
+  mountShell(shell);
+})();
 
 // Phase 3 bridge — the vanilla route modules delegate converted screens here.
 const bridge: CentraidReactBridge = {

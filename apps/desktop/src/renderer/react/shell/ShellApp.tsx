@@ -1,4 +1,4 @@
-import { type JSX, type ReactNode, useCallback, useMemo, useReducer, useState } from 'react';
+import { type JSX, type ReactNode, useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
 import {
   canGoBack as canBack,
@@ -35,6 +35,10 @@ export interface ShellAppProps {
   onNewApp?: () => void;
   sidebarOpen?: boolean;
   onSidebarOpenChange?: (open: boolean) => void;
+  /** Receives the current nav surface whenever it changes, so the App root can
+   *  wire document-level shortcuts + external re-scope (gateway/vault change)
+   *  against live navigation without owning the router. */
+  onNavReady?: (nav: ShellNav) => void;
 }
 
 const DEFAULT_FULL_BLEED = (r: ShellRoute): boolean =>
@@ -48,6 +52,7 @@ export default function ShellApp({
   onNewApp,
   sidebarOpen: sidebarOpenProp,
   onSidebarOpenChange,
+  onNavReady,
 }: ShellAppProps): JSX.Element {
   const [state, dispatch] = useReducer(routerReducer, INITIAL_ROUTER, (init) =>
     routerReducer(init, { type: 'navigate', route: initialRoute }),
@@ -76,6 +81,10 @@ export default function ShellApp({
     if (onSidebarOpenChange) onSidebarOpenChange(next);
     else setLocalOpen(next);
   }, [sidebarOpen, onSidebarOpenChange]);
+
+  useEffect(() => {
+    onNavReady?.(nav);
+  }, [nav, onNavReady]);
 
   const screen = renderScreen(nav);
 
