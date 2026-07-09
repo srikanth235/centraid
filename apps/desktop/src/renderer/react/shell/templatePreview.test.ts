@@ -21,7 +21,7 @@ afterEach(() => {
 describe('openTemplatePreview', () => {
   it('mounts a preview modal with the template identity + version', () => {
     openTemplatePreview(tmpl, () => {});
-    const card = document.querySelector('.cd-tmpl-preview')!;
+    const card = document.querySelector('.tmplPreview')!;
     expect(card.textContent).toContain('Todos');
     expect(card.textContent).toContain('A small todo app');
     expect(card.textContent).toContain('Template · v1.0');
@@ -35,22 +35,22 @@ describe('openTemplatePreview', () => {
     ) as HTMLButtonElement;
     useBtn.click();
     expect(onUse).toHaveBeenCalledWith(tmpl);
-    expect(document.querySelector('.cd-tmpl-preview')).toBeNull();
+    expect(document.querySelector('.tmplPreview')).toBeNull();
   });
 
   it('closes on Cancel, backdrop click, and Escape without firing onUse', () => {
     const onUse = vi.fn();
     openTemplatePreview(tmpl, onUse);
     (document.querySelector('.btn-ghost') as HTMLButtonElement).click();
-    expect(document.querySelector('.cd-tmpl-preview')).toBeNull();
+    expect(document.querySelector('.tmplPreview')).toBeNull();
 
     openTemplatePreview(tmpl, onUse);
     (document.querySelector('.modal-backdrop') as HTMLElement).click();
-    expect(document.querySelector('.cd-tmpl-preview')).toBeNull();
+    expect(document.querySelector('.tmplPreview')).toBeNull();
 
     openTemplatePreview(tmpl, onUse);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(document.querySelector('.cd-tmpl-preview')).toBeNull();
+    expect(document.querySelector('.tmplPreview')).toBeNull();
     expect(onUse).not.toHaveBeenCalled();
   });
 });

@@ -2765,45 +2765,8 @@ select.input option {
 /* Template preview — the modal-card variant that lets users see what a
    template is before committing to a clone. Reuses the modal chrome but
    adds a head row with a tinted icon next to the title (Notion-style). */
-.cd-tmpl-preview .cd-tmpl-preview-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 10px;
-}
-.cd-tmpl-preview-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  flex: 0 0 auto;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 6px 14px rgba(0, 0, 0, 0.18);
-}
-.cd-tmpl-preview-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin-bottom: 2px;
-}
-.cd-tmpl-preview h3 {
-  margin: 0;
-}
 /* Subtle helper line under the description — explains what cloning does
    so users aren't surprised by a new draft appearing on disk. */
-.cd-tmpl-preview-note {
-  font-size: 12px;
-  color: var(--ink-3);
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
-  line-height: 1.5;
-}
 
 /* Tweaks · Card variant — outlined is the design default (see .cd-app-card
    above). Flat strips the border + frosted blur down to a plain elev tile;
@@ -3222,16 +3185,6 @@ select.input option {
   justify-content: flex-end;
   animation: cd-au-fade 0.16s ease;
 }
-.cd-au-drawer {
-  width: min(420px, 90vw);
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-elev);
-  border-left: 0.5px solid var(--line-strong);
-  box-shadow: var(--shadow-lg);
-  animation: cd-au-slide-in 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
-}
 @keyframes cd-au-fade {
   from {
     opacity: 0;
@@ -3242,83 +3195,6 @@ select.input option {
     transform: translateX(24px);
     opacity: 0.4;
   }
-}
-.cd-au-drawer-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 20px;
-  border-bottom: 0.5px solid var(--line);
-}
-.cd-au-drawer-emoji {
-  font-size: 26px;
-  line-height: 1;
-}
-.cd-au-drawer-name {
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-au-drawer-trig {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 3px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.cd-au-drawer-close {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  border: none;
-  background: none;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.cd-au-drawer-close:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.cd-au-drawer-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 18px 20px;
-}
-.cd-au-drawer-sec-l {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin: 16px 0 9px;
-}
-.cd-au-drawer-sec-l:first-child {
-  margin-top: 0;
-}
-.cd-au-drawer-steps {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-.cd-au-drawer-foot {
-  padding: 16px 20px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-au-drawer-foot .cd-au-btn {
-  width: 100%;
-  justify-content: center;
 }
 
 /* ── Integration chips ── */
@@ -3487,10 +3363,16 @@ select.input option {
 
 
 
+
+
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
+
+
 
 
 
@@ -3823,25 +3705,6 @@ select.input option {
     opacity: 0;
   }
 }
-.cd-asst-p {
-  margin: 0 0 8px;
-}
-.cd-asst-h {
-  margin: 12px 0 6px;
-  font-family: var(--font-display);
-  color: var(--ink);
-}
-.cd-asst-ul {
-  margin: 0 0 8px;
-  padding-left: 20px;
-}
-.cd-asst-rich code {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  background: var(--bg-sunken);
-  border-radius: 4px;
-  padding: 1px 4px;
-}
 .cd-asst-pre {
   font-family: var(--font-mono);
   font-size: 11.5px;
@@ -3854,112 +3717,8 @@ select.input option {
   margin: 0 0 8px;
   white-space: pre-wrap;
 }
-.cd-asst-ref {
-  display: inline-flex;
-  align-items: center;
-  border: 0.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--ink);
-  border-radius: 999px;
-  padding: 0 7px;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.5;
-  cursor: default;
-}
-.cd-asst-ref[data-state='missing'] {
-  opacity: 0.55;
-  text-decoration: line-through;
-}
 
 /* Typed blocks */
-.cd-asst-block {
-  margin: 4px 0 10px;
-}
-.cd-asst-table-wrap {
-  overflow-x: auto;
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-}
-.cd-asst-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12.5px;
-}
-.cd-asst-table th {
-  text-align: left;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  padding: 8px 12px;
-  border-bottom: 0.5px solid var(--line-strong);
-}
-.cd-asst-table td {
-  padding: 7px 12px;
-  border-bottom: 0.5px solid var(--line);
-  color: var(--ink-2);
-}
-.cd-asst-table tbody tr:last-child td {
-  border-bottom: 0;
-}
-.cd-asst-caption {
-  font-size: 11px;
-  color: var(--ink-3);
-  padding: 6px 2px 0;
-}
-.cd-asst-stat {
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  padding: 12px 16px;
-  width: fit-content;
-  min-width: 180px;
-  background: var(--bg-elev);
-}
-.cd-asst-stat-value {
-  font-family: var(--font-display);
-  font-size: 24px;
-  color: var(--ink);
-}
-.cd-asst-stat-label {
-  font-size: 12px;
-  color: var(--ink-2);
-  margin-top: 2px;
-}
-.cd-asst-stat-sub {
-  font-size: 11px;
-  color: var(--ink-4);
-}
-.cd-asst-chart {
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  padding: 12px 14px 8px;
-  background: var(--bg-elev);
-}
-.cd-asst-chart-plot {
-  height: 160px;
-}
-.cd-asst-chart-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-.cd-asst-chart-x {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  color: var(--ink-4);
-  padding-top: 4px;
-  gap: 4px;
-  overflow: hidden;
-}
-.cd-asst-chart-legend {
-  display: flex;
-  gap: 12px;
-  font-size: 11px;
-  color: var(--ink-3);
-  padding-top: 6px;
-}
 
 /* The per-turn queries pill (transparency drawer) */
 

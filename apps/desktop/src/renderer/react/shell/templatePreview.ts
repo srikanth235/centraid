@@ -1,6 +1,8 @@
 import { palette } from '@centraid/design-tokens';
 import type { TemplateEntry } from '../../app-shell-context.js';
 import { iconSvg } from './iconSvg.js';
+import styles from './templatePreview.module.css';
+import { cx } from '../ui/cx.js';
 
 // Template preview — a modal showing a template's identity + blurb with a "Use
 // this template" action. Ported from the vanilla app-cards.ts openTemplatePreview;
@@ -13,7 +15,7 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   const card = document.createElement('div');
-  card.className = 'modal-card cd-tmpl-preview';
+  card.className = cx("modal-card", styles.tmplPreview);
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-label', `Preview ${tmpl.name}`);
 
@@ -41,14 +43,14 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   const head = document.createElement('div');
   head.className = 'cd-tmpl-preview-head';
   const iconEl = document.createElement('div');
-  iconEl.className = 'cd-tmpl-preview-icon';
+  iconEl.className = styles.tmplPreviewIcon ?? '';
   iconEl.style.background = color;
   iconEl.innerHTML = iconSvg(tmpl.iconKey, 28, 1.85);
   head.append(iconEl);
   const headText = document.createElement('div');
   headText.style.minWidth = '0';
   const eyebrow = document.createElement('div');
-  eyebrow.className = 'cd-tmpl-preview-eyebrow';
+  eyebrow.className = styles.tmplPreviewEyebrow ?? '';
   eyebrow.textContent = `Template · v${tmpl.version}`;
   const h3 = document.createElement('h3');
   h3.textContent = tmpl.name;
@@ -60,7 +62,7 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   desc.textContent = tmpl.desc;
   card.append(desc);
   const note = document.createElement('div');
-  note.className = 'cd-tmpl-preview-note';
+  note.className = styles.tmplPreviewNote ?? '';
   note.textContent =
     'Clones into your apps as a draft. Rename, edit, and publish from there — the original template stays in the catalog.';
   card.append(note);

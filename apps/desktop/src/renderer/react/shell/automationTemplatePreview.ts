@@ -1,6 +1,7 @@
 import type { TemplateEntry } from '../../app-shell-context.js';
 import { INTEGRATION_HUES } from '../format.js';
 import { iconSvg } from './iconSvg.js';
+import styles from './automationTemplatePreview.module.css';
 
 // Automation-template preview — the richer drawer for an automation template
 // (emoji, trigger, what-it-does steps, integration chips, "Use template").
@@ -17,7 +18,7 @@ export function openAutomationTemplatePreview(
   const backdrop = document.createElement('div');
   backdrop.className = 'cd-au-drawer-backdrop';
   const panel = document.createElement('div');
-  panel.className = 'cd-au-drawer';
+  panel.className = styles.auDrawer ?? '';
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-label', `${template.name} template`);
@@ -34,13 +35,13 @@ export function openAutomationTemplatePreview(
     if (e.target === backdrop) close();
   });
 
-  const html = (tag: string, cls: string, inner = ''): HTMLElement => {
+  const html = (tag: string, cls: string | undefined, inner = ''): HTMLElement => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     if (inner) n.innerHTML = inner;
     return n;
   };
-  const text = (tag: string, cls: string, t: string): HTMLElement => {
+  const text = (tag: string, cls: string | undefined, t: string): HTMLElement => {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
     n.textContent = t;
@@ -48,24 +49,24 @@ export function openAutomationTemplatePreview(
   };
 
   // Head
-  const head = html('div', 'cd-au-drawer-head');
-  head.append(text('span', 'cd-au-drawer-emoji', template.emoji ?? '⚙️'));
+  const head = html('div', styles.auDrawerHead);
+  head.append(text('span', styles.auDrawerEmoji, template.emoji ?? '⚙️'));
   const headText = document.createElement('div');
-  headText.append(text('div', 'cd-au-drawer-name', template.name));
-  const trig = html('div', 'cd-au-drawer-trig');
+  headText.append(text('div', styles.auDrawerName, template.name));
+  const trig = html('div', styles.auDrawerTrig);
   const trigIco = html('span', '', trigIcon);
   trigIco.setAttribute('aria-hidden', 'true');
   trig.append(trigIco, document.createTextNode(template.triggerLabel ?? 'Manual'));
   headText.append(trig);
   head.append(headText);
-  const closeBtn = html('button', 'cd-au-drawer-close', iconSvg('X', 16));
+  const closeBtn = html('button', styles.auDrawerClose, iconSvg('X', 16));
   closeBtn.setAttribute('type', 'button');
   closeBtn.setAttribute('aria-label', 'Close');
   closeBtn.addEventListener('click', close);
   head.append(closeBtn);
 
   // Body
-  const stepsList = html('ul', 'cd-au-drawer-steps');
+  const stepsList = html('ul', styles.auDrawerSteps);
   for (const line of [
     `Fires ${template.triggerLabel ?? 'on a trigger'}.`,
     template.desc,
@@ -75,10 +76,10 @@ export function openAutomationTemplatePreview(
   ]) {
     stepsList.append(text('li', '', line));
   }
-  const body = html('div', 'cd-au-drawer-body');
-  body.append(text('div', 'cd-au-drawer-sec-l', 'What it does'), stepsList);
+  const body = html('div', styles.auDrawerBody);
+  body.append(text('div', styles.auDrawerSecL, 'What it does'), stepsList);
   if (integrations.length > 0) {
-    body.append(text('div', 'cd-au-drawer-sec-l', 'Connects'));
+    body.append(text('div', styles.auDrawerSecL, 'Connects'));
     const chips = html('div', 'cd-au-chips');
     for (const name of integrations) {
       const chip = text('span', 'cd-au-chip', name);
@@ -96,7 +97,7 @@ export function openAutomationTemplatePreview(
     close();
     onUse(template);
   });
-  const foot = html('div', 'cd-au-drawer-foot');
+  const foot = html('div', styles.auDrawerFoot);
   foot.append(useBtn);
 
   panel.append(head, body, foot);

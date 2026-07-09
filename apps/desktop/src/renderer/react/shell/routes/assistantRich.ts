@@ -1,4 +1,6 @@
 import { resolveAssistantRefs } from '../../../gateway-client.js';
+import styles from './assistantRich.module.css';
+import { cx } from '../../ui/cx.js';
 
 // Assistant rich-answer renderer — ports the vanilla app-assistant.ts
 // markdown-lite + typed-block renderer (richAnswer / proseNodes / table / stat /
@@ -33,7 +35,7 @@ function inlineHtml(raw: string): string {
   s = s.replace(
     /@\[([^\]]+)\]\(ref:([a-z_]+\.[a-z_]+)\/([A-Za-z0-9_-]+)\)/g,
     (_m, label: string, type: string, id: string) =>
-      `<button type="button" class="cd-asst-ref" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`,
+      `<button type="button" class="${styles.asstRef}" data-ref-type="${type}" data-ref-id="${id}">${label}</button>`,
   );
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>');
@@ -56,7 +58,7 @@ function proseNodes(text: string): HTMLElement[] {
     }
     const bullet = line.match(/^\s*[-*]\s+(.*)$/);
     if (bullet) {
-      list ??= el('ul', { class: 'cd-asst-ul' });
+      list ??= el('ul', { class: styles.asstUl });
       list.append(el('li', { trustedHtml: inlineHtml(bullet[1] ?? '') }));
       continue;
     }
@@ -65,13 +67,13 @@ function proseNodes(text: string): HTMLElement[] {
     if (heading) {
       out.push(
         el(`h${Math.min(heading[1]!.length + 2, 5)}`, {
-          class: 'cd-asst-h',
+          class: styles.asstH,
           trustedHtml: inlineHtml(heading[2] ?? ''),
         }),
       );
       continue;
     }
-    out.push(el('p', { class: 'cd-asst-p', trustedHtml: inlineHtml(line) }));
+    out.push(el('p', { class: styles.asstP, trustedHtml: inlineHtml(line) }));
   }
   flushList();
   return out;
@@ -80,7 +82,7 @@ function proseNodes(text: string): HTMLElement[] {
 function tableBlock(spec: unknown): HTMLElement | null {
   const s = spec as { columns?: unknown; rows?: unknown; caption?: unknown };
   if (!Array.isArray(s.columns) || !Array.isArray(s.rows)) return null;
-  const table = el('table', { class: 'cd-asst-table' });
+  const table = el('table', { class: styles.asstTable });
   table.append(
     el('thead', {}, el('tr', {}, s.columns.map((c) => el('th', {}, String(c))))),
   );
@@ -90,9 +92,9 @@ function tableBlock(spec: unknown): HTMLElement | null {
     body.append(el('tr', {}, row.map((v) => el('td', {}, v === null || v === undefined ? '—' : String(v)))));
   }
   table.append(body);
-  const wrap = el('div', { class: 'cd-asst-block cd-asst-table-wrap' }, table);
+  const wrap = el('div', { class: cx(styles.asstBlock, styles.asstTableWrap) }, table);
   if (typeof s.caption === 'string' && s.caption) {
-    wrap.append(el('div', { class: 'cd-asst-caption' }, s.caption));
+    wrap.append(el('div', { class: styles.asstCaption }, s.caption));
   }
   return wrap;
 }
@@ -100,10 +102,10 @@ function tableBlock(spec: unknown): HTMLElement | null {
 function statBlock(spec: unknown): HTMLElement | null {
   const s = spec as { value?: unknown; label?: unknown; sub?: unknown };
   if (typeof s.value !== 'string' && typeof s.value !== 'number') return null;
-  return el('div', { class: 'cd-asst-block cd-asst-stat' }, [
-    el('div', { class: 'cd-asst-stat-value' }, String(s.value)),
-    typeof s.label === 'string' ? el('div', { class: 'cd-asst-stat-label' }, s.label) : false,
-    typeof s.sub === 'string' ? el('div', { class: 'cd-asst-stat-sub' }, s.sub) : false,
+  return el('div', { class: cx(styles.asstBlock, styles.asstStat) }, [
+    el('div', { class: styles.asstStatValue }, String(s.value)),
+    typeof s.label === 'string' ? el('div', { class: styles.asstStatLabel }, s.label) : false,
+    typeof s.sub === 'string' ? el('div', { class: styles.asstStatSub }, s.sub) : false,
   ]);
 }
 
@@ -158,16 +160,16 @@ function chartBlock(spec: unknown): HTMLElement | null {
       );
     });
   }
-  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="cd-asst-chart-svg">${parts.join('')}</svg>`;
-  const labels = el('div', { class: 'cd-asst-chart-x' }, s.x.slice(0, 12).map((v) => el('span', {}, String(v))));
-  const wrap = el('div', { class: 'cd-asst-block cd-asst-chart' });
-  if (typeof s.title === 'string' && s.title) wrap.append(el('div', { class: 'cd-asst-caption' }, s.title));
-  wrap.append(el('div', { class: 'cd-asst-chart-plot', trustedHtml: svg }), labels);
+  const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${styles.asstChartSvg}">${parts.join('')}</svg>`;
+  const labels = el('div', { class: styles.asstChartX }, s.x.slice(0, 12).map((v) => el('span', {}, String(v))));
+  const wrap = el('div', { class: cx(styles.asstBlock, styles.asstChart) });
+  if (typeof s.title === 'string' && s.title) wrap.append(el('div', { class: styles.asstCaption }, s.title));
+  wrap.append(el('div', { class: styles.asstChartPlot, trustedHtml: svg }), labels);
   if (series.some((r) => r.label)) {
     wrap.append(
       el(
         'div',
-        { class: 'cd-asst-chart-legend' },
+        { class: styles.asstChartLegend },
         series.map((r, si) => el('span', { style: { opacity: String(1 - si * 0.35) } }, r.label ?? `Series ${si + 1}`)),
       ),
     );
@@ -177,7 +179,7 @@ function chartBlock(spec: unknown): HTMLElement | null {
 
 /** Full answer → prose + typed blocks + plain code fences, as an HTML string. */
 export function richAnswerHtml(text: string): string {
-  const host = el('div', { class: 'cd-asst-rich' });
+  const host = el('div', { class: styles.asstRich });
   const fence = /```(block:table|block:chart|block:stat|[a-z]*)\n([\s\S]*?)```/g;
   let last = 0;
   let m: RegExpExecArray | null;
@@ -209,7 +211,7 @@ export function richAnswerHtml(text: string): string {
 
 /** Resolve every ref chip under `host` to a live card title, batched. */
 export function hydrateRefs(host: HTMLElement): void {
-  const chips = [...host.querySelectorAll<HTMLElement>('.cd-asst-ref:not([data-resolved])')];
+  const chips = [...host.querySelectorAll<HTMLElement>(`.${styles.asstRef}:not([data-resolved])`)];
   if (chips.length === 0) return;
   const refs = chips.map((c) => ({ type: c.dataset.refType ?? '', id: c.dataset.refId ?? '' }));
   void resolveAssistantRefs(refs)

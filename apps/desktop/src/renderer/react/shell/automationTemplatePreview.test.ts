@@ -25,7 +25,7 @@ afterEach(() => {
 describe('openAutomationTemplatePreview', () => {
   it('renders the drawer with name, trigger label, steps, and integration chips', () => {
     openAutomationTemplatePreview(tmpl, () => {});
-    const drawer = document.querySelector('.cd-au-drawer')!;
+    const drawer = document.querySelector('.auDrawer')!;
     expect(drawer.textContent).toContain('Daily Digest');
     expect(drawer.textContent).toContain('Every morning');
     expect(drawer.textContent).toContain('Summarizes your inbox');
@@ -42,24 +42,24 @@ describe('openAutomationTemplatePreview', () => {
     ) as HTMLButtonElement;
     useBtn.click();
     expect(onUse).toHaveBeenCalledWith(tmpl);
-    expect(document.querySelector('.cd-au-drawer')).toBeNull();
+    expect(document.querySelector('.auDrawer')).toBeNull();
   });
 
   it('closes on Escape and backdrop click without firing onUse', () => {
     const onUse = vi.fn();
     openAutomationTemplatePreview(tmpl, onUse);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    expect(document.querySelector('.cd-au-drawer')).toBeNull();
+    expect(document.querySelector('.auDrawer')).toBeNull();
 
     openAutomationTemplatePreview(tmpl, onUse);
     (document.querySelector('.cd-au-drawer-backdrop') as HTMLElement).click();
-    expect(document.querySelector('.cd-au-drawer')).toBeNull();
+    expect(document.querySelector('.auDrawer')).toBeNull();
     expect(onUse).not.toHaveBeenCalled();
   });
 
   it('shows the default-tools line when there are no integrations', () => {
     openAutomationTemplatePreview({ ...tmpl, integrations: [] } as TemplateEntry, () => {});
-    expect(document.querySelector('.cd-au-drawer')!.textContent).toContain(
+    expect(document.querySelector('.auDrawer')!.textContent).toContain(
       'Runs with the workspace default tools',
     );
     expect(document.querySelectorAll('.cd-au-chip')).toHaveLength(0);
