@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
-import type { OnboardingBridgeProps } from '../bridge.js';
 import styles from './OnboardingScreen.module.css';
+
+export interface OnboardingCompleteInput {
+  displayName: string;
+  avatarColor: string;
+}
+export interface OnboardingScreenProps {
+  onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
+}
 
 // Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
 // updateProfileMetadata, which validates #RRGGBB).
@@ -32,7 +39,7 @@ function initials(name: string): string {
  * replaces the root with home. Styles are co-located in
  * `OnboardingScreen.module.css` (scoped CSS Modules — issue #325 Phase 4).
  */
-export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps): JSX.Element {
+export default function OnboardingScreen({ onComplete }: OnboardingScreenProps): JSX.Element {
   const [displayName, setDisplayName] = useState('');
   // Random initial color so two fresh installs on the same machine don't both
   // start on the same swatch.

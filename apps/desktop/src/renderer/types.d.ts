@@ -394,18 +394,6 @@ declare global {
     Profiles: ProfilesApi;
     openBuilder: (opts: BuilderOptions) => () => void;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
-    /**
-     * First-run onboarding. Mounted by app.ts when settings.onboardingCompletedAt
-     * is absent. The host owns the root element and a completion callback that
-     * fires after the user's profile is saved.
-     */
-    Onboarding: {
-      mount: (opts: {
-        root: HTMLElement;
-        /** Resolves with the chosen displayName + avatarColor once the user submits. */
-        onComplete: (input: { displayName: string; avatarColor: string }) => Promise<void> | void;
-      }) => () => void;
-    };
   }
 
   // Convenience type aliases reachable inside renderer scripts.

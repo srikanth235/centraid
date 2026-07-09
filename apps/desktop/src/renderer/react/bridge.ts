@@ -281,15 +281,6 @@ export interface ImportBridgeProps {
   showToast?: (message: string) => void;
 }
 
-// ── Onboarding (first run) ──────────────────────────────────────────────────
-export interface OnboardingCompleteInput {
-  displayName: string;
-  avatarColor: string;
-}
-export interface OnboardingBridgeProps {
-  onComplete: (input: OnboardingCompleteInput) => Promise<void> | void;
-}
-
 // ── Automations overview ────────────────────────────────────────────────────
 // The vanilla side derives every display value (hue, glyph, trigger + status
 // labels, formatted run meta) so the React screen needs no app-format /
@@ -769,16 +760,12 @@ export interface BuilderChatBridgeProps {
 }
 
 // After the #325 flip, React owns #root and the shell mounts every screen route
-// directly (react/shell/routes/*). Only two vanilla→React handoffs survive: the
-// vanilla builder window (builder.ts) hosts the React chat pane, and the vanilla
-// first-run boot (onboarding.ts) hosts the React welcome view. The bridge is
-// pared to exactly those; the other screens are imported by their route wrappers
-// with no bridge in between.
+// directly (react/shell/routes/*). One vanilla→React handoff survives: the
+// vanilla builder window (builder.ts) hosts the React chat pane. Every other
+// screen is imported by its route wrapper with no bridge in between.
 export interface CentraidReactBridge {
   /** Mount the React builder chat pane (SSE-driven) inside the vanilla builder window; returns a disposer. */
   mountBuilderChat(host: HTMLElement, props: BuilderChatBridgeProps): () => void;
-  /** Mount the React first-run onboarding view; returns an unmount disposer. */
-  mountOnboarding(host: HTMLElement, props: OnboardingBridgeProps): () => void;
 }
 
 declare global {

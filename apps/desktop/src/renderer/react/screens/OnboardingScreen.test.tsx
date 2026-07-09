@@ -1,8 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OnboardingBridgeProps } from '../bridge.js';
-import OnboardingScreen from './OnboardingScreen.js';
+import OnboardingScreen, { type OnboardingScreenProps } from './OnboardingScreen.js';
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -13,7 +12,7 @@ afterEach(() => {
   container = null;
   vi.clearAllMocks();
 });
-function mount(props: OnboardingBridgeProps): HTMLDivElement {
+function mount(props: OnboardingScreenProps): HTMLDivElement {
   container = document.createElement('div');
   document.body.appendChild(container);
   act(() => {

@@ -1,16 +1,10 @@
 // React entry for the renderer — issue #325.
 //
-// Two jobs, both proving React runs *inside the live vanilla renderer* (same
-// document, same styles.css, same design-tokens):
-//
-//   1. Phase 0 coexistence island — on the `#ui-preview` hash, hide the vanilla
-//      shell (`#root`) and render the local UI Gallery as an
-//      overlay; restore on any other hash. Non-destructive proof + preview
-//      surface.
-//   2. Phase 3 screen bridge — publish `window.CentraidReact`, the handoff seam
-//      converted screens use (see ./bridge.ts). Each `mount<Screen>` renders a
-//      React screen into a host the vanilla route module owns and returns an
-//      unmount disposer the module registers as the page's cleanup.
+// React owns `#root`: this module mounts the App shell (via the first-run
+// onboarding gate below) and publishes `window.CentraidReact`, the one handoff
+// seam still standing — the vanilla builder window hosts the React chat pane
+// through it (see ./bridge.ts). A dev-only component gallery renders on the
+// `#ui-preview` hash.
 //
 // Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
 // loaded as a plain <script type="module"> — no dev server, so the strict
@@ -73,53 +67,44 @@ window.addEventListener('hashchange', sync);
 sync();
 
 // ── The shell (#325 flip) ────────────────────────────────────────────────
-// React now owns #root: mount the App shell here, replacing the retired vanilla
-// app.ts IIFE. First-run gate — when onboarding hasn't completed we show the
-// welcome view (window.Onboarding, itself React via the bridge) and mount the
-// App only after the user submits, persisting their identity like app.ts did.
-let shellMounted = false;
-function mountShell(shell: HTMLElement): void {
-  if (shellMounted) return;
-  shellMounted = true;
-  createRoot(shell).render(<App />);
-}
-
+// React now owns #root: one root on #root renders either the first-run
+// onboarding view or the App shell, replacing the retired vanilla app.ts IIFE.
+// First-run gate — when onboarding hasn't completed we render the welcome view
+// and swap the same root to <App/> once the user submits, persisting their
+// identity like app.ts did.
 void (async (): Promise<void> => {
   const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
   if (!shell) return;
+  const shellRoot = createRoot(shell);
   const settings = await window.CentraidApi.getSettings().catch(
     () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
   );
-  if (!settings.onboardingCompletedAt && window.Onboarding) {
-    window.Onboarding.mount({
-      root: shell,
-      onComplete: async ({ displayName, avatarColor }) => {
+  if (settings.onboardingCompletedAt) {
+    shellRoot.render(<App />);
+    return;
+  }
+  shellRoot.render(
+    <OnboardingScreen
+      onComplete={async ({ displayName, avatarColor }) => {
         await window.CentraidApi.updateProfileMetadata({ id: 'local', displayName, avatarColor }).catch(
           () => undefined,
         );
         await window.CentraidApi.saveSettings({
           onboardingCompletedAt: new Date().toISOString(),
         }).catch(() => undefined);
-        mountShell(shell);
-      },
-    });
-    return;
-  }
-  mountShell(shell);
+        shellRoot.render(<App />);
+      }}
+    />,
+  );
 })();
 
-// Vanilla→React handoff bridge (#325 R4). After the flip only two vanilla hosts
-// still embed a React screen: the builder window's chat pane and the first-run
-// onboarding view. Every other screen is mounted directly by its shell route.
+// Vanilla→React handoff bridge (#325 R4). After the flip the only vanilla host
+// still embedding a React screen is the builder window's chat pane. Every other
+// screen is mounted directly by its shell route or the boot sequence above.
 const bridge: CentraidReactBridge = {
   mountBuilderChat(host, props) {
     const screenRoot = createRoot(host);
     screenRoot.render(<BuilderChatPane {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountOnboarding(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<OnboardingScreen {...props} />);
     return () => screenRoot.unmount();
   },
 };
