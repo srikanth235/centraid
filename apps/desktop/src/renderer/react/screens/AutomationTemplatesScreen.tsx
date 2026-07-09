@@ -3,16 +3,18 @@ import { Icon } from '../ui/index.js';
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './AutomationTemplatesScreen.module.css';
+import au from '../styles/automation.module.css';
+import { cx } from '../ui/cx.js';
 
 type Trig = 'all' | 'cron' | 'webhook';
 
 function IntegrationChips({ integrations }: { integrations: readonly string[] }): JSX.Element {
   return (
-    <div className="cd-au-chips">
+    <div className={au.auChips}>
       {integrations.map((name) => (
-        <span key={name} className="cd-au-chip">
+        <span key={name} className={au.auChip}>
           <i
-            className="cd-au-chip-dot"
+            className={au.auChipDot}
             aria-hidden="true"
             style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
           />
@@ -169,7 +171,7 @@ export default function AutomationTemplatesScreen({
                 onClick={() => toggleIntegration(name)}
               >
                 <i
-                  className="cd-au-chip-dot"
+                  className={au.auChipDot}
                   aria-hidden="true"
                   style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
                 />
@@ -189,13 +191,13 @@ export default function AutomationTemplatesScreen({
             <div className={styles.emptyTitle}>No templates match</div>
             <div className={styles.emptyText}>Try a different search or clear the filters.</div>
             <div className={styles.emptyActions}>
-              <button type="button" className="cd-au-btn cd-au-btn-ghost" onClick={clearFilters}>
+              <button type="button" className={cx(au.auBtn, au.auBtnGhost)} onClick={clearFilters}>
                 <Icon name="X" size={14} />
                 <span>Clear filters</span>
               </button>
               <button
                 type="button"
-                className="cd-au-btn cd-au-btn-primary"
+                className={cx(au.auBtn, au.auBtnPrimary)}
                 onClick={onStartFromScratch}
               >
                 <Icon name="Sparkle" size={14} />

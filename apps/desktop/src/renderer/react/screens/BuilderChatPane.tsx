@@ -3,6 +3,7 @@ import { Icon } from '../ui/index.js';
 import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../screen-contracts.js';
 import styles from './BuilderChatPane.module.css';
 import { cx } from '../ui/cx.js';
+import tgCss from '../styles/toolGroup.module.css';
 
 // Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs
 // in builder.ts), as small components so the React pane paints identically.
@@ -46,7 +47,7 @@ function ToolGroup({
 }): JSX.Element {
   return (
     <div
-      className="tool-group"
+      className={tgCss.group}
       data-open={String(m.open)}
       data-running={String(m.running)}
       data-error={String(m.error)}
@@ -54,15 +55,15 @@ function ToolGroup({
     >
       <button
         type="button"
-        className="tool-group-pill"
+        className={tgCss.groupPill}
         aria-expanded={m.open}
         onClick={() => onToggleGroup(m.id)}
       >
-        <span className="tg-bolt">
+        <span className={tgCss.bolt}>
           <BoltGlyph />
         </span>
-        <span className="tg-label">{m.label}</span>
-        <span className="tg-chev">
+        <span className={tgCss.label}>{m.label}</span>
+        <span className={tgCss.chev}>
           <ChevronDownGlyph />
         </span>
       </button>
@@ -86,12 +87,12 @@ function ToolGroup({
         </button>
       )}
       {m.open && (
-        <div className="tg-list">
+        <div className={tgCss.list}>
           {m.rows.map((r, i) => (
-            <div key={i} className="tg-row" data-state={r.state}>
-              <span className="tg-dot" data-state={r.state} />
-              <span className="tg-row-name">{r.verb}</span>
-              <span className="tg-row-target">{r.target}</span>
+            <div key={i} className={tgCss.row} data-state={r.state}>
+              <span className={tgCss.dot} data-state={r.state} />
+              <span className={tgCss.rowName}>{r.verb}</span>
+              <span className={tgCss.rowTarget}>{r.target}</span>
             </div>
           ))}
         </div>

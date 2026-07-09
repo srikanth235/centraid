@@ -11,6 +11,7 @@ import type {
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './AutomationsOverviewScreen.module.css';
 import { cx } from '../ui/cx.js';
+import au from '../styles/automation.module.css';
 
 const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
   active: { icon: 'Power' },
@@ -26,8 +27,8 @@ const RUN_CAP = 6;
 function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX.Element {
   const m = STATUS_META[kind];
   return (
-    <span className="cd-au-status" data-tone={kind} role="status">
-      <span className="cd-au-status-ic" data-spin={m.spin ? 'true' : undefined} aria-hidden="true">
+    <span className={au.auStatus} data-tone={kind} role="status">
+      <span className={au.auStatusIc} data-spin={m.spin ? 'true' : undefined} aria-hidden="true">
         <Icon name={m.icon} size={12} />
       </span>
       <span className="cd-au-status-tx">{label}</span>
@@ -37,17 +38,17 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
 
 function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
   return (
-    <div className="cd-au-ov-dots" aria-hidden={names.length === 0}>
+    <div className={au.auOvDots} aria-hidden={names.length === 0}>
       {names.slice(0, 4).map((name) => (
         <i
           key={name}
-          className="cd-au-ov-dot"
+          className={au.auOvDot}
           title={name}
           style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
         />
       ))}
       {names.length > 4 ? (
-        <span className="cd-au-ov-dot-more">{`+${names.length - 4}`}</span>
+        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
       ) : null}
     </div>
   );
@@ -63,27 +64,27 @@ function AutomationRow({
   return (
     <button
       type="button"
-      className="cd-au-ov-row"
+      className={au.auOvRow}
       data-hue={row.hue}
       onClick={() => onOpen(row.ref)}
     >
-      <span className="cd-au-glyph" data-hue={row.hue} style={{ width: 38, height: 38 }}>
+      <span className={au.auGlyph} data-hue={row.hue} style={{ width: 38, height: 38 }}>
         <Icon name={row.glyphIcon as IconName} size={17} />
       </span>
-      <span className="cd-au-ov-body">
-        <span className="cd-au-ov-name">{row.name}</span>
-        <span className="cd-au-trigbadge" data-mono="true">
-          <span className="cd-au-trigbadge-ic" aria-hidden="true">
+      <span className={au.auOvBody}>
+        <span className={au.auOvName}>{row.name}</span>
+        <span className={au.auTrigbadge} data-mono="true">
+          <span className={au.auTrigbadgeIc} aria-hidden="true">
             <Icon name={row.triggerIcon as IconName} size={12} />
           </span>
           <span className="cd-au-trigbadge-tx">{row.triggerLabel}</span>
         </span>
       </span>
       <IntegrationDots names={row.integrations} />
-      <span className="cd-au-ov-last">{row.lastRunLabel}</span>
-      <span className="cd-au-ov-right">
+      <span className={au.auOvLast}>{row.lastRunLabel}</span>
+      <span className={au.auOvRight}>
         <StatusPill kind={row.statusKind} label={row.statusLabel} />
-        <span className="cd-au-ov-chev" aria-hidden="true">
+        <span className={au.auOvChev} aria-hidden="true">
           <Icon name="ChevronRight" size={16} />
         </span>
       </span>
@@ -101,20 +102,20 @@ function RunRow({
   return (
     <button
       type="button"
-      className="cd-au-ov-run"
+      className={au.auOvRun}
       data-ok={String(run.ok)}
       onClick={() => onOpen(run.automationId, run.runId)}
     >
-      <span className="cd-au-ov-run-ic" data-ok={String(run.ok)} aria-hidden="true">
+      <span className={au.auOvRunIc} data-ok={String(run.ok)} aria-hidden="true">
         <Icon name={run.ok ? 'CheckCircle' : 'AlertTriangle'} size={14} />
       </span>
-      <span className="cd-au-ov-run-body">
-        <span className="cd-au-ov-run-name">{run.name}</span>
-        <span className="cd-au-ov-run-sum">{run.summary}</span>
+      <span className={au.auOvRunBody}>
+        <span className={au.auOvRunName}>{run.name}</span>
+        <span className={au.auOvRunSum}>{run.summary}</span>
       </span>
-      <span className="cd-au-ov-run-when">
+      <span className={au.auOvRunWhen}>
         <b>{run.whenLabel}</b>
-        <span className="cd-au-ov-run-meta">{run.metaLabel}</span>
+        <span className={au.auOvRunMeta}>{run.metaLabel}</span>
       </span>
     </button>
   );
@@ -175,7 +176,7 @@ export default function AutomationsOverviewScreen({
         </div>
         <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
         <div className={styles.errorText}>{errMsg}</div>
-        <button type="button" className="cd-au-btn cd-au-btn-primary" onClick={() => void reload()}>
+        <button type="button" className={cx(au.auBtn, au.auBtnPrimary)} onClick={() => void reload()}>
           <Icon name="Refresh" size={14} />
           <span>Retry</span>
         </button>
@@ -185,12 +186,12 @@ export default function AutomationsOverviewScreen({
 
   const { rows, runs, health } = state;
   const actions = (
-    <div className="cd-au-actions">
-      <button type="button" className="cd-au-btn cd-au-btn-ghost" onClick={onBrowseTemplates}>
+    <div className={au.auActions}>
+      <button type="button" className={cx(au.auBtn, au.auBtnGhost)} onClick={onBrowseTemplates}>
         <Icon name="Bolt" size={14} />
         <span>Browse templates</span>
       </button>
-      <button type="button" className="cd-au-btn cd-au-btn-primary" onClick={onNewAutomation}>
+      <button type="button" className={cx(au.auBtn, au.auBtnPrimary)} onClick={onNewAutomation}>
         <Icon name="Sparkle" size={14} />
         <span>New automation</span>
       </button>

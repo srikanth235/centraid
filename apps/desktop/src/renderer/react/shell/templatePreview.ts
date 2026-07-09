@@ -3,6 +3,7 @@ import type { TemplateEntry } from '../../app-shell-context.js';
 import { iconSvg } from './iconSvg.js';
 import styles from './templatePreview.module.css';
 import { cx } from '../ui/cx.js';
+import modalCss from '../styles/modal.module.css';
 
 // Template preview — a modal showing a template's identity + blurb with a "Use
 // this template" action. Ported from the vanilla app-cards.ts openTemplatePreview;
@@ -13,9 +14,9 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   const color = (palette as unknown as Record<string, string>)[tmpl.colorKey] || '#7C5BD9';
 
   const backdrop = document.createElement('div');
-  backdrop.className = 'modal-backdrop';
+  backdrop.className = modalCss.backdrop ?? '';
   const card = document.createElement('div');
-  card.className = cx("modal-card", styles.tmplPreview);
+  card.className = cx(modalCss.card, styles.tmplPreview);
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-label', `Preview ${tmpl.name}`);
 
@@ -34,7 +35,7 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   document.addEventListener('keydown', onKey);
 
   const closeBtn = document.createElement('button');
-  closeBtn.className = 'btn-icon modal-close';
+  closeBtn.className = cx("btn-icon", modalCss.close);
   closeBtn.setAttribute('aria-label', 'Close');
   closeBtn.innerHTML = iconSvg('X', 16, 1.7);
   closeBtn.addEventListener('click', close);

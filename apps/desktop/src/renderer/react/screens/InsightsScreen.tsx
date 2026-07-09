@@ -4,6 +4,7 @@ import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 import styles from './InsightsScreen.module.css';
 import { cx } from '../ui/cx.js';
+import emptyCss from '../styles/pageEmpty.module.css';
 
 // Daily-consumption line chart — a React port of `insLineChart`
 // (app-insights.ts): same 760×200 viewBox, area gradient, peak marker.
@@ -122,11 +123,11 @@ function ChartStat({
 
 function EmptyLine({ message }: { message: string }): JSX.Element {
   return (
-    <div className="cd-page-empty">
-      <div className="cd-page-empty-icon" aria-hidden="true">
+    <div className={emptyCss.pageEmpty}>
+      <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
         <Icon name="Sparkle" size={22} />
       </div>
-      <div className="cd-page-empty-text">{message}</div>
+      <div className={emptyCss.pageEmptyText}>{message}</div>
     </div>
   );
 }

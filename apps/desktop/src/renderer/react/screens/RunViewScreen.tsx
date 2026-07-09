@@ -10,6 +10,7 @@ import type {
 } from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
 import styles from './RunViewScreen.module.css';
+import au from '../styles/automation.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -22,9 +23,9 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
 
 function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX.Element {
   return (
-    <span className="cd-au-status" data-tone={kind} role="status">
+    <span className={au.auStatus} data-tone={kind} role="status">
       <span
-        className="cd-au-status-ic"
+        className={au.auStatusIc}
         data-spin={kind === 'running' ? 'true' : undefined}
         aria-hidden="true"
       >
@@ -168,7 +169,7 @@ export default function RunViewScreen({
     onReady((s) => setSnap(s));
   }, [onReady]);
 
-  if (!snap) return <div className="cd-au-loading">Loading run…</div>;
+  if (!snap) return <div className={au.auLoading}>Loading run…</div>;
 
   const setModeAnd = (m: 'timeline' | 'log'): void => {
     setMode(m);
@@ -177,23 +178,23 @@ export default function RunViewScreen({
 
   const header = (
     <>
-      <div className="cd-au-crumb">
+      <div className={au.auCrumb}>
         <button type="button" onClick={onBack}>
           Automations
         </button>
-        <span className="cd-au-crumb-sep" aria-hidden="true">
+        <span className={au.auCrumbSep} aria-hidden="true">
           <Icon name="ArrowRight" size={12} />
         </span>
         <button type="button" onClick={onOpenAutomation}>
           {snap.crumbName}
         </button>
-        <span className="cd-au-crumb-sep" aria-hidden="true">
+        <span className={au.auCrumbSep} aria-hidden="true">
           <Icon name="ArrowRight" size={12} />
         </span>
         <span>Run</span>
       </div>
       <div className={styles.rvHead}>
-        <span className="cd-au-glyph" data-hue={snap.hue} style={{ width: 42, height: 42 }}>
+        <span className={au.auGlyph} data-hue={snap.hue} style={{ width: 42, height: 42 }}>
           <Icon name={snap.glyphIcon as IconName} size={19} />
         </span>
         <div className={styles.rvHeadMain}>
@@ -203,7 +204,7 @@ export default function RunViewScreen({
           </div>
           <div className={styles.rvHeadMeta}>{`${snap.startedLabel}  ·  ${snap.model}`}</div>
         </div>
-        <div className="cd-au-actions">
+        <div className={au.auActions}>
           <div className={styles.rvSeg} role="tablist" aria-label="Run view">
             {(['timeline', 'log'] as const).map((k) => (
               <button
@@ -223,7 +224,7 @@ export default function RunViewScreen({
           {mode === 'timeline' ? (
             <button
               type="button"
-              className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnSm)}
+              className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
               onClick={() => setDetailsHidden((v) => !v)}
             >
               <Icon name="Eye" size={13} />
@@ -232,7 +233,7 @@ export default function RunViewScreen({
           ) : null}
           <button
             type="button"
-            className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnSm)}
+            className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
             onClick={onRunAgain}
           >
             <Icon name="Reset" size={13} />

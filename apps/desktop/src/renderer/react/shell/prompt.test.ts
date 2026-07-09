@@ -5,9 +5,9 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const field = (): HTMLInputElement => document.querySelector('.modal-input')!;
+const field = (): HTMLInputElement => document.querySelector('.input')!;
 const button = (label: string): HTMLButtonElement =>
-  [...document.querySelectorAll('.modal-card button')].find(
+  [...document.querySelectorAll('.card button')].find(
     (b) => b.textContent === label,
   ) as HTMLButtonElement;
 

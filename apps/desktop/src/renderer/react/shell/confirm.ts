@@ -1,3 +1,5 @@
+import modalCss from '../styles/modal.module.css';
+import { cx } from '../ui/cx.js';
 // Confirm dialog — a promise-based modal (backdrop + card + Cancel/Confirm,
 // Esc = cancel, Enter = confirm). Ported from the vanilla app-cards.ts
 // `openConfirm`; it portals to document.body and resolves a boolean, so it's
@@ -28,16 +30,16 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
     };
 
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
+    backdrop.className = modalCss.backdrop ?? '';
     backdrop.addEventListener('click', () => finish(false));
 
     const card = document.createElement('div');
-    card.className = 'modal-card';
+    card.className = modalCss.card ?? '';
     card.setAttribute('role', 'dialog');
     card.setAttribute('aria-label', opts.title);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn-icon modal-close';
+    closeBtn.className = cx("btn-icon", modalCss.close);
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = X_SVG;
     closeBtn.addEventListener('click', () => finish(false));

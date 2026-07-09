@@ -117,7 +117,7 @@ describe('AutomationViewScreen', () => {
     );
     expect(props.onOpenRun).toHaveBeenCalledWith('a', 'r1');
     await act(async () =>
-      (el.querySelector('.cd-au-crumb button') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -139,7 +139,7 @@ describe('AutomationViewScreen', () => {
   it('runs now, handing off (button shows Starting…)', async () => {
     const props = makeProps({ onRun: vi.fn().mockReturnValue(new Promise(() => {})) });
     const el = await mount(props);
-    const runBtn = [...el.querySelectorAll('.cd-au-btn-primary')].at(-1) as HTMLButtonElement;
+    const runBtn = [...el.querySelectorAll('.auBtnPrimary')].at(-1) as HTMLButtonElement;
     await act(async () => runBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onRun).toHaveBeenCalledTimes(1);
     expect(el.textContent).toContain('Starting…');

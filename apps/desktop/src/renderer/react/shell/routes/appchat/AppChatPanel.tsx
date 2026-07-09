@@ -16,6 +16,7 @@ import {
 import { useAppChat } from './useAppChat.js';
 import styles from './AppChatPanel.module.css';
 import { cx } from '../../../ui/cx.js';
+import tgCss from '../../../styles/toolGroup.module.css';
 
 // Inline glyphs (kept tiny — the same shapes the vanilla emitted) so the panel
 // doesn't need to reach through the shared Icon set for one-offs.
@@ -156,40 +157,40 @@ function ToolGroupMsg({
   const hasError = m.calls.some((c) => c.state === 'error');
   return (
     <div
-      className="tool-group"
+      className={tgCss.group}
       data-open={String(m.open)}
       data-running={String(isRunning)}
       data-error={String(hasError)}
     >
       <button
         type="button"
-        className="tool-group-pill"
+        className={tgCss.groupPill}
         aria-expanded={m.open}
         onClick={() => onToggleGroup(m.id)}
       >
-        <span className="tg-bolt">
+        <span className={tgCss.bolt}>
           <BoltGlyph />
         </span>
-        <span className="tg-label">{summarizeGroup(m.calls)}</span>
-        <span className="tg-chev">
+        <span className={tgCss.label}>{summarizeGroup(m.calls)}</span>
+        <span className={tgCss.chev}>
           <ChevronDownGlyph />
         </span>
       </button>
       {m.open && (
-        <div className="tg-list">
+        <div className={tgCss.list}>
           {m.calls.map((c) => (
             <div key={c.id}>
               <button
                 type="button"
-                className="tg-row tg-row-clickable"
+                className={cx(tgCss.row, tgCss.rowClickable)}
                 data-state={c.state}
                 data-open={String(!!c.open)}
                 onClick={() => onToggleCall(m.id, c.id)}
               >
-                <span className="tg-dot" data-state={c.state} />
-                <span className="tg-row-name">{toolVerb(c.tool)}</span>
-                <span className="tg-row-target">{c.summary ?? ''}</span>
-                <span className="tg-row-expand">
+                <span className={tgCss.dot} data-state={c.state} />
+                <span className={tgCss.rowName}>{toolVerb(c.tool)}</span>
+                <span className={tgCss.rowTarget}>{c.summary ?? ''}</span>
+                <span className={tgCss.rowExpand}>
                   <ChevronDownGlyph size={11} />
                 </span>
               </button>

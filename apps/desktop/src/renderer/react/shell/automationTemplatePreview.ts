@@ -2,6 +2,8 @@ import type { TemplateEntry } from '../../app-shell-context.js';
 import { INTEGRATION_HUES } from '../format.js';
 import { iconSvg } from './iconSvg.js';
 import styles from './automationTemplatePreview.module.css';
+import au from '../styles/automation.module.css';
+import { cx } from '../ui/cx.js';
 
 // Automation-template preview — the richer drawer for an automation template
 // (emoji, trigger, what-it-does steps, integration chips, "Use template").
@@ -80,9 +82,9 @@ export function openAutomationTemplatePreview(
   body.append(text('div', styles.auDrawerSecL, 'What it does'), stepsList);
   if (integrations.length > 0) {
     body.append(text('div', styles.auDrawerSecL, 'Connects'));
-    const chips = html('div', 'cd-au-chips');
+    const chips = html('div', au.auChips);
     for (const name of integrations) {
-      const chip = text('span', 'cd-au-chip', name);
+      const chip = text('span', au.auChip, name);
       const hue = (INTEGRATION_HUES as Record<string, string>)[name.toLowerCase()];
       if (hue) chip.style.setProperty('--chip-hue', hue);
       chips.append(chip);
@@ -91,7 +93,7 @@ export function openAutomationTemplatePreview(
   }
 
   // Foot
-  const useBtn = html('button', 'cd-au-btn cd-au-btn-primary', `<span>Use template</span>${iconSvg('ArrowRight', 14)}`);
+  const useBtn = html('button', cx(au.auBtn, au.auBtnPrimary), `<span>Use template</span>${iconSvg('ArrowRight', 14)}`);
   useBtn.setAttribute('type', 'button');
   useBtn.addEventListener('click', () => {
     close();

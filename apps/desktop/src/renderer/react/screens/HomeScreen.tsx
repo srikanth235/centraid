@@ -11,6 +11,7 @@ import type {
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';
+import au from '../styles/automation.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -177,7 +178,7 @@ function AutoCard({
         onClick={() => onOpen(r.ref)}
       >
         <div className="cd-app-card-head">
-          <span className="cd-au-glyph" data-hue={r.hue} style={{ width: 52, height: 52 }}>
+          <span className={au.auGlyph} data-hue={r.hue} style={{ width: 52, height: 52 }}>
             <Icon name={r.glyphIcon as IconName} size={24} />
           </span>
           <div className="cd-app-card-head-text">
@@ -188,8 +189,8 @@ function AutoCard({
           </div>
         </div>
         <div className={styles.appCardMeta}>
-          <span className="cd-au-status" data-tone={r.statusKind} role="status">
-            <span className="cd-au-status-ic" aria-hidden="true">
+          <span className={au.auStatus} data-tone={r.statusKind} role="status">
+            <span className={au.auStatusIc} aria-hidden="true">
               <Icon name={STATUS_ICON[r.statusKind]} size={12} />
             </span>
             <span className="cd-au-status-tx">{r.statusLabel}</span>
@@ -201,11 +202,11 @@ function AutoCard({
             <span>{r.triggerLabel}</span>
           </span>
           {r.integrations.length > 0 ? (
-            <div className="cd-au-ov-dots">
+            <div className={au.auOvDots}>
               {r.integrations.slice(0, 4).map((name) => (
                 <i
                   key={name}
-                  className="cd-au-ov-dot"
+                  className={au.auOvDot}
                   title={name}
                   style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
                 />

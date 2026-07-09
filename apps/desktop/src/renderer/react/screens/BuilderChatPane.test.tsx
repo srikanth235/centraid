@@ -101,20 +101,20 @@ describe('BuilderChatPane', () => {
         ],
       }),
     );
-    expect((el.querySelector('.tool-group') as HTMLElement).dataset.open).toBe('false');
-    expect(el.querySelector('.tg-label')?.textContent).toBe('Editing ×2, Reading');
+    expect((el.querySelector('.group') as HTMLElement).dataset.open).toBe('false');
+    expect(el.querySelector('.label')?.textContent).toBe('Editing ×2, Reading');
     expect(el.querySelector('.tgCardTitle')?.textContent).toContain('2 files updated');
     expect(el.querySelector('.tgCardVersion')?.textContent).toContain('v3');
-    expect(el.querySelector('.tg-list')).toBeNull();
+    expect(el.querySelector('.list')).toBeNull();
     act(() =>
-      (el.querySelector('.tool-group-pill') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.groupPill') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onToggleGroup).toHaveBeenCalledWith('g1');
   });
 
-  it('renders expanded tool-group rows', () => {
+  it('renders expanded group rows', () => {
     const el = mount(makeProps());
     push(
       snap({
@@ -132,8 +132,8 @@ describe('BuilderChatPane', () => {
         ],
       }),
     );
-    expect(el.querySelectorAll('.tg-row').length).toBe(1);
-    expect(el.querySelector('.tg-row-target')?.textContent).toBe('index.html');
+    expect(el.querySelectorAll('.row').length).toBe(1);
+    expect(el.querySelector('.rowTarget')?.textContent).toBe('index.html');
   });
 
   it('shows the agent-progress strip only while generating; cancel fires', () => {

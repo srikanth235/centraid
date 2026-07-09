@@ -118,7 +118,7 @@ describe('AutomationTemplatesScreen', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     expect(el.textContent).toContain('No templates match');
-    const scratch = el.querySelector('.cd-au-btn-primary') as HTMLButtonElement;
+    const scratch = el.querySelector('.auBtnPrimary') as HTMLButtonElement;
     act(() => scratch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onStartFromScratch).toHaveBeenCalledTimes(1);
   });

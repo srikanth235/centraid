@@ -1,0 +1,128 @@
+@keyframes tool-group-bolt {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.group {
+  margin: 10px 0;
+}
+.groupPill {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-align: left;
+  transition: background 140ms ease-out;
+}
+.groupPill:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.groupPill .bolt,
+.groupPill .chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-3);
+}
+.groupPill .label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.groupPill .chev {
+  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.group[data-open='true'] .groupPill .chev {
+  transform: rotate(180deg);
+}
+.group[data-running='true'] .groupPill .bolt {
+  color: var(--accent);
+  animation: tool-group-bolt 1.4s ease-in-out infinite;
+}
+.group[data-error='true'] .groupPill .bolt {
+  color: #c0392b;
+  animation: none;
+}
+.group .list {
+  margin: 6px 0 0 14px;
+  padding: 6px 0 6px 14px;
+  border-left: 0.5px solid var(--line);
+}
+.group .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.group .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.group .dot[data-state='running'] {
+  background: var(--accent);
+  animation: tool-group-bolt 1.4s ease-in-out infinite;
+}
+.group .dot[data-state='error'] {
+  background: #c0392b;
+  animation: none;
+}
+.group .rowName {
+  color: var(--ink);
+  font-weight: 500;
+}
+.group .rowTarget {
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+}
+.group .row[data-state='error'] .rowName,
+.group .row[data-state='error'] .rowTarget {
+  color: #c0392b;
+}
+.group .rowClickable {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.group .rowClickable:hover {
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+}
+.group .rowExpand {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ink-3);
+  margin-left: auto;
+  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.group .rowClickable[data-open='true'] .rowExpand {
+  transform: rotate(180deg);
+}

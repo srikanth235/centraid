@@ -9,6 +9,7 @@ import type {
 import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
 import vault from '../styles/vault.module.css';
+import au from '../styles/automation.module.css';
 
 const scopeLabel = (s: VaultScopeDTO): string => (s.table ? `${s.schema}.${s.table}` : s.schema);
 
@@ -247,7 +248,7 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
     return (
       <>
         <RequestSection block={block} />
-        <div className="cd-au-loading">Loading…</div>
+        <div className={au.auLoading}>Loading…</div>
       </>
     );
   }

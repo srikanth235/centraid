@@ -82,7 +82,7 @@ describe('DiscoverScreen', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
     expect(html).toContain('trig');
     expect(html).toContain('>Cron<');
-    expect(count(html, 'cd-au-ov-dot"')).toBe(2);
+    expect(count(html, 'auOvDot"')).toBe(2);
     expect(html).toContain('cd-disc-badge');
   });
 
@@ -90,7 +90,7 @@ describe('DiscoverScreen', () => {
     const html = renderToStaticMarkup(
       <DiscoverScreen {...baseProps({ appTemplates: [], automationTemplates: [] })} />,
     );
-    expect(html).toContain('cd-page-empty');
+    expect(html).toContain('pageEmpty');
     expect(html).toContain('No templates available yet.');
     expect(count(html, 'card"')).toBe(0);
   });

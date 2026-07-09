@@ -67,6 +67,6 @@ describe('InsightsRoute', () => {
   it('renders an error line when the fetch rejects', async () => {
     getInsightsSummary.mockRejectedValue(new Error('offline'));
     const el = await render();
-    expect(el.querySelector('.cd-page-empty')?.textContent).toContain('offline');
+    expect(el.querySelector('.pageEmpty')?.textContent).toContain('offline');
   });
 });

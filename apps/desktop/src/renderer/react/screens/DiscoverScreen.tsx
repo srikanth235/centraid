@@ -6,6 +6,8 @@ import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './DiscoverScreen.module.css';
 import { cx } from '../ui/cx.js';
+import emptyCss from '../styles/pageEmpty.module.css';
+import au from '../styles/automation.module.css';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
@@ -55,17 +57,17 @@ function RowsGlyph({ size = 15 }: { size?: number }): JSX.Element {
 
 function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
   return (
-    <div className="cd-au-ov-dots" aria-hidden={names.length === 0}>
+    <div className={au.auOvDots} aria-hidden={names.length === 0}>
       {names.slice(0, 4).map((name) => (
         <i
           key={name}
-          className="cd-au-ov-dot"
+          className={au.auOvDot}
           title={name}
           style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
         />
       ))}
       {names.length > 4 ? (
-        <span className="cd-au-ov-dot-more">{`+${names.length - 4}`}</span>
+        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
       ) : null}
     </div>
   );
@@ -246,11 +248,11 @@ export default function DiscoverScreen({
         </div>
         <div className={styles.cats}>
           {shown.length === 0 ? (
-            <div className="cd-page-empty">
-              <div className="cd-page-empty-icon" aria-hidden="true">
+            <div className={emptyCss.pageEmpty}>
+              <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
                 <Icon name="Sparkle" size={22} />
               </div>
-              <div className="cd-page-empty-text">No templates available yet.</div>
+              <div className={emptyCss.pageEmptyText}>No templates available yet.</div>
             </div>
           ) : (
             order.map((cat) => {

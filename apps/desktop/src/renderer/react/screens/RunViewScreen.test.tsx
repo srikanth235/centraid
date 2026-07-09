@@ -181,12 +181,12 @@ describe('RunViewScreen', () => {
     const el = mount(props);
     push(makeSnapshot());
     act(() =>
-      (el.querySelector('.cd-au-crumb button') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onBack).toHaveBeenCalled();
-    const runAgain = [...el.querySelectorAll('.cd-au-btn')].find((b) =>
+    const runAgain = [...el.querySelectorAll('.auBtn')].find((b) =>
       b.textContent?.includes('Run again'),
     ) as HTMLButtonElement;
     act(() => runAgain.dispatchEvent(new MouseEvent('click', { bubbles: true })));

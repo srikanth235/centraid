@@ -9,6 +9,7 @@ import type {
 } from '../screen-contracts.js';
 import styles from './AutomationViewScreen.module.css';
 import { cx } from '../ui/cx.js';
+import au from '../styles/automation.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -121,9 +122,9 @@ export default function AutomationViewScreen({
     void reload();
   }, [reload]);
 
-  if (state === 'loading') return <div className="cd-au-loading">Loading automation…</div>;
-  if (state === 'error') return <div className="cd-au-loading">Could not load automation.</div>;
-  if (state === 'missing') return <div className="cd-au-loading">Automation not found.</div>;
+  if (state === 'loading') return <div className={au.auLoading}>Loading automation…</div>;
+  if (state === 'error') return <div className={au.auLoading}>Could not load automation.</div>;
+  if (state === 'missing') return <div className={au.auLoading}>Automation not found.</div>;
 
   const d = state;
   const shownRuns = d.runs.filter((r) => filter === 'all' || r.filterKey === filter);
@@ -150,17 +151,17 @@ export default function AutomationViewScreen({
     <div className={styles.view}>
       <div className={styles.vhead}>
         <div>
-          <div className="cd-au-crumb">
+          <div className={au.auCrumb}>
             <button type="button" onClick={onBack}>
               Automations
             </button>
-            <span className="cd-au-crumb-sep" aria-hidden="true">
+            <span className={au.auCrumbSep} aria-hidden="true">
               <Icon name="ArrowRight" size={12} />
             </span>
             <span>{d.name}</span>
           </div>
           <div className={styles.vtitle}>
-            <span className="cd-au-glyph" data-hue={d.hue} style={{ width: 46, height: 46 }}>
+            <span className={au.auGlyph} data-hue={d.hue} style={{ width: 46, height: 46 }}>
               <Icon name={d.glyphIcon as IconName} size={21} />
             </span>
             <div className={styles.vtitleText}>
@@ -169,10 +170,10 @@ export default function AutomationViewScreen({
             </div>
           </div>
         </div>
-        <div className="cd-au-actions">
+        <div className={au.auActions}>
           <button
             type="button"
-            className={cx('cd-au-btn', styles.btnDanger, styles.btnIcon)}
+            className={cx(au.auBtn, styles.btnDanger, styles.btnIcon)}
             title="Delete automation"
             aria-label={`Delete ${d.name}`}
             disabled={busy}
@@ -182,7 +183,7 @@ export default function AutomationViewScreen({
           </button>
           <button
             type="button"
-            className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnIcon)}
+            className={cx(au.auBtn, au.auBtnGhost, styles.btnIcon)}
             title="Edit in builder"
             disabled={busy}
             onClick={onEdit}
@@ -191,7 +192,7 @@ export default function AutomationViewScreen({
           </button>
           <button
             type="button"
-            className="cd-au-btn cd-au-btn-primary"
+            className={cx(au.auBtn, au.auBtnPrimary)}
             disabled={busy || running}
             onClick={doRun}
           >
@@ -240,7 +241,7 @@ export default function AutomationViewScreen({
           {d.webhook ? (
             d.webhook.pending || !d.webhook.url ? (
               <div className={styles.heroWebhook} data-provisioning="true">
-                <span className="cd-au-status-ic" data-spin="true" aria-hidden="true">
+                <span className={au.auStatusIc} data-spin="true" aria-hidden="true">
                   <Icon name="Loader" size={13} />
                 </span>
                 <span>Provisioning endpoint… · secret minted server-side</span>
@@ -271,8 +272,8 @@ export default function AutomationViewScreen({
           ) : null}
         </div>
         <div className={styles.heroStatus}>
-          <span className="cd-au-status" data-tone={d.statusKind} role="status">
-            <span className="cd-au-status-ic" aria-hidden="true">
+          <span className={au.auStatus} data-tone={d.statusKind} role="status">
+            <span className={au.auStatusIc} aria-hidden="true">
               <Icon name={STATUS_ICON[d.statusKind]} size={12} />
             </span>
             <span className="cd-au-status-tx">{d.statusLabel}</span>

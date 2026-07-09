@@ -29,7 +29,7 @@ describe('openAutomationTemplatePreview', () => {
     expect(drawer.textContent).toContain('Daily Digest');
     expect(drawer.textContent).toContain('Every morning');
     expect(drawer.textContent).toContain('Summarizes your inbox');
-    const chips = drawer.querySelectorAll('.cd-au-chip');
+    const chips = drawer.querySelectorAll('.auChip');
     expect(chips).toHaveLength(2);
     expect([...chips].map((c) => c.textContent)).toEqual(['gmail', 'slack']);
   });
@@ -37,7 +37,7 @@ describe('openAutomationTemplatePreview', () => {
   it('fires onUse with the template and closes on "Use template"', () => {
     const onUse = vi.fn();
     openAutomationTemplatePreview(tmpl, onUse);
-    const useBtn = [...document.querySelectorAll('.cd-au-btn-primary')].find((b) =>
+    const useBtn = [...document.querySelectorAll('.auBtnPrimary')].find((b) =>
       b.textContent?.includes('Use template'),
     ) as HTMLButtonElement;
     useBtn.click();
@@ -62,6 +62,6 @@ describe('openAutomationTemplatePreview', () => {
     expect(document.querySelector('.auDrawer')!.textContent).toContain(
       'Runs with the workspace default tools',
     );
-    expect(document.querySelectorAll('.cd-au-chip')).toHaveLength(0);
+    expect(document.querySelectorAll('.auChip')).toHaveLength(0);
   });
 });

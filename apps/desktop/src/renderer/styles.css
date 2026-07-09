@@ -694,58 +694,8 @@ select.input option {
    The pill shows a verb-and-count summary ("Reading ×3"); clicking expands
    into one row per call with status + tool + target. Mirrors the design
    system's `tcg` component (preview/components-tool-calls.html). */
-.tool-group {
-  margin: 10px 0;
-}
-.tool-group-pill {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 14px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-2);
-  text-align: left;
-  transition: background 140ms ease-out;
-}
-.tool-group-pill:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-}
-.tool-group-pill .tg-bolt,
-.tool-group-pill .tg-chev {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-3);
-}
-.tool-group-pill .tg-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.tool-group-pill .tg-chev {
-  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.tool-group[data-open='true'] .tool-group-pill .tg-chev {
-  transform: rotate(180deg);
-}
 /* Subtle accent tint while any call is still running so the user sees
    the pill is live without expanding. Errors win over running. */
-.tool-group[data-running='true'] .tool-group-pill .tg-bolt {
-  color: var(--accent);
-  animation: tool-group-bolt 1.4s ease-in-out infinite;
-}
-.tool-group[data-error='true'] .tool-group-pill .tg-bolt {
-  color: #c0392b;
-  animation: none;
-}
 @keyframes tool-group-bolt {
   0%,
   100% {
@@ -763,53 +713,6 @@ select.input option {
 /* Version stamp on the card right edge — small mono pill that shows the
    target version this turn lands as ("→ v3" / "→ draft"), giving the
    user a sense of progression without expanding the tool list. */
-
-.tool-group .tg-list {
-  margin: 6px 0 0 14px;
-  padding: 6px 0 6px 14px;
-  border-left: 0.5px solid var(--line);
-}
-.tool-group .tg-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--ink-2);
-}
-.tool-group .tg-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 99px;
-  background: var(--ink-3);
-  flex-shrink: 0;
-}
-.tool-group .tg-dot[data-state='running'] {
-  background: var(--accent);
-  animation: tool-group-bolt 1.4s ease-in-out infinite;
-}
-.tool-group .tg-dot[data-state='error'] {
-  background: #c0392b;
-  animation: none;
-}
-.tool-group .tg-row-name {
-  color: var(--ink);
-  font-weight: 500;
-}
-.tool-group .tg-row-target {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-  flex: 1;
-}
-.tool-group .tg-row[data-state='error'] .tg-row-name,
-.tool-group .tg-row[data-state='error'] .tg-row-target {
-  color: #c0392b;
-}
 
 /* ---- Thinking trace (faint, italic, left-aligned) ---- */
 
@@ -1186,13 +1089,6 @@ select.input option {
 }
 
 /* ---------- Modal / "What should we build?" sheet ---------- */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.32);
-  z-index: 50;
-  animation: m-fade 0.18s ease-out;
-}
 @keyframes m-fade {
   from {
     opacity: 0;
@@ -1200,25 +1096,6 @@ select.input option {
   to {
     opacity: 1;
   }
-}
-.modal-card {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(560px, calc(100vw - 48px));
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-xl);
-  padding: 28px 28px 22px;
-  z-index: 60;
-  box-shadow: var(--shadow-lg);
-  animation: m-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.modal-close {
-  position: absolute;
-  top: 16px;
-  right: 16px;
 }
 @keyframes m-rise {
   from {
@@ -1230,46 +1107,7 @@ select.input option {
     opacity: 1;
   }
 }
-.modal-card h3 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 26px;
-  letter-spacing: -0.025em;
-  margin: 0 0 6px;
-  color: var(--ink);
-}
-.modal-card p {
-  margin: 0 0 18px;
-  font-size: 13.5px;
-  color: var(--ink-2);
-  line-height: 1.45;
-}
-.modal-card .input,
-.modal-card textarea.input {
-  min-height: 96px;
-  resize: none;
-  line-height: 1.5;
-  font-family: var(--font-sans);
-  font-size: 14px;
-}
 /* Single-line text field for the prompt dialog (rename etc.). */
-.modal-input {
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0 0 4px;
-  padding: 10px 12px;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: var(--ink);
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  outline: none;
-}
-.modal-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
-}
 .sheet-actions {
   display: flex;
   align-items: center;
@@ -1324,9 +1162,6 @@ select.input option {
   font-size: 12px;
   line-height: 1.45;
   padding: 2px 0 8px;
-}
-.modal-card .input[type='password'] {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
 }
 .preview-toast.preview-toast-action {
   align-items: center;
@@ -2101,32 +1936,6 @@ select.input option {
   margin: 0;
   font-size: 14px;
   color: var(--ink-3);
-}
-.cd-page-empty {
-  max-width: 1080px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 64px 24px;
-  border: 0.5px dashed var(--line-strong);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
-}
-.cd-page-empty-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
-  color: #fff;
-}
-.cd-page-empty-text {
-  font-size: 14px;
-  color: var(--ink-3);
-  text-align: center;
 }
 
 /* Day-1 home — centered hero with the composer as the centre of gravity.
@@ -3019,28 +2828,6 @@ select.input option {
 /* Each tool row inside the in-app chat's tool-group is clickable and drills
    in to show SQL + the result table. Builder's `.tg-row` is a static div;
    here we promote it to a button and add a chevron at the right edge. */
-.tool-group .tg-row-clickable {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  border-radius: 6px;
-}
-.tool-group .tg-row-clickable:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-}
-.tool-group .tg-row-expand {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-3);
-  margin-left: auto;
-  transition: transform 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.tool-group .tg-row-clickable[data-open='true'] .tg-row-expand {
-  transform: rotate(180deg);
-}
 
 /* Per-row drill-in: SQL preview + result table or error. Sits flush below
    its `.tg-row` inside the group's `.tg-list`. */
@@ -3198,64 +2985,10 @@ select.input option {
 }
 
 /* ── Integration chips ── */
-.cd-au-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.cd-au-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  border-radius: 20px;
-  padding: 3px 9px;
-}
-.cd-au-chip-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-}
 
 /* ── Automation viewer ── */
-.cd-au-loading {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding: 48px 0;
-  font-size: 14px;
-  color: var(--ink-3);
-}
 
 /* viewer header */
-.cd-au-crumb {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-bottom: 11px;
-}
-.cd-au-crumb button {
-  font: inherit;
-  font-size: 12px;
-  color: var(--ink-3);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: color 0.14s ease;
-}
-.cd-au-crumb button:hover {
-  color: var(--accent);
-}
-.cd-au-crumb-sep {
-  display: inline-flex;
-  opacity: 0.5;
-}
 /* Per-automation identity hue → --au-hue. Identity is DECORATIVE ONLY:
    it tints the glyph tile, the trigger-hero rail, and status dots. CTAs,
    focus rings, toggles and active states keep the single --accent action
@@ -3284,92 +3017,16 @@ select.input option {
 [data-hue='slate'] {
   --au-hue: var(--c-slate);
 }
-.cd-au-glyph {
-  width: 42px;
-  height: 42px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink-3);
-}
 /* Identity-coloured glyph tile — hue is independent of on/off status, which
    is carried by the adjacent status pill (icon + label). */
-.cd-au-glyph[data-hue] {
-  background: color-mix(in srgb, var(--au-hue) 16%, transparent);
-  color: var(--au-hue);
-}
 /* Legacy on/off accent tint — kept for any call site not yet migrated to
    identity hues; [data-hue] wins via later source order when both present. */
-.cd-au-glyph[data-on='true'] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-}
 
 /* Status pill — always icon + label, never colour alone (WCAG + colourblind).
    tone 12% fill + 28% border; `running` spins the Loader glyph. */
-.cd-au-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--au-status-tone, var(--ink)) 28%, transparent);
-  background: color-mix(in srgb, var(--au-status-tone, var(--ink)) 12%, transparent);
-  color: var(--au-status-tone, var(--ink-3));
-}
-.cd-au-status[data-tone='active'],
-.cd-au-status[data-tone='success'] {
-  --au-status-tone: var(--success);
-}
-.cd-au-status[data-tone='paused'] {
-  --au-status-tone: var(--ink-3);
-}
-.cd-au-status[data-tone='draft'] {
-  --au-status-tone: var(--icon-amber);
-}
-.cd-au-status[data-tone='running'] {
-  --au-status-tone: var(--accent);
-}
-.cd-au-status[data-tone='failed'] {
-  --au-status-tone: var(--danger);
-}
-.cd-au-status-ic {
-  display: inline-flex;
-}
-.cd-au-status-ic[data-spin='true'] {
-  animation: cd-spin 0.9s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  .cd-au-status-ic[data-spin='true'] {
-    animation: none;
-  }
-}
 
 
 
@@ -3390,66 +3047,8 @@ select.input option {
 
 
 /* Trigger badge — cron-clock / webhook glyph + schedule label. */
-.cd-au-trigbadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cd-au-trigbadge-ic {
-  display: inline-flex;
-  color: var(--ink-4);
-}
-.cd-au-trigbadge[data-mono='true'] {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-}
-.cd-au-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 9px;
-  align-items: center;
-}
 
 /* viewer buttons */
-.cd-au-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 9px 15px;
-  border-radius: 8px;
-  border: none;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    transform 0.14s ease,
-    background 0.14s ease,
-    filter 0.14s ease;
-}
-.cd-au-btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.cd-au-btn-primary {
-  background: var(--accent);
-  color: #fff;
-}
-.cd-au-btn-primary:not(:disabled):hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-}
-.cd-au-btn-ghost {
-  background: var(--bg-elev);
-  color: var(--ink);
-  border: 0.5px solid var(--line-strong);
-}
-.cd-au-btn-ghost:hover {
-  background: var(--bg-sunken);
-}
 /* Destructive action — quiet by default (reads as a neutral ghost icon), but
    declares its intent the moment the pointer lands: the glyph, fill, and
    border all shift toward --danger. Keeps a low-frequency, irreversible action
@@ -3520,177 +3119,11 @@ select.input option {
 /* Recent-runs section sits full-width below the automations list. */
 
 /* automation rows */
-.cd-au-ov-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  text-align: left;
-  padding: 14px 16px 14px 17px;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  font: inherit;
-  cursor: pointer;
-  overflow: hidden;
-  transition:
-    transform 0.16s cubic-bezier(0.22, 0.61, 0.36, 1),
-    border-color 0.16s ease;
-}
-.cd-au-ov-row::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--ink-4);
-  transition: width 0.16s ease;
-}
-.cd-au-ov-row[data-on='true']::before {
-  background: var(--success);
-}
 /* Identity rail — the per-automation hue (decorative; status lives in the
    adjacent icon+label pill). */
-.cd-au-ov-row[data-hue]::before {
-  background: var(--au-hue);
-}
-.cd-au-ov-row:hover {
-  transform: translateX(2px);
-  border-color: var(--line-strong);
-}
-.cd-au-ov-row:hover::before {
-  width: 4px;
-}
-.cd-au-ov-row:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-}
-.cd-au-ov-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.cd-au-ov-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-au-ov-right {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cd-au-ov-last {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.cd-au-ov-chev {
-  display: inline-flex;
-  color: var(--ink-4);
-}
 /* mini integration dots — colour + title, never colour alone */
-.cd-au-ov-dots {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.cd-au-ov-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-elev) 100%, transparent);
-}
-.cd-au-ov-dot-more {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-}
 
 /* recent run stream */
-.cd-au-ov-run {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  padding: 13px 15px;
-  background: none;
-  border: none;
-  border-bottom: 0.5px solid var(--line);
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.14s ease;
-}
-.cd-au-ov-run:last-child {
-  border-bottom: none;
-}
-.cd-au-ov-run:hover {
-  background: var(--bg-sunken);
-}
-.cd-au-ov-run-ic {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
-}
-.cd-au-ov-run-ic[data-ok='false'] {
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--danger);
-}
-.cd-au-ov-run-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cd-au-ov-run-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-au-ov-run-sum {
-  font-size: 12px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-au-ov-run-when {
-  flex: none;
-  text-align: right;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-}
-.cd-au-ov-run-when b {
-  display: block;
-  font-weight: 500;
-  color: var(--ink-2);
-}
-.cd-au-ov-run-meta {
-  display: block;
-  font-size: 9.5px;
-  letter-spacing: 0.02em;
-  color: var(--ink-4);
-}
 
 /* ── Overview health strip — Active / Paused / Drafts / Need attention ── */
 

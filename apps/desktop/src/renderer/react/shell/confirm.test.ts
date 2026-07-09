@@ -11,12 +11,12 @@ afterEach(() => {
 describe('openConfirm', () => {
   it('mounts a dialog with the title/message and resolves true on Confirm', async () => {
     const p = openConfirm({ title: 'Delete?', message: 'Are you sure', confirmLabel: 'Delete' });
-    const card = document.querySelector('.modal-card')!;
+    const card = document.querySelector('.card')!;
     expect(card.textContent).toContain('Delete?');
     expect(card.textContent).toContain('Are you sure');
     (card.querySelector('.btn-danger, .btn-primary') as HTMLButtonElement).click();
     expect(await p).toBe(true);
-    expect(document.querySelector('.modal-card')).toBeNull();
+    expect(document.querySelector('.card')).toBeNull();
   });
 
   it('resolves false on Cancel and on backdrop click', async () => {
@@ -25,7 +25,7 @@ describe('openConfirm', () => {
     expect(await p1).toBe(false);
 
     const p2 = openConfirm({ title: 'T', message: 'M' });
-    (document.querySelector('.modal-backdrop') as HTMLElement).click();
+    (document.querySelector('.backdrop') as HTMLElement).click();
     expect(await p2).toBe(false);
   });
 

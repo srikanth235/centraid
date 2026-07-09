@@ -1,3 +1,5 @@
+import modalCss from '../styles/modal.module.css';
+import { cx } from '../ui/cx.js';
 // Text-prompt dialog — a promise-based modal (backdrop + card + a single text
 // field + Cancel/Save, Esc = cancel, Enter = save). Sibling of confirm.ts's
 // `openConfirm`; it portals to document.body and resolves the trimmed string, or
@@ -33,16 +35,16 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     };
 
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop';
+    backdrop.className = modalCss.backdrop ?? '';
     backdrop.addEventListener('click', () => finish(null));
 
     const card = document.createElement('div');
-    card.className = 'modal-card';
+    card.className = modalCss.card ?? '';
     card.setAttribute('role', 'dialog');
     card.setAttribute('aria-label', opts.title);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = 'btn-icon modal-close';
+    closeBtn.className = cx("btn-icon", modalCss.close);
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = X_SVG;
     closeBtn.addEventListener('click', () => finish(null));
@@ -51,7 +53,7 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     heading.textContent = opts.title;
 
     const input = document.createElement('input');
-    input.className = 'modal-input';
+    input.className = modalCss.input ?? '';
     input.type = 'text';
     input.value = opts.initial ?? '';
     if (opts.placeholder) input.placeholder = opts.placeholder;

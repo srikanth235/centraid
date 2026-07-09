@@ -45,7 +45,7 @@ describe('openTemplatePreview', () => {
     expect(document.querySelector('.tmplPreview')).toBeNull();
 
     openTemplatePreview(tmpl, onUse);
-    (document.querySelector('.modal-backdrop') as HTMLElement).click();
+    (document.querySelector('.backdrop') as HTMLElement).click();
     expect(document.querySelector('.tmplPreview')).toBeNull();
 
     openTemplatePreview(tmpl, onUse);
