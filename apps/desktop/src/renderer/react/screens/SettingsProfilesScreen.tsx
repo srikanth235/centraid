@@ -3,6 +3,8 @@ import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../screen-contracts.js';
+import styles from './SettingsProfilesScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 function Avatar({
   icon,
@@ -44,20 +46,20 @@ function ProfileRow({
   onDelete: (id: string) => void;
 }): JSX.Element {
   return (
-    <div className="cd-prof-row" data-active={p.active ? 'true' : 'false'}>
+    <div className={styles.profRow} data-active={p.active ? 'true' : 'false'}>
       <Avatar icon={p.icon} color={p.color} size={40} />
-      <div className="cd-prof-row-text">
-        <div className="cd-prof-row-titlerow">
-          <span className="cd-prof-row-name">{p.name}</span>
-          {p.active ? <span className="cd-prof-row-badge">Active</span> : null}
+      <div className={styles.profRowText}>
+        <div className={styles.profRowTitlerow}>
+          <span className={styles.profRowName}>{p.name}</span>
+          {p.active ? <span className={styles.profRowBadge}>Active</span> : null}
         </div>
-        <div className="cd-prof-row-sub">{p.subLine}</div>
+        <div className={styles.profRowSub}>{p.subLine}</div>
       </div>
-      <div className="cd-prof-row-actions">
+      <div className={styles.profRowActions}>
         {!p.active ? (
           <button
             type="button"
-            className="cd-chip cd-prof-row-switch"
+            className={cx("cd-chip", styles.profRowSwitch)}
             onClick={() => onSwitch(p.id)}
           >
             Switch
@@ -75,7 +77,7 @@ function ProfileRow({
         {!p.primordial ? (
           <button
             type="button"
-            className="cd-icon-btn cd-prof-row-del"
+            className={cx("cd-icon-btn", styles.profRowDel)}
             title="Delete"
             aria-label={`Delete ${p.name}`}
             onClick={() => onDelete(p.id)}
@@ -98,19 +100,19 @@ function ConnectionRow({
   onRemove: (id: string) => void;
 }): JSX.Element {
   return (
-    <div className="cd-prof-row" data-active={c.active ? 'true' : 'false'}>
-      <div className="cd-prof-row-text">
-        <div className="cd-prof-row-titlerow">
-          <span className="cd-prof-row-name">{c.displayName}</span>
-          {c.active ? <span className="cd-prof-row-badge">Connected</span> : null}
+    <div className={styles.profRow} data-active={c.active ? 'true' : 'false'}>
+      <div className={styles.profRowText}>
+        <div className={styles.profRowTitlerow}>
+          <span className={styles.profRowName}>{c.displayName}</span>
+          {c.active ? <span className={styles.profRowBadge}>Connected</span> : null}
         </div>
-        <div className="cd-prof-row-sub">{c.sub}</div>
+        <div className={styles.profRowSub}>{c.sub}</div>
       </div>
-      <div className="cd-prof-row-actions">
+      <div className={styles.profRowActions}>
         {!c.active ? (
           <button
             type="button"
-            className="cd-chip cd-prof-row-switch"
+            className={cx("cd-chip", styles.profRowSwitch)}
             onClick={() => onConnect(c.id)}
           >
             Connect
@@ -119,7 +121,7 @@ function ConnectionRow({
         {c.removable ? (
           <button
             type="button"
-            className="cd-icon-btn cd-prof-row-del"
+            className={cx("cd-icon-btn", styles.profRowDel)}
             title="Remove connection"
             aria-label={`Remove ${c.displayName}`}
             onClick={() => onRemove(c.id)}
@@ -158,8 +160,8 @@ export default function SettingsProfilesScreen({
             until you grant access. Switch from here or from the switcher at the top of the sidebar
             (⌘⇧G).
           </div>
-          <div className="cd-prof-manage">
-            <div className="cd-prof-manage-list">
+          <div className={styles.profManage}>
+            <div className={styles.profManageList}>
               {profiles.map((p) => (
                 <ProfileRow
                   key={p.id}
@@ -170,7 +172,7 @@ export default function SettingsProfilesScreen({
                 />
               ))}
             </div>
-            <button type="button" className="cd-prof-manage-add" onClick={onAdd}>
+            <button type="button" className={styles.profManageAdd} onClick={onAdd}>
               <span>
                 <Icon name="Plus" size={14} />
               </span>
@@ -186,7 +188,7 @@ export default function SettingsProfilesScreen({
           <div className="settings-note">
             Gateways this desktop can talk to. Each connection hosts its own set of spaces.
           </div>
-          <div className="cd-prof-manage-list">
+          <div className={styles.profManageList}>
             {connections.map((c) => (
               <ConnectionRow key={c.id} c={c} onConnect={onConnect} onRemove={onRemoveConnection} />
             ))}

@@ -373,16 +373,6 @@ select.input option {
 .app-topbar .spacer {
   flex: 1;
 }
-
-.app-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 36px 56px 60px;
-}
-.app-body-inner {
-  max-width: 760px;
-  margin: 0 auto;
-}
 .app-title {
   font-family: var(--font-display);
   font-size: 32px;
@@ -409,20 +399,6 @@ select.input option {
    no padding. The parent .app-body keeps its scroll behavior in case
    the host shell ever needs it, but the inner container drops every
    constraint when carrying a live app. */
-.app-body:has(> .app-body-inner.app-view-fullbleed) {
-  padding: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.app-body-inner.app-view-fullbleed {
-  max-width: none;
-  margin: 0;
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
 .app-view-fullbleed > .app-view-frame {
   flex: 1 1 auto;
   display: flex;
@@ -1427,384 +1403,25 @@ select.input option {
    becomes a two-column grid: a 232px category nav beside a scrolling
    content pane. The nav rides a faint ink wash; the pane scrolls on its
    own so the nav stays put. */
-.cd-settings-main {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-}
-.cd-settings-nav {
-  display: flex;
-  flex-direction: column;
-  padding: 26px 12px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
-  border-right: 0.5px solid var(--line);
-  overflow-y: auto;
-}
-.cd-settings-nav-head {
-  padding: 0 8px 12px;
-}
-.cd-settings-nav-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.cd-settings-nav-title {
-  margin-top: 6px;
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-settings-nav-section {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  padding: 14px 10px 4px;
-}
-.cd-settings-nav-section:first-of-type {
-  padding-top: 2px;
-}
-.cd-settings-nav-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  padding: 7px 10px;
-  margin-block: 1.5px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-2);
-  cursor: pointer;
-  transition: background 100ms;
-}
-.cd-settings-nav-item:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
-}
-.cd-settings-nav-item[data-active='true'] {
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink);
-}
 
 /* Content pane — scrolls independently; controls capped at 640px wide. */
-.cd-settings-content {
-  min-width: 0;
-  overflow-y: auto;
-  padding: 36px 48px 60px;
-}
-.cd-settings-content > * {
-  max-width: 640px;
-}
-.cd-settings-page-head {
-  margin: 0 0 22px;
-}
-.cd-settings-page-titlerow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.cd-settings-page-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 26px;
-  letter-spacing: -0.025em;
-  color: var(--ink);
-}
-.cd-settings-page-sub {
-  margin: 8px 0 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ink-3);
-  text-wrap: pretty;
-}
 /* §C4 — auto-save marker for pages whose controls persist on change. */
-.cd-settings-autosaved {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--c-forest, #5c8a4e);
-}
-.cd-settings-page {
-  display: block;
-}
 
 /* Active-agent segmented switch (Settings → Agents). One control for which
    agent runs: a pill slides under the active segment, tinted with that agent's
    accent. Unavailable agents are dimmed and non-interactive. */
-.agent-switch {
-  position: relative;
-  display: flex;
-  width: 100%;
-  max-width: 380px;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-}
-.agent-switch-ind {
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  left: 3px;
-  /* Two equal segments (each seg is flex:1). The pill matches one segment and
-     slides via translateX(100%) — measurement-free, so it positions correctly
-     even while the settings page is hidden. */
-  width: calc(50% - 3px);
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, var(--bg-elev));
-  border: 1px solid color-mix(in oklab, var(--seg-accent, var(--accent)) 55%, var(--line-strong));
-  box-shadow:
-    var(--shadow-sm),
-    0 0 0 3px color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, transparent);
-  transition:
-    transform 0.26s cubic-bezier(0.2, 0.7, 0.3, 1),
-    background 0.2s ease,
-    border-color 0.2s ease;
-  pointer-events: none;
-}
-.agent-switch[data-active-index='1'] .agent-switch-ind {
-  transform: translateX(100%);
-}
-.agent-switch-seg {
-  position: relative;
-  z-index: 1;
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink-3);
-  padding: 8px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: color 0.18s ease;
-}
-.agent-switch-seg:not([data-active='true']):not([data-unavail='true']):hover {
-  color: var(--ink-2);
-}
-.agent-switch-seg[data-active='true'] {
-  color: var(--ink);
-  font-weight: 600;
-  cursor: default;
-}
-.agent-switch-seg[data-unavail='true'] {
-  color: var(--ink-4);
-  cursor: default;
-}
-.agent-switch-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex: none;
-  transition: background 0.18s ease;
-}
-.agent-switch-seg[data-unavail='true'] .agent-switch-dot {
-  background: var(--ink-4) !important;
-}
 
 /* Agent config panel — one surface, a row per agent (hairline-divided). The
    active row wears its agent's accent as a left rail + a faint wash. */
-.agents-panel {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.agent-entry + .agent-entry {
-  border-top: 1px solid var(--line);
-}
-.agent-row {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  transition: background 0.18s ease;
-}
-.agent-row[data-active='true'] {
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 7%, transparent);
-}
-.agent-row[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--row-accent, var(--accent));
-}
-.agent-row[data-unavail='true'] {
-  opacity: 0.55;
-}
-.agent-row-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex: none;
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--row-accent, var(--accent)) 16%, transparent);
-}
-.agent-row-meta {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.agent-row-name {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.agent-row-active {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
-}
-.agent-row-sub {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.agent-row-model {
-  flex: none;
-}
 /* Refined model picker — native select with the chrome stripped: custom
    chevron, compact, right-aligned. Replaces the full-width default control. */
-.agent-model-select {
-  appearance: none;
-  -webkit-appearance: none;
-  min-width: 180px;
-  max-width: 240px;
-  padding: 8px 32px 8px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  background-color: var(--bg-sunken);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.agent-model-select:hover:not(:disabled) {
-  border-color: var(--ink-4);
-}
-.agent-model-select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
-}
-.agent-model-select:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
 
 /* ---- Per-agent host-tools disclosure (Settings → Agents) -------------------
    A quiet "N tools" toggle in the agent row expands a grouped list of the
    builtins + MCP tools the runner exposes, read from the gateway catalog. */
-.agent-row-tools {
-  flex: none;
-}
-.agent-tools-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    color 0.15s ease,
-    background 0.15s ease;
-}
-.agent-tools-toggle:hover {
-  border-color: var(--ink-4);
-  color: var(--ink);
-}
-.agent-tools-toggle svg {
-  display: block;
-}
-.agent-tools-chev {
-  display: inline-flex;
-  transition: transform 0.22s ease;
-}
-.agent-entry[data-tools-open='true'] .agent-tools-chev {
-  transform: rotate(180deg);
-}
-.agent-entry[data-tools-open='true'] .agent-tools-toggle {
-  border-color: color-mix(in oklab, var(--row-accent, var(--accent)) 45%, var(--line));
-  color: var(--ink);
-}
 
 /* Expanded panel — indented to align under the row meta, with a hairline
    accent rail mirroring the active-row marker. */
-.agent-tools {
-  padding: 4px 16px 16px 32px;
-  background: color-mix(in oklab, var(--bg-sunken) 50%, transparent);
-  border-top: 1px solid var(--line);
-}
-.agent-tools[hidden] {
-  display: none;
-}
-.tools-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.tools-group {
-  animation: tools-group-in 0.26s ease both;
-}
-.tools-group:nth-child(2) {
-  animation-delay: 0.04s;
-}
-.tools-group:nth-child(3) {
-  animation-delay: 0.08s;
-}
-.tools-group:nth-child(4) {
-  animation-delay: 0.12s;
-}
-.tools-group:nth-child(n + 5) {
-  animation-delay: 0.16s;
-}
 @keyframes tools-group-in {
   from {
     opacity: 0;
@@ -1814,73 +1431,6 @@ select.input option {
     opacity: 1;
     transform: translateY(0);
   }
-}
-.tools-group-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 6px;
-}
-.tools-group-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
-  font-family: var(--font-mono);
-}
-.tools-group-count {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--ink-4, var(--ink-3));
-  background: color-mix(in oklab, var(--ink-3) 12%, transparent);
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-family: var(--font-mono);
-}
-.tools-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.tool-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.tool-item-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tool-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink);
-  word-break: break-word;
-}
-.tool-args {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--row-accent, var(--accent));
-  background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
-  border-radius: 4px;
-  padding: 1px 5px;
-}
-.tool-desc {
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-.agent-tools-empty {
-  font-size: 11px;
-  color: var(--ink-3);
-  font-style: italic;
-  padding: 8px 0;
 }
 
 /* §C2 — Appearance live-preview tile. A 4-up grid of app tiles whose
@@ -1938,44 +1488,8 @@ select.input option {
   padding-top: 8px;
   border-top: 0.5px solid var(--line);
 }
-.drawer-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 7px 0;
-}
-.drawer-row-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-}
 /* §C — `Row`: two-column grid — label + hint on the left, control right. */
-.drawer-row-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
 /* `full` row — control stacked below the label across the row width. */
-.drawer-row-full {
-  display: block;
-}
-.drawer-row-full .drawer-row-control {
-  margin-top: 8px;
-}
-.drawer-row-grid .drawer-row-head {
-  padding-top: 4px;
-}
-.drawer-row-hint {
-  display: block;
-  margin-top: 3px;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--ink-3);
-}
-.drawer-row-control {
-  min-width: 0;
-}
 
 /* Segmented control (theme/density/tile treatment, per-app knobs) */
 .seg {
@@ -2005,56 +1519,9 @@ select.input option {
 }
 /* §C — within Settings the segmented control is the proposal `Seg`:
    inline (hugs its options), bordered, with a subtle ink wash. */
-.cd-settings-page .seg {
-  display: inline-flex;
-  padding: 3px;
-  gap: 0;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cd-settings-page .seg button {
-  padding: 6px 12px;
-  font-size: 12.5px;
-}
-.cd-settings-page .seg button[data-active='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-}
 
 /* §C — RefinedSettingsV2 `Tog`: a 34×20 pill toggle. Off = ink wash with
    a hairline ring, On = accent fill, white thumb. */
-.cd-switch {
-  position: relative;
-  width: 34px;
-  height: 20px;
-  border-radius: 999px;
-  border: 0;
-  padding: 0;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
-  box-shadow: inset 0 0 0 0.5px var(--line);
-  cursor: pointer;
-  flex: 0 0 auto;
-  transition: background 150ms ease;
-}
-.cd-switch-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  transition: transform 150ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.cd-switch[data-on='true'] {
-  background: var(--accent);
-  box-shadow: none;
-}
-.cd-switch[data-on='true'] .cd-switch-thumb {
-  transform: translateX(14px);
-}
 
 /* §C — RefinedSettingsV2 accent picker: labelled swatch cards — a color
    bar over a caption. The active card wears an ink border. */
@@ -2583,319 +2050,16 @@ select.input option {
    trailing column lines up across every row in every state. */
 
 /* Overlays — modal + dialog share the centered scrim shell */
-.cd-prof-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-}
-.cd-prof-scrim {
-  position: absolute;
-  inset: 0;
-  background: rgba(8, 9, 12, 0.5);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  animation: cd-fade 160ms ease-out;
-}
 
 /* Add / edit modal */
-.cd-prof-modal {
-  position: relative;
-  width: 468px;
-  max-width: 100%;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 18px;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.25),
-    0 32px 80px -20px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
-  animation: cd-pop 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.cd-prof-modal-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 20px;
-  border-bottom: 0.5px solid var(--line);
-}
-.cd-prof-modal-head-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-}
-.cd-prof-modal-title {
-  margin: 0;
-  flex: 1;
-  font: var(--t-h3);
-  font-size: 15.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.cd-prof-modal-close {
-  width: 28px;
-  height: 28px;
-}
-.cd-prof-modal-body {
-  padding: 20px 20px 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.cd-prof-modal-preview {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 13px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  border: 0.5px solid var(--line);
-}
-.cd-prof-modal-preview-text {
-  min-width: 0;
-}
-.cd-prof-modal-preview-name {
-  font: var(--t-title);
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-prof-modal-preview-sub {
-  margin-top: 2px;
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cd-prof-modal-foot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-  margin-top: 8px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-prof-modal-delete {
-  font-size: 12.5px;
-  padding: 7px 12px;
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
-}
-.cd-prof-modal-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 16px;
-  border-radius: 8px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  font: var(--t-body);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-prof-modal-save[disabled] {
-  background: color-mix(in srgb, var(--ink) 10%, transparent);
-  color: var(--ink-4);
-  cursor: not-allowed;
-}
 
 /* Form fields */
-.cd-prof-field {
-  display: block;
-}
-.cd-prof-field-label {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  margin-bottom: 7px;
-  font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.cd-prof-field-optional {
-  font: var(--t-small);
-  font-size: 11px;
-  color: var(--ink-4);
-  font-weight: 400;
-}
-.cd-prof-field-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 9px 12px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  font: var(--t-body);
-  font-size: 13.5px;
-  color: var(--ink);
-  outline: none;
-  caret-color: var(--accent);
-  transition:
-    border-color 120ms,
-    box-shadow 120ms;
-}
-.cd-prof-field-input:focus {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-.cd-prof-icon-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.cd-prof-icon-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  color: var(--ink-2);
-}
-.cd-prof-icon-btn[data-selected='true'] {
-  border: 1.5px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-.cd-prof-color-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.cd-prof-color-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  cursor: pointer;
-  padding: 0;
-  border: 0.5px solid var(--line);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
-}
-.cd-prof-color-btn[data-selected='true'] {
-  border: 1.5px solid var(--ink);
-  box-shadow: inset 0 0 0 2px var(--bg-elev);
-}
 
 /* Delete dialog */
 
 /* Toast */
 
 /* Settings → Account → Profiles manage cards */
-.cd-prof-manage {
-  margin-top: 4px;
-}
-.cd-prof-manage-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.cd-prof-manage-add {
-  margin-top: 14px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  border: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent);
-  background: transparent;
-  color: var(--ink-2);
-  font: var(--t-body);
-  font-size: 13px;
-  font-weight: 500;
-  transition:
-    background 120ms,
-    border-color 120ms;
-}
-.cd-prof-manage-add:hover {
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.cd-prof-row {
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 12px 14px;
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
-  border: 0.5px solid var(--line);
-  transition: background 120ms;
-}
-.cd-prof-row[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border: 0.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-.cd-prof-row-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-prof-row-titlerow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cd-prof-row-name {
-  font: var(--t-title);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-.cd-prof-row-badge {
-  padding: 1px 7px;
-  border-radius: 4px;
-  font: var(--t-mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--accent);
-}
-.cd-prof-row-sub {
-  margin-top: 2px;
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-prof-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  opacity: 0.6;
-  transition: opacity 120ms;
-}
-.cd-prof-row:hover .cd-prof-row-actions {
-  opacity: 1;
-}
-.cd-prof-row-switch {
-  font-size: 11.5px;
-  padding: 5px 10px;
-}
-.cd-prof-row-del {
-  color: var(--ink-3);
-}
 
 /* Main area on Bold pages */
 .cd-main {
@@ -3837,90 +3001,7 @@ select.input option {
 
 /* §D — App-view titlebar identity lockup: gradient app-icon tile + name
    + a LIVE status chip, in a soft ink-washed pill. */
-.cd-brand-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 4px 10px 4px 6px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-}
-.cd-brand-chip-icon {
-  width: 20px;
-  height: 20px;
-  flex: none;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.cd-brand-chip-name {
-  font-family: var(--font-display, var(--font-sans));
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-brand-chip-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--success) 18%, transparent);
-  color: var(--success);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.cd-brand-chip-live-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-}
 /* §D4/§G4 — Use / Build segmented switch in the App-view titlebar. */
-.cd-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  height: 28px;
-  padding: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 0.5px solid var(--line);
-}
-.cd-mode-seg {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0 12px;
-  height: 24px;
-  border-radius: 999px;
-  border: none;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.cd-mode-seg:hover {
-  color: var(--ink);
-}
-.cd-mode-seg[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: 0 0 0 0.5px var(--line);
-}
-.cd-mode-seg-icon {
-  display: inline-flex;
-}
 
 /* Small ghost / primary buttons used in the titlebar */
 .cd-btn {
@@ -4400,10 +3481,22 @@ select.input option {
 
 
 
+
+
+
+
+
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
+
+
+
+
+
 
 
 

@@ -20,6 +20,7 @@ import SpaceModal, {
   type SpaceModalInitial,
 } from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
+import styles from './SettingsRoute.module.css';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
 // renderSettings (app-settings.ts): a grouped category nav beside a content
@@ -127,20 +128,20 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
 
   return (
     <>
-    <div className="cd-settings-main">
-      <aside className="cd-settings-nav">
-        <div className="cd-settings-nav-head">
-          <div className="cd-settings-nav-eyebrow">Settings</div>
-          <div className="cd-settings-nav-title">Personal</div>
+    <div className={styles.settingsMain}>
+      <aside className={styles.settingsNav}>
+        <div className={styles.settingsNavHead}>
+          <div className={styles.settingsNavEyebrow}>Settings</div>
+          <div className={styles.settingsNavTitle}>Personal</div>
         </div>
         {SECTIONS.map((section) => (
-          <div key={section} className="cd-settings-nav-section">
+          <div key={section} className={styles.settingsNavSection}>
             <div className="cd-settings-nav-section-label">{section}</div>
             {PAGES.filter((p) => p.section === section).map((p) => (
               <button
                 key={p.id}
                 type="button"
-                className="cd-settings-nav-item"
+                className={styles.settingsNavItem}
                 data-active={String(p.id === page)}
                 onClick={() => setPage(p.id)}
               >
@@ -152,21 +153,21 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
         ))}
       </aside>
 
-      <section className="cd-settings-content">
-        <header className="cd-settings-page-head">
-          <div className="cd-settings-page-titlerow">
-            <h1 className="cd-settings-page-title">{def?.label ?? 'Settings'}</h1>
+      <section className={styles.settingsContent}>
+        <header className={styles.settingsPageHead}>
+          <div className={styles.settingsPageTitlerow}>
+            <h1 className={styles.settingsPageTitle}>{def?.label ?? 'Settings'}</h1>
             {AUTO_SAVE.has(page) ? (
-              <span className="cd-settings-autosaved">
+              <span className={styles.settingsAutosaved}>
                 <Icon name="Check" size={10} strokeWidth={2.5} />
                 <span>Auto-saved</span>
               </span>
             ) : null}
           </div>
-          {def ? <p className="cd-settings-page-sub">{def.subtitle}</p> : null}
+          {def ? <p className={styles.settingsPageSub}>{def.subtitle}</p> : null}
         </header>
 
-        <div className="cd-settings-page">
+        <div className={styles.settingsPage}>
           {page === 'appearance' ? (
             <SettingsAppearanceScreen
               accent={prefs.accent}

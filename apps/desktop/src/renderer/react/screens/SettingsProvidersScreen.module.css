@@ -1,0 +1,326 @@
+@keyframes tools-group-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.switch {
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 380px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+.switchInd {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  /* Two equal segments (each seg is flex:1). The pill matches one segment and
+     slides via translateX(100%) — measurement-free, so it positions correctly
+     even while the settings page is hidden. */
+  width: calc(50% - 3px);
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, var(--bg-elev));
+  border: 1px solid color-mix(in oklab, var(--seg-accent, var(--accent)) 55%, var(--line-strong));
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 3px color-mix(in oklab, var(--seg-accent, var(--accent)) 12%, transparent);
+  transition:
+    transform 0.26s cubic-bezier(0.2, 0.7, 0.3, 1),
+    background 0.2s ease,
+    border-color 0.2s ease;
+  pointer-events: none;
+}
+.switch[data-active-index='1'] .switchInd {
+  transform: translateX(100%);
+}
+.switchSeg {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-3);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s ease;
+}
+.switchSeg:not([data-active='true']):not([data-unavail='true']):hover {
+  color: var(--ink-2);
+}
+.switchSeg[data-active='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  cursor: default;
+}
+.switchSeg[data-unavail='true'] {
+  color: var(--ink-4);
+  cursor: default;
+}
+.switchDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  transition: background 0.18s ease;
+}
+.switchSeg[data-unavail='true'] .switchDot {
+  background: var(--ink-4) !important;
+}
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.entry + .entry {
+  border-top: 1px solid var(--line);
+}
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  transition: background 0.18s ease;
+}
+.row[data-active='true'] {
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 7%, transparent);
+}
+.row[data-active='true']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--row-accent, var(--accent));
+}
+.row[data-unavail='true'] {
+  opacity: 0.55;
+}
+.rowDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--row-accent, var(--accent)) 16%, transparent);
+}
+.rowMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rowName {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rowActive {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--row-accent, var(--accent));
+}
+.rowSub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowModel {
+  flex: none;
+}
+.modelSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  min-width: 180px;
+  max-width: 240px;
+  padding: 8px 32px 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background-color: var(--bg-sunken);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.modelSelect:hover:not(:disabled) {
+  border-color: var(--ink-4);
+}
+.modelSelect:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+.modelSelect:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.rowTools {
+  flex: none;
+}
+.toolsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background 0.15s ease;
+}
+.toolsToggle:hover {
+  border-color: var(--ink-4);
+  color: var(--ink);
+}
+.toolsToggle svg {
+  display: block;
+}
+.toolsChev {
+  display: inline-flex;
+  transition: transform 0.22s ease;
+}
+.entry[data-tools-open='true'] .toolsChev {
+  transform: rotate(180deg);
+}
+.entry[data-tools-open='true'] .toolsToggle {
+  border-color: color-mix(in oklab, var(--row-accent, var(--accent)) 45%, var(--line));
+  color: var(--ink);
+}
+.tools {
+  padding: 4px 16px 16px 32px;
+  background: color-mix(in oklab, var(--bg-sunken) 50%, transparent);
+  border-top: 1px solid var(--line);
+}
+.tools[hidden] {
+  display: none;
+}
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.group {
+  animation: tools-group-in 0.26s ease both;
+}
+.group:nth-child(2) {
+  animation-delay: 0.04s;
+}
+.group:nth-child(3) {
+  animation-delay: 0.08s;
+}
+.group:nth-child(4) {
+  animation-delay: 0.12s;
+}
+.group:nth-child(n + 5) {
+  animation-delay: 0.16s;
+}
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.groupLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--row-accent, var(--accent));
+  font-family: var(--font-mono);
+}
+.groupCount {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ink-4, var(--ink-3));
+  background: color-mix(in oklab, var(--ink-3) 12%, transparent);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-family: var(--font-mono);
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  word-break: break-word;
+}
+.args {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--row-accent, var(--accent));
+  background: color-mix(in oklab, var(--row-accent, var(--accent)) 14%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.desc {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.toolsEmpty {
+  font-size: 11px;
+  color: var(--ink-3);
+  font-style: italic;
+  padding: 8px 0;
+}

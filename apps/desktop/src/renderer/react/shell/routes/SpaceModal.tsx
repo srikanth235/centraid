@@ -1,6 +1,8 @@
 import type { IconName } from '@centraid/design-tokens';
 import { type CSSProperties, type JSX, useEffect, useRef, useState } from 'react';
 import { iconSvg } from '../iconSvg.js';
+import styles from './SpaceModal.module.css';
+import { cx } from '../../ui/cx.js';
 
 // The Spaces add/rename modal, ported to React (issue #325, R5) from the vanilla
 // `window.Profiles.openModal`. A space IS a vault (#280); this is a name + icon +
@@ -102,48 +104,48 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
   };
 
   return (
-    <div className="cd-prof-overlay">
+    <div className={styles.profOverlay}>
       <button
         type="button"
-        className="cd-prof-scrim"
+        className={styles.profScrim}
         aria-label="Close"
         tabIndex={-1}
         onClick={onCancel}
       />
-      <div className="cd-prof-modal" role="dialog" aria-modal="true">
-        <div className="cd-prof-modal-head">
+      <div className={styles.profModal} role="dialog" aria-modal="true">
+        <div className={styles.profModalHead}>
           <span
-            className="cd-prof-modal-head-icon"
+            className={styles.profModalHeadIcon}
             dangerouslySetInnerHTML={{ __html: iconSvg('Users', 14) }}
           />
-          <h2 className="cd-prof-modal-title">{mode === 'add' ? 'New profile' : 'Edit profile'}</h2>
+          <h2 className={styles.profModalTitle}>{mode === 'add' ? 'New profile' : 'Edit profile'}</h2>
           <button
             type="button"
-            className="cd-icon-btn cd-prof-modal-close"
+            className={cx("cd-icon-btn", styles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onCancel}
             dangerouslySetInnerHTML={{ __html: iconSvg('X', 14) }}
           />
         </div>
-        <div className="cd-prof-modal-body">
-          <div className="cd-prof-modal-preview">
+        <div className={styles.profModalBody}>
+          <div className={styles.profModalPreview}>
             <span className="cd-prof-modal-preview-avatar">
               <Avatar icon={icon} color={color} size={46} />
             </span>
-            <div className="cd-prof-modal-preview-text">
-              <div className="cd-prof-modal-preview-name">{name.trim() || 'Untitled'}</div>
-              <div className="cd-prof-modal-preview-sub">
+            <div className={styles.profModalPreviewText}>
+              <div className={styles.profModalPreviewName}>{name.trim() || 'Untitled'}</div>
+              <div className={styles.profModalPreviewSub}>
                 {blurb.trim() || 'How this profile appears in the switcher.'}
               </div>
             </div>
           </div>
 
-          <label className="cd-prof-field">
-            <span className="cd-prof-field-label">Name</span>
+          <label className={styles.profField}>
+            <span className={styles.profFieldLabel}>Name</span>
             <input
               ref={nameRef}
-              className="cd-prof-field-input"
+              className={styles.profFieldInput}
               type="text"
               placeholder="e.g. Work"
               value={name}
@@ -157,14 +159,14 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
             />
           </label>
 
-          <label className="cd-prof-field">
-            <span className="cd-prof-field-label">Icon</span>
-            <div className="cd-prof-icon-grid">
+          <label className={styles.profField}>
+            <span className={styles.profFieldLabel}>Icon</span>
+            <div className={styles.profIconGrid}>
               {PROFILE_ICONS.map((ic) => (
                 <button
                   key={ic}
                   type="button"
-                  className="cd-prof-icon-btn"
+                  className={styles.profIconBtn}
                   title={ic}
                   aria-label={ic}
                   data-selected={ic === icon ? 'true' : 'false'}
@@ -175,14 +177,14 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
             </div>
           </label>
 
-          <label className="cd-prof-field">
-            <span className="cd-prof-field-label">Color</span>
-            <div className="cd-prof-color-row">
+          <label className={styles.profField}>
+            <span className={styles.profFieldLabel}>Color</span>
+            <div className={styles.profColorRow}>
               {PROFILE_COLORS.map((c) => (
                 <button
                   key={c}
                   type="button"
-                  className="cd-prof-color-btn"
+                  className={styles.profColorBtn}
                   title={c}
                   aria-label={`Color ${c}`}
                   data-selected={c === color ? 'true' : 'false'}
@@ -193,12 +195,12 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
             </div>
           </label>
 
-          <label className="cd-prof-field">
-            <span className="cd-prof-field-label">
-              Description<span className="cd-prof-field-optional">optional</span>
+          <label className={styles.profField}>
+            <span className={styles.profFieldLabel}>
+              Description<span className={styles.profFieldOptional}>optional</span>
             </span>
             <input
-              className="cd-prof-field-input"
+              className={styles.profFieldInput}
               type="text"
               placeholder="A short note — e.g. Focus & planning"
               value={blurb}
@@ -206,9 +208,9 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
             />
           </label>
         </div>
-        <div className="cd-prof-modal-foot">
+        <div className={styles.profModalFoot}>
           {onDelete ? (
-            <button type="button" className="cd-chip cd-prof-modal-delete" onClick={onDelete}>
+            <button type="button" className={cx("cd-chip", styles.profModalDelete)} onClick={onDelete}>
               <span dangerouslySetInnerHTML={{ __html: iconSvg('Trash', 12) }} />
               Delete
             </button>
@@ -219,7 +221,7 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
           </button>
           <button
             type="button"
-            className="cd-prof-modal-save"
+            className={styles.profModalSave}
             disabled={!ready}
             data-enabled={ready ? 'true' : 'false'}
             onClick={submit}

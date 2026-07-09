@@ -1,4 +1,6 @@
 import type { JSX, ReactNode } from 'react';
+import styles from './settings-controls.module.css';
+import { cx } from '../ui/cx.js';
 
 // Shared Settings control primitives — React ports of the vanilla
 // drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),
@@ -31,12 +33,12 @@ export function DrawerRow({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className={full ? 'drawer-row drawer-row-full' : 'drawer-row drawer-row-grid'}>
+    <div className={full ? cx(styles.row, styles.rowFull) : cx(styles.row, styles.rowGrid)}>
       <div className="drawer-row-head">
-        <span className="drawer-row-label">{label}</span>
-        <span className="drawer-row-hint">{hint}</span>
+        <span className={styles.rowLabel}>{label}</span>
+        <span className={styles.rowHint}>{hint}</span>
       </div>
-      <div className="drawer-row-control">{children}</div>
+      <div className={styles.rowControl}>{children}</div>
     </div>
   );
 }
@@ -53,14 +55,14 @@ export function Switch({
   return (
     <button
       type="button"
-      className="cd-switch"
+      className={styles.switch}
       role="switch"
       aria-checked={on}
       aria-label={ariaLabel}
       data-on={String(on)}
       onClick={() => onToggle(!on)}
     >
-      <span className="cd-switch-thumb" />
+      <span className={styles.switchThumb} />
     </button>
   );
 }

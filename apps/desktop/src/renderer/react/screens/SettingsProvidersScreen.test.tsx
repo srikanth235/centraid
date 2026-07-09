@@ -79,15 +79,15 @@ async function mount(props: SettingsProvidersBridgeProps): Promise<HTMLDivElemen
 describe('SettingsProvidersScreen', () => {
   it('renders the agent switch, agent entries, model selects, and the saved model', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.agent-switch-seg').length).toBe(2);
-    expect(el.querySelectorAll('.agent-entry').length).toBe(2);
+    expect(el.querySelectorAll('.switchSeg').length).toBe(2);
+    expect(el.querySelectorAll('.entry').length).toBe(2);
     // codex is active + connected; claude-code is unavailable (disabled switch)
-    const codexSeg = el.querySelectorAll('.agent-switch-seg')[0] as HTMLButtonElement;
+    const codexSeg = el.querySelectorAll('.switchSeg')[0] as HTMLButtonElement;
     expect(codexSeg.dataset.active).toBe('true');
-    const claudeSeg = el.querySelectorAll('.agent-switch-seg')[1] as HTMLButtonElement;
+    const claudeSeg = el.querySelectorAll('.switchSeg')[1] as HTMLButtonElement;
     expect(claudeSeg.disabled).toBe(true);
     // saved model reflected
-    const select = el.querySelector('.agent-model-select') as HTMLSelectElement;
+    const select = el.querySelector('.modelSelect') as HTMLSelectElement;
     expect(select.value).toBe('gpt-5');
     // tiered optgroups present
     expect(el.querySelectorAll('optgroup').length).toBeGreaterThan(0);
@@ -104,7 +104,7 @@ describe('SettingsProvidersScreen', () => {
       ),
     });
     const el = await mount(props);
-    const claudeSeg = el.querySelectorAll('.agent-switch-seg')[1] as HTMLButtonElement;
+    const claudeSeg = el.querySelectorAll('.switchSeg')[1] as HTMLButtonElement;
     expect(claudeSeg.disabled).toBe(false);
     await act(async () => claudeSeg.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.activateRunner).toHaveBeenCalledWith('claude-code');
@@ -113,12 +113,12 @@ describe('SettingsProvidersScreen', () => {
   it('expands an agent tool list and saves a model change', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const toggle = el.querySelector('.agent-tools-toggle') as HTMLButtonElement;
+    const toggle = el.querySelector('.toolsToggle') as HTMLButtonElement;
     await act(async () => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelector('.tools-groups')).toBeTruthy();
+    expect(el.querySelector('.groups')).toBeTruthy();
     expect(el.textContent).toContain('shell');
 
-    const select = el.querySelector('.agent-model-select') as HTMLSelectElement;
+    const select = el.querySelector('.modelSelect') as HTMLSelectElement;
     const setter = Object.getOwnPropertyDescriptor(
       globalThis.HTMLSelectElement.prototype,
       'value',

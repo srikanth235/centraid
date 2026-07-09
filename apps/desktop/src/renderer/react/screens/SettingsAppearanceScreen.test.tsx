@@ -91,7 +91,7 @@ describe('SettingsAppearanceScreen', () => {
     act(() => matchBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onMatchSystem).toHaveBeenCalledTimes(1);
 
-    const sw = el.querySelector('.cd-switch') as HTMLButtonElement;
+    const sw = el.querySelector('.switch') as HTMLButtonElement;
     act(() => sw.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetCoolCast).toHaveBeenCalledWith(true);
   });

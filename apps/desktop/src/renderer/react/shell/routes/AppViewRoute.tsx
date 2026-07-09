@@ -9,6 +9,7 @@ import type { ShellNav } from '../ShellApp.js';
 import ShellFrame from '../ShellFrame.js';
 import AppFrame from './AppFrame.js';
 import AppSettingsController from './AppSettingsController.js';
+import styles from './AppViewRoute.module.css';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
@@ -70,15 +71,15 @@ export default function AppViewRoute({
 
   const finish = window.CentraidTokens.tileFinish(app.color, 'gradient');
   const brandChip = (
-    <span className="cd-brand-chip">
+    <span className={styles.brandChip}>
       <span
-        className="cd-brand-chip-icon"
+        className={styles.brandChipIcon}
         style={{ background: finish.background, color: finish.glyphColor, boxShadow: finish.boxShadow || undefined }}
         dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
       />
-      <span className="cd-brand-chip-name">{app.name}</span>
-      <span className="cd-brand-chip-live">
-        <span className="cd-brand-chip-live-dot" />
+      <span className={styles.brandChipName}>{app.name}</span>
+      <span className={styles.brandChipLive}>
+        <span className={styles.brandChipLiveDot} />
         live
       </span>
     </span>
@@ -86,13 +87,13 @@ export default function AppViewRoute({
 
   const titlebarRight = (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-      <div className="cd-mode-switch">
-        <button className="cd-mode-seg" type="button" data-active="true">
-          <span className="cd-mode-seg-icon" dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }} />
+      <div className={styles.modeSwitch}>
+        <button className={styles.modeSeg} type="button" data-active="true">
+          <span className={styles.modeSegIcon} dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }} />
           Use
         </button>
-        <button className="cd-mode-seg" type="button" onClick={() => enterBuilder({ appContext: app })}>
-          <span className="cd-mode-seg-icon" dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }} />
+        <button className={styles.modeSeg} type="button" onClick={() => enterBuilder({ appContext: app })}>
+          <span className={styles.modeSegIcon} dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }} />
           Build
         </button>
       </div>
@@ -136,8 +137,8 @@ export default function AppViewRoute({
         className="app-view"
         style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       >
-        <div className="app-body">
-          <div className="app-body-inner">
+        <div className={styles.body}>
+          <div className={styles.bodyInner}>
             <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
           </div>
         </div>
