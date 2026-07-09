@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-vi.mock('../../../gateway-client.js', () => ({}));
-
 import { attentionCount, buildHomeAppItems, buildHomeAutoItems } from './homeData.js';
 import type { AutomationFeedEntry } from './automationsData.js';
+
+// `vi.mock` is hoisted above the imports by vitest, so the gateway stub is in
+// place before homeData.js pulls gateway-client-core's load-time side-effect.
+vi.mock('../../../gateway-client.js', () => ({}));
 
 beforeEach(() => {
   (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {

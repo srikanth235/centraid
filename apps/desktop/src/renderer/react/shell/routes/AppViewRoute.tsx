@@ -102,8 +102,8 @@ export default function AppViewRoute({
       sidebar={renderSidebar(nav)}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
-      onBack={nav.back}
-      onForward={nav.forward}
+      onBack={() => nav.back()}
+      onForward={() => nav.forward()}
       showNewChat
       onNewChat={openNewAppSheet}
       titlebarLead={brandChip}

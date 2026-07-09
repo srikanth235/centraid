@@ -34,7 +34,7 @@ export default function DiscoverRoute(): JSX.Element {
     Store.get<Partial<AppearancePrefs>>('appearance', {}).tileVariant ?? 'gradient';
 
   // Clone an app template → open the builder on the fresh draft.
-  const useAppTemplate = (t: TemplateEntry): void => {
+  const applyAppTemplate = (t: TemplateEntry): void => {
     void cloneTemplateToDraft(t)
       .then((draft) => enterBuilder({ appContext: draft }))
       .catch((err: unknown) =>
@@ -43,7 +43,7 @@ export default function DiscoverRoute(): JSX.Element {
   };
   // Clone an automation template → surface once-only webhook secrets → open the
   // automation builder.
-  const useAutoTemplate = (t: TemplateEntry): void => {
+  const applyAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
       .then(({ automationId, webhooks }) => {
         for (const w of webhooks) showToast(`Webhook URL: ${w.url} (secret shown once in console)`);
@@ -67,8 +67,8 @@ export default function DiscoverRoute(): JSX.Element {
           appTemplates={state.data.appTemplates as unknown as DiscoverTemplate[]}
           automationTemplates={state.data.automationTemplates as unknown as DiscoverTemplate[]}
           tileVariant={tileVariant}
-          onOpenTemplate={(t) => openTemplatePreview(asEntry(t), useAppTemplate)}
-          onOpenAutomationTemplate={(t) => openAutomationTemplatePreview(asEntry(t), useAutoTemplate)}
+          onOpenTemplate={(t) => openTemplatePreview(asEntry(t), applyAppTemplate)}
+          onOpenAutomationTemplate={(t) => openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)}
           onTemplateContext={(t, anchor) =>
             openMenu(
               [
@@ -78,8 +78,8 @@ export default function DiscoverRoute(): JSX.Element {
               anchor,
               (id) =>
                 id === 'use'
-                  ? useAppTemplate(asEntry(t))
-                  : openTemplatePreview(asEntry(t), useAppTemplate),
+                  ? applyAppTemplate(asEntry(t))
+                  : openTemplatePreview(asEntry(t), applyAppTemplate),
             )
           }
         />

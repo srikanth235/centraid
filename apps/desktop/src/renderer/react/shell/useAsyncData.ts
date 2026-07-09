@@ -16,19 +16,20 @@ export function useAsyncData<T>(
   deps: readonly unknown[] = [],
 ): AsyncState<T> {
   const [state, setState] = useState<AsyncState<T>>({ status: 'loading' });
+  // `deps` is a caller-provided array by contract — re-fetch when it changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading' });
-    load().then(
-      (data) => {
+    load()
+      .then((data) => {
         if (alive) setState({ status: 'ready', data });
-      },
-      (err: unknown) => {
+      })
+      .catch((err: unknown) => {
         if (alive) {
           setState({ status: 'error', error: err instanceof Error ? err.message : String(err) });
         }
-      },
-    );
+      });
     return () => {
       alive = false;
     };

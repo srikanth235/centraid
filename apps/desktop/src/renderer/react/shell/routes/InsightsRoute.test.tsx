@@ -53,12 +53,12 @@ const summary = {
 
 describe('InsightsRoute', () => {
   it('shows a loading line, then the dashboard once the summary resolves', async () => {
-    let resolve!: (v: unknown) => void;
-    getInsightsSummary.mockReturnValue(new Promise((r) => (resolve = r)));
+    let resolveSummary!: (v: unknown) => void;
+    getInsightsSummary.mockReturnValue(new Promise((resolve) => (resolveSummary = resolve)));
     const el = await render();
     expect(el.textContent).toContain('Loading insights…');
     await act(async () => {
-      resolve(summary);
+      resolveSummary(summary);
     });
     expect(el.querySelector('.cd-au-loading')).toBeNull();
     expect(el.querySelector('.cd-main-scroll')).not.toBeNull();

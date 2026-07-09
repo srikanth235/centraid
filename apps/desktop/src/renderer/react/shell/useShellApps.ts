@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { tileVisualFromListing } from '../../app-format.js';
-import { colorForIcon } from '../../app-format.js';
+import { colorForIcon, tileVisualFromListing } from '../../app-format.js';
 import { listApps } from '../../gateway-client.js';
 
 export interface ShellAppsController {

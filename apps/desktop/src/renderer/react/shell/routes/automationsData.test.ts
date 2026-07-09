@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-
-// buildOverviewData is pure; stub the gateway module so importing it doesn't
-// run gateway-client-core's load-time window.CentraidApi side-effect.
-vi.mock('../../../gateway-client.js', () => ({
-  listAutomations: vi.fn(),
-  listAutomationRuns: vi.fn(),
-}));
-
 import {
   buildAutomationViewData,
   buildOverviewData,
   type AutomationFeedEntry,
 } from './automationsData.js';
+
+// buildOverviewData is pure; stub the gateway module so importing it doesn't
+// run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
+// is hoisted above these imports by vitest, so the stub is in place first.
+vi.mock('../../../gateway-client.js', () => ({
+  listAutomations: vi.fn(),
+  listAutomationRuns: vi.fn(),
+}));
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
   ({

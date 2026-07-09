@@ -33,8 +33,8 @@ export function useAppearance(): AppearanceController {
     if (reconciled.current) return;
     reconciled.current = true;
     let alive = true;
-    getUserPrefs().then(
-      (remote) => {
+    getUserPrefs()
+      .then((remote) => {
         const recognised = pickAppearance(remote);
         if (alive && Object.keys(recognised).length > 0) {
           setPrefsState((prev) => {
@@ -43,11 +43,10 @@ export function useAppearance(): AppearanceController {
             return next;
           });
         }
-      },
-      () => {
+      })
+      .catch(() => {
         /* gateway unreachable — local cache stands in */
-      },
-    );
+      });
     return () => {
       alive = false;
     };

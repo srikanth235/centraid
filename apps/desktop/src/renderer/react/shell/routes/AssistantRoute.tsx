@@ -239,10 +239,8 @@ export default function AssistantRoute(): JSX.Element {
         case 'error': {
           m.current.msgs.push({ kind: 'ai', text: event.message, error: true });
           push();
-          return;
+          break;
         }
-        default:
-          return;
       }
     };
 

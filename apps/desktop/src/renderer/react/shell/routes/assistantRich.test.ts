@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('../../../gateway-client.js', () => ({ resolveAssistantRefs: vi.fn() }));
-
 import { richAnswerHtml } from './assistantRich.js';
+
+// `vi.mock` is hoisted above the import by vitest, so the stub lands first.
+vi.mock('../../../gateway-client.js', () => ({ resolveAssistantRefs: vi.fn() }));
 
 describe('richAnswerHtml', () => {
   it('renders prose paragraphs with inline formatting', () => {

@@ -99,8 +99,8 @@ export default function ShellApp({
       sidebar={renderSidebar(nav)}
       canGoBack={nav.canGoBack}
       canGoForward={nav.canGoForward}
-      onBack={nav.back}
-      onForward={nav.forward}
+      onBack={() => nav.back()}
+      onForward={() => nav.forward()}
       showNewChat={Boolean(onNewApp)}
       onNewChat={onNewApp}
     >

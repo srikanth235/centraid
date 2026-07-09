@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('../../../gateway-client.js', () => ({}));
-
 import { buildRunSnapshot } from './runViewData.js';
+
+// `vi.mock` is hoisted above the import by vitest, so the gateway stub lands
+// before runViewData.js pulls gateway-client-core's load-time side-effect.
+vi.mock('../../../gateway-client.js', () => ({}));
 
 const row = (): CentraidAutomationRow =>
   ({

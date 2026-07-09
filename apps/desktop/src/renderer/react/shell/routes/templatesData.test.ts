@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cloneTemplateToDraft, loadAppTemplates, loadAutomationTemplates } from './templatesData.js';
 
-const listTemplates = vi.fn();
-const gwCloneTemplate = vi.fn();
+// `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
+// close over them without a TDZ error, keeping the real imports first.
+const { listTemplates, gwCloneTemplate } = vi.hoisted(() => ({
+  listTemplates: vi.fn(),
+  gwCloneTemplate: vi.fn(),
+}));
 vi.mock('../../../gateway-client.js', () => ({
   listTemplates: () => listTemplates(),
   cloneTemplate: (a: unknown) => gwCloneTemplate(a),
 }));
-
-import { cloneTemplateToDraft, loadAppTemplates, loadAutomationTemplates } from './templatesData.js';
 
 const app = { id: 'todos', name: 'Todos', kind: 'app', colorKey: 'blue', iconKey: 'Todo', desc: 'd', version: '1' };
 const auto = { id: 'digest', name: 'Digest', kind: 'automation', colorKey: 'teal', iconKey: 'Bolt', desc: 'd', version: '1' };

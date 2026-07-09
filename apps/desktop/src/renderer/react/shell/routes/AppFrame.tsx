@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useRef } from 'react';
+import { type CSSProperties, type JSX, useEffect, useRef } from 'react';
 import { themes } from '@centraid/design-tokens';
 import { appLiveUrl } from '../../../gateway-client.js';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
@@ -58,8 +58,16 @@ export default function AppFrame({
   }, [appId, themeKind, bgL]);
 
   return (
-    <div className="app-view-fullbleed" style={{ ['--accent-color' as string]: accentColor }}>
+    <div
+      className="app-view-fullbleed"
+      style={{ '--accent-color': accentColor } as CSSProperties}
+    >
       <div className="app-view-frame" ref={wrapRef}>
+        {/* Centraid apps are trusted local blueprint code served from the gateway
+            origin: they need same-origin (vault fetches, module imports) *and*
+            scripts, which the sandbox rule flags together. Intentional — the
+            vanilla mountUserApp used the same grant. */}
+        {/* eslint-disable react/iframe-missing-sandbox */}
         <iframe
           ref={frameRef}
           src="about:blank"
@@ -68,6 +76,7 @@ export default function AppFrame({
           referrerPolicy="no-referrer"
           title="app"
         />
+        {/* eslint-enable react/iframe-missing-sandbox */}
       </div>
     </div>
   );

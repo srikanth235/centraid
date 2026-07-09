@@ -215,7 +215,7 @@ export default function App(): JSX.Element {
           return <PageEmpty message="This screen is being migrated to React." />;
       }
     },
-    [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh],
+    [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh, setUserApps, renderSidebar],
   );
 
   return (
