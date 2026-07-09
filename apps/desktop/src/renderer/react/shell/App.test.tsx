@@ -115,6 +115,18 @@ describe('App root', () => {
     expect(el.querySelector('.cd-page-head')?.textContent).toContain('Starred');
   });
 
+  it('opens the ⌘K command palette listing the app + a create row', async () => {
+    const el = await mount();
+    expect(el.querySelector('[aria-label="Command palette"]')).toBeNull();
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }));
+    });
+    const dialog = el.querySelector('[aria-label="Command palette"]');
+    expect(dialog).not.toBeNull();
+    expect(dialog?.textContent).toContain('Todos');
+    expect(dialog?.textContent).toContain('Build a new app…');
+  });
+
   it('binds the sidebar toggle to the appearance pref', async () => {
     const el = await mount();
     expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');

@@ -1,7 +1,9 @@
-import { type JSX, useCallback, useEffect, useRef } from 'react';
+import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
+import PaletteScreen from '../screens/PaletteScreen.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
+import { buildPaletteGroups } from './routes/paletteData.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import PageScroll from './PageScroll.js';
@@ -27,7 +29,7 @@ import TemplatesRoute from './routes/TemplatesRoute.js';
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
 // context menu) are wired as their clusters land — until then they route to the
 // builder or no-op so a consumer never crashes.
-function makeActions(nav: ShellNav): ShellActions {
+function makeActions(nav: ShellNav, openCommandPalette: () => void): ShellActions {
   return {
     showToast,
     confirm: openConfirm,
@@ -39,9 +41,7 @@ function makeActions(nav: ShellNav): ShellActions {
         ...(opts.initialPrompt ? { initialPrompt: opts.initialPrompt } : {}),
       }),
     openNewAppSheet: () => nav.navigate({ kind: 'builder' }),
-    openCommandPalette: () => {
-      /* ⌘K palette ported with PaletteRoute */
-    },
+    openCommandPalette,
     openContextMenu: () => {
       /* the home app-card context menu is wired inside HomeRoute */
     },
@@ -75,6 +75,7 @@ export default function App(): JSX.Element {
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const { isStarred, toggleStar } = useStarred();
   const navRef = useRef<ShellNav | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
   // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
@@ -89,6 +90,9 @@ export default function App(): JSX.Element {
       } else if (meta && e.key === ']') {
         e.preventDefault();
         navRef.current?.forward();
+      } else if (meta && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setPaletteOpen((open) => !open);
       }
     };
     document.addEventListener('keydown', onKey);
@@ -218,21 +222,46 @@ export default function App(): JSX.Element {
     [userApps, drafts, prefs, setPrefs, isStarred, toggleStar, refresh, setUserApps, renderSidebar],
   );
 
+  const closePalette = useCallback(() => setPaletteOpen(false), []);
+
   return (
-    <ShellApp
-      initialRoute={{ kind: 'home' }}
-      sidebarOpen={prefs.sidebarOpen}
-      onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
-      renderSidebar={renderSidebar}
-      onNavReady={(nav) => {
-        navRef.current = nav;
-      }}
-      renderScreen={(nav) => (
-        <ShellActionsProvider value={makeActions(nav)}>{renderRoute(nav)}</ShellActionsProvider>
-      )}
-      onNewApp={() => {
-        /* new-app flow ported with the builder route (R3) */
-      }}
-    />
+    <>
+      <ShellApp
+        initialRoute={{ kind: 'home' }}
+        sidebarOpen={prefs.sidebarOpen}
+        onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
+        renderSidebar={renderSidebar}
+        onNavReady={(nav) => {
+          navRef.current = nav;
+        }}
+        renderScreen={(nav) => (
+          <ShellActionsProvider value={makeActions(nav, () => setPaletteOpen(true))}>
+            {renderRoute(nav)}
+          </ShellActionsProvider>
+        )}
+        onNewApp={() => {
+          /* new-app flow ported with the builder route (R3) */
+        }}
+      />
+      {paletteOpen ? (
+        <PaletteScreen
+          onClose={closePalette}
+          buildGroups={(query) =>
+            buildPaletteGroups(query, {
+              userApps,
+              drafts,
+              tileVariant: prefs.tileVariant,
+              navigate: (route) => navRef.current?.navigate(route),
+              enterBuilder: (initialPrompt) =>
+                navRef.current?.navigate({
+                  kind: 'builder',
+                  ...(initialPrompt ? { initialPrompt } : {}),
+                }),
+              onClose: closePalette,
+            })
+          }
+        />
+      ) : null}
+    </>
   );
 }
