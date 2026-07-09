@@ -39,3 +39,6 @@ ds-bundle-desktop/
 .design-sync/desktop-src/dist/
 .design-sync/desktop-src/fonts/
 .design-sync/desktop-src/styles/
+# CSS-module carve tooling bookkeeping (class -> local-name maps used only by
+# the carve/rewrite scripts, never read by the app or its build).
+*.module.css.map.json
