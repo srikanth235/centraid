@@ -807,10 +807,12 @@ select.input option {
 @media (prefers-reduced-motion: reduce) {
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 .ab-progress-main {
@@ -1590,344 +1592,16 @@ select.input option {
 /* Cloud — left rail (sections) + stage (content). UI placeholder for a
    Lovable-style data browser; sections render empty states until wired
    to a real backend. */
-.cloud-pane {
-  flex: 1;
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 0;
-  background: var(--bg);
-}
-.cloud-rail {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 16px 10px;
-  border-right: 1px solid var(--line);
-  overflow-y: auto;
-  min-height: 0;
-}
-.cloud-rail-item {
-  border: 0;
-  background: transparent;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: var(--ink-3);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-}
-.cloud-rail-item:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.cloud-rail-item[data-active='true'] {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.cloud-rail-item svg {
-  flex: none;
-  opacity: 0.85;
-}
-.cloud-rail-label {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-}
-.cloud-rail-item[data-ready='false'] .cloud-rail-label {
-  opacity: 0.7;
-}
-.cloud-stage {
-  padding: 32px;
-  overflow-y: auto;
-  min-height: 0;
-}
-.cloud-stage-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-.cloud-stage-head h2 {
-  margin: 0 0 4px 0;
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cloud-stage-head p {
-  margin: 0;
-  color: var(--ink-3);
-  font-size: 13px;
-}
-.cloud-refresh-btn {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  padding: 6px 12px;
-}
-.cloud-refresh-btn svg {
-  display: block;
-}
-.cloud-empty {
-  margin-top: 24px;
-  padding: 40px 24px;
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  color: var(--ink-3);
-  font-size: 13px;
-  text-align: center;
-}
-.cloud-empty-quiet {
-  border-style: solid;
-  border-color: transparent;
-}
-.cloud-empty code {
-  background: var(--bg-sunken);
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-}
 
 /* Overview — stat-card grid */
-.cloud-stat-grid {
-  margin-top: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-}
-.cloud-stat-card {
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cloud-stat-value {
-  margin-top: 4px;
-  font-size: 24px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.1;
-  color: var(--ink);
-  word-break: break-all;
-}
-.cloud-stat-value.cloud-stat-mono {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 13px;
-  font-weight: 500;
-}
-.cloud-stat-value.cloud-stat-muted {
-  color: var(--ink-3);
-  font-weight: 500;
-  font-size: 14px;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-.cloud-stat-sub {
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--ink-3);
-}
 
 /* Logs — filter chips + newest-first row list */
-.cloud-logs {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cloud-logs-filter {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.cloud-logs-chip {
-  padding: 4px 10px;
-  font-size: 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.cloud-logs-chip:hover {
-  background: var(--bg-sunken);
-}
-.cloud-logs-chip[data-active='true'] {
-  background: var(--ink);
-  color: var(--bg);
-  border-color: var(--ink);
-}
-.cloud-logs-search {
-  flex: 1;
-  max-width: 240px;
-  margin-left: auto;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-sunken);
-  color: var(--ink);
-  font-size: 12px;
-  outline: none;
-}
-.cloud-logs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.cloud-logs-row {
-  display: grid;
-  grid-template-columns: 64px 56px 180px 1fr;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  border-bottom: 1px solid var(--line);
-}
-.cloud-logs-row:last-child {
-  border-bottom: none;
-}
-.cloud-logs-row[data-level='warn'] {
-  background: color-mix(in srgb, var(--warn, #d49000) 6%, transparent);
-}
-.cloud-logs-row[data-level='error'] {
-  background: color-mix(in srgb, var(--danger, #e25555) 8%, transparent);
-}
-.cloud-logs-ts {
-  color: var(--ink-3);
-}
-.cloud-logs-level {
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.cloud-logs-row[data-level='warn'] .cloud-logs-level {
-  color: var(--warn, #d49000);
-}
-.cloud-logs-row[data-level='error'] .cloud-logs-level {
-  color: var(--danger, #e25555);
-}
-.cloud-logs-source {
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cloud-logs-msg {
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 /* Cloud → Automations — per-app cron-scheduled actions (issue #70).
  * Each card pairs the user's NL prompt with the cron expression, the
  * enable/disable toggle, and Run-now / Delete affordances. The result
  * chip after a manual run sticks until the next refresh so the user
  * can read the timing without watching the panel. */
-.cloud-automations {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.cloud-automation-row {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px 14px;
-  background: var(--bg-elev);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cloud-automation-row[data-enabled='false'] {
-  opacity: 0.72;
-}
-.cloud-automation-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.cloud-automation-title {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-.cloud-automation-name {
-  font-weight: 600;
-  color: var(--ink);
-  font-size: 13px;
-}
-.cloud-automation-cron {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 11.5px;
-  color: var(--ink-3);
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-}
-.cloud-automation-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--ink-2);
-}
-.cloud-automation-toggle-text {
-  min-width: 22px;
-}
-.cloud-automation-prompt {
-  font-size: 12.5px;
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cloud-automation-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.cloud-automation-meta-item {
-  font-size: 11px;
-  color: var(--ink-2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-}
-.cloud-automation-meta-faint {
-  color: var(--ink-3);
-  background: transparent;
-  font-family: inherit;
-}
-.cloud-automation-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cloud-automation-result {
-  font-size: 11.5px;
-  margin-left: auto;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-}
-.cloud-automation-result[data-ok='true'] {
-  color: var(--success, #2f9d3f);
-  background: color-mix(in srgb, var(--success, #2f9d3f) 10%, transparent);
-}
-.cloud-automation-result[data-ok='false'] {
-  color: var(--danger, #e25555);
-  background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
-}
 
 /* Code — file tree (left) + viewer (right) */
 .code-pane {
@@ -2371,296 +2045,17 @@ select.input option {
 }
 
 /* ---------- Cloud rail: "Coming soon" group header + soon items ---------- */
-.cloud-rail-group-head {
-  padding: 14px 12px 4px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-}
-.cloud-rail-item[data-ready='false'] {
-  cursor: default;
-  color: var(--ink-4);
-}
-.cloud-rail-item[data-ready='false']:hover {
-  background: transparent;
-  color: var(--ink-4);
-}
-.cloud-rail-item[data-ready='false'] svg {
-  opacity: 0.55;
-}
-.cloud-rail-item[data-active='true'] {
-  position: relative;
-  background: hsla(229 91% 63% / 0.1);
-  color: var(--ink);
-}
-.cloud-rail-item[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: -10px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-.cloud-rail-item[data-active='true'] svg {
-  color: var(--accent);
-  opacity: 1;
-}
 
 /* ---------- Cloud Overview: atmospheric backdrop + new card variants ---------- */
-.cloud-stage.cloud-stage-atmospheric {
-  position: relative;
-  isolation: isolate;
-}
-.cloud-stage.cloud-stage-atmospheric::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(800px 380px at top left, hsla(229 91% 63% / 0.06), transparent 70%);
-  pointer-events: none;
-  z-index: -1;
-}
-.cloud-stat-grid {
-  /* Fixed 4-col grid — Schema · Tables · Versions · Gateway. The grid
-     sits directly under its "Status" section label so it carries no
-     top margin of its own. Cards drop to single-column under ~720px. */
-  grid-template-columns: repeat(4, 1fr);
-  margin-top: 0;
-}
-@media (max-width: 720px) {
-
-
-  .cloud-stat-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 
 /* Caps section label — "Status" / "Recent activity" headings that sit
    above the stat grid and the activity feed on the Cloud Overview. */
-.cloud-section-label {
-  margin: 26px 0 12px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
 /* Hero strip — full-width deployment band: an icon tile, the status
    eyebrow + mono URL, and Open / Copy / Share actions trailing. */
-.cloud-hero {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 14px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-}
-.cloud-hero[data-live='true'] {
-  border-color: hsla(101 28% 42% / 0.28);
-  background: linear-gradient(180deg, hsla(101 28% 42% / 0.06), transparent 70%), var(--bg-elev);
-}
-.cloud-hero-tile {
-  flex: none;
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink-3);
-}
-.cloud-hero-tile[data-status='live'] {
-  background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest, #5c8a4e);
-}
-.cloud-hero-tile svg {
-  display: block;
-}
-.cloud-hero-dot {
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--ink-4);
-}
-.cloud-hero-dot[data-status='live'] {
-  background: var(--c-forest, #5c8a4e);
-  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
-}
-.cloud-hero-dot[data-status='off'] {
-  background: var(--ink-4);
-}
-.cloud-hero-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-  flex: 1;
-}
-.cloud-hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-  color: var(--c-forest, #5c8a4e);
-}
-.cloud-hero[data-live='false'] .cloud-hero-eyebrow {
-  color: var(--ink-3);
-}
-.cloud-hero-url {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 15px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cloud-hero-url--muted {
-  color: var(--ink-3);
-  font-weight: 400;
-}
-.cloud-hero-actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cloud-hero-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease,
-    border-color 0.12s ease;
-}
-.cloud-hero-btn:hover {
-  background: var(--bg-elev);
-  color: var(--ink);
-}
-.cloud-hero-btn svg {
-  display: block;
-}
 /* Activity feed — chronological deploy log under the "Recent activity"
    label: each row an icon tile, a title (+ Active flag), and a mono
    "Builder · <when>" on the trailing edge. */
-.cloud-feed {
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.cloud-feed-empty {
-  padding: 18px 16px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-.cloud-feed-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--line);
-}
-.cloud-feed-row:last-child {
-  border-bottom: 0;
-}
-.cloud-feed-tile {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: hsla(101 28% 42% / 0.14);
-  color: var(--c-forest, #5c8a4e);
-}
-.cloud-feed-tile svg {
-  display: block;
-}
-.cloud-feed-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-.cloud-feed-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.cloud-feed-live {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest, #5c8a4e);
-}
-.cloud-feed-when {
-  flex: none;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.cloud-stat-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.cloud-status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--ink-4);
-}
-.cloud-status-dot[data-status='live'] {
-  background: var(--c-forest, #5c8a4e);
-  box-shadow: 0 0 0 3px hsla(101 28% 42% / 0.18);
-}
-.cloud-status-dot[data-status='off'] {
-  background: var(--danger, #c44a4a);
-  box-shadow: 0 0 0 3px hsla(0 50% 53% / 0.18);
-}
-.cloud-stat-value.cloud-stat-mid {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  white-space: nowrap;
-}
-.cloud-stat-value.cloud-stat-inline {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
 
 /* ---------- Code view: lang dots, tree groups, active-row accent stripe
               ---------- */
@@ -6472,11 +5867,13 @@ select.input option {
 @media (prefers-reduced-motion: reduce) {
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 /* Enumerated empty / CLI unavailable — muted, not an error. */
@@ -6861,10 +6258,12 @@ select.input option {
 @media (prefers-reduced-motion: reduce) {
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 .ab-diff-ribbon {
@@ -7444,10 +6843,12 @@ select.input option {
 @media (prefers-reduced-motion: reduce) {
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 /* Trigger badge — cron-clock / webhook glyph + schedule label. */

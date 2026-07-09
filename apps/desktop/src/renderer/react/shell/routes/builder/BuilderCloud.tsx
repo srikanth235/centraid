@@ -11,6 +11,8 @@ import {
 } from '../../../../gateway-client.js';
 import { relativeWhen } from '../../../../format.js';
 import { iconSvg } from '../../iconSvg.js';
+import { cx } from '../../../ui/cx.js';
+import styles from './BuilderCloud.module.css';
 
 // React port of the vanilla builder's Cloud tab (builder.ts `renderCloud`,
 // ~lines 1722–2463). Renders the same global `.cloud-*` class names — the
@@ -325,12 +327,12 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
     <button
       key={key}
       type="button"
-      className="cloud-rail-item"
+      className={styles.railItem}
       data-active={String(active === key)}
       data-ready={String(ready)}
       onClick={() => selectSection(key, ready)}
       dangerouslySetInnerHTML={{
-        __html: `${renderIcon(14)}<span class="cloud-rail-label">${label}</span>`,
+        __html: `${renderIcon(14)}<span class="${styles.railLabel}">${label}</span>`,
       }}
     />
   );
@@ -348,24 +350,24 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
           : 'View and manage the data stored in your app.';
 
   return (
-    <div className="cloud-pane">
-      <div className="cloud-rail">
+    <div className={styles.pane}>
+      <div className={styles.rail}>
         {SECTIONS.filter((s) => s[3]).map(([key, label, renderIcon, ready]) =>
           railBtn(key, label, renderIcon, ready),
         )}
         {soon.length > 0 && (
           <>
-            <div className="cloud-rail-group-head">Coming soon</div>
+            <div className={styles.railGroupHead}>Coming soon</div>
             {soon.map(([key, label, renderIcon, ready]) => railBtn(key, label, renderIcon, ready))}
           </>
         )}
       </div>
 
-      <div className={`cloud-stage${active === 'overview' ? ' cloud-stage-atmospheric' : ''}`}>
+      <div className={cx(styles.stage, active === 'overview' && styles.stageAtmospheric)}>
         {/* The Overview surface opens straight into its hero strip, so the
             stage head is rendered for every section except Overview. */}
         {active !== 'overview' && (
-          <div className="cloud-stage-head">
+          <div className={styles.stageHead}>
             <div>
               <h2>{title}</h2>
               <p>{subtitle}</p>
@@ -374,7 +376,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
               <button
                 type="button"
                 aria-label="Refresh logs"
-                className="btn btn-ghost cloud-refresh-btn"
+                className={cx("btn", "btn-ghost", styles.refreshBtn)}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
                 dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
@@ -384,7 +386,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
               <button
                 type="button"
                 aria-label="Refresh automations"
-                className="btn btn-ghost cloud-refresh-btn"
+                className={cx("btn", "btn-ghost", styles.refreshBtn)}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
                 dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
@@ -416,7 +418,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
             onDelete={onDeleteAutomation}
           />
         ) : (
-          <div className="cloud-empty">
+          <div className={styles.empty}>
             Not yet available. The backend for this section will land in a future release.
           </div>
         )}
@@ -436,7 +438,7 @@ function Overview({
   versionsCache: VersionsCache;
   liveUrl: string | undefined;
 }): JSX.Element {
-  if (!appId) return <div className="cloud-empty">No app yet.</div>;
+  if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
   const ready = versionsCache !== undefined && versionsCache !== 'pending' && versionsCache !== 'error';
   const versionList = ready ? versionsCache.versions : [];
@@ -453,7 +455,7 @@ function Overview({
 
   const heroBtn = (glyph: string, label: string, onClick: () => void): JSX.Element => (
     <button
-      className="cloud-hero-btn"
+      className={styles.heroBtn}
       type="button"
       onClick={onClick}
       dangerouslySetInnerHTML={{ __html: `${glyph}<span>${label}</span>` }}
@@ -476,22 +478,22 @@ function Overview({
   return (
     <>
       {/* Hero strip — the live deployment URL is the headline fact. */}
-      <div className="cloud-hero" data-live={String(!!liveUrl)}>
+      <div className={styles.hero} data-live={String(!!liveUrl)}>
         <div
-          className="cloud-hero-tile"
+          className={styles.heroTile}
           data-status={liveUrl ? 'live' : 'off'}
           dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 21) }}
         />
         {liveUrl ? (
           <>
-            <div className="cloud-hero-meta">
-              <div className="cloud-hero-eyebrow">
-                <span className="cloud-hero-dot" data-status="live" />
+            <div className={styles.heroMeta}>
+              <div className={styles.heroEyebrow}>
+                <span className={styles.heroDot} data-status="live" />
                 <span>{`LIVE${verLabel}${whenLabel}`}</span>
               </div>
-              <span className="cloud-hero-url">{formatPreviewUrl(liveUrl)}</span>
+              <span className={styles.heroUrl}>{formatPreviewUrl(liveUrl)}</span>
             </div>
-            <div className="cloud-hero-actions">
+            <div className={styles.heroActions}>
               {heroBtn(iconSvg('Eye', 13), 'Open', () => {
                 window.open(liveUrl, '_blank');
               })}
@@ -500,86 +502,86 @@ function Overview({
             </div>
           </>
         ) : (
-          <div className="cloud-hero-meta">
-            <div className="cloud-hero-eyebrow">
-              <span className="cloud-hero-dot" data-status="off" />
+          <div className={styles.heroMeta}>
+            <div className={styles.heroEyebrow}>
+              <span className={styles.heroDot} data-status="off" />
               <span>NOT DEPLOYED</span>
             </div>
-            <span className="cloud-hero-url cloud-hero-url--muted">Publish to get a live URL</span>
+            <span className={cx(styles.heroUrl, styles.heroUrlMuted)}>Publish to get a live URL</span>
           </div>
         )}
       </div>
 
       {/* Status — stat tiles (Versions · Gateway). */}
-      <div className="cloud-section-label">Status</div>
-      <div className="cloud-stat-grid">
-        <div className="cloud-stat-card">
-          <div className="cloud-stat-eyebrow">
+      <div className={styles.sectionLabel}>Status</div>
+      <div className={styles.statGrid}>
+        <div className={styles.statCard}>
+          <div className={styles.statEyebrow}>
             <span>Versions</span>
           </div>
           {stillLoading ? (
-            <div className="cloud-stat-value cloud-stat-muted">Loading…</div>
+            <div className={cx(styles.statValue, styles.statMuted)}>Loading…</div>
           ) : versionsCache === 'error' ? (
-            <div className="cloud-stat-value cloud-stat-muted">—</div>
+            <div className={cx(styles.statValue, styles.statMuted)}>—</div>
           ) : (
             <>
-              <div className="cloud-stat-value">{versionList.length}</div>
-              <div className="cloud-stat-sub">
+              <div className={styles.statValue}>{versionList.length}</div>
+              <div className={styles.statSub}>
                 {activeVersion ? `active · ${activeVersion.uploadedAt.slice(0, 10)}` : 'No active version'}
               </div>
             </>
           )}
         </div>
 
-        <div className="cloud-stat-card">
-          <div className="cloud-stat-eyebrow">
+        <div className={styles.statCard}>
+          <div className={styles.statEyebrow}>
             <span>Gateway</span>
           </div>
           {stillLoading && !anyOk ? (
-            <div className="cloud-stat-value cloud-stat-muted">Checking…</div>
+            <div className={cx(styles.statValue, styles.statMuted)}>Checking…</div>
           ) : anyOk ? (
             <>
-              <div className="cloud-stat-value cloud-stat-mid cloud-stat-inline">
-                <span className="cloud-status-dot" data-status="live" />
+              <div className={cx(styles.statValue, styles.statMid, styles.statInline)}>
+                <span className={styles.statusDot} data-status="live" />
                 Reachable
               </div>
-              <div className="cloud-stat-sub">openclaw · 18789</div>
+              <div className={styles.statSub}>openclaw · 18789</div>
             </>
           ) : (
             <>
-              <div className="cloud-stat-value cloud-stat-mid cloud-stat-inline">
-                <span className="cloud-status-dot" data-status="off" />
+              <div className={cx(styles.statValue, styles.statMid, styles.statInline)}>
+                <span className={styles.statusDot} data-status="off" />
                 Unreachable
               </div>
-              <div className="cloud-stat-sub">Check Settings → Gateway</div>
+              <div className={styles.statSub}>Check Settings → Gateway</div>
             </>
           )}
         </div>
       </div>
 
       {/* Recent activity — the version history as a deploy log. */}
-      <div className="cloud-section-label">Recent activity</div>
-      <div className="cloud-feed">
+      <div className={styles.sectionLabel}>Recent activity</div>
+      <div className={styles.feed}>
         {stillLoading ? (
-          <div className="cloud-feed-empty">Loading activity…</div>
+          <div className={styles.feedEmpty}>Loading activity…</div>
         ) : versionsCache === 'error' || versionList.length === 0 ? (
-          <div className="cloud-feed-empty">No activity yet — publish your app to deploy it.</div>
+          <div className={styles.feedEmpty}>No activity yet — publish your app to deploy it.</div>
         ) : (
           ordered.map((v) => {
             const isActive = v.current || v.versionId === activeVersionId;
             return (
-              <div className="cloud-feed-row" key={v.versionId}>
+              <div className={styles.feedRow} key={v.versionId}>
                 <div
-                  className="cloud-feed-tile"
+                  className={styles.feedTile}
                   dangerouslySetInnerHTML={{ __html: iconSvg('Save', 14) }}
                 />
-                <div className="cloud-feed-title-row">
-                  <span className="cloud-feed-title">
+                <div className={styles.feedTitleRow}>
+                  <span className={styles.feedTitle}>
                     {v.declaredVersion ? `Published v${v.declaredVersion}` : 'Published'}
                   </span>
-                  {isActive && <span className="cloud-feed-live">Active</span>}
+                  {isActive && <span className={styles.feedLive}>Active</span>}
                 </div>
-                <span className="cloud-feed-when">{`Builder · ${relativeWhen(v.uploadedAt)}`}</span>
+                <span className={styles.feedWhen}>{`Builder · ${relativeWhen(v.uploadedAt)}`}</span>
               </div>
             );
           })
@@ -609,19 +611,19 @@ function Logs({
   onLevel: (lvl: CentraidLogLevel | 'all') => void;
   onSearch: (v: string) => void;
 }): JSX.Element {
-  if (!appId) return <div className="cloud-empty">No app yet.</div>;
+  if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
   const levels: Array<CentraidLogLevel | 'all'> = ['all', 'info', 'warn', 'error'];
 
   let body: JSX.Element;
   if (logsCache === 'pending' || logsCache === undefined) {
-    body = <div className="cloud-empty cloud-empty-quiet">Loading logs…</div>;
+    body = <div className={cx(styles.empty, styles.emptyQuiet)}>Loading logs…</div>;
   } else if (logsCache === 'error') {
     body = (
-      <div className="cloud-empty">
+      <div className={styles.empty}>
         Could not load logs.
         <br />
-        <span className="cloud-stat-sub">{logsError ?? 'unknown error'}</span>
+        <span className={styles.statSub}>{logsError ?? 'unknown error'}</span>
       </div>
     );
   } else {
@@ -637,7 +639,7 @@ function Logs({
     });
     if (filtered.length === 0) {
       body = (
-        <div className="cloud-empty cloud-empty-quiet">
+        <div className={cx(styles.empty, styles.emptyQuiet)}>
           {logsCache.length === 0
             ? 'No logs yet. Run a query or action to produce log lines.'
             : 'No logs match the current filter.'}
@@ -650,11 +652,11 @@ function Logs({
             const when = new Date(entry.ts);
             const ts = `${pad2(when.getHours())}:${pad2(when.getMinutes())}:${pad2(when.getSeconds())}`;
             return (
-              <div className="cloud-logs-row" data-level={entry.level} key={`${entry.ts}-${i}`}>
-                <span className="cloud-logs-ts">{ts}</span>
-                <span className="cloud-logs-level">{entry.level.toUpperCase()}</span>
-                <span className="cloud-logs-source">{`${entry.source}/${entry.handler}`}</span>
-                <span className="cloud-logs-msg">{entry.msg}</span>
+              <div className={styles.logsRow} data-level={entry.level} key={`${entry.ts}-${i}`}>
+                <span className={styles.logsTs}>{ts}</span>
+                <span className={styles.logsLevel}>{entry.level.toUpperCase()}</span>
+                <span className={styles.logsSource}>{`${entry.source}/${entry.handler}`}</span>
+                <span className={styles.logsMsg}>{entry.msg}</span>
               </div>
             );
           })}
@@ -664,13 +666,13 @@ function Logs({
   }
 
   return (
-    <div className="cloud-logs">
-      <div className="cloud-logs-filter">
+    <div className={styles.logs}>
+      <div className={styles.logsFilter}>
         {levels.map((lvl) => (
           <button
             key={lvl}
             type="button"
-            className="cloud-logs-chip"
+            className={styles.logsChip}
             data-active={String(logsLevelFilter === lvl)}
             data-level={lvl}
             onClick={() => {
@@ -681,14 +683,14 @@ function Logs({
           </button>
         ))}
         <input
-          className="cloud-logs-search"
+          className={styles.logsSearch}
           placeholder="Filter…"
           type="search"
           value={logsSearch}
           onChange={(e) => onSearch(e.target.value)}
         />
       </div>
-      <div className="cloud-logs-list">{body}</div>
+      <div className={styles.logsList}>{body}</div>
     </div>
   );
 }
@@ -713,23 +715,23 @@ function Automations({
   onRun: (row: CentraidAutomationRow) => void;
   onDelete: (row: CentraidAutomationRow) => void;
 }): JSX.Element {
-  if (!appId) return <div className="cloud-empty">No app yet.</div>;
+  if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
   if (automationsCache === undefined || automationsCache === 'pending') {
     return (
-      <div className="cloud-automations">
-        <div className="cloud-empty cloud-empty-quiet">Loading automations…</div>
+      <div className={styles.automations}>
+        <div className={cx(styles.empty, styles.emptyQuiet)}>Loading automations…</div>
       </div>
     );
   }
 
   if (automationsCache === 'error') {
     return (
-      <div className="cloud-automations">
-        <div className="cloud-empty">
+      <div className={styles.automations}>
+        <div className={styles.empty}>
           Could not load automations.
           <br />
-          <span className="cloud-stat-sub">{automationsError ?? 'unknown error'}</span>
+          <span className={styles.statSub}>{automationsError ?? 'unknown error'}</span>
         </div>
       </div>
     );
@@ -737,11 +739,11 @@ function Automations({
 
   if (automationsCache.length === 0) {
     return (
-      <div className="cloud-automations">
-        <div className="cloud-empty">
+      <div className={styles.automations}>
+        <div className={styles.empty}>
           No automations yet.
           <br />
-          <span className="cloud-stat-sub">
+          <span className={styles.statSub}>
             Ask the builder to "set up an automation that runs every…" or drop a manifest into the
             app's <code>automations/</code> folder, then republish to deploy.
           </span>
@@ -751,7 +753,7 @@ function Automations({
   }
 
   return (
-    <div className="cloud-automations">
+    <div className={styles.automations}>
       {automationsCache.map((row) => (
         <AutomationRow
           key={row.ref}
@@ -783,45 +785,45 @@ function AutomationRow({
     row.triggers.map((t) => (t.kind === 'cron' ? t.expr : 'webhook')).join(' · ') || 'manual';
 
   return (
-    <div className="cloud-automation-row" data-enabled={String(row.enabled)}>
+    <div className={styles.automationRow} data-enabled={String(row.enabled)}>
       {/* Header: name + trigger expr + enabled toggle. */}
-      <div className="cloud-automation-head">
-        <div className="cloud-automation-title">
-          <span className="cloud-automation-name">{row.name}</span>
-          <span className="cloud-automation-cron" title="Triggers">
+      <div className={styles.automationHead}>
+        <div className={styles.automationTitle}>
+          <span className={styles.automationName}>{row.name}</span>
+          <span className={styles.automationCron} title="Triggers">
             {cron}
           </span>
         </div>
-        <label className="cloud-automation-toggle">
+        <label className={styles.automationToggle}>
           <input
             type="checkbox"
             checked={row.enabled}
             onChange={(e) => onToggle(row, e.target.checked)}
           />
-          <span className="cloud-automation-toggle-text">{row.enabled ? 'On' : 'Off'}</span>
+          <span className={styles.automationToggleText}>{row.enabled ? 'On' : 'Off'}</span>
         </label>
       </div>
 
       {/* Prompt body — the user's NL prompt verbatim. */}
-      <div className="cloud-automation-prompt">{row.manifest.prompt}</div>
+      <div className={styles.automationPrompt}>{row.manifest.prompt}</div>
 
       {/* Metadata strip: automation id · model · generated-by. */}
-      <div className="cloud-automation-meta">
-        <span className="cloud-automation-meta-item" title="Automation app id">
+      <div className={styles.automationMeta}>
+        <span className={styles.automationMetaItem} title="Automation app id">
           {row.id}
         </span>
         {row.manifest.requires.model && (
-          <span className="cloud-automation-meta-item" title="Model used by ctx.agent calls">
+          <span className={styles.automationMetaItem} title="Model used by ctx.agent calls">
             {row.manifest.requires.model}
           </span>
         )}
-        <span className="cloud-automation-meta-item cloud-automation-meta-faint">
+        <span className={cx(styles.automationMetaItem, styles.automationMetaFaint)}>
           {`by ${row.manifest.generated.by}`}
         </span>
       </div>
 
       {/* Actions: Run now · Delete · per-row run-result chip. */}
-      <div className="cloud-automation-actions">
+      <div className={styles.automationActions}>
         <button
           type="button"
           className="btn btn-ghost cloud-automation-run"
@@ -838,7 +840,7 @@ function AutomationRow({
           Delete
         </button>
         {runState.kind === 'done' && (
-          <span className="cloud-automation-result" data-ok={String(runState.ok)}>
+          <span className={styles.automationResult} data-ok={String(runState.ok)}>
             {runState.ok
               ? `OK in ${runState.durationMs}ms`
               : `FAILED in ${runState.durationMs}ms — ${runState.error ?? 'unknown error'}`}
