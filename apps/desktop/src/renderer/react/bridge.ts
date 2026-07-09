@@ -768,45 +768,17 @@ export interface BuilderChatBridgeProps {
   onMountHistory: (host: HTMLElement) => void;
 }
 
+// After the #325 flip, React owns #root and the shell mounts every screen route
+// directly (react/shell/routes/*). Only two vanilla→React handoffs survive: the
+// vanilla builder window (builder.ts) hosts the React chat pane, and the vanilla
+// first-run boot (onboarding.ts) hosts the React welcome view. The bridge is
+// pared to exactly those; the other screens are imported by their route wrappers
+// with no bridge in between.
 export interface CentraidReactBridge {
-  /** Mount the React Discover screen into `host`; returns an unmount disposer. */
-  mountDiscover(host: HTMLElement, props: DiscoverBridgeProps): () => void;
-  /** Mount the React app-view settings popover; returns an unmount disposer. */
-  mountAppSettings(host: HTMLElement, props: AppSettingsBridgeProps): () => void;
-  /** Mount the React builder chat pane (SSE-driven); returns a disposer. */
+  /** Mount the React builder chat pane (SSE-driven) inside the vanilla builder window; returns a disposer. */
   mountBuilderChat(host: HTMLElement, props: BuilderChatBridgeProps): () => void;
-  /** Mount the React Assistant copilot (streaming); returns a disposer. */
-  mountAssistant(host: HTMLElement, props: AssistantBridgeProps): () => void;
-  /** Mount the React automation run-viewer (SSE-driven); returns a disposer. */
-  mountRunView(host: HTMLElement, props: RunViewBridgeProps): () => void;
-  /** Mount the React Home screen (composer hero + unified library grid). */
-  mountHome(host: HTMLElement, props: HomeBridgeProps): () => void;
-  /** Mount the React Settings → Spaces (profiles + connections) page. */
-  mountSettingsProfiles(host: HTMLElement, props: SettingsProfilesBridgeProps): () => void;
-  /** Mount the React Settings → Providers (agents) page; returns a disposer. */
-  mountSettingsProviders(host: HTMLElement, props: SettingsProvidersBridgeProps): () => void;
-  /** Mount the React Settings → Appearance page; returns an unmount disposer. */
-  mountSettingsAppearance(host: HTMLElement, props: SettingsAppearanceBridgeProps): () => void;
-  /** Mount the React Settings → Layout page; returns an unmount disposer. */
-  mountSettingsLayout(host: HTMLElement, props: SettingsLayoutBridgeProps): () => void;
-  /** Mount the React automation single-view; returns an unmount disposer. */
-  mountAutomationView(host: HTMLElement, props: AutomationViewBridgeProps): () => void;
-  /** Mount the React Automations overview; returns an unmount disposer. */
-  mountAutomationsOverview(host: HTMLElement, props: AutomationsOverviewBridgeProps): () => void;
   /** Mount the React first-run onboarding view; returns an unmount disposer. */
   mountOnboarding(host: HTMLElement, props: OnboardingBridgeProps): () => void;
-  /** Mount the React Import settings pane; returns an unmount disposer. */
-  mountImport(host: HTMLElement, props: ImportBridgeProps): () => void;
-  /** Mount the React Phone settings pane; returns an unmount disposer. */
-  mountPhone(host: HTMLElement, props: PhoneBridgeProps): () => void;
-  /** Mount the React command palette overlay; returns an unmount disposer. */
-  mountPalette(host: HTMLElement, props: PaletteBridgeProps): () => void;
-  /** Mount the React automation-templates gallery; returns an unmount disposer. */
-  mountAutomationTemplates(host: HTMLElement, props: AutomationTemplatesBridgeProps): () => void;
-  /** Mount the React Insights dashboard into `host`; returns an unmount disposer. */
-  mountInsights(host: HTMLElement, props: InsightsBridgeProps): () => void;
-  /** Mount the React Vault consent pane into `host`; returns an unmount disposer. */
-  mountVault(host: HTMLElement, props: VaultBridgeProps): () => void;
 }
 
 declare global {
