@@ -420,6 +420,44 @@ kit-reference-strip {
   background: var(--ok, #16a34a);
 }
 
+/* ---------- Trust / notice banner ------------------------------------------ */
+/* The consent + outcome banner every app renders above its content: accent
+   dot = trust framing, .notice tone = a quieter outcome/notice voice. */
+
+.kit-banner {
+  position: relative;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: var(--surface, #fff);
+  border-radius: var(--kit-radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted, #667085);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong));
+}
+.kit-banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--kit-accent);
+  box-shadow: 0 0 0 3px var(--kit-accent-soft);
+}
+.kit-banner strong {
+  display: block;
+  color: var(--text, #16181d);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.kit-banner.notice::before {
+  background: var(--kit-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--kit-faint) 16%, transparent);
+}
+
 /* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
 
 .kit-popover {
@@ -501,8 +539,21 @@ kit-reference-strip {
   }
 }
 
-/* ---------- Empty state (emptyState) --------------------------------------- */
+/* ---------- Empty states ---------------------------------------------------- */
 
+/* The quiet one-line empty card ("Nothing to do — enjoy your day."). */
+.kit-empty-card {
+  color: var(--muted, #667085);
+  font-size: 0.92rem;
+  text-align: center;
+  padding: 3rem 1rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: var(--kit-radius);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong));
+}
+
+/* The full icon/title/sub empty state (emptyState() helper). */
 .kit-empty {
   text-align: center;
   padding: 64px 20px;

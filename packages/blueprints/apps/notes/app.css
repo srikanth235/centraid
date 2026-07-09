@@ -132,39 +132,7 @@ main {
 
 /* ---------- Trust banners ------------------------------------------------ */
 
-.banner {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem 0.85rem 2.5rem;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--ink-soft);
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow-sm);
-}
-.banner::before {
-  content: '';
-  position: absolute;
-  left: 1rem;
-  top: 1rem;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  background: var(--app-color, var(--accent));
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.banner strong {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-  margin-bottom: 0.1rem;
-}
-.banner.notice::before {
-  background: var(--ink-faint);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
-}
+/* Trust/notice banner: kit.css .kit-banner (shared across all apps). */
 
 /* ---------- Inputs & write affordances ----------------------------------- */
 
@@ -763,16 +731,7 @@ input.chip-rename-input {
   text-decoration: line-through;
 }
 
-.empty {
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-  text-align: center;
-  padding: 3rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
+/* Empty card: kit.css .kit-empty-card (shared across apps). */
 .footnote {
   margin-top: 2rem;
   padding-top: 1rem;
