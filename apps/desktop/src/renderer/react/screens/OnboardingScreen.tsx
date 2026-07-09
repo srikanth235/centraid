@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import type { OnboardingBridgeProps } from '../bridge.js';
+import styles from './OnboardingScreen.module.css';
 
 // Mirror of gateway-store.ts#AVATAR_PALETTE (values round-trip through
 // updateProfileMetadata, which validates #RRGGBB).
@@ -28,7 +29,8 @@ function initials(name: string): string {
 /**
  * First-run onboarding — a name + a color, ported to React (issue #325,
  * Phase 3). On submit it calls the vanilla-supplied `onComplete`; the host then
- * replaces the root with home. Emits the same `cd-onb-*` classes.
+ * replaces the root with home. Styles are co-located in
+ * `OnboardingScreen.module.css` (scoped CSS Modules — issue #325 Phase 4).
  */
 export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps): JSX.Element {
   const [displayName, setDisplayName] = useState('');
@@ -67,44 +69,44 @@ export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps):
 
   return (
     <div
-      className="cd-onb-view"
+      className={styles.view}
       data-mounted="true"
       style={{ '--onb-accent': avatarColor } as CSSProperties}
     >
-      <div className="cd-onb-stage-bg" aria-hidden="true" />
-      <div className="cd-onb-stage-glow" aria-hidden="true" />
-      <div className="cd-onb-card">
-        <div className="cd-onb-eyebrow">
-          <span className="cd-onb-eyebrow-dot" aria-hidden="true" />
+      <div className={styles.stageBg} aria-hidden="true" />
+      <div className={styles.stageGlow} aria-hidden="true" />
+      <div className={styles.card}>
+        <div className={styles.eyebrow}>
+          <span className={styles.eyebrowDot} aria-hidden="true" />
           CENTRAID
         </div>
-        <h1 className="cd-onb-title">
+        <h1 className={styles.title}>
           Make yourself <em>at home</em>.
         </h1>
-        <p className="cd-onb-sub">
+        <p className={styles.sub}>
           A name and a color. We use them for your local workspace — you can change either at any
           time.
         </p>
-        <div className="cd-onb-avatar-wrap">
-          <span className="cd-onb-avatar-ring" aria-hidden="true" />
-          <span className="cd-onb-avatar" style={{ background: avatarColor }} aria-hidden="true">
-            <span className="cd-onb-initials">{initials(displayName)}</span>
+        <div className={styles.avatarWrap}>
+          <span className={styles.avatarRing} aria-hidden="true" />
+          <span className={styles.avatar} style={{ background: avatarColor }} aria-hidden="true">
+            <span className={styles.initials}>{initials(displayName)}</span>
           </span>
         </div>
         <form
-          className="cd-onb-form"
+          className={styles.form}
           onSubmit={(e) => {
             e.preventDefault();
             submit();
           }}
         >
-          <label className="cd-onb-field-label" htmlFor="cd-onb-name">
+          <label className={styles.fieldLabel} htmlFor="cd-onb-name">
             Your name
           </label>
           <input
             ref={nameRef}
             id="cd-onb-name"
-            className="cd-onb-input"
+            className={styles.input}
             type="text"
             placeholder="What should we call you?"
             autoCapitalize="words"
@@ -121,15 +123,15 @@ export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps):
               }
             }}
           />
-          <span className="cd-onb-field-label" id="cd-onb-color-label">
+          <span className={styles.fieldLabel} id="cd-onb-color-label">
             Pick a color
           </span>
-          <div className="cd-onb-swatches" role="radiogroup" aria-labelledby="cd-onb-color-label">
+          <div className={styles.swatches} role="radiogroup" aria-labelledby="cd-onb-color-label">
             {AVATAR_PALETTE.map((c) => (
               <button
                 key={c}
                 type="button"
-                className="cd-onb-swatch"
+                className={styles.swatch}
                 role="radio"
                 aria-label={`Color ${c}`}
                 aria-checked={c === avatarColor}
@@ -145,13 +147,13 @@ export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps):
           </div>
           <button
             type="button"
-            className="cd-onb-cta"
+            className={styles.cta}
             disabled={!ready}
             data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
             onClick={submit}
           >
-            <span className="cd-onb-cta-label">Enter Centraid</span>
-            <span className="cd-onb-cta-arrow">
+            <span>Enter Centraid</span>
+            <span className={styles.ctaArrow}>
               <svg
                 width="14"
                 height="14"
@@ -167,7 +169,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingBridgeProps):
             </span>
           </button>
           {error ? (
-            <div className="cd-onb-error" role="alert">
+            <div className={styles.error} role="alert">
               {error}
             </div>
           ) : null}

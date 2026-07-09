@@ -23,6 +23,21 @@ export default defineConfig({
       '@centraid/design-tokens': fromHere('../../packages/design-tokens/src/index.ts'),
     },
   },
+  css: {
+    // CSS Modules for co-located `*.module.css` (issue #325, Phase 4 — CSS
+    // refactor away from the monolithic global `styles.css`). Component-private
+    // classes live next to their component and are scoped here; `styles.foo`
+    // in the .tsx resolves to a build-time hash. `localsConvention:
+    // 'camelCaseOnly'` lets us author `.stageBg`/`styles.stageBg` cleanly, and
+    // the readable `[name]__[local]__[hash]` scope keeps devtools legible
+    // (`OnboardingScreen.module__cta__a1b2c`) — a maintainability win over the
+    // old opaque global `cd-*` soup. Vitest returns identity keys (its `css` is
+    // off) so class-based render tests are unaffected.
+    modules: {
+      localsConvention: 'camelCaseOnly',
+      generateScopedName: '[name]__[local]__[hash:base64:5]',
+    },
+  },
   build: {
     emptyOutDir: false,
     outDir: 'dist/renderer',

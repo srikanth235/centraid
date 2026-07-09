@@ -17,5 +17,10 @@ export default defineProject({
     name: '@centraid/desktop',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     environment: 'jsdom',
+    // Co-located CSS Modules (issue #325, Phase 4): return the *local* class
+    // name from `styles.foo` (→ `'foo'`) instead of Vitest's default hashed
+    // `_foo_<hash>`, so render tests keep matching on readable class selectors
+    // (`.swatch`, `.cta`) that mirror the module's local names.
+    css: { modules: { classNameStrategy: 'non-scoped' } },
   },
 });
