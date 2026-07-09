@@ -1,3 +1,4 @@
+import { Store } from '../../store.js';
 import { type CSSProperties, type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AppearancePrefs } from '../../../../app-shell-context.js';
@@ -61,7 +62,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   const vm = useBuilder(builderInput);
 
   const [chatOpenPref, setChatOpenPref] = useState<boolean>(() =>
-    typeof window.Store?.get === 'function' ? window.Store.get<boolean>(CHAT_PANE_PREF, true) : true,
+    Store.get<boolean>(CHAT_PANE_PREF, true),
   );
   const [previewInfo, setPreviewInfo] = useState<{ src: string } | null>(null);
 
@@ -90,7 +91,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     if (!chatEligible) return;
     setChatOpenPref((open) => {
       const next = !open;
-      window.Store?.set?.(CHAT_PANE_PREF, next);
+      Store.set(CHAT_PANE_PREF, next);
       return next;
     });
   };

@@ -1,3 +1,4 @@
+import { Store } from '../store.js';
 import { type JSX, useEffect, useRef } from 'react';
 import {
   listAutomationRunNodes,

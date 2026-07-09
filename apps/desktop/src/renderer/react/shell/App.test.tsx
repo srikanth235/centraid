@@ -28,19 +28,24 @@ vi.mock('../../gateway-client.js', () => ({
     }),
 }));
 
+// The renderer's client-local store is a plain module now; back it with an
+// in-memory Map so the hooks read/write deterministically (vi.hoisted lets the
+// mock factory close over `store` despite mock hoisting).
+const store = vi.hoisted(() => new Map<string, unknown>());
+vi.mock('./store.js', () => ({
+  Store: {
+    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
+    set: (k: string, v: unknown) => store.set(k, v),
+  },
+}));
+
 let App: typeof import('./App.js').default;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-const store = new Map<string, unknown>();
 
 beforeEach(async () => {
   store.clear();
   store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#123' }]);
-  (globalThis as unknown as { Store: unknown }).Store = {
-    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
-    remove: (k: string) => store.delete(k),
-  };
   // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
   (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
   (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };

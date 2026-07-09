@@ -1,3 +1,4 @@
+import { Store } from './store.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AppearancePrefs } from '../../app-shell-context.js';
 import { getUserPrefs, saveUserPrefs } from '../../gateway-client.js';

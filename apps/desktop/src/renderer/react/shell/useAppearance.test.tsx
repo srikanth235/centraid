@@ -12,15 +12,17 @@ vi.mock('../../gateway-client.js', () => ({
 let useAppearance: typeof import('./useAppearance.js').useAppearance;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-const store = new Map<string, unknown>();
+// The client-local store is a plain module now; back it with an in-memory Map.
+const store = vi.hoisted(() => new Map<string, unknown>());
+vi.mock('./store.js', () => ({
+  Store: {
+    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
+    set: (k: string, v: unknown) => store.set(k, v),
+  },
+}));
 
 beforeEach(async () => {
   store.clear();
-  (globalThis as unknown as { Store: unknown }).Store = {
-    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
-    remove: (k: string) => store.delete(k),
-  };
   getUserPrefs.mockReset().mockResolvedValue({});
   saveUserPrefs.mockReset().mockResolvedValue(undefined);
   ({ useAppearance } = await import('./useAppearance.js'));

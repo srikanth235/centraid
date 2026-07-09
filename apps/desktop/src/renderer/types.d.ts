@@ -46,19 +46,6 @@ declare global {
     tileFinish: (color: string, variant: TileVariant) => TileFinish;
   }
 
-  interface CentraidStore {
-    get<T>(key: string, fallback: T): T;
-    set<T>(key: string, value: T): void;
-  }
-
-  interface CentraidDateUtil {
-    todayKey(): string;
-    daysAgoKey(n: number): string;
-    dayOfWeek(): number;
-    formatDate(d: string, opts?: Intl.DateTimeFormatOptions): string;
-    formatShort(d: string): string;
-  }
-
   type ElAttrValue =
     | string
     | number
@@ -156,8 +143,6 @@ declare global {
     CentraidTokens: CentraidTokensBridge;
     Icon: Record<IconName, IconRenderer>;
     ICON_PALETTE: Palette;
-    Store: CentraidStore;
-    DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
   }
 
@@ -167,11 +152,10 @@ declare global {
   type ColorHexType = ColorHex;
   type ColorKeyType = ColorKey;
 
-  // Convenience values — set by store.ts / icons.ts on the window. Declared
-  // as `var` so renderer scripts can reference them unprefixed.
+  // Convenience values on the window — Icon/ICON_PALETTE are set by icons.ts
+  // at boot; Centraid is the React shell's nav shim. Declared as `var` so the
+  // shared helpers (app-format.ts) can reference them unprefixed.
   var Icon: Record<IconName, IconRenderer>;
   var ICON_PALETTE: Palette;
-  var Store: CentraidStore;
-  var DateUtil: CentraidDateUtil;
   var Centraid: CentraidRoot;
 }

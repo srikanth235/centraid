@@ -5,19 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const listApps = vi.fn();
 vi.mock('../../gateway-client.js', () => ({ listApps: () => listApps() }));
 // tileVisualFromListing/colorForIcon are pure — use the real ones.
+// The client-local store is a plain module now; back it with an in-memory Map.
+const store = vi.hoisted(() => new Map<string, unknown>());
+vi.mock('./store.js', () => ({
+  Store: {
+    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
+    set: (k: string, v: unknown) => store.set(k, v),
+  },
+}));
 
 let useShellApps: typeof import('./useShellApps.js').useShellApps;
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-const store = new Map<string, unknown>();
 
 beforeEach(async () => {
   store.clear();
-  (globalThis as unknown as { Store: unknown }).Store = {
-    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
-    set: (k: string, v: unknown) => store.set(k, v),
-    remove: (k: string) => store.delete(k),
-  };
   // tileVisualFromListing (real, pure) probes the ambient Icon registry to
   // validate an icon key — stub it with the keys the fixtures use.
   (globalThis as unknown as { Icon: unknown }).Icon = {

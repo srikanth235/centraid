@@ -1,3 +1,4 @@
+import { Store } from '../store.js';
 import { type JSX } from 'react';
 import type { AppearancePrefs, TemplateEntry } from '../../../app-shell-context.js';
 import type { DiscoverTemplate } from '../../screen-contracts.js';

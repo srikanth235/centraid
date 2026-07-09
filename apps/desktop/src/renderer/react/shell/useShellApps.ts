@@ -1,3 +1,4 @@
+import { Store } from './store.js';
 import { useCallback, useEffect, useState } from 'react';
 import { colorForIcon, tileVisualFromListing } from '../../app-format.js';
 import { listApps } from '../../gateway-client.js';
