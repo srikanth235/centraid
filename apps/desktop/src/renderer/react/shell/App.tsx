@@ -1,13 +1,39 @@
 import { type JSX, useCallback } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
+import { type ShellActions, ShellActionsProvider } from './actions.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import PageScroll from './PageScroll.js';
+import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
 import InsightsRoute from './routes/InsightsRoute.js';
+
+// Build the ShellActions surface for the current render. Navigation + toast are
+// live; the overlay actions (builder, new-app sheet, ⌘K palette, context menu)
+// are ported from the vanilla cardsMod/autoMod one cluster at a time — until
+// then they route to the builder or no-op so a consumer never crashes.
+function makeActions(nav: ShellNav): ShellActions {
+  return {
+    showToast,
+    navigate: nav.navigate,
+    enterBuilder: (opts) =>
+      nav.navigate({
+        kind: 'builder',
+        ...(opts.appContext ? { appContext: opts.appContext } : {}),
+        ...(opts.initialPrompt ? { initialPrompt: opts.initialPrompt } : {}),
+      }),
+    openNewAppSheet: () => nav.navigate({ kind: 'builder' }),
+    openCommandPalette: () => {
+      /* ⌘K palette ported with PaletteRoute */
+    },
+    openContextMenu: () => {
+      /* context menu ported with the card-action cluster */
+    },
+  };
+}
 
 // The React shell root — the single component the flip mounts on #root,
 // replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
@@ -86,7 +112,9 @@ export default function App(): JSX.Element {
       sidebarOpen={prefs.sidebarOpen}
       onSidebarOpenChange={(open) => setPrefs({ sidebarOpen: open })}
       renderSidebar={renderSidebar}
-      renderScreen={renderRoute}
+      renderScreen={(nav) => (
+        <ShellActionsProvider value={makeActions(nav)}>{renderRoute(nav)}</ShellActionsProvider>
+      )}
       onNewApp={() => {
         /* new-app flow ported with the builder route (R3) */
       }}
