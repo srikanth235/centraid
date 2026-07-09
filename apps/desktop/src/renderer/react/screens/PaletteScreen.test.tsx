@@ -64,22 +64,22 @@ function mount(props: PaletteBridgeProps): HTMLDivElement {
 }
 
 const rows = (el: HTMLElement): HTMLButtonElement[] =>
-  [...el.querySelectorAll('.cd-palette-row')] as HTMLButtonElement[];
+  [...el.querySelectorAll('.row')] as HTMLButtonElement[];
 
 describe('PaletteScreen', () => {
   it('renders grouped rows with the first row active', () => {
     const el = mount(makeProps());
-    expect(el.querySelectorAll('.cd-palette-group').length).toBe(2);
+    expect(el.querySelectorAll('.group').length).toBe(2);
     expect(rows(el).length).toBe(3);
     expect(rows(el)[0]?.dataset.active).toBe('true');
     // app-variant row carries the gradient tile + injected icon svg
-    expect(el.querySelector('.cd-palette-row-tile')).toBeTruthy();
-    expect(el.querySelector('.cd-palette-row-tile svg')).toBeTruthy();
+    expect(el.querySelector('.rowTile')).toBeTruthy();
+    expect(el.querySelector('.rowTile svg')).toBeTruthy();
   });
 
   it('moves the active row with ArrowDown and runs it on Enter', () => {
     const el = mount(makeProps());
-    const input = el.querySelector('.cd-palette-input') as HTMLInputElement;
+    const input = el.querySelector('.input') as HTMLInputElement;
     act(() =>
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
     );
@@ -98,7 +98,7 @@ describe('PaletteScreen', () => {
   it('recomputes groups from the query and passes it to buildGroups', () => {
     const props = makeProps();
     const el = mount(props);
-    const input = el.querySelector('.cd-palette-input') as HTMLInputElement;
+    const input = el.querySelector('.input') as HTMLInputElement;
     const setter = Object.getOwnPropertyDescriptor(
       globalThis.HTMLInputElement.prototype,
       'value',
@@ -114,10 +114,10 @@ describe('PaletteScreen', () => {
   it('closes on Escape and on backdrop click', () => {
     const props = makeProps();
     const el = mount(props);
-    const input = el.querySelector('.cd-palette-input') as HTMLInputElement;
+    const input = el.querySelector('.input') as HTMLInputElement;
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
     expect(props.onClose).toHaveBeenCalledTimes(1);
-    const backdrop = el.querySelector('.cd-palette-backdrop') as HTMLElement;
+    const backdrop = el.querySelector('.backdrop') as HTMLElement;
     act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onClose).toHaveBeenCalledTimes(2);
   });
