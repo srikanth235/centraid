@@ -47,7 +47,7 @@ describe('richAnswerHtml', () => {
 
   it('renders a malformed block as visible payload, never silent loss', () => {
     const html = richAnswerHtml('```block:table\nnot json\n```');
-    expect(html).toContain('cd-asst-pre');
+    expect(html).toContain('asstPre');
     expect(html).toContain('not json');
   });
 });

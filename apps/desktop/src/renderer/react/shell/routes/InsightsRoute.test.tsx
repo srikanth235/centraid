@@ -61,7 +61,7 @@ describe('InsightsRoute', () => {
       resolveSummary(summary);
     });
     expect(el.querySelector('.cd-au-loading')).toBeNull();
-    expect(el.querySelector('.cd-main-scroll')).not.toBeNull();
+    expect(el.querySelector('.mainScroll')).not.toBeNull();
   });
 
   it('renders an error line when the fetch rejects', async () => {

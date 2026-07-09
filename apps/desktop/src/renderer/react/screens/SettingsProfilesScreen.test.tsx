@@ -104,7 +104,7 @@ describe('SettingsProfilesScreen', () => {
     };
     click('.profRowSwitch');
     expect(props.onSwitch).toHaveBeenCalledWith('work');
-    click('.cd-icon-btn:not(.profRowDel)');
+    click('.iconBtn:not(.profRowDel)');
     expect(props.onEdit).toHaveBeenCalledWith('work');
     click('.profRowDel');
     expect(props.onDelete).toHaveBeenCalledWith('work');

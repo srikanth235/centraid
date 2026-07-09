@@ -107,7 +107,7 @@ describe('AssistantScreen', () => {
     );
     expect(el.querySelector('.msgUser')?.textContent).toContain('How much');
     expect(el.querySelector('.tools summary')?.textContent).toContain('1 query');
-    expect(el.querySelector('.cd-asst-pre')?.textContent).toBe('SELECT 1');
+    expect(el.querySelector('.asstPre')?.textContent).toBe('SELECT 1');
     // final answer HTML is injected verbatim
     expect(el.querySelector('.msgAi strong')?.textContent).toBe('$412');
   });

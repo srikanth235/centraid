@@ -98,8 +98,8 @@ describe('HomeScreen', () => {
   it('renders the composer hero, suggestions, filter, and the unified grid', () => {
     const el = mount(makeProps());
     expect(el.querySelector('.composerInput')).toBeTruthy();
-    expect(el.querySelectorAll('.heroSuggestions .cd-chip').length).toBe(2);
-    expect(el.querySelectorAll('.cd-disc-seg-b').length).toBe(3);
+    expect(el.querySelectorAll('.heroSuggestions .chip').length).toBe(2);
+    expect(el.querySelectorAll('.discSegB').length).toBe(3);
     // 2 apps + 1 automation card
     expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(3);
     // draft app has a status pill + is starred flag
@@ -140,13 +140,13 @@ describe('HomeScreen', () => {
 
   it('filters to automations and toggles the layout', () => {
     const el = mount(makeProps());
-    const autoTab = [...el.querySelectorAll('.cd-disc-seg-b')].find(
+    const autoTab = [...el.querySelectorAll('.discSegB')].find(
       (b) => (b as HTMLElement).dataset.k === 'automation',
     ) as HTMLButtonElement;
     act(() => autoTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(1);
     expect(el.querySelector('[data-kind="app"]')).toBeNull();
-    const rowsBtn = [...el.querySelectorAll('.cd-lib-layout-btn')].find(
+    const rowsBtn = [...el.querySelectorAll('.libLayoutBtn')].find(
       (b) => (b as HTMLElement).dataset.layout === 'rows',
     ) as HTMLButtonElement;
     act(() => rowsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));

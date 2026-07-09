@@ -1327,31 +1327,6 @@ select.input option {
 /* `full` row — control stacked below the label across the row width. */
 
 /* Segmented control (theme/density/tile treatment, per-app knobs) */
-.seg {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
-  padding: 3px;
-  gap: 2px;
-  border-radius: 8px;
-  background: var(--bg-sunken);
-}
-.seg button {
-  border: 0;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  text-transform: capitalize;
-  min-width: 0;
-}
-.seg button[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
-}
 /* §C — within Settings the segmented control is the proposal `Seg`:
    inline (hugs its options), bordered, with a subtle ink wash. */
 
@@ -1360,29 +1335,6 @@ select.input option {
 
 /* §C — RefinedSettingsV2 accent picker: labelled swatch cards — a color
    bar over a caption. The active card wears an ink border. */
-.cd-swatches {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-.cd-swatch {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 8px;
-  border: 0.5px solid var(--line);
-  background: transparent;
-  cursor: pointer;
-  transition: border-color 120ms;
-}
-.cd-swatch:hover {
-  border-color: var(--ink-3);
-}
-.cd-swatch[data-active='true'] {
-  border: 1.5px solid var(--ink);
-  padding: 7.5px;
-}
 
 /* VSCode-style theme picker — cards with a sampled mini-preview. Each
    card paints itself from its own theme's tokens (passed in via inline
@@ -1392,23 +1344,6 @@ select.input option {
 /* Inline-ish action button — text-only, accent-coloured. Used by the
    Match-system action in the Appearance panel and similar one-shot
    triggers that shouldn't read as primary CTAs. */
-.cd-link-btn {
-  background: transparent;
-  border: 0.5px solid var(--line);
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 500;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition:
-    border-color 120ms,
-    background 120ms;
-}
-.cd-link-btn:hover {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
 .share-access-row .label {
   font-size: 13.5px;
   font-weight: 500;
@@ -1913,11 +1848,6 @@ select.input option {
 .cd-main {
   background: var(--bg-wall);
 }
-.cd-main-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 48px 56px 56px;
-}
 
 /* Sidebar destination pages — Discover / Starred / Automations (§G3). */
 .cd-page-head {
@@ -1947,40 +1877,6 @@ select.input option {
    the apps shelf the rest of the column rather than vertically centering. */
 
 /* Day1Composer — bg-elev card with descriptive placeholder + toolbar. */
-.cd-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: var(--ink-2);
-  cursor: pointer;
-}
-.cd-icon-btn:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
-.cd-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line);
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 140ms;
-}
-.cd-chip:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink);
-}
 
 /* Hero date eyebrow stacked tight above the heading. */
 /* Composer + suggestion chips share a column so the chips ride just under
@@ -1995,9 +1891,6 @@ select.input option {
    filter reuses Discover's pill control; its own 8px top margin is reset so
    it sits centred against the link in this single-row header. */
 /* Body — kind groups stacked with the same rhythm as Discover's categories. */
-.cd-hsec-spacer {
-  flex: 1;
-}
 
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
 
@@ -2013,41 +1906,6 @@ select.input option {
 /* Home library layout toggle (Tiles | Rows) — a small segmented icon pair on
    the right of the shelf header. The pressed segment reads as an elevated
    chip; the other dims back. Session-only, mirrors the design's spec. */
-.cd-lib-layout {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 9px;
-  border: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cd-lib-layout-btn {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ink-4);
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.cd-lib-layout-btn svg {
-  display: block;
-}
-.cd-lib-layout-btn:hover {
-  color: var(--ink-2);
-}
-.cd-lib-layout-btn[aria-pressed='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-  color: var(--ink);
-}
 
 /* Rows layout — restack the tile grid as one full-width card per line and
    flatten each card into a horizontal strip: glyph plate · name/blurb (grows)
@@ -2378,56 +2236,6 @@ select.input option {
    grid resolves to the same column width on Discover as on Home. Both share the
    --lib-shelf-* tokens; the scroll drops its padding so the wrap owns the
    envelope, mirroring Home's padding-free day1 scroll + .cd-hsec. */
-.cd-disc-seg {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-top: 8px;
-  padding: 3px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-}
-.cd-disc-seg-b {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 13px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-3);
-  font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.cd-disc-seg-b:hover {
-  color: var(--ink-2);
-}
-.cd-disc-seg-b[data-active='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-  color: var(--ink);
-  font-weight: 600;
-}
-.cd-disc-seg-ic {
-  display: inline-flex;
-}
-.cd-disc-seg-n {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0;
-  color: var(--ink-4);
-}
-.cd-disc-seg-b[data-active='true'] .cd-disc-seg-n {
-  color: var(--ink-3);
-}
 
 /* Filter toolbar — kind segmented control on the left, layout toggle on the
    right; sits below the Discover title block. */
@@ -2882,21 +2690,8 @@ select.input option {
 
 /* §E1 — tabbed popover: a segmented pill of Appearance / Automations /
    Manage, inset 14px from the popover edges. */
-.cd-app-settings-note {
-  padding: 4px 0;
-  font-size: 12.5px;
-  color: var(--ink-4);
-  line-height: 1.5;
-}
 
 /* §E1 — Manage tab Danger zone. */
-.cd-app-settings-section {
-  padding: 10px 12px 12px;
-  border-bottom: 0.5px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
 /* §E1 — Appearance pane: the proposal's `TabAppearance` drops the
    "Preferences" heading and renders Font / Width / Corners as compact
@@ -3137,18 +2932,6 @@ select.input option {
   50% {
     opacity: 0;
   }
-}
-.cd-asst-pre {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 12px;
-  overflow-x: auto;
-  margin: 0 0 8px;
-  white-space: pre-wrap;
 }
 
 /* Typed blocks */

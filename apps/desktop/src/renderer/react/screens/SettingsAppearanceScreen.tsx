@@ -5,6 +5,9 @@ import { Icon } from '../ui/index.js';
 import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
 import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
 import styles from './SettingsAppearanceScreen.module.css';
+import segCss from '../styles/seg.module.css';
+import swatchCss from '../styles/swatch.module.css';
+import linkBtnCss from '../styles/linkBtn.module.css';
 
 // Accent options — mirrors ACCENT_PALETTE (app-shell-context.ts) + the names
 // from makeSwatches. Kept inline so the React bundle stays decoupled.
@@ -102,7 +105,7 @@ export default function SettingsAppearanceScreen({
         <DrawerRow label="Match system" hint="Snap the theme to your OS appearance right now.">
           <button
             type="button"
-            className="cd-link-btn"
+            className={linkBtnCss.linkBtn}
             onClick={() => setCurTheme(onMatchSystem())}
           >
             Match system
@@ -128,12 +131,12 @@ export default function SettingsAppearanceScreen({
           label="Color"
           hint="Used for the build button, sparkle, focus rings, and version badges."
         >
-          <div className="cd-swatches" role="radiogroup" aria-label="Accent">
+          <div className={swatchCss.swatches} role="radiogroup" aria-label="Accent">
             {ACCENTS.map((a) => (
               <button
                 key={a.key}
                 type="button"
-                className="cd-swatch"
+                className={swatchCss.swatch}
                 role="radio"
                 aria-checked={a.key === curAccent}
                 aria-label={a.name}
@@ -153,7 +156,7 @@ export default function SettingsAppearanceScreen({
 
       <DrawerGroup label="App tiles">
         <DrawerRow label="Treatment" hint="How icon tiles on the home grid look.">
-          <div className="seg" role="tablist" aria-label="Treatment">
+          <div className={segCss.seg} role="tablist" aria-label="Treatment">
             {TILE_VARIANTS.map((v) => (
               <button
                 key={v}

@@ -1,6 +1,7 @@
 import { resolveAssistantRefs } from '../../../gateway-client.js';
 import styles from './assistantRich.module.css';
 import { cx } from '../../ui/cx.js';
+import asstPreCss from '../../styles/asstPre.module.css';
 
 // Assistant rich-answer renderer — ports the vanilla app-assistant.ts
 // markdown-lite + typed-block renderer (richAnswer / proseNodes / table / stat /
@@ -200,9 +201,9 @@ export function richAnswerHtml(text: string): string {
       } catch {
         node = null;
       }
-      host.append(node ?? el('pre', { class: 'cd-asst-pre' }, payload.trim()));
+      host.append(node ?? el('pre', { class: asstPreCss.asstPre }, payload.trim()));
     } else {
-      host.append(el('pre', { class: 'cd-asst-pre' }, payload.replace(/\n$/, '')));
+      host.append(el('pre', { class: asstPreCss.asstPre }, payload.replace(/\n$/, '')));
     }
   }
   pushProse(text.slice(last));

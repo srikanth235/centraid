@@ -56,8 +56,8 @@ describe('DiscoverScreen', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
     expect(html).toContain('wrap');
     expect(html).toContain('<h1>Templates</h1>');
-    expect(count(html, 'cd-disc-seg-b')).toBe(3);
-    expect(html).toContain('cd-lib-layout');
+    expect(count(html, 'discSegB')).toBe(3);
+    expect(html).toContain('libLayout');
   });
 
   it('lists every template as a card in the default All view, apps first', () => {

@@ -8,6 +8,8 @@ import styles from './DiscoverScreen.module.css';
 import { cx } from '../ui/cx.js';
 import emptyCss from '../styles/pageEmpty.module.css';
 import au from '../styles/automation.module.css';
+import libCss from '../styles/library.module.css';
+import mainScrollCss from '../styles/mainScroll.module.css';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
@@ -185,7 +187,7 @@ export default function DiscoverScreen({
   ];
 
   return (
-    <div className={cx('cd-main-scroll', styles.scroll)}>
+    <div className={cx(mainScrollCss.mainScroll, styles.scroll)}>
       <div className={styles.wrap}>
         <div className={styles.head}>
           <div className={styles.headText}>
@@ -198,12 +200,12 @@ export default function DiscoverScreen({
           </div>
         </div>
         <div className={styles.toolbar}>
-          <div className="cd-disc-seg" role="tablist" aria-label="Filter templates by kind">
+          <div className={libCss.discSeg} role="tablist" aria-label="Filter templates by kind">
             {segDefs.map((d) => (
               <button
                 key={d.k}
                 type="button"
-                className="cd-disc-seg-b"
+                className={libCss.discSegB}
                 role="tab"
                 aria-selected={d.k === kind}
                 data-k={d.k}
@@ -211,20 +213,20 @@ export default function DiscoverScreen({
                 onClick={() => setKind(d.k)}
               >
                 {d.icon ? (
-                  <span className="cd-disc-seg-ic" aria-hidden="true">
+                  <span className={libCss.discSegIc} aria-hidden="true">
                     <Icon name={d.icon} size={13} />
                   </span>
                 ) : null}
                 <span>{d.label}</span>
-                <span className="cd-disc-seg-n">{`· ${d.count}`}</span>
+                <span className={libCss.discSegN}>{`· ${d.count}`}</span>
               </button>
             ))}
           </div>
-          <span className="cd-hsec-spacer" />
-          <div className="cd-lib-layout" role="group" aria-label="Layout">
+          <span className={libCss.hsecSpacer} />
+          <div className={libCss.libLayout} role="group" aria-label="Layout">
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Tiles"
               aria-label="Tiles"
               aria-pressed={layout === 'tiles'}
@@ -235,7 +237,7 @@ export default function DiscoverScreen({
             </button>
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Rows"
               aria-label="Rows"
               aria-pressed={layout === 'rows'}

@@ -1,0 +1,17 @@
+.linkBtn {
+  background: transparent;
+  border: 0.5px solid var(--line);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    border-color 120ms,
+    background 120ms;
+}
+.linkBtn:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}

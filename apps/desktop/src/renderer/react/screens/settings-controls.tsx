@@ -1,6 +1,7 @@
 import type { JSX, ReactNode } from 'react';
 import styles from './settings-controls.module.css';
 import { cx } from '../ui/cx.js';
+import segCss from '../styles/seg.module.css';
 
 // Shared Settings control primitives — React ports of the vanilla
 // drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),
@@ -79,7 +80,7 @@ export function Segmented<T extends string>({
   ariaLabel?: string;
 }): JSX.Element {
   return (
-    <div className="seg" role="tablist" aria-label={ariaLabel}>
+    <div className={segCss.seg} role="tablist" aria-label={ariaLabel}>
       {options.map((opt) => (
         <button
           key={opt}

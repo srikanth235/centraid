@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import type { AsstMsgDTO, AssistantBridgeProps, AssistantSnapshot } from '../screen-contracts.js';
 import styles from './AssistantScreen.module.css';
 import { cx } from '../ui/cx.js';
+import asstPreCss from '../styles/asstPre.module.css';
 
 function ToolsMsg({
   label,
@@ -17,7 +18,7 @@ function ToolsMsg({
         <div className={styles.toolsBody}>
           {calls.map((c, i) => (
             <div key={i} className={styles.tool} data-state={c.state}>
-              {c.sql ? <pre className="cd-asst-pre">{c.sql}</pre> : <span>{c.tool}</span>}
+              {c.sql ? <pre className={asstPreCss.asstPre}>{c.sql}</pre> : <span>{c.tool}</span>}
               <div className={styles.toolMeta}>{c.meta}</div>
             </div>
           ))}

@@ -12,6 +12,8 @@ import { INTEGRATION_HUES } from '../format.js';
 import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
+import libCss from '../styles/library.module.css';
+import controlsCss from '../styles/controls.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -343,7 +345,7 @@ export default function HomeScreen({
             <div className={styles.composerToolbar}>
               <button
                 type="button"
-                className={cx('cd-icon-btn', styles.composerAttach)}
+                className={cx(controlsCss.iconBtn, styles.composerAttach)}
                 title="Attach"
               >
                 <Icon name="Plus" size={14} />
@@ -374,7 +376,7 @@ export default function HomeScreen({
               <button
                 key={s}
                 type="button"
-                className="cd-chip"
+                className={controlsCss.chip}
                 onClick={() => {
                   setPrompt(s);
                   taRef.current?.focus();
@@ -389,12 +391,12 @@ export default function HomeScreen({
 
       <section className={cx(styles.hsec, styles.homeLib)}>
         <div className={styles.homeLibHead}>
-          <div className="cd-disc-seg" role="tablist" aria-label="Filter your library by kind">
+          <div className={libCss.discSeg} role="tablist" aria-label="Filter your library by kind">
             {segDefs.map((d) => (
               <button
                 key={d.k}
                 type="button"
-                className="cd-disc-seg-b"
+                className={libCss.discSegB}
                 role="tab"
                 aria-selected={d.k === kind}
                 data-k={d.k}
@@ -402,16 +404,16 @@ export default function HomeScreen({
                 onClick={() => setKind(d.k)}
               >
                 {d.icon ? (
-                  <span className="cd-disc-seg-ic" aria-hidden="true">
+                  <span className={libCss.discSegIc} aria-hidden="true">
                     <Icon name={d.icon} size={13} />
                   </span>
                 ) : null}
                 <span>{d.label}</span>
-                <span className="cd-disc-seg-n">{`· ${d.count}`}</span>
+                <span className={libCss.discSegN}>{`· ${d.count}`}</span>
               </button>
             ))}
           </div>
-          <span className="cd-hsec-spacer" />
+          <span className={libCss.hsecSpacer} />
           {attention > 0 ? (
             <div className={styles.hsecStatus}>
               <span className={styles.hsecStat} data-tone="attention">
@@ -428,10 +430,10 @@ export default function HomeScreen({
               <Icon name="ChevronRight" size={14} />
             </span>
           </button>
-          <div className="cd-lib-layout" role="group" aria-label="Layout">
+          <div className={libCss.libLayout} role="group" aria-label="Layout">
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Tiles"
               aria-label="Tiles"
               aria-pressed={layout === 'tiles'}
@@ -442,7 +444,7 @@ export default function HomeScreen({
             </button>
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Rows"
               aria-label="Rows"
               aria-pressed={layout === 'rows'}

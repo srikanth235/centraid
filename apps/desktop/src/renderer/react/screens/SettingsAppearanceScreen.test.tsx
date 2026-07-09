@@ -45,14 +45,14 @@ describe('SettingsAppearanceScreen', () => {
   it('renders a theme card per preset, 5 accents, 4 tile treatments, and 4 preview tiles', () => {
     const el = mount(makeProps());
     expect(el.querySelectorAll('.themeCard').length).toBe(THEME_PRESETS.length);
-    expect(el.querySelectorAll('.cd-swatch').length).toBe(5);
+    expect(el.querySelectorAll('.swatch').length).toBe(5);
     expect(el.querySelectorAll('.ap-preview-tile').length).toBe(4);
     // active theme marked
     expect(
       (el.querySelector('.themeCard[data-name="light"]') as HTMLElement).dataset.active,
     ).toBe('true');
     // active accent
-    expect(el.querySelectorAll('.cd-swatch[data-active="true"]').length).toBe(1);
+    expect(el.querySelectorAll('.swatch[data-active="true"]').length).toBe(1);
   });
 
   it('selects a theme card', () => {
@@ -69,7 +69,7 @@ describe('SettingsAppearanceScreen', () => {
   it('picks an accent and a tile treatment', () => {
     const props = makeProps();
     const el = mount(props);
-    const violet = [...el.querySelectorAll('.cd-swatch')].find(
+    const violet = [...el.querySelectorAll('.swatch')].find(
       (b) => (b as HTMLElement).getAttribute('aria-label') === 'Violet',
     ) as HTMLButtonElement;
     act(() => violet.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -85,7 +85,7 @@ describe('SettingsAppearanceScreen', () => {
   it('applies match-system and cool-cast', () => {
     const props = makeProps();
     const el = mount(props);
-    const matchBtn = [...el.querySelectorAll('.cd-link-btn')].find(
+    const matchBtn = [...el.querySelectorAll('.linkBtn')].find(
       (b) => b.textContent === 'Match system',
     ) as HTMLButtonElement;
     act(() => matchBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));

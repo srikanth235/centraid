@@ -105,7 +105,7 @@ describe('App root', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(el.querySelector('.cd-main-scroll')).not.toBeNull();
+    expect(el.querySelector('.mainScroll')).not.toBeNull();
   });
 
   it('renders the Starred empty state natively', async () => {

@@ -6,9 +6,11 @@ import type {
   PhoneStatusDTO,
 } from '../screen-contracts.js';
 import styles from './PhoneScreen.module.css';
+import appSettingsCss from '../styles/appSettings.module.css';
+import linkBtnCss from '../styles/linkBtn.module.css';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="cd-app-settings-note">{children}</div>;
+  return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
 function DeviceRow({
@@ -132,16 +134,16 @@ export default function PhoneScreen({
               alt="Pairing QR code — scan from the Centraid mobile app"
               src={pairing.info.qrDataUrl}
             />
-            <div className="cd-app-settings-note">
+            <div className={appSettingsCss.appSettingsNote}>
               {`Open the Centraid app on your phone → Settings → Pair with desktop, and scan this code. It works once and expires at ${expiresLabel}.`}
             </div>
-            <button type="button" className="cd-link-btn" onClick={onCancelPairing}>
+            <button type="button" className={linkBtnCss.linkBtn} onClick={onCancelPairing}>
               Cancel pairing
             </button>
           </>
         ) : (
           <>
-            <div className="cd-app-settings-note">
+            <div className={appSettingsCss.appSettingsNote}>
               Your phone connects directly to this desktop over an end-to-end encrypted tunnel —
               from any network, with the gateway never exposed. Publish an app here, open it there.
             </div>

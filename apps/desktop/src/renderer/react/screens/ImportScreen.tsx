@@ -9,6 +9,8 @@ import type {
 import { relativeTime } from '../format.js';
 import styles from './ImportScreen.module.css';
 import vault from '../styles/vault.module.css';
+import appSettingsCss from '../styles/appSettings.module.css';
+import { cx } from '../ui/cx.js';
 
 const TEXT_KINDS = new Set(['ics', 'vcf', 'vcard', 'mbox', 'csv']);
 
@@ -22,7 +24,7 @@ function summaryLine(summary: Record<string, number>): string {
 }
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="cd-app-settings-note">{children}</div>;
+  return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
 function ConnectionRow({
@@ -79,9 +81,9 @@ function DraftSection({
     };
   }, [batch.batchId, loadRows]);
   return (
-    <div className="cd-app-settings-section cd-import-draft">
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-import-draft")}>
       <div className={vault.label}>{`Draft · ${batch.label ?? batch.kind ?? 'import'}`}</div>
-      <div className="cd-app-settings-note">
+      <div className={appSettingsCss.appSettingsNote}>
         {`${summaryLine(batch.summary)} · staged ${relativeTime(batch.createdAt)}`}
       </div>
       {rows === 'error' ? (
@@ -220,7 +222,7 @@ export default function ImportScreen({
 
   return (
     <>
-      <div className="cd-app-settings-section">
+      <div className={appSettingsCss.appSettingsSection}>
         <div className={vault.label}>{`Import into · ${state.vaultName}`}</div>
         <Note>
           Calendar (.ics), contacts (.vcf), mail (.mbox), bank statements (.csv) or a Google Takeout
@@ -246,7 +248,7 @@ export default function ImportScreen({
       </div>
 
       {live.length > 0 ? (
-        <div className="cd-app-settings-section">
+        <div className={appSettingsCss.appSettingsSection}>
           <div className={vault.label}>Connections</div>
           <Note>
             Live sources syncing into this vault. A paused connection never runs; needs-auth means
@@ -269,7 +271,7 @@ export default function ImportScreen({
       ))}
 
       {settled.length > 0 ? (
-        <div className="cd-app-settings-section">
+        <div className={appSettingsCss.appSettingsSection}>
           <div className={vault.label}>History</div>
           {settled.map((batch) => (
             <div key={batch.batchId} className={styles.historyRow}>

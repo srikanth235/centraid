@@ -3,6 +3,7 @@ import { type CSSProperties, type JSX, useEffect, useRef, useState } from 'react
 import { iconSvg } from '../iconSvg.js';
 import styles from './SpaceModal.module.css';
 import { cx } from '../../ui/cx.js';
+import controlsCss from '../../styles/controls.module.css';
 
 // The Spaces add/rename modal, ported to React (issue #325, R5) from the vanilla
 // `window.Profiles.openModal`. A space IS a vault (#280); this is a name + icon +
@@ -121,7 +122,7 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
           <h2 className={styles.profModalTitle}>{mode === 'add' ? 'New profile' : 'Edit profile'}</h2>
           <button
             type="button"
-            className={cx("cd-icon-btn", styles.profModalClose)}
+            className={cx(controlsCss.iconBtn, styles.profModalClose)}
             title="Close"
             aria-label="Close"
             onClick={onCancel}
@@ -210,13 +211,13 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
         </div>
         <div className={styles.profModalFoot}>
           {onDelete ? (
-            <button type="button" className={cx("cd-chip", styles.profModalDelete)} onClick={onDelete}>
+            <button type="button" className={cx(controlsCss.chip, styles.profModalDelete)} onClick={onDelete}>
               <span dangerouslySetInnerHTML={{ __html: iconSvg('Trash', 12) }} />
               Delete
             </button>
           ) : null}
           <span style={{ flex: 1 }} />
-          <button type="button" className="cd-chip" onClick={onCancel}>
+          <button type="button" className={controlsCss.chip} onClick={onCancel}>
             Cancel
           </button>
           <button

@@ -10,17 +10,18 @@ import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
 import vault from '../styles/vault.module.css';
 import au from '../styles/automation.module.css';
+import appSettingsCss from '../styles/appSettings.module.css';
 
 const scopeLabel = (s: VaultScopeDTO): string => (s.table ? `${s.schema}.${s.table}` : s.schema);
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="cd-app-settings-note">{children}</div>;
+  return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
 // WHAT the app asked for — why line + requested scopes as chips.
 function RequestSection({ block }: { block: VaultBridgeProps['block'] }): JSX.Element {
   return (
-    <div className="cd-app-settings-section cd-vault-request">
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-request")}>
       <div className={vault.label}>Requested access</div>
       {block.why ? <div className={vault.why}>{block.why}</div> : null}
       <div className={vault.scopes}>
@@ -49,7 +50,7 @@ function GrantSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className={cx('cd-app-settings-section', vault.grants)}>
+    <div className={cx(appSettingsCss.appSettingsSection, vault.grants)}>
       <div className={vault.label}>{`Access · ${vaultName}`}</div>
       {grants.length === 0 ? (
         <>
@@ -103,7 +104,7 @@ function ParkedSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className={cx('cd-app-settings-section', vault.parked)}>
+    <div className={cx(appSettingsCss.appSettingsSection, vault.parked)}>
       <div className={vault.label}>Waiting for your say-so</div>
       {parked.map((entry) => (
         <div key={entry.invocationId} className={vault.parkedCard}>
@@ -153,7 +154,7 @@ function DemoSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="cd-app-settings-section cd-vault-demo">
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-demo")}>
       <div className={vault.label}>Demo data</div>
       <Note>
         {demo.rows > 0

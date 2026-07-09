@@ -5,6 +5,7 @@ import { Icon } from '../ui/index.js';
 import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../screen-contracts.js';
 import styles from './SettingsProfilesScreen.module.css';
 import { cx } from '../ui/cx.js';
+import controlsCss from '../styles/controls.module.css';
 
 function Avatar({
   icon,
@@ -59,7 +60,7 @@ function ProfileRow({
         {!p.active ? (
           <button
             type="button"
-            className={cx("cd-chip", styles.profRowSwitch)}
+            className={cx(controlsCss.chip, styles.profRowSwitch)}
             onClick={() => onSwitch(p.id)}
           >
             Switch
@@ -67,7 +68,7 @@ function ProfileRow({
         ) : null}
         <button
           type="button"
-          className="cd-icon-btn"
+          className={controlsCss.iconBtn}
           title="Edit"
           aria-label={`Edit ${p.name}`}
           onClick={() => onEdit(p.id)}
@@ -77,7 +78,7 @@ function ProfileRow({
         {!p.primordial ? (
           <button
             type="button"
-            className={cx("cd-icon-btn", styles.profRowDel)}
+            className={cx(controlsCss.iconBtn, styles.profRowDel)}
             title="Delete"
             aria-label={`Delete ${p.name}`}
             onClick={() => onDelete(p.id)}
@@ -112,7 +113,7 @@ function ConnectionRow({
         {!c.active ? (
           <button
             type="button"
-            className={cx("cd-chip", styles.profRowSwitch)}
+            className={cx(controlsCss.chip, styles.profRowSwitch)}
             onClick={() => onConnect(c.id)}
           >
             Connect
@@ -121,7 +122,7 @@ function ConnectionRow({
         {c.removable ? (
           <button
             type="button"
-            className={cx("cd-icon-btn", styles.profRowDel)}
+            className={cx(controlsCss.iconBtn, styles.profRowDel)}
             title="Remove connection"
             aria-label={`Remove ${c.displayName}`}
             onClick={() => onRemove(c.id)}
