@@ -16,22 +16,10 @@ import {
   listTemplates,
   updateAppMeta,
 } from './gateway-client.js';
-import { inferAppVisual, isAutomationTemplate, relativeTime } from './app-format.js';
-import { APP_BADGE_SVG } from './app-glyphs.js';
+import { inferAppVisual, isAutomationTemplate } from './app-format.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
-// True when an app was created within the last 24h (drives the "new" pill).
-function isRecentlyCreated(iso?: string): boolean {
-  if (!iso) return false;
-  const t = new Date(iso).getTime();
-  return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
-}
-
 export interface CardsModule {
-  renderAppCard(app: AppMetaResolvedType, small?: boolean): HTMLElement;
-  statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement;
-  /** Footer kind badge (APP / AUTOMATION) — shared with the Home automation card. */
-  kindBadgeEl(kind: 'app' | 'automation'): HTMLElement;
   closeContextMenu(): void;
   isContextMenuOpen(): boolean;
   openContextMenu(app: AppMetaResolvedType, anchor: MenuAnchor): void;
@@ -86,141 +74,10 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
     isDraft,
     isStarred,
     toggleStar,
-    getPrefs,
     getUserApps,
     setUserApps,
     persist,
   } = ctx;
-
-  function statusPillEl(tone: 'new' | 'draft' | 'live', label: string): HTMLElement {
-    return el('span', { class: 'cd-status', 'data-tone': tone }, [
-      el('span', { class: 'cd-status-dot' }),
-      label,
-    ]);
-  }
-
-  // Card footer kind badge (APP / AUTOMATION) — reuses the Discover badge
-  // styling so apps and automations read consistently across both surfaces.
-  // Exposed on the module so the Home automation card (in app.ts) reuses it.
-  function kindBadgeEl(kind: 'app' | 'automation'): HTMLElement {
-    return el('span', { class: 'cd-disc-badge', 'data-kind': kind }, [
-      el('span', {
-        'aria-hidden': 'true',
-        trustedHtml: kind === 'app' ? APP_BADGE_SVG : Icon.Bolt({ size: 12 }),
-      }),
-      el('span', {}, kind === 'app' ? 'App' : 'Automation'),
-    ]);
-  }
-
-  // §A3 — RefinedAppTile: gradient icon tile with a status dot, a
-  // hover-revealed star, a 2-line blurb, and a state-aware bottom strip
-  // (NEW for <24h, DRAFT, else last-opened).
-  function renderAppCard(app: AppMetaResolvedType, small = false): HTMLElement {
-    const draft = isDraft(app);
-
-    // Wrap is the grid item; the card is the clickable surface. The `•••`
-    // action rides as a wrap sibling so we don't nest a button in a button.
-    const wrap = el('div', { class: 'cd-app-card-wrap', 'data-app-id': app.id });
-    const card = el('button', {
-      class: small ? 'cd-app-card cd-app-card--small' : 'cd-app-card',
-      type: 'button',
-      // Stable hook for e2e — the clickable tile surface. Decouples tests from
-      // the styling class so a card restyle can't break tile-open flows.
-      'data-testid': 'app-tile',
-      onClick: () => (draft ? enterBuilder({ appContext: app }) : ctx.shell.openApp(app.id)),
-      onContextmenu: (e: Event) => {
-        e.preventDefault();
-        const me = e as MouseEvent;
-        openContextMenu(app, { kind: 'point', x: me.clientX, y: me.clientY });
-      },
-    });
-
-    const ua = !draft ? findUserApp(app.id) : undefined;
-    const isNew = !draft && isRecentlyCreated(ua?.createdAt);
-    const tone: 'new' | 'draft' | null = draft ? 'draft' : isNew ? 'new' : null;
-
-    const iconEl = el('div', {
-      class: 'cd-app-card-icon',
-      // Home tiles render the glyph large + prominent (24px in a ~52px tile)
-      // to match the app-gallery spec; CSS pins the final svg box per variant.
-      trustedHtml: Icon[app.iconKey] ? Icon[app.iconKey]({ size: 24, strokeWidth: 1.9 }) : '',
-    });
-    const finish = window.CentraidTokens.tileFinish(app.color, getPrefs().tileVariant);
-    iconEl.style.background = finish.background;
-    iconEl.style.color = finish.glyphColor;
-    if (finish.boxShadow) iconEl.style.boxShadow = finish.boxShadow;
-    if (tone) {
-      iconEl.append(el('span', { class: 'cd-app-card-icon-dot', 'data-tone': tone }));
-    }
-
-    // Horizontal header — large glyph plate on the left, name (+ inline NEW/
-    // DRAFT pill) over blurb on the right (matches the apps-gallery spec).
-    card.dataset.kind = 'app';
-    card.append(
-      el('div', { class: 'cd-app-card-head' }, [
-        iconEl,
-        el('div', { class: 'cd-app-card-head-text' }, [
-          el('div', { class: 'cd-app-card-name-row' }, [
-            el('div', { class: 'cd-app-card-name' }, app.name),
-            ...(tone ? [statusPillEl(tone, tone)] : []),
-          ]),
-          el('div', { class: 'cd-app-card-desc' }, app.desc || 'No description yet.'),
-        ]),
-      ]),
-    );
-
-    // Divider + state strip: APP kind badge on the left, timestamp on the
-    // right. The hover-revealed action toolbar floats over the top-right (a
-    // wrap sibling so we don't nest buttons inside the card button).
-    const foot = el('div', { class: 'cd-app-card-foot' });
-    foot.append(kindBadgeEl('app'));
-    const stamp = draft ? 'saved' : relativeTime(ua?.updatedAt);
-    foot.append(el('span', { class: 'cd-app-card-foot-time' }, stamp));
-    card.append(foot);
-    const starred = isStarred(app.id);
-    wrap.dataset.starred = String(starred);
-    wrap.append(card);
-
-    // Single overflow ⋯ affordance — Edit / Star / Open / Rename / … all live in
-    // the menu (openContextMenu) so the card stays clean (no multi-button hover
-    // toolbar). A persistent gold star flag marks starred apps when idle;
-    // hovering swaps in the ⋯.
-    wrap.append(
-      el('div', { class: 'cd-card-actions' }, [
-        buildMoreButton('App actions', (rect) => openContextMenu(app, { kind: 'rect', rect })),
-      ]),
-    );
-    if (starred)
-      wrap.append(
-        el('span', {
-          class: 'cd-card-star-flag',
-          'aria-hidden': 'true',
-          trustedHtml: Icon.Star ? Icon.Star({ size: 14 }) : '',
-        }),
-      );
-    return wrap;
-  }
-
-  // Overflow `⋯` trigger for the inline toolbar. Marks itself `data-open`
-  // while the menu is mounted so CSS keeps the toolbar visible even when the
-  // cursor wanders off the card into the menu (captureTrigger reads the flag).
-  function buildMoreButton(label: string, onOpen: (rect: DOMRect) => void): HTMLElement {
-    const btn = el('button', {
-      class: 'cd-card-act cd-card-act-more',
-      type: 'button',
-      'aria-label': label,
-      'aria-haspopup': 'menu',
-      trustedHtml: Icon.MoreHoriz({ size: 16 }),
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const target = e.currentTarget as HTMLElement;
-        target.dataset.open = 'true';
-        onOpen(target.getBoundingClientRect());
-      },
-    });
-    return btn;
-  }
 
   // ---------- Context menu ----------
   let ctxBackdrop: HTMLElement | null = null;
@@ -987,9 +844,6 @@ export function createCardsModule(ctx: ShellContext): CardsModule {
   }
 
   return {
-    renderAppCard,
-    statusPillEl,
-    kindBadgeEl,
     closeContextMenu,
     isContextMenuOpen: () => ctxMenu !== null,
     openContextMenu,
