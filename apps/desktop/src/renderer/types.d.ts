@@ -46,19 +46,6 @@ declare global {
     tileFinish: (color: string, variant: TileVariant) => TileFinish;
   }
 
-  interface CentraidStore {
-    get<T>(key: string, fallback: T): T;
-    set<T>(key: string, value: T): void;
-  }
-
-  interface CentraidDateUtil {
-    todayKey(): string;
-    daysAgoKey(n: number): string;
-    dayOfWeek(): number;
-    formatDate(d: string, opts?: Intl.DateTimeFormatOptions): string;
-    formatShort(d: string): string;
-  }
-
   type ElAttrValue =
     | string
     | number
@@ -78,7 +65,6 @@ declare global {
     el: ElHelper;
     openApp: (id: string) => void;
     renderHome: () => void;
-    openBuilder: () => void;
     openShare: (app: AppMetaResolved) => void;
     openSettings: () => void | Promise<void>;
     /**
@@ -103,64 +89,6 @@ declare global {
      * first settings fetch resolves.
      */
     getRuntimeMode: () => 'local' | 'remote' | undefined;
-  }
-
-  interface BuilderOptions {
-    root: HTMLElement;
-    el: ElHelper;
-    onExit: () => void;
-    initialPrompt?: string;
-    appContext?: AppMetaResolved;
-    /**
-     * Centraid app id (folder name under <appsDir>) when reopening an
-     * already-generated user app. Absent for fresh `initialPrompt` flows —
-     * the builder generates an id and scaffolds an app itself.
-     */
-    appId?: string;
-    /**
-     * App kind. `'app'` (default) is the standard chat-driven app
-     * builder; `'automation'` swaps the right pane for a read-only
-     * automation config view + test-run pane. Automation mode always
-     * receives a pre-scaffolded draft via `appId`.
-     */
-    appKind?: 'app' | 'automation';
-    /**
-     * Called after a successful publish of a fresh build. Receives the centraid
-     * app id (used to look up the app on subsequent opens) plus the
-     * suggested name/icon/color so the home screen can render a tile.
-     */
-    onAddToHome?: (input: {
-      prompt?: string;
-      appId: string;
-      name?: string;
-      versionId?: string;
-    }) => void;
-    /**
-     * Called when the user inline-edits the app title or description
-     * in the builder topbar. The home screen uses this to update its
-     * in-memory userApps entry (and its persisted localStorage copy) so
-     * the tile reflects the new metadata without waiting for a re-publish.
-     * Either `name` or `description` (or both) will be present.
-     */
-    onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
-    canGoBack?: boolean;
-    canGoForward?: boolean;
-    onBack?: () => void;
-    onForward?: () => void;
-    /**
-     * When true, focus the inline title and select its text on mount so the
-     * user is dropped straight into renaming. Used by the template-clone
-     * flow (Notion-style: duplicate inherits the template name but lands
-     * in rename mode immediately).
-     */
-    focusName?: boolean;
-    /**
-     * Sidebar drafts list — the user's other in-progress apps on disk
-     * that the shell already knows about. Builder renders these under a
-     * "Drafts" section so the user can switch between WIP apps without
-     * exiting to home. Defaults to `[]` when omitted (older callers).
-     */
-    drafts?: ChromeSidebarApp[];
   }
 
   interface UserAppMeta extends AppMetaResolved {
@@ -193,14 +121,6 @@ declare global {
     hasIndex: boolean;
   }
 
-  interface ChromeSidebarApp {
-    id: string;
-    name: string;
-    iconKey: IconName;
-    color: string;
-    status?: 'new' | 'draft' | 'live' | null;
-  }
-
   /**
    * Where the home/sidebar context menu should anchor. `point` is a raw
    * cursor location (right-click); `rect` is a trigger element's bounding
@@ -209,32 +129,6 @@ declare global {
    * the sidebar can hand the right-click event off to the home shell.
    */
   type MenuAnchor = { kind: 'point'; x: number; y: number } | { kind: 'rect'; rect: DOMRect };
-
-  interface ChromeBuildWindowOpts {
-    sidebarOpen: boolean;
-    onToggleSidebar: () => void;
-    sidebar: HTMLElement;
-    main: HTMLElement;
-    /** Right-edge chrome cluster — app identity, Publish, brand chip, etc. */
-    titlebarRight?: HTMLElement | null;
-    /** Center chrome cluster — mode tabs, device pill, etc. Sits between
-     *  the back/forward nav and the trailing flex spacer. */
-    titlebarCenter?: HTMLElement | null;
-    /** Lead chrome element — placed in `.cd-tl-nav` right after the
-     *  forward button, hugging the back/forward arrows. Builder identity. */
-    titlebarLead?: HTMLElement | null;
-    showNewChat?: boolean;
-    onNewChat?: () => void;
-    canGoBack?: boolean;
-    canGoForward?: boolean;
-    onBack?: () => void;
-    onForward?: () => void;
-    /** When true, a chat-pane toggle is rendered at the trailing edge of
-     *  `.cd-tl-nav` (the chat-pane/canvas boundary). Builder-only today. */
-    showChatToggle?: boolean;
-    chatPaneOpen?: boolean;
-    onToggleChat?: () => void;
-  }
 
   type SidebarPage =
     | 'home'
@@ -245,167 +139,11 @@ declare global {
     | 'automations'
     | 'settings';
 
-  interface ChromeBuildSidebarOpts {
-    /** App id of the app/builder currently in focus — highlights its row. */
-    activeId?: string;
-    /** Which top-level page is current — drives the active highlight. */
-    activePage?: SidebarPage;
-    apps: ChromeSidebarApp[];
-    drafts: ChromeSidebarApp[];
-    /**
-     * Arbitrary element rendered at the very top of the sidebar, above
-     * "Build new", followed by a hairline divider. Used to mount the
-     * profile switcher head row. Omit to skip the head slot (test
-     * harnesses).
-     */
-    headSlot?: HTMLElement;
-    onHome: () => void;
-    onNewApp: () => void;
-    /** New-chat action wired to the Chats section `+`. Falls back to
-     *  `onNewApp` when there is no dedicated chat-creation entry point. */
-    onNewChat?: () => void;
-    onSearch?: () => void;
-    onAssistant?: () => void;
-    onInsights?: () => void;
-    onDiscover?: () => void;
-    onStarred?: () => void;
-    onAutomations?: () => void;
-    onAppClick: (id: string) => void;
-    onSettings: () => void;
-    /**
-     * Opens the per-app actions menu (Rename · Reveal in Finder · Delete
-     * etc.) from a sidebar row. Wired to the same handler the home grid
-     * uses so both surfaces stay in lockstep. Omit to skip the `•••`
-     * affordance entirely (e.g. test harnesses).
-     */
-    onAppContext?: (id: string, anchor: MenuAnchor) => void;
-  }
-
-  /**
-   * Renderer-facing profile record fed into the profile switcher's
-   * presentation layer (`window.Profiles`). Since #280 a profile IS a
-   * VAULT: `id` is the vaultId, `name` maps to `core_vault.display_name`,
-   * and `color`/`icon`/`blurb` come from the vault's own presentation
-   * settings — nothing is persisted client-side. `kind` reflects the
-   * hosting CONNECTION (local runtime vs remote endpoint). `appsCount`
-   * is known only for the active profile (others omit it).
-   */
-  interface ProfileView {
-    id: string;
-    name: string;
-    /** `#RRGGBB` avatar color (maps to the vault's presentation settings). */
-    color: string;
-    icon: IconName;
-    blurb: string;
-    kind: 'local' | 'remote';
-    /** True for the ACTIVE vault — the registry refuses to delete it. */
-    primordial: boolean;
-    /** App count, when known (active profile only). */
-    appsCount?: number;
-  }
-
-  /**
-   * Profile switcher presentation API (apps/desktop/src/renderer/profiles.ts).
-   * Owns the avatar, sidebar-head switcher, dropdown, add/edit modal,
-   * delete dialog, toast, and the Settings manage body. All data + IPC
-   * wiring stays in app.ts, which feeds `ProfileView` records in and
-   * receives plain callbacks out.
-   */
-  interface ProfilesApi {
-    readonly PROFILE_COLORS: readonly string[];
-    readonly PROFILE_ICONS: readonly IconName[];
-    readonly DEFAULT_ICON: IconName;
-    /** Normalize a backend icon string into a renderable icon name. */
-    safeIcon: (name: string | undefined) => IconName;
-    avatar: (profile: { icon: IconName; color: string }, size?: number) => HTMLElement;
-    buildSwitcherHeader: (opts: {
-      active: ProfileView;
-      open?: boolean;
-      onToggle: (anchor: DOMRect) => void;
-    }) => HTMLElement;
-    openDropdown: (opts: {
-      anchor: DOMRect;
-      profiles: ProfileView[];
-      activeId: string;
-      onSwitch: (id: string) => void;
-      onEdit: (p: ProfileView) => void;
-      onAdd: () => void;
-      onManage: () => void;
-      /** Other gateway endpoints ("connections", #280). */
-      connections?: Array<{ id: string; name: string; active: boolean; kind: 'local' | 'remote' }>;
-      onSwitchConnection?: (id: string) => void;
-    }) => { close: () => void };
-    openModal: (opts: {
-      mode: 'add' | 'edit';
-      initial: { name?: string; icon?: IconName; color?: string; blurb?: string };
-      onCommit: (data: { name: string; icon: IconName; color: string; blurb: string }) => void;
-      onCancel: () => void;
-      onDelete?: (() => void) | null;
-    }) => { close: () => void };
-    openDeleteDialog: (opts: {
-      profile: ProfileView;
-      onConfirm: () => void;
-      onCancel: () => void;
-    }) => { close: () => void };
-    toast: (opts: { msg: string; kind?: 'ok' | 'del' }) => void;
-    buildManageBody: (opts: {
-      profiles: ProfileView[];
-      activeId: string;
-      onSwitch: (id: string) => void;
-      onEdit: (p: ProfileView) => void;
-      onDelete: (p: ProfileView) => void;
-      onAdd: () => void;
-    }) => HTMLElement;
-  }
-
-  interface ChromeApi {
-    buildWindow: (opts: ChromeBuildWindowOpts) => {
-      root: HTMLElement;
-      setSidebarOpen: (open: boolean) => void;
-      setChatPaneOpen: (open: boolean) => void;
-    };
-    buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
-    tbBtn: (opts: {
-      icon: string;
-      title?: string;
-      shortcut?: string;
-      onClick?: () => void;
-      disabled?: boolean;
-      ariaLabel?: string;
-    }) => HTMLElement;
-    glyphs: Record<string, (size?: number) => string>;
-  }
-
-  interface AppChatMountOptions {
-    view: HTMLElement;
-    app: AppMetaResolved;
-    appId: string;
-    el: ElHelper;
-  }
-
   interface Window {
     CentraidTokens: CentraidTokensBridge;
     Icon: Record<IconName, IconRenderer>;
     ICON_PALETTE: Palette;
-    Store: CentraidStore;
-    DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
-    Chrome: ChromeApi;
-    Profiles: ProfilesApi;
-    openBuilder: (opts: BuilderOptions) => () => void;
-    AppChat: { mount: (opts: AppChatMountOptions) => () => void };
-    /**
-     * First-run onboarding. Mounted by app.ts when settings.onboardingCompletedAt
-     * is absent. The host owns the root element and a completion callback that
-     * fires after the user's profile is saved.
-     */
-    Onboarding: {
-      mount: (opts: {
-        root: HTMLElement;
-        /** Resolves with the chosen displayName + avatarColor once the user submits. */
-        onComplete: (input: { displayName: string; avatarColor: string }) => Promise<void> | void;
-      }) => () => void;
-    };
   }
 
   // Convenience type aliases reachable inside renderer scripts.
@@ -414,12 +152,10 @@ declare global {
   type ColorHexType = ColorHex;
   type ColorKeyType = ColorKey;
 
-  // Convenience values — set by store.ts / icons.ts on the window.
-  // Declared as `var` so renderer scripts can reference them unprefixed.
+  // Convenience values on the window — Icon/ICON_PALETTE are set by icons.ts
+  // at boot; Centraid is the React shell's nav shim. Declared as `var` so the
+  // shared helpers (app-format.ts) can reference them unprefixed.
   var Icon: Record<IconName, IconRenderer>;
   var ICON_PALETTE: Palette;
-  var Store: CentraidStore;
-  var DateUtil: CentraidDateUtil;
   var Centraid: CentraidRoot;
-  var Profiles: ProfilesApi;
 }

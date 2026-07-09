@@ -1,16 +1,9 @@
 // React entry for the renderer — issue #325.
 //
-// Two jobs, both proving React runs *inside the live vanilla renderer* (same
-// document, same styles.css, same design-tokens):
-//
-//   1. Phase 0 coexistence island — on the `#ui-preview` hash, hide the vanilla
-//      shell (`#root`) and render the local UI Gallery as an
-//      overlay; restore on any other hash. Non-destructive proof + preview
-//      surface.
-//   2. Phase 3 screen bridge — publish `window.CentraidReact`, the handoff seam
-//      converted screens use (see ./bridge.ts). Each `mount<Screen>` renders a
-//      React screen into a host the vanilla route module owns and returns an
-//      unmount disposer the module registers as the page's cleanup.
+// React owns `#root`: this module mounts the App shell (via the first-run
+// onboarding gate below). A dev-only component gallery renders on the
+// `#ui-preview` hash. No vanilla↔React bridge remains — every screen, the
+// builder included, is a React component the shell mounts directly.
 //
 // Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
 // loaded as a plain <script type="module"> — no dev server, so the strict
@@ -18,26 +11,8 @@
 
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from './ui/index.js';
-import type { CentraidReactBridge } from './bridge.js';
-import AppSettingsPanel from './screens/AppSettingsPanel.js';
-import AssistantScreen from './screens/AssistantScreen.js';
-import AutomationsOverviewScreen from './screens/AutomationsOverviewScreen.js';
-import AutomationTemplatesScreen from './screens/AutomationTemplatesScreen.js';
-import AutomationViewScreen from './screens/AutomationViewScreen.js';
-import BuilderChatPane from './screens/BuilderChatPane.js';
-import DiscoverScreen from './screens/DiscoverScreen.js';
-import HomeScreen from './screens/HomeScreen.js';
-import ImportScreen from './screens/ImportScreen.js';
-import InsightsScreen from './screens/InsightsScreen.js';
+import App from './shell/App.js';
 import OnboardingScreen from './screens/OnboardingScreen.js';
-import PaletteScreen from './screens/PaletteScreen.js';
-import PhoneScreen from './screens/PhoneScreen.js';
-import RunViewScreen from './screens/RunViewScreen.js';
-import SettingsAppearanceScreen from './screens/SettingsAppearanceScreen.js';
-import SettingsLayoutScreen from './screens/SettingsLayoutScreen.js';
-import SettingsProfilesScreen from './screens/SettingsProfilesScreen.js';
-import SettingsProvidersScreen from './screens/SettingsProvidersScreen.js';
-import VaultScreen from './screens/VaultScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
 const HOST_SELECTOR = '#react-preview-root';
@@ -88,107 +63,36 @@ function sync(): void {
 window.addEventListener('hashchange', sync);
 sync();
 
-// Phase 3 bridge — the vanilla route modules delegate converted screens here.
-const bridge: CentraidReactBridge = {
-  mountAssistant(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<AssistantScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountAppSettings(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<AppSettingsPanel {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountBuilderChat(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<BuilderChatPane {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountDiscover(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<DiscoverScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountHome(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<HomeScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountRunView(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<RunViewScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountInsights(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<InsightsScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountVault(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<VaultScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountAutomationTemplates(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<AutomationTemplatesScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountAutomationsOverview(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<AutomationsOverviewScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountAutomationView(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<AutomationViewScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountPalette(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<PaletteScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountPhone(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<PhoneScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountImport(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<ImportScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountOnboarding(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<OnboardingScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountSettingsAppearance(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<SettingsAppearanceScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountSettingsLayout(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<SettingsLayoutScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountSettingsProviders(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<SettingsProvidersScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-  mountSettingsProfiles(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<SettingsProfilesScreen {...props} />);
-    return () => screenRoot.unmount();
-  },
-};
-window.CentraidReact = bridge;
+// ── The shell (#325 flip) ────────────────────────────────────────────────
+// React now owns #root: one root on #root renders either the first-run
+// onboarding view or the App shell, replacing the retired vanilla app.ts IIFE.
+// First-run gate — when onboarding hasn't completed we render the welcome view
+// and swap the same root to <App/> once the user submits, persisting their
+// identity like app.ts did.
+void (async (): Promise<void> => {
+  const shell = document.querySelector<HTMLElement>(SHELL_SELECTOR);
+  if (!shell) return;
+  const shellRoot = createRoot(shell);
+  const settings = await window.CentraidApi.getSettings().catch(
+    () => ({}) as Awaited<ReturnType<typeof window.CentraidApi.getSettings>>,
+  );
+  if (settings.onboardingCompletedAt) {
+    shellRoot.render(<App />);
+    return;
+  }
+  shellRoot.render(
+    <OnboardingScreen
+      onComplete={async ({ displayName, avatarColor }) => {
+        await window.CentraidApi.updateProfileMetadata({ id: 'local', displayName, avatarColor }).catch(
+          () => undefined,
+        );
+        await window.CentraidApi.saveSettings({
+          onboardingCompletedAt: new Date().toISOString(),
+        }).catch(() => undefined);
+        shellRoot.render(<App />);
+      }}
+    />,
+  );
+})();
 
-console.log(
-  '[react] renderer bridge ready — screens: discover, insights, vault; open %s for the component gallery',
-  PREVIEW_HASH,
-);
+console.log('[react] renderer ready — App on #root; open %s for the component gallery', PREVIEW_HASH);

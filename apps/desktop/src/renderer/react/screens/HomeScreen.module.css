@@ -1,0 +1,361 @@
+.day1Scroll {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.hero {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 44px 56px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  align-items: center;
+  text-align: center;
+}
+.hero h1 {
+  margin: 0;
+  font: var(--t-display-1);
+  font-size: 44px;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.composer {
+  width: 100%;
+  max-width: 680px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 18px;
+  padding: 18px 18px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow:
+    0 24px 48px -24px rgba(0, 0, 0, 0.45),
+    0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent);
+  text-align: left;
+}
+.composerInput {
+  width: 100%;
+  min-height: 56px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: var(--t-body);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.composerInput::placeholder {
+  color: var(--ink-3);
+}
+.composerToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--line);
+}
+.composerSpacer {
+  flex: 1;
+}
+.composerMode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.composerMode svg {
+  display: block;
+}
+.composerKbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  letter-spacing: 0;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.composerSend {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: none;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  padding: 0;
+}
+.composerSend svg {
+  display: block;
+}
+.composerSend[disabled] {
+  opacity: 0.4;
+  cursor: default;
+}
+.composerSend:hover:not([disabled]) {
+  background: color-mix(in srgb, var(--ink) 86%, var(--bg));
+}
+.heroSuggestions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.heroHead {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.heroDate {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}
+.heroComposerWrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.heroComposerWrap .heroSuggestions {
+  margin-top: 0;
+}
+.hsec {
+  width: 100%;
+  /* The library shelf runs wider than the centered hero so the tile grid sits
+     4-up on a roomy window (matching the gallery spec); it reflows to 3/2 as
+     the pane narrows. Shares its envelope with Discover's .cd-disc-wrap. */
+  max-width: var(--lib-shelf-max);
+  margin: 40px auto 0;
+  padding: 0 var(--lib-shelf-pad-x);
+  box-sizing: border-box;
+}
+.hsec:last-child {
+  padding-bottom: 56px;
+}
+.homeLibHead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.homeLibHead :global(.cd-disc-seg) {
+  margin-top: 0;
+}
+.homeLibBody {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+.hsecStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12.5px;
+}
+.hsecStat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+}
+.hsecStat[data-tone='active'] {
+  color: var(--ink-2);
+}
+.hsecStat[data-tone='attention'] {
+  color: var(--danger);
+}
+.hsecStat svg {
+  display: block;
+}
+.hsecBrowse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.hsecBrowse:hover {
+  color: var(--ink);
+}
+.hsecBrowse svg {
+  display: block;
+}
+.appsGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+}
+.appsGridSmall {
+  /* App-store-style tiles. A ~200px floor packs 4–5 across in the widened
+     shelf and reflows to 3/2 as the pane narrows — compact cards, not big
+     posters. (Gap inherited from .cd-apps-grid.) */
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+.appsGrid[data-layout='rows'] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-wrap) {
+  height: auto;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card--small) {
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 108px 10px 14px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-head) {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Back to a horizontal head for the row strip — icon beside the title. */
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card--small) :global(.cd-app-card-icon) {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card--small) :global(.cd-app-card-icon) svg {
+  width: 19px;
+  height: 19px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-desc) {
+  -webkit-line-clamp: 1;
+}
+.appsGrid[data-layout='rows'] .appCardMeta {
+  /* Fixed-width slot so the status pill (its leftmost child) lands at the same
+     x down the column — otherwise a longer trigger ("Weekdays at 11:30 PM" vs
+     "Daily at 9:00 AM") shifts the whole cluster and the pills drift. The
+     trigger fills the remainder and truncates if a row runs long. */
+  flex: 0 0 auto;
+  width: 256px;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow: hidden;
+  order: 1;
+}
+.appsGrid[data-layout='rows'] .appCardMeta :global(.cd-au-status) {
+  flex: 0 0 auto;
+}
+.appsGrid[data-layout='rows'] .appCardMeta .appCardTrig {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-foot) {
+  flex: 0 0 auto;
+  order: 2;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-foot) :global(.cd-disc-badge) {
+  width: var(--lib-row-badge-w);
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-foot-time) {
+  min-width: 132px;
+  justify-content: flex-end;
+  text-align: right;
+}
+.appsGrid[data-layout='rows'] :global(.cd-card-actions) {
+  top: 50%;
+  right: 14px;
+  bottom: auto;
+  transform: translateY(-50%) translateY(3px);
+}
+.appsGrid[data-layout='rows'] :global(.cd-app-card-wrap):hover :global(.cd-card-actions),
+.appsGrid[data-layout='rows']
+  :global(.cd-app-card-wrap):has(:focus-visible)
+  :global(.cd-card-actions),
+.appsGrid[data-layout='rows']
+  :global(.cd-card-actions):has(:global(.cd-card-act)[data-open='true']) {
+  transform: translateY(-50%);
+}
+.appsGrid[data-layout='rows'] :global(.cd-card-star-flag) {
+  top: 50%;
+  right: 17px;
+  transform: translateY(-50%);
+}
+.shelfEmpty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  border: 0.5px dashed var(--line-strong);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
+}
+.shelfEmptyIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
+  color: #fff;
+}
+.shelfEmptyTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.shelfEmptySub {
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+  max-width: 360px;
+}
+.appCardMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.appCardTrig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.appCardTrig svg {
+  display: block;
+}

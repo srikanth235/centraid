@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AutomationViewBridgeProps, AutomationViewData } from '../bridge.js';
+import type { AutomationViewBridgeProps, AutomationViewData } from '../screen-contracts.js';
 import AutomationViewScreen from './AutomationViewScreen.js';
 
 function makeData(over: Partial<AutomationViewData> = {}): AutomationViewData {
@@ -86,23 +86,23 @@ async function mount(props: AutomationViewBridgeProps): Promise<HTMLDivElement> 
 describe('AutomationViewScreen', () => {
   it('renders header, hero (cron + next runs), KPIs, behavior, tools, and runs', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelector('.cd-au-vtitle h1')?.textContent).toBe('Daily Digest');
+    expect(el.querySelector('.vtitle h1')?.textContent).toBe('Daily Digest');
     expect(el.textContent).toContain('Every day at 8am');
     expect(el.querySelector('code')?.textContent).toBe('0 8 * * *');
     expect(el.textContent).toContain('Next 3 runs');
-    expect(el.querySelectorAll('.cd-au-kpi').length).toBe(4);
+    expect(el.querySelectorAll('.kpi').length).toBe(4);
     expect(el.textContent).toContain('claude-opus-4-8');
     expect(el.textContent).toContain('gmail.search');
-    expect(el.querySelectorAll('.cd-au-run').length).toBe(2);
+    expect(el.querySelectorAll('.run').length).toBe(2);
   });
 
   it('filters the run history', async () => {
     const el = await mount(makeProps());
-    const manualFilter = [...el.querySelectorAll('.cd-au-filter')].find(
+    const manualFilter = [...el.querySelectorAll('.filter')].find(
       (b) => (b as HTMLElement).dataset.filter === 'manual',
     ) as HTMLButtonElement;
     await act(async () => manualFilter.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelectorAll('.cd-au-run').length).toBe(1);
+    expect(el.querySelectorAll('.run').length).toBe(1);
     expect(el.textContent).toContain('failed run');
     expect(el.textContent).not.toContain('ok run');
   });
@@ -111,13 +111,13 @@ describe('AutomationViewScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     await act(async () =>
-      (el.querySelector('.cd-au-run') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.run') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onOpenRun).toHaveBeenCalledWith('a', 'r1');
     await act(async () =>
-      (el.querySelector('.cd-au-crumb button') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -127,7 +127,7 @@ describe('AutomationViewScreen', () => {
   it('toggles enabled then reloads on success', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const toggle = el.querySelector('.cd-au-switch input') as HTMLInputElement;
+    const toggle = el.querySelector('.switch input') as HTMLInputElement;
     // .click() flips the checkbox (true→false) and fires the event React's
     // controlled onChange listens to.
     await act(async () => toggle.click());
@@ -139,7 +139,7 @@ describe('AutomationViewScreen', () => {
   it('runs now, handing off (button shows Starting…)', async () => {
     const props = makeProps({ onRun: vi.fn().mockReturnValue(new Promise(() => {})) });
     const el = await mount(props);
-    const runBtn = [...el.querySelectorAll('.cd-au-btn-primary')].at(-1) as HTMLButtonElement;
+    const runBtn = [...el.querySelectorAll('.auBtnPrimary')].at(-1) as HTMLButtonElement;
     await act(async () => runBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onRun).toHaveBeenCalledTimes(1);
     expect(el.textContent).toContain('Starting…');
@@ -158,9 +158,9 @@ describe('AutomationViewScreen', () => {
       ),
     });
     const el = await mount(props);
-    expect(el.querySelector('.cd-au-hero-wh-url')?.textContent).toBe('/_centraid-hook/abc');
+    expect(el.querySelector('.heroWhUrl')?.textContent).toBe('/_centraid-hook/abc');
     await act(async () =>
-      (el.querySelector('.cd-au-hero-copy') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.heroCopy') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

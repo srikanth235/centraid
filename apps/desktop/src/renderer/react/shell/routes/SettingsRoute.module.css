@@ -1,0 +1,127 @@
+.settingsMain {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+.settingsNav {
+  display: flex;
+  flex-direction: column;
+  padding: 26px 12px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  border-right: 0.5px solid var(--line);
+  overflow-y: auto;
+}
+.settingsNavHead {
+  padding: 0 8px 12px;
+}
+.settingsNavEyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.settingsNavTitle {
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.settingsNavSection {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 14px 10px 4px;
+}
+.settingsNavSection:first-of-type {
+  padding-top: 2px;
+}
+.settingsNavItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 10px;
+  margin-block: 1.5px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background 100ms;
+}
+.settingsNavItem:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  color: var(--ink);
+}
+.settingsNavItem[data-active='true'] {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.settingsContent {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 36px 48px 60px;
+}
+.settingsContent > * {
+  max-width: 640px;
+}
+.settingsPageHead {
+  margin: 0 0 22px;
+}
+.settingsPageTitlerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.settingsPageTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+.settingsPageSub {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ink-3);
+  text-wrap: pretty;
+}
+.settingsAutosaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--c-forest, #5c8a4e);
+}
+.settingsPage {
+  display: block;
+}
+.settingsPage :global(.seg) {
+  display: inline-flex;
+  padding: 3px;
+  gap: 0;
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.settingsPage :global(.seg) button {
+  padding: 6px 12px;
+  font-size: 12.5px;
+}
+.settingsPage :global(.seg) button[data-active='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+}

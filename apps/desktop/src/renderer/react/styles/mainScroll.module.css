@@ -1,0 +1,5 @@
+.mainScroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 48px 56px 56px;
+}

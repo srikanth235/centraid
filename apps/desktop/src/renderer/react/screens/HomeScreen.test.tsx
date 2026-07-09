@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { HomeAppItemDTO, HomeAutoItemDTO, HomeBridgeProps } from '../bridge.js';
+import type { HomeAppItemDTO, HomeAutoItemDTO, HomeBridgeProps } from '../screen-contracts.js';
 import HomeScreen from './HomeScreen.js';
 
 const appItems: HomeAppItemDTO[] = [
@@ -97,9 +97,9 @@ function typeInto(input: HTMLTextAreaElement, value: string): void {
 describe('HomeScreen', () => {
   it('renders the composer hero, suggestions, filter, and the unified grid', () => {
     const el = mount(makeProps());
-    expect(el.querySelector('.cd-composer-input')).toBeTruthy();
-    expect(el.querySelectorAll('.cd-hero-suggestions .cd-chip').length).toBe(2);
-    expect(el.querySelectorAll('.cd-disc-seg-b').length).toBe(3);
+    expect(el.querySelector('.composerInput')).toBeTruthy();
+    expect(el.querySelectorAll('.heroSuggestions .chip').length).toBe(2);
+    expect(el.querySelectorAll('.discSegB').length).toBe(3);
     // 2 apps + 1 automation card
     expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(3);
     // draft app has a status pill + is starred flag
@@ -110,12 +110,12 @@ describe('HomeScreen', () => {
   it('builds from the composer (send enabled after typing)', () => {
     const props = makeProps();
     const el = mount(props);
-    const send = el.querySelector('.cd-composer-send') as HTMLButtonElement;
+    const send = el.querySelector('.composerSend') as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    typeInto(el.querySelector('.cd-composer-input') as HTMLTextAreaElement, 'a todo app');
-    expect((el.querySelector('.cd-composer-send') as HTMLButtonElement).disabled).toBe(false);
+    typeInto(el.querySelector('.composerInput') as HTMLTextAreaElement, 'a todo app');
+    expect((el.querySelector('.composerSend') as HTMLButtonElement).disabled).toBe(false);
     act(() =>
-      (el.querySelector('.cd-composer-send') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.composerSend') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -140,17 +140,17 @@ describe('HomeScreen', () => {
 
   it('filters to automations and toggles the layout', () => {
     const el = mount(makeProps());
-    const autoTab = [...el.querySelectorAll('.cd-disc-seg-b')].find(
+    const autoTab = [...el.querySelectorAll('.discSegB')].find(
       (b) => (b as HTMLElement).dataset.k === 'automation',
     ) as HTMLButtonElement;
     act(() => autoTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(1);
     expect(el.querySelector('[data-kind="app"]')).toBeNull();
-    const rowsBtn = [...el.querySelectorAll('.cd-lib-layout-btn')].find(
+    const rowsBtn = [...el.querySelectorAll('.libLayoutBtn')].find(
       (b) => (b as HTMLElement).dataset.layout === 'rows',
     ) as HTMLButtonElement;
     act(() => rowsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect((el.querySelector('.cd-apps-grid') as HTMLElement).dataset.layout).toBe('rows');
+    expect((el.querySelector('.appsGrid') as HTMLElement).dataset.layout).toBe('rows');
   });
 
   it('opens an automation + its more-menu, and browses templates', () => {
@@ -170,7 +170,7 @@ describe('HomeScreen', () => {
       expect.objectContaining({ kind: 'rect' }),
     );
     act(() =>
-      (el.querySelector('.cd-hsec-browse') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.hsecBrowse') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -181,7 +181,7 @@ describe('HomeScreen', () => {
     const el = mount(
       makeProps({ appItems: [], automationItems: [], counts: { all: 0, apps: 0, automations: 0 } }),
     );
-    expect(el.querySelector('.cd-shelf-empty')).toBeTruthy();
+    expect(el.querySelector('.shelfEmpty')).toBeTruthy();
     expect(el.textContent).toContain('Nothing here yet');
   });
 });

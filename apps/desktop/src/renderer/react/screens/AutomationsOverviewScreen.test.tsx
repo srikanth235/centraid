@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AuOverviewData, AutomationsOverviewBridgeProps } from '../bridge.js';
+import type { AuOverviewData, AutomationsOverviewBridgeProps } from '../screen-contracts.js';
 import AutomationsOverviewScreen from './AutomationsOverviewScreen.js';
 
 function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {
@@ -82,12 +82,12 @@ async function mount(props: AutomationsOverviewBridgeProps): Promise<HTMLDivElem
 describe('AutomationsOverviewScreen', () => {
   it('renders health tiles, the automation row, and recent runs', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.cd-au-health-tile').length).toBe(4);
+    expect(el.querySelectorAll('.healthTile').length).toBe(4);
     expect(el.textContent).toContain('Daily Digest');
     expect(el.textContent).toContain('Every day at 8am');
     expect(el.textContent).toContain('Last run 2h ago');
-    expect((el.querySelector('.cd-au-status') as HTMLElement | null)?.dataset.tone).toBe('active');
-    expect(el.querySelectorAll('.cd-au-ov-run').length).toBe(2);
+    expect((el.querySelector('.auStatus') as HTMLElement | null)?.dataset.tone).toBe('active');
+    expect(el.querySelectorAll('.auOvRun').length).toBe(2);
     expect(el.textContent).toContain('Summarized 12 emails');
   });
 
@@ -95,13 +95,13 @@ describe('AutomationsOverviewScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     await act(async () =>
-      (el.querySelector('.cd-au-ov-row') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auOvRow') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
     await act(async () =>
-      (el.querySelector('.cd-au-ov-run') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auOvRun') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -112,7 +112,7 @@ describe('AutomationsOverviewScreen', () => {
     const props = makeProps();
     const el = await mount(props);
     const [browse, create] = [
-      ...el.querySelectorAll('.cd-au-actions .cd-au-btn'),
+      ...el.querySelectorAll('.auActions .auBtn'),
     ] as HTMLButtonElement[];
     await act(async () => browse?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => create?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -133,7 +133,7 @@ describe('AutomationsOverviewScreen', () => {
       }),
     );
     expect(el.textContent).toContain('No automations yet');
-    expect(el.querySelectorAll('.cd-au-health-tile').length).toBe(0);
+    expect(el.querySelectorAll('.healthTile').length).toBe(0);
   });
 
   it('renders the error state + retry when loadData rejects', async () => {
@@ -145,7 +145,7 @@ describe('AutomationsOverviewScreen', () => {
     expect(el.textContent).toContain("Couldn't load automations");
     expect(el.textContent).toContain('boom');
     await act(async () =>
-      (el.querySelector('.cd-au-btn-primary') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.auBtnPrimary') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

@@ -18,6 +18,7 @@
     "dist",
     "src/preload.ts",
     "src/**/*.test.ts",
-    "src/renderer/react/ui/**"
+    "src/renderer/react/ui/**",
+    "src/renderer/react/shell/**"
   ]
 }

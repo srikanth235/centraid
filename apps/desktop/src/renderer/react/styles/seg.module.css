@@ -1,0 +1,25 @@
+.seg {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+}
+.seg button {
+  border: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+  text-transform: capitalize;
+  min-width: 0;
+}
+.seg button[data-active='true'] {
+  background: var(--bg-elev);
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}

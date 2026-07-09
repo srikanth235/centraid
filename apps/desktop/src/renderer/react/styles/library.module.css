@@ -1,0 +1,88 @@
+.hsecSpacer {
+  flex: 1;
+}
+.libLayout {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 9px;
+  border: 0.5px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+.libLayoutBtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.libLayoutBtn svg {
+  display: block;
+}
+.libLayoutBtn:hover {
+  color: var(--ink-2);
+}
+.libLayoutBtn[aria-pressed='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--ink);
+}
+.discSeg {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 999px;
+}
+.discSegB {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.discSegB:hover {
+  color: var(--ink-2);
+}
+.discSegB[data-active='true'] {
+  background: var(--bg-elev);
+  box-shadow: 0 0 0 0.5px var(--line);
+  color: var(--ink);
+  font-weight: 600;
+}
+.discSegIc {
+  display: inline-flex;
+}
+.discSegN {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--ink-4);
+}
+.discSegB[data-active='true'] .discSegN {
+  color: var(--ink-3);
+}

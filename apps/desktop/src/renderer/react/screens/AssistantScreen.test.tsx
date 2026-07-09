@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantBridgeProps, AssistantSnapshot } from '../bridge.js';
+import type { AssistantBridgeProps, AssistantSnapshot } from '../screen-contracts.js';
 import AssistantScreen from './AssistantScreen.js';
 
 function emptySnap(over: Partial<AssistantSnapshot> = {}): AssistantSnapshot {
@@ -58,12 +58,12 @@ describe('AssistantScreen', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
-    expect(el.querySelector('.cd-asst-empty')).toBeTruthy();
-    const chips = [...el.querySelectorAll<HTMLButtonElement>('.cd-asst-suggest-chip')];
+    expect(el.querySelector('.empty')).toBeTruthy();
+    const chips = [...el.querySelectorAll<HTMLButtonElement>('.suggestChip')];
     expect(chips.length).toBe(2);
     act(() => chips[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     // suggestion loads into the composer draft
-    expect((el.querySelector('.cd-asst-input') as HTMLTextAreaElement).value).toContain('spend');
+    expect((el.querySelector('.input') as HTMLTextAreaElement).value).toContain('spend');
   });
 
   it('lists threads and marks the active one; right-click deletes', () => {
@@ -77,7 +77,7 @@ describe('AssistantScreen', () => {
         ],
       }),
     );
-    const rows = [...el.querySelectorAll<HTMLButtonElement>('.cd-asst-thread')];
+    const rows = [...el.querySelectorAll<HTMLButtonElement>('.thread')];
     expect(rows.length).toBe(2);
     expect(rows[0]!.dataset.active).toBe('true');
     expect(Object.hasOwn(rows[1]!.dataset, 'active')).toBe(false);
@@ -105,11 +105,11 @@ describe('AssistantScreen', () => {
         ],
       }),
     );
-    expect(el.querySelector('.cd-asst-msg-user')?.textContent).toContain('How much');
-    expect(el.querySelector('.cd-asst-tools summary')?.textContent).toContain('1 query');
-    expect(el.querySelector('.cd-asst-pre')?.textContent).toBe('SELECT 1');
+    expect(el.querySelector('.msgUser')?.textContent).toContain('How much');
+    expect(el.querySelector('.tools summary')?.textContent).toContain('1 query');
+    expect(el.querySelector('.asstPre')?.textContent).toBe('SELECT 1');
     // final answer HTML is injected verbatim
-    expect(el.querySelector('.cd-asst-msg-ai strong')?.textContent).toBe('$412');
+    expect(el.querySelector('.msgAi strong')?.textContent).toBe('$412');
   });
 
   it('re-hydrates refs inside an injected final answer', () => {
@@ -135,15 +135,15 @@ describe('AssistantScreen', () => {
         messages: [{ kind: 'ai', streaming: true, text: 'Working on it' }],
       }),
     );
-    expect(el.querySelector('.cd-asst-live')?.textContent).toBe('Working on it');
-    expect(el.querySelector('.cd-asst-cursor')).toBeTruthy();
+    expect(el.querySelector('.live')?.textContent).toBe('Working on it');
+    expect(el.querySelector('.cursor')).toBeTruthy();
   });
 
   it('sends the composed draft on Enter and clears it', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
-    const input = el.querySelector('.cd-asst-input') as HTMLTextAreaElement;
+    const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, 'When is my next event?');
     act(() =>
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
@@ -156,7 +156,7 @@ describe('AssistantScreen', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap({ busy: true }));
-    const send = el.querySelector('.cd-asst-send') as HTMLButtonElement;
+    const send = el.querySelector('.send') as HTMLButtonElement;
     expect(send.getAttribute('aria-label')).toBe('Stop');
     act(() => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onStop).toHaveBeenCalled();
@@ -167,7 +167,7 @@ describe('AssistantScreen', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
-    const input = el.querySelector('.cd-asst-input') as HTMLTextAreaElement;
+    const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, '   ');
     act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(props.onSend).not.toHaveBeenCalled();
@@ -178,7 +178,7 @@ describe('AssistantScreen', () => {
     const el = mount(props);
     push(emptySnap());
     act(() =>
-      (el.querySelector('.cd-asst-new') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.new') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

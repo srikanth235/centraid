@@ -2,8 +2,14 @@ import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../bridge.js';
+import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
+import styles from './DiscoverScreen.module.css';
+import { cx } from '../ui/cx.js';
+import emptyCss from '../styles/pageEmpty.module.css';
+import au from '../styles/automation.module.css';
+import libCss from '../styles/library.module.css';
+import mainScrollCss from '../styles/mainScroll.module.css';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
@@ -53,17 +59,17 @@ function RowsGlyph({ size = 15 }: { size?: number }): JSX.Element {
 
 function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
   return (
-    <div className="cd-au-ov-dots" aria-hidden={names.length === 0}>
+    <div className={au.auOvDots} aria-hidden={names.length === 0}>
       {names.slice(0, 4).map((name) => (
         <i
           key={name}
-          className="cd-au-ov-dot"
+          className={au.auOvDot}
           title={name}
           style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
         />
       ))}
       {names.length > 4 ? (
-        <span className="cd-au-ov-dot-more">{`+${names.length - 4}`}</span>
+        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
       ) : null}
     </div>
   );
@@ -88,7 +94,7 @@ function TemplateCard({
   return (
     <button
       type="button"
-      className="cd-disc-card"
+      className={styles.card}
       data-kind={auto ? 'automation' : 'app'}
       onClick={() => (auto ? onOpenAutomationTemplate(t) : onOpenTemplate(t))}
       onContextMenu={(e) => {
@@ -96,9 +102,9 @@ function TemplateCard({
         onTemplateContext(t, { kind: 'point', x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="cd-disc-card-top">
+      <div className={styles.cardTop}>
         <div
-          className="cd-disc-card-icon"
+          className={styles.cardIcon}
           style={{
             background: finish.background,
             boxShadow: finish.boxShadow,
@@ -107,12 +113,12 @@ function TemplateCard({
         >
           <Icon name={t.iconKey as IconName} size={21} strokeWidth={1.85} />
         </div>
-        <div className="cd-disc-card-head">
-          <div className="cd-disc-card-name">{t.name}</div>
-          <div className="cd-disc-card-desc">{t.desc}</div>
+        <div className={styles.cardHead}>
+          <div className={styles.cardName}>{t.name}</div>
+          <div className={styles.cardDesc}>{t.desc}</div>
         </div>
       </div>
-      <div className="cd-disc-card-foot">
+      <div className={styles.cardFoot}>
         <span className="cd-disc-badge" data-kind={auto ? 'automation' : 'app'}>
           <span aria-hidden="true" style={{ display: 'inline-flex' }}>
             {auto ? <Icon name="Bolt" size={12} /> : <GridGlyph size={12} sw={1.85} />}
@@ -121,7 +127,7 @@ function TemplateCard({
         </span>
         {auto ? (
           <>
-            <span className="cd-disc-trig">
+            <span className={styles.trig}>
               <span aria-hidden="true" style={{ display: 'inline-flex' }}>
                 <Icon name={t.triggerKind === 'webhook' ? 'Webhook' : 'Clock'} size={12} />
               </span>
@@ -136,12 +142,10 @@ function TemplateCard({
 }
 
 /**
- * Discover — the unified template gallery, ported to React (issue #325,
- * Phase 3). Reproduces the vanilla `app-discover.ts` markup (`cd-disc-*`
- * classes, styled by the global styles.css) and behavior (kind segmented
- * filter, Tiles/Rows layout toggle, category grouping, click/right-click into
- * the shell's preview + context menu). Mounted by the vanilla route module via
- * `window.CentraidReact.mountDiscover`.
+ * Discover — the unified template gallery (issue #325). Renders the `cd-disc-*`
+ * markup (styled by the global styles.css) and behavior (kind segmented filter,
+ * Tiles/Rows layout toggle, category grouping, click/right-click into the
+ * shell's preview + context menu). Rendered by DiscoverRoute.
  */
 export default function DiscoverScreen({
   appTemplates,
@@ -183,11 +187,11 @@ export default function DiscoverScreen({
   ];
 
   return (
-    <div className="cd-main-scroll cd-disc-scroll">
-      <div className="cd-disc-wrap">
-        <div className="cd-disc-head">
-          <div className="cd-disc-head-text">
-            <div className="cd-eyebrow">Discover</div>
+    <div className={cx(mainScrollCss.mainScroll, styles.scroll)}>
+      <div className={styles.wrap}>
+        <div className={styles.head}>
+          <div className={styles.headText}>
+            <div className={styles.eyebrow}>Discover</div>
             <h1>Templates</h1>
             <p>
               Start from a blueprint — an app you open or an automation that runs for you. Clone it,
@@ -195,13 +199,13 @@ export default function DiscoverScreen({
             </p>
           </div>
         </div>
-        <div className="cd-disc-toolbar">
-          <div className="cd-disc-seg" role="tablist" aria-label="Filter templates by kind">
+        <div className={styles.toolbar}>
+          <div className={libCss.discSeg} role="tablist" aria-label="Filter templates by kind">
             {segDefs.map((d) => (
               <button
                 key={d.k}
                 type="button"
-                className="cd-disc-seg-b"
+                className={libCss.discSegB}
                 role="tab"
                 aria-selected={d.k === kind}
                 data-k={d.k}
@@ -209,20 +213,20 @@ export default function DiscoverScreen({
                 onClick={() => setKind(d.k)}
               >
                 {d.icon ? (
-                  <span className="cd-disc-seg-ic" aria-hidden="true">
+                  <span className={libCss.discSegIc} aria-hidden="true">
                     <Icon name={d.icon} size={13} />
                   </span>
                 ) : null}
                 <span>{d.label}</span>
-                <span className="cd-disc-seg-n">{`· ${d.count}`}</span>
+                <span className={libCss.discSegN}>{`· ${d.count}`}</span>
               </button>
             ))}
           </div>
-          <span className="cd-hsec-spacer" />
-          <div className="cd-lib-layout" role="group" aria-label="Layout">
+          <span className={libCss.hsecSpacer} />
+          <div className={libCss.libLayout} role="group" aria-label="Layout">
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Tiles"
               aria-label="Tiles"
               aria-pressed={layout === 'tiles'}
@@ -233,7 +237,7 @@ export default function DiscoverScreen({
             </button>
             <button
               type="button"
-              className="cd-lib-layout-btn"
+              className={libCss.libLayoutBtn}
               title="Rows"
               aria-label="Rows"
               aria-pressed={layout === 'rows'}
@@ -244,26 +248,26 @@ export default function DiscoverScreen({
             </button>
           </div>
         </div>
-        <div className="cd-disc-cats">
+        <div className={styles.cats}>
           {shown.length === 0 ? (
-            <div className="cd-page-empty">
-              <div className="cd-page-empty-icon" aria-hidden="true">
+            <div className={emptyCss.pageEmpty}>
+              <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
                 <Icon name="Sparkle" size={22} />
               </div>
-              <div className="cd-page-empty-text">No templates available yet.</div>
+              <div className={emptyCss.pageEmptyText}>No templates available yet.</div>
             </div>
           ) : (
             order.map((cat) => {
               const bucket = groups.get(cat) ?? [];
               return (
-                <section key={cat} className="cd-disc-cat">
-                  <div className="cd-disc-cat-head">
-                    <span className="cd-disc-cat-label">{cat}</span>
-                    <span className="cd-disc-cat-count">
+                <section key={cat} className={styles.cat}>
+                  <div className={styles.catHead}>
+                    <span className={styles.catLabel}>{cat}</span>
+                    <span className={styles.catCount}>
                       {String(bucket.length).padStart(2, '0')}
                     </span>
                   </div>
-                  <div className="cd-disc-grid" data-layout={layout}>
+                  <div className={styles.grid} data-layout={layout}>
                     {bucket.map((t) => (
                       <TemplateCard
                         key={`${t.kind ?? 'app'}:${t.id}`}

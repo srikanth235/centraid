@@ -5,30 +5,34 @@ import type {
   VaultGrantDTO,
   VaultParkedDTO,
   VaultScopeDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { relativeTime } from '../format.js';
+import { cx } from '../ui/cx.js';
+import vault from '../styles/vault.module.css';
+import au from '../styles/automation.module.css';
+import appSettingsCss from '../styles/appSettings.module.css';
 
 const scopeLabel = (s: VaultScopeDTO): string => (s.table ? `${s.schema}.${s.table}` : s.schema);
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="cd-app-settings-note">{children}</div>;
+  return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
 // WHAT the app asked for — why line + requested scopes as chips.
 function RequestSection({ block }: { block: VaultBridgeProps['block'] }): JSX.Element {
   return (
-    <div className="cd-app-settings-section cd-vault-request">
-      <div className="cd-vault-label">Requested access</div>
-      {block.why ? <div className="cd-vault-why">{block.why}</div> : null}
-      <div className="cd-vault-scopes">
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-request")}>
+      <div className={vault.label}>Requested access</div>
+      {block.why ? <div className={vault.why}>{block.why}</div> : null}
+      <div className={vault.scopes}>
         {block.scopes.map((scope) => (
-          <span key={scopeLabel(scope)} className="cd-vault-scope" data-verbs={scope.verbs}>
+          <span key={scopeLabel(scope)} className={vault.scope} data-verbs={scope.verbs}>
             <span className="cd-vault-scope-name">{scopeLabel(scope)}</span>
-            <span className="cd-vault-scope-verbs">{scope.verbs}</span>
+            <span className={vault.scopeVerbs}>{scope.verbs}</span>
           </span>
         ))}
       </div>
-      <div className="cd-vault-purpose">{`Purpose · ${block.purpose}`}</div>
+      <div className={vault.purpose}>{`Purpose · ${block.purpose}`}</div>
     </div>
   );
 }
@@ -46,14 +50,14 @@ function GrantSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="cd-app-settings-section cd-vault-grants">
-      <div className="cd-vault-label">{`Access · ${vaultName}`}</div>
+    <div className={cx(appSettingsCss.appSettingsSection, vault.grants)}>
+      <div className={vault.label}>{`Access · ${vaultName}`}</div>
       {grants.length === 0 ? (
         <>
           <Note>No access yet — the vault denies every call until you grant it.</Note>
           <button
             type="button"
-            className="cd-vault-grant-btn"
+            className={vault.grantBtn}
             disabled={busy}
             onClick={() => {
               setBusy(true);
@@ -65,17 +69,17 @@ function GrantSection({
         </>
       ) : (
         grants.map((grant) => (
-          <div key={grant.grantId} className="cd-vault-grant-row">
-            <div className="cd-vault-grant-text">
-              <div className="cd-vault-grant-title">{`Granted · ${grant.purpose ?? 'purpose'}`}</div>
-              <div className="cd-vault-grant-sub">
+          <div key={grant.grantId} className={vault.grantRow}>
+            <div className={vault.grantText}>
+              <div className={vault.grantTitle}>{`Granted · ${grant.purpose ?? 'purpose'}`}</div>
+              <div className={vault.grantSub}>
                 {grant.scopes.map(scopeLabel).join(' · ') +
                   (grant.expiresAt ? ` · expires ${grant.expiresAt.slice(0, 10)}` : '')}
               </div>
             </div>
             <button
               type="button"
-              className="cd-vault-revoke-btn"
+              className={vault.revokeBtn}
               disabled={busy}
               onClick={() => {
                 setBusy(true);
@@ -100,19 +104,19 @@ function ParkedSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="cd-app-settings-section cd-vault-parked">
-      <div className="cd-vault-label">Waiting for your say-so</div>
+    <div className={cx(appSettingsCss.appSettingsSection, vault.parked)}>
+      <div className={vault.label}>Waiting for your say-so</div>
       {parked.map((entry) => (
-        <div key={entry.invocationId} className="cd-vault-parked-card">
-          <div className="cd-vault-parked-head">
-            <span className="cd-vault-parked-command">{entry.command}</span>
-            <span className="cd-vault-parked-when">{relativeTime(entry.parkedAt)}</span>
+        <div key={entry.invocationId} className={vault.parkedCard}>
+          <div className={vault.parkedHead}>
+            <span className={vault.parkedCommand}>{entry.command}</span>
+            <span className={vault.parkedWhen}>{relativeTime(entry.parkedAt)}</span>
           </div>
-          <pre className="cd-vault-parked-input">{JSON.stringify(entry.input, null, 2)}</pre>
-          <div className="cd-vault-parked-actions">
+          <pre className={vault.parkedInput}>{JSON.stringify(entry.input, null, 2)}</pre>
+          <div className={vault.parkedActions}>
             <button
               type="button"
-              className="cd-vault-approve-btn"
+              className={vault.approveBtn}
               disabled={busy}
               onClick={() => {
                 setBusy(true);
@@ -123,7 +127,7 @@ function ParkedSection({
             </button>
             <button
               type="button"
-              className="cd-vault-deny-btn"
+              className={vault.denyBtn}
               disabled={busy}
               onClick={() => {
                 setBusy(true);
@@ -150,18 +154,18 @@ function DemoSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="cd-app-settings-section cd-vault-demo">
-      <div className="cd-vault-label">Demo data</div>
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-demo")}>
+      <div className={vault.label}>Demo data</div>
       <Note>
         {demo.rows > 0
           ? `${demo.rows} demo row${demo.rows === 1 ? '' : 's'} loaded — safe to reset any time; real data is never touched.`
           : 'Load a sample scenario to try the app on realistic data. Demo rows are marked, never fire automations, and reset in one click.'}
       </Note>
-      <div className="cd-vault-demo-actions">
+      <div className={vault.demoActions}>
         {demo.seedable ? (
           <button
             type="button"
-            className="cd-vault-grant-btn"
+            className={vault.grantBtn}
             disabled={busy}
             onClick={() => {
               setBusy(true);
@@ -174,7 +178,7 @@ function DemoSection({
         {demo.rows > 0 ? (
           <button
             type="button"
-            className="cd-vault-grant-btn"
+            className={vault.grantBtn}
             disabled={busy}
             onClick={() => {
               setBusy(true);
@@ -245,7 +249,7 @@ export default function VaultScreen(props: VaultBridgeProps): JSX.Element {
     return (
       <>
         <RequestSection block={block} />
-        <div className="cd-au-loading">Loading…</div>
+        <div className={au.auLoading}>Loading…</div>
       </>
     );
   }

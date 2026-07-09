@@ -7,7 +7,11 @@ import type {
   AgentsStatusDTO,
   AgentToolDTO,
   SettingsProvidersBridgeProps,
-} from '../bridge.js';
+} from '../screen-contracts.js';
+import styles from './SettingsProvidersScreen.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
+import controlsCss from '../styles/controls.module.css';
+import { cx } from '../ui/cx.js';
 
 const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
@@ -35,7 +39,7 @@ function ModelSelect({
   );
   return (
     <select
-      className="agent-model-select"
+      className={styles.modelSelect}
       aria-label={`Default model for ${card.title}`}
       disabled={!card.connected}
       value={saved}
@@ -85,28 +89,28 @@ function ToolGroups({ tools }: { tools: AgentToolDTO[] }): JSX.Element {
     groups.push({ label: server, items: mcp.get(server) ?? [] });
   }
   return (
-    <div className="tools-groups">
+    <div className={styles.groups}>
       {groups.map((g) => (
-        <div key={g.label} className="tools-group">
-          <div className="tools-group-head">
-            <span className="tools-group-label">{g.label}</span>
-            <span className="tools-group-count">{String(g.items.length)}</span>
+        <div key={g.label} className={styles.group}>
+          <div className={styles.groupHead}>
+            <span className={styles.groupLabel}>{g.label}</span>
+            <span className={styles.groupCount}>{String(g.items.length)}</span>
           </div>
-          <div className="tools-list">
+          <div className={styles.list}>
             {g.items
               .slice()
               .sort((a, b) => a.name.localeCompare(b.name))
               .map((t) => (
-                <div key={t.name} className="tool-item">
-                  <div className="tool-item-head">
-                    <span className="tool-name">{t.name}</span>
+                <div key={t.name} className={styles.item}>
+                  <div className={styles.itemHead}>
+                    <span className={styles.name}>{t.name}</span>
                     {t.hasArgs ? (
-                      <span className="tool-args" title="Takes JSON arguments">
+                      <span className={styles.args} title="Takes JSON arguments">
                         args
                       </span>
                     ) : null}
                   </div>
-                  {t.description ? <span className="tool-desc">{t.description}</span> : null}
+                  {t.description ? <span className={styles.desc}>{t.description}</span> : null}
                 </div>
               ))}
           </div>
@@ -134,50 +138,50 @@ function AgentEntry({
   const count = card.tools.length;
   return (
     <div
-      className="agent-entry"
+      className={styles.entry}
       data-tools-open={open ? 'true' : ''}
       style={{ '--row-accent': card.accent } as CSSProperties}
     >
       <div
-        className="agent-row"
+        className={styles.row}
         data-active={active ? 'true' : ''}
         data-unavail={card.connected ? '' : 'true'}
       >
         <span
-          className="agent-row-dot"
+          className={styles.rowDot}
           style={{ background: card.connected ? card.accent : 'var(--ink-4, var(--ink-3))' }}
         />
-        <div className="agent-row-meta">
-          <div className="agent-row-name">
+        <div className={styles.rowMeta}>
+          <div className={styles.rowName}>
             {card.title}
-            {active ? <span className="agent-row-active">Active</span> : null}
+            {active ? <span className={styles.rowActive}>Active</span> : null}
           </div>
-          <span className="agent-row-sub">{card.subtitle}</span>
+          <span className={styles.rowSub}>{card.subtitle}</span>
         </div>
-        <div className="agent-row-tools">
+        <div className={styles.rowTools}>
           <button
             type="button"
-            className="agent-tools-toggle"
+            className={styles.toolsToggle}
             aria-expanded={open}
             title="Show tools this agent exposes (builtins + MCP)"
             onClick={onToggle}
           >
             <Icon name="Code" size={12} />
             <span className="agent-tools-count">{`${count} ${count === 1 ? 'tool' : 'tools'}`}</span>
-            <span className="agent-tools-chev">
+            <span className={styles.toolsChev}>
               <Icon name="ChevronDown" size={12} />
             </span>
           </button>
         </div>
-        <div className="agent-row-model">
+        <div className={styles.rowModel}>
           <ModelSelect card={card} saved={saved} onChange={onSetModel} />
         </div>
       </div>
-      <div className="agent-tools" hidden={!open}>
+      <div className={styles.tools} hidden={!open}>
         {count > 0 ? (
           <ToolGroups tools={card.tools} />
         ) : (
-          <div className="agent-tools-empty">
+          <div className={styles.toolsEmpty}>
             {card.toolsLoading
               ? 'Scanning tools…'
               : 'No tools scanned yet — use Refresh tools below.'}
@@ -282,27 +286,27 @@ export default function SettingsProvidersScreen({
   const cards = status?.cards ?? [];
 
   return (
-    <div className="drawer-group">
-      <div className="drawer-group-label">Connected</div>
-      <div className="drawer-group-body">
+    <div className={drawerGroupCss.group}>
+      <div className={drawerGroupCss.groupLabel}>Connected</div>
+      <div className={drawerGroupCss.groupBody}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="settings-note">
+          <div className={controlsCss.note}>
             Switch the active agent below; set each agent’s default model. Detection is CLI-only —
             the gateway ran `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
             authenticates.
           </div>
           <div
-            className="agent-switch"
+            className={styles.switch}
             role="tablist"
             aria-label="Active agent"
             data-active-index={String(selected === 'codex' ? 0 : 1)}
           >
-            <span className="agent-switch-ind" />
+            <span className={styles.switchInd} />
             {cards.map((card) => (
               <button
                 key={card.kind}
                 type="button"
-                className="agent-switch-seg"
+                className={styles.switchSeg}
                 role="tab"
                 aria-selected={card.kind === selected}
                 data-active={card.kind === selected ? 'true' : ''}
@@ -311,14 +315,14 @@ export default function SettingsProvidersScreen({
                 title={`Make ${card.title} the active agent`}
                 onClick={() => onActivate(card.kind)}
               >
-                <span className="agent-switch-dot" style={{ background: card.accent }} />
+                <span className={styles.switchDot} style={{ background: card.accent }} />
                 <span>{card.title}</span>
               </button>
             ))}
           </div>
-          <div className="agents-panel">
+          <div className={styles.panel}>
             {status === null ? (
-              <div className="settings-note">Reading credential status…</div>
+              <div className={controlsCss.note}>Reading credential status…</div>
             ) : (
               cards.map((card) => (
                 <AgentEntry
@@ -338,7 +342,7 @@ export default function SettingsProvidersScreen({
       <div className="sheet-actions">
         <button
           type="button"
-          className="btn btn-soft"
+          className={cx("btn", controlsCss.soft)}
           disabled={busyModels}
           onClick={() => doRefresh(refreshModels, setBusyModels)}
         >
@@ -347,7 +351,7 @@ export default function SettingsProvidersScreen({
         </button>
         <button
           type="button"
-          className="btn btn-soft"
+          className={cx("btn", controlsCss.soft)}
           disabled={busyTools}
           onClick={() => doRefresh(refreshTools, setBusyTools)}
         >

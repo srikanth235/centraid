@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useReducer, useRef, useState, type JSX } from 'react';
-import type { PaletteBridgeProps, PaletteRowDTO } from '../bridge.js';
+import type { PaletteBridgeProps, PaletteRowDTO } from '../screen-contracts.js';
+import styles from './PaletteScreen.module.css';
 
 function Row({
   row,
@@ -21,7 +22,7 @@ function Row({
     <button
       ref={ref}
       type="button"
-      className="cd-palette-row"
+      className={styles.row}
       data-variant={row.variant}
       data-active={String(activeIsThis)}
       onMouseDown={(e) => {
@@ -32,7 +33,7 @@ function Row({
     >
       {row.variant === 'app' && row.tile ? (
         <div
-          className="cd-palette-row-tile"
+          className={styles.rowTile}
           style={{
             background: row.tile.background,
             boxShadow: row.tile.boxShadow,
@@ -43,20 +44,20 @@ function Row({
         />
       ) : (
         <span
-          className="cd-palette-row-icon"
+          className={styles.rowIcon}
           data-accent={row.accent ? 'true' : undefined}
           // eslint-disable-next-line react/no-danger -- icon markup comes from the trusted vanilla Icon set
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
       )}
-      <div className="cd-palette-row-text">
-        <div className="cd-palette-row-label">{row.label}</div>
-        {row.sub ? <div className="cd-palette-row-sub">{row.sub}</div> : null}
+      <div className={styles.rowText}>
+        <div className={styles.rowLabel}>{row.label}</div>
+        {row.sub ? <div className={styles.rowSub}>{row.sub}</div> : null}
       </div>
       {row.kbd ? (
-        <span className="cd-palette-row-kbd">{row.kbd}</span>
+        <span className={styles.rowKbd}>{row.kbd}</span>
       ) : row.meta ? (
-        <span className="cd-palette-row-meta">{row.meta}</span>
+        <span className={styles.rowMeta}>{row.meta}</span>
       ) : null}
     </button>
   );
@@ -66,7 +67,8 @@ function Row({
  * Command palette (⌘K), ported to React (issue #325, Phase 3). React owns the
  * overlay, the search field, and up/down + Enter keyboard navigation; the
  * vanilla side supplies `buildGroups(query)` (data + per-row `run` closures)
- * and `onClose`. Emits the same `cd-palette-*` classes.
+ * and `onClose`. Styles are co-located in `PaletteScreen.module.css` (scoped
+ * CSS Modules — issue #325 Phase 4).
  */
 export default function PaletteScreen({
   buildGroups,
@@ -113,7 +115,7 @@ export default function PaletteScreen({
   let rowIndex = -1;
   return (
     <div
-      className="cd-palette-backdrop"
+      className={styles.backdrop}
       role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
@@ -121,9 +123,9 @@ export default function PaletteScreen({
         }
       }}
     >
-      <div className="cd-palette" role="dialog" aria-label="Command palette">
-        <div className="cd-palette-inputrow">
-          <span className="cd-palette-search-icon" aria-hidden="true">
+      <div className={styles.root} role="dialog" aria-label="Command palette">
+        <div className={styles.inputrow}>
+          <span className={styles.searchIcon} aria-hidden="true">
             <svg
               width="16"
               height="16"
@@ -140,7 +142,7 @@ export default function PaletteScreen({
           </span>
           <input
             ref={inputRef}
-            className="cd-palette-input"
+            className={styles.input}
             type="text"
             autoComplete="off"
             placeholder="Search apps, chats, templates — or describe a new one…"
@@ -151,12 +153,12 @@ export default function PaletteScreen({
             }}
             onKeyDown={onKeyDown}
           />
-          <span className="cd-palette-esc">esc</span>
+          <span className={styles.esc}>esc</span>
         </div>
-        <div className="cd-palette-results">
+        <div className={styles.results}>
           {groups.map((g) => (
             <Fragment key={g.group}>
-              <div className="cd-palette-group">{g.group}</div>
+              <div className={styles.group}>{g.group}</div>
               {g.items.map((item) => {
                 rowIndex += 1;
                 const thisIndex = rowIndex;
@@ -172,15 +174,15 @@ export default function PaletteScreen({
             </Fragment>
           ))}
         </div>
-        <div className="cd-palette-footer">
-          <span className="cd-palette-kbd">↑↓</span>
+        <div className={styles.footer}>
+          <span className={styles.kbd}>↑↓</span>
           <span>navigate</span>
-          <span className="cd-palette-kbd">↵</span>
+          <span className={styles.kbd}>↵</span>
           <span>open</span>
-          <span className="cd-palette-kbd">⌘↵</span>
+          <span className={styles.kbd}>⌘↵</span>
           <span>open in new window</span>
-          <span className="cd-palette-footer-sp" />
-          <span className="cd-palette-kbd">esc</span>
+          <span className={styles.footerSp} />
+          <span className={styles.kbd}>esc</span>
           <span>close</span>
         </div>
       </div>

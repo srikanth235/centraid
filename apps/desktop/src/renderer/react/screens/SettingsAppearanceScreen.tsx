@@ -2,8 +2,12 @@ import { useState, type JSX } from 'react';
 import { THEME_PRESETS, themes, tileFinish } from '@centraid/design-tokens';
 import type { IconName, ThemeName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../bridge.js';
+import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
 import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
+import styles from './SettingsAppearanceScreen.module.css';
+import segCss from '../styles/seg.module.css';
+import swatchCss from '../styles/swatch.module.css';
+import linkBtnCss from '../styles/linkBtn.module.css';
 
 // Accent options — mirrors ACCENT_PALETTE (app-shell-context.ts) + the names
 // from makeSwatches. Kept inline so the React bundle stays decoupled.
@@ -69,7 +73,7 @@ export default function SettingsAppearanceScreen({
           hint="Pick a preset for the Centraid shell. Apps stay in their own light/dark palette."
           full
         >
-          <div className="cd-theme-picker" role="radiogroup" aria-label="Color theme">
+          <div className={styles.themePicker} role="radiogroup" aria-label="Color theme">
             {THEME_PRESETS.map((preset) => {
               const p = themePreview(preset.name);
               const active = preset.name === curTheme;
@@ -77,7 +81,7 @@ export default function SettingsAppearanceScreen({
                 <button
                   key={preset.name}
                   type="button"
-                  className="cd-theme-card"
+                  className={styles.themeCard}
                   data-name={preset.name}
                   data-active={String(active)}
                   aria-checked={active}
@@ -85,13 +89,13 @@ export default function SettingsAppearanceScreen({
                   role="radio"
                   onClick={() => pickTheme(preset.name)}
                 >
-                  <div className="cd-theme-card-preview" style={{ background: p.bg }}>
-                    <span className="cd-theme-card-bar" style={{ background: p.elev }} />
-                    <span className="cd-theme-card-dot" style={{ background: p.accent }} />
+                  <div className={styles.themeCardPreview} style={{ background: p.bg }}>
+                    <span className={styles.themeCardBar} style={{ background: p.elev }} />
+                    <span className={styles.themeCardDot} style={{ background: p.accent }} />
                   </div>
-                  <div className="cd-theme-card-foot">
-                    <span className="cd-theme-card-label">{preset.label}</span>
-                    <span className="cd-theme-card-kind">{preset.kind}</span>
+                  <div className={styles.themeCardFoot}>
+                    <span className={styles.themeCardLabel}>{preset.label}</span>
+                    <span className={styles.themeCardKind}>{preset.kind}</span>
                   </div>
                 </button>
               );
@@ -101,7 +105,7 @@ export default function SettingsAppearanceScreen({
         <DrawerRow label="Match system" hint="Snap the theme to your OS appearance right now.">
           <button
             type="button"
-            className="cd-link-btn"
+            className={linkBtnCss.linkBtn}
             onClick={() => setCurTheme(onMatchSystem())}
           >
             Match system
@@ -127,12 +131,12 @@ export default function SettingsAppearanceScreen({
           label="Color"
           hint="Used for the build button, sparkle, focus rings, and version badges."
         >
-          <div className="cd-swatches" role="radiogroup" aria-label="Accent">
+          <div className={swatchCss.swatches} role="radiogroup" aria-label="Accent">
             {ACCENTS.map((a) => (
               <button
                 key={a.key}
                 type="button"
-                className="cd-swatch"
+                className={swatchCss.swatch}
                 role="radio"
                 aria-checked={a.key === curAccent}
                 aria-label={a.name}
@@ -142,8 +146,8 @@ export default function SettingsAppearanceScreen({
                   onSetAccent(a.key);
                 }}
               >
-                <span className="cd-swatch-chip" style={{ background: a.color }} />
-                <span className="cd-swatch-name">{a.name}</span>
+                <span className={styles.swatchChip} style={{ background: a.color }} />
+                <span className={styles.swatchName}>{a.name}</span>
               </button>
             ))}
           </div>
@@ -152,7 +156,7 @@ export default function SettingsAppearanceScreen({
 
       <DrawerGroup label="App tiles">
         <DrawerRow label="Treatment" hint="How icon tiles on the home grid look.">
-          <div className="seg" role="tablist" aria-label="Treatment">
+          <div className={segCss.seg} role="tablist" aria-label="Treatment">
             {TILE_VARIANTS.map((v) => (
               <button
                 key={v}
@@ -172,13 +176,13 @@ export default function SettingsAppearanceScreen({
         </DrawerRow>
         <DrawerRow label="Preview" hint="How the home grid looks with your current choices." full>
           <div className="ap-preview-host">
-            <div className="ap-preview">
+            <div className={styles.preview}>
               {PREVIEW_SEEDS.map((s) => {
                 const finish = tileFinish(s.color, curTile);
                 return (
-                  <div key={s.name} className="ap-preview-tile">
+                  <div key={s.name} className={styles.previewTile}>
                     <div
-                      className="ap-preview-tile-icon"
+                      className={styles.previewTileIcon}
                       style={{
                         background: finish.background,
                         boxShadow: finish.boxShadow,
@@ -187,7 +191,7 @@ export default function SettingsAppearanceScreen({
                     >
                       <Icon name={s.icon} size={18} strokeWidth={1.85} />
                     </div>
-                    <span className="ap-preview-tile-name">{s.name}</span>
+                    <span className={styles.previewTileName}>{s.name}</span>
                   </div>
                 );
               })}

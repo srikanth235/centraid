@@ -9,6 +9,10 @@
     "types": [],
     "noEmit": true
   },
-  "include": ["src/renderer/react/**/*.tsx", "src/renderer/react/**/*.ts"],
+  "include": [
+    "src/renderer/react/**/*.tsx",
+    "src/renderer/react/**/*.ts",
+    "src/renderer/types.d.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

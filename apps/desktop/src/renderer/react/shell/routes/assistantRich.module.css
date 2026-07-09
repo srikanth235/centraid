@@ -1,0 +1,123 @@
+.asstP {
+  margin: 0 0 8px;
+}
+.asstH {
+  margin: 12px 0 6px;
+  font-family: var(--font-display);
+  color: var(--ink);
+}
+.asstUl {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.asstRich code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.asstRef {
+  display: inline-flex;
+  align-items: center;
+  border: 0.5px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0 7px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  cursor: default;
+}
+.asstRef[data-state='missing'] {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.asstBlock {
+  margin: 4px 0 10px;
+}
+.asstTableWrap {
+  overflow-x: auto;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+.asstTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.asstTable th {
+  text-align: left;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--line-strong);
+}
+.asstTable td {
+  padding: 7px 12px;
+  border-bottom: 0.5px solid var(--line);
+  color: var(--ink-2);
+}
+.asstTable tbody tr:last-child td {
+  border-bottom: 0;
+}
+.asstCaption {
+  font-size: 11px;
+  color: var(--ink-3);
+  padding: 6px 2px 0;
+}
+.asstStat {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 16px;
+  width: fit-content;
+  min-width: 180px;
+  background: var(--bg-elev);
+}
+.asstStatValue {
+  font-family: var(--font-display);
+  font-size: 24px;
+  color: var(--ink);
+}
+.asstStatLabel {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+.asstStatSub {
+  font-size: 11px;
+  color: var(--ink-4);
+}
+.asstChart {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px 8px;
+  background: var(--bg-elev);
+}
+.asstChartPlot {
+  height: 160px;
+}
+.asstChartSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.asstChartX {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ink-4);
+  padding-top: 4px;
+  gap: 4px;
+  overflow: hidden;
+}
+.asstChartLegend {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--ink-3);
+  padding-top: 6px;
+}

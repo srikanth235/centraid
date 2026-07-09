@@ -1,17 +1,20 @@
 import { useMemo, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../bridge.js';
+import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
+import styles from './AutomationTemplatesScreen.module.css';
+import au from '../styles/automation.module.css';
+import { cx } from '../ui/cx.js';
 
 type Trig = 'all' | 'cron' | 'webhook';
 
 function IntegrationChips({ integrations }: { integrations: readonly string[] }): JSX.Element {
   return (
-    <div className="cd-au-chips">
+    <div className={au.auChips}>
       {integrations.map((name) => (
-        <span key={name} className="cd-au-chip">
+        <span key={name} className={au.auChip}>
           <i
-            className="cd-au-chip-dot"
+            className={au.auChipDot}
             aria-hidden="true"
             style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
           />
@@ -30,19 +33,19 @@ function TemplateCard({
   onOpen: (t: DiscoverTemplate) => void;
 }): JSX.Element {
   return (
-    <button type="button" className="cd-au-tpl-card" onClick={() => onOpen(t)}>
-      <span className="cd-au-tpl-use">
+    <button type="button" className={styles.card} onClick={() => onOpen(t)}>
+      <span className={styles.use}>
         <span>Use template</span>
         <Icon name="ArrowRight" size={13} />
       </span>
-      <span className="cd-au-tpl-top">
-        <span className="cd-au-tpl-emoji">{t.emoji ?? '⚙️'}</span>
-        <span className="cd-au-tpl-name">{t.name}</span>
+      <span className={styles.top}>
+        <span className={styles.emoji}>{t.emoji ?? '⚙️'}</span>
+        <span className={styles.name}>{t.name}</span>
       </span>
-      <span className="cd-au-tpl-desc">{t.desc}</span>
-      <span className="cd-au-tpl-foot">
-        <span className="cd-au-tpl-trig">
-          <span className="cd-au-tpl-trig-icon" aria-hidden="true">
+      <span className={styles.desc}>{t.desc}</span>
+      <span className={styles.foot}>
+        <span className={styles.trig}>
+          <span className={styles.trigIcon} aria-hidden="true">
             <Icon name={t.triggerKind === 'webhook' ? 'Webhook' : 'Clock'} size={13} />
           </span>
           {t.triggerLabel ?? ''}
@@ -121,14 +124,14 @@ export default function AutomationTemplatesScreen({
   };
 
   return (
-    <div className="cd-au-tpl-wrap">
-      <div className="cd-au-tpl-toolbar">
-        <div className="cd-au-tpl-search">
-          <span className="cd-au-tpl-search-ic" aria-hidden="true">
+    <div className={styles.wrap}>
+      <div className={styles.toolbar}>
+        <div className={styles.search}>
+          <span className={styles.searchIc} aria-hidden="true">
             <Icon name="Search" size={14} />
           </span>
           <input
-            className="cd-au-tpl-search-in"
+            className={styles.searchIn}
             type="search"
             placeholder="Search templates…"
             aria-label="Search templates"
@@ -136,12 +139,12 @@ export default function AutomationTemplatesScreen({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <div className="cd-au-tpl-seg" role="tablist" aria-label="Filter by trigger">
+        <div className={styles.seg} role="tablist" aria-label="Filter by trigger">
           {(['all', 'cron', 'webhook'] as const).map((k) => (
             <button
               key={k}
               type="button"
-              className="cd-au-tpl-seg-b"
+              className={styles.segB}
               role="tab"
               aria-selected={k === trig}
               data-k={k}
@@ -155,20 +158,20 @@ export default function AutomationTemplatesScreen({
       </div>
 
       {allIntegrations.length > 0 ? (
-        <div className="cd-au-tpl-fltr-chips">
+        <div className={styles.fltrChips}>
           {allIntegrations.map((name) => {
             const on = active.has(name);
             return (
               <button
                 key={name}
                 type="button"
-                className="cd-au-tpl-fltr-chip"
+                className={styles.fltrChip}
                 aria-pressed={on}
                 data-active={on ? 'true' : undefined}
                 onClick={() => toggleIntegration(name)}
               >
                 <i
-                  className="cd-au-chip-dot"
+                  className={au.auChipDot}
                   aria-hidden="true"
                   style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
                 />
@@ -179,22 +182,22 @@ export default function AutomationTemplatesScreen({
         </div>
       ) : null}
 
-      <div className="cd-au-tpl-cats">
+      <div className={styles.cats}>
         {shown.length === 0 ? (
-          <div className="cd-au-tpl-empty">
-            <div className="cd-au-tpl-empty-icon" aria-hidden="true">
+          <div className={styles.empty}>
+            <div className={styles.emptyIcon} aria-hidden="true">
               <Icon name="Filter" size={22} />
             </div>
-            <div className="cd-au-tpl-empty-title">No templates match</div>
-            <div className="cd-au-tpl-empty-text">Try a different search or clear the filters.</div>
-            <div className="cd-au-tpl-empty-actions">
-              <button type="button" className="cd-au-btn cd-au-btn-ghost" onClick={clearFilters}>
+            <div className={styles.emptyTitle}>No templates match</div>
+            <div className={styles.emptyText}>Try a different search or clear the filters.</div>
+            <div className={styles.emptyActions}>
+              <button type="button" className={cx(au.auBtn, au.auBtnGhost)} onClick={clearFilters}>
                 <Icon name="X" size={14} />
                 <span>Clear filters</span>
               </button>
               <button
                 type="button"
-                className="cd-au-btn cd-au-btn-primary"
+                className={cx(au.auBtn, au.auBtnPrimary)}
                 onClick={onStartFromScratch}
               >
                 <Icon name="Sparkle" size={14} />
@@ -204,9 +207,9 @@ export default function AutomationTemplatesScreen({
           </div>
         ) : (
           cats.map((cat) => (
-            <section key={cat} className="cd-au-tpl-cat">
-              <div className="cd-au-tpl-cat-label">{cat}</div>
-              <div className="cd-au-tpl-grid">
+            <section key={cat} className={styles.cat}>
+              <div className={styles.catLabel}>{cat}</div>
+              <div className={styles.grid}>
                 {shown
                   .filter((t) => (t.category ?? 'Other') === cat)
                   .map((t) => (

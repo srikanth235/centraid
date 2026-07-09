@@ -1,0 +1,23 @@
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.swatch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 0.5px solid var(--line);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 120ms;
+}
+.swatch:hover {
+  border-color: var(--ink-3);
+}
+.swatch[data-active='true'] {
+  border: 1.5px solid var(--ink);
+  padding: 7.5px;
+}

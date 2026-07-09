@@ -5,8 +5,12 @@ import type {
   ImportConnectionDTO,
   ImportData,
   ImportRowDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { relativeTime } from '../format.js';
+import styles from './ImportScreen.module.css';
+import vault from '../styles/vault.module.css';
+import appSettingsCss from '../styles/appSettings.module.css';
+import { cx } from '../ui/cx.js';
 
 const TEXT_KINDS = new Set(['ics', 'vcf', 'vcard', 'mbox', 'csv']);
 
@@ -20,7 +24,7 @@ function summaryLine(summary: Record<string, number>): string {
 }
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
-  return <div className="cd-app-settings-note">{children}</div>;
+  return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
 }
 
 function ConnectionRow({
@@ -32,16 +36,16 @@ function ConnectionRow({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className="cd-import-connection" data-status={c.status}>
-      <span className="cd-import-connection-label">{`${c.label} · ${c.kind}`}</span>
-      <span className="cd-import-history-sub">
+    <div className={styles.connection} data-status={c.status}>
+      <span className={styles.connectionLabel}>{`${c.label} · ${c.kind}`}</span>
+      <span className={styles.historySub}>
         {`${c.status}${c.principal ? ` · ${c.principal}` : ''}${
           c.lastRunAt ? ` · last run ${relativeTime(c.lastRunAt)}` : ''
         }${c.lastRunError ? ` · ${c.lastRunError}` : ''}`}
       </span>
       <button
         type="button"
-        className="cd-vault-deny-btn"
+        className={vault.denyBtn}
         disabled={busy}
         onClick={() => {
           setBusy(true);
@@ -77,33 +81,33 @@ function DraftSection({
     };
   }, [batch.batchId, loadRows]);
   return (
-    <div className="cd-app-settings-section cd-import-draft">
-      <div className="cd-vault-label">{`Draft · ${batch.label ?? batch.kind ?? 'import'}`}</div>
-      <div className="cd-app-settings-note">
+    <div className={cx(appSettingsCss.appSettingsSection, "cd-import-draft")}>
+      <div className={vault.label}>{`Draft · ${batch.label ?? batch.kind ?? 'import'}`}</div>
+      <div className={appSettingsCss.appSettingsNote}>
         {`${summaryLine(batch.summary)} · staged ${relativeTime(batch.createdAt)}`}
       </div>
       {rows === 'error' ? (
         <Note>Could not load the rows.</Note>
       ) : rows ? (
-        <div className="cd-import-rows">
+        <div className={styles.rows}>
           {rows.slice(0, 12).map((row) => (
             <div
               key={`${row.entityType}:${row.externalId}`}
-              className="cd-import-row"
+              className={styles.row}
               data-disposition={row.disposition}
             >
-              <span className="cd-import-row-disposition">{row.disposition}</span>
-              <span className="cd-import-row-id">{`${row.entityType} · ${row.externalId}`}</span>
-              {row.note ? <span className="cd-import-row-note">{row.note}</span> : null}
+              <span className={styles.rowDisposition}>{row.disposition}</span>
+              <span className={styles.rowId}>{`${row.entityType} · ${row.externalId}`}</span>
+              {row.note ? <span className={styles.rowNote}>{row.note}</span> : null}
             </div>
           ))}
           {rows.length > 12 ? <Note>{`…and ${rows.length - 12} more`}</Note> : null}
         </div>
       ) : null}
-      <div className="cd-vault-parked-actions">
+      <div className={vault.parkedActions}>
         <button
           type="button"
-          className="cd-vault-approve-btn"
+          className={vault.approveBtn}
           disabled={busy}
           onClick={() => {
             setBusy(true);
@@ -114,7 +118,7 @@ function DraftSection({
         </button>
         <button
           type="button"
-          className="cd-vault-deny-btn"
+          className={vault.denyBtn}
           disabled={busy}
           onClick={() => {
             setBusy(true);
@@ -218,16 +222,16 @@ export default function ImportScreen({
 
   return (
     <>
-      <div className="cd-app-settings-section">
-        <div className="cd-vault-label">{`Import into · ${state.vaultName}`}</div>
+      <div className={appSettingsCss.appSettingsSection}>
+        <div className={vault.label}>{`Import into · ${state.vaultName}`}</div>
         <Note>
           Calendar (.ics), contacts (.vcf), mail (.mbox), bank statements (.csv) or a Google Takeout
           (.zip). Files stage as a reviewable draft — nothing lands until you publish.
         </Note>
-        <div className="cd-vault-demo-actions">
+        <div className={vault.demoActions}>
           <button
             type="button"
-            className="cd-vault-grant-btn"
+            className={vault.grantBtn}
             disabled={picking}
             onClick={() => fileRef.current?.click()}
           >
@@ -236,7 +240,7 @@ export default function ImportScreen({
           <input
             ref={fileRef}
             type="file"
-            className="cd-import-file"
+            className={styles.file}
             accept=".ics,.vcf,.vcard,.mbox,.csv,.zip"
             onChange={onFile}
           />
@@ -244,8 +248,8 @@ export default function ImportScreen({
       </div>
 
       {live.length > 0 ? (
-        <div className="cd-app-settings-section">
-          <div className="cd-vault-label">Connections</div>
+        <div className={appSettingsCss.appSettingsSection}>
+          <div className={vault.label}>Connections</div>
           <Note>
             Live sources syncing into this vault. A paused connection never runs; needs-auth means
             the harness is signed into the wrong account.
@@ -267,12 +271,12 @@ export default function ImportScreen({
       ))}
 
       {settled.length > 0 ? (
-        <div className="cd-app-settings-section">
-          <div className="cd-vault-label">History</div>
+        <div className={appSettingsCss.appSettingsSection}>
+          <div className={vault.label}>History</div>
           {settled.map((batch) => (
-            <div key={batch.batchId} className="cd-import-history-row">
+            <div key={batch.batchId} className={styles.historyRow}>
               <span className="cd-import-history-label">{batch.label ?? batch.kind ?? '?'}</span>
-              <span className="cd-import-history-sub">
+              <span className={styles.historySub}>
                 {`${batch.status} · ${summaryLine(batch.summary)} · ${relativeTime(batch.createdAt)}`}
               </span>
             </div>

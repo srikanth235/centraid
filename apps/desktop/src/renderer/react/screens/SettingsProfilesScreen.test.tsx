@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsProfilesBridgeProps } from '../bridge.js';
+import type { SettingsProfilesBridgeProps } from '../screen-contracts.js';
 import SettingsProfilesScreen from './SettingsProfilesScreen.js';
 
 function makeProps(over: Partial<SettingsProfilesBridgeProps> = {}): SettingsProfilesBridgeProps {
@@ -72,7 +72,7 @@ function mount(props: SettingsProfilesBridgeProps): HTMLDivElement {
 }
 
 const spacesRows = (el: HTMLElement): HTMLElement[] =>
-  [...el.querySelector('.cd-prof-manage')!.querySelectorAll('.cd-prof-row')] as HTMLElement[];
+  [...el.querySelector('.profManage')!.querySelectorAll('.profRow')] as HTMLElement[];
 
 describe('SettingsProfilesScreen', () => {
   it('renders space rows (active badge, no switch; primordial no delete) + connections', () => {
@@ -80,12 +80,12 @@ describe('SettingsProfilesScreen', () => {
     const rows = spacesRows(el);
     expect(rows.length).toBe(2);
     // active + primordial "Home": has badge, no switch, no delete
-    expect(rows[0]?.querySelector('.cd-prof-row-badge')?.textContent).toBe('Active');
-    expect(rows[0]?.querySelector('.cd-prof-row-switch')).toBeNull();
-    expect(rows[0]?.querySelector('.cd-prof-row-del')).toBeNull();
+    expect(rows[0]?.querySelector('.profRowBadge')?.textContent).toBe('Active');
+    expect(rows[0]?.querySelector('.profRowSwitch')).toBeNull();
+    expect(rows[0]?.querySelector('.profRowDel')).toBeNull();
     // inactive "Work": has switch + delete
-    expect(rows[1]?.querySelector('.cd-prof-row-switch')).toBeTruthy();
-    expect(rows[1]?.querySelector('.cd-prof-row-del')).toBeTruthy();
+    expect(rows[1]?.querySelector('.profRowSwitch')).toBeTruthy();
+    expect(rows[1]?.querySelector('.profRowDel')).toBeTruthy();
     // connections: 2 rows total in the second list
     expect(el.textContent).toContain('This computer');
     expect(el.textContent).toContain('Cloud');
@@ -102,14 +102,14 @@ describe('SettingsProfilesScreen', () => {
         );
       });
     };
-    click('.cd-prof-row-switch');
+    click('.profRowSwitch');
     expect(props.onSwitch).toHaveBeenCalledWith('work');
-    click('.cd-icon-btn:not(.cd-prof-row-del)');
+    click('.iconBtn:not(.profRowDel)');
     expect(props.onEdit).toHaveBeenCalledWith('work');
-    click('.cd-prof-row-del');
+    click('.profRowDel');
     expect(props.onDelete).toHaveBeenCalledWith('work');
     act(() =>
-      (el.querySelector('.cd-prof-manage-add') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.profManageAdd') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -119,18 +119,18 @@ describe('SettingsProfilesScreen', () => {
   it('fires connection connect + remove', () => {
     const props = makeProps();
     const el = mount(props);
-    const connList = el.querySelectorAll('.cd-prof-manage-list')[1] as HTMLElement;
-    const remoteRow = [...connList.querySelectorAll('.cd-prof-row')].find((r) =>
+    const connList = el.querySelectorAll('.profManageList')[1] as HTMLElement;
+    const remoteRow = [...connList.querySelectorAll('.profRow')].find((r) =>
       r.textContent?.includes('Cloud'),
     ) as HTMLElement;
     act(() =>
-      (remoteRow.querySelector('.cd-prof-row-switch') as HTMLButtonElement).dispatchEvent(
+      (remoteRow.querySelector('.profRowSwitch') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onConnect).toHaveBeenCalledWith('remote1');
     act(() =>
-      (remoteRow.querySelector('.cd-prof-row-del') as HTMLButtonElement).dispatchEvent(
+      (remoteRow.querySelector('.profRowDel') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsLayoutBridgeProps } from '../bridge.js';
+import type { SettingsLayoutBridgeProps } from '../screen-contracts.js';
 import SettingsLayoutScreen from './SettingsLayoutScreen.js';
 
 function makeProps(over: Partial<SettingsLayoutBridgeProps> = {}): SettingsLayoutBridgeProps {
@@ -45,7 +45,7 @@ describe('SettingsLayoutScreen', () => {
     expect(seg(el, 0).length).toBe(3);
     expect(seg(el, 1).length).toBe(3);
     expect(seg(el, 0).find((b) => b.textContent === 'regular')?.dataset.active).toBe('true');
-    expect((el.querySelector('.cd-switch') as HTMLElement).dataset.on).toBe('true');
+    expect((el.querySelector('.switch') as HTMLElement).dataset.on).toBe('true');
   });
 
   it('changes density, cards, and the sidebar toggle', () => {
@@ -64,7 +64,7 @@ describe('SettingsLayoutScreen', () => {
     );
     expect(props.onSetCards).toHaveBeenCalledWith('elevated');
     act(() =>
-      (el.querySelector('.cd-switch') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.switch') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

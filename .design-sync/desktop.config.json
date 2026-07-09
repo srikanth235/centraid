@@ -1,0 +1,10 @@
+{
+  "pkg": "@centraid/desktop-shell-ds",
+  "globalName": "CentraidShell",
+  "projectId": "e6d9c37d-2ffa-4c5d-944f-bff021f338dc",
+  "shape": "package",
+  "buildCmd": "node .design-sync/desktop-src/build.mjs",
+  "entry": ".design-sync/desktop-src/dist/index.js",
+  "cssEntry": "styles/bundle.css",
+  "readmeHeader": ".design-sync/desktop.conventions.md"
+}

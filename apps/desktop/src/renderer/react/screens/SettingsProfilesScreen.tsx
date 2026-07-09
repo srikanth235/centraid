@@ -2,7 +2,11 @@ import type { CSSProperties, JSX } from 'react';
 import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../bridge.js';
+import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../screen-contracts.js';
+import styles from './SettingsProfilesScreen.module.css';
+import { cx } from '../ui/cx.js';
+import controlsCss from '../styles/controls.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 
 function Avatar({
   icon,
@@ -44,20 +48,20 @@ function ProfileRow({
   onDelete: (id: string) => void;
 }): JSX.Element {
   return (
-    <div className="cd-prof-row" data-active={p.active ? 'true' : 'false'}>
+    <div className={styles.profRow} data-active={p.active ? 'true' : 'false'}>
       <Avatar icon={p.icon} color={p.color} size={40} />
-      <div className="cd-prof-row-text">
-        <div className="cd-prof-row-titlerow">
-          <span className="cd-prof-row-name">{p.name}</span>
-          {p.active ? <span className="cd-prof-row-badge">Active</span> : null}
+      <div className={styles.profRowText}>
+        <div className={styles.profRowTitlerow}>
+          <span className={styles.profRowName}>{p.name}</span>
+          {p.active ? <span className={styles.profRowBadge}>Active</span> : null}
         </div>
-        <div className="cd-prof-row-sub">{p.subLine}</div>
+        <div className={styles.profRowSub}>{p.subLine}</div>
       </div>
-      <div className="cd-prof-row-actions">
+      <div className={styles.profRowActions}>
         {!p.active ? (
           <button
             type="button"
-            className="cd-chip cd-prof-row-switch"
+            className={cx(controlsCss.chip, styles.profRowSwitch)}
             onClick={() => onSwitch(p.id)}
           >
             Switch
@@ -65,7 +69,7 @@ function ProfileRow({
         ) : null}
         <button
           type="button"
-          className="cd-icon-btn"
+          className={controlsCss.iconBtn}
           title="Edit"
           aria-label={`Edit ${p.name}`}
           onClick={() => onEdit(p.id)}
@@ -75,7 +79,7 @@ function ProfileRow({
         {!p.primordial ? (
           <button
             type="button"
-            className="cd-icon-btn cd-prof-row-del"
+            className={cx(controlsCss.iconBtn, styles.profRowDel)}
             title="Delete"
             aria-label={`Delete ${p.name}`}
             onClick={() => onDelete(p.id)}
@@ -98,19 +102,19 @@ function ConnectionRow({
   onRemove: (id: string) => void;
 }): JSX.Element {
   return (
-    <div className="cd-prof-row" data-active={c.active ? 'true' : 'false'}>
-      <div className="cd-prof-row-text">
-        <div className="cd-prof-row-titlerow">
-          <span className="cd-prof-row-name">{c.displayName}</span>
-          {c.active ? <span className="cd-prof-row-badge">Connected</span> : null}
+    <div className={styles.profRow} data-active={c.active ? 'true' : 'false'}>
+      <div className={styles.profRowText}>
+        <div className={styles.profRowTitlerow}>
+          <span className={styles.profRowName}>{c.displayName}</span>
+          {c.active ? <span className={styles.profRowBadge}>Connected</span> : null}
         </div>
-        <div className="cd-prof-row-sub">{c.sub}</div>
+        <div className={styles.profRowSub}>{c.sub}</div>
       </div>
-      <div className="cd-prof-row-actions">
+      <div className={styles.profRowActions}>
         {!c.active ? (
           <button
             type="button"
-            className="cd-chip cd-prof-row-switch"
+            className={cx(controlsCss.chip, styles.profRowSwitch)}
             onClick={() => onConnect(c.id)}
           >
             Connect
@@ -119,7 +123,7 @@ function ConnectionRow({
         {c.removable ? (
           <button
             type="button"
-            className="cd-icon-btn cd-prof-row-del"
+            className={cx(controlsCss.iconBtn, styles.profRowDel)}
             title="Remove connection"
             aria-label={`Remove ${c.displayName}`}
             onClick={() => onRemove(c.id)}
@@ -150,16 +154,16 @@ export default function SettingsProfilesScreen({
 }: SettingsProfilesBridgeProps): JSX.Element {
   return (
     <>
-      <div className="drawer-group">
-        <div className="drawer-group-label">Spaces</div>
-        <div className="drawer-group-body">
-          <div className="settings-note">
+      <div className={drawerGroupCss.group}>
+        <div className={drawerGroupCss.groupLabel}>Spaces</div>
+        <div className={drawerGroupCss.groupBody}>
+          <div className={controlsCss.note}>
             Each space is a vault — its own apps, chats, and data, deny-by-default to every app
             until you grant access. Switch from here or from the switcher at the top of the sidebar
             (⌘⇧G).
           </div>
-          <div className="cd-prof-manage">
-            <div className="cd-prof-manage-list">
+          <div className={styles.profManage}>
+            <div className={styles.profManageList}>
               {profiles.map((p) => (
                 <ProfileRow
                   key={p.id}
@@ -170,7 +174,7 @@ export default function SettingsProfilesScreen({
                 />
               ))}
             </div>
-            <button type="button" className="cd-prof-manage-add" onClick={onAdd}>
+            <button type="button" className={styles.profManageAdd} onClick={onAdd}>
               <span>
                 <Icon name="Plus" size={14} />
               </span>
@@ -180,13 +184,13 @@ export default function SettingsProfilesScreen({
         </div>
       </div>
 
-      <div className="drawer-group">
-        <div className="drawer-group-label">Connections</div>
-        <div className="drawer-group-body">
-          <div className="settings-note">
+      <div className={drawerGroupCss.group}>
+        <div className={drawerGroupCss.groupLabel}>Connections</div>
+        <div className={drawerGroupCss.groupBody}>
+          <div className={controlsCss.note}>
             Gateways this desktop can talk to. Each connection hosts its own set of spaces.
           </div>
-          <div className="cd-prof-manage-list">
+          <div className={styles.profManageList}>
             {connections.map((c) => (
               <ConnectionRow key={c.id} c={c} onConnect={onConnect} onRemove={onRemoveConnection} />
             ))}

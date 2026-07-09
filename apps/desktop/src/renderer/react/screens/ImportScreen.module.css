@@ -1,0 +1,61 @@
+/* Co-located styles for ImportScreen.tsx (issue #325, Phase 4 CSS refactor).
+   Scoped by Vite CSS Modules; the shared vault-consent classes it also uses
+   live in ../styles/vault.module.css. */
+.file {
+  display: none;
+}
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  padding: 2px 0;
+}
+.rowDisposition {
+  flex: none;
+  width: 52px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.row[data-disposition='create'] .rowDisposition {
+  color: var(--accent);
+}
+.rowId {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowNote {
+  color: var(--text-secondary);
+  flex: none;
+}
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+.connectionLabel {
+  font-weight: 600;
+}
+.connection[data-status='needs-auth'] .connectionLabel,
+.connection[data-status='failing'] .connectionLabel {
+  color: var(--danger, #c0392b);
+}
+.historyRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+.historySub {
+  color: var(--text-secondary);
+}

@@ -14,6 +14,12 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
+    <!-- Co-located component styles, bundled by Vite from the React island's
+         `*.module.css` imports (issue #325, Phase 4 CSS refactor). Blocking +
+         ahead of the module scripts below, so scoped component styles are
+         present before first paint — no FOUC as the monolithic `styles.css`
+         shrinks and per-component modules take over. -->
+    <link rel="stylesheet" href="react-boot.css" />
   </head>
   <body>
     <main id="root"></main>
@@ -23,15 +29,12 @@
 
     <script type="module" src="theme-vars.js"></script>
     <script type="module" src="icons.js"></script>
-    <script type="module" src="store.js"></script>
-    <script type="module" src="chrome.js"></script>
-    <script type="module" src="profiles.js"></script>
-    <script type="module" src="builder.js"></script>
-    <script type="module" src="app-chat.js"></script>
-    <script type="module" src="onboarding.js"></script>
-    <script type="module" src="app.js"></script>
-    <!-- React island bundle (Vite → dist/renderer/react-boot.js). Loads after
-         the vanilla shell; renders only into #react-preview-root. -->
+    <!-- app.js (the vanilla shell IIFE) retired at the #325 flip — React owns
+         #root now; onboarding and the builder are React screens mounted by
+         react-boot. chrome/profiles/app-chat stay: they register the window
+         globals the per-app chat + remaining vanilla surfaces use. -->
+    <!-- React shell bundle (Vite → dist/renderer/react-boot.js): mounts the App
+         on #root and hosts the #ui-preview gallery. -->
     <script type="module" src="react-boot.js"></script>
   </body>
 </html>

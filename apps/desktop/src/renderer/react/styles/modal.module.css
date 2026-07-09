@@ -1,0 +1,101 @@
+@keyframes m-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes m-rise {
+  from {
+    transform: translate(-50%, -46%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 50;
+  animation: m-fade 0.18s ease-out;
+}
+.card {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100vw - 48px));
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--r-xl);
+  padding: 28px 28px 22px;
+  z-index: 60;
+  box-shadow: var(--shadow-lg);
+  animation: m-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+.card h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: -0.025em;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+.card p {
+  margin: 0 0 18px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+.card :global(.input),
+.card textarea:global(.input) {
+  min-height: 96px;
+  resize: none;
+  line-height: 1.5;
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+.card :global(.input)[type='password'] {
+  font-family: ui-monospace, 'JetBrains Mono', monospace;
+}
+.danger {
+  background: var(--c-rose);
+  color: white;
+}
+.danger:hover {
+  background: color-mix(in oklab, var(--c-rose) 88%, black);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}

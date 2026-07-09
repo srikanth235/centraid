@@ -2,7 +2,7 @@ import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { VaultBridgeProps, VaultData } from '../bridge.js';
+import type { VaultBridgeProps, VaultData } from '../screen-contracts.js';
 import VaultScreen from './VaultScreen.js';
 
 const block: VaultBridgeProps['block'] = {
@@ -62,7 +62,7 @@ describe('VaultScreen', () => {
   it('renders the grant CTA when the app holds no grants', async () => {
     const el = await mount(makeProps());
     expect(el.textContent).toContain('No access yet');
-    expect(el.querySelector('.cd-vault-grant-btn')?.textContent).toBe('Grant access');
+    expect(el.querySelector('.grantBtn')?.textContent).toBe('Grant access');
   });
 
   it('reports the parked count and renders parked cards', async () => {
@@ -83,13 +83,13 @@ describe('VaultScreen', () => {
     const el = await mount(makeProps({ loadData: vi.fn().mockResolvedValue(data), onParkedCount }));
     expect(onParkedCount).toHaveBeenCalledWith(1);
     expect(el.textContent).toContain('Waiting for your say-so');
-    expect(el.querySelector('.cd-vault-approve-btn')).toBeTruthy();
+    expect(el.querySelector('.approveBtn')).toBeTruthy();
   });
 
   it('runs the grant action then reloads', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const btn = el.querySelector('.cd-vault-grant-btn') as HTMLButtonElement;
+    const btn = el.querySelector('.grantBtn') as HTMLButtonElement;
     await act(async () => {
       btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

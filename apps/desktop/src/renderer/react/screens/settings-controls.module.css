@@ -1,0 +1,67 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 7px 0;
+}
+.rowLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.rowGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.rowFull {
+  display: block;
+}
+.rowFull .rowControl {
+  margin-top: 8px;
+}
+.rowGrid :global(.drawer-row-head) {
+  padding-top: 4px;
+}
+.rowHint {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+.rowControl {
+  min-width: 0;
+}
+.switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  border: 0;
+  padding: 0;
+  background: color-mix(in srgb, var(--ink) 14%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 150ms ease;
+}
+.switchThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  transition: transform 150ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.switch[data-on='true'] {
+  background: var(--accent);
+  box-shadow: none;
+}
+.switch[data-on='true'] .switchThumb {
+  transform: translateX(14px);
+}

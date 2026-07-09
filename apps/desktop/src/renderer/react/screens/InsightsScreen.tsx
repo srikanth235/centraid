@@ -1,7 +1,10 @@
 import type { JSX, ReactNode } from 'react';
 import { Icon } from '../ui/index.js';
-import type { InsightsBridgeProps } from '../bridge.js';
+import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
+import styles from './InsightsScreen.module.css';
+import { cx } from '../ui/cx.js';
+import emptyCss from '../styles/pageEmpty.module.css';
 
 // Daily-consumption line chart — a React port of `insLineChart`
 // (app-insights.ts): same 760×200 viewBox, area gradient, peak marker.
@@ -21,9 +24,9 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
   const peakIdx = values.indexOf(max);
   const peak = pts[peakIdx] ?? ([0, 0] as const);
   return (
-    <div className="cd-ins-chart-plot">
-      <div className="cd-ins-chart-svg-wrap">
-        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="cd-ins-chart-svg">
+    <div className={styles.chartPlot}>
+      <div className={styles.chartSvgWrap}>
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className={styles.chartSvg}>
           <defs>
             <linearGradient id="insArea" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.32" />
@@ -50,7 +53,7 @@ function LineChart({ values }: { values: readonly number[] }): JSX.Element {
           />
         </svg>
       </div>
-      <div className="cd-ins-chart-peak" style={{ left: `${((peak[0] / W) * 100).toFixed(2)}%` }}>
+      <div className={styles.chartPeak} style={{ left: `${((peak[0] / W) * 100).toFixed(2)}%` }}>
         {insK(max)}
       </div>
     </div>
@@ -69,13 +72,13 @@ function StatCard({
   foot?: ReactNode;
 }): JSX.Element {
   return (
-    <div className="cd-ins-kpi">
-      <div className="cd-ins-kpi-label">
-        <span className="cd-ins-kpi-icon">{icon}</span>
+    <div className={styles.kpi}>
+      <div className={styles.kpiLabel}>
+        <span className={styles.kpiIcon}>{icon}</span>
         {label}
       </div>
-      <div className="cd-ins-kpi-value">{value}</div>
-      {foot ? <div className="cd-ins-kpi-foot">{foot}</div> : null}
+      <div className={styles.kpiValue}>{value}</div>
+      {foot ? <div className={styles.kpiFoot}>{foot}</div> : null}
     </div>
   );
 }
@@ -90,10 +93,10 @@ function Panel({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section className="cd-ins-panel">
-      <header className="cd-ins-panel-head">
+    <section className={styles.panel}>
+      <header className={styles.panelHead}>
         <h2>{title}</h2>
-        {meta ? <span className="cd-ins-panel-meta">{meta}</span> : null}
+        {meta ? <span className={styles.panelMeta}>{meta}</span> : null}
       </header>
       {children}
     </section>
@@ -111,30 +114,30 @@ function ChartStat({
 }): JSX.Element {
   return (
     <div className="cd-ins-chart-stat">
-      <div className="cd-ins-chart-stat-label">{label}</div>
-      <div className="cd-ins-chart-stat-value">{value}</div>
-      {sub ? <div className="cd-ins-chart-stat-sub">{sub}</div> : null}
+      <div className={styles.chartStatLabel}>{label}</div>
+      <div className={styles.chartStatValue}>{value}</div>
+      {sub ? <div className={styles.chartStatSub}>{sub}</div> : null}
     </div>
   );
 }
 
 function EmptyLine({ message }: { message: string }): JSX.Element {
   return (
-    <div className="cd-page-empty">
-      <div className="cd-page-empty-icon" aria-hidden="true">
+    <div className={emptyCss.pageEmpty}>
+      <div className={emptyCss.pageEmptyIcon} aria-hidden="true">
         <Icon name="Sparkle" size={22} />
       </div>
-      <div className="cd-page-empty-text">{message}</div>
+      <div className={emptyCss.pageEmptyText}>{message}</div>
     </div>
   );
 }
 
 /**
- * Insights — the usage-analytics dashboard, ported to React (issue #325,
- * Phase 3). Read-only: the vanilla route module fetches the summary and mounts
- * this with the resolved data via `window.CentraidReact.mountInsights`.
- * Reproduces the vanilla `cd-ins-*` markup so the global styles.css renders it
- * identically.
+ * Insights — the usage-analytics dashboard (issue #325). Read-only: its route
+ * (InsightsRoute) fetches the summary and renders this with the resolved data.
+ * Styles are co-located in `InsightsScreen.module.css` (scoped CSS Modules —
+ * issue #325 Phase 4); the shared `cd-page-empty*` empty-state classes stay
+ * global (also used by the vanilla shell + Discover).
  */
 export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.Element {
   const { kpis } = summary;
@@ -159,17 +162,17 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
   );
 
   return (
-    <div className="cd-ins-page">
-      <div className="cd-ins-head">
-        <div className="cd-ins-title">
-          <span className="cd-ins-title-icon">
+    <div className={styles.page}>
+      <div className={styles.head}>
+        <div className={styles.title}>
+          <span className={styles.titleIcon}>
             <Icon name="Activity" size={18} strokeWidth={2} />
           </span>
           <h1>Insights</h1>
         </div>
-        <div className="cd-ins-filters">
-          <span className="cd-ins-filter cd-ins-filter-static">
-            <span className="cd-ins-filter-icon">
+        <div className={styles.filters}>
+          <span className={cx(styles.filter, 'cd-ins-filter-static')}>
+            <span className={styles.filterIcon}>
               <Icon name="History" size={13} />
             </span>
             <span>Last 30 days</span>
@@ -178,17 +181,17 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
       </div>
 
       <div className="cd-ins-body">
-        <div className="cd-ins-kpis">
+        <div className={styles.kpis}>
           <StatCard
             icon={<Icon name="Activity" size={12} />}
             label="Tokens · 30 days"
             value={insK(kpis.totalTokens)}
             foot={
-              <div className="cd-ins-meter">
-                <div className="cd-ins-bar">
-                  <div className="cd-ins-bar-fill" style={{ width: `${quotaPct}%` }} />
+              <div className={styles.meter}>
+                <div className={styles.bar}>
+                  <div className={styles.barFill} style={{ width: `${quotaPct}%` }} />
                 </div>
-                <div className="cd-ins-meter-foot">
+                <div className={styles.meterFoot}>
                   <span>{`${insK(kpis.totalTokens)} of ${insK(kpis.quotaTokens)} included`}</span>
                   <span>{`${quotaPct}%`}</span>
                 </div>
@@ -199,34 +202,34 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
             icon={<Icon name="Coin" size={12} />}
             label="Spent · USD"
             value={insUsd(kpis.totalCostUsd)}
-            foot={<span className="cd-ins-kpi-sub">last 30 days</span>}
+            foot={<span className={styles.kpiSub}>last 30 days</span>}
           />
           <StatCard
             icon={<Icon name="History" size={12} />}
             label="Forecast · USD"
             value={insUsd(kpis.forecastCostUsd)}
-            foot={<span className="cd-ins-kpi-sub">30-day run rate</span>}
+            foot={<span className={styles.kpiSub}>30-day run rate</span>}
           />
           <StatCard
             icon={<Icon name="Folder" size={12} />}
             label="Apps touched"
             value={String(kpis.appsTouched)}
-            foot={<span className="cd-ins-kpi-sub">last 30 days</span>}
+            foot={<span className={styles.kpiSub}>last 30 days</span>}
           />
           <StatCard
             icon={<Icon name="Sparkle" size={12} />}
             label="Generations"
             value={String(kpis.generations)}
-            foot={<span className="cd-ins-kpi-sub">{`${kpis.retries} retries`}</span>}
+            foot={<span className={styles.kpiSub}>{`${kpis.retries} retries`}</span>}
           />
         </div>
 
-        <div className="cd-ins-grid">
-          <div className="cd-ins-col">
+        <div className={styles.grid}>
+          <div className={styles.col}>
             <Panel title="Daily consumption" meta={`${summary.windowDays} days · tokens`}>
               {hasDaily ? (
-                <div className="cd-ins-chart">
-                  <div className="cd-ins-chart-stats">
+                <div className={styles.chart}>
+                  <div className={styles.chartStats}>
                     <ChartStat label="Daily avg" value={insK(avg)} />
                     <ChartStat label="Peak" value={insK(peak)} sub={peakDay} />
                     <ChartStat label="Median" value={insK(median)} />
@@ -235,7 +238,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                   <LineChart
                     values={series.length === 1 ? [series[0] ?? 0, series[0] ?? 0] : series}
                   />
-                  <div className="cd-ins-chart-axis">
+                  <div className={styles.chartAxis}>
                     <span>{summary.daily[0]?.date}</span>
                     <span>{summary.daily[summary.daily.length - 1]?.date}</span>
                   </div>
@@ -246,35 +249,41 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
             </Panel>
 
             <Panel title="By source" meta={`${summary.byAutomation.length} · sorted by tokens`}>
-              <div className="cd-ins-table">
-                <div className="cd-ins-tr cd-ins-tr-head">
-                  <span className="cd-ins-th cd-ins-c-app">Source</span>
-                  <span className="cd-ins-th cd-ins-c-num">Tokens</span>
-                  <span className="cd-ins-th cd-ins-c-num">USD</span>
-                  <span className="cd-ins-th cd-ins-c-mix">Mix</span>
-                  <span className="cd-ins-th cd-ins-c-runs">Runs</span>
+              <div className={styles.table}>
+                <div className={cx(styles.tr, styles.trHead)}>
+                  <span className={cx(styles.th, styles.cApp)}>Source</span>
+                  <span className={cx(styles.th, styles.cNum)}>Tokens</span>
+                  <span className={cx(styles.th, styles.cNum)}>USD</span>
+                  <span className={cx(styles.th, 'cd-ins-c-mix')}>Mix</span>
+                  <span className={cx(styles.th, styles.cRuns)}>Runs</span>
                 </div>
                 {summary.byAutomation.map((r) => (
-                  <div key={r.key} className="cd-ins-tr">
-                    <span className="cd-ins-td cd-ins-c-app">
-                      <span className="cd-ins-tag">{insKindLabel(r.kind)}</span>
-                      <span className="cd-ins-app-name">{r.label}</span>
+                  <div key={r.key} className={styles.tr}>
+                    <span className={cx(styles.td, styles.cApp)}>
+                      <span className={styles.tag}>{insKindLabel(r.kind)}</span>
+                      <span className={styles.appName}>{r.label}</span>
                     </span>
-                    <span className="cd-ins-td cd-ins-c-num cd-ins-mono">{insK(r.tokens)}</span>
-                    <span className="cd-ins-td cd-ins-c-num cd-ins-mono">{insUsd(r.costUsd)}</span>
-                    <span className="cd-ins-td cd-ins-c-mix">
-                      <span className="cd-ins-mixbar">
+                    <span className={cx(styles.td, styles.cNum, styles.mono)}>
+                      {insK(r.tokens)}
+                    </span>
+                    <span className={cx(styles.td, styles.cNum, styles.mono)}>
+                      {insUsd(r.costUsd)}
+                    </span>
+                    <span className={cx(styles.td, 'cd-ins-c-mix')}>
+                      <span className={styles.mixbar}>
                         <span
-                          className="cd-ins-mixbar-fill"
+                          className={styles.mixbarFill}
                           style={{ width: `${Math.round((r.tokens / autoMax) * 100)}%` }}
                         />
                       </span>
                     </span>
-                    <span className="cd-ins-td cd-ins-c-runs cd-ins-mono">{String(r.runs)}</span>
+                    <span className={cx(styles.td, styles.cRuns, styles.mono)}>
+                      {String(r.runs)}
+                    </span>
                   </div>
                 ))}
                 {summary.byAutomation.length === 0 ? (
-                  <div className="cd-ins-tr">
+                  <div className={styles.tr}>
                     <EmptyLine message="No runs yet." />
                   </div>
                 ) : null}
@@ -282,20 +291,20 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
             </Panel>
           </div>
 
-          <div className="cd-ins-col">
+          <div className={styles.col}>
             <Panel title="By model" meta="last 30 days">
-              <div className="cd-ins-models">
+              <div className={styles.models}>
                 {summary.byModel.map((m) => {
                   const pct = Math.round((m.tokens / modelTotal) * 100);
                   return (
-                    <div key={m.model} className="cd-ins-model">
-                      <div className="cd-ins-model-name">{m.model}</div>
-                      <div className="cd-ins-bar">
-                        <div className="cd-ins-bar-fill" style={{ width: `${pct}%` }} />
+                    <div key={m.model} className={styles.model}>
+                      <div className={styles.modelName}>{m.model}</div>
+                      <div className={styles.bar}>
+                        <div className={styles.barFill} style={{ width: `${pct}%` }} />
                       </div>
-                      <div className="cd-ins-model-foot">
-                        <span className="cd-ins-mono">{`${pct}%  ${insK(m.tokens)}`}</span>
-                        <span className="cd-ins-mono">{insUsd(m.costUsd)}</span>
+                      <div className={styles.modelFoot}>
+                        <span className={styles.mono}>{`${pct}%  ${insK(m.tokens)}`}</span>
+                        <span className={styles.mono}>{insUsd(m.costUsd)}</span>
                       </div>
                     </div>
                   );
@@ -307,22 +316,22 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
             </Panel>
 
             <Panel title="Recent activity" meta={`${summary.kpis.generations} generations`}>
-              <div className="cd-ins-activity">
+              <div className={styles.activity}>
                 {summary.recent.map((a) => (
-                  <div key={a.runId} className="cd-ins-act">
-                    <span className="cd-ins-act-ago cd-ins-mono">
+                  <div key={a.runId} className={styles.act}>
+                    <span className={cx(styles.actAgo, styles.mono)}>
                       {relativeTime(new Date(a.startedAt).toISOString())}
                     </span>
-                    <div className="cd-ins-act-body">
-                      <div className="cd-ins-act-app">
-                        <span className="cd-ins-tag">{insKindLabel(a.kind)}</span>
+                    <div className={styles.actBody}>
+                      <div className={styles.actApp}>
+                        <span className={styles.tag}>{insKindLabel(a.kind)}</span>
                         <span>{a.ok ? '' : ' · failed'}</span>
                       </div>
-                      <div className="cd-ins-act-note">{a.label}</div>
+                      <div className={styles.actNote}>{a.label}</div>
                     </div>
-                    <div className="cd-ins-act-cost">
-                      <span className="cd-ins-mono">{insK(a.tokens)}</span>
-                      <span className="cd-ins-mono cd-ins-act-usd">{insUsd(a.costUsd)}</span>
+                    <div className={styles.actCost}>
+                      <span className={styles.mono}>{insK(a.tokens)}</span>
+                      <span className={cx(styles.mono, styles.actUsd)}>{insUsd(a.costUsd)}</span>
                     </div>
                   </div>
                 ))}

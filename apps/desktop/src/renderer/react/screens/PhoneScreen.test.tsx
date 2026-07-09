@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PhoneBridgeProps, PhoneStatusDTO } from '../bridge.js';
+import type { PhoneBridgeProps, PhoneStatusDTO } from '../screen-contracts.js';
 import PhoneScreen from './PhoneScreen.js';
 
 const statusWithDevice: PhoneStatusDTO = {
@@ -61,7 +61,7 @@ describe('PhoneScreen', () => {
     const el = await mount(props);
     expect(el.textContent).toContain('Pixel 9');
     expect(el.textContent).toContain('android');
-    const revokeBtn = el.querySelector('.cd-phone-revoke-btn') as HTMLButtonElement;
+    const revokeBtn = el.querySelector('.revokeBtn') as HTMLButtonElement;
     await act(async () => revokeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.revoke).toHaveBeenCalledWith('d1');
     expect(loadStatus).toHaveBeenCalledTimes(2); // initial + after revoke
@@ -75,14 +75,14 @@ describe('PhoneScreen', () => {
     });
     const props = makeProps({ beginPairing });
     const el = await mount(props);
-    const connect = el.querySelector('.cd-btn-primary') as HTMLButtonElement;
+    const connect = el.querySelector('.btnPrimary') as HTMLButtonElement;
     await act(async () => connect.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelector('.cd-phone-qr')).toBeTruthy();
+    expect(el.querySelector('.qr')).toBeTruthy();
     expect(el.textContent).toContain('Cancel pairing');
     // Complete the pairing via the wired callback.
     await act(async () => firePaired?.('Pixel 9'));
     expect(props.showToast).toHaveBeenCalledWith('Paired Pixel 9.');
-    expect(el.querySelector('.cd-phone-qr')).toBeNull();
+    expect(el.querySelector('.qr')).toBeNull();
   });
 
   it('renders the error note when the status cannot be read', async () => {

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BuilderChatBridgeProps, BuilderChatSnapshot } from '../bridge.js';
+import type { BuilderChatBridgeProps, BuilderChatSnapshot } from '../screen-contracts.js';
 import BuilderChatPane from './BuilderChatPane.js';
 
 function snap(over: Partial<BuilderChatSnapshot> = {}): BuilderChatSnapshot {
@@ -75,11 +75,11 @@ describe('BuilderChatPane', () => {
         ],
       }),
     );
-    expect(el.querySelector('.chat-divider')?.textContent).toBe('Today');
-    expect(el.querySelector('.msg-status')?.textContent).toContain('Published v2');
-    expect(el.querySelector('.msg-user-bubble')?.textContent).toBe('Add a header');
-    expect((el.querySelector('.chat-thinking') as HTMLElement).dataset.streaming).toBe('true');
-    expect(el.querySelectorAll('.msg-ai-text p').length).toBe(2);
+    expect(el.querySelector('.chatDivider')?.textContent).toBe('Today');
+    expect(el.querySelector('.status')?.textContent).toContain('Published v2');
+    expect(el.querySelector('.userBubble')?.textContent).toBe('Add a header');
+    expect((el.querySelector('.chatThinking') as HTMLElement).dataset.streaming).toBe('true');
+    expect(el.querySelectorAll('.aiText p').length).toBe(2);
   });
 
   it('renders a collapsed tool group with a change card, toggles on click', () => {
@@ -101,20 +101,20 @@ describe('BuilderChatPane', () => {
         ],
       }),
     );
-    expect((el.querySelector('.tool-group') as HTMLElement).dataset.open).toBe('false');
-    expect(el.querySelector('.tg-label')?.textContent).toBe('Editing ×2, Reading');
-    expect(el.querySelector('.tg-card-title')?.textContent).toContain('2 files updated');
-    expect(el.querySelector('.tg-card-version')?.textContent).toContain('v3');
-    expect(el.querySelector('.tg-list')).toBeNull();
+    expect((el.querySelector('.group') as HTMLElement).dataset.open).toBe('false');
+    expect(el.querySelector('.label')?.textContent).toBe('Editing ×2, Reading');
+    expect(el.querySelector('.tgCardTitle')?.textContent).toContain('2 files updated');
+    expect(el.querySelector('.tgCardVersion')?.textContent).toContain('v3');
+    expect(el.querySelector('.list')).toBeNull();
     act(() =>
-      (el.querySelector('.tool-group-pill') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.groupPill') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onToggleGroup).toHaveBeenCalledWith('g1');
   });
 
-  it('renders expanded tool-group rows', () => {
+  it('renders expanded group rows', () => {
     const el = mount(makeProps());
     push(
       snap({
@@ -132,15 +132,15 @@ describe('BuilderChatPane', () => {
         ],
       }),
     );
-    expect(el.querySelectorAll('.tg-row').length).toBe(1);
-    expect(el.querySelector('.tg-row-target')?.textContent).toBe('index.html');
+    expect(el.querySelectorAll('.row').length).toBe(1);
+    expect(el.querySelector('.rowTarget')?.textContent).toBe('index.html');
   });
 
   it('shows the agent-progress strip only while generating; cancel fires', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap({ messages: [{ kind: 'user', text: 'go' }] }));
-    expect(el.querySelector('.ab-progress')).toBeNull();
+    expect(el.querySelector('.abProgress')).toBeNull();
     push(
       snap({
         messages: [{ kind: 'user', text: 'go' }],
@@ -149,11 +149,11 @@ describe('BuilderChatPane', () => {
         progress: { verb: 'Writing', file: 'app.js', sub: 'Composing', filled: 3 },
       }),
     );
-    expect(el.querySelector('.ab-progress-verb')?.textContent).toBe('Writing');
-    expect(el.querySelector('.ab-progress-file')?.textContent).toBe('app.js');
-    expect(el.querySelectorAll('.ab-progress-dots i[data-on]').length).toBe(3);
+    expect(el.querySelector('.abProgressVerb')?.textContent).toBe('Writing');
+    expect(el.querySelector('.abProgressFile')?.textContent).toBe('app.js');
+    expect(el.querySelectorAll('.abProgressDots i[data-on]').length).toBe(3);
     act(() =>
-      (el.querySelector('.ab-progress-cancel') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.abProgressCancel') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -164,7 +164,7 @@ describe('BuilderChatPane', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap());
-    const ta = el.querySelector('.chat-input textarea') as HTMLTextAreaElement;
+    const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
     setValue(ta, 'Add a footer');
     act(() => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(props.onSend).toHaveBeenCalledWith('Add a footer');
@@ -175,10 +175,10 @@ describe('BuilderChatPane', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap({ composerDisabled: true }));
-    const ta = el.querySelector('.chat-input textarea') as HTMLTextAreaElement;
+    const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
     setValue(ta, 'hi');
     act(() =>
-      (el.querySelector('.send-btn') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.sendBtn') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -188,11 +188,11 @@ describe('BuilderChatPane', () => {
   it('loads a suggestion into the composer draft', () => {
     const el = mount(makeProps());
     push(snap());
-    const chip = [...el.querySelectorAll<HTMLButtonElement>('.prompt-starter')].find(
+    const chip = [...el.querySelectorAll<HTMLButtonElement>('.promptStarter')].find(
       (b) => b.textContent === 'Prepare to publish',
     )!;
     act(() => chip.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect((el.querySelector('.chat-input textarea') as HTMLTextAreaElement).value).toBe(
+    expect((el.querySelector('.chatInput textarea') as HTMLTextAreaElement).value).toBe(
       'Prepare to publish',
     );
   });
@@ -201,11 +201,11 @@ describe('BuilderChatPane', () => {
     const props = makeProps();
     const el = mount(props);
     push(snap({ view: 'history' }));
-    expect(el.querySelector('.chatpane-head-title')?.textContent).toBe('Version history');
+    expect(el.querySelector('.chatpaneHeadTitle')?.textContent).toBe('Version history');
     expect(props.onMountHistory).toHaveBeenCalledTimes(1);
     expect(props.onMountHistory).toHaveBeenCalledWith(expect.any(HTMLElement));
     act(() =>
-      (el.querySelector('.chatpane-head .btn-icon') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.chatpaneHead .btn-icon') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
