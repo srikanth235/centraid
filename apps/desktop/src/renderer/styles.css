@@ -1448,10 +1448,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3387,10 +3389,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7027,10 +7031,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 
 
@@ -7042,10 +7048,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7074,10 +7082,12 @@ select.input option {
 
 
 
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
+
 
 
 
@@ -7788,6 +7798,7 @@ select.input option {
 
 
 
+
   .cd-disc-head {
     flex-direction: column;
     gap: 14px;
@@ -7796,6 +7807,7 @@ select.input option {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -9114,11 +9126,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -9356,40 +9370,6 @@ select.input option {
    titlebar. The panel hangs from the top-right of `.app-view` (which is
    `position: relative`); the backdrop captures click-outside without
    dimming the canvas so the running app stays the protagonist. */
-.cd-app-settings-backdrop {
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  border: 0;
-  cursor: default;
-  z-index: 12;
-}
-.cd-app-settings-panel {
-  position: absolute;
-  top: 6px;
-  right: 18px;
-  width: 340px;
-  max-height: calc(100% - 16px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg-elev) 92%, transparent) 0%,
-    color-mix(in srgb, var(--bg-elev) 80%, transparent) 100%
-  );
-  backdrop-filter: blur(36px) saturate(180%);
-  -webkit-backdrop-filter: blur(36px) saturate(180%);
-  border-radius: 16px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    inset 0 0 0 0.5px color-mix(in srgb, var(--ink) 4%, transparent),
-    0 2px 4px rgba(0, 0, 0, 0.25),
-    0 32px 80px -20px rgba(0, 0, 0, 0.55),
-    0 12px 28px -6px rgba(0, 0, 0, 0.3);
-  z-index: 13;
-  animation: cd-app-settings-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
 @keyframes cd-app-settings-pop {
   from {
     opacity: 0;
@@ -9400,194 +9380,17 @@ select.input option {
     transform: translateY(0) scale(1);
   }
 }
-.cd-app-settings-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 14px 12px;
-}
-.cd-app-settings-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  flex: none;
-}
-.cd-app-settings-icon svg {
-  width: 15px;
-  height: 15px;
-}
-.cd-app-settings-header-text {
-  min-width: 0;
-  flex: 1;
-}
-.cd-app-settings-name {
-  font-family: var(--font-display, var(--font-sans));
-  font-weight: 600;
-  font-size: 15px;
-  line-height: 1.05;
-  color: var(--ink);
-}
-.cd-app-settings-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-  margin-top: 2px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.cd-app-settings-close {
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  flex: none;
-}
-.cd-app-settings-close:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
 
 /* §E1 — tabbed popover: a segmented pill of Appearance / Automations /
    Manage, inset 14px from the popover edges. */
-.cd-app-settings-tabs-wrap {
-  padding: 0 14px;
-}
-.cd-app-settings-tabs {
-  display: flex;
-  gap: 0;
-  padding: 3px;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cd-app-settings-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-3);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 110ms,
-    color 110ms;
-}
-.cd-app-settings-tab-glyph {
-  display: inline-flex;
-}
-.cd-app-settings-tab:hover {
-  color: var(--ink-2);
-}
-.cd-app-settings-tab[data-active='true'] {
-  color: var(--ink);
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-}
-.cd-app-settings-tab-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-}
-.cd-app-settings-tab-badge[hidden] {
-  display: none;
-}
-.cd-app-settings-tab[data-active='true'] .cd-app-settings-tab-badge {
-  background: var(--accent);
-  color: #fff;
-}
-.cd-app-settings-pane {
-  flex: 1;
-  min-height: 0;
-  padding: 16px 14px 8px;
-  overflow-y: auto;
-}
-.cd-app-settings-pane[hidden] {
-  display: none;
-}
 .cd-app-settings-note {
   padding: 4px 0;
   font-size: 12.5px;
   color: var(--ink-4);
   line-height: 1.5;
 }
-.cd-app-settings-pane-link {
-  display: block;
-  width: 100%;
-  text-align: left;
-  margin-top: 14px;
-  padding: 12px 4px 0;
-  border: none;
-  border-top: 0.5px solid var(--line);
-  background: transparent;
-  color: var(--accent);
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-app-settings-pane-link:hover {
-  color: color-mix(in oklab, var(--accent) 80%, var(--ink) 20%);
-}
 
 /* §E1 — Manage tab Danger zone. */
-.cd-app-settings-danger {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-app-settings-danger-label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--danger);
-  margin-bottom: 8px;
-}
-.cd-app-settings-danger-item .cd-app-settings-menu-icon {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
-}
-.cd-app-settings-confirm-pill {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--danger);
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
-}
-.cd-app-settings-confirm-pill[hidden] {
-  display: none;
-}
 .cd-app-settings-section {
   padding: 10px 12px 12px;
   border-bottom: 0.5px solid var(--line);
@@ -9600,60 +9403,8 @@ select.input option {
    "Preferences" heading and renders Font / Width / Corners as compact
    label-left, segmented-right grid rows. The App-color row is hairline-
    separated and stacks its swatches under a label + scope note. */
-.cd-app-settings-pane .cd-app-settings-section {
-  padding: 0;
-  border-bottom: none;
-  gap: 12px;
-}
-.cd-app-settings-pane .cd-app-settings-section-label {
-  display: none;
-}
-.cd-app-settings-pane .cd-app-settings-row {
-  display: grid;
-  grid-template-columns: minmax(0, 80px) 1fr;
-  gap: 10px;
-  align-items: center;
-  min-height: 0;
-}
-.cd-app-settings-pane .cd-app-settings-row-label {
-  font-size: 13px;
-  color: var(--ink-2);
-}
 /* The color knob renders last; lift it onto its own hairline-topped
    block and let the swatches sit on the right. */
-.cd-app-settings-pane .cd-app-settings-row:has(.cd-swatches) {
-  margin-top: 4px;
-  padding-top: 14px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-app-settings-pane .seg {
-  display: inline-flex;
-  justify-self: end;
-  padding: 2px;
-  gap: 2px;
-  border: 0.5px solid var(--line);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cd-app-settings-pane .seg button {
-  padding: 5px 10px;
-  border-radius: 5px;
-  font-size: 12px;
-}
-.cd-app-settings-pane .seg button[data-active='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
-}
-.cd-app-settings-pane .cd-swatches {
-  justify-self: end;
-  display: inline-flex;
-  gap: 6px;
-}
-.cd-app-settings-pane .cd-swatch {
-  width: 22px;
-  height: 30px;
-  border-radius: 999px;
-}
 
 /* "Standing orders" — per-automation cards inside the app-view gear
  * popover. Different visual register from the Preferences section
@@ -9663,138 +9414,6 @@ select.input option {
  * Decorative rail on the left edge shifts from accent → ink-4 when
  * the order is paused, so an off automation feels stilled rather
  * than absent. Issue #70. */
-.cd-app-orders {
-  padding-top: 12px;
-  padding-bottom: 14px;
-}
-.cd-app-orders-label {
-  margin-bottom: 2px;
-}
-.cd-app-orders-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-app-order {
-  position: relative;
-  display: grid;
-  grid-template-columns: 3px 1fr auto;
-  gap: 12px;
-  align-items: start;
-  padding: 10px 10px 10px 0;
-  border-radius: 8px;
-  background: color-mix(in oklab, var(--ink) 2.5%, transparent);
-  transition: background 0.15s ease;
-}
-.cd-app-order:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-}
-.cd-app-order-rail {
-  align-self: stretch;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent-color, color-mix(in oklab, var(--ink) 35%, transparent));
-  transition:
-    background 0.18s ease,
-    opacity 0.18s ease;
-}
-.cd-app-order[data-enabled='false'] .cd-app-order-rail {
-  background: color-mix(in oklab, var(--ink) 16%, transparent);
-}
-.cd-app-order[data-enabled='false'] .cd-app-order-schedule {
-  color: var(--ink-3);
-}
-.cd-app-order[data-enabled='false'] .cd-app-order-prompt {
-  opacity: 0.6;
-}
-.cd-app-order-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-app-order-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-.cd-app-order-schedule {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.cd-app-order-run {
-  flex: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--ink) 18%, transparent);
-  text-underline-offset: 3px;
-  cursor: pointer;
-  transition:
-    color 0.15s ease,
-    text-decoration-color 0.15s ease;
-}
-.cd-app-order-run:hover:not(:disabled) {
-  color: var(--ink);
-  text-decoration-color: var(--ink-2);
-}
-.cd-app-order-run:disabled {
-  color: var(--ink-4);
-  cursor: progress;
-  text-decoration-color: transparent;
-}
-.cd-app-order-prompt {
-  margin: 0;
-  padding: 0 0 0 10px;
-  border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
-  font-size: 12.5px;
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1.45;
-  color: var(--ink-2);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cd-app-order-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.cd-app-order-handler {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 10.5px;
-  color: var(--ink-4);
-  letter-spacing: 0.01em;
-}
-.cd-app-order-result {
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 10.5px;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-left: auto;
-}
-.cd-app-order-result[data-ok='true'] {
-  color: var(--success, #2f9d3f);
-  background: color-mix(in srgb, var(--success, #2f9d3f) 10%, transparent);
-}
-.cd-app-order-result[data-ok='false'] {
-  color: var(--danger, #e25555);
-  background: color-mix(in srgb, var(--danger, #e25555) 10%, transparent);
-}
 
 /* Settings → Vaults (duaility §12): the vault registry manage surface —
  * one row per vault (rename inline, switch, arm-to-delete) + a create row. */
@@ -9923,26 +9542,6 @@ select.input option {
 /* Run audit (issue #80). The "Runs" link in the foot expands a
  * per-automation history panel below the card. Newest run first;
  * clicking a run expands its node timeline. */
-.cd-app-order-runs-toggle {
-  margin-left: auto;
-  font-size: 11px;
-  background: none;
-  border: none;
-  color: color-mix(in oklab, var(--ink) 55%, transparent);
-  cursor: pointer;
-  padding: 0;
-}
-.cd-app-order-runs-toggle:hover {
-  color: var(--ink);
-  text-decoration: underline;
-}
-.cd-app-order-runs {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 11px;
-}
 .cd-app-runs-empty {
   color: color-mix(in oklab, var(--ink) 45%, transparent);
   font-style: italic;
@@ -10183,135 +9782,6 @@ select.input option {
 /* Pill toggle — custom, not a native checkbox. Matches the dignity
  * of the surrounding typography; iOS-style affordance reads as
  * deliberate without being overwrought. */
-.cd-app-order-toggle {
-  position: relative;
-  display: inline-block;
-  width: 30px;
-  height: 18px;
-  flex: none;
-  margin-top: 2px;
-  cursor: pointer;
-}
-.cd-app-order-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 100%;
-  height: 100%;
-  margin: 0;
-  cursor: pointer;
-}
-.cd-app-order-toggle-track {
-  position: absolute;
-  inset: 0;
-  background: color-mix(in oklab, var(--ink) 14%, transparent);
-  border-radius: 999px;
-  transition:
-    background 0.18s ease,
-    box-shadow 0.18s ease;
-}
-.cd-app-order-toggle-track::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--bg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
-  transition: transform 0.18s cubic-bezier(0.34, 1.32, 0.7, 1);
-}
-.cd-app-order-toggle input:checked + .cd-app-order-toggle-track {
-  background: var(--accent-color, color-mix(in oklab, var(--ink) 70%, transparent));
-}
-.cd-app-order-toggle input:checked + .cd-app-order-toggle-track::after {
-  transform: translateX(12px);
-}
-.cd-app-order-toggle input:focus-visible + .cd-app-order-toggle-track {
-  box-shadow:
-    0 0 0 2px var(--bg),
-    0 0 0 4px color-mix(in oklab, var(--ink) 35%, transparent);
-}
-
-.cd-app-settings-section-label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-4);
-}
-.cd-app-settings-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 24px;
-}
-.cd-app-settings-row-label {
-  font-size: 12.5px;
-  color: var(--ink-2);
-}
-.cd-app-settings-manage {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.cd-app-settings-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 9px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  transition: background 100ms;
-}
-.cd-app-settings-menu-icon {
-  width: 28px;
-  height: 28px;
-  flex: none;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  border: 0.5px solid var(--line);
-  color: var(--ink-3);
-}
-.cd-app-settings-menu-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-app-settings-menu-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-  line-height: 1.1;
-}
-.cd-app-settings-menu-sub {
-  display: block;
-  margin-top: 3px;
-  font-size: 11px;
-  color: var(--ink-3);
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-app-settings-menu-item:hover {
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
-}
-.cd-app-settings-menu-item[data-danger='true'] .cd-app-settings-menu-label {
-  color: var(--danger);
-}
-.cd-app-settings-menu-item[data-danger='true']:hover {
-  background: color-mix(in oklab, var(--danger) 10%, transparent);
-}
 /* Gear in titlebar — `data-open` is set while the panel is mounted so it
    stays visually "pressed" without needing a stateful class. */
 .cd-tb-btn[data-open='true'] {
@@ -10411,10 +9881,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -11001,10 +10473,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -11131,17 +10605,6 @@ select.input option {
 /* ── Side rail: Last 30 days · Behavior + Tools ── */
 
 /* standing-order name becomes a link to the viewer */
-button.cd-app-order-name {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-button.cd-app-order-name:hover {
-  color: var(--accent);
-}
 
 
 
@@ -11510,6 +10973,7 @@ button.cd-au-run:hover .cd-au-run-go {
 
 
 
+
   .cd-asst {
     grid-template-columns: 0 1fr;
   }
@@ -11517,6 +10981,7 @@ button.cd-au-run:hover .cd-au-run-go {
     display: none;
   }
 }
+
 
 
 

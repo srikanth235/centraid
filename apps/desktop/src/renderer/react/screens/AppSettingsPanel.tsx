@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import type { AppKnobDTO, AppSettingsBridgeProps, AppSettingsSnapshot } from '../bridge.js';
+import styles from './AppSettingsPanel.module.css';
+import { cx } from '../ui/cx.js';
 
 type Tab = 'appearance' | 'automations' | 'vault' | 'manage';
 
@@ -88,13 +90,13 @@ function ManageItem({
   onClick: () => void;
 }): JSX.Element {
   return (
-    <button type="button" className="cd-app-settings-menu-item" onClick={onClick}>
-      <span className="cd-app-settings-menu-icon">
+    <button type="button" className={styles.settingsMenuItem} onClick={onClick}>
+      <span className={styles.settingsMenuIcon}>
         <Icon name={icon} size={13} />
       </span>
-      <span className="cd-app-settings-menu-text">
-        <span className="cd-app-settings-menu-label">{label}</span>
-        <span className="cd-app-settings-menu-sub">{sub}</span>
+      <span className={styles.settingsMenuText}>
+        <span className={styles.settingsMenuLabel}>{label}</span>
+        <span className={styles.settingsMenuSub}>{sub}</span>
       </span>
     </button>
   );
@@ -118,39 +120,43 @@ function OrderCard({
   const loadedRef = useRef(false);
   const running = order.run.kind === 'running';
   return (
-    <article className="cd-app-order" data-enabled={String(order.enabled)} data-automation-id={order.id}>
-      <span className="cd-app-order-rail" aria-hidden="true" />
-      <div className="cd-app-order-body">
-        <div className="cd-app-order-head">
+    <article
+      className={styles.order}
+      data-enabled={String(order.enabled)}
+      data-automation-id={order.id}
+    >
+      <span className={styles.orderRail} aria-hidden="true" />
+      <div className={styles.orderBody}>
+        <div className={styles.orderHead}>
           <button
             type="button"
-            className="cd-app-order-name"
+            className={styles.orderName}
             title={`Open ${order.name}`}
             onClick={() => onOpen(order.ref)}
           >
             {order.name}
           </button>
-          <span className="cd-app-order-schedule">{order.schedule}</span>
+          <span className={styles.orderSchedule}>{order.schedule}</span>
           <button
             type="button"
-            className="cd-app-order-run"
+            className={styles.orderRun}
             disabled={running}
             onClick={() => onRun(order.ref)}
           >
             {running ? 'Running…' : 'Run now'}
           </button>
         </div>
-        <blockquote className="cd-app-order-prompt">{order.prompt}</blockquote>
-        <div className="cd-app-order-foot">
-          <span className="cd-app-order-handler">{order.appsLabel}</span>
+        <blockquote className={styles.orderPrompt}>{order.prompt}</blockquote>
+        <div className={styles.orderFoot}>
+          <span className={styles.orderHandler}>{order.appsLabel}</span>
           {order.run.kind === 'done' && (
-            <span className="cd-app-order-result" data-ok={String(order.run.ok)}>
+            <span className={styles.orderResult} data-ok={String(order.run.ok)}>
               {order.run.label}
             </span>
           )}
           <button
             type="button"
-            className="cd-app-order-runs-toggle"
+            className={styles.orderRunsToggle}
             aria-expanded={runsOpen}
             onClick={() => setRunsOpen((v) => !v)}
           >
@@ -158,7 +164,7 @@ function OrderCard({
           </button>
         </div>
         <div
-          className="cd-app-order-runs"
+          className={styles.orderRuns}
           hidden={!runsOpen}
           ref={(node) => {
             if (node && runsOpen && !loadedRef.current) {
@@ -169,7 +175,7 @@ function OrderCard({
         />
       </div>
       <label
-        className="cd-app-order-toggle"
+        className={styles.orderToggle}
         aria-label={`${order.enabled ? 'Disable' : 'Enable'} ${order.name}`}
       >
         <input
@@ -177,7 +183,7 @@ function OrderCard({
           checked={order.enabled}
           onChange={(e) => onToggle(order.ref, e.target.checked)}
         />
-        <span className="cd-app-order-toggle-track" aria-hidden="true" />
+        <span className={styles.orderToggleTrack} aria-hidden="true" />
       </label>
     </article>
   );
@@ -227,7 +233,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
   }, [onClose]);
 
   if (!snap)
-    return <div className="cd-app-settings-backdrop" role="presentation" onClick={onClose} />;
+    return <div className={styles.settingsBackdrop} role="presentation" onClick={onClose} />;
 
   const panelStyle = { '--accent-color': snap.accent } as CSSProperties;
   const iconStyle: CSSProperties = {
@@ -238,26 +244,36 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
 
   return (
     <>
-      <div className="cd-app-settings-backdrop" role="presentation" onClick={onClose} />
-      <div className="cd-app-settings-panel" role="dialog" aria-label="App settings" style={panelStyle}>
-        <div className="cd-app-settings-header">
+      <div className={styles.settingsBackdrop} role="presentation" onClick={onClose} />
+      <div
+        className={styles.settingsPanel}
+        role="dialog"
+        aria-label="App settings"
+        style={panelStyle}
+      >
+        <div className={styles.settingsHeader}>
           <span
-            className="cd-app-settings-icon"
+            className={styles.settingsIcon}
             style={iconStyle}
             // eslint-disable-next-line react/no-danger -- trusted glyph SVG from the vanilla icon set
             dangerouslySetInnerHTML={{ __html: snap.iconSvg }}
           />
-          <div className="cd-app-settings-header-text">
-            <div className="cd-app-settings-name">{snap.appName}</div>
-            <div className="cd-app-settings-eyebrow">App settings</div>
+          <div className={styles.settingsHeaderText}>
+            <div className={styles.settingsName}>{snap.appName}</div>
+            <div className={styles.settingsEyebrow}>App settings</div>
           </div>
-          <button type="button" className="cd-app-settings-close" aria-label="Close" onClick={onClose}>
+          <button
+            type="button"
+            className={styles.settingsClose}
+            aria-label="Close"
+            onClick={onClose}
+          >
             <Icon name="X" size={12} />
           </button>
         </div>
 
-        <div className="cd-app-settings-tabs-wrap">
-          <div className="cd-app-settings-tabs">
+        <div className={styles.settingsTabsWrap}>
+          <div className={styles.settingsTabs}>
             {TABS.map((t) => {
               if (t.id === 'vault' && !snap.vaultVisible) return null;
               const badge =
@@ -270,18 +286,18 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                 <button
                   key={t.id}
                   type="button"
-                  className="cd-app-settings-tab"
+                  className={styles.settingsTab}
                   data-active={String(tab === t.id)}
                   onClick={() => setTab(t.id)}
                 >
                   <span
-                    className="cd-app-settings-tab-glyph"
+                    className={styles.settingsTabGlyph}
                     // eslint-disable-next-line react/no-danger -- static inline glyph
                     dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
                   />
-                  <span className="cd-app-settings-tab-label">{t.label}</span>
+                  <span className={styles.settingsTabLabel}>{t.label}</span>
                   {badge != null && badge > 0 && (
-                    <span className="cd-app-settings-tab-badge">{badge}</span>
+                    <span className={styles.settingsTabBadge}>{badge}</span>
                   )}
                 </button>
               );
@@ -289,14 +305,14 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           </div>
         </div>
 
-        <div className="cd-app-settings-pane" hidden={tab !== 'appearance'}>
-          <div className="cd-app-settings-section-host">
+        <div className={styles.settingsPane} hidden={tab !== 'appearance'}>
+          <div className={styles.settingsSectionHost}>
             {snap.knobs && snap.knobs.length > 0 ? (
               <div className="cd-app-settings-section">
-                <div className="cd-app-settings-section-label">Preferences</div>
+                <div className={styles.settingsSectionLabel}>Preferences</div>
                 {snap.knobs.map((knob) => (
-                  <div key={knob.key} className="cd-app-settings-row">
-                    <span className="cd-app-settings-row-label">{knob.label}</span>
+                  <div key={knob.key} className={styles.settingsRow}>
+                    <span className={styles.settingsRowLabel}>{knob.label}</span>
                     <KnobControl knob={knob} onCommit={onKnobCommit} />
                   </div>
                 ))}
@@ -307,16 +323,16 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           </div>
         </div>
 
-        <div className="cd-app-settings-pane" hidden={tab !== 'automations'}>
-          <div className="cd-app-settings-section-host">
+        <div className={styles.settingsPane} hidden={tab !== 'automations'}>
+          <div className={styles.settingsSectionHost}>
             {snap.orders.length === 0 ? (
               <div className="cd-app-settings-note">No automations linked to this app yet.</div>
             ) : (
-              <div className="cd-app-settings-section cd-app-orders">
-                <div className="cd-app-settings-section-label cd-app-orders-label">
+              <div className={cx('cd-app-settings-section', styles.orders)}>
+                <div className={cx(styles.settingsSectionLabel, styles.ordersLabel)}>
                   Standing orders
                 </div>
-                <div className="cd-app-orders-list">
+                <div className={styles.ordersList}>
                   {snap.orders.map((o) => (
                     <OrderCard
                       key={o.id}
@@ -331,18 +347,14 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               </div>
             )}
           </div>
-          <button
-            type="button"
-            className="cd-app-settings-pane-link"
-            onClick={onOpenAutomations}
-          >
+          <button type="button" className={styles.settingsPaneLink} onClick={onOpenAutomations}>
             Open Automations →
           </button>
         </div>
 
-        <div className="cd-app-settings-pane" hidden={tab !== 'vault'}>
+        <div className={styles.settingsPane} hidden={tab !== 'vault'}>
           <div
-            className="cd-app-settings-section-host"
+            className={styles.settingsSectionHost}
             ref={(node) => {
               if (node && snap.vaultVisible && !vaultMounted.current) {
                 vaultMounted.current = true;
@@ -352,15 +364,20 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           />
         </div>
 
-        <div className="cd-app-settings-pane" hidden={tab !== 'manage'}>
-          <div className="cd-app-settings-manage">
+        <div className={styles.settingsPane} hidden={tab !== 'manage'}>
+          <div className={styles.settingsManage}>
             <ManageItem
               icon="Pencil"
               label="Rename"
               sub={`Currently · ${snap.appName}`}
               onClick={onRename}
             />
-            <ManageItem icon="Share" label="Share…" sub="Link or read-only invite" onClick={onShare} />
+            <ManageItem
+              icon="Share"
+              label="Share…"
+              sub="Link or read-only invite"
+              onClick={onShare}
+            />
             <ManageItem
               icon="Folder"
               label="Reveal in Finder"
@@ -368,25 +385,25 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
               onClick={onReveal}
             />
           </div>
-          <div className="cd-app-settings-danger">
-            <div className="cd-app-settings-danger-label">Danger zone</div>
+          <div className={styles.settingsDanger}>
+            <div className={styles.settingsDangerLabel}>Danger zone</div>
             <button
               type="button"
-              className="cd-app-settings-menu-item cd-app-settings-danger-item"
+              className={cx(styles.settingsMenuItem, styles.settingsDangerItem)}
               data-danger="true"
               data-armed={deleteArmed ? 'true' : undefined}
               onClick={() => (deleteArmed ? onDelete() : setDeleteArmed(true))}
             >
-              <span className="cd-app-settings-menu-icon">
+              <span className={styles.settingsMenuIcon}>
                 <Icon name="Trash" size={13} />
               </span>
-              <span className="cd-app-settings-menu-text">
-                <span className="cd-app-settings-menu-label">Delete app</span>
-                <span className="cd-app-settings-menu-sub">
+              <span className={styles.settingsMenuText}>
+                <span className={styles.settingsMenuLabel}>Delete app</span>
+                <span className={styles.settingsMenuSub}>
                   Removes the app, its data, and its scheduled automations.
                 </span>
               </span>
-              <span className="cd-app-settings-confirm-pill" hidden={!deleteArmed}>
+              <span className={styles.settingsConfirmPill} hidden={!deleteArmed}>
                 click to confirm
               </span>
             </button>
