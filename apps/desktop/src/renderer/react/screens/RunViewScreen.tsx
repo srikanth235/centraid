@@ -8,6 +8,8 @@ import type {
   RunViewBridgeProps,
   RunViewSnapshot,
 } from '../bridge.js';
+import { cx } from '../ui/cx.js';
+import styles from './RunViewScreen.module.css';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -38,53 +40,53 @@ function TimelineNode({ node }: { node: RunNodeDTO }): JSX.Element {
   const railIcon: IconName =
     node.status === 'running' ? 'Loader' : node.status === 'ok' ? 'CheckCircle' : 'AlertTriangle';
   return (
-    <div className="cd-au-tl-item" data-status={node.status}>
-      <span className="cd-au-tl-rail" aria-hidden="true">
-        <span className="cd-au-tl-dot" data-spin={node.status === 'running' ? 'true' : undefined}>
+    <div className={styles.tlItem} data-status={node.status}>
+      <span className={styles.tlRail} aria-hidden="true">
+        <span className={styles.tlDot} data-spin={node.status === 'running' ? 'true' : undefined}>
           <Icon name={railIcon} size={node.status === 'running' ? 12 : 13} />
         </span>
-        <span className="cd-au-tl-line" />
+        <span className={styles.tlLine} />
       </span>
-      <div className="cd-au-tl-card" data-status={node.status}>
+      <div className={styles.tlCard} data-status={node.status}>
         <button
           type="button"
-          className="cd-au-tl-head"
+          className={styles.tlHead}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
         >
-          <span className="cd-au-tl-type" aria-hidden="true">
+          <span className={styles.tlType} aria-hidden="true">
             <Icon name={node.typeIcon as IconName} size={13} />
           </span>
-          <span className="cd-au-tl-name">{node.name}</span>
-          <span className="cd-au-tl-kind">{node.kind}</span>
-          <span className="cd-au-tl-meta">{node.meta || '—'}</span>
-          <span className="cd-au-tl-chev" aria-hidden="true">
+          <span className={styles.tlName}>{node.name}</span>
+          <span className={styles.tlKind}>{node.kind}</span>
+          <span className={styles.tlMeta}>{node.meta || '—'}</span>
+          <span className={styles.tlChev} aria-hidden="true">
             <Icon name="ChevronRight" size={14} />
           </span>
         </button>
-        <div className="cd-au-tl-body" hidden={!open}>
-          {node.error ? <div className="cd-au-tl-error">{node.error}</div> : null}
-          {node.response ? <div className="cd-au-tl-response">{node.response}</div> : null}
+        <div className={styles.tlBody} hidden={!open}>
+          {node.error ? <div className={styles.tlError}>{node.error}</div> : null}
+          {node.response ? <div className={styles.tlResponse}>{node.response}</div> : null}
           {node.input ? (
             <>
-              <div className="cd-au-step-label">Input</div>
-              <pre className="cd-au-step-pre">{node.input}</pre>
+              <div className={styles.stepLabel}>Input</div>
+              <pre className={styles.stepPre}>{node.input}</pre>
             </>
           ) : null}
           {node.output ? (
             <>
-              <div className="cd-au-step-label">Output</div>
-              <pre className="cd-au-step-pre">{node.output}</pre>
+              <div className={styles.stepLabel}>Output</div>
+              <pre className={styles.stepPre}>{node.output}</pre>
             </>
           ) : null}
           {!node.error && !node.response && !node.input && !node.output ? (
-            <div className="cd-au-step-empty">No payload recorded.</div>
+            <div className={styles.stepEmpty}>No payload recorded.</div>
           ) : null}
         </div>
         {node.streaming && node.liveText ? (
-          <div className="cd-au-tl-stream">
-            <span className="cd-au-tl-stream-tx">{node.liveText}</span>
-            <span className="cd-au-tl-caret" aria-hidden="true" />
+          <div className={styles.tlStream}>
+            <span className={styles.tlStreamTx}>{node.liveText}</span>
+            <span className={styles.tlCaret} aria-hidden="true" />
           </div>
         ) : null}
       </div>
@@ -96,28 +98,28 @@ function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
   const [openIn, setOpenIn] = useState(false);
   const [openOut, setOpenOut] = useState(false);
   return (
-    <div className="cd-au-log-row" data-tone={row.tone}>
-      <span className="cd-au-log-time">{row.time}</span>
-      <div className="cd-au-log-main">
-        <div className="cd-au-log-head">
-          <span className="cd-au-log-glyph" data-status={row.tone} aria-hidden="true" />
-          <span className="cd-au-log-label">{row.label}</span>
-          {row.sub ? <span className="cd-au-log-sub">{row.sub}</span> : null}
+    <div className={styles.logRow} data-tone={row.tone}>
+      <span className={styles.logTime}>{row.time}</span>
+      <div className={styles.logMain}>
+        <div className={styles.logHead}>
+          <span className={styles.logGlyph} data-status={row.tone} aria-hidden="true" />
+          <span className={styles.logLabel}>{row.label}</span>
+          {row.sub ? <span className={styles.logSub}>{row.sub}</span> : null}
         </div>
-        {row.error ? <div className="cd-au-tl-error">{row.error}</div> : null}
-        {row.response ? <div className="cd-au-log-response">{row.response}</div> : null}
+        {row.error ? <div className={styles.tlError}>{row.error}</div> : null}
+        {row.response ? <div className={styles.logResponse}>{row.response}</div> : null}
         {row.input ? (
           <>
             <button
               type="button"
-              className="cd-au-log-chip"
+              className={styles.logChip}
               aria-expanded={openIn}
               onClick={() => setOpenIn((v) => !v)}
             >
               <Icon name="Braces" size={11} />
               <span>args</span>
             </button>
-            <pre className="cd-au-log-pre" hidden={!openIn}>
+            <pre className={styles.logPre} hidden={!openIn}>
               {row.input}
             </pre>
           </>
@@ -126,14 +128,14 @@ function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
           <>
             <button
               type="button"
-              className="cd-au-log-chip"
+              className={styles.logChip}
               aria-expanded={openOut}
               onClick={() => setOpenOut((v) => !v)}
             >
               <Icon name="Braces" size={11} />
               <span>output</span>
             </button>
-            <pre className="cd-au-log-pre" hidden={!openOut}>
+            <pre className={styles.logPre} hidden={!openOut}>
               {row.output}
             </pre>
           </>
@@ -190,24 +192,24 @@ export default function RunViewScreen({
         </span>
         <span>Run</span>
       </div>
-      <div className="cd-au-rv-head">
+      <div className={styles.rvHead}>
         <span className="cd-au-glyph" data-hue={snap.hue} style={{ width: 42, height: 42 }}>
           <Icon name={snap.glyphIcon as IconName} size={19} />
         </span>
-        <div className="cd-au-rv-head-main">
-          <div className="cd-au-rv-head-name">
+        <div className={styles.rvHeadMain}>
+          <div className={styles.rvHeadName}>
             {snap.headerName}
             <StatusPill kind={snap.statusKind} label={snap.statusLabel} />
           </div>
-          <div className="cd-au-rv-head-meta">{`${snap.startedLabel}  ·  ${snap.model}`}</div>
+          <div className={styles.rvHeadMeta}>{`${snap.startedLabel}  ·  ${snap.model}`}</div>
         </div>
         <div className="cd-au-actions">
-          <div className="cd-au-rv-seg" role="tablist" aria-label="Run view">
+          <div className={styles.rvSeg} role="tablist" aria-label="Run view">
             {(['timeline', 'log'] as const).map((k) => (
               <button
                 key={k}
                 type="button"
-                className="cd-au-rv-seg-b"
+                className={styles.rvSegB}
                 role="tab"
                 aria-selected={mode === k}
                 data-active={mode === k ? 'true' : undefined}
@@ -221,7 +223,7 @@ export default function RunViewScreen({
           {mode === 'timeline' ? (
             <button
               type="button"
-              className="cd-au-btn cd-au-btn-ghost cd-au-btn-sm"
+              className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnSm)}
               onClick={() => setDetailsHidden((v) => !v)}
             >
               <Icon name="Eye" size={13} />
@@ -230,7 +232,7 @@ export default function RunViewScreen({
           ) : null}
           <button
             type="button"
-            className="cd-au-btn cd-au-btn-ghost cd-au-btn-sm"
+            className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnSm)}
             onClick={onRunAgain}
           >
             <Icon name="Reset" size={13} />
@@ -243,41 +245,41 @@ export default function RunViewScreen({
 
   if (mode === 'log') {
     return (
-      <div className="cd-au-rv">
+      <div className={styles.rv}>
         {header}
-        <div className="cd-au-log">
-          <div className="cd-au-log-stats">
-            <div className="cd-au-log-stat">
-              <div className="cd-au-log-stat-l">Trigger</div>
-              <div className="cd-au-log-stat-v">
-                <span className="cd-au-log-stat-trig">
-                  <span className="cd-au-log-stat-ic" aria-hidden="true">
+        <div className={styles.log}>
+          <div className={styles.logStats}>
+            <div className={styles.logStat}>
+              <div className={styles.logStatL}>Trigger</div>
+              <div className={styles.logStatV}>
+                <span className={styles.logStatTrig}>
+                  <span className={styles.logStatIc} aria-hidden="true">
                     <Icon name={snap.logKpi.triggerIcon as IconName} size={13} />
                   </span>
                   <span>{snap.logKpi.triggerLabel}</span>
                 </span>
               </div>
             </div>
-            <div className="cd-au-log-stat">
-              <div className="cd-au-log-stat-l">Tokens</div>
-              <div className="cd-au-log-stat-v">{snap.logKpi.tokens}</div>
+            <div className={styles.logStat}>
+              <div className={styles.logStatL}>Tokens</div>
+              <div className={styles.logStatV}>{snap.logKpi.tokens}</div>
             </div>
-            <div className="cd-au-log-stat">
-              <div className="cd-au-log-stat-l">Cost</div>
-              <div className="cd-au-log-stat-v">{snap.logKpi.cost}</div>
+            <div className={styles.logStat}>
+              <div className={styles.logStatL}>Cost</div>
+              <div className={styles.logStatV}>{snap.logKpi.cost}</div>
             </div>
-            <div className="cd-au-log-stat">
-              <div className="cd-au-log-stat-l">Duration</div>
-              <div className="cd-au-log-stat-v">{snap.logKpi.duration}</div>
+            <div className={styles.logStat}>
+              <div className={styles.logStatL}>Duration</div>
+              <div className={styles.logStatV}>{snap.logKpi.duration}</div>
             </div>
-            <div className="cd-au-log-stat">
-              <div className="cd-au-log-stat-l">Outcome</div>
-              <div className="cd-au-log-stat-v">
+            <div className={styles.logStat}>
+              <div className={styles.logStatL}>Outcome</div>
+              <div className={styles.logStatV}>
                 <StatusPill kind={snap.side.outcomeKind} label={snap.side.outcomeLabel} />
               </div>
             </div>
           </div>
-          <div className="cd-au-log-panel">
+          <div className={styles.logPanel}>
             {snap.logRows.map((row, i) => (
               <LogRow key={`${row.tone}:${i}`} row={row} />
             ))}
@@ -288,29 +290,29 @@ export default function RunViewScreen({
   }
 
   return (
-    <div className="cd-au-rv">
+    <div className={styles.rv}>
       {header}
-      <div className={detailsHidden ? 'cd-au-rv-grid cd-au-rv-grid--narrow' : 'cd-au-rv-grid'}>
-        <div className="cd-au-rv-thread-col">
-          <div className="cd-au-tl">
-            <div className="cd-au-tl-item" data-status="trigger">
-              <span className="cd-au-tl-rail" aria-hidden="true">
-                <span className="cd-au-tl-dot">
+      <div className={detailsHidden ? cx(styles.rvGrid, styles.rvGridNarrow) : styles.rvGrid}>
+        <div className={styles.rvThreadCol}>
+          <div className={styles.tl}>
+            <div className={styles.tlItem} data-status="trigger">
+              <span className={styles.tlRail} aria-hidden="true">
+                <span className={styles.tlDot}>
                   <Icon name={snap.triggerHeroIcon as IconName} size={13} />
                 </span>
-                <span className="cd-au-tl-line" />
+                <span className={styles.tlLine} />
               </span>
-              <div className="cd-au-tl-card cd-au-tl-card-trigger">
-                <div className="cd-au-tl-trig-head">
-                  <span className="cd-au-tl-trig-label">{snap.triggerLabel}</span>
+              <div className={cx(styles.tlCard, styles.tlCardTrigger)}>
+                <div className={styles.tlTrigHead}>
+                  <span className={styles.tlTrigLabel}>{snap.triggerLabel}</span>
                 </div>
-                <div className="cd-au-trig-line">
+                <div className={styles.trigLine}>
                   <span aria-hidden="true">
                     <Icon name="Clock" size={14} />
                   </span>
                   {snap.triggersSummary}
                 </div>
-                <div className="cd-au-trig-instr cd-au-trig-instr--open">{snap.promptInstr}</div>
+                <div className={cx(styles.trigInstr, styles.trigInstrOpen)}>{snap.promptInstr}</div>
               </div>
             </div>
 
@@ -319,12 +321,12 @@ export default function RunViewScreen({
             ))}
 
             <div
-              className="cd-au-tl-item cd-au-tl-item-final"
+              className={cx(styles.tlItem, styles.tlItemFinal)}
               data-status={snap.final.kind === 'pending' ? 'running' : snap.final.kind}
             >
-              <span className="cd-au-tl-rail" aria-hidden="true">
+              <span className={styles.tlRail} aria-hidden="true">
                 <span
-                  className="cd-au-tl-dot"
+                  className={styles.tlDot}
                   data-spin={snap.final.kind === 'pending' ? 'true' : undefined}
                 >
                   <Icon
@@ -340,23 +342,23 @@ export default function RunViewScreen({
                 </span>
               </span>
               <div
-                className="cd-au-tl-card"
+                className={styles.tlCard}
                 data-status={snap.final.kind === 'pending' ? 'running' : snap.final.kind}
               >
-                <div className="cd-au-tl-head cd-au-tl-head-static">
-                  <span className="cd-au-tl-type" aria-hidden="true">
+                <div className={cx(styles.tlHead, styles.tlHeadStatic)}>
+                  <span className={styles.tlType} aria-hidden="true">
                     <Icon
                       name={snap.final.kind === 'fail' ? 'AlertTriangle' : 'Sparkle'}
                       size={13}
                     />
                   </span>
-                  <span className="cd-au-tl-name">
+                  <span className={styles.tlName}>
                     {snap.final.kind === 'fail' ? 'Run failed' : `Centraid · ${snap.final.model}`}
                   </span>
                 </div>
                 {snap.final.kind === 'pending' ? (
-                  <div className="cd-au-pending">
-                    <span className="cd-au-pending-dots" aria-hidden="true">
+                  <div className={styles.pending}>
+                    <span className={styles.pendingDots} aria-hidden="true">
                       <i />
                       <i />
                       <i />
@@ -364,23 +366,23 @@ export default function RunViewScreen({
                     <span>Working — this updates live as the run progresses.</span>
                   </div>
                 ) : (
-                  <div className="cd-au-tl-final-body">
+                  <div className={styles.tlFinalBody}>
                     {snap.final.kind === 'ok' ? (
                       <>
-                        <p className="cd-au-reply-lead">
+                        <p className={styles.replyLead}>
                           {snap.final.summary ?? 'The run completed.'}
                         </p>
                         {snap.final.output ? (
                           <>
-                            <div className="cd-au-step-label">Output</div>
-                            <pre className="cd-au-step-pre">{snap.final.output}</pre>
+                            <div className={styles.stepLabel}>Output</div>
+                            <pre className={styles.stepPre}>{snap.final.output}</pre>
                           </>
                         ) : null}
                       </>
                     ) : (
                       <>
-                        <p className="cd-au-reply-lead">This run did not complete.</p>
-                        <div className="cd-au-tl-error">
+                        <p className={styles.replyLead}>This run did not complete.</p>
+                        <div className={styles.tlError}>
                           {snap.final.error ?? 'No error detail was recorded.'}
                         </div>
                       </>
@@ -392,11 +394,11 @@ export default function RunViewScreen({
           </div>
         </div>
 
-        <div className="cd-au-rside">
-          <div className="cd-au-rside-card">
-            <div className="cd-au-rside-h">Run detail</div>
-            <div className="cd-au-rside-row">
-              <span className="cd-au-rside-k">Outcome</span>
+        <div className={styles.rside}>
+          <div className={styles.rsideCard}>
+            <div className={styles.rsideH}>Run detail</div>
+            <div className={styles.rsideRow}>
+              <span className={styles.rsideK}>Outcome</span>
               <StatusPill kind={snap.side.outcomeKind} label={snap.side.outcomeLabel} />
             </div>
             {(
@@ -407,14 +409,14 @@ export default function RunViewScreen({
                 ['Run ID', snap.side.runId],
               ] as const
             ).map(([k, v]) => (
-              <div key={k} className="cd-au-rside-row">
-                <span className="cd-au-rside-k">{k}</span>
-                <span className="cd-au-rside-v">{v}</span>
+              <div key={k} className={styles.rsideRow}>
+                <span className={styles.rsideK}>{k}</span>
+                <span className={styles.rsideV}>{v}</span>
               </div>
             ))}
           </div>
-          <div className="cd-au-rside-card">
-            <div className="cd-au-rside-h">Usage</div>
+          <div className={styles.rsideCard}>
+            <div className={styles.rsideH}>Usage</div>
             {(
               [
                 ['Tokens', snap.side.tokens],
@@ -423,15 +425,15 @@ export default function RunViewScreen({
                 ['Model', snap.side.model],
               ] as const
             ).map(([k, v]) => (
-              <div key={k} className="cd-au-rside-row">
-                <span className="cd-au-rside-k">{k}</span>
-                <span className="cd-au-rside-v">{v}</span>
+              <div key={k} className={styles.rsideRow}>
+                <span className={styles.rsideK}>{k}</span>
+                <span className={styles.rsideV}>{v}</span>
               </div>
             ))}
           </div>
-          <div className="cd-au-rside-card">
-            <div className="cd-au-rside-h">Belongs to</div>
-            <button type="button" className="cd-au-rside-link" onClick={onOpenAutomation}>
+          <div className={styles.rsideCard}>
+            <div className={styles.rsideH}>Belongs to</div>
+            <button type="button" className={styles.rsideLink} onClick={onOpenAutomation}>
               <span>{snap.crumbName}</span>
               <span aria-hidden="true">
                 <Icon name="ArrowRight" size={14} />

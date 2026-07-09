@@ -122,44 +122,44 @@ describe('RunViewScreen', () => {
     const el = mount(makeProps());
     expect(el.textContent).toContain('Loading run…');
     push(makeSnapshot());
-    expect(el.querySelector('.cd-au-rv')).toBeTruthy();
+    expect(el.querySelector('.rv')).toBeTruthy();
     expect(el.textContent).not.toContain('Loading run…');
   });
 
   it('renders the timeline: breadcrumb, header, node cards, final outcome, KPI rail', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
-    expect(el.querySelector('.cd-au-rv-head-name')?.textContent).toContain('Daily Digest');
+    expect(el.querySelector('.rvHeadName')?.textContent).toContain('Daily Digest');
     // trigger node + 2 run nodes + final node
-    expect(el.querySelectorAll('.cd-au-tl-item').length).toBe(4);
+    expect(el.querySelectorAll('.tlItem').length).toBe(4);
     expect(el.textContent).toContain('gmail.search');
     expect(el.textContent).toContain('Done — 12 emails.');
-    expect(el.querySelector('.cd-au-rside')).toBeTruthy();
+    expect(el.querySelector('.rside')).toBeTruthy();
     expect(el.textContent).toContain('claude-opus-4-8');
   });
 
   it('expands a node payload on click', () => {
     const el = mount(makeProps());
     push(makeSnapshot());
-    const head = el.querySelector('.cd-au-tl-head') as HTMLButtonElement;
+    const head = el.querySelector('.tlHead') as HTMLButtonElement;
     expect(head.getAttribute('aria-expanded')).toBe('false');
     act(() => head.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(head.getAttribute('aria-expanded')).toBe('true');
-    expect(el.querySelector('.cd-au-tl-body')?.hasAttribute('hidden')).toBe(false);
+    expect(el.querySelector('.tlBody')?.hasAttribute('hidden')).toBe(false);
   });
 
   it('switches to log mode (persisted) and renders transcript rows', () => {
     const props = makeProps();
     const el = mount(props);
     push(makeSnapshot());
-    const logTab = [...el.querySelectorAll('.cd-au-rv-seg-b')].find((b) =>
+    const logTab = [...el.querySelectorAll('.rvSegB')].find((b) =>
       b.textContent?.includes('Log'),
     ) as HTMLButtonElement;
     act(() => logTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetMode).toHaveBeenCalledWith('log');
-    expect(el.querySelector('.cd-au-log')).toBeTruthy();
-    expect(el.querySelectorAll('.cd-au-log-row').length).toBe(3);
-    expect(el.querySelector('.cd-au-tl')).toBeNull();
+    expect(el.querySelector('.log')).toBeTruthy();
+    expect(el.querySelectorAll('.logRow').length).toBe(3);
+    expect(el.querySelector('.tl')).toBeNull();
   });
 
   it('shows a pending final node while in flight', () => {
@@ -172,7 +172,7 @@ describe('RunViewScreen', () => {
         final: { kind: 'pending', model: 'claude-opus-4-8' },
       }),
     );
-    expect(el.querySelector('.cd-au-pending')).toBeTruthy();
+    expect(el.querySelector('.pending')).toBeTruthy();
     expect(el.textContent).toContain('updates live');
   });
 

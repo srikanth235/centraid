@@ -1443,10 +1443,12 @@ select.input option {
   animation: cd-pulse 1.2s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 .ab-progress-main {
   flex: 1;
   min-width: 0;
@@ -3372,10 +3374,12 @@ select.input option {
   margin-top: 0;
 }
 @media (max-width: 720px) {
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 /* Caps section label — "Status" / "Recent activity" headings that sit
    above the stat grid and the activity feed on the Cloud Overview. */
 .cloud-section-label {
@@ -7002,15 +7006,19 @@ select.input option {
   gap: 13px;
 }
 @media (max-width: 1024px) {
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 @media (max-width: 640px) {
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 /* Staggered rise-in applied per cell on each tab switch (see renderTab).
    `both` holds the hidden `from` state through the per-cell delay; the JS
    strips the class on animationend so hover transforms aren't pinned. */
@@ -7029,10 +7037,12 @@ select.input option {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
+
 .cd-shelf-empty {
   grid-column: 1 / -1;
   display: flex;
@@ -7733,6 +7743,7 @@ select.input option {
   margin-left: auto;
 }
 @media (max-width: 920px) {
+
   .cd-disc-head {
     flex-direction: column;
     gap: 14px;
@@ -7741,6 +7752,7 @@ select.input option {
     grid-template-columns: 1fr;
   }
 }
+
 
 /* Hover-revealed `•••` action trigger. Lives as a sibling of the card so
    we don't nest a button inside a button; revealed on the wrap's hover or
@@ -9049,11 +9061,13 @@ select.input option {
   animation-delay: 0.36s;
 }
 @media (prefers-reduced-motion: reduce) {
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 /* Enumerated empty / CLI unavailable — muted, not an error. */
 .app-chat-am-empty {
   padding: 14px 12px;
@@ -10397,10 +10411,12 @@ select.input option {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 .ab-diff-ribbon {
   display: inline-flex;
   align-items: center;
@@ -11117,10 +11133,12 @@ select.input option {
 }
 
 @media (max-width: 720px) {
+
   .cd-au-tpl-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 /* ── Automation viewer ── */
 .cd-au-loading {
@@ -11280,10 +11298,12 @@ select.input option {
   animation: cd-spin 0.9s linear infinite;
 }
 @media (prefers-reduced-motion: reduce) {
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 /* Trigger badge — cron-clock / webhook glyph + schedule label. */
 .cd-au-trigbadge {
@@ -11922,10 +11942,12 @@ button.cd-app-order-name:hover {
 }
 
 @media (max-width: 860px) {
+
   .cd-au-cols {
     grid-template-columns: 1fr;
   }
 }
+
 
 /* ── Run history rows become clickable threads ── */
 button.cd-au-run {
@@ -11960,195 +11982,13 @@ button.cd-au-run:hover .cd-au-run-go {
 }
 
 /* ── Run viewer (chat thread) ── */
-.cd-au-rv {
-  max-width: 1080px;
-  margin: 0 auto;
-  padding-bottom: 56px;
-}
-.cd-au-btn-sm {
-  padding: 7px 12px;
-  font-size: 12px;
-}
-.cd-au-rv-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 14px 0 22px;
-}
-.cd-au-rv-head-main {
-  min-width: 0;
-  flex: 1;
-}
-.cd-au-rv-head-name {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.cd-au-rv-head-meta {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--ink-3);
-  margin-top: 4px;
-}
-.cd-au-rv-grid {
-  display: grid;
-  grid-template-columns: 1fr 248px;
-  gap: 26px;
-  align-items: start;
-  transition: grid-template-columns 0.2s ease;
-}
-.cd-au-rv-grid--narrow {
-  grid-template-columns: 1fr;
-}
-.cd-au-rv-grid--narrow .cd-au-rside {
-  display: none;
-}
 
 /* Run view A/B toggle — Timeline vs Log. */
-.cd-au-rv-seg {
-  display: inline-flex;
-  padding: 3px;
-  gap: 2px;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg-sunken);
-}
-.cd-au-rv-seg-b {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease;
-}
-.cd-au-rv-seg-b:hover {
-  color: var(--ink);
-}
-.cd-au-rv-seg-b[data-active='true'] {
-  background: var(--accent);
-  color: #fff;
-}
-.cd-au-rv-seg-b:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-}
 
 /* ── Run viewer Direction B — single-column transcript log ── */
-.cd-au-log {
-  max-width: 880px;
-}
 /* KPI strip — Trigger · Tokens · Cost · Duration · Outcome: one bordered row
    of labelled cells split by hairline dividers (mirrors the run-detail spec). */
-.cd-au-log-stats {
-  display: flex;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.cd-au-log-stat {
-  flex: 1 1 0;
-  min-width: 104px;
-  padding: 13px 18px;
-  border-left: 0.5px solid var(--line);
-}
-.cd-au-log-stat:first-child {
-  border-left: none;
-}
-.cd-au-log-stat-l {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-bottom: 8px;
-}
-.cd-au-log-stat-v {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-au-log-stat-trig {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.cd-au-log-stat-ic {
-  display: inline-flex;
-  color: var(--ink-3);
-}
 /* Transcript panel — the rows live inside one elevated card. */
-.cd-au-log-panel {
-  border: 0.5px solid var(--line);
-  border-radius: 14px;
-  background: var(--bg-elev);
-  padding: 4px 20px;
-}
-.cd-au-log-row {
-  display: grid;
-  grid-template-columns: 60px 1fr;
-  gap: 14px;
-  padding: 12px 0;
-  border-top: 0.5px solid var(--line);
-}
-.cd-au-log-row:first-of-type {
-  border-top: none;
-}
-.cd-au-log-time {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-  padding-top: 2px;
-  text-align: right;
-}
-.cd-au-log-main {
-  min-width: 0;
-}
-.cd-au-log-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.cd-au-log-glyph {
-  display: inline-flex;
-  color: var(--ink-3);
-}
-.cd-au-log-glyph[data-status='ok'] {
-  color: var(--success);
-}
-.cd-au-log-glyph[data-status='fail'] {
-  color: var(--danger);
-}
-.cd-au-log-glyph[data-status='running'] {
-  color: var(--accent);
-}
-.cd-au-log-glyph[data-spin='true'] {
-  animation: cd-spin 0.9s linear infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cd-au-log-glyph[data-spin='true'] {
-    animation: none;
-  }
-}
-.cd-au-log-glyph[data-status='trigger'] {
-  color: var(--ink-3);
-}
 /* Kind reads as a quiet inline prefix (STEP / TOOL / AGENT) — no chip box, so
    the eye lands on the node name, not the label. */
 .cd-au-log-kind {
@@ -12191,23 +12031,6 @@ button.cd-au-run:hover .cd-au-run-go {
   gap: 6px;
   margin-top: 8px;
 }
-.cd-au-log-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 0.5px solid var(--line);
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  cursor: pointer;
-  transition:
-    background 0.14s ease,
-    color 0.14s ease,
-    border-color 0.14s ease;
-}
 .cd-au-log-chip:hover,
 .cd-au-log-chip--open {
   color: var(--ink);
@@ -12224,20 +12047,6 @@ button.cd-au-run:hover .cd-au-run-go {
 .cd-au-log-pres {
   display: flex;
   flex-direction: column;
-}
-.cd-au-log-pre {
-  margin: 8px 0 0;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-x: auto;
 }
 /* Footer — the settled "✓ Run finished · <summary>" line. */
 .cd-au-log-foot {
@@ -12273,165 +12082,8 @@ button.cd-au-run:hover .cd-au-run-go {
 }
 
 /* ── Run timeline (Direction A) — vertical rail + node cards ── */
-.cd-au-tl {
-  display: flex;
-  flex-direction: column;
-}
-.cd-au-tl-item {
-  display: grid;
-  grid-template-columns: 26px 1fr;
-  gap: 12px;
-}
 /* Rail column — status circle + connector line drawn down to the next node. */
-.cd-au-tl-rail {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.cd-au-tl-dot {
-  flex: none;
-  z-index: 1;
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--bg-elev);
-  border: 1px solid color-mix(in srgb, var(--au-tl-tone, var(--ink)) 35%, transparent);
-  color: var(--au-tl-tone, var(--ink-3));
-}
-.cd-au-tl-dot[data-spin='true'] {
-  animation: cd-spin 0.9s linear infinite;
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-@media (prefers-reduced-motion: reduce) {
-  .cd-au-tl-dot[data-spin='true'] {
-    animation: none;
-  }
-}
-.cd-au-tl-line {
-  flex: 1;
-  width: 2px;
-  margin-top: 2px;
-  min-height: 8px;
-  background: var(--line);
-}
-.cd-au-tl-item:last-child .cd-au-tl-line {
-  display: none;
-}
-.cd-au-tl-item[data-status='ok'],
-.cd-au-tl-item[data-status='trigger'] {
-  --au-tl-tone: var(--success);
-}
-.cd-au-tl-item[data-status='trigger'] {
-  --au-tl-tone: var(--ink-3);
-}
-.cd-au-tl-item[data-status='running'] {
-  --au-tl-tone: var(--accent);
-}
-.cd-au-tl-item[data-status='fail'] {
-  --au-tl-tone: var(--danger);
-}
-.cd-au-tl-card {
-  min-width: 0;
-  margin-bottom: 12px;
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.cd-au-tl-card[data-status='running'] {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.cd-au-tl-card[data-status='fail'] {
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
-}
-.cd-au-tl-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 13px;
-  background: none;
-  border: none;
-  font: inherit;
-  cursor: pointer;
-  transition: background 0.14s ease;
-}
-.cd-au-tl-head:hover {
-  background: var(--bg-sunken);
-}
-.cd-au-tl-head-static {
-  cursor: default;
-}
-.cd-au-tl-head-static:hover {
-  background: none;
-}
-.cd-au-tl-head:focus-visible {
-  outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.cd-au-tl-type {
-  display: inline-flex;
-  color: var(--ink-3);
-}
-.cd-au-tl-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-au-tl-kind {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-.cd-au-tl-meta {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.cd-au-tl-chev {
-  display: inline-flex;
-  color: var(--ink-4);
-  transition: transform 0.16s ease;
-}
-.cd-au-tl-head[aria-expanded='true'] .cd-au-tl-chev {
-  transform: rotate(90deg);
-}
-.cd-au-tl-body {
-  padding: 2px 13px 13px 34px;
-}
-.cd-au-tl-error {
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 9%, transparent);
-  border: 0.5px solid color-mix(in srgb, var(--danger) 28%, transparent);
-  border-radius: 7px;
-  padding: 9px 11px;
-  margin-bottom: 8px;
-  white-space: pre-wrap;
-}
 /* agent response prose (ink) vs the italic ink-3 thinking variant */
-.cd-au-tl-response {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
 .cd-au-tl-thinking {
   font-style: italic;
   color: var(--ink-3);
@@ -12439,223 +12091,16 @@ button.cd-au-run:hover .cd-au-run-go {
   padding-left: 10px;
 }
 /* live token-by-token stream with a blinking caret */
-.cd-au-tl-stream {
-  padding: 2px 13px 13px 34px;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
-.cd-au-tl-caret {
-  display: inline-block;
-  width: 7px;
-  height: 1.05em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--accent);
-  animation: cd-pulse 1s steps(2, start) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .cd-au-tl-caret {
-    animation: none;
-  }
-}
 /* trigger + final outcome cards */
-.cd-au-tl-card-trigger {
-  padding: 12px 14px;
-}
-.cd-au-tl-trig-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 7px;
-}
-.cd-au-tl-trig-label {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cd-au-tl-trig-head time {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-}
-.cd-au-tl-final-body {
-  padding: 2px 14px 14px;
-}
 
 /* ── Run-timeline shared bits — trigger node, node payloads, pending ── */
-.cd-au-trig-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  margin-bottom: 9px;
-}
-.cd-au-trig-line span {
-  display: inline-flex;
-  color: var(--accent);
-}
-.cd-au-trig-instr {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  white-space: pre-wrap;
-  border-top: 1px dashed color-mix(in srgb, var(--accent) 32%, transparent);
-  padding-top: 9px;
-  max-height: 52px;
-  overflow: hidden;
-  transition: max-height 0.2s ease;
-}
-.cd-au-trig-instr--open {
-  max-height: 800px;
-}
 /* node payload blocks (Input / Output / empty) inside a timeline card */
-.cd-au-step-label {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin: 8px 0 4px;
-}
-.cd-au-step-pre {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  border-radius: 7px;
-  padding: 9px 11px;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cd-au-step-empty {
-  font-size: 11.5px;
-  color: var(--ink-4);
-}
 
 /* final outcome lead text (run-timeline final node) */
-.cd-au-reply-lead {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.6;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
 
 /* pending reply — shown while a run is still in flight */
-.cd-au-pending {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-  font-size: 12.5px;
-  color: var(--ink-3);
-}
-.cd-au-pending-dots {
-  display: inline-flex;
-  gap: 4px;
-  flex: none;
-}
-.cd-au-pending-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: cd-pulse 1.2s ease-in-out infinite;
-}
-.cd-au-pending-dots i:nth-child(2) {
-  animation-delay: 0.18s;
-}
-.cd-au-pending-dots i:nth-child(3) {
-  animation-delay: 0.36s;
-}
 
 /* run-viewer side rail */
-.cd-au-rside {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  position: sticky;
-  top: 8px;
-}
-.cd-au-rside-card {
-  border: 0.5px solid var(--line);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  overflow: hidden;
-}
-.cd-au-rside-h {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding: 12px 15px 9px;
-}
-.cd-au-rside-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 7px 15px;
-  font-size: 12px;
-}
-.cd-au-rside-row:last-child {
-  padding-bottom: 13px;
-}
-.cd-au-rside-k {
-  color: var(--ink-3);
-  flex: none;
-}
-.cd-au-rside-v {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--ink);
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-au-rside-link {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  gap: 10px;
-  padding: 9px 15px 13px;
-  background: none;
-  border: none;
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  cursor: pointer;
-}
-.cd-au-rside-link:hover {
-  color: var(--accent);
-}
-.cd-au-rside-link span {
-  display: inline-flex;
-}
-
-@media (max-width: 860px) {
-  .cd-au-rv-grid {
-    grid-template-columns: 1fr;
-  }
-  .cd-au-rv-grid .cd-au-rside {
-    display: none;
-  }
-}
 
 /* ── Automations overview (landing) ── */
 .cd-au-ov {
@@ -13070,11 +12515,13 @@ button.cd-au-run:hover .cd-au-run-go {
   animation-delay: 0.36s;
 }
 @media (prefers-reduced-motion: reduce) {
+
   .cd-au-skel-strip,
   .cd-au-skel-row {
     animation: none;
   }
 }
+
 .cd-au-error {
   display: flex;
   flex-direction: column;
@@ -13100,10 +12547,12 @@ button.cd-au-run:hover .cd-au-run-go {
 }
 
 @media (max-width: 860px) {
+
   .cd-au-health {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 /* ── Assistant (shell-level vault Q&A) ─────────────────────────────────
    Two-pane chat: past conversations left, active thread right. Answers
@@ -13116,6 +12565,7 @@ button.cd-au-run:hover .cd-au-run-go {
   grid-template-columns: 232px 1fr;
 }
 @media (max-width: 760px) {
+
   .cd-asst {
     grid-template-columns: 0 1fr;
   }
@@ -13123,6 +12573,7 @@ button.cd-au-run:hover .cd-au-run-go {
     display: none;
   }
 }
+
 .cd-asst-side {
   border-right: 0.5px solid var(--line);
   display: flex;
