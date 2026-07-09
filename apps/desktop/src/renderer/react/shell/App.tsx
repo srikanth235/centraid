@@ -15,6 +15,7 @@ import AppViewRoute from './routes/AppViewRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
+import BuilderRoute from './routes/BuilderRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
@@ -71,7 +72,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
 // app-*.ts modules. NOT yet wired to #root while that work continues.
 export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
-  const { userApps, drafts, refresh } = useShellApps();
+  const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const { isStarred, toggleStar } = useStarred();
 
   const renderSidebar = useCallback(
@@ -147,6 +148,17 @@ export default function App(): JSX.Element {
             />
           );
         }
+        case 'builder':
+        case 'automation-builder':
+          return (
+            <BuilderRoute
+              route={nav.route}
+              nav={nav}
+              userApps={userApps}
+              setUserApps={setUserApps}
+              drafts={drafts}
+            />
+          );
         case 'starred':
           // Port of the vanilla renderStarred — a pure empty-state page.
           return (
