@@ -13,8 +13,17 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { cronNextRuns } from '../../../cron.js';
-import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
+import { createAutomation, listAutomationRuns, listAutomations } from '../../../gateway-client.js';
 import type { AuOverviewData, AuStatusKind, AutomationViewData } from '../../bridge.js';
+
+/** Scaffold a fresh disabled draft automation, returning its id to open in the
+ *  builder (vanilla createAndOpenAutomationBuilder, minus the navigation). A
+ *  plain slug id — the app.json#kind, not the id, is the automation signal. */
+export async function scaffoldAutomationDraft(): Promise<string> {
+  const id = `automation-${Math.random().toString(36).slice(2, 8)}`;
+  await createAutomation({ id, name: 'New automation', enabled: false });
+  return id;
+}
 
 export interface AutomationFeedEntry {
   automationId: string;

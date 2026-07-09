@@ -15,6 +15,7 @@ import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
+import TemplatesRoute from './routes/TemplatesRoute.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast are
 // live; the overlay actions (builder, new-app sheet, ⌘K palette, context menu)
@@ -79,6 +80,8 @@ function renderRoute(nav: ShellNav): JSX.Element {
       );
     case 'discover':
       return <DiscoverRoute />;
+    case 'templates':
+      return <TemplatesRoute />;
     case 'starred':
       // Port of the vanilla renderStarred — a pure empty-state page.
       return (
