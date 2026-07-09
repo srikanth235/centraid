@@ -3,7 +3,6 @@ import { Icon } from '../ui/index.js';
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './AutomationTemplatesScreen.module.css';
-import { cx } from '../ui/cx.js';
 
 type Trig = 'all' | 'cron' | 'webhook';
 
