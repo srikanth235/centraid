@@ -82,7 +82,7 @@ async function mount(props: AutomationsOverviewBridgeProps): Promise<HTMLDivElem
 describe('AutomationsOverviewScreen', () => {
   it('renders health tiles, the automation row, and recent runs', async () => {
     const el = await mount(makeProps());
-    expect(el.querySelectorAll('.cd-au-health-tile').length).toBe(4);
+    expect(el.querySelectorAll('.healthTile').length).toBe(4);
     expect(el.textContent).toContain('Daily Digest');
     expect(el.textContent).toContain('Every day at 8am');
     expect(el.textContent).toContain('Last run 2h ago');
@@ -133,7 +133,7 @@ describe('AutomationsOverviewScreen', () => {
       }),
     );
     expect(el.textContent).toContain('No automations yet');
-    expect(el.querySelectorAll('.cd-au-health-tile').length).toBe(0);
+    expect(el.querySelectorAll('.healthTile').length).toBe(0);
   });
 
   it('renders the error state + retry when loadData rejects', async () => {

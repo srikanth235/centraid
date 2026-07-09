@@ -9,6 +9,8 @@ import type {
   AutomationsOverviewBridgeProps,
 } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
+import styles from './AutomationsOverviewScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 const STATUS_META: Record<AuStatusKind, { icon: IconName; spin?: boolean }> = {
   active: { icon: 'Power' },
@@ -151,14 +153,14 @@ export default function AutomationsOverviewScreen({
 
   if (state === 'loading') {
     return (
-      <div className="cd-au-ov">
-        <div className="cd-au-skel-strip" aria-hidden="true" />
-        <div className="cd-au-loading-label" role="status">
+      <div className={styles.ov}>
+        <div className={styles.skelStrip} aria-hidden="true" />
+        <div className={styles.loadingLabel} role="status">
           Loading automations…
         </div>
-        <div className="cd-au-ov-list" aria-hidden="true">
+        <div className={styles.ovList} aria-hidden="true">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="cd-au-skel-row" />
+            <div key={i} className={styles.skelRow} />
           ))}
         </div>
       </div>
@@ -167,12 +169,12 @@ export default function AutomationsOverviewScreen({
 
   if (state === 'error') {
     return (
-      <div className="cd-au-error">
-        <div className="cd-au-error-icon" aria-hidden="true">
+      <div className={styles.error}>
+        <div className={styles.errorIcon} aria-hidden="true">
           <Icon name="AlertCircle" size={22} />
         </div>
-        <div className="cd-au-error-title">Couldn&apos;t load automations</div>
-        <div className="cd-au-error-text">{errMsg}</div>
+        <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
+        <div className={styles.errorText}>{errMsg}</div>
         <button type="button" className="cd-au-btn cd-au-btn-primary" onClick={() => void reload()}>
           <Icon name="Refresh" size={14} />
           <span>Retry</span>
@@ -198,17 +200,17 @@ export default function AutomationsOverviewScreen({
   const shownRuns = expanded ? runs : runs.slice(0, RUN_CAP);
 
   return (
-    <div className="cd-au-ov">
-      <div className="cd-au-ov-head">
+    <div className={styles.ov}>
+      <div className={styles.ovHead}>
         <div>
-          <h1 className="cd-au-ov-title">Automations</h1>
-          <p className="cd-au-ov-sub">{state.subtitle}</p>
+          <h1 className={styles.ovTitle}>Automations</h1>
+          <p className={styles.ovSub}>{state.subtitle}</p>
         </div>
         {actions}
       </div>
 
       {rows.length > 0 ? (
-        <div className="cd-au-health">
+        <div className={styles.health}>
           <HealthTile icon="Power" value={health.active} label="Active" tone="active" />
           <HealthTile icon="Pause" value={health.paused} label="Paused" tone="paused" />
           <HealthTile icon="Pencil" value={health.drafts} label="Drafts" tone="draft" />
@@ -222,38 +224,38 @@ export default function AutomationsOverviewScreen({
       ) : null}
 
       {rows.length === 0 ? (
-        <div className="cd-au-empty">
-          <div className="cd-au-empty-icon">
+        <div className={styles.empty}>
+          <div className={styles.emptyIcon}>
             <Icon name="Bolt" size={22} />
           </div>
-          <div className="cd-au-empty-title">No automations yet</div>
-          <div className="cd-au-empty-text">
+          <div className={styles.emptyTitle}>No automations yet</div>
+          <div className={styles.emptyText}>
             An automation is a saved conversation that fires on a trigger. Start from a template, or
             describe one from scratch.
           </div>
         </div>
       ) : (
         <>
-          <div className="cd-au-ov-sec">
-            <span className="cd-au-ov-sec-t">Your automations</span>
-            <span className="cd-au-ov-sec-m">{String(rows.length)}</span>
+          <div className={styles.ovSec}>
+            <span className={styles.ovSecT}>Your automations</span>
+            <span className={styles.ovSecM}>{String(rows.length)}</span>
           </div>
-          <div className="cd-au-ov-list">
+          <div className={styles.ovList}>
             {rows.map((row) => (
               <AutomationRow key={row.ref} row={row} onOpen={onOpenAutomation} />
             ))}
           </div>
 
-          <div className="cd-au-ov-runs">
-            <div className="cd-au-ov-sec">
-              <span className="cd-au-ov-sec-t">Recent runs</span>
+          <div className={styles.ovRuns}>
+            <div className={styles.ovSec}>
+              <span className={styles.ovSecT}>Recent runs</span>
               {runs.length > 0 ? (
-                <span className="cd-au-ov-sec-m">{String(runs.length)}</span>
+                <span className={styles.ovSecM}>{String(runs.length)}</span>
               ) : null}
               {runs.length > RUN_CAP ? (
                 <button
                   type="button"
-                  className="cd-au-ov-viewall"
+                  className={styles.ovViewall}
                   onClick={() => setExpanded((v) => !v)}
                 >
                   {expanded ? (
@@ -268,13 +270,13 @@ export default function AutomationsOverviewScreen({
               ) : null}
             </div>
             {runs.length > 0 ? (
-              <div className="cd-au-ov-stream">
+              <div className={styles.ovStream}>
                 {shownRuns.map((run) => (
                   <RunRow key={run.runId} run={run} onOpen={onOpenRun} />
                 ))}
               </div>
             ) : (
-              <div className="cd-au-ov-stream cd-au-ov-stream-empty">No runs recorded yet.</div>
+              <div className={cx(styles.ovStream, styles.ovStreamEmpty)}>No runs recorded yet.</div>
             )}
           </div>
         </>
@@ -295,13 +297,13 @@ function HealthTile({
   tone: 'active' | 'paused' | 'draft' | 'attention';
 }): JSX.Element {
   return (
-    <div className="cd-au-health-tile" data-tone={tone}>
-      <span className="cd-au-health-ic" aria-hidden="true">
+    <div className={styles.healthTile} data-tone={tone}>
+      <span className={styles.healthIc} aria-hidden="true">
         <Icon name={icon} size={16} />
       </span>
-      <div className="cd-au-health-meta">
-        <span className="cd-au-health-v">{String(value)}</span>
-        <span className="cd-au-health-k">{label}</span>
+      <div className={styles.healthMeta}>
+        <span className={styles.healthV}>{String(value)}</span>
+        <span className={styles.healthK}>{label}</span>
       </div>
     </div>
   );
