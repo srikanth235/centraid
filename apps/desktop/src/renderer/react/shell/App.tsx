@@ -13,6 +13,7 @@ import { useShellApps } from './useShellApps.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
+import RunViewRoute from './routes/RunViewRoute.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast are
 // live; the overlay actions (builder, new-app sheet, ⌘K palette, context menu)
@@ -71,6 +72,10 @@ function renderRoute(nav: ShellNav): JSX.Element {
       return <AutomationsRoute />;
     case 'automation-view':
       return <AutomationViewRoute automationId={nav.route.automationId} />;
+    case 'run-view':
+      return (
+        <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />
+      );
     case 'starred':
       // Port of the vanilla renderStarred — a pure empty-state page.
       return (
