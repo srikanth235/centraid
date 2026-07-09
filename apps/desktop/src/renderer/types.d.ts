@@ -104,64 +104,6 @@ declare global {
     getRuntimeMode: () => 'local' | 'remote' | undefined;
   }
 
-  interface BuilderOptions {
-    root: HTMLElement;
-    el: ElHelper;
-    onExit: () => void;
-    initialPrompt?: string;
-    appContext?: AppMetaResolved;
-    /**
-     * Centraid app id (folder name under <appsDir>) when reopening an
-     * already-generated user app. Absent for fresh `initialPrompt` flows —
-     * the builder generates an id and scaffolds an app itself.
-     */
-    appId?: string;
-    /**
-     * App kind. `'app'` (default) is the standard chat-driven app
-     * builder; `'automation'` swaps the right pane for a read-only
-     * automation config view + test-run pane. Automation mode always
-     * receives a pre-scaffolded draft via `appId`.
-     */
-    appKind?: 'app' | 'automation';
-    /**
-     * Called after a successful publish of a fresh build. Receives the centraid
-     * app id (used to look up the app on subsequent opens) plus the
-     * suggested name/icon/color so the home screen can render a tile.
-     */
-    onAddToHome?: (input: {
-      prompt?: string;
-      appId: string;
-      name?: string;
-      versionId?: string;
-    }) => void;
-    /**
-     * Called when the user inline-edits the app title or description
-     * in the builder topbar. The home screen uses this to update its
-     * in-memory userApps entry (and its persisted localStorage copy) so
-     * the tile reflects the new metadata without waiting for a re-publish.
-     * Either `name` or `description` (or both) will be present.
-     */
-    onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
-    canGoBack?: boolean;
-    canGoForward?: boolean;
-    onBack?: () => void;
-    onForward?: () => void;
-    /**
-     * When true, focus the inline title and select its text on mount so the
-     * user is dropped straight into renaming. Used by the template-clone
-     * flow (Notion-style: duplicate inherits the template name but lands
-     * in rename mode immediately).
-     */
-    focusName?: boolean;
-    /**
-     * Sidebar drafts list — the user's other in-progress apps on disk
-     * that the shell already knows about. Builder renders these under a
-     * "Drafts" section so the user can switch between WIP apps without
-     * exiting to home. Defaults to `[]` when omitted (older callers).
-     */
-    drafts?: ChromeSidebarApp[];
-  }
-
   interface UserAppMeta extends AppMetaResolved {
     /** Centraid app id (uploaded-mode app on the gateway). */
     centraidAppId?: string;
@@ -192,14 +134,6 @@ declare global {
     hasIndex: boolean;
   }
 
-  interface ChromeSidebarApp {
-    id: string;
-    name: string;
-    iconKey: IconName;
-    color: string;
-    status?: 'new' | 'draft' | 'live' | null;
-  }
-
   /**
    * Where the home/sidebar context menu should anchor. `point` is a raw
    * cursor location (right-click); `rect` is a trigger element's bounding
@@ -209,32 +143,6 @@ declare global {
    */
   type MenuAnchor = { kind: 'point'; x: number; y: number } | { kind: 'rect'; rect: DOMRect };
 
-  interface ChromeBuildWindowOpts {
-    sidebarOpen: boolean;
-    onToggleSidebar: () => void;
-    sidebar: HTMLElement;
-    main: HTMLElement;
-    /** Right-edge chrome cluster — app identity, Publish, brand chip, etc. */
-    titlebarRight?: HTMLElement | null;
-    /** Center chrome cluster — mode tabs, device pill, etc. Sits between
-     *  the back/forward nav and the trailing flex spacer. */
-    titlebarCenter?: HTMLElement | null;
-    /** Lead chrome element — placed in `.cd-tl-nav` right after the
-     *  forward button, hugging the back/forward arrows. Builder identity. */
-    titlebarLead?: HTMLElement | null;
-    showNewChat?: boolean;
-    onNewChat?: () => void;
-    canGoBack?: boolean;
-    canGoForward?: boolean;
-    onBack?: () => void;
-    onForward?: () => void;
-    /** When true, a chat-pane toggle is rendered at the trailing edge of
-     *  `.cd-tl-nav` (the chat-pane/canvas boundary). Builder-only today. */
-    showChatToggle?: boolean;
-    chatPaneOpen?: boolean;
-    onToggleChat?: () => void;
-  }
-
   type SidebarPage =
     | 'home'
     | 'assistant'
@@ -243,42 +151,6 @@ declare global {
     | 'starred'
     | 'automations'
     | 'settings';
-
-  interface ChromeBuildSidebarOpts {
-    /** App id of the app/builder currently in focus — highlights its row. */
-    activeId?: string;
-    /** Which top-level page is current — drives the active highlight. */
-    activePage?: SidebarPage;
-    apps: ChromeSidebarApp[];
-    drafts: ChromeSidebarApp[];
-    /**
-     * Arbitrary element rendered at the very top of the sidebar, above
-     * "Build new", followed by a hairline divider. Used to mount the
-     * profile switcher head row. Omit to skip the head slot (test
-     * harnesses).
-     */
-    headSlot?: HTMLElement;
-    onHome: () => void;
-    onNewApp: () => void;
-    /** New-chat action wired to the Chats section `+`. Falls back to
-     *  `onNewApp` when there is no dedicated chat-creation entry point. */
-    onNewChat?: () => void;
-    onSearch?: () => void;
-    onAssistant?: () => void;
-    onInsights?: () => void;
-    onDiscover?: () => void;
-    onStarred?: () => void;
-    onAutomations?: () => void;
-    onAppClick: (id: string) => void;
-    onSettings: () => void;
-    /**
-     * Opens the per-app actions menu (Rename · Reveal in Finder · Delete
-     * etc.) from a sidebar row. Wired to the same handler the home grid
-     * uses so both surfaces stay in lockstep. Omit to skip the `•••`
-     * affordance entirely (e.g. test harnesses).
-     */
-    onAppContext?: (id: string, anchor: MenuAnchor) => void;
-  }
 
   /**
    * Renderer-facing profile record fed into the profile switcher's
@@ -357,24 +229,6 @@ declare global {
     }) => HTMLElement;
   }
 
-  interface ChromeApi {
-    buildWindow: (opts: ChromeBuildWindowOpts) => {
-      root: HTMLElement;
-      setSidebarOpen: (open: boolean) => void;
-      setChatPaneOpen: (open: boolean) => void;
-    };
-    buildSidebar: (opts: ChromeBuildSidebarOpts) => HTMLElement;
-    tbBtn: (opts: {
-      icon: string;
-      title?: string;
-      shortcut?: string;
-      onClick?: () => void;
-      disabled?: boolean;
-      ariaLabel?: string;
-    }) => HTMLElement;
-    glyphs: Record<string, (size?: number) => string>;
-  }
-
   interface AppChatMountOptions {
     view: HTMLElement;
     app: AppMetaResolved;
@@ -389,7 +243,6 @@ declare global {
     Store: CentraidStore;
     DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
-    Chrome: ChromeApi;
     Profiles: ProfilesApi;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
   }
