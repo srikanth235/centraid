@@ -90,14 +90,14 @@ describe('ImportScreen', () => {
   it('renders the drop zone, live connections (file.* filtered), draft + history', async () => {
     const el = await mount(makeProps());
     expect(el.textContent).toContain('Import into · home');
-    expect(el.querySelector('.cd-import-file')).toBeTruthy();
+    expect(el.querySelector('.file')).toBeTruthy();
     // live connection shown, file.* hidden
     expect(el.textContent).toContain('Gmail · gmail');
     expect(el.textContent).not.toContain('file.csv');
     // draft with its summary + loaded rows
     expect(el.textContent).toContain('Draft · Calendar');
     expect(el.textContent).toContain('3 create · 1 skip');
-    expect(el.querySelectorAll('.cd-import-row').length).toBe(2);
+    expect(el.querySelectorAll('.row').length).toBe(2);
     // history
     expect(el.textContent).toContain('History');
     expect(el.textContent).toContain('Contacts');
@@ -106,7 +106,7 @@ describe('ImportScreen', () => {
   it('publishes a draft then reloads', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const publishBtn = el.querySelector('.cd-vault-approve-btn') as HTMLButtonElement;
+    const publishBtn = el.querySelector('.approveBtn') as HTMLButtonElement;
     await act(async () => publishBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.publish).toHaveBeenCalledWith('b1');
     expect(props.loadData).toHaveBeenCalledTimes(2);
@@ -115,9 +115,7 @@ describe('ImportScreen', () => {
   it('toggles a live connection', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const pauseBtn = el.querySelector(
-      '.cd-import-connection .cd-vault-deny-btn',
-    ) as HTMLButtonElement;
+    const pauseBtn = el.querySelector('.connection .denyBtn') as HTMLButtonElement;
     expect(pauseBtn.textContent).toBe('Pause');
     await act(async () => pauseBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.setConnectionStatus).toHaveBeenCalledWith('c1', 'paused');
