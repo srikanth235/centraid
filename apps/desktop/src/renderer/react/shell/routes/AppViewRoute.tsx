@@ -1,11 +1,14 @@
-import { type JSX, type ReactNode, useEffect, useRef } from 'react';
+import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
+import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
 import { useShellActions } from '../actions.js';
 import { el } from '../el.js';
 import { iconSvg } from '../iconSvg.js';
+import { openPrompt } from '../prompt.js';
 import type { ShellNav } from '../ShellApp.js';
 import ShellFrame from '../ShellFrame.js';
 import AppFrame from './AppFrame.js';
+import AppSettingsController from './AppSettingsController.js';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): its own .cd-window with a brand-chip lead +
@@ -13,8 +16,8 @@ import AppFrame from './AppFrame.js';
 // agentic chat. The chat is window.AppChat — a large vanilla subsystem that
 // appends a FAB + panel to the app-view container; React renders that container
 // and delegates the chat mount into it via an effect (it survives as foreign
-// DOM at the container tail). Gear/more (the settings popover) is stubbed here
-// and follows with the per-app chat's own React conversion.
+// DOM at the container tail). The gear opens the React app-settings popover
+// (AppSettingsController) — knobs, linked automations, and the vault pane.
 export interface AppViewRouteProps {
   app: AppMetaResolvedType;
   appId: string;
@@ -32,8 +35,42 @@ export default function AppViewRoute({
   prefs,
   onToggleSidebar,
 }: AppViewRouteProps): JSX.Element {
-  const { enterBuilder, openNewAppSheet, showToast } = useShellActions();
+  const { confirm, enterBuilder, openNewAppSheet, showToast } = useShellActions();
   const viewRef = useRef<HTMLDivElement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const renameFlow = async (): Promise<void> => {
+    const next = await openPrompt({
+      title: 'Rename app',
+      initial: app.name,
+      placeholder: 'App name',
+      confirmLabel: 'Rename',
+    });
+    if (!next) return;
+    try {
+      await updateAppMeta({ id: app.id, name: next });
+      showToast(`Renamed to "${next}"`);
+    } catch (err) {
+      showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const deleteFlow = async (): Promise<void> => {
+    const ok = await confirm({
+      confirmLabel: 'Delete',
+      danger: true,
+      title: 'Delete app?',
+      message: `Delete "${app.name}"? This removes it from the gateway and wipes its local app files.`,
+    });
+    if (!ok) return;
+    try {
+      await deleteApp({ id: app.id });
+      showToast(`Deleted "${app.name}"`);
+      nav.navigate({ kind: 'home' });
+    } catch (err) {
+      showToast(`Could not delete: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
 
   // Delegate the per-app agentic chat to the vanilla window.AppChat, mounted
   // into the app-view container (it appends its FAB + panel; React keeps the
@@ -80,7 +117,8 @@ export default function AppViewRoute({
           type="button"
           aria-label="App settings"
           aria-haspopup="dialog"
-          onClick={() => showToast('App settings are moving to React.')}
+          data-open={settingsOpen ? 'true' : undefined}
+          onClick={() => setSettingsOpen((open) => !open)}
           dangerouslySetInnerHTML={{ __html: iconSvg('Settings', 15) }}
         />
         <span className="cd-tooltip">App settings</span>
@@ -119,6 +157,32 @@ export default function AppViewRoute({
             <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
           </div>
         </div>
+        {settingsOpen ? (
+          <AppSettingsController
+            app={app}
+            appId={appId}
+            onClose={() => setSettingsOpen(false)}
+            onOpenAutomations={() => {
+              setSettingsOpen(false);
+              nav.navigate({ kind: 'automations' });
+            }}
+            onOpenOrder={(ref) => {
+              setSettingsOpen(false);
+              nav.navigate({ kind: 'automation-view', automationId: ref });
+            }}
+            onRename={() => {
+              setSettingsOpen(false);
+              void renameFlow();
+            }}
+            onShare={() => showToast('Sharing isn’t available yet.')}
+            onReveal={() => void window.CentraidApi.openAppFolder({ id: app.id })}
+            onDelete={() => {
+              setSettingsOpen(false);
+              void deleteFlow();
+            }}
+            showToast={showToast}
+          />
+        ) : null}
       </div>
     </ShellFrame>
   );
