@@ -1,0 +1,105 @@
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../gateway-client.js', () => ({
+  getUserPrefs: () => Promise.resolve({}),
+  saveUserPrefs: () => Promise.resolve(undefined),
+  listApps: () => Promise.resolve([{ id: 'todos', name: 'Todos', kind: 'app' }]),
+  getInsightsSummary: () =>
+    Promise.resolve({
+      kpis: {
+        totalTokens: 0,
+        totalCostUsd: 0,
+        forecastCostUsd: 0,
+        generations: 0,
+        retries: 0,
+        appsTouched: 0,
+        quotaTokens: 1,
+      },
+      daily: [],
+      byAutomation: [],
+      byModel: [],
+      recent: [],
+      windowDays: 30,
+      generatedAt: 0,
+    }),
+}));
+
+let App: typeof import('./App.js').default;
+let root: Root | null = null;
+let host: HTMLElement | null = null;
+const store = new Map<string, unknown>();
+
+beforeEach(async () => {
+  store.clear();
+  store.set('home.userApps', [{ id: 'todos', name: 'Todos', iconKey: 'Todo', color: '#123' }]);
+  (globalThis as unknown as { Store: unknown }).Store = {
+    get: <T,>(k: string, d: T): T => (store.has(k) ? (store.get(k) as T) : d),
+    set: (k: string, v: unknown) => store.set(k, v),
+    remove: (k: string) => store.delete(k),
+  };
+  // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
+  (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
+  (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
+  ({ default: App } = await import('./App.js'));
+});
+
+afterEach(() => {
+  act(() => root?.unmount());
+  host?.remove();
+  root = null;
+  host = null;
+});
+
+async function mount(): Promise<HTMLElement> {
+  host = document.createElement('div');
+  document.body.append(host);
+  root = createRoot(host);
+  await act(async () => {
+    root!.render(<App />);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  return host;
+}
+
+describe('App root', () => {
+  it('renders the chrome frame with the app in the sidebar, opening on Home', async () => {
+    const el = await mount();
+    expect(el.querySelector('.cd-window')).not.toBeNull();
+    expect(el.textContent).toContain('Todos');
+    expect(el.textContent).toContain('Apps · 1');
+    const activeHome = el.querySelector('[data-active="true"]');
+    expect(activeHome?.textContent).toContain('Home');
+  });
+
+  it('navigates to Insights via the sidebar and highlights it', async () => {
+    const el = await mount();
+    const insightsBtn = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+      b.textContent?.includes('Insights'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      insightsBtn.click();
+    });
+    const active = el.querySelector('[data-active="true"]');
+    expect(active?.textContent).toContain('Insights');
+    // Insights route mounts its own dashboard (a main-scroll body) once loaded.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(el.querySelector('.cd-main-scroll')).not.toBeNull();
+  });
+
+  it('binds the sidebar toggle to the appearance pref', async () => {
+    const el = await mount();
+    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');
+    const toggle = el.querySelector('.cd-tl-side [aria-label="Hide sidebar"]') as HTMLButtonElement;
+    await act(async () => {
+      toggle.click();
+    });
+    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('closed');
+    expect(store.get('appearance')).toMatchObject({ sidebarOpen: false });
+  });
+});
