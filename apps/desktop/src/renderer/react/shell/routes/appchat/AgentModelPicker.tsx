@@ -13,6 +13,8 @@ import {
   type RunnerKey,
   type SwitchableKind,
 } from './appChatModel.js';
+import styles from './AgentModelPicker.module.css';
+import { cx } from '../../../ui/cx.js';
 
 type AmAgents = Awaited<ReturnType<typeof getAgentsStatus>>;
 type AmModel = NonNullable<Awaited<ReturnType<typeof getRunnerStatus>>['models']>[number];
@@ -258,14 +260,14 @@ export default function AgentModelPicker({
   const modelNode =
     sel.mode === 'default' ? (
       discovering ? (
-        <span className="app-chat-am-discovering">Discovering…</span>
+        <span className={styles.chatAmDiscovering}>Discovering…</span>
       ) : (
         <span>Gateway default</span>
       )
     ) : sel.mode === 'pinned' ? (
       <span>{amModelName(sel.model as AmModel)}</span>
     ) : (
-      <span className="app-chat-am-warn" title={`${sel.id} is no longer available`}>
+      <span className={styles.chatAmWarn} title={`${sel.id} is no longer available`}>
         ⚠ {sel.id}
       </span>
     );
@@ -278,18 +280,18 @@ export default function AgentModelPicker({
     return (
       <button
         type="button"
-        className="app-chat-am-agentcard"
+        className={styles.chatAmAgentcard}
         aria-pressed={isActive ? 'true' : 'false'}
         disabled={!(available && !isActive)}
         style={{ '--am-accent': AM_ACCENT[kind] } as CSSProperties}
         onClick={() => void amSwitchAgent(kind)}
       >
-        <span className="app-chat-am-ac-top">
-          <span className="app-chat-am-dot" style={{ background: AM_ACCENT[kind] }} />
-          <span className="app-chat-am-ac-name">{AM_TITLE[kind]}</span>
+        <span className={styles.chatAmAcTop}>
+          <span className={styles.chatAmDot} style={{ background: AM_ACCENT[kind] }} />
+          <span className={styles.chatAmAcName}>{AM_TITLE[kind]}</span>
         </span>
-        <span className="app-chat-am-ac-meta">{meta}</span>
-        {isActive && <span className="app-chat-am-ac-active">ACTIVE</span>}
+        <span className={styles.chatAmAcMeta}>{meta}</span>
+        {isActive && <span className={styles.chatAmAcActive}>ACTIVE</span>}
       </button>
     );
   };
@@ -305,18 +307,18 @@ export default function AgentModelPicker({
     <button
       key={opts.id || '__default'}
       type="button"
-      className="app-chat-am-opt"
+      className={styles.chatAmOpt}
       role="menuitemradio"
       aria-checked={opts.selected ? 'true' : 'false'}
       onClick={() => opts.onChoose()}
     >
-      <span className="app-chat-am-check">{opts.selected ? '✓' : ''}</span>
-      <span className="app-chat-am-opt-lab">
+      <span className={styles.chatAmCheck}>{opts.selected ? '✓' : ''}</span>
+      <span className={styles.chatAmOptLab}>
         {opts.label}
         {opts.hint && <small>{` · ${opts.hint}`}</small>}
       </span>
-      {opts.id && <span className="app-chat-am-opt-id">{opts.id}</span>}
-      {opts.isDefault && <span className="app-chat-am-tag">default</span>}
+      {opts.id && <span className={styles.chatAmOptId}>{opts.id}</span>}
+      {opts.isDefault && <span className={styles.chatAmTag}>default</span>}
     </button>
   );
 
@@ -324,10 +326,10 @@ export default function AgentModelPicker({
   const staleDefault = amModels.current.find((m) => m.default) ?? amModels.current[0];
 
   return (
-    <div className="app-chat-am" ref={wrapRef}>
+    <div className={styles.chatAm} ref={wrapRef}>
       <button
         type="button"
-        className={amBusy.current ? 'app-chat-am-trigger app-chat-am-busy' : 'app-chat-am-trigger'}
+        className={amBusy.current ? cx(styles.chatAmTrigger, styles.chatAmBusy) : styles.chatAmTrigger}
         aria-haspopup="true"
         aria-expanded={amOpen.current ? 'true' : 'false'}
         title="Agent and model"
@@ -337,82 +339,82 @@ export default function AgentModelPicker({
           toggleAm();
         }}
       >
-        <span className="app-chat-am-seg app-chat-am-agent">
-          <span className="app-chat-am-dot" style={{ background: accent }} />
+        <span className={cx(styles.chatAmSeg, styles.chatAmAgent)}>
+          <span className={styles.chatAmDot} style={{ background: accent }} />
           {AM_TITLE[amActiveRunner.current]}
         </span>
-        <span className="app-chat-am-seg app-chat-am-model">
+        <span className={cx(styles.chatAmSeg, styles.chatAmModel)}>
           {modelNode}
-          <span className="app-chat-am-caret">
+          <span className={styles.chatAmCaret}>
             <CaretGlyph />
           </span>
         </span>
       </button>
       <div
-        className={amOpen.current ? 'app-chat-am-pop open' : 'app-chat-am-pop'}
+        className={amOpen.current ? cx(styles.chatAmPop, "open") : styles.chatAmPop}
         role="menu"
         aria-label="Agent and model"
         style={accentStyle}
       >
         {!amLoaded.current ? (
-          <div className="app-chat-am-loading">Loading agents…</div>
+          <div className={styles.chatAmLoading}>Loading agents…</div>
         ) : (
           <>
-            <div className="app-chat-am-seclabel">Agent</div>
+            <div className={styles.chatAmSeclabel}>Agent</div>
             {isSwitchable(amActiveRunner.current) ? (
-              <div className="app-chat-am-agentgrid">
+              <div className={styles.chatAmAgentgrid}>
                 {agentCard('codex')}
                 {agentCard('claude-code')}
               </div>
             ) : (
               <div
-                className="app-chat-am-agentcard"
+                className={styles.chatAmAgentcard}
                 aria-pressed="true"
                 style={{ '--am-accent': AM_ACCENT[amActiveRunner.current] } as CSSProperties}
               >
-                <span className="app-chat-am-ac-top">
+                <span className={styles.chatAmAcTop}>
                   <span
-                    className="app-chat-am-dot"
+                    className={styles.chatAmDot}
                     style={{ background: AM_ACCENT[amActiveRunner.current] }}
                   />
-                  <span className="app-chat-am-ac-name">{AM_TITLE[amActiveRunner.current]}</span>
+                  <span className={styles.chatAmAcName}>{AM_TITLE[amActiveRunner.current]}</span>
                 </span>
-                <span className="app-chat-am-ac-meta">active runner</span>
+                <span className={styles.chatAmAcMeta}>active runner</span>
               </div>
             )}
-            <div className="app-chat-am-divider" />
-            <div className="app-chat-am-modelhead">
-              <span className="app-chat-am-modelfor">
+            <div className={styles.chatAmDivider} />
+            <div className={styles.chatAmModelhead}>
+              <span className={styles.chatAmModelfor}>
                 Models for {AM_TITLE[amActiveRunner.current]}
               </span>
               <button
                 type="button"
                 className={
                   amModelsStatus.current === 'loading'
-                    ? 'app-chat-am-refresh app-chat-am-busy'
-                    : 'app-chat-am-refresh'
+                    ? cx(styles.chatAmRefresh, styles.chatAmBusy)
+                    : styles.chatAmRefresh
                 }
                 title="Re-enumerate from the runner"
                 onClick={() => void amRefresh()}
               >
-                <span className="app-chat-am-refresh-icon">
+                <span className={styles.chatAmRefreshIcon}>
                   <RefreshGlyph />
                 </span>
                 Refresh
               </button>
             </div>
             {sel.mode === 'stale' && (
-              <div className="app-chat-am-stale">
+              <div className={styles.chatAmStale}>
                 <span>Saved model </span>
                 <b>{sel.id}</b>
                 <span>
                   {` isn’t offered by ${AM_TITLE[amActiveRunner.current]} anymore. It won’t be sent.`}
                 </span>
-                <div className="app-chat-am-stale-fix">
+                <div className={styles.chatAmStaleFix}>
                   {staleDefault && (
                     <button
                       type="button"
-                      className="app-chat-am-stale-btn primary"
+                      className={cx(styles.chatAmStaleBtn, "primary")}
                       onClick={() => void amSelectModel(staleDefault.id)}
                     >
                       {`Use ${amModelName(staleDefault)}`}
@@ -420,7 +422,7 @@ export default function AgentModelPicker({
                   )}
                   <button
                     type="button"
-                    className="app-chat-am-stale-btn"
+                    className={styles.chatAmStaleBtn}
                     onClick={() => void amSelectModel('')}
                   >
                     Gateway default
@@ -428,7 +430,7 @@ export default function AgentModelPicker({
                 </div>
               </div>
             )}
-            <div className="app-chat-am-modellist">
+            <div className={styles.chatAmModellist}>
               {optionRow({
                 label: 'Gateway default',
                 id: '',
@@ -437,8 +439,8 @@ export default function AgentModelPicker({
                 onChoose: () => void amSelectModel(''),
               })}
               {amModels.current.length === 0 && amModelsStatus.current === 'loading' ? (
-                <div className="app-chat-am-loadrow">
-                  <div className="app-chat-am-loaddots">
+                <div className={styles.chatAmLoadrow}>
+                  <div className={styles.chatAmLoaddots}>
                     <i />
                     <i />
                     <i />
@@ -446,7 +448,7 @@ export default function AgentModelPicker({
                   <span>{`Discovering ${AM_TITLE[amActiveRunner.current]} models…`}</span>
                 </div>
               ) : amModels.current.length === 0 ? (
-                <div className="app-chat-am-empty">
+                <div className={styles.chatAmEmpty}>
                   {`No models reported by ${AM_TITLE[amActiveRunner.current]}.`}
                 </div>
               ) : tiered ? (
@@ -455,7 +457,7 @@ export default function AgentModelPicker({
                   if (!inTier.length) return null;
                   return (
                     <div key={tier}>
-                      <div className="app-chat-am-tierlabel">{label}</div>
+                      <div className={styles.chatAmTierlabel}>{label}</div>
                       {inTier.map((m) =>
                         optionRow({
                           label: amModelName(m),

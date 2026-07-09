@@ -14,6 +14,8 @@ import {
   toolVerb,
 } from './appChatModel.js';
 import { useAppChat } from './useAppChat.js';
+import styles from './AppChatPanel.module.css';
+import { cx } from '../../../ui/cx.js';
 
 // Inline glyphs (kept tiny — the same shapes the vanilla emitted) so the panel
 // doesn't need to reach through the shared Icon set for one-offs.
@@ -80,10 +82,10 @@ function TrashGlyph(): JSX.Element {
 function ToolDetail({ c }: { c: AppToolCall }): JSX.Element {
   let body: JSX.Element;
   if (c.state === 'running') {
-    body = <div className="app-chat-tool-result">Running…</div>;
+    body = <div className={styles.chatToolResult}>Running…</div>;
   } else if (c.state === 'error') {
     body = (
-      <div className="app-chat-tool-result app-chat-tool-err">
+      <div className={cx(styles.chatToolResult, styles.chatToolErr)}>
         Error: {c.errorText ?? 'Tool failed.'}
       </div>
     );
@@ -93,11 +95,11 @@ function ToolDetail({ c }: { c: AppToolCall }): JSX.Element {
       const columns = parsed.columns as string[];
       const rows = parsed.rows as Array<Record<string, unknown>>;
       body = (
-        <div className="app-chat-tool-result">
+        <div className={styles.chatToolResult}>
           {rows.length === 0 ? (
-            <div className="app-chat-rows-empty">No rows.</div>
+            <div className={styles.chatRowsEmpty}>No rows.</div>
           ) : (
-            <table className="app-chat-rows">
+            <table className={styles.chatRows}>
               <thead>
                 <tr>
                   {columns.map((col) => (
@@ -117,24 +119,24 @@ function ToolDetail({ c }: { c: AppToolCall }): JSX.Element {
             </table>
           )}
           {parsed.truncated ? (
-            <div className="app-chat-rows-meta">
+            <div className={styles.chatRowsMeta}>
               {`Showing ${Math.min(20, rows.length)} of ${(parsed.totalRows as number) ?? rows.length} rows.`}
             </div>
           ) : null}
         </div>
       );
     } else if (c.result !== undefined) {
-      body = <div className="app-chat-tool-result">{safeJson(c.result)}</div>;
+      body = <div className={styles.chatToolResult}>{safeJson(c.result)}</div>;
     } else {
-      body = <div className="app-chat-tool-result">(no result)</div>;
+      body = <div className={styles.chatToolResult}>(no result)</div>;
     }
   }
   return (
-    <div className="app-chat-tool-detail">
+    <div className={styles.chatToolDetail}>
       {c.sql ? (
-        <pre className="app-chat-tool-sql">{c.sql}</pre>
+        <pre className={styles.chatToolSql}>{c.sql}</pre>
       ) : c.args !== undefined ? (
-        <pre className="app-chat-tool-sql">{safeJson(c.args)}</pre>
+        <pre className={styles.chatToolSql}>{safeJson(c.args)}</pre>
       ) : null}
       {body}
     </div>
@@ -221,7 +223,7 @@ function Message({
   if (m.kind === 'ai') {
     const text = m.text || (m.streaming ? '…' : '');
     return (
-      <div className={m.error ? 'msg-ai msg-ai-error' : 'msg-ai'}>
+      <div className={m.error ? cx('msg-ai', styles.aiError) : 'msg-ai'}>
         <div className="msg-ai-author">
           <span className="msg-ai-author-dot" style={{ background: app.color }} />
           <span className="msg-ai-author-name">{app.name.toLowerCase()}</span>
@@ -330,7 +332,7 @@ export default function AppChatPanel({
   // ── History list (grouped by time bucket) ─────────────────────────────────
   const historyBody = (): JSX.Element => {
     if (c.historyLoading) {
-      return <div className="app-chat-history-empty">Loading…</div>;
+      return <div className={styles.chatHistoryEmpty}>Loading…</div>;
     }
     const q = c.historySearch.trim().toLowerCase();
     const filtered = q
@@ -338,7 +340,7 @@ export default function AppChatPanel({
       : c.historySessions;
     if (filtered.length === 0) {
       return (
-        <div className="app-chat-history-empty">
+        <div className={styles.chatHistoryEmpty}>
           {q ? 'No chats match your search.' : 'No saved chats yet.'}
         </div>
       );
@@ -351,24 +353,24 @@ export default function AppChatPanel({
       if (bucket !== currentBucket) {
         currentBucket = bucket;
         out.push(
-          <div key={`b-${bucket}`} className="app-chat-history-group">
+          <div key={`b-${bucket}`} className={styles.chatHistoryGroup}>
             {bucket}
           </div>,
         );
       }
       out.push(
-        <div key={s.id} className="app-chat-history-row">
+        <div key={s.id} className={styles.chatHistoryRow}>
           <button
             type="button"
-            className="app-chat-history-rowmain"
+            className={styles.chatHistoryRowmain}
             onClick={() => c.resumeSession(s)}
           >
-            <div className="app-chat-history-title">{s.title || '(untitled chat)'}</div>
-            <div className="app-chat-history-meta">{relativeTime(s.updatedAt, now)}</div>
+            <div className={styles.chatHistoryTitle}>{s.title || '(untitled chat)'}</div>
+            <div className={styles.chatHistoryMeta}>{relativeTime(s.updatedAt, now)}</div>
           </button>
           <button
             type="button"
-            className="app-chat-history-del"
+            className={styles.chatHistoryDel}
             aria-label="Delete chat"
             title="Delete chat"
             onClick={(e) => {
@@ -389,31 +391,31 @@ export default function AppChatPanel({
   const chatBody = (): JSX.Element => {
     if (c.chatLoading) {
       return (
-        <div className="app-chat-loading">
+        <div className={styles.chatLoading}>
           <span className="pulse" /> Loading chat…
         </div>
       );
     }
     if (c.loadError) {
-      return <div className="app-chat-error">{c.loadError}</div>;
+      return <div className={styles.chatError}>{c.loadError}</div>;
     }
     if (c.messages.length === 0) {
       return (
-        <div className="app-chat-empty">
-          <div className="app-chat-intro-card">
-            <div className="app-chat-empty-title">
-              Chat with your <span className="app-chat-empty-accent">{app.name}</span> data.
+        <div className={styles.chatEmpty}>
+          <div className={styles.chatIntroCard}>
+            <div className={styles.chatEmptyTitle}>
+              Chat with your <span className={styles.chatEmptyAccent}>{app.name}</span> data.
             </div>
-            <p className="app-chat-empty-hint">
+            <p className={styles.chatEmptyHint}>
               Ask questions, add items by talking, or have the assistant update or delete records for
               you.
             </p>
-            <div className="app-chat-starters">
+            <div className={styles.chatStarters}>
               {STARTER_PROMPTS.map((p) => (
                 <button
                   key={p}
                   type="button"
-                  className="app-chat-starter"
+                  className={styles.chatStarter}
                   onClick={() => setStarter(p)}
                 >
                   {p}
@@ -422,19 +424,19 @@ export default function AppChatPanel({
             </div>
           </div>
           {c.recentSessions.length > 0 && (
-            <div className="app-chat-recent">
-              <div className="app-chat-recent-label">Recent chats</div>
-              <div className="app-chat-recent-list">
+            <div className={styles.chatRecent}>
+              <div className={styles.chatRecentLabel}>Recent chats</div>
+              <div className={styles.chatRecentList}>
                 {c.recentSessions.map((s) => (
                   <button
                     key={s.id}
                     type="button"
-                    className="app-chat-recent-row"
+                    className={styles.chatRecentRow}
                     onClick={() => c.resumeSession(s)}
                   >
-                    <span className="app-chat-recent-dot" />
-                    <span className="app-chat-recent-title">{s.title || '(untitled chat)'}</span>
-                    <span className="app-chat-recent-meta">{relativeTime(s.updatedAt, now)}</span>
+                    <span className={styles.chatRecentDot} />
+                    <span className={styles.chatRecentTitle}>{s.title || '(untitled chat)'}</span>
+                    <span className={styles.chatRecentMeta}>{relativeTime(s.updatedAt, now)}</span>
                   </button>
                 ))}
               </div>
@@ -455,7 +457,7 @@ export default function AppChatPanel({
           />
         ))}
         {c.thinking && (
-          <div className="gen-row">
+          <div className={styles.row}>
             <span className="msg-status">
               <span className="pulse" /> Thinking…
             </span>
@@ -469,27 +471,27 @@ export default function AppChatPanel({
     <>
       <button
         type="button"
-        className={c.open ? 'app-chat-fab hidden' : 'app-chat-fab'}
+        className={c.open ? cx(styles.chatFab, 'hidden') : styles.chatFab}
         title="Ask about this app"
         aria-label={`Ask ${app.name}`}
         onClick={() => c.toggle(true)}
       >
         <span
-          className="app-chat-fab-icon"
+          className={styles.chatFabIcon}
           dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 11) }}
         />
-        <span className="app-chat-fab-label">Ask {app.name}</span>
-        <span className="app-chat-fab-kbd">⌘J</span>
+        <span className={styles.chatFabLabel}>Ask {app.name}</span>
+        <span className={styles.chatFabKbd}>⌘J</span>
       </button>
 
       <aside
-        className={`app-chat-panel${c.open ? ' open' : ''}${onHistory ? ' view-history' : ''}`}
+        className={cx(styles.chatPanel, c.open && 'open', onHistory && 'view-history')}
         aria-hidden={c.open ? 'false' : 'true'}
       >
-        <div className="app-chat-head">
+        <div className={styles.chatHead}>
           <button
             type="button"
-            className="app-chat-icon-btn"
+            className={styles.chatIconBtn}
             hidden={!onHistory}
             aria-label="Back to chat"
             title="Back to chat"
@@ -498,18 +500,18 @@ export default function AppChatPanel({
             <HistoryBackGlyph />
           </button>
           <span
-            className="app-chat-avatar"
+            className={styles.chatAvatar}
             dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }}
           />
-          <div className="app-chat-title">
-            <span className="app-chat-title-text">Copilot</span>
-            <span className="app-chat-sub">{c.headContext}</span>
+          <div className={styles.chatTitle}>
+            <span className={styles.chatTitleText}>Copilot</span>
+            <span className={styles.chatSub}>{c.headContext}</span>
           </div>
-          <div className="app-chat-head-actions">
-            <div className="app-chat-overflow-wrap" hidden={onHistory} ref={overflowWrapRef}>
+          <div className={styles.chatHeadActions}>
+            <div className={styles.chatOverflowWrap} hidden={onHistory} ref={overflowWrapRef}>
               <button
                 type="button"
-                className="app-chat-icon-btn"
+                className={styles.chatIconBtn}
                 aria-label="More actions"
                 title="More"
                 onClick={(e) => {
@@ -519,10 +521,10 @@ export default function AppChatPanel({
               >
                 <MoreGlyph />
               </button>
-              <div className="app-chat-overflow-menu" hidden={!overflowOpen}>
+              <div className={styles.chatOverflowMenu} hidden={!overflowOpen}>
                 <button
                   type="button"
-                  className="app-chat-overflow-item"
+                  className={styles.chatOverflowItem}
                   onClick={() => {
                     setOverflowOpen(false);
                     c.startNewChat();
@@ -532,7 +534,7 @@ export default function AppChatPanel({
                 </button>
                 <button
                   type="button"
-                  className="app-chat-overflow-item"
+                  className={styles.chatOverflowItem}
                   onClick={() => {
                     setOverflowOpen(false);
                     c.openHistory();
@@ -544,7 +546,7 @@ export default function AppChatPanel({
             </div>
             <button
               type="button"
-              className="app-chat-icon-btn app-chat-close"
+              className={cx(styles.chatIconBtn, "app-chat-close")}
               aria-label="Minimize"
               title="Minimize"
               onClick={() => c.toggle(false)}
@@ -563,10 +565,10 @@ export default function AppChatPanel({
           {chatBody()}
         </div>
 
-        <div className="app-chat-history" hidden={!onHistory}>
-          <div className="app-chat-history-searchwrap">
+        <div className={styles.chatHistory} hidden={!onHistory}>
+          <div className={styles.chatHistorySearchwrap}>
             <input
-              className="app-chat-history-search"
+              className={styles.chatHistorySearch}
               type="search"
               placeholder="Search chats…"
               aria-label="Search chats"
@@ -574,11 +576,11 @@ export default function AppChatPanel({
               onChange={(e) => c.setHistorySearch(e.target.value)}
             />
           </div>
-          <div className="app-chat-history-list">{onHistory ? historyBody() : null}</div>
+          <div className={styles.chatHistoryList}>{onHistory ? historyBody() : null}</div>
         </div>
 
         <form
-          className="app-chat-input-wrap"
+          className={styles.chatInputWrap}
           hidden={onHistory}
           onSubmit={(e) => {
             e.preventDefault();
@@ -587,7 +589,7 @@ export default function AppChatPanel({
         >
           <textarea
             ref={inputRef}
-            className="app-chat-textarea"
+            className={styles.chatTextarea}
             placeholder="Ask about this app’s data…"
             rows={1}
             value={draft}
@@ -599,10 +601,10 @@ export default function AppChatPanel({
               }
             }}
           />
-          <div className="app-chat-input-tools">
+          <div className={styles.chatInputTools}>
             <button
               type="button"
-              className="app-chat-attach"
+              className={styles.chatAttach}
               aria-label="Attach"
               title="Attach"
               onClick={() => fileRef.current?.click()}
@@ -639,11 +641,11 @@ export default function AppChatPanel({
               ))}
             </div>
             <AgentModelPicker active={c.open} registerModelResolver={c.registerModelResolver} />
-            <span className="app-chat-input-spacer" />
-            <span className="app-chat-input-kbd">⌘↵</span>
+            <span className={styles.chatInputSpacer} />
+            <span className={styles.chatInputKbd}>⌘↵</span>
             <button
               type="submit"
-              className="app-chat-send"
+              className={styles.chatSend}
               title="Send"
               aria-label="Send"
               hidden={c.busy}
@@ -652,7 +654,7 @@ export default function AppChatPanel({
             />
             <button
               type="button"
-              className="app-chat-send app-chat-stop"
+              className={cx(styles.chatSend, styles.chatStop)}
               title="Stop"
               aria-label="Stop"
               hidden={!c.busy}
