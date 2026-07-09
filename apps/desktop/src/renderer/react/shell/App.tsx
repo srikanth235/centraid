@@ -10,17 +10,19 @@ import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
+import { useStarred } from './useStarred.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
+import HomeRoute from './routes/HomeRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
 import TemplatesRoute from './routes/TemplatesRoute.js';
 
-// Build the ShellActions surface for the current render. Navigation + toast are
-// live; the overlay actions (builder, new-app sheet, ⌘K palette, context menu)
-// are ported from the vanilla cardsMod/autoMod one cluster at a time — until
-// then they route to the builder or no-op so a consumer never crashes.
+// Build the ShellActions surface for the current render. Navigation + toast +
+// confirm are live; the remaining overlay actions (⌘K palette, the generic app
+// context menu) are wired as their clusters land — until then they route to the
+// builder or no-op so a consumer never crashes.
 function makeActions(nav: ShellNav): ShellActions {
   return {
     showToast,
@@ -37,18 +39,10 @@ function makeActions(nav: ShellNav): ShellActions {
       /* ⌘K palette ported with PaletteRoute */
     },
     openContextMenu: () => {
-      /* context menu ported with the card-action cluster */
+      /* the home app-card context menu is wired inside HomeRoute */
     },
   };
 }
-
-// The React shell root — the single component the flip mounts on #root,
-// replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
-// state (appearance prefs, the live app/draft list) and drives ShellApp, which
-// wires the chrome frame + router. Each route is rendered by an entry in the
-// registry; entries are ported one at a time from the vanilla app-*.ts modules
-// (Insights is done — the rest render a staged placeholder until ported, and
-// this component is NOT yet wired to #root while that work continues).
 
 // Map the current route to the sidebar's active-page highlight.
 function activePageFor(route: ShellRoute): SidebarPage | undefined {
@@ -66,38 +60,16 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
   }
 }
 
-function renderRoute(nav: ShellNav): JSX.Element {
-  switch (nav.route.kind) {
-    case 'insights':
-      return <InsightsRoute />;
-    case 'automations':
-      return <AutomationsRoute />;
-    case 'automation-view':
-      return <AutomationViewRoute automationId={nav.route.automationId} />;
-    case 'run-view':
-      return (
-        <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />
-      );
-    case 'discover':
-      return <DiscoverRoute />;
-    case 'templates':
-      return <TemplatesRoute />;
-    case 'starred':
-      // Port of the vanilla renderStarred — a pure empty-state page.
-      return (
-        <PageScroll title="Starred" subtitle="Apps you star show up here for quick access.">
-          <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
-        </PageScroll>
-      );
-    default:
-      // Staged: ported one-by-one from the vanilla app-*.ts render fns.
-      return <PageEmpty message="This screen is being migrated to React." />;
-  }
-}
-
+// The React shell root — the single component the flip mounts on #root,
+// replacing the vanilla app.ts IIFE + chrome.ts. It owns the real renderer
+// state (appearance prefs, the live app/draft list, starred set) and drives
+// ShellApp, which wires the chrome frame + router. Routes render from the
+// renderRoute switch below; each is ported one at a time from the vanilla
+// app-*.ts modules. NOT yet wired to #root while that work continues.
 export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
-  const { userApps, drafts } = useShellApps();
+  const { userApps, drafts, refresh } = useShellApps();
+  const { isStarred, toggleStar } = useStarred();
 
   const renderSidebar = useCallback(
     (nav: ShellNav) => {
@@ -123,6 +95,47 @@ export default function App(): JSX.Element {
       );
     },
     [userApps, drafts],
+  );
+
+  const renderRoute = useCallback(
+    (nav: ShellNav): JSX.Element => {
+      switch (nav.route.kind) {
+        case 'home':
+          return (
+            <HomeRoute
+              userApps={userApps}
+              drafts={drafts}
+              tileVariant={prefs.tileVariant}
+              isStarred={isStarred}
+              toggleStar={toggleStar}
+              refreshApps={refresh}
+            />
+          );
+        case 'insights':
+          return <InsightsRoute />;
+        case 'automations':
+          return <AutomationsRoute />;
+        case 'automation-view':
+          return <AutomationViewRoute automationId={nav.route.automationId} />;
+        case 'run-view':
+          return <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />;
+        case 'discover':
+          return <DiscoverRoute />;
+        case 'templates':
+          return <TemplatesRoute />;
+        case 'starred':
+          // Port of the vanilla renderStarred — a pure empty-state page.
+          return (
+            <PageScroll title="Starred" subtitle="Apps you star show up here for quick access.">
+              <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
+            </PageScroll>
+          );
+        default:
+          // Staged: ported one-by-one from the vanilla app-*.ts render fns.
+          return <PageEmpty message="This screen is being migrated to React." />;
+      }
+    },
+    [userApps, drafts, prefs.tileVariant, isStarred, toggleStar, refresh],
   );
 
   return (

@@ -6,6 +6,8 @@ vi.mock('../../gateway-client.js', () => ({
   getUserPrefs: () => Promise.resolve({}),
   saveUserPrefs: () => Promise.resolve(undefined),
   listApps: () => Promise.resolve([{ id: 'todos', name: 'Todos', kind: 'app' }]),
+  listAutomations: () => Promise.resolve([]),
+  listAutomationRuns: () => Promise.resolve([]),
   getInsightsSummary: () =>
     Promise.resolve({
       kpis: {
@@ -42,6 +44,10 @@ beforeEach(async () => {
   // Ambient globals the real tileVisualFromListing (via useShellApps) probes.
   (globalThis as unknown as { Icon: unknown }).Icon = { Todo: () => '', Sparkle: () => '' };
   (globalThis as unknown as { ICON_PALETTE: unknown }).ICON_PALETTE = { violet: '#7C5BD9' };
+  // Home's buildHomeAppItems asks the tokens bridge for each tile's finish.
+  (globalThis as unknown as { CentraidTokens: unknown }).CentraidTokens = {
+    tileFinish: () => ({ background: '#111', boxShadow: 'none', glyphColor: '#fff' }),
+  };
   ({ default: App } = await import('./App.js'));
 });
 
