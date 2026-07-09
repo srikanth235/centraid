@@ -1,17 +1,33 @@
 # Desktop renderer CSS conventions
 
-Status: **modularization complete** (issue #325, R6/M5). There is no more
+Status: **modularization complete** (issue #325, R6/M5+M6). There is no more
 vanilla renderer — R5 deleted every `.ts` CSS-emitting file, so the old
 "shared with a vanilla host" rationale for keeping a class global no longer
 applies to anything. Every class that is safely scopable (owned by exactly one
 surface, or shared by React files that can agree on one module) has been
 carved out of the monolithic `src/renderer/styles.css` into co-located or
-shared CSS Modules. The file went from ~14,788 lines (pre-R1) to ~2,600. What
+shared CSS Modules. The file went from ~14,788 lines (pre-R1) to ~2,120. What
 remains is a small, permanent global layer: reset/tokens/base, the two design-
-sync primitive families, and the window-chrome family (see "What stays
-global" below) — not a migration backlog. This doc is the north star for
-**all new work** — new screens author a co-located `*.module.css`, never grow
-the monolith.
+sync primitive families, the window-chrome family, and a deliberate atomic
+utility layer (see "What stays global" below) — not a migration backlog. This
+doc is the north star for **all new work** — new screens author a co-located
+`*.module.css`, never grow the monolith.
+
+M6 (same issue, after M5 was first declared "done") found and closed a real
+gap: the classifier script used to audit this file (`full.mjs`, kept outside
+the repo) had a hardcoded prefix whitelist that silently skipped ~90 classes
+all migration long — a `ctx-*` context-menu family, a `msg-*`/`chat-scroll`/
+`pulse` chat-bubble family shared by the two chat surfaces, `drawer-group*`,
+`right-pane`, `preview-toast*`, `ap-preview*`, `app-view-frame`/`-fullbleed`,
+`btn-danger`, `sheet-actions`, and a batch of genuinely dead rules (orphaned
+`app-topbar`, `cd-sb-icon`/`cd-sb-dot`, `hide`, `empty-art`, `journal-list-
+item`, `share-access-row`, `tap-circle.sm`, `app-tile-add .app-icon` —
+selectors that survived earlier dead-sweeps only because they were entangled
+with a *different*, still-live class in the same rule). The classifier is
+fixed now (no whitelist) — running it again turns up nothing but the
+documented global families below and known noise (comment prose, dynamically-
+built class names like `` `cd-btn-${variant}` ``, and an e2e-only consumer
+outside the renderer tree).
 
 ## The four layers
 
@@ -99,14 +115,18 @@ examples (commits on `main`).
 
 ## What stays global, and why
 
-Two families are **permanently** global — do not attempt to scope these, they
-are not migration debt:
+Three families are **permanently** global — do not attempt to scope these,
+they are not migration debt:
 
 - **Design-sync primitives.** `cd-app-card*`, `cd-btn*`, `cd-status`,
   `cd-status-dot`, `cd-disc-badge` — rendered by the shared `ui/AppCard.tsx` and
   `ui/Button.tsx` components. The claude.ai/design bundle ships `styles.css`
   verbatim and expects these classes to exist globally under exactly these
-  names; scoping them would desync the design-sync bundle from the app.
+  names; scoping them would desync the design-sync bundle from the app. Some
+  of these (e.g. `cd-btn-ghost`/`cd-btn-soft`/`cd-btn-danger`) are built as a
+  template literal (`` `cd-btn-${variant}` `` in `ui/Button.tsx`), so a plain
+  grep for the literal string won't find the consumer — check the component,
+  not just the source text, before assuming one of these is dead.
 - **Window/shell chrome.** `cd-window*`, `cd-sidebar*`, `cd-sb-*` (`Sidebar.tsx`),
   `cd-tl-*`/`cd-main`/`cd-traffic-lights-spacer` (`ShellFrame.tsx`), `cd-tb-btn*`,
   `cd-tooltip`, `cd-kbd`, `chip` — `ShellFrame.tsx` and `Sidebar.tsx` are densely
@@ -116,17 +136,31 @@ are not migration debt:
   the other reaches into. Confirmed via a reverted attempt (10 stranded
   classes) — this is the one part of the shell intentionally left as the old
   global-string style, forever.
+- **The atomic utility layer.** `btn`/`btn-primary`/`btn-ghost`/`btn-icon`/
+  `btn-soft`, `flex`/`row`/`col`/`center`/`between`, `textarea`/`label`/`input`,
+  `hint`/`muted`/`tiny`/`spacer`/`card`/`chip`/`empty`/`empty-art` — each reused
+  by 3–15+ files as a one- or two-word rule (`.flex { display: flex }`). Rule
+  #4 above ("reuse = components, not shared classes") is about *look-alike UI*,
+  not these — scoping a 2-line atomic rule means either duplicating it into
+  every consumer's module or funneling everything through one shared
+  `utilities.module.css`, which is just relocating the global layer, not
+  eliminating it. Left global on purpose, the same call most CSS-Modules
+  codebases make for a small utility layer. `tiny-btn` and `right-pane-content`
+  are the same call for a different reason — each is foreign-rooted under a
+  combinator owned by an unrelated family (`preview-toast-action`, `has-phone`)
+  and isn't worth detangling for one selector.
 
 Everything else — every per-screen private family and every cross-screen
-shared family that isn't one of the two above — has been carved into a module.
-A `full.mjs`-style classifier (defined-in-`styles.css` × referenced-by) run
-against the current tree should turn up nothing beyond: these two families,
-handful of narrow-name false positives from comments/keyframe-name substrings
-(e.g. `ab-` inside `ab-diff-flash`), and the small 2-rule `.empty`/`.empty-art`
-family (shared by ~4 screens as plain strings — small enough that a shared
-module wasn't worth the churn).
+shared family that isn't one of the three above — has been carved into a
+module. A `full.mjs`-style classifier (defined-in-`styles.css` ×
+referenced-by, **no prefix whitelist** — see the M6 pitfall below) run against
+the current tree should turn up nothing but: these three families, and noise —
+comment prose that happens to contain a class-shaped word (`.empty-art` inside
+a doc sentence is not a live selector), and a consumer outside the scanned
+tree (`tile-more-btn` is real, asserted on by a Playwright e2e flow under
+`tests/agent-e2e/`, invisible to a classifier that only scans `src/renderer`).
 
-### Two tooling pitfalls hit during the carve (worth knowing before automating this again)
+### Tooling pitfalls hit during the carve (worth knowing before automating this again)
 
 - **A class can be "rooted" (owns a rule) and *also* reached from a foreign
   combinator elsewhere** (`.cd-tl-side { … }` plus
@@ -141,6 +175,25 @@ module wasn't worth the churn).
   newly-carved rules (especially when that set is empty, e.g. every candidate
   got fixpoint-excluded) silently wipes the file to empty. Always read-merge
   the CSS text and the `class → local-name` map with what's already there.
+- **A classifier that only evaluates a hardcoded prefix whitelist will miss
+  real families.** M5 declared this migration done using a classifier whose
+  loop started `if (!/^(cd-|app-chat-|.../.test(c)) continue;` — anything
+  outside that prefix list (`ctx-*`, `msg-*`, `drawer-group*`, `right-pane`,
+  `preview-toast*`, `ap-preview*`, `sheet-actions`, `btn-danger`, …) was never
+  evaluated for scoping, all migration long, without erroring or warning. M6
+  found this by re-running the classifier with the filter removed. Evaluate
+  every defined class; let real noise (comment prose, dead orphaned rules,
+  dynamically-built names) show up as an empty ref set or a doc-only hit, not
+  as a skip before it's even checked.
+- **`ruleDead`/dead-sweep checks must look at the *whole* selector, not just
+  the candidate class.** A combinator rule like `.journal-list-item .date {}`
+  has two class tokens; if only `journal-list-item` is dead but `date` is a
+  live class elsewhere, an all-classes-must-be-dead check correctly refuses to
+  delete the rule — which is right for `date`, but leaves the truly-orphaned
+  `journal-list-item` half of it stranded forever. These need a manual pass:
+  find rules where the *first* class is confirmed dead even if a later class
+  in the same selector is a live class from an unrelated family, and delete
+  just those rules.
 
 ## Serving + design-sync
 
