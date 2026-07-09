@@ -1,0 +1,465 @@
+/* Insights page — co-located styles for InsightsScreen.tsx (issue #325, Phase 4
+   CSS refactor). Scoped by Vite CSS Modules; lifted from the old monolithic
+   styles.css, cd-ins-* → scoped local names.
+
+   Usage-analytics dashboard reached from the sidebar Pages section. A KPI strip
+   over a two-column grid: daily-consumption chart + by-app table on the left,
+   by-model + recent-activity on the right. */
+.page {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* Header — title cluster + (display-only) filter chips. */
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.titleIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(155deg, var(--accent-light), var(--accent-deep));
+}
+.title h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 25px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: default;
+}
+.filterIcononly {
+  padding: 0;
+  width: 32px;
+  justify-content: center;
+}
+.filterIcon {
+  display: inline-flex;
+  color: var(--ink-3);
+}
+.filterCaret {
+  display: inline-flex;
+  color: var(--ink-4);
+  margin-left: 1px;
+}
+
+/* KPI strip. */
+.kpis {
+  display: grid;
+  grid-template-columns: 1.4fr repeat(4, 1fr);
+  gap: 14px;
+}
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 16px 18px;
+  border-radius: 13px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+}
+.kpiLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.kpiIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+.kpiValue {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 33px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.kpiFoot {
+  margin-top: auto;
+}
+.kpiRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.kpiSub {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* Delta chip — "+18%" / "−6%". */
+.delta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.delta[data-tone='up'] {
+  color: #d98a3d;
+}
+.delta[data-tone='down'] {
+  color: var(--ink-3);
+}
+.delta[data-tone='flat'] {
+  color: var(--ink-4);
+}
+
+/* Meter under the Tokens KPI. */
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.meterRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.meterFoot {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.bar {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.barFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+/* Two-column grid. */
+.grid {
+  display: grid;
+  grid-template-columns: 1.62fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Panel — shared card shell for chart / table / lists. */
+.panel {
+  border-radius: 14px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.panelHead {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 16px 18px 0;
+}
+.panelHead h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.panelMeta {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+
+/* Daily-consumption chart. */
+.chart {
+  padding: 14px 18px 18px;
+}
+.chartStats {
+  display: flex;
+  gap: 34px;
+  margin-bottom: 14px;
+}
+.chartStatLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 3px;
+}
+.chartStatValue {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--ink);
+}
+.chartStatAccent {
+  color: #d98a3d;
+}
+.chartStatSub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+  margin-top: 2px;
+}
+.chartPlot {
+  position: relative;
+  height: 200px;
+}
+.chartSvgWrap {
+  position: absolute;
+  inset: 0;
+}
+.chartSvg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.chartPeak {
+  position: absolute;
+  top: -2px;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 0.5px solid var(--line);
+}
+.chartAxis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+
+/* By-app table. */
+.table {
+  padding: 6px 6px 8px;
+}
+.tr {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.6fr) 84px 64px 64px 1fr 110px 110px 48px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9px;
+}
+.tr:not(.trHead):hover {
+  background: var(--bg-sunken);
+}
+.tr + .tr:not(.trHead) {
+  box-shadow: 0 -0.5px 0 var(--line);
+}
+.th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.td {
+  font-size: 13px;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+.cNum,
+.cRuns {
+  text-align: right;
+  justify-self: end;
+}
+.cApp {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.appIcon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+}
+.appName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tag {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d98a3d;
+  background: color-mix(in srgb, #d98a3d 14%, transparent);
+  border-radius: 4px;
+  padding: 2px 5px;
+}
+.mixbar {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.mixbarFill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.spark {
+  display: block;
+  width: 96px;
+  height: 26px;
+  color: var(--accent);
+}
+.spark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* By-model list. */
+.models {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 18px 18px;
+  gap: 16px;
+}
+.model {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.modelName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.modelFoot {
+  display: flex;
+  justify-content: space-between;
+}
+.modelFoot .mono {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* Recent-activity feed. */
+.activity {
+  padding: 8px 8px 10px;
+}
+.act {
+  display: grid;
+  grid-template-columns: 56px 24px 1fr auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 12px;
+  border-radius: 9px;
+}
+.act + .act {
+  box-shadow: 0 -0.5px 0 var(--line);
+}
+.act:hover {
+  background: var(--bg-sunken);
+}
+.actAgo {
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
+.actBody {
+  min-width: 0;
+}
+.actApp {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.actNote {
+  font-size: 12px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.actCost {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.actCost .mono {
+  font-size: 11px;
+}
+.actUsd {
+  color: var(--ink-4) !important;
+}
+
+/* Narrow-window fallback — stack the two columns. */
+@media (max-width: 1080px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

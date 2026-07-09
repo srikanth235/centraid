@@ -62,14 +62,14 @@ describe('InsightsScreen', () => {
     const html = renderToStaticMarkup(<InsightsScreen summary={summary} />);
     expect(html).toContain('<h1>Insights</h1>');
     expect(html).toContain('Last 30 days');
-    expect(count(html, 'cd-ins-kpi"')).toBe(5);
+    expect(count(html, 'kpi"')).toBe(5);
     expect(html).toContain('128k'); // insK(128_000)
     expect(html).toContain('$3.40'); // insUsd
   });
 
   it('draws the daily line chart with computed stats', () => {
     const html = renderToStaticMarkup(<InsightsScreen summary={summary} />);
-    expect(html).toContain('cd-ins-chart-svg');
+    expect(html).toContain('chartSvg');
     expect(html).toContain('Daily avg');
     expect(html).toContain('Peak');
     // peak day label present
