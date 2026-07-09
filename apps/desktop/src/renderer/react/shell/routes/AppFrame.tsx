@@ -24,14 +24,25 @@ export default function AppFrame({
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const themeKind = themes[theme]?.kind ?? 'dark';
+  // Latest theme, read by the load handler so a frame that loads mid-change
+  // paints the current theme without re-resolving its URL.
+  const themeRef = useRef({ themeKind, bgL });
+  themeRef.current = { themeKind, bgL };
 
+  // Resolve + load the app once per app. The theme rides the initial URL and is
+  // re-asserted on load; later theme changes are broadcast live (next effect)
+  // rather than reloading the frame, so the app keeps its in-flight state.
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
     let alive = true;
     const onLoad = (): void => {
       try {
-        frame.contentWindow?.postMessage({ type: 'centraid:theme', theme: themeKind, bgL }, '*');
+        const t = themeRef.current;
+        frame.contentWindow?.postMessage(
+          { type: 'centraid:theme', theme: t.themeKind, bgL: t.bgL },
+          '*',
+        );
       } catch {
         /* noop */
       }
@@ -40,8 +51,9 @@ export default function AppFrame({
     void appLiveUrl({ id: appId })
       .then((r) => {
         if (!alive) return;
+        const t = themeRef.current;
         const qsep = r.url.includes('?') ? '&' : '?';
-        const themeQs = `theme=${themeKind}&bgL=${bgL}`;
+        const themeQs = `theme=${t.themeKind}&bgL=${t.bgL}`;
         frame.src = `${r.url}${qsep}${themeQs}#${themeQs}`;
       })
       .catch(() => {
@@ -54,8 +66,20 @@ export default function AppFrame({
       alive = false;
       frame.removeEventListener('load', onLoad);
     };
-    // Re-resolve when the app or the injected theme changes.
-  }, [appId, themeKind, bgL]);
+  }, [appId]);
+
+  // Live re-theme — postMessage the running frame on a global theme change
+  // (vanilla broadcastSettingsToFrames). No src reset, so no reload.
+  useEffect(() => {
+    try {
+      frameRef.current?.contentWindow?.postMessage(
+        { type: 'centraid:theme', theme: themeKind, bgL },
+        '*',
+      );
+    } catch {
+      /* noop */
+    }
+  }, [themeKind, bgL]);
 
   return (
     <div
