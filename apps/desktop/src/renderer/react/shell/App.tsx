@@ -12,6 +12,7 @@ import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
+import DiscoverRoute from './routes/DiscoverRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
 
@@ -76,6 +77,8 @@ function renderRoute(nav: ShellNav): JSX.Element {
       return (
         <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />
       );
+    case 'discover':
+      return <DiscoverRoute />;
     case 'starred':
       // Port of the vanilla renderStarred — a pure empty-state page.
       return (

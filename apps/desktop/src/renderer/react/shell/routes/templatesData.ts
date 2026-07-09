@@ -27,6 +27,16 @@ export async function loadAutomationTemplates(): Promise<TemplateEntry[]> {
   }
 }
 
+/** Clone an automation template on the gateway, returning the new automation id
+ *  + any once-only webhook secrets for the caller to surface and to open in the
+ *  automation builder (vanilla adoptTemplate, minus the navigation). Throws. */
+export async function cloneAutomationTemplate(
+  tmpl: TemplateEntry,
+): Promise<{ automationId: string; webhooks: ReadonlyArray<{ url: string }> }> {
+  const result = await gwCloneTemplate({ templateId: tmpl.id });
+  return { automationId: result.app.id, webhooks: result.webhooks ?? [] };
+}
+
 /** Clone a template into a fresh draft app on the gateway, returning the draft
  *  meta for the caller to open in the builder (vanilla cloneTemplate, minus the
  *  enterBuilder side-effect — the route owns navigation). Throws on failure. */
