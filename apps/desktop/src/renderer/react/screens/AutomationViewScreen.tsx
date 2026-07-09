@@ -7,6 +7,8 @@ import type {
   AutomationViewData,
   AuViewRunDTO,
 } from '../bridge.js';
+import styles from './AutomationViewScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -34,23 +36,23 @@ function RunRow({
   return (
     <button
       type="button"
-      className="cd-au-run"
+      className={styles.run}
       data-ok={String(run.ok)}
       onClick={() => run.automationId && onOpen(run.automationId, run.runId)}
     >
-      <span className="cd-au-run-ic" data-ok={String(run.ok)} aria-hidden="true">
+      <span className={styles.runIc} data-ok={String(run.ok)} aria-hidden="true">
         <Icon name={run.ok ? 'CheckCircle' : 'AlertCircle'} size={15} />
       </span>
-      <span className="cd-au-run-sum">{run.summary}</span>
-      <span className="cd-au-run-trig">
+      <span className={styles.runSum}>{run.summary}</span>
+      <span className={styles.runTrig}>
         <span aria-hidden="true">
           <Icon name={run.trigIcon as IconName} size={12} />
         </span>
         <span>{run.trigLabel}</span>
       </span>
-      <span className="cd-au-run-when">
+      <span className={styles.runWhen}>
         <b>{run.whenLabel}</b>
-        <span className="cd-au-run-when-meta">{run.metaLabel}</span>
+        <span className={styles.runWhenMeta}>{run.metaLabel}</span>
       </span>
     </button>
   );
@@ -68,14 +70,14 @@ function Kpi({
   ok?: boolean;
 }): JSX.Element {
   return (
-    <div className="cd-au-kpi">
-      <div className="cd-au-kpi-l">
-        <span className="cd-au-kpi-ic" aria-hidden="true">
+    <div className={styles.kpi}>
+      <div className={styles.kpiL}>
+        <span className={styles.kpiIc} aria-hidden="true">
           <Icon name={icon} size={13} />
         </span>
         <span>{label}</span>
       </div>
-      <div className="cd-au-kpi-v" data-ok={ok ? 'true' : undefined}>
+      <div className={styles.kpiV} data-ok={ok ? 'true' : undefined}>
         {value}
       </div>
     </div>
@@ -145,8 +147,8 @@ export default function AutomationViewScreen({
   };
 
   return (
-    <div className="cd-au-view">
-      <div className="cd-au-vhead">
+    <div className={styles.view}>
+      <div className={styles.vhead}>
         <div>
           <div className="cd-au-crumb">
             <button type="button" onClick={onBack}>
@@ -157,20 +159,20 @@ export default function AutomationViewScreen({
             </span>
             <span>{d.name}</span>
           </div>
-          <div className="cd-au-vtitle">
+          <div className={styles.vtitle}>
             <span className="cd-au-glyph" data-hue={d.hue} style={{ width: 46, height: 46 }}>
               <Icon name={d.glyphIcon as IconName} size={21} />
             </span>
-            <div className="cd-au-vtitle-text">
+            <div className={styles.vtitleText}>
               <h1>{d.name}</h1>
-              {d.description ? <p className="cd-au-vsub">{d.description}</p> : null}
+              {d.description ? <p className={styles.vsub}>{d.description}</p> : null}
             </div>
           </div>
         </div>
         <div className="cd-au-actions">
           <button
             type="button"
-            className="cd-au-btn cd-au-btn-danger cd-au-btn-icon"
+            className={cx('cd-au-btn', styles.btnDanger, styles.btnIcon)}
             title="Delete automation"
             aria-label={`Delete ${d.name}`}
             disabled={busy}
@@ -180,7 +182,7 @@ export default function AutomationViewScreen({
           </button>
           <button
             type="button"
-            className="cd-au-btn cd-au-btn-ghost cd-au-btn-icon"
+            className={cx('cd-au-btn', 'cd-au-btn-ghost', styles.btnIcon)}
             title="Edit in builder"
             disabled={busy}
             onClick={onEdit}
@@ -199,18 +201,18 @@ export default function AutomationViewScreen({
         </div>
       </div>
 
-      <div className="cd-au-hero" data-hue={d.hue}>
-        <span className="cd-au-hero-icon" aria-hidden="true">
+      <div className={styles.hero} data-hue={d.hue}>
+        <span className={styles.heroIcon} aria-hidden="true">
           <Icon name={d.heroIcon as IconName} size={26} />
         </span>
-        <div className="cd-au-hero-main">
-          <div className="cd-au-hero-eyebrow cd-au-hero-kind">{d.kindEyebrow}</div>
-          <div className="cd-au-hero-when">{d.when}</div>
+        <div className={styles.heroMain}>
+          <div className={cx(styles.heroEyebrow, styles.heroKind)}>{d.kindEyebrow}</div>
+          <div className={styles.heroWhen}>{d.when}</div>
           {d.cronExprs.length > 0 ? (
-            <div className="cd-au-hero-detail">
+            <div className={styles.heroDetail}>
               {d.cronExprs.map((expr) => (
-                <span key={expr} className="cd-au-hero-cron">
-                  <span className="cd-au-hero-cron-ic" aria-hidden="true">
+                <span key={expr} className={styles.heroCron}>
+                  <span className={styles.heroCronIc} aria-hidden="true">
                     <Icon name="Braces" size={12} />
                   </span>
                   <code>{expr}</code>
@@ -219,16 +221,16 @@ export default function AutomationViewScreen({
             </div>
           ) : null}
           {d.nextRuns.length > 0 ? (
-            <div className="cd-au-hero-next">
-              <div className="cd-au-hero-next-lbl">Next 3 runs</div>
-              <div className="cd-au-hero-next-pills">
+            <div className={styles.heroNext}>
+              <div className={styles.heroNextLbl}>Next 3 runs</div>
+              <div className={styles.heroNextPills}>
                 {d.nextRuns.map((label, i) => (
                   <span
                     key={label}
-                    className="cd-au-hero-next-pill"
+                    className={styles.heroNextPill}
                     data-active={i === 0 ? 'true' : undefined}
                   >
-                    <i className="cd-au-hero-next-dot" aria-hidden="true" />
+                    <i className={styles.heroNextDot} aria-hidden="true" />
                     <span>{label}</span>
                   </span>
                 ))}
@@ -237,28 +239,28 @@ export default function AutomationViewScreen({
           ) : null}
           {d.webhook ? (
             d.webhook.pending || !d.webhook.url ? (
-              <div className="cd-au-hero-webhook" data-provisioning="true">
+              <div className={styles.heroWebhook} data-provisioning="true">
                 <span className="cd-au-status-ic" data-spin="true" aria-hidden="true">
                   <Icon name="Loader" size={13} />
                 </span>
                 <span>Provisioning endpoint… · secret minted server-side</span>
               </div>
             ) : (
-              <div className="cd-au-hero-webhook">
-                <span className="cd-au-hero-wh-ic" aria-hidden="true">
+              <div className={styles.heroWebhook}>
+                <span className={styles.heroWhIc} aria-hidden="true">
                   <Icon name="Webhook" size={14} />
                 </span>
-                <code className="cd-au-hero-wh-url">{d.webhook.url}</code>
+                <code className={styles.heroWhUrl}>{d.webhook.url}</code>
                 <button
                   type="button"
-                  className="cd-au-hero-copy"
+                  className={styles.heroCopy}
                   aria-label="Copy webhook URL"
                   title="Copy webhook URL"
                   onClick={() => d.webhook?.url && onCopyWebhook(d.webhook.url)}
                 >
                   <Icon name="Copy" size={13} />
                 </button>
-                <span className="cd-au-hero-wh-note">
+                <span className={styles.heroWhNote}>
                   <span aria-hidden="true">
                     <Icon name="Key" size={12} />
                   </span>
@@ -268,16 +270,16 @@ export default function AutomationViewScreen({
             )
           ) : null}
         </div>
-        <div className="cd-au-hero-status">
+        <div className={styles.heroStatus}>
           <span className="cd-au-status" data-tone={d.statusKind} role="status">
             <span className="cd-au-status-ic" aria-hidden="true">
               <Icon name={STATUS_ICON[d.statusKind]} size={12} />
             </span>
             <span className="cd-au-status-tx">{d.statusLabel}</span>
           </span>
-          <div className="cd-au-hero-toggle">
-            <span className="cd-au-hero-toggle-lbl">Enabled</span>
-            <label className="cd-au-switch" title={d.enabled ? 'Disable' : 'Enable'}>
+          <div className={styles.heroToggle}>
+            <span className={styles.heroToggleLbl}>Enabled</span>
+            <label className={styles.switch} title={d.enabled ? 'Disable' : 'Enable'}>
               <input
                 type="checkbox"
                 role="switch"
@@ -286,23 +288,23 @@ export default function AutomationViewScreen({
                 checked={d.enabled}
                 onChange={(e) => doToggle(e.target.checked)}
               />
-              <span className="cd-au-switch-track" aria-hidden="true" />
+              <span className={styles.switchTrack} aria-hidden="true" />
             </label>
           </div>
         </div>
       </div>
 
-      <div className="cd-au-cols">
-        <div className="cd-au-col-main">
-          <div className="cd-au-runhist">
-            <div className="cd-au-runhist-h">
+      <div className={styles.cols}>
+        <div className={styles.colMain}>
+          <div className={styles.runhist}>
+            <div className={styles.runhistH}>
               <h2>Run history</h2>
-              <div className="cd-au-filters">
+              <div className={styles.filters}>
                 {RUN_FILTERS.map(([key, label]) => (
                   <button
                     key={key}
                     type="button"
-                    className="cd-au-filter"
+                    className={styles.filter}
                     data-filter={key}
                     data-active={key === filter ? 'true' : undefined}
                     onClick={() => setFilter(key)}
@@ -312,40 +314,40 @@ export default function AutomationViewScreen({
                 ))}
               </div>
             </div>
-            <div className="cd-au-card">
-              <div className="cd-au-runs">
+            <div className={styles.card}>
+              <div className={styles.runs}>
                 {shownRuns.length > 0 ? (
                   shownRuns.map((run) => <RunRow key={run.runId} run={run} onOpen={onOpenRun} />)
                 ) : (
-                  <div className="cd-au-runs-empty">No runs in this view yet.</div>
+                  <div className={styles.runsEmpty}>No runs in this view yet.</div>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        <div className="cd-au-side">
-          <div className="cd-au-card cd-au-rail-card">
-            <div className="cd-au-rail-eyebrow">Last 30 days</div>
-            <div className="cd-au-kpis">
+        <div className={styles.side}>
+          <div className={cx(styles.card, styles.railCard)}>
+            <div className={styles.railEyebrow}>Last 30 days</div>
+            <div className={styles.kpis}>
               <Kpi icon="Activity" label="Runs · 30d" value={d.kpis.total} />
               <Kpi icon="CheckCircle" label="Success" value={d.kpis.successPct} ok />
               <Kpi icon="Clock" label="Avg duration" value={d.kpis.avg} />
               <Kpi icon="Coin" label="Cost · 30d" value={d.kpis.cost} />
             </div>
           </div>
-          <div className="cd-au-card cd-au-rail-card">
-            <div className="cd-au-rail-eyebrow">Behavior</div>
+          <div className={cx(styles.card, styles.railCard)}>
+            <div className={styles.railEyebrow}>Behavior</div>
             <BehaviorRow icon="Settings" label="Model" value={d.behavior.model} />
             <BehaviorRow icon="History" label="Run history" value={d.behavior.historyLabel} />
             <BehaviorRow icon="AlertTriangle" label="On failure" value={d.behavior.onFailure} />
             {d.tools.length > 0 ? (
-              <div className="cd-au-tools-sec">
-                <div className="cd-au-rail-eyebrow cd-au-rail-eyebrow-sub">Tools</div>
-                <div className="cd-au-tools">
+              <div className={styles.toolsSec}>
+                <div className={cx(styles.railEyebrow, styles.railEyebrowSub)}>Tools</div>
+                <div className={styles.tools}>
                   {d.tools.map((t) => (
-                    <span key={t} className="cd-au-tool-chip">
-                      <span className="cd-au-tool-ic" aria-hidden="true">
+                    <span key={t} className={styles.toolChip}>
+                      <span className={styles.toolIc} aria-hidden="true">
                         <Icon name="Plug" size={11} />
                       </span>
                       <code>{t}</code>
@@ -371,12 +373,12 @@ function BehaviorRow({
   value: string;
 }): JSX.Element {
   return (
-    <div className="cd-au-beh-row">
-      <span className="cd-au-beh-ic" aria-hidden="true">
+    <div className={styles.behRow}>
+      <span className={styles.behIc} aria-hidden="true">
         <Icon name={icon} size={14} />
       </span>
-      <span className="cd-au-beh-k">{label}</span>
-      <span className="cd-au-beh-v">{value}</span>
+      <span className={styles.behK}>{label}</span>
+      <span className={styles.behV}>{value}</span>
     </div>
   );
 }
