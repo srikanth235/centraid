@@ -1450,10 +1450,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3393,10 +3395,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -6958,10 +6962,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 
 
@@ -6977,10 +6983,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7013,10 +7021,12 @@ select.input option {
 
 
 
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
+
 
 
 
@@ -7410,41 +7420,6 @@ select.input option {
    grid resolves to the same column width on Discover as on Home. Both share the
    --lib-shelf-* tokens; the scroll drops its padding so the wrap owns the
    envelope, mirroring Home's padding-free day1 scroll + .cd-hsec. */
-.cd-disc-scroll {
-  padding: 0;
-}
-.cd-disc-wrap {
-  width: 100%;
-  max-width: var(--lib-shelf-max);
-  margin: 0 auto;
-  /* Same side padding as .cd-hsec; top/bottom replace what cd-disc-scroll drops. */
-  padding: 48px var(--lib-shelf-pad-x) 56px;
-  box-sizing: border-box;
-}
-.cd-disc-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-}
-.cd-disc-head-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-disc-head-text h1 {
-  margin: 8px 0 0;
-  font: var(--t-display-1);
-  font-size: 34px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-}
-.cd-disc-head-text p {
-  margin: 10px 0 0;
-  max-width: 540px;
-  font: var(--t-body);
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--ink-3);
-}
 .cd-disc-seg {
   flex: none;
   display: inline-flex;
@@ -7498,201 +7473,29 @@ select.input option {
 
 /* Filter toolbar — kind segmented control on the left, layout toggle on the
    right; sits below the Discover title block. */
-.cd-disc-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 22px;
-}
-.cd-disc-toolbar .cd-disc-seg {
-  margin-top: 0;
-}
-
-.cd-disc-cats {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-  margin-top: 28px;
-}
-.cd-disc-cat-head {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
-  margin-bottom: 13px;
-}
-.cd-disc-cat-label {
-  font: var(--t-h2);
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-.cd-disc-cat-count {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-}
-.cd-disc-grid {
-  /* Compact template tiles, sized to match the Home shelf exactly — the same
-     ~200px floor (.cd-apps-grid--small) packs 4–5 across in the wide pane and
-     reflows to 3/2 as the pane narrows. Not big posters. */
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px;
-}
 /* Rows layout — flatten template cards into full-width strips, mirroring the
    Home library's rows mode. */
-.cd-disc-grid[data-layout='rows'] {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card {
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-  min-height: 0;
-  padding: 12px 16px;
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-top {
-  flex: 1 1 auto;
-  flex-direction: row;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
 /* Slimmer glyph plate in the strip — the row's height is set by the text, not
    a poster icon. Matches the Home rows glyph (38px / 19px). */
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-icon svg {
-  width: 19px;
-  height: 19px;
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-desc {
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 /* Footer flattens into a fixed-width tail riding the right edge. The kind badge
    and trigger chip each take a fixed slot so APP/AUTOMATION and Cron/Webhook
    line up into clean columns down the list; integration dots pin to the far
    right. (Discover groups cards by category, so each grid is homogeneous and
    the columns stay true within a section.) */
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot {
-  flex: 0 0 auto;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-  gap: 14px;
-  justify-content: flex-end;
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-disc-badge {
-  flex: 0 0 auto;
-  width: var(--lib-row-badge-w);
-}
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-disc-trig {
-  flex: 0 0 auto;
-  width: 96px;
-}
 /* Integration dots: a fixed slot, dots right-aligned within it, so the column
    to its left (the trigger chip) lands at the same x regardless of how many
    dots a row carries — and an integration-less row still reserves the space. */
-.cd-disc-grid[data-layout='rows'] .cd-disc-card-foot .cd-au-ov-dots {
-  flex: 0 0 auto;
-  width: 58px;
-  margin-left: 0;
-  justify-content: flex-end;
-}
 
 /* Unified template card — apps and automations share the shape; the kind
    badge + trigger metadata distinguish them. The tile mirrors the Home library
    tile (.cd-app-card--small): a vertical head (glyph plate on its own row, name
    + 2-line blurb beneath), a shared min-height, and a foot pinned to the
    bottom so every tile in a row shares one height. */
-.cd-disc-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--lib-tile-gap);
-  min-height: var(--lib-tile-h);
-  text-align: left;
-  padding: var(--lib-tile-pad);
-  border: 0.5px solid var(--line);
-  border-radius: var(--lib-tile-radius);
-  background: var(--lib-tile-bg);
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
-  transition:
-    background 140ms,
-    transform 120ms;
-}
-.cd-disc-card:hover {
-  background: var(--lib-tile-bg-hover);
-}
-.cd-disc-card:active {
-  transform: scale(0.99);
-}
-.cd-disc-card-top {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--lib-tile-gap);
-}
-.cd-disc-card-icon {
-  width: var(--lib-tile-icon);
-  height: var(--lib-tile-icon);
-  flex: none;
-  border-radius: var(--lib-tile-icon-radius);
-  display: grid;
-  place-items: center;
-}
-.cd-disc-card-icon svg {
-  display: block;
-}
 /* Stretch the head to the card width so the name ellipsis and the blurb clamp
    are both bounded by the tile, not by the text's natural width. */
-.cd-disc-card-head {
-  align-self: stretch;
-  min-width: 0;
-}
 /* Match the Home tile name exactly — the display font (via --t-title), 15px,
    so "Hydrate" reads identically on both pages (Discover previously inherited
    the sans body font). */
-.cd-disc-card-name {
-  font: var(--t-title);
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-disc-card-desc {
-  margin-top: 4px;
-  font: var(--t-small);
-  font-size: 12.5px;
-  line-height: 1.4;
-  color: var(--ink-3);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.cd-disc-card-foot {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 11px;
-  border-top: 0.5px solid var(--line);
-}
 .cd-disc-badge {
   display: inline-flex;
   align-items: center;
@@ -7709,35 +7512,6 @@ select.input option {
 }
 .cd-disc-badge[data-kind='automation'] {
   color: var(--accent);
-}
-.cd-disc-trig {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-}
-.cd-disc-trig svg {
-  display: block;
-}
-.cd-disc-card-foot .cd-au-ov-dots {
-  margin-left: auto;
-}
-@media (max-width: 920px) {
-
-
-
-
-
-
-
-  .cd-disc-head {
-    flex-direction: column;
-    gap: 14px;
-  }
-  .cd-disc-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 
@@ -9061,11 +8835,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -9818,10 +9594,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -10412,10 +10190,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -10914,6 +10694,7 @@ button.cd-au-run:hover .cd-au-run-go {
 
 
 
+
   .cd-asst {
     grid-template-columns: 0 1fr;
   }
@@ -10921,6 +10702,7 @@ button.cd-au-run:hover .cd-au-run-go {
     display: none;
   }
 }
+
 
 
 

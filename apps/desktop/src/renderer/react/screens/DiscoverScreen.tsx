@@ -4,6 +4,8 @@ import type { ColorHex, IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
+import styles from './DiscoverScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 type Kind = 'all' | 'app' | 'automation';
 type Layout = 'tiles' | 'rows';
@@ -88,7 +90,7 @@ function TemplateCard({
   return (
     <button
       type="button"
-      className="cd-disc-card"
+      className={styles.card}
       data-kind={auto ? 'automation' : 'app'}
       onClick={() => (auto ? onOpenAutomationTemplate(t) : onOpenTemplate(t))}
       onContextMenu={(e) => {
@@ -96,9 +98,9 @@ function TemplateCard({
         onTemplateContext(t, { kind: 'point', x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="cd-disc-card-top">
+      <div className={styles.cardTop}>
         <div
-          className="cd-disc-card-icon"
+          className={styles.cardIcon}
           style={{
             background: finish.background,
             boxShadow: finish.boxShadow,
@@ -107,12 +109,12 @@ function TemplateCard({
         >
           <Icon name={t.iconKey as IconName} size={21} strokeWidth={1.85} />
         </div>
-        <div className="cd-disc-card-head">
-          <div className="cd-disc-card-name">{t.name}</div>
-          <div className="cd-disc-card-desc">{t.desc}</div>
+        <div className={styles.cardHead}>
+          <div className={styles.cardName}>{t.name}</div>
+          <div className={styles.cardDesc}>{t.desc}</div>
         </div>
       </div>
-      <div className="cd-disc-card-foot">
+      <div className={styles.cardFoot}>
         <span className="cd-disc-badge" data-kind={auto ? 'automation' : 'app'}>
           <span aria-hidden="true" style={{ display: 'inline-flex' }}>
             {auto ? <Icon name="Bolt" size={12} /> : <GridGlyph size={12} sw={1.85} />}
@@ -121,7 +123,7 @@ function TemplateCard({
         </span>
         {auto ? (
           <>
-            <span className="cd-disc-trig">
+            <span className={styles.trig}>
               <span aria-hidden="true" style={{ display: 'inline-flex' }}>
                 <Icon name={t.triggerKind === 'webhook' ? 'Webhook' : 'Clock'} size={12} />
               </span>
@@ -183,10 +185,10 @@ export default function DiscoverScreen({
   ];
 
   return (
-    <div className="cd-main-scroll cd-disc-scroll">
-      <div className="cd-disc-wrap">
-        <div className="cd-disc-head">
-          <div className="cd-disc-head-text">
+    <div className={cx('cd-main-scroll', styles.scroll)}>
+      <div className={styles.wrap}>
+        <div className={styles.head}>
+          <div className={styles.headText}>
             <div className="cd-eyebrow">Discover</div>
             <h1>Templates</h1>
             <p>
@@ -195,7 +197,7 @@ export default function DiscoverScreen({
             </p>
           </div>
         </div>
-        <div className="cd-disc-toolbar">
+        <div className={styles.toolbar}>
           <div className="cd-disc-seg" role="tablist" aria-label="Filter templates by kind">
             {segDefs.map((d) => (
               <button
@@ -244,7 +246,7 @@ export default function DiscoverScreen({
             </button>
           </div>
         </div>
-        <div className="cd-disc-cats">
+        <div className={styles.cats}>
           {shown.length === 0 ? (
             <div className="cd-page-empty">
               <div className="cd-page-empty-icon" aria-hidden="true">
@@ -256,14 +258,14 @@ export default function DiscoverScreen({
             order.map((cat) => {
               const bucket = groups.get(cat) ?? [];
               return (
-                <section key={cat} className="cd-disc-cat">
-                  <div className="cd-disc-cat-head">
-                    <span className="cd-disc-cat-label">{cat}</span>
-                    <span className="cd-disc-cat-count">
+                <section key={cat} className={styles.cat}>
+                  <div className={styles.catHead}>
+                    <span className={styles.catLabel}>{cat}</span>
+                    <span className={styles.catCount}>
                       {String(bucket.length).padStart(2, '0')}
                     </span>
                   </div>
-                  <div className="cd-disc-grid" data-layout={layout}>
+                  <div className={styles.grid} data-layout={layout}>
                     {bucket.map((t) => (
                       <TemplateCard
                         key={`${t.kind ?? 'app'}:${t.id}`}

@@ -54,7 +54,7 @@ const count = (html: string, needle: string): number => html.split(needle).lengt
 describe('DiscoverScreen', () => {
   it('renders the Discover chrome and the kind segmented filter', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
-    expect(html).toContain('cd-disc-wrap');
+    expect(html).toContain('wrap');
     expect(html).toContain('<h1>Templates</h1>');
     expect(count(html, 'cd-disc-seg-b')).toBe(3);
     expect(html).toContain('cd-lib-layout');
@@ -62,7 +62,7 @@ describe('DiscoverScreen', () => {
 
   it('lists every template as a card in the default All view, apps first', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
-    expect(count(html, 'class="cd-disc-card"')).toBe(3);
+    expect(count(html, 'class="card"')).toBe(3);
     expect(html.indexOf('Todos')).toBeLessThan(html.indexOf('Daily Digest'));
     expect(html).toContain('Todos');
     expect(html).toContain('Journal');
@@ -80,7 +80,7 @@ describe('DiscoverScreen', () => {
 
   it('draws trigger badge + integration dots only for automation cards', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
-    expect(html).toContain('cd-disc-trig');
+    expect(html).toContain('trig');
     expect(html).toContain('>Cron<');
     expect(count(html, 'cd-au-ov-dot"')).toBe(2);
     expect(html).toContain('cd-disc-badge');
@@ -92,6 +92,6 @@ describe('DiscoverScreen', () => {
     );
     expect(html).toContain('cd-page-empty');
     expect(html).toContain('No templates available yet.');
-    expect(count(html, 'cd-disc-card"')).toBe(0);
+    expect(count(html, 'card"')).toBe(0);
   });
 });
