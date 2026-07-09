@@ -12,6 +12,7 @@ import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { importCallbacks, loadProfilesData, phoneCallbacks } from './settingsAccountData.js';
+import { openSpaceModal, requestDeleteSpace, type SpaceModalDeps } from './spaceModals.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -59,10 +60,18 @@ export interface SettingsRouteProps {
 export default function SettingsRoute({ prefs, setPrefs, initialPage }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(initialPage ?? 'appearance');
   const def = PAGES.find((p) => p.id === page);
-  const { showToast } = useShellActions();
+  const { showToast, navigate } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
-  const spaces = useAsyncData(loadProfilesData);
+  const [spacesNonce, setSpacesNonce] = useState(0);
+  const spaces = useAsyncData(loadProfilesData, [spacesNonce]);
+  const spaceDeps: SpaceModalDeps = useMemo(
+    () => ({
+      onChanged: () => setSpacesNonce((n) => n + 1),
+      navigateHome: () => navigate({ kind: 'home' }),
+    }),
+    [navigate],
+  );
 
   return (
     <div className="cd-settings-main">
@@ -156,11 +165,17 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
                 onSwitch={(id) => void window.CentraidApi.setActiveVault({ vaultId: id })}
                 onConnect={(id) => void window.CentraidApi.setActiveGateway({ id })}
                 onRemoveConnection={(id) => void window.CentraidApi.removeGateway({ id })}
-                // Add / rename / delete open the vanilla profiles-cluster modals;
-                // those move to React in a follow-up (see notes).
-                onAdd={() => showToast('Space management is moving to React — use the switcher for now.')}
-                onEdit={() => showToast('Rename a space from the switcher for now.')}
-                onDelete={() => showToast('Delete a space from the switcher for now.')}
+                // Add / rename / delete open the vanilla `window.Profiles` modal
+                // cluster; the gateway I/O + re-scope live in spaceModals.ts.
+                onAdd={() => openSpaceModal('add', undefined, spaceDeps)}
+                onEdit={(id) => {
+                  const row = spaces.data.profiles.find((p) => p.id === id);
+                  if (row) openSpaceModal('edit', row, spaceDeps);
+                }}
+                onDelete={(id) => {
+                  const row = spaces.data.profiles.find((p) => p.id === id);
+                  if (row) requestDeleteSpace(row, spaceDeps);
+                }}
               />
             )
           ) : (
