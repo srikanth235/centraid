@@ -10,6 +10,8 @@ import {
 import { lineDiff } from '../../../../diff.js';
 import { iconSvg } from '../../iconSvg.js';
 import { showToast } from '../../toast.js';
+import { cx } from '../../../ui/cx.js';
+import styles from './BuilderCode.module.css';
 
 // File-tree glyphs copied verbatim from the vanilla builder (builder.ts
 // ~110-113). Small enough to inline; emitted as HTML strings for the
@@ -355,9 +357,9 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   }
 
   return (
-    <div className="code-pane">
-      <div className="code-tree">{files.length > 0 ? renderTree() : null}</div>
-      <div className="code-workspace">{workspaceBody}</div>
+    <div className={styles.pane}>
+      <div className={styles.tree}>{files.length > 0 ? renderTree() : null}</div>
+      <div className={styles.workspace}>{workspaceBody}</div>
     </div>
   );
 
@@ -376,7 +378,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <button
             key={`f:${node.path}`}
             type="button"
-            className="code-tree-row code-tree-folder"
+            className={cx(styles.treeRow, "code-tree-folder")}
             data-depth={String(depth)}
             style={{ '--depth': String(depth) } as React.CSSProperties}
             onClick={() =>
@@ -391,15 +393,15 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             }
           >
             <span
-              className="code-tree-chevron"
+              className={styles.treeChevron}
               data-open={String(isOpen)}
               dangerouslySetInnerHTML={{ __html: ChevronIcon(11) }}
             />
             <span
-              className="code-tree-icon"
+              className={styles.treeIcon}
               dangerouslySetInnerHTML={{ __html: FolderIcon(13) }}
             />
-            <span className="code-tree-name">{node.name}</span>
+            <span className={styles.treeName}>{node.name}</span>
           </button>
         );
       }
@@ -410,7 +412,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         <button
           key={`p:${node.path}`}
           type="button"
-          className="code-tree-row code-tree-file"
+          className={cx(styles.treeRow, "code-tree-file")}
           data-active={String(activePath === node.path)}
           data-dirty={String(isDirty)}
           data-depth={String(depth)}
@@ -420,10 +422,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             setDiffMode(false);
           }}
         >
-          <span className="code-tree-chevron-spacer" />
-          <span className="code-tree-lang-dot" data-lang={lang} />
-          <span className="code-tree-name">{node.name}</span>
-          {isDirty ? <span className="code-tree-dirty" /> : null}
+          <span className={styles.treeChevronSpacer} />
+          <span className={styles.treeLangDot} data-lang={lang} />
+          <span className={styles.treeName}>{node.name}</span>
+          {isDirty ? <span className={styles.treeDirty} /> : null}
         </button>
       );
     };
@@ -447,34 +449,34 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     const showHeaders = !q && frontend.length > 0 && backend.length > 0;
 
     const groupHead = (label: string, count: number): JSX.Element => (
-      <div className="code-tree-group-head" key={`h:${label}`}>
+      <div className={styles.treeGroupHead} key={`h:${label}`}>
         <span>{label}</span>
-        <span className="code-tree-group-count">{String(count)}</span>
+        <span className={styles.treeGroupCount}>{String(count)}</span>
       </div>
     );
 
     return (
       <>
-        <div className="code-search">
+        <div className={styles.search}>
           <span
-            className="code-search-icon"
+            className={styles.searchIcon}
             dangerouslySetInnerHTML={{ __html: iconSvg('Search', 13) }}
           />
           <input
-            className="code-search-input"
+            className={styles.searchInput}
             placeholder="Search code"
             value={search}
             onChange={(e) => setSearch(e.target.value.trim().toLowerCase())}
           />
-          <span className="code-search-kbd">⌘P</span>
+          <span className={styles.searchKbd}>⌘P</span>
         </div>
-        <div className="code-tree-list">
+        <div className={styles.treeList}>
           {showHeaders ? groupHead('Frontend', frontend.length) : null}
           {walk(frontend, 0)}
           {backend.length > 0 ? (showHeaders ? groupHead('Backend', backend.length) : null) : null}
           {backend.length > 0 ? walk(backend, 0) : null}
           {visible.length === 0 ? (
-            <div className="empty code-tree-empty">No matches</div>
+            <div className={cx("empty", styles.treeEmpty)}>No matches</div>
           ) : null}
         </div>
       </>
@@ -485,35 +487,35 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   function renderWorkspace(): JSX.Element {
     return (
       <>
-        <div className="code-tabs">
+        <div className={styles.tabs}>
           {renderTabStrip()}
           {renderTabActions()}
         </div>
-        <div className="code-editor-host">
+        <div className={styles.editorHost}>
           {diffMode && activeBuf ? renderDiff(activeBuf) : renderEditor()}
         </div>
-        <div className="code-status">{renderStatus()}</div>
+        <div className={styles.status}>{renderStatus()}</div>
       </>
     );
   }
 
   function renderTabStrip(): JSX.Element {
     return (
-      <div className="code-tab-strip">
+      <div className={styles.tabStrip}>
         {openTabs.map((p) => {
           const buf = buffers[p];
           const dirty = !!buf && buf.current !== buf.original;
           return (
             <div
               key={p}
-              className="code-tab"
+              className={styles.tab}
               data-active={String(activePath === p)}
               data-dirty={String(dirty)}
             >
-              <span className="code-tab-dot" data-lang={languageHint(p)} />
+              <span className={styles.tabDot} data-lang={languageHint(p)} />
               <button
                 type="button"
-                className="code-tab-label"
+                className={styles.tabLabel}
                 title={p}
                 onClick={() => {
                   openFile(p);
@@ -525,7 +527,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
               <button
                 type="button"
                 aria-label={`Close ${basename(p)}`}
-                className="code-tab-close"
+                className={styles.tabClose}
                 title={dirty ? 'Unsaved changes' : 'Close'}
                 onClick={() => closeTab(p)}
                 dangerouslySetInnerHTML={dirty ? undefined : { __html: iconSvg('X', 11, 2.5) }}
@@ -540,13 +542,13 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   function renderTabActions(): JSX.Element | null {
     const p = activePath;
     const buf = activeBuf;
-    if (!p || !buf) return <div className="code-tab-actions" />;
+    if (!p || !buf) return <div className={styles.tabActions} />;
     const dirty = buf.current !== buf.original;
     const nDirty = dirtyPaths().length;
     const isRemote = window.Centraid?.getRuntimeMode() === 'remote';
 
     return (
-      <div className="code-tab-actions">
+      <div className={styles.tabActions}>
         <button
           type="button"
           className="btn btn-ghost tiny-btn"
@@ -565,11 +567,11 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         >
           Save
         </button>
-        <div className="code-overflow-wrap">
+        <div className={styles.overflowWrap}>
           <button
             type="button"
             aria-label="More code actions"
-            className="btn btn-ghost tiny-btn code-overflow-btn"
+            className={cx("btn", "btn-ghost", "tiny-btn", styles.overflowBtn)}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((v) => !v);
@@ -581,10 +583,10 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
               <circle cx="19" cy="12" r="1.7" />
             </svg>
           </button>
-          <div className="code-overflow-menu" hidden={!menuOpen}>
+          <div className={styles.overflowMenu} hidden={!menuOpen}>
             <button
               type="button"
-              className="code-overflow-item"
+              className={styles.overflowItem}
               disabled={nDirty === 0}
               onClick={() => {
                 setMenuOpen(false);
@@ -595,7 +597,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             </button>
             <button
               type="button"
-              className="code-overflow-item"
+              className={styles.overflowItem}
               disabled={!dirty}
               onClick={() => {
                 setMenuOpen(false);
@@ -607,7 +609,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             {!isRemote ? (
               <button
                 type="button"
-                className="code-overflow-item"
+                className={styles.overflowItem}
                 onClick={() => {
                   setMenuOpen(false);
                   void window.CentraidApi.openAppFolder({ id: appId });
@@ -631,22 +633,22 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
     const lineNums: JSX.Element[] = [];
     for (let i = 1; i <= lineCount; i++) lineNums.push(<div key={i}>{i}</div>);
     return (
-      <div className="code-editor">
-        <div className="code-edit-gutter">
-          <div className="code-edit-gutter-inner" ref={gutterInnerRef}>
+      <div className={styles.editor}>
+        <div className={styles.editGutter}>
+          <div className={styles.editGutterInner} ref={gutterInnerRef}>
             {lineNums}
           </div>
         </div>
-        <div className="code-edit-surface">
-          <div className="code-edit-pre-clip">
+        <div className={styles.editSurface}>
+          <div className={styles.editPreClip}>
             <pre
-              className="code-edit-pre"
+              className={styles.editPre}
               ref={preRef}
               dangerouslySetInnerHTML={{ __html: tokenize(buf.current, lang) + '\n' }}
             />
           </div>
           <textarea
-            className="code-edit-ta"
+            className={styles.editTa}
             ref={taRef}
             spellCheck={false}
             wrap="off"
@@ -666,15 +668,15 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   function renderDiff(buf: CodeBuffer): JSX.Element {
     const rows = lineDiff(buf.original, buf.current);
     return (
-      <div className="code-diff">
+      <div className={styles.diff}>
         {rows.map((r, i) => {
           const sign = r.type === 'add' ? '+' : r.type === 'del' ? '-' : ' ';
           return (
-            <div className="code-diff-row" data-type={r.type} key={i}>
-              <span className="code-diff-num">{r.aNum ? String(r.aNum) : ''}</span>
-              <span className="code-diff-num">{r.bNum ? String(r.bNum) : ''}</span>
-              <span className="code-diff-sign">{sign}</span>
-              <span className="code-diff-text">{r.text || ' '}</span>
+            <div className={styles.diffRow} data-type={r.type} key={i}>
+              <span className={styles.diffNum}>{r.aNum ? String(r.aNum) : ''}</span>
+              <span className={styles.diffNum}>{r.bNum ? String(r.bNum) : ''}</span>
+              <span className={styles.diffSign}>{sign}</span>
+              <span className={styles.diffText}>{r.text || ' '}</span>
             </div>
           );
         })}
@@ -695,18 +697,18 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         <span>
           {lineCount} {lineCount === 1 ? 'line' : 'lines'} · {formatBytes(bytes)}
         </span>
-        <span className="code-status-sep">·</span>
-        <span className="code-status-save">
-          <span className="code-status-dot" />
+        <span className={styles.statusSep}>·</span>
+        <span className={styles.statusSave}>
+          <span className={styles.statusDot} />
           {nDirty > 0
             ? `autosaving · ${nDirty} unsaved file${nDirty === 1 ? '' : 's'}`
             : 'all saved'}
         </span>
-        <span className="code-status-spacer" />
+        <span className={styles.statusSpacer} />
         <span>
           line {caret.line} · col {caret.col}
         </span>
-        <span className="code-status-sep">·</span>
+        <span className={styles.statusSep}>·</span>
         <span>{LANG_DISPLAY[lang] ?? 'TXT'}</span>
       </>
     );

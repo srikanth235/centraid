@@ -1,0 +1,402 @@
+@keyframes pulse-fade {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes cd-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+.chatBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chatpaneHead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.chatpaneHeadTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.historyList.chatpaneHistory {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chatDivider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 4px 0 16px;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.chatDivider span {
+  background: var(--bg);
+  padding: 0 10px;
+  position: relative;
+  z-index: 1;
+}
+.chatStatusRow {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
+}
+.msgAiAvatar {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.abProgress {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+.abProgressDots {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.abProgressDots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  transition: background 0.2s ease;
+}
+.abProgressDots i[data-on='true'] {
+  background: var(--accent);
+}
+.abProgressDots i[data-on='true']:last-of-type {
+  animation: cd-pulse 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .abProgressDots i {
+    animation: none;
+  }
+}
+.abProgressMain {
+  flex: 1;
+  min-width: 0;
+}
+.abProgressLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.abProgressVerb {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  flex: none;
+}
+.abProgressFile {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg-sunken);
+  padding: 1px 6px;
+  border-radius: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.abProgressSub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.abProgressCancel {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: none;
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition:
+    color 0.14s ease,
+    border-color 0.14s ease;
+}
+.abProgressCancel:hover {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
+}
+.abProgressCancel:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.tgChangeCard {
+  margin: 6px 0 0 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border: 0.5px solid color-mix(in oklab, var(--accent) 22%, transparent);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition:
+    background 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.tgChangeCard:hover {
+  background: color-mix(in oklab, var(--accent) 11%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 32%, transparent);
+}
+.tgChangeCard .tgCardIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--accent) 18%, transparent);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.tgChangeCard .tgCardMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.tgChangeCard .tgCardTitle {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.tgChangeCard .tgCardSub {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tgChangeCard .tgCardVersion {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.01em;
+}
+.chatThinking {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--line);
+  background: transparent;
+}
+.chatThinking .thinkingHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.chatThinking .thinkingDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  opacity: 0.55;
+}
+.chatThinking[data-streaming='true'] .thinkingDot {
+  background: var(--accent);
+  animation: pulse-fade 1s infinite;
+}
+.chatThinking .thinkingBody {
+  font-size: 12.5px;
+  font-style: italic;
+  line-height: 1.55;
+  color: var(--ink-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.chatInputWrap {
+  flex: none;
+  padding: 8px 16px 16px;
+  background: var(--bg);
+}
+.promptStartersGroup {
+  margin-bottom: 10px;
+}
+.promptStarters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.promptStartersLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 8px;
+}
+.promptStarter {
+  border: 0.5px solid var(--line);
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 140ms ease-out,
+    color 140ms ease-out,
+    border-color 140ms ease-out;
+}
+.promptStarter:hover {
+  background: color-mix(in oklab, var(--ink) 5%, transparent);
+  border-color: color-mix(in oklab, var(--ink) 14%, transparent);
+  color: var(--ink);
+}
+.chatInput {
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.chatInputKbd {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--ink-4);
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.chatInput:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+.chatInput textarea {
+  border: 0;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: none;
+  min-height: 22px;
+  max-height: 180px;
+  color: var(--ink);
+}
+.chatInput textarea::placeholder {
+  color: var(--ink-4);
+}
+.chatInputControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chatInputControls .spacer {
+  flex: 1;
+}
+.inputPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.inputPill:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.inputPillIcon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  justify-content: center;
+}
+.sendBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--accent);
+  color: white;
+  display: grid;
+  place-items: center;
+  margin-left: 0;
+}
+.sendBtn:hover {
+  background: color-mix(in oklab, var(--accent) 88%, black);
+}
+.sendBtn:disabled {
+  opacity: 0.4;
+}
+.historyList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}

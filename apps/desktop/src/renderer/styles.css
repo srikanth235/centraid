@@ -631,40 +631,12 @@ select.input option {
   min-height: 0;
   overflow: hidden;
 }
-.chat-body {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
 
 /* Builder titlebar identity lockup — the app icon + name + status
    badge now ride in the window titlebar (cd-tl-nav), hugging the
    back/forward arrows. The chat pane carries no header of its own. */
 
 /* Header shown when chat pane is in History view */
-.chatpane-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elev);
-}
-.chatpane-head-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.history-list.chatpane-history {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
@@ -672,27 +644,6 @@ select.input option {
   display: flex;
   flex-direction: column;
   gap: 18px;
-}
-.chat-divider {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 4px 0 16px;
-  color: var(--ink-3);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.chat-divider span {
-  background: var(--bg);
-  padding: 0 10px;
-  position: relative;
-  z-index: 1;
-}
-.chat-status-row {
-  display: flex;
-  justify-content: center;
-  margin: 14px 0;
 }
 .msg-status {
   display: inline-flex;
@@ -743,17 +694,6 @@ select.input option {
   gap: 10px;
   margin: 0;
 }
-.msg-ai-avatar {
-  flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  margin-top: 2px;
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--accent);
-}
 .msg-ai-text {
   flex: 1;
   min-width: 0;
@@ -775,105 +715,7 @@ select.input option {
 /* ---- Agent progress strip (one determinate strip per build turn) ----
    4 dots (filled as tool calls complete) + a live verb + mono filename +
    a sub-line + cancel. Replaces the old "Thinking…" gen-row in the builder. */
-.ab-progress {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  margin: 12px 0 4px;
-  padding: 10px 12px;
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-}
-.ab-progress-dots {
-  display: inline-flex;
-  gap: 4px;
-  flex: none;
-}
-.ab-progress-dots i {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 18%, transparent);
-  transition: background 0.2s ease;
-}
-.ab-progress-dots i[data-on='true'] {
-  background: var(--accent);
-}
 /* the leading filled dot pulses to read as "in progress" */
-.ab-progress-dots i[data-on='true']:last-of-type {
-  animation: cd-pulse 1.2s ease-in-out infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-
-
-
-  .ab-progress-dots i {
-    animation: none;
-  }
-}
-
-
-
-.ab-progress-main {
-  flex: 1;
-  min-width: 0;
-}
-.ab-progress-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-.ab-progress-verb {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  flex: none;
-}
-.ab-progress-file {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  padding: 1px 6px;
-  border-radius: 5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ab-progress-sub {
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ab-progress-cancel {
-  flex: none;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  background: none;
-  border: 0.5px solid var(--line);
-  border-radius: 6px;
-  padding: 4px 10px;
-  cursor: pointer;
-  transition:
-    color 0.14s ease,
-    border-color 0.14s ease;
-}
-.ab-progress-cancel:hover {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--line));
-}
-.ab-progress-cancel:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
-}
 
 /* ---- Tool group (consolidated pill + expandable per-call list) ----
    Adjacent tool calls within an AI turn are folded into one chat bubble.
@@ -946,70 +788,9 @@ select.input option {
    wrote files in this group. Surfaces "N files updated" + first three
    basenames so the user sees what shipped without expanding. Clicking
    the card toggles the group like the pill does. */
-.tg-change-card {
-  margin: 6px 0 0 0;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 9px 12px;
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
-  border: 0.5px solid color-mix(in oklab, var(--accent) 22%, transparent);
-  border-radius: var(--r-md);
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  transition:
-    background 140ms ease-out,
-    border-color 140ms ease-out;
-}
-.tg-change-card:hover {
-  background: color-mix(in oklab, var(--accent) 11%, transparent);
-  border-color: color-mix(in oklab, var(--accent) 32%, transparent);
-}
-.tg-change-card .tg-card-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in oklab, var(--accent) 18%, transparent);
-  color: var(--accent);
-  flex-shrink: 0;
-}
-.tg-change-card .tg-card-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-.tg-change-card .tg-card-title {
-  font-size: 12.5px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.tg-change-card .tg-card-sub {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 /* Version stamp on the card right edge — small mono pill that shows the
    target version this turn lands as ("→ v3" / "→ draft"), giving the
    user a sense of progression without expanding the tool list. */
-.tg-change-card .tg-card-version {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-2);
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
-  padding: 2px 7px;
-  border-radius: 5px;
-  letter-spacing: 0.01em;
-}
 
 .tool-group .tg-list {
   margin: 6px 0 0 14px;
@@ -1059,179 +840,15 @@ select.input option {
 }
 
 /* ---- Thinking trace (faint, italic, left-aligned) ---- */
-.chat-thinking {
-  margin: 8px 0;
-  padding: 8px 12px;
-  border-left: 2px solid var(--line);
-  background: transparent;
-}
-.chat-thinking .thinking-header {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-3);
-  margin-bottom: 4px;
-}
-.chat-thinking .thinking-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-3);
-  opacity: 0.55;
-}
-.chat-thinking[data-streaming='true'] .thinking-dot {
-  background: var(--accent);
-  animation: pulse-fade 1s infinite;
-}
-.chat-thinking .thinking-body {
-  font-size: 12.5px;
-  font-style: italic;
-  line-height: 1.55;
-  color: var(--ink-3);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 /* ---- Chat input ---- */
-.chat-input-wrap {
-  flex: none;
-  padding: 8px 16px 16px;
-  background: var(--bg);
-}
 /* Contextual follow-ups, anchored just above the input under a
    "Suggested next moves" eyebrow so they read as a labelled group
    tied to the conversation rather than empty-state filler. */
-.prompt-starters-group {
-  margin-bottom: 10px;
-}
-.prompt-starters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.prompt-starters-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  margin-bottom: 8px;
-}
-.prompt-starter {
-  border: 0.5px solid var(--line);
-  background: transparent;
-  color: var(--ink-2);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background 140ms ease-out,
-    color 140ms ease-out,
-    border-color 140ms ease-out;
-}
-.prompt-starter:hover {
-  background: color-mix(in oklab, var(--ink) 5%, transparent);
-  border-color: color-mix(in oklab, var(--ink) 14%, transparent);
-  color: var(--ink);
-}
-
-.chat-input {
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 14px;
-  padding: 12px 14px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
 /* ⌘↵ keycap in the composer toolbar — matches RBChat's mono hint. */
-.chat-input-kbd {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-}
-.chat-input:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
-}
-.chat-input textarea {
-  border: 0;
-  background: transparent;
-  outline: none;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
-  resize: none;
-  min-height: 22px;
-  max-height: 180px;
-  color: var(--ink);
-}
-.chat-input textarea::placeholder {
-  color: var(--ink-4);
-}
-.chat-input-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.chat-input-controls .spacer {
-  flex: 1;
-}
-.input-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.input-pill:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
 /* Icon-only variant — square-ish with no horizontal padding overhead so the
    attach + open-folder buttons cluster tightly without competing with the
    primary send button on the right. */
-.input-pill-icon {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  justify-content: center;
-}
-.send-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 0;
-  background: var(--accent);
-  color: white;
-  display: grid;
-  place-items: center;
-  margin-left: 0;
-}
-.send-btn:hover {
-  background: color-mix(in oklab, var(--accent) 88%, black);
-}
-.send-btn:disabled {
-  opacity: 0.4;
-}
 
 /* ---- Right pane (preview / code / cloud) ----
    The pane is a flex column hosting a persistent toolbar (mode tabs +
@@ -1371,14 +988,6 @@ select.input option {
 }
 
 /* Preview */
-.preview-stage {
-  flex: 1;
-  padding: 12px;
-  overflow: auto;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-}
 
 /* §B4 — skeleton phone shown before the agent writes an index.html. */
 @keyframes skel-shimmer {
@@ -1389,151 +998,11 @@ select.input option {
     background-position: -200% 0;
   }
 }
-.preview-stage:has(.skel-phone) {
-  align-items: center;
-}
 /* Light skeleton phone (refined proposal RBPreview) — a light device
    wall with light-grey shimmering placeholder blocks. */
-.skel-phone {
-  flex: 0 0 auto;
-  width: 320px;
-  height: 600px;
-  border-radius: 28px;
-  background: linear-gradient(180deg, #fafbfc 0%, #eceef2 100%);
-  padding: 22px;
-  display: flex;
-  flex-direction: column;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.06),
-    0 50px 100px -30px rgba(0, 0, 0, 0.55),
-    0 12px 32px -8px rgba(0, 0, 0, 0.25);
-}
-.skel-phone-screen {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.skel-statusbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 0 10px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #0c0f15;
-}
-.skel-battery {
-  width: 14px;
-  height: 8px;
-  border: 1.2px solid #0c0f15;
-  border-radius: 2px;
-  position: relative;
-}
-.skel-battery::after {
-  content: '';
-  position: absolute;
-  inset: 1.2px;
-  background: #0c0f15;
-  border-radius: 1px;
-}
-.skel-body {
-  flex: 1;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 11px;
-}
-.skel-block,
-.skel-cell {
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.06) 0%,
-    rgba(0, 0, 0, 0.12) 50%,
-    rgba(0, 0, 0, 0.06) 100%
-  );
-  background-size: 200% 100%;
-  animation: skel-shimmer 1.6s linear infinite;
-  border-radius: 7px;
-}
-.skel-block-title {
-  height: 26px;
-  width: 56%;
-}
-.skel-block-sub {
-  height: 13px;
-  width: 34%;
-}
-.skel-block-card {
-  height: 112px;
-  border-radius: 12px;
-}
-.skel-block-row {
-  height: 40px;
-}
-.skel-grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 6px;
-}
-.skel-cell {
-  aspect-ratio: 1;
-  border-radius: 6px;
-}
-.preview-building-pill {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
-  box-shadow: var(--shadow-md);
-  font-size: 12px;
-  color: var(--ink-2);
-}
-.preview-building-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
-  animation: pulse-fade 1.4s ease-in-out infinite;
-}
-.preview-card {
-  width: 100%;
-  background: var(--bg-app);
-  border: 1px solid var(--line);
-  border-radius: var(--r-lg);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.preview-card.preview-card-mobile {
-  max-width: 420px;
-  box-shadow: var(--shadow-md);
-}
 /* Tablet device frame — sits on the same `has-phone` dotted backdrop as
    mobile but with a wider canvas. iPad-class viewports (~820pt) map well
    to the gateway-served preview iframes. */
-.preview-card.preview-card-tablet {
-  max-width: 820px;
-  box-shadow: var(--shadow-md);
-}
-.preview-card > iframe {
-  flex: 1 1 auto;
-  min-height: 0;
-  border: 0;
-  border-radius: inherit;
-}
 .preview-toast {
   position: absolute;
   top: 76px;
@@ -1604,428 +1073,15 @@ select.input option {
  * can read the timing without watching the panel. */
 
 /* Code — file tree (left) + viewer (right) */
-.code-pane {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
-  min-height: 0;
-}
-.code-tree {
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--line);
-  background: var(--bg);
-  min-height: 0;
-}
-.code-search {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin: 12px;
-  padding: 7px 9px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: var(--bg-sunken);
-  transition: border-color 0.15s;
-}
-.code-search:focus-within {
-  border-color: var(--ink-4, var(--ink-3));
-  background: var(--bg-elev);
-}
-.code-search-icon {
-  display: inline-flex;
-  flex: none;
-  color: var(--ink-3);
-}
-.code-search-input {
-  flex: 1;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink);
-  font-size: 12px;
-  outline: none;
-}
-.code-search-input::placeholder {
-  color: var(--ink-3);
-}
-.code-search-kbd {
-  flex: none;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 2px 5px;
-}
-.code-tree-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 6px 12px;
-}
-.code-tree-row {
-  --depth: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 5px 8px 5px calc(8px + var(--depth) * 14px);
-  margin-block: 1.5px;
-  border-radius: 6px;
-  color: var(--ink-2, var(--ink));
-  font-size: 12.5px;
-  text-align: left;
-  cursor: pointer;
-}
-.code-tree-row:hover {
-  background: var(--bg-sunken);
-}
-.code-tree-row[data-active='true'] {
-  background: var(--bg-sunken);
-  color: var(--ink);
-  font-weight: 500;
-}
-.code-tree-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  color: var(--ink-3);
-  transition: transform 0.12s;
-}
-.code-tree-chevron[data-open='true'] {
-  transform: rotate(90deg);
-}
-.code-tree-chevron-spacer {
-  width: 12px;
-  flex: none;
-}
-.code-tree-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  flex: none;
-}
-.code-tree-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-}
-.code-tree-empty {
-  padding: 12px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
 
 /* §B5 — editable code workspace. Column of tab strip + file head +
    editor surface. The editor is a transparent <textarea> stacked over a
    tokenized <pre>; both share identical font metrics so the caret and
    the syntax colours line up exactly. */
-.code-workspace {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--bg);
-}
-.code-tabs {
-  flex: none;
-  display: flex;
-  align-items: stretch;
-  gap: 10px;
-  padding: 0 10px 0 14px;
-  background: var(--bg);
-  border-bottom: 0.5px solid var(--line);
-}
-.code-tab-strip {
-  display: flex;
-  align-items: stretch;
-  flex: 1;
-  min-width: 0;
-  overflow-x: auto;
-}
-.code-tab-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-}
-.code-tab-actions .tiny-btn[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-}
-.code-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 12px 9px;
-  border-bottom: 2px solid transparent;
-  max-width: 200px;
-}
-.code-tab[data-active='true'] {
-  border-bottom-color: var(--accent);
-}
-.code-tab-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--c-blue, #4f8fe0);
-}
-.code-tab-dot[data-lang='css'] {
-  background: var(--c-orange, #e08c45);
-}
-.code-tab-dot[data-lang='js'],
-.code-tab-dot[data-lang='ts'] {
-  background: var(--c-yellow, #d4b445);
-}
-.code-tab-dot[data-lang='md'] {
-  background: var(--c-violet, #7c5bd9);
-}
-.code-tab-label {
-  border: 0;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  font-size: 12.5px;
-  padding: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.code-tab[data-active='true'] .code-tab-label {
-  font-weight: 600;
-  color: var(--ink);
-}
-.code-tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: none;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.code-tab-close:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.code-tab[data-dirty='true'] .code-tab-close {
-  background: var(--accent);
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin: 0 4px;
-}
-.code-overflow-wrap {
-  position: relative;
-  display: inline-flex;
-}
-.code-overflow-btn {
-  padding: 4px 6px;
-}
-.code-overflow-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 20;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-.code-overflow-menu[hidden] {
-  display: none;
-}
-.code-overflow-item {
-  border: 0;
-  background: transparent;
-  text-align: left;
-  padding: 7px 10px;
-  border-radius: 6px;
-  color: var(--ink);
-  font-size: 12.5px;
-  cursor: pointer;
-}
-.code-overflow-item:hover:not(:disabled) {
-  background: var(--bg-sunken);
-}
-.code-overflow-item:disabled {
-  color: var(--ink-4);
-  cursor: default;
-}
-.code-editor-host {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-.code-editor {
-  flex: 1;
-  display: flex;
-  min-width: 0;
-  min-height: 0;
-}
-.code-edit-gutter {
-  flex: none;
-  overflow: hidden;
-  background: var(--bg);
-  border-right: 1px solid var(--line);
-  user-select: none;
-}
-.code-edit-gutter-inner {
-  padding: 12px 10px 12px 14px;
-  text-align: right;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.65;
-  color: var(--ink-4);
-  will-change: transform;
-}
-.code-edit-surface {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.code-edit-pre-clip {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-.code-edit-pre,
-.code-edit-ta {
-  margin: 0;
-  padding: 12px 16px;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.65;
-  white-space: pre;
-  tab-size: 2;
-  letter-spacing: 0;
-}
-.code-edit-pre {
-  will-change: transform;
-  pointer-events: none;
-  color: var(--ink);
-}
-.code-edit-ta {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  outline: none;
-  resize: none;
-  overflow: auto;
-  background: transparent;
-  color: transparent;
-  caret-color: var(--ink);
-}
-.code-edit-ta::selection {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
-}
 /* Unified diff against the last save. */
-.code-diff {
-  flex: 1;
-  overflow: auto;
-  padding: 8px 0;
-  font-family: ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace;
-  font-size: 12px;
-  line-height: 1.6;
-}
-.code-diff-row {
-  display: flex;
-  white-space: pre;
-}
-.code-diff-row[data-type='add'] {
-  background: color-mix(in srgb, var(--c-forest, #3fb950) 14%, transparent);
-}
-.code-diff-row[data-type='del'] {
-  background: color-mix(in srgb, var(--c-rose, #f0506e) 14%, transparent);
-}
-.code-diff-num {
-  flex: none;
-  width: 42px;
-  padding-right: 8px;
-  text-align: right;
-  color: var(--ink-4);
-  user-select: none;
-}
-.code-diff-sign {
-  flex: none;
-  width: 18px;
-  text-align: center;
-  color: var(--ink-3);
-}
-.code-diff-row[data-type='add'] .code-diff-sign {
-  color: var(--c-forest, #3fb950);
-}
-.code-diff-row[data-type='del'] .code-diff-sign {
-  color: var(--c-rose, #f0506e);
-}
-.code-diff-text {
-  flex: 1;
-  color: var(--ink);
-}
-.code-tree-dirty {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-  margin-left: auto;
-  background: var(--accent);
-}
 
 /* Bottom status strip — N lines · KB · autosaving · line/col · LANG.
    Matches RefinedBuilderCode's footer. */
-.code-status {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 8px 18px;
-  border-top: 0.5px solid var(--line);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 10.5px;
-  letter-spacing: 0;
-  color: var(--ink-3);
-}
-.code-status-sep {
-  color: var(--ink-4);
-}
-.code-status-spacer {
-  flex: 1;
-}
-.code-status-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.code-status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--accent-light, var(--accent));
-}
 .tok-tag {
   color: var(--c-rose);
 }
@@ -2061,146 +1117,8 @@ select.input option {
               ---------- */
 /* Tree — group headers + colored dot replaces the per-file glyph + a 2px
    accent stripe on the active row instead of a heavy background fill. */
-.code-tree-group-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 16px 10px 4px;
-  font-size: 9.5px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-.code-tree-group-head:first-child {
-  padding-top: 4px;
-}
-.code-tree-group-count {
-  margin-left: auto;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 9px;
-  letter-spacing: 0;
-  color: var(--ink-4);
-}
-.code-tree-lang-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  flex: none;
-  background: var(--ink-4);
-  /* Sit on the same baseline as the chevron spacer beside it. */
-  margin: 0 3px;
-}
-.code-tree-lang-dot[data-lang='html'] {
-  background: var(--c-blue, #4f8fe0);
-}
-.code-tree-lang-dot[data-lang='css'] {
-  background: var(--c-orange, #e08c45);
-}
-.code-tree-lang-dot[data-lang='js'],
-.code-tree-lang-dot[data-lang='ts'] {
-  background: var(--c-yellow, #d4b445);
-}
-.code-tree-lang-dot[data-lang='md'] {
-  background: var(--c-violet, #7c5bd9);
-}
-.code-tree-row[data-active='true'] {
-  position: relative;
-  background: hsla(229 91% 63% / 0.08);
-}
-.code-tree-row[data-active='true']::before {
-  content: '';
-  position: absolute;
-  left: 2px;
-  top: 5px;
-  bottom: 5px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
 
 /* History */
-.history-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-.history-item {
-  display: grid;
-  grid-template-columns: 88px 1fr auto;
-  gap: 16px;
-  padding: 14px;
-  margin-block: 1.5px;
-  border-radius: var(--r-md);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition:
-    background 0.15s,
-    border-color 0.15s;
-}
-.history-item:hover {
-  background: var(--bg-elev);
-}
-.history-item[data-active='true'] {
-  background: var(--bg-elev);
-  border-color: var(--line);
-}
-.history-thumb {
-  width: 88px;
-  height: 64px;
-  border-radius: 8px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--accent) 15%, transparent),
-    color-mix(in oklab, var(--accent) 5%, transparent)
-  );
-  position: relative;
-  overflow: hidden;
-}
-.thumb-shimmer {
-  position: absolute;
-  inset: 8px;
-  background: var(--bg-elev);
-  border-radius: 4px;
-}
-.history-meta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.history-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.history-title b {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.current-tag {
-  font-size: 11px;
-  color: var(--accent);
-}
-.history-when {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.history-prompt {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--ink-3);
-  line-height: 1.4;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.history-actions {
-  display: flex;
-  align-items: center;
-}
 .tiny-btn {
   padding: 6px 12px;
   font-size: 12px;
@@ -2411,34 +1329,6 @@ select.input option {
    preview content area when the iframe is showing the gateway-served
    live URL. Ambient confirmation that what's on screen reflects the
    persisted, published app. */
-.preview-live-badge {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 12px 6px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
-  border: 0.5px solid var(--line);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0;
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
-  z-index: 3;
-  pointer-events: none;
-}
-.preview-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success, #2ea043);
-  box-shadow: 0 0 6px color-mix(in oklab, var(--success, #2ea043) 70%, transparent);
-}
 
 /* ---------- Misc utilities ---------- */
 .flex {
@@ -5868,11 +4758,21 @@ select.input option {
 
 
 
+
+
+
+
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
+
+
+
+
 
 
 
@@ -6173,78 +5073,8 @@ select.input option {
    Automation builder (issue #98) — the right pane's read-only
    config view + test-run pane. `.ab-*` = automation builder.
    ============================================================ */
-.ab-config,
-.ab-runs {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 20px 22px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.ab-config-loading {
-  margin: 0;
-}
-
-.ab-config-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.ab-config-title {
-  font-size: 17px;
-  font-weight: 650;
-  color: var(--ink);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ab-chip {
-  font-size: 10px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 8px;
-  border-radius: var(--r-sm);
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-  border: 1px solid var(--line);
-}
-.ab-chip[data-on='true'] {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 35%, transparent);
-}
-
-.ab-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ab-section-label {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-4);
-}
 
 /* ── Config diff ribbon — flashes the section the chat just changed ── */
-.ab-section-flash {
-  position: relative;
-  border-radius: 8px;
-  margin: -6px -10px;
-  padding: 6px 10px;
-  animation: ab-diff-flash 1.8s ease-out;
-}
 @keyframes ab-diff-flash {
   0% {
     background: color-mix(in srgb, var(--accent) 18%, transparent);
@@ -6255,323 +5085,12 @@ select.input option {
     box-shadow: inset 2px 0 0 transparent;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-
-
-
-  .ab-section-flash {
-    animation: none;
-  }
-}
-
-
-
-.ab-diff-ribbon {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 9.5px;
-  letter-spacing: 0.04em;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-}
-.ab-diff-ribbon span {
-  display: inline-flex;
-}
 
 /* ── Code tab — read-only automation.json ── */
-.ab-code {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 2px;
-}
-.ab-code-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.ab-code-file {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink);
-}
-.ab-code-tag {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-.ab-code-pre {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  border-radius: 9px;
-  padding: 14px 16px;
-  overflow-x: auto;
-  white-space: pre;
-}
 
 /* ── Builder Direction B — vertical flow/pipeline ── */
-.ab-flow {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 4px 2px;
-}
-.ab-flow-node {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 13px 15px;
-  border: 0.5px solid var(--line);
-  border-radius: 11px;
-  background: var(--bg-elev);
-}
-.ab-flow-ic {
-  flex: none;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-.ab-flow-body {
-  min-width: 0;
-}
-.ab-flow-kind {
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-4);
-  margin-bottom: 2px;
-}
-.ab-flow-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.ab-flow-sub {
-  margin-top: 3px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--ink-3);
-  white-space: pre-wrap;
-}
-.ab-flow-conn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  height: 26px;
-  color: var(--ink-4);
-}
-.ab-flow-conn-line {
-  width: 2px;
-  flex: 1;
-  background: var(--line-strong);
-}
-.ab-flow-conn-chev {
-  display: inline-flex;
-  margin-top: -3px;
-}
-
-.ab-prompt {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--ink-2);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 12px 14px;
-  white-space: pre-wrap;
-}
-
-.ab-muted {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--ink-4);
-}
-
-.ab-triggers {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ab-trigger {
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 11px 13px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.ab-trigger-main {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 13px;
-  color: var(--ink);
-}
-.ab-trigger-icon {
-  display: inline-flex;
-  color: var(--accent);
-}
-.ab-trigger-desc {
-  font-weight: 550;
-}
-.ab-trigger-expr {
-  margin-left: auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  color: var(--ink-3);
-  background: var(--bg-sunken);
-  padding: 2px 7px;
-  border-radius: var(--r-sm);
-}
-.ab-nextruns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: baseline;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.ab-nextrun {
-  background: var(--bg-sunken);
-  border-radius: var(--r-sm);
-  padding: 2px 7px;
-}
-
-.ab-rows {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  overflow: hidden;
-}
-.ab-row {
-  display: flex;
-  gap: 12px;
-  padding: 9px 13px;
-  font-size: 13px;
-}
-.ab-row + .ab-row {
-  border-top: 1px solid var(--line);
-}
-.ab-row-label {
-  color: var(--ink-4);
-  width: 96px;
-  flex-shrink: 0;
-}
-.ab-row-value {
-  color: var(--ink);
-  min-width: 0;
-  word-break: break-word;
-}
-
-.ab-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ab-tag {
-  font-size: 12px;
-  padding: 3px 9px;
-  border-radius: var(--r-sm);
-  background: var(--bg-sunken);
-  color: var(--ink-2);
-  border: 1px solid var(--line);
-}
-
-.ab-hint {
-  margin-top: auto;
-  font-size: 11.5px;
-  color: var(--ink-4);
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
 
 /* Test-run pane */
-.ab-runs-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-.ab-runs-head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ab-runbtn {
-  flex-shrink: 0;
-}
-
-.ab-runlist {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  overflow: hidden;
-}
-.ab-runrow {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 12px;
-  font-size: 12.5px;
-}
-.ab-runrow + .ab-runrow {
-  border-top: 1px solid var(--line);
-}
-.ab-run-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--success);
-}
-.ab-run-dot[data-ok='false'] {
-  background: var(--danger);
-}
-.ab-run-summary {
-  flex: 1;
-  min-width: 0;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ab-run-trigger {
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-4);
-  background: var(--bg-sunken);
-  padding: 2px 6px;
-  border-radius: var(--r-sm);
-  flex-shrink: 0;
-}
-.ab-run-meta {
-  color: var(--ink-4);
-  flex-shrink: 0;
-}
 
 /* ═══════════════════════ Automations ═══════════════════════════════
    A run is a chat thread; an automation is a saved conversation that
@@ -6844,10 +5363,20 @@ select.input option {
 
 
 
+
+
+
+
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
+
+
+
+
 
 
 

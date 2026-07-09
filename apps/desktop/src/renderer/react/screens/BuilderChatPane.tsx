@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../screen-contracts.js';
+import styles from './BuilderChatPane.module.css';
+import { cx } from '../ui/cx.js';
 
 // Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs
 // in builder.ts), as small components so the React pane paints identically.
@@ -67,20 +69,20 @@ function ToolGroup({
       {m.change && (
         <button
           type="button"
-          className="tg-change-card"
+          className={styles.tgChangeCard}
           aria-label={`${m.change.count} file${m.change.count === 1 ? '' : 's'} updated — toggle details`}
           onClick={() => onToggleGroup(m.id)}
         >
-          <span className="tg-card-icon">
+          <span className={styles.tgCardIcon}>
             <FileEditGlyph />
           </span>
-          <span className="tg-card-meta">
-            <span className="tg-card-title">
+          <span className={styles.tgCardMeta}>
+            <span className={styles.tgCardTitle}>
               {m.change.count} file{m.change.count === 1 ? '' : 's'} updated
             </span>
-            <span className="tg-card-sub">{m.change.subtitle}</span>
+            <span className={styles.tgCardSub}>{m.change.subtitle}</span>
           </span>
-          <span className="tg-card-version">→ {m.change.version}</span>
+          <span className={styles.tgCardVersion}>→ {m.change.version}</span>
         </button>
       )}
       {m.open && (
@@ -108,13 +110,13 @@ function Message({
   switch (m.kind) {
     case 'divider':
       return (
-        <div className="chat-divider">
+        <div className={styles.chatDivider}>
           <span>{m.text}</span>
         </div>
       );
     case 'status':
       return (
-        <div className="chat-status-row">
+        <div className={styles.chatStatusRow}>
           <span className="msg-status">
             {m.spinning ? <span className="pulse" /> : <Icon name="Check" size={12} strokeWidth={2.5} />}
             {' ' + m.text}
@@ -129,12 +131,12 @@ function Message({
       );
     case 'thinking':
       return (
-        <div className="chat-thinking" data-streaming={String(m.streaming)}>
-          <div className="thinking-header">
-            <span className="thinking-dot" />
+        <div className={styles.chatThinking} data-streaming={String(m.streaming)}>
+          <div className={styles.thinkingHeader}>
+            <span className={styles.thinkingDot} />
             <span>{m.header}</span>
           </div>
-          <div className="thinking-body">{m.text}</div>
+          <div className={styles.thinkingBody}>{m.text}</div>
         </div>
       );
     case 'toolGroup':
@@ -142,7 +144,7 @@ function Message({
     case 'ai':
       return (
         <div className="msg-ai">
-          <span className="msg-ai-avatar">
+          <span className={styles.msgAiAvatar}>
             <Icon name="Sparkle" size={11} />
           </span>
           <div className="msg-ai-text">
@@ -202,8 +204,8 @@ export default function BuilderChatPane({
 
   if (snap.view === 'history') {
     return (
-      <div className="chat-body">
-        <div className="chatpane-head">
+      <div className={styles.chatBody}>
+        <div className={styles.chatpaneHead}>
           <button
             type="button"
             className="btn-icon"
@@ -212,9 +214,9 @@ export default function BuilderChatPane({
           >
             <Icon name="ArrowLeft" size={14} />
           </button>
-          <span className="chatpane-head-title">Version history</span>
+          <span className={styles.chatpaneHeadTitle}>Version history</span>
         </div>
-        <div className="history-list chatpane-history" ref={historyRef} />
+        <div className={cx(styles.historyList, styles.chatpaneHistory)} ref={historyRef} />
       </div>
     );
   }
@@ -227,45 +229,45 @@ export default function BuilderChatPane({
   };
 
   return (
-    <div className="chat-body">
+    <div className={styles.chatBody}>
       <div className="chat-scroll" ref={scrollRef}>
         {snap.messages.map((m, i) => (
           <Message key={i} m={m} onToggleGroup={onToggleGroup} />
         ))}
         {snap.generating && snap.progress && (
-          <div className="ab-progress" role="status" aria-label={`${snap.progress.verb} — running`}>
-            <span className="ab-progress-dots" aria-hidden="true">
+          <div className={styles.abProgress} role="status" aria-label={`${snap.progress.verb} — running`}>
+            <span className={styles.abProgressDots} aria-hidden="true">
               {[0, 1, 2, 3].map((i) => (
                 <i key={i} data-on={i < snap.progress!.filled ? 'true' : undefined} />
               ))}
             </span>
-            <div className="ab-progress-main">
-              <div className="ab-progress-line">
-                <span className="ab-progress-verb">{snap.progress.verb}</span>
-                {snap.progress.file && <code className="ab-progress-file">{snap.progress.file}</code>}
+            <div className={styles.abProgressMain}>
+              <div className={styles.abProgressLine}>
+                <span className={styles.abProgressVerb}>{snap.progress.verb}</span>
+                {snap.progress.file && <code className={styles.abProgressFile}>{snap.progress.file}</code>}
               </div>
-              <div className="ab-progress-sub">{snap.progress.sub}</div>
+              <div className={styles.abProgressSub}>{snap.progress.sub}</div>
             </div>
-            <button type="button" className="ab-progress-cancel" onClick={onCancel}>
+            <button type="button" className={styles.abProgressCancel} onClick={onCancel}>
               Cancel
             </button>
           </div>
         )}
       </div>
-      <div className="chat-input-wrap">
+      <div className={styles.chatInputWrap}>
         {snap.suggestions.length > 0 && (
-          <div className="prompt-starters-group">
-            <div className="prompt-starters-label">Suggested next moves</div>
-            <div className="prompt-starters">
+          <div className={styles.promptStartersGroup}>
+            <div className={styles.promptStartersLabel}>Suggested next moves</div>
+            <div className={styles.promptStarters}>
               {snap.suggestions.map((s) => (
-                <button key={s} type="button" className="prompt-starter" onClick={() => setDraft(s)}>
+                <button key={s} type="button" className={styles.promptStarter} onClick={() => setDraft(s)}>
                   {s}
                 </button>
               ))}
             </div>
           </div>
         )}
-        <div className="chat-input">
+        <div className={styles.chatInput}>
           <textarea
             placeholder="Describe a change…"
             rows={1}
@@ -278,13 +280,13 @@ export default function BuilderChatPane({
               }
             }}
           />
-          <div className="chat-input-controls">
-            <button type="button" className="input-pill input-pill-icon" aria-label="Attach" title="Attach">
+          <div className={styles.chatInputControls}>
+            <button type="button" className={cx(styles.inputPill, styles.inputPillIcon)} aria-label="Attach" title="Attach">
               <PaperclipGlyph />
             </button>
-            <div className="spacer" />
-            <span className="chat-input-kbd">⌘↵</span>
-            <button type="button" className="send-btn" aria-label="Send" onClick={send}>
+            <div className={styles.spacer} />
+            <span className={styles.chatInputKbd}>⌘↵</span>
+            <button type="button" className={styles.sendBtn} aria-label="Send" onClick={send}>
               <Icon name="ArrowRight" size={14} strokeWidth={2.5} />
             </button>
           </div>

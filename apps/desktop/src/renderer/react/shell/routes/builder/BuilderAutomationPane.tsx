@@ -6,6 +6,8 @@ import {
   runAutomationNow,
 } from '../../../../gateway-client.js';
 import { iconSvg } from '../../iconSvg.js';
+import styles from './BuilderAutomationPane.module.css';
+import { cx } from '../../../ui/cx.js';
 
 // React port of the vanilla builder's automation-mode right-pane views —
 // Config / Flow / Runs / Code (see builder.ts `renderConfig` /
@@ -72,9 +74,9 @@ function Glyph({ svg, className }: { svg: string; className?: string }): JSX.Ele
   );
 }
 
-const LOADING = (wrapClass: string): JSX.Element => (
+const LOADING = (wrapClass: string | undefined): JSX.Element => (
   <div className={wrapClass}>
-    <p className="ab-muted ab-config-loading">Loading automation…</p>
+    <p className={cx(styles.muted, styles.configLoading)}>Loading automation…</p>
   </div>
 );
 
@@ -99,13 +101,13 @@ function ConfigView({
     return (
       <div
         key={key}
-        className={flash ? 'ab-section ab-section-flash' : 'ab-section'}
+        className={flash ? cx(styles.section, styles.sectionFlash) : styles.section}
         data-section={key}
       >
-        <div className="ab-section-label">
+        <div className={styles.sectionLabel}>
           <span>{label}</span>
           {flash ? (
-            <span className="ab-diff-ribbon">
+            <span className={styles.diffRibbon}>
               <Glyph svg={svgCheck11} />
               Updated
             </span>
@@ -118,26 +120,26 @@ function ConfigView({
 
   const triggersBody =
     m.triggers.length === 0 ? (
-      <div className="ab-triggers">
-        <p className="ab-muted">Manual runs only — no schedule.</p>
+      <div className={styles.triggers}>
+        <p className={styles.muted}>Manual runs only — no schedule.</p>
       </div>
     ) : (
-      <div className="ab-triggers">
+      <div className={styles.triggers}>
         {m.triggers.map((t, i) => {
           if (t.kind === 'cron') {
             const next = cronNextRuns(t.expr, 3);
             return (
-              <div className="ab-trigger" key={i}>
-                <div className="ab-trigger-main">
-                  <Glyph svg={svgHistory14} className="ab-trigger-icon" />
-                  <span className="ab-trigger-desc">{describeCron(t.expr)}</span>
-                  <code className="ab-trigger-expr">{t.expr}</code>
+              <div className={styles.trigger} key={i}>
+                <div className={styles.triggerMain}>
+                  <Glyph svg={svgHistory14} className={styles.triggerIcon} />
+                  <span className={styles.triggerDesc}>{describeCron(t.expr)}</span>
+                  <code className={styles.triggerExpr}>{t.expr}</code>
                 </div>
                 {next.length > 0 ? (
-                  <div className="ab-nextruns">
-                    <span className="ab-muted">Next: </span>
+                  <div className={styles.nextruns}>
+                    <span className={styles.muted}>Next: </span>
                     {next.map((d, j) => (
-                      <span className="ab-nextrun" key={j}>
+                      <span className={styles.nextrun} key={j}>
                         {fmtNextRun(d)}
                       </span>
                     ))}
@@ -149,17 +151,17 @@ function ConfigView({
           // Webhook trigger — provisioned (has a minted route id) or pending.
           const pending = t.id === undefined;
           return (
-            <div className="ab-trigger" key={i}>
-              <div className="ab-trigger-main">
-                <Glyph svg={svgGlobe14} className="ab-trigger-icon" />
-                <span className="ab-trigger-desc">
+            <div className={styles.trigger} key={i}>
+              <div className={styles.triggerMain}>
+                <Glyph svg={svgGlobe14} className={styles.triggerIcon} />
+                <span className={styles.triggerDesc}>
                   {pending ? 'Webhook trigger — provisioning…' : 'Webhook trigger'}
                 </span>
-                {pending ? null : <code className="ab-trigger-expr">{`/${t.id}`}</code>}
+                {pending ? null : <code className={styles.triggerExpr}>{`/${t.id}`}</code>}
               </div>
               {pending ? (
-                <div className="ab-nextruns">
-                  <span className="ab-muted">A URL + secret are minted server-side.</span>
+                <div className={styles.nextruns}>
+                  <span className={styles.muted}>A URL + secret are minted server-side.</span>
                 </div>
               ) : null}
             </div>
@@ -172,14 +174,14 @@ function ConfigView({
   const apps = m.apps ?? [];
 
   const cfgRow = (label: string, value: string): JSX.Element => (
-    <div className="ab-row" key={label}>
-      <span className="ab-row-label">{label}</span>
-      <span className="ab-row-value">{value}</span>
+    <div className={styles.row} key={label}>
+      <span className={styles.rowLabel}>{label}</span>
+      <span className={styles.rowValue}>{value}</span>
     </div>
   );
 
   const behaviorBody = (
-    <div className="ab-rows">
+    <div className={styles.rows}>
       {cfgRow('Model', m.requires.model || 'Workspace default')}
       {cfgRow('Run history', fmtRetention(m.history.keep))}
       {m.onFailure ? cfgRow('On failure', `Run "${m.onFailure}"`) : null}
@@ -189,30 +191,30 @@ function ConfigView({
 
   const appsBody =
     apps.length > 0 ? (
-      <div className="ab-tags">
+      <div className={styles.tags}>
         {apps.map((a) => (
-          <span className="ab-tag" key={a}>
+          <span className={styles.tag} key={a}>
             {a}
           </span>
         ))}
       </div>
     ) : (
-      <p className="ab-muted">Not linked to any app.</p>
+      <p className={styles.muted}>Not linked to any app.</p>
     );
 
   return (
-    <div className="ab-config">
-      <div className="ab-config-head">
-        <div className="ab-config-title">{m.name || automationRow.id}</div>
-        <span className="ab-chip" data-on={String(enabled)}>
+    <div className={styles.config}>
+      <div className={styles.configHead}>
+        <div className={styles.configTitle}>{m.name || automationRow.id}</div>
+        <span className={styles.chip} data-on={String(enabled)}>
           {enabled ? 'Enabled' : 'Draft'}
         </span>
       </div>
-      {Section('what', 'What it does', <p className="ab-prompt">{m.prompt || 'Not described yet.'}</p>)}
+      {Section('what', 'What it does', <p className={styles.prompt}>{m.prompt || 'Not described yet.'}</p>)}
       {Section('when', 'When it runs', triggersBody)}
       {Section('behavior', 'Behavior', behaviorBody)}
       {Section('apps', 'Connected apps', appsBody)}
-      <div className="ab-hint">
+      <div className={styles.hint}>
         This view is filled in by the chat. Describe any change in the conversation.
       </div>
     </div>
@@ -223,12 +225,12 @@ function ConfigView({
 
 function CodeView({ automationRow }: { automationRow: CentraidAutomationRow }): JSX.Element {
   return (
-    <div className="ab-code">
-      <div className="ab-code-head">
-        <span className="ab-code-file">automation.json</span>
-        <span className="ab-code-tag">read-only</span>
+    <div className={styles.code}>
+      <div className={styles.codeHead}>
+        <span className={styles.codeFile}>automation.json</span>
+        <span className={styles.codeTag}>read-only</span>
       </div>
-      <pre className="ab-code-pre">{JSON.stringify(automationRow.manifest, null, 2)}</pre>
+      <pre className={styles.codePre}>{JSON.stringify(automationRow.manifest, null, 2)}</pre>
     </div>
   );
 }
@@ -247,12 +249,12 @@ function FlowNode({
   sub?: string | null;
 }): JSX.Element {
   return (
-    <div className="ab-flow-node">
-      <Glyph svg={svg} className="ab-flow-ic" />
-      <div className="ab-flow-body">
-        <div className="ab-flow-kind">{kind}</div>
-        <div className="ab-flow-title">{title}</div>
-        {sub ? <div className="ab-flow-sub">{sub}</div> : null}
+    <div className={styles.flowNode}>
+      <Glyph svg={svg} className={styles.flowIc} />
+      <div className={styles.flowBody}>
+        <div className={styles.flowKind}>{kind}</div>
+        <div className={styles.flowTitle}>{title}</div>
+        {sub ? <div className={styles.flowSub}>{sub}</div> : null}
       </div>
     </div>
   );
@@ -260,9 +262,9 @@ function FlowNode({
 
 function FlowConnector(): JSX.Element {
   return (
-    <div className="ab-flow-conn" aria-hidden="true">
-      <span className="ab-flow-conn-line" />
-      <Glyph svg={svgChevronDown14} className="ab-flow-conn-chev" />
+    <div className={styles.flowConn} aria-hidden="true">
+      <span className={styles.flowConnLine} />
+      <Glyph svg={svgChevronDown14} className={styles.flowConnChev} />
     </div>
   );
 }
@@ -320,14 +322,14 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
   });
 
   return (
-    <div className="ab-flow">
+    <div className={styles.flow}>
       {stages.map((s, i) => (
         <div key={i} style={{ display: 'contents' }}>
           {i > 0 ? <FlowConnector /> : null}
           <FlowNode svg={s.svg} kind={s.kind} title={s.title} sub={s.sub} />
         </div>
       ))}
-      <div className="ab-hint">
+      <div className={styles.hint}>
         The flow is derived from automation.json — describe changes in the chat.
       </div>
     </div>
@@ -383,17 +385,17 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
   };
 
   return (
-    <div className="ab-runs">
-      <div className="ab-runs-head">
-        <div className="ab-runs-head-text">
-          <div className="ab-section-label">Test run</div>
-          <p className="ab-muted">
+    <div className={styles.runs}>
+      <div className={styles.runsHead}>
+        <div className={styles.runsHeadText}>
+          <div className={styles.sectionLabel}>Test run</div>
+          <p className={styles.muted}>
             Fire the automation once now, without waiting for the schedule.
           </p>
         </div>
         <button
           type="button"
-          className="btn btn-primary ab-runbtn"
+          className={cx("btn", "btn-primary", styles.runbtn)}
           disabled={busy}
           onClick={() => {
             void runOnce();
@@ -403,27 +405,27 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
           <span>Run once</span>
         </button>
       </div>
-      <div className="ab-section">
-        <div className="ab-section-label">Recent runs</div>
-        <div className="ab-runlist">
+      <div className={styles.section}>
+        <div className={styles.sectionLabel}>Recent runs</div>
+        <div className={styles.runlist}>
           {failed ? (
-            <p className="ab-muted">Could not load run history.</p>
+            <p className={styles.muted}>Could not load run history.</p>
           ) : runs === null ? (
-            <p className="ab-muted">Loading runs…</p>
+            <p className={styles.muted}>Loading runs…</p>
           ) : runs.length === 0 ? (
-            <p className="ab-muted">No runs yet. Use "Run once" to test it.</p>
+            <p className={styles.muted}>No runs yet. Use "Run once" to test it.</p>
           ) : (
             runs.map((r) => {
               const dur =
                 r.endedAt !== undefined ? `${((r.endedAt - r.startedAt) / 1000).toFixed(1)}s` : '—';
               return (
-                <div className="ab-runrow" data-ok={String(r.ok)} key={r.runId}>
-                  <span className="ab-run-dot" data-ok={String(r.ok)} />
-                  <span className="ab-run-summary">
+                <div className={styles.runrow} data-ok={String(r.ok)} key={r.runId}>
+                  <span className={styles.runDot} data-ok={String(r.ok)} />
+                  <span className={styles.runSummary}>
                     {r.summary || r.error || (r.ok ? 'Completed' : 'Failed')}
                   </span>
-                  <span className="ab-run-trigger">{r.triggerKind}</span>
-                  <span className="ab-run-meta">{`${dur} · ${relTime(r.startedAt)}`}</span>
+                  <span className={styles.runTrigger}>{r.triggerKind}</span>
+                  <span className={styles.runMeta}>{`${dur} · ${relTime(r.startedAt)}`}</span>
                 </div>
               );
             })
@@ -442,14 +444,14 @@ export default function BuilderAutomationPane(props: BuilderAutomationPaneProps)
   if (tab === 'runs') return <RunsView appId={appId} />;
 
   if (tab === 'config') {
-    if (!automationRow) return LOADING('ab-config');
+    if (!automationRow) return LOADING(styles.config);
     return <ConfigView automationRow={automationRow} flashSections={flashSections} />;
   }
   if (tab === 'flow') {
-    if (!automationRow) return LOADING('ab-flow');
+    if (!automationRow) return LOADING(styles.flow);
     return <FlowView automationRow={automationRow} />;
   }
   // tab === 'code'
-  if (!automationRow) return LOADING('ab-code');
+  if (!automationRow) return LOADING(styles.code);
   return <CodeView automationRow={automationRow} />;
 }

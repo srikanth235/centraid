@@ -1,5 +1,7 @@
 import { type CSSProperties, type JSX, useEffect, useState } from 'react';
 import { draftPreviewUrl } from '../../../../gateway-client.js';
+import styles from './BuilderPreview.module.css';
+import { cx } from '../../../ui/cx.js';
 
 // The Preview tab — the sandboxed draft iframe (React port of builder.ts
 // renderPreview/makePreviewFrame/resolvePreviewSrc). The builder always
@@ -42,25 +44,25 @@ function resolveTheme(): { theme: 'light' | 'dark'; bgL: number } {
 
 function Skeleton(): JSX.Element {
   return (
-    <div className="preview-stage">
-      <div className="skel-phone">
-        <div className="skel-phone-screen">
-          <div className="skel-statusbar">
+    <div className={styles.stage}>
+      <div className={styles.phone}>
+        <div className={styles.phoneScreen}>
+          <div className={styles.statusbar}>
             <span>9:41</span>
-            <span className="skel-battery" />
+            <span className={styles.battery} />
           </div>
-          <div className="skel-body">
-            <div className="skel-block skel-block-title" />
-            <div className="skel-block skel-block-sub" />
-            <div className="skel-block skel-block-card" />
-            <div className="skel-grid">
+          <div className={styles.body}>
+            <div className={cx(styles.block, styles.blockTitle)} />
+            <div className={cx(styles.block, styles.blockSub)} />
+            <div className={cx(styles.block, styles.blockCard)} />
+            <div className={styles.grid}>
               {Array.from({ length: 28 }).map((_, i) => (
-                <div key={i} className="skel-cell" />
+                <div key={i} className={styles.cell} />
               ))}
             </div>
-            <div className="skel-block skel-block-row" />
-            <div className="skel-block skel-block-row" />
-            <div className="skel-block skel-block-row" />
+            <div className={cx(styles.block, styles.blockRow)} />
+            <div className={cx(styles.block, styles.blockRow)} />
+            <div className={cx(styles.block, styles.blockRow)} />
           </div>
         </div>
       </div>
@@ -113,8 +115,8 @@ export default function BuilderPreview({
     return (
       <>
         <Skeleton />
-        <div className="preview-building-pill">
-          <span className="preview-building-dot" />
+        <div className={styles.buildingPill}>
+          <span className={styles.buildingDot} />
           Building · preview refreshes on save
         </div>
       </>
@@ -123,14 +125,14 @@ export default function BuilderPreview({
 
   const cardClass =
     device === 'mobile'
-      ? 'preview-card preview-card-mobile'
+      ? cx(styles.card, styles.cardMobile)
       : device === 'tablet'
-        ? 'preview-card preview-card-tablet'
-        : 'preview-card';
+        ? cx(styles.card, styles.cardTablet)
+        : styles.card;
 
   return (
     <>
-      <div className="preview-stage">
+      <div className={styles.stage}>
         <div className="preview-card-wrap" style={{ display: 'contents' }}>
           <div className={cardClass} style={{ '--accent-color': accentColor } as CSSProperties}>
             <iframe
@@ -154,8 +156,8 @@ export default function BuilderPreview({
           </div>
         </div>
       </div>
-      <div className="preview-live-badge">
-        <span className="preview-live-dot" />
+      <div className={styles.liveBadge}>
+        <span className={styles.liveDot} />
         Draft · staged
       </div>
     </>

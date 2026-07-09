@@ -1,6 +1,7 @@
 import { type JSX, useEffect, useState } from 'react';
 import { activateVersion, listVersions } from '../../../../gateway-client.js';
 import { relativeWhen, shortVersionTitle } from '../../../../format.js';
+import styles from './BuilderHistory.module.css';
 
 // Version-history list inside the builder chat pane's History view (React port
 // of builder.ts renderHistoryInto). Newest first; each row can Restore a prior
@@ -69,21 +70,21 @@ export default function BuilderHistory({
       {sorted.map((v) => {
         const isCurrent = v.versionId === data.activeVersion;
         return (
-          <div key={v.versionId} className="history-item" data-active={String(isCurrent)}>
-            <div className="history-thumb">
-              <div className="thumb-shimmer" />
+          <div key={v.versionId} className={styles.item} data-active={String(isCurrent)}>
+            <div className={styles.thumb}>
+              <div className={styles.shimmer} />
             </div>
-            <div className="history-meta">
-              <div className="history-title">
+            <div className={styles.meta}>
+              <div className={styles.title}>
                 <b>{shortVersionTitle(v)}</b>
-                {isCurrent ? <span className="current-tag">● current</span> : null}
+                {isCurrent ? <span className={styles.tag}>● current</span> : null}
               </div>
-              <div className="history-when">{relativeWhen(v.uploadedAt)}</div>
-              <p className="history-prompt">
+              <div className={styles.when}>{relativeWhen(v.uploadedAt)}</div>
+              <p className={styles.prompt}>
                 {`${v.files} files · ${(v.bytes / 1024).toFixed(1)} KB · sha ${v.sha256.slice(0, 8)}`}
               </p>
             </div>
-            <div className="history-actions">
+            <div className={styles.actions}>
               {!isCurrent ? (
                 <button
                   type="button"
