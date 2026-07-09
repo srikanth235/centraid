@@ -1,11 +1,15 @@
-import { type JSX, useState } from 'react';
+import { type JSX, useMemo, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
 import Icon from '../../ui/Icon.js';
+import ImportScreen from '../../screens/ImportScreen.js';
+import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
+import { useShellActions } from '../actions.js';
 import { PageEmpty } from '../status.js';
+import { importCallbacks, phoneCallbacks } from './settingsAccountData.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -53,6 +57,9 @@ export interface SettingsRouteProps {
 export default function SettingsRoute({ prefs, setPrefs, initialPage }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(initialPage ?? 'appearance');
   const def = PAGES.find((p) => p.id === page);
+  const { showToast } = useShellActions();
+  const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
+  const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
 
   return (
     <div className="cd-settings-main">
@@ -130,6 +137,10 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
               activateRunner={activateRunner}
               setAgentModel={setAgentModel}
             />
+          ) : page === 'phone' ? (
+            <PhoneScreen {...phoneProps} />
+          ) : page === 'import' ? (
+            <ImportScreen {...importProps} />
           ) : (
             <PageEmpty message="This settings page is being migrated to React." />
           )}
