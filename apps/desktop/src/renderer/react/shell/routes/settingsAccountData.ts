@@ -1,4 +1,5 @@
 import {
+  listVaults,
   vaultConnections,
   vaultConnectionSetStatus,
   vaultImportDiscard,
@@ -8,7 +9,49 @@ import {
   vaultImportStage,
   vaultStatus,
 } from '../../../gateway-client.js';
-import type { ImportBridgeProps, PhoneBridgeProps } from '../../bridge.js';
+import type { ConnectionRowDTO, ImportBridgeProps, PhoneBridgeProps, ProfileRowDTO } from '../../bridge.js';
+
+// Load the Spaces page data — the vault registry (spaces) + gateway endpoints
+// (connections). Derives the DTOs straight from the vault list rather than the
+// vanilla toProfileView (which coupled to the profiles global + gateway state);
+// the appsCount nicety is dropped for the subLine here.
+export async function loadProfilesData(): Promise<{
+  profiles: ProfileRowDTO[];
+  connections: ConnectionRowDTO[];
+}> {
+  const vaultList = await listVaults()
+    .then((v) => v ?? [])
+    .catch(() => []);
+  const activeVaultId = await window.CentraidApi.getGatewayAuth()
+    .then((a) => a.vaultId ?? vaultList[0]?.vaultId ?? '')
+    .catch(() => vaultList[0]?.vaultId ?? '');
+  const connectionList = await window.CentraidApi.listGateways().catch(() => []);
+  const activeConnectionId = await window.CentraidApi.getSettings()
+    .then((s) => s.activeGatewayId)
+    .catch(() => 'local');
+
+  const profiles: ProfileRowDTO[] = vaultList.map((v) => {
+    const active = v.vaultId === activeVaultId;
+    const lead = (v.blurb ?? '').trim() || 'Local';
+    return {
+      active,
+      color: v.color ?? '#4E68DD',
+      icon: v.icon ?? 'Folder',
+      id: v.vaultId,
+      name: v.name,
+      primordial: active && vaultList.length <= 1,
+      subLine: lead,
+    };
+  });
+  const connections: ConnectionRowDTO[] = connectionList.map((g) => ({
+    active: g.id === activeConnectionId,
+    displayName: g.displayName,
+    id: g.id,
+    removable: g.id !== 'local',
+    sub: g.kind === 'remote' ? (g.url ?? 'Remote gateway') : 'This computer',
+  }));
+  return { profiles, connections };
+}
 
 // Account-page data — ports the Phone (app-phone.ts) + Import (app-import.ts)
 // bridge callback wiring for the Settings Account pages. Phone talks to the

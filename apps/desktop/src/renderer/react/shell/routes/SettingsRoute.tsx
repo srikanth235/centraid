@@ -6,10 +6,12 @@ import ImportScreen from '../../screens/ImportScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
+import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
 import { useShellActions } from '../actions.js';
-import { PageEmpty } from '../status.js';
-import { importCallbacks, phoneCallbacks } from './settingsAccountData.js';
+import { PageEmpty, PageLoading } from '../status.js';
+import { useAsyncData } from '../useAsyncData.js';
+import { importCallbacks, loadProfilesData, phoneCallbacks } from './settingsAccountData.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -60,6 +62,7 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
   const { showToast } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
+  const spaces = useAsyncData(loadProfilesData);
 
   return (
     <div className="cd-settings-main">
@@ -141,6 +144,25 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
             <PhoneScreen {...phoneProps} />
           ) : page === 'import' ? (
             <ImportScreen {...importProps} />
+          ) : page === 'profiles' ? (
+            spaces.status === 'loading' ? (
+              <PageLoading label="Loading spaces…" />
+            ) : spaces.status === 'error' ? (
+              <PageEmpty message={`Couldn’t load spaces: ${spaces.error}`} />
+            ) : (
+              <SettingsProfilesScreen
+                profiles={spaces.data.profiles}
+                connections={spaces.data.connections}
+                onSwitch={(id) => void window.CentraidApi.setActiveVault({ vaultId: id })}
+                onConnect={(id) => void window.CentraidApi.setActiveGateway({ id })}
+                onRemoveConnection={(id) => void window.CentraidApi.removeGateway({ id })}
+                // Add / rename / delete open the vanilla profiles-cluster modals;
+                // those move to React in a follow-up (see notes).
+                onAdd={() => showToast('Space management is moving to React — use the switcher for now.')}
+                onEdit={() => showToast('Rename a space from the switcher for now.')}
+                onDelete={() => showToast('Delete a space from the switcher for now.')}
+              />
+            )
           ) : (
             <PageEmpty message="This settings page is being migrated to React." />
           )}
