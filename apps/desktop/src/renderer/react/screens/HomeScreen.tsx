@@ -9,6 +9,8 @@ import type {
   HomeMenuAnchor,
 } from '../bridge.js';
 import { INTEGRATION_HUES } from '../format.js';
+import styles from './HomeScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 const STATUS_ICON: Record<AuStatusKind, IconName> = {
   active: 'Power',
@@ -185,14 +187,14 @@ function AutoCard({
             <div className="cd-app-card-desc">{r.blurb}</div>
           </div>
         </div>
-        <div className="cd-app-card-meta">
+        <div className={styles.appCardMeta}>
           <span className="cd-au-status" data-tone={r.statusKind} role="status">
             <span className="cd-au-status-ic" aria-hidden="true">
               <Icon name={STATUS_ICON[r.statusKind]} size={12} />
             </span>
             <span className="cd-au-status-tx">{r.statusLabel}</span>
           </span>
-          <span className="cd-app-card-trig">
+          <span className={styles.appCardTrig}>
             <span aria-hidden="true">
               <Icon name={r.triggerIcon as IconName} size={12} />
             </span>
@@ -257,12 +259,12 @@ function EmptyState({ kind }: { kind: 'all' | 'app' | 'automation' }): JSX.Eleme
             'Describe an app or automation in the box above to get started.',
           ];
   return (
-    <div className="cd-shelf-empty">
-      <div className="cd-shelf-empty-icon">
+    <div className={styles.shelfEmpty}>
+      <div className={styles.shelfEmptyIcon}>
         <Icon name={icon} size={20} />
       </div>
-      <div className="cd-shelf-empty-title">{title}</div>
-      <div className="cd-shelf-empty-sub">{sub}</div>
+      <div className={styles.shelfEmptyTitle}>{title}</div>
+      <div className={styles.shelfEmptySub}>{sub}</div>
     </div>
   );
 }
@@ -315,17 +317,17 @@ export default function HomeScreen({
   ];
 
   return (
-    <div className="cd-day1-scroll">
-      <div className="cd-hero">
-        <div className="cd-hero-head">
-          <div className="cd-hero-date">{dateLabel}</div>
+    <div className={styles.day1Scroll}>
+      <div className={styles.hero}>
+        <div className={styles.heroHead}>
+          <div className={styles.heroDate}>{dateLabel}</div>
           <h1>What should we build?</h1>
         </div>
-        <div className="cd-hero-composer-wrap">
-          <div className="cd-composer">
+        <div className={styles.heroComposerWrap}>
+          <div className={styles.composer}>
             <textarea
               ref={taRef}
-              className="cd-composer-input"
+              className={styles.composerInput}
               placeholder="Describe an app you want — a habit tracker, a journal, a tiny tool…"
               rows={2}
               value={prompt}
@@ -337,12 +339,16 @@ export default function HomeScreen({
                 }
               }}
             />
-            <div className="cd-composer-toolbar">
-              <button type="button" className="cd-icon-btn cd-composer-attach" title="Attach">
+            <div className={styles.composerToolbar}>
+              <button
+                type="button"
+                className={cx('cd-icon-btn', styles.composerAttach)}
+                title="Attach"
+              >
                 <Icon name="Plus" size={14} />
               </button>
-              <span className="cd-composer-spacer" />
-              <span className="cd-composer-mode">
+              <span className={styles.composerSpacer} />
+              <span className={styles.composerMode}>
                 <span>
                   <Icon name="Sparkle" size={11} />
                 </span>
@@ -351,10 +357,10 @@ export default function HomeScreen({
                   <Icon name="ChevronDown" size={9} />
                 </span>
               </span>
-              <span className="cd-kbd cd-composer-kbd">⌘↵</span>
+              <span className={cx('cd-kbd', styles.composerKbd)}>⌘↵</span>
               <button
                 type="button"
-                className="cd-composer-send"
+                className={styles.composerSend}
                 disabled={prompt.trim().length === 0}
                 onClick={submit}
               >
@@ -362,7 +368,7 @@ export default function HomeScreen({
               </button>
             </div>
           </div>
-          <div className="cd-hero-suggestions">
+          <div className={styles.heroSuggestions}>
             {suggestions.map((s) => (
               <button
                 key={s}
@@ -380,8 +386,8 @@ export default function HomeScreen({
         </div>
       </div>
 
-      <section className="cd-hsec cd-home-lib">
-        <div className="cd-home-lib-head">
+      <section className={cx(styles.hsec, styles.homeLib)}>
+        <div className={styles.homeLibHead}>
           <div className="cd-disc-seg" role="tablist" aria-label="Filter your library by kind">
             {segDefs.map((d) => (
               <button
@@ -406,8 +412,8 @@ export default function HomeScreen({
           </div>
           <span className="cd-hsec-spacer" />
           {attention > 0 ? (
-            <div className="cd-hsec-status">
-              <span className="cd-hsec-stat" data-tone="attention">
+            <div className={styles.hsecStatus}>
+              <span className={styles.hsecStat} data-tone="attention">
                 <span aria-hidden="true">
                   <Icon name="AlertTriangle" size={13} />
                 </span>
@@ -415,7 +421,7 @@ export default function HomeScreen({
               </span>
             </div>
           ) : null}
-          <button type="button" className="cd-hsec-browse" onClick={onBrowseTemplates}>
+          <button type="button" className={styles.hsecBrowse} onClick={onBrowseTemplates}>
             <span>Browse templates</span>
             <span aria-hidden="true">
               <Icon name="ChevronRight" size={14} />
@@ -446,11 +452,11 @@ export default function HomeScreen({
             </button>
           </div>
         </div>
-        <div className="cd-home-lib-body">
+        <div className={styles.homeLibBody}>
           {cardCount === 0 ? (
             <EmptyState kind={kind} />
           ) : (
-            <div className="cd-apps-grid cd-apps-grid--small" data-layout={layout}>
+            <div className={cx(styles.appsGrid, styles.appsGridSmall)} data-layout={layout}>
               {showApps
                 ? appItems.map((a) => (
                     <AppCard

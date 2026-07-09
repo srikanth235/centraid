@@ -1451,10 +1451,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3396,10 +3398,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -6250,128 +6254,16 @@ select.input option {
 /* Day-1 home — centered hero with the composer as the centre of gravity.
    The scroll column centers its content vertically when the page is the
    Day-1 layout (a single hero block above the shelf). */
-.cd-day1-scroll {
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-}
 
 /* Hero — "What should we build?" + composer. Top-anchored: the heading
    sits ~44px from the top and the composer rides just under it, leaving
    the apps shelf the rest of the column rather than vertically centering. */
-.cd-hero {
-  max-width: 760px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 44px 56px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  align-items: center;
-  text-align: center;
-}
-
-.cd-hero h1 {
-  margin: 0;
-  font: var(--t-display-1);
-  font-size: 44px;
-  letter-spacing: -0.03em;
-  color: var(--ink);
-  text-wrap: balance;
-}
 
 /* Day1Composer — bg-elev card with descriptive placeholder + toolbar. */
-.cd-composer {
-  width: 100%;
-  max-width: 680px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 18px;
-  padding: 18px 18px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow:
-    0 24px 48px -24px rgba(0, 0, 0, 0.45),
-    0 0 0 6px color-mix(in srgb, var(--accent) 5%, transparent);
-  text-align: left;
-}
-.cd-composer-input {
-  width: 100%;
-  min-height: 56px;
-  resize: none;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font: var(--t-body);
-  font-size: 15px;
-  line-height: 1.45;
-}
-.cd-composer-input::placeholder {
-  color: var(--ink-3);
-}
-.cd-composer-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-composer-spacer {
-  flex: 1;
-}
 .cd-composer-attach,
 .cd-composer-mic {
   width: 28px;
   height: 28px;
-}
-.cd-composer-mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 0.5px solid var(--line);
-  font: var(--t-small);
-  font-size: 12px;
-  color: var(--ink-2);
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.cd-composer-mode svg {
-  display: block;
-}
-.cd-composer-kbd {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ink-4);
-  letter-spacing: 0;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.cd-composer-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  border: none;
-  background: var(--ink);
-  color: var(--bg);
-  cursor: pointer;
-  padding: 0;
-}
-.cd-composer-send svg {
-  display: block;
-}
-.cd-composer-send[disabled] {
-  opacity: 0.4;
-  cursor: default;
-}
-.cd-composer-send:hover:not([disabled]) {
-  background: color-mix(in srgb, var(--ink) 86%, var(--bg));
 }
 
 .cd-hero-build-btn {
@@ -6411,13 +6303,6 @@ select.input option {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
 }
-.cd-hero-suggestions {
-  margin-top: 12px;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
 .cd-chip {
   display: inline-flex;
   align-items: center;
@@ -6438,117 +6323,26 @@ select.input option {
 }
 
 /* Hero date eyebrow stacked tight above the heading. */
-.cd-hero-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-.cd-hero-date {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
 /* Composer + suggestion chips share a column so the chips ride just under
    the box (the hero's own 28px gap is for the larger heading→composer step). */
-.cd-hero-composer-wrap {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-.cd-hero-composer-wrap .cd-hero-suggestions {
-  margin-top: 0;
-}
 
 /* ── Home library shelf ───────────────────────────────────────────────────
    One section below the hero that clubs apps + automations together — the
    Discover pattern applied to the user's own stuff. A segmented All / Apps /
    Automations filter rides the header; the body paints kind-grouped sections
    of matching cards. */
-.cd-hsec {
-  width: 100%;
-  /* The library shelf runs wider than the centered hero so the tile grid sits
-     4-up on a roomy window (matching the gallery spec); it reflows to 3/2 as
-     the pane narrows. Shares its envelope with Discover's .cd-disc-wrap. */
-  max-width: var(--lib-shelf-max);
-  margin: 40px auto 0;
-  padding: 0 var(--lib-shelf-pad-x);
-  box-sizing: border-box;
-}
-.cd-hsec:last-child {
-  padding-bottom: 56px;
-}
 /* Header — segmented filter left, status summary + Browse link right. The
    filter reuses Discover's pill control; its own 8px top margin is reset so
    it sits centred against the link in this single-row header. */
-.cd-home-lib-head {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 18px;
-  flex-wrap: wrap;
-}
-.cd-home-lib-head .cd-disc-seg {
-  margin-top: 0;
-}
 /* Body — kind groups stacked with the same rhythm as Discover's categories. */
-.cd-home-lib-body {
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
 .cd-hsec-spacer {
   flex: 1;
-}
-.cd-hsec-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 16px;
-  font-size: 12.5px;
-}
-.cd-hsec-stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-3);
-}
-.cd-hsec-stat[data-tone='active'] {
-  color: var(--ink-2);
-}
-.cd-hsec-stat[data-tone='attention'] {
-  color: var(--danger);
-}
-.cd-hsec-stat svg {
-  display: block;
 }
 .cd-hsec-dot {
   width: 6px;
   height: 6px;
   border-radius: 999px;
   background: var(--success);
-}
-.cd-hsec-browse {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border: none;
-  background: transparent;
-  color: var(--ink-2);
-  font: var(--t-body);
-  font-size: 12.5px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.cd-hsec-browse:hover {
-  color: var(--ink);
-}
-.cd-hsec-browse svg {
-  display: block;
 }
 
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
@@ -6614,18 +6408,6 @@ select.input option {
   color: var(--ink-3);
 }
 
-.cd-apps-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
-}
-.cd-apps-grid--small {
-  /* App-store-style tiles. A ~200px floor packs 4–5 across in the widened
-     shelf and reflows to 3/2 as the pane narrows — compact cards, not big
-     posters. (Gap inherited from .cd-apps-grid.) */
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
-
 /* Home library layout toggle (Tiles | Rows) — a small segmented icon pair on
    the right of the shelf header. The pressed segment reads as an elevated
    chip; the other dims back. Session-only, mirrors the design's spec. */
@@ -6671,104 +6453,15 @@ select.input option {
    edge; the card reserves right padding so the meta never sits under it.
    Applies to both app cards (renderAppCard) and the automation cards, which
    share the .cd-app-card--small family. */
-.cd-apps-grid[data-layout='rows'] {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap {
-  height: auto;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card--small {
-  min-height: 0;
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 108px 10px 14px;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-head {
-  flex: 1 1 auto;
-  min-width: 0;
-  /* Back to a horizontal head for the row strip — icon beside the title. */
-  flex-direction: row;
-  align-items: center;
-  gap: 14px;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card--small .cd-app-card-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card--small .cd-app-card-icon svg {
-  width: 19px;
-  height: 19px;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-desc {
-  -webkit-line-clamp: 1;
-}
 /* Meta strip + footer collapse from stacked blocks into inline, no-wrap
    clusters that ride the right edge of the row. Reading order, left → right:
    title (grows) · status + trigger · kind badge · timestamp. The kind badge +
    timestamp share a fixed-width tail so they line up into clean columns across
    rows regardless of whether a row carries the status/trigger meta. */
-.cd-apps-grid[data-layout='rows'] .cd-app-card-meta {
-  /* Fixed-width slot so the status pill (its leftmost child) lands at the same
-     x down the column — otherwise a longer trigger ("Weekdays at 11:30 PM" vs
-     "Daily at 9:00 AM") shifts the whole cluster and the pills drift. The
-     trigger fills the remainder and truncates if a row runs long. */
-  flex: 0 0 auto;
-  width: 256px;
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  overflow: hidden;
-  order: 1;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-meta .cd-au-status {
-  flex: 0 0 auto;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-meta .cd-app-card-trig {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-foot {
-  flex: 0 0 auto;
-  order: 2;
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
-  justify-content: flex-end;
-  gap: 12px;
-}
 /* Kind badge: fixed slot so APP / AUTOMATION align down the column. */
-.cd-apps-grid[data-layout='rows'] .cd-app-card-foot .cd-disc-badge {
-  width: var(--lib-row-badge-w);
-}
 /* Timestamp: right-aligned in a fixed slot wide enough for the longest stamp
    ("Weekdays at 11:30 PM") so the times right-align into a column. */
-.cd-apps-grid[data-layout='rows'] .cd-app-card-foot-time {
-  min-width: 132px;
-  justify-content: flex-end;
-  text-align: right;
-}
-.cd-apps-grid[data-layout='rows'] .cd-card-actions {
-  top: 50%;
-  right: 14px;
-  bottom: auto;
-  transform: translateY(-50%) translateY(3px);
-}
-.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap:hover .cd-card-actions,
-.cd-apps-grid[data-layout='rows'] .cd-app-card-wrap:has(:focus-visible) .cd-card-actions,
-.cd-apps-grid[data-layout='rows'] .cd-card-actions:has(.cd-card-act[data-open='true']) {
-  transform: translateY(-50%);
-}
 /* Star flag rides the same vertically-centred right edge as the ⋯ in rows. */
-.cd-apps-grid[data-layout='rows'] .cd-card-star-flag {
-  top: 50%;
-  right: 17px;
-  transform: translateY(-50%);
-}
 
 /* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
    the right of the greeting; expanded it swaps in a composer card. */
@@ -6963,10 +6656,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 
 
@@ -6984,10 +6679,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7022,49 +6719,12 @@ select.input option {
 
 
 
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
 
-
-
-
-
-
-
-
-.cd-shelf-empty {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 48px 24px;
-  border: 0.5px dashed var(--line-strong);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
-}
-.cd-shelf-empty-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 13px;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(160deg, var(--accent-light), var(--accent-deep));
-  color: #fff;
-}
-.cd-shelf-empty-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink-1);
-}
-.cd-shelf-empty-sub {
-  font-size: 13px;
-  color: var(--ink-3);
-  text-align: center;
-  max-width: 360px;
-}
 
 /* §A2 — quiet inspiration footer. */
 .cd-home-footer {
@@ -7267,24 +6927,6 @@ select.input option {
 /* Automation meta strip — status pill · trigger chip · integration dots,
    sitting in the card body between the blurb and the footer (apps omit it).
    In tiles it wraps; in rows it flows inline (see the rows block). */
-.cd-app-card-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 0;
-}
-.cd-app-card-trig {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11.5px;
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.cd-app-card-trig svg {
-  display: block;
-}
 /* Footer kind badge (APP / AUTOMATION) reuses the Discover badge styling;
    it sits left, timestamp right (the foot is already space-between). */
 .cd-app-card-foot .cd-disc-badge {
@@ -8836,11 +8478,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -9595,10 +9239,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -10191,10 +9837,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -10695,6 +10343,7 @@ button.cd-au-run:hover .cd-au-run-go {
 
 
 
+
   .cd-asst {
     grid-template-columns: 0 1fr;
   }
@@ -10702,6 +10351,7 @@ button.cd-au-run:hover .cd-au-run-go {
     display: none;
   }
 }
+
 
 
 

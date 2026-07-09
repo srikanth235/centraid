@@ -97,8 +97,8 @@ function typeInto(input: HTMLTextAreaElement, value: string): void {
 describe('HomeScreen', () => {
   it('renders the composer hero, suggestions, filter, and the unified grid', () => {
     const el = mount(makeProps());
-    expect(el.querySelector('.cd-composer-input')).toBeTruthy();
-    expect(el.querySelectorAll('.cd-hero-suggestions .cd-chip').length).toBe(2);
+    expect(el.querySelector('.composerInput')).toBeTruthy();
+    expect(el.querySelectorAll('.heroSuggestions .cd-chip').length).toBe(2);
     expect(el.querySelectorAll('.cd-disc-seg-b').length).toBe(3);
     // 2 apps + 1 automation card
     expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(3);
@@ -110,12 +110,12 @@ describe('HomeScreen', () => {
   it('builds from the composer (send enabled after typing)', () => {
     const props = makeProps();
     const el = mount(props);
-    const send = el.querySelector('.cd-composer-send') as HTMLButtonElement;
+    const send = el.querySelector('.composerSend') as HTMLButtonElement;
     expect(send.disabled).toBe(true);
-    typeInto(el.querySelector('.cd-composer-input') as HTMLTextAreaElement, 'a todo app');
-    expect((el.querySelector('.cd-composer-send') as HTMLButtonElement).disabled).toBe(false);
+    typeInto(el.querySelector('.composerInput') as HTMLTextAreaElement, 'a todo app');
+    expect((el.querySelector('.composerSend') as HTMLButtonElement).disabled).toBe(false);
     act(() =>
-      (el.querySelector('.cd-composer-send') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.composerSend') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -150,7 +150,7 @@ describe('HomeScreen', () => {
       (b) => (b as HTMLElement).dataset.layout === 'rows',
     ) as HTMLButtonElement;
     act(() => rowsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect((el.querySelector('.cd-apps-grid') as HTMLElement).dataset.layout).toBe('rows');
+    expect((el.querySelector('.appsGrid') as HTMLElement).dataset.layout).toBe('rows');
   });
 
   it('opens an automation + its more-menu, and browses templates', () => {
@@ -170,7 +170,7 @@ describe('HomeScreen', () => {
       expect.objectContaining({ kind: 'rect' }),
     );
     act(() =>
-      (el.querySelector('.cd-hsec-browse') as HTMLButtonElement).dispatchEvent(
+      (el.querySelector('.hsecBrowse') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
@@ -181,7 +181,7 @@ describe('HomeScreen', () => {
     const el = mount(
       makeProps({ appItems: [], automationItems: [], counts: { all: 0, apps: 0, automations: 0 } }),
     );
-    expect(el.querySelector('.cd-shelf-empty')).toBeTruthy();
+    expect(el.querySelector('.shelfEmpty')).toBeTruthy();
     expect(el.textContent).toContain('Nothing here yet');
   });
 });
