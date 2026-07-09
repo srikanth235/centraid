@@ -11,6 +11,7 @@ import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
+import AppViewRoute from './routes/AppViewRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
@@ -129,6 +130,23 @@ export default function App(): JSX.Element {
           return <TemplatesRoute />;
         case 'settings':
           return <SettingsRoute prefs={prefs} setPrefs={setPrefs} />;
+        case 'app': {
+          const id = nav.route.id;
+          const app = [...userApps, ...drafts].find((a) => a.id === id);
+          if (!app) return <PageEmpty message="App not found." />;
+          const ua = userApps.find((a) => a.id === id);
+          const appId = ua?.centraidAppId ?? app.id;
+          return (
+            <AppViewRoute
+              app={app}
+              appId={appId}
+              nav={nav}
+              renderSidebar={renderSidebar}
+              prefs={prefs}
+              onToggleSidebar={() => setPrefs({ sidebarOpen: !prefs.sidebarOpen })}
+            />
+          );
+        }
         case 'starred':
           // Port of the vanilla renderStarred — a pure empty-state page.
           return (
