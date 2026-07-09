@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { THEME_PRESETS } from '@centraid/design-tokens';
-import type { SettingsAppearanceBridgeProps } from '../bridge.js';
+import type { SettingsAppearanceBridgeProps } from '../screen-contracts.js';
 import SettingsAppearanceScreen from './SettingsAppearanceScreen.js';
 
 function makeProps(

@@ -5,7 +5,7 @@ import type {
   VaultGrantDTO,
   VaultParkedDTO,
   VaultScopeDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { relativeTime } from '../format.js';
 import { cx } from '../ui/cx.js';
 import vault from '../styles/vault.module.css';

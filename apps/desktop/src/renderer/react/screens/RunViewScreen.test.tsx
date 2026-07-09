@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { RunViewBridgeProps, RunViewSnapshot } from '../bridge.js';
+import type { RunViewBridgeProps, RunViewSnapshot } from '../screen-contracts.js';
 import RunViewScreen from './RunViewScreen.js';
 
 function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {

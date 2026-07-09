@@ -14,7 +14,7 @@ import {
 } from '../../../app-format.js';
 import { cronNextRuns } from '../../../cron.js';
 import { createAutomation, listAutomationRuns, listAutomations } from '../../../gateway-client.js';
-import type { AuOverviewData, AuStatusKind, AutomationViewData } from '../../bridge.js';
+import type { AuOverviewData, AuStatusKind, AutomationViewData } from '../../screen-contracts.js';
 
 /** Scaffold a fresh disabled draft automation, returning its id to open in the
  *  builder (vanilla createAndOpenAutomationBuilder, minus the navigation). A

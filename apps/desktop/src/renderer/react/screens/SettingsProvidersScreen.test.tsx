@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AgentsStatusDTO, SettingsProvidersBridgeProps } from '../bridge.js';
+import type { AgentsStatusDTO, SettingsProvidersBridgeProps } from '../screen-contracts.js';
 import SettingsProvidersScreen from './SettingsProvidersScreen.js';
 
 function makeStatus(over: Partial<AgentsStatusDTO> = {}): AgentsStatusDTO {

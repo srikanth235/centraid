@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { openSpaceModal, requestDeleteSpace } from './spaceModals.js';
-import type { ProfileRowDTO } from '../../bridge.js';
+import type { ProfileRowDTO } from '../../screen-contracts.js';
 
 const updateVault = vi.fn((_input?: unknown) => Promise.resolve({}));
 // `vi.mock` is hoisted above the imports by vitest, so the gateway stub lands

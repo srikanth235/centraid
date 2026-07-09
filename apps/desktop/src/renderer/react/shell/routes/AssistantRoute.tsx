@@ -9,7 +9,7 @@ import {
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
 import { relativeTime } from '../../../app-format.js';
-import type { AssistantSnapshot, AsstMsgDTO } from '../../bridge.js';
+import type { AssistantSnapshot, AsstMsgDTO } from '../../screen-contracts.js';
 import AssistantScreen from '../../screens/AssistantScreen.js';
 import { useShellActions } from '../actions.js';
 import { hydrateRefs, richAnswerHtml } from './assistantRich.js';

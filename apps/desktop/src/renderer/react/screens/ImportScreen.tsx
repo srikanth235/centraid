@@ -5,7 +5,7 @@ import type {
   ImportConnectionDTO,
   ImportData,
   ImportRowDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { relativeTime } from '../format.js';
 import styles from './ImportScreen.module.css';
 import vault from '../styles/vault.module.css';

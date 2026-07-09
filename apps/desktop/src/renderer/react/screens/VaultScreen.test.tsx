@@ -2,7 +2,7 @@ import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { VaultBridgeProps, VaultData } from '../bridge.js';
+import type { VaultBridgeProps, VaultData } from '../screen-contracts.js';
 import VaultScreen from './VaultScreen.js';
 
 const block: VaultBridgeProps['block'] = {

@@ -6,7 +6,7 @@ import type {
   AutomationViewBridgeProps,
   AutomationViewData,
   AuViewRunDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import styles from './AutomationViewScreen.module.css';
 import { cx } from '../ui/cx.js';
 

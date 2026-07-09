@@ -1,6 +1,6 @@
 import { useMemo, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../bridge.js';
+import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './AutomationTemplatesScreen.module.css';
 

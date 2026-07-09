@@ -1,7 +1,7 @@
 import { relativeTime, triggersSummary } from '../../../app-format.js';
 import { auStatusForRow, glyphForId, hueForId } from '../../../automation-identity.js';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
-import type { AuStatusKind, HomeAppItemDTO, HomeAutoItemDTO } from '../../bridge.js';
+import type { AuStatusKind, HomeAppItemDTO, HomeAutoItemDTO } from '../../screen-contracts.js';
 import type { AutomationFeedEntry } from './automationsData.js';
 
 const AU_LABEL: Record<AuStatusKind, string> = {

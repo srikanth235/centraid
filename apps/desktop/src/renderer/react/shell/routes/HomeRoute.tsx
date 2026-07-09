@@ -7,7 +7,7 @@ import {
   runAutomationNow,
   updateAppMeta,
 } from '../../../gateway-client.js';
-import type { HomeMenuAnchor } from '../../bridge.js';
+import type { HomeMenuAnchor } from '../../screen-contracts.js';
 import HomeScreen from '../../screens/HomeScreen.js';
 import { useShellActions } from '../actions.js';
 import { openMenu } from '../contextMenu.js';
@@ -56,7 +56,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const apps: AppMetaResolvedType[] = [...userApps, ...drafts];
   const findApp = (id: string): AppMetaResolvedType | undefined => apps.find((a) => a.id === id);
 
-  // The Home screen emits the bridge's HomeMenuAnchor (loose optionals); the
+  // The Home screen emits the contract's HomeMenuAnchor (loose optionals); the
   // context-menu overlay takes the shell's discriminated ShellMenuAnchor.
   const toAnchor = (a: HomeMenuAnchor): ShellMenuAnchor =>
     a.kind === 'point'

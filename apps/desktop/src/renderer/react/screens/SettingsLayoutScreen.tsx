@@ -1,5 +1,5 @@
 import { useState, type JSX } from 'react';
-import type { SettingsLayoutBridgeProps } from '../bridge.js';
+import type { SettingsLayoutBridgeProps } from '../screen-contracts.js';
 import { DrawerGroup, DrawerRow, Segmented, Switch } from './settings-controls.js';
 
 const DENSITIES = ['compact', 'regular', 'comfy'] as const;

@@ -11,7 +11,7 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { glyphForId, hueForId } from '../../../automation-identity.js';
-import type { AuStatusKind, RunLogRowDTO, RunNodeDTO, RunViewSnapshot } from '../../bridge.js';
+import type { AuStatusKind, RunLogRowDTO, RunNodeDTO, RunViewSnapshot } from '../../screen-contracts.js';
 
 const NODE_TYPE_ICON: Record<string, string> = {
   trigger: 'Bolt',

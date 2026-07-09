@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsProfilesBridgeProps } from '../bridge.js';
+import type { SettingsProfilesBridgeProps } from '../screen-contracts.js';
 import SettingsProfilesScreen from './SettingsProfilesScreen.js';
 
 function makeProps(over: Partial<SettingsProfilesBridgeProps> = {}): SettingsProfilesBridgeProps {

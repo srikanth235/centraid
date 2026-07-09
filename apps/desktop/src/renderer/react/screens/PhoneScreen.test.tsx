@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PhoneBridgeProps, PhoneStatusDTO } from '../bridge.js';
+import type { PhoneBridgeProps, PhoneStatusDTO } from '../screen-contracts.js';
 import PhoneScreen from './PhoneScreen.js';
 
 const statusWithDevice: PhoneStatusDTO = {

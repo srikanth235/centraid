@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { AppKnobDTO, AppSettingsBridgeProps, AppSettingsSnapshot } from '../bridge.js';
+import type { AppKnobDTO, AppSettingsBridgeProps, AppSettingsSnapshot } from '../screen-contracts.js';
 import styles from './AppSettingsPanel.module.css';
 import { cx } from '../ui/cx.js';
 

@@ -1,13 +1,13 @@
-// The vanilla↔React handoff seam (issue #325, Phase 3).
+// Screen prop-type contracts (issue #325).
 //
-// The renderer is two independently-loaded module graphs: the vanilla shell
-// (tsc → per-file ES modules) and the React bundle (Vite → react-boot.js).
-// They can't `import` each other, so converted screens meet here: react-boot
-// publishes `window.CentraidReact` with one `mount<Screen>` per converted
-// screen, and the vanilla route module (still owning routing/teardown) calls
-// it, mounts the returned React tree into the page container, and registers the
-// returned disposer as the page's cleanup. If the bundle is missing the vanilla
-// module falls back to its own render, so the app is runnable at every commit.
+// The DTOs below are the typed props each React screen renders against — the
+// shape of the data a route derives (in react/shell/routes/*Data.ts) and hands
+// its screen. They began life as the vanilla↔React handoff seam (a
+// `window.CentraidReact` bridge between two module graphs); after the full-React
+// flip that runtime bridge is gone and these are just the screens' contracts,
+// kept as explicit DTOs so a route's derivation and its screen agree field for
+// field. The `*BridgeProps` names are retained only to avoid churning ~50
+// import sites.
 
 import type { TileVariant } from '@centraid/design-tokens';
 
@@ -759,33 +759,3 @@ export interface BuilderChatBridgeProps {
   onMountHistory: (host: HTMLElement) => void;
 }
 
-// After the #325 flip, React owns #root and the shell mounts every screen route
-// directly (react/shell/routes/*). One vanilla→React handoff survives: the
-// vanilla builder window (builder.ts) hosts the React chat pane. Every other
-// screen is imported by its route wrapper with no bridge in between.
-export interface CentraidReactBridge {
-  /** Mount the React builder chat pane (SSE-driven) inside the vanilla builder window; returns a disposer. */
-  mountBuilderChat(host: HTMLElement, props: BuilderChatBridgeProps): () => void;
-}
-
-declare global {
-  interface Window {
-    CentraidReact?: CentraidReactBridge;
-  }
-}
-
-// The React island bundle (react-boot.js) publishes `window.CentraidReact` and
-// is loaded unconditionally by index.html — and always before the first route
-// paints (the boot sequence awaits a settings IPC first, by which point every
-// deferred module script, this bundle included, has run). So route modules can
-// treat the bridge as guaranteed present. This accessor centralises that
-// invariant: it returns the bridge or throws a clear error if the bundle failed
-// to load, instead of every call site re-deriving an optional guard + a dead
-// vanilla fallback (issue #325, Phase 4 — the coexistence scaffolding is gone).
-export function requireReactBridge(): CentraidReactBridge {
-  const bridge = window.CentraidReact;
-  if (!bridge) {
-    throw new Error('React renderer bundle (react-boot.js) is not loaded');
-  }
-  return bridge;
-}

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ImportBridgeProps, ImportData } from '../bridge.js';
+import type { ImportBridgeProps, ImportData } from '../screen-contracts.js';
 import ImportScreen from './ImportScreen.js';
 
 const dataWithDraft: ImportData = {

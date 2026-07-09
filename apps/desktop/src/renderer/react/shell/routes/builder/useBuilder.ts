@@ -14,7 +14,7 @@ import {
 import { generateAppId, shortVersionTitle } from '../../../../format.js';
 import { inferAppVisual } from '../../../../app-format.js';
 import { describeCron } from '../../../../cron.js';
-import type { BuilderChatSnapshot } from '../../../bridge.js';
+import type { BuilderChatSnapshot } from '../../../screen-contracts.js';
 import {
   BUILDER_SUGGESTIONS,
   type ChatView,

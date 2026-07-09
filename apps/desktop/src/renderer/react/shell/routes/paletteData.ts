@@ -1,5 +1,5 @@
 import type { AppearancePrefs, ShellRoute } from '../../../app-shell-context.js';
-import type { PaletteGroupDTO, PaletteRowDTO } from '../../bridge.js';
+import type { PaletteGroupDTO, PaletteRowDTO } from '../../screen-contracts.js';
 import { iconSvg } from '../iconSvg.js';
 
 // The ⌘K command palette's data driver — the React successor to the vanilla

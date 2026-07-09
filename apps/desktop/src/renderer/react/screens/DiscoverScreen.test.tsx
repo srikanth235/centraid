@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { DiscoverBridgeProps, DiscoverTemplate } from '../bridge.js';
+import type { DiscoverBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import DiscoverScreen from './DiscoverScreen.js';
 
 const appTemplates: DiscoverTemplate[] = [

@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppSettingsBridgeProps, AppSettingsSnapshot } from '../bridge.js';
+import type { AppSettingsBridgeProps, AppSettingsSnapshot } from '../screen-contracts.js';
 import AppSettingsPanel from './AppSettingsPanel.js';
 
 function makeSnapshot(over: Partial<AppSettingsSnapshot> = {}): AppSettingsSnapshot {

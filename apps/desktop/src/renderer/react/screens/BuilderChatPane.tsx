@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../bridge.js';
+import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../screen-contracts.js';
 
 // Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs
 // in builder.ts), as small components so the React pane paints identically.

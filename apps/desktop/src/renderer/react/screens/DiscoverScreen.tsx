@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../bridge.js';
+import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './DiscoverScreen.module.css';
 import { cx } from '../ui/cx.js';
@@ -138,12 +138,10 @@ function TemplateCard({
 }
 
 /**
- * Discover — the unified template gallery, ported to React (issue #325,
- * Phase 3). Reproduces the vanilla `app-discover.ts` markup (`cd-disc-*`
- * classes, styled by the global styles.css) and behavior (kind segmented
- * filter, Tiles/Rows layout toggle, category grouping, click/right-click into
- * the shell's preview + context menu). Mounted by the vanilla route module via
- * `window.CentraidReact.mountDiscover`.
+ * Discover — the unified template gallery (issue #325). Renders the `cd-disc-*`
+ * markup (styled by the global styles.css) and behavior (kind segmented filter,
+ * Tiles/Rows layout toggle, category grouping, click/right-click into the
+ * shell's preview + context menu). Rendered by DiscoverRoute.
  */
 export default function DiscoverScreen({
   appTemplates,

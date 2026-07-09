@@ -2,7 +2,7 @@ import { act } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../bridge.js';
+import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import AutomationTemplatesScreen from './AutomationTemplatesScreen.js';
 
 const templates: DiscoverTemplate[] = [

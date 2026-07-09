@@ -7,7 +7,7 @@ import type {
   HomeAutoItemDTO,
   HomeBridgeProps,
   HomeMenuAnchor,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';

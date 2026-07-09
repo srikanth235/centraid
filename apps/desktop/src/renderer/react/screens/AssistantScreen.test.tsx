@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantBridgeProps, AssistantSnapshot } from '../bridge.js';
+import type { AssistantBridgeProps, AssistantSnapshot } from '../screen-contracts.js';
 import AssistantScreen from './AssistantScreen.js';
 
 function emptySnap(over: Partial<AssistantSnapshot> = {}): AssistantSnapshot {

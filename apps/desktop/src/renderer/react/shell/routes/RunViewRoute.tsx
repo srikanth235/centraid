@@ -7,7 +7,7 @@ import {
   streamAutomationRun,
   type RunStreamEvent,
 } from '../../../gateway-client.js';
-import type { RunViewSnapshot } from '../../bridge.js';
+import type { RunViewSnapshot } from '../../screen-contracts.js';
 import RunViewScreen from '../../screens/RunViewScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';

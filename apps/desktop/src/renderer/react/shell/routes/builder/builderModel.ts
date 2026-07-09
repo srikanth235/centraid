@@ -4,7 +4,7 @@
 // in explicitly) so useBuilder stays a thin state container and these are unit
 // testable.
 
-import type { BuilderChatSnapshot, BuilderMsgDTO } from '../../../bridge.js';
+import type { BuilderChatSnapshot, BuilderMsgDTO } from '../../../screen-contracts.js';
 
 /** A single tool invocation; several fold into one `toolGroup` chat bubble. */
 export interface ToolCall {

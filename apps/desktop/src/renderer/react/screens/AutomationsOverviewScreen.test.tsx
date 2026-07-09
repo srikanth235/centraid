@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AuOverviewData, AutomationsOverviewBridgeProps } from '../bridge.js';
+import type { AuOverviewData, AutomationsOverviewBridgeProps } from '../screen-contracts.js';
 import AutomationsOverviewScreen from './AutomationsOverviewScreen.js';
 
 function makeData(over: Partial<AuOverviewData> = {}): AuOverviewData {

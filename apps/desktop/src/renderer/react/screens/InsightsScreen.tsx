@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { Icon } from '../ui/index.js';
-import type { InsightsBridgeProps } from '../bridge.js';
+import type { InsightsBridgeProps } from '../screen-contracts.js';
 import { insK, insKindLabel, insUsd, relativeTime } from '../format.js';
 import styles from './InsightsScreen.module.css';
 import { cx } from '../ui/cx.js';
@@ -132,9 +132,8 @@ function EmptyLine({ message }: { message: string }): JSX.Element {
 }
 
 /**
- * Insights — the usage-analytics dashboard, ported to React (issue #325,
- * Phase 3). Read-only: the vanilla route module fetches the summary and mounts
- * this with the resolved data via `window.CentraidReact.mountInsights`.
+ * Insights — the usage-analytics dashboard (issue #325). Read-only: its route
+ * (InsightsRoute) fetches the summary and renders this with the resolved data.
  * Styles are co-located in `InsightsScreen.module.css` (scoped CSS Modules —
  * issue #325 Phase 4); the shared `cd-page-empty*` empty-state classes stay
  * global (also used by the vanilla shell + Discover).

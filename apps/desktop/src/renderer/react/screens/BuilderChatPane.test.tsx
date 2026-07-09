@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BuilderChatBridgeProps, BuilderChatSnapshot } from '../bridge.js';
+import type { BuilderChatBridgeProps, BuilderChatSnapshot } from '../screen-contracts.js';
 import BuilderChatPane from './BuilderChatPane.js';
 
 function snap(over: Partial<BuilderChatSnapshot> = {}): BuilderChatSnapshot {

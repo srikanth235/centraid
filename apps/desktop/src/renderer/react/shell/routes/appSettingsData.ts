@@ -15,7 +15,7 @@ import {
   type VaultDemoApp,
   type VaultScope,
 } from '../../../gateway-client.js';
-import type { VaultBlockDTO, VaultBridgeProps } from '../../bridge.js';
+import type { VaultBlockDTO, VaultBridgeProps } from '../../screen-contracts.js';
 
 // The gateway I/O + manifest parsing behind the React app-settings popover —
 // the successor to the helpers that lived in the deleted app-appview.ts /

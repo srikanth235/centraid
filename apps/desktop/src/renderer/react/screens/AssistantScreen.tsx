@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
-import type { AsstMsgDTO, AssistantBridgeProps, AssistantSnapshot } from '../bridge.js';
+import type { AsstMsgDTO, AssistantBridgeProps, AssistantSnapshot } from '../screen-contracts.js';
 import styles from './AssistantScreen.module.css';
 import { cx } from '../ui/cx.js';
 

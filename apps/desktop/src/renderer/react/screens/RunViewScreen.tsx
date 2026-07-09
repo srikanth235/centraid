@@ -7,7 +7,7 @@ import type {
   RunNodeDTO,
   RunViewBridgeProps,
   RunViewSnapshot,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { cx } from '../ui/cx.js';
 import styles from './RunViewScreen.module.css';
 

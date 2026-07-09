@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsLayoutBridgeProps } from '../bridge.js';
+import type { SettingsLayoutBridgeProps } from '../screen-contracts.js';
 import SettingsLayoutScreen from './SettingsLayoutScreen.js';
 
 function makeProps(over: Partial<SettingsLayoutBridgeProps> = {}): SettingsLayoutBridgeProps {

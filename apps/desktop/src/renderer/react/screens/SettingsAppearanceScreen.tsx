@@ -2,7 +2,7 @@ import { useState, type JSX } from 'react';
 import { THEME_PRESETS, themes, tileFinish } from '@centraid/design-tokens';
 import type { IconName, ThemeName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../bridge.js';
+import type { SettingsAppearanceBridgeProps, SettingsTileVariant } from '../screen-contracts.js';
 import { DrawerGroup, DrawerRow, Switch } from './settings-controls.js';
 import styles from './SettingsAppearanceScreen.module.css';
 

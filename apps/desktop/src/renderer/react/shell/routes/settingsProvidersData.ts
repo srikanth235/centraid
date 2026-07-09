@@ -1,5 +1,5 @@
 import { getAgentsStatus, getUserPrefs, saveUserPrefs } from '../../../gateway-client.js';
-import type { AgentRunnerKind, AgentsStatusDTO } from '../../bridge.js';
+import type { AgentRunnerKind, AgentsStatusDTO } from '../../screen-contracts.js';
 
 // Providers (agents) console data — ports the vanilla app-settings.ts agent
 // status derivation. Centraid runs the user's installed coding-agent CLIs in

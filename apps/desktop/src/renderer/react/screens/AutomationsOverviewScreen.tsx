@@ -7,7 +7,7 @@ import type {
   AuOverviewRunDTO,
   AuStatusKind,
   AutomationsOverviewBridgeProps,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './AutomationsOverviewScreen.module.css';
 import { cx } from '../ui/cx.js';

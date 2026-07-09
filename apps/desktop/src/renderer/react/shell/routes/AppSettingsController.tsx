@@ -6,7 +6,7 @@ import {
   runAutomationNow,
   setAutomationEnabled,
 } from '../../../gateway-client.js';
-import type { AppSettingsSnapshot } from '../../bridge.js';
+import type { AppSettingsSnapshot } from '../../screen-contracts.js';
 import AppSettingsPanel from '../../screens/AppSettingsPanel.js';
 import VaultScreen from '../../screens/VaultScreen.js';
 import { iconSvg } from '../iconSvg.js';

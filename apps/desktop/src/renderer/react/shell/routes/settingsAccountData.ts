@@ -9,7 +9,7 @@ import {
   vaultImportStage,
   vaultStatus,
 } from '../../../gateway-client.js';
-import type { ConnectionRowDTO, ImportBridgeProps, PhoneBridgeProps, ProfileRowDTO } from '../../bridge.js';
+import type { ConnectionRowDTO, ImportBridgeProps, PhoneBridgeProps, ProfileRowDTO } from '../../screen-contracts.js';
 
 // Load the Spaces page data — the vault registry (spaces) + gateway endpoints
 // (connections). Derives the DTOs straight from the vault list rather than the

@@ -7,7 +7,7 @@ import type {
   AgentsStatusDTO,
   AgentToolDTO,
   SettingsProvidersBridgeProps,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 
 const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {

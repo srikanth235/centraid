@@ -1,6 +1,6 @@
 import { type JSX } from 'react';
 import type { AppearancePrefs, TemplateEntry } from '../../../app-shell-context.js';
-import type { DiscoverTemplate } from '../../bridge.js';
+import type { DiscoverTemplate } from '../../screen-contracts.js';
 import DiscoverScreen from '../../screens/DiscoverScreen.js';
 import { useShellActions } from '../actions.js';
 import { openAutomationTemplatePreview } from '../automationTemplatePreview.js';

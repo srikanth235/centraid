@@ -1,6 +1,6 @@
 import type { IconName } from '@centraid/design-tokens';
 import { listVaults, updateVault } from '../../../gateway-client.js';
-import type { ProfileRowDTO } from '../../bridge.js';
+import type { ProfileRowDTO } from '../../screen-contracts.js';
 
 // The Spaces (#280: a space IS a vault) add / rename / delete flows for the
 // React SettingsRoute. The presentation (modal + delete dialog chrome) is the

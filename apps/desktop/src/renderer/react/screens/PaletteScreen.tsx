@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useReducer, useRef, useState, type JSX } from 'react';
-import type { PaletteBridgeProps, PaletteRowDTO } from '../bridge.js';
+import type { PaletteBridgeProps, PaletteRowDTO } from '../screen-contracts.js';
 import styles from './PaletteScreen.module.css';
 
 function Row({

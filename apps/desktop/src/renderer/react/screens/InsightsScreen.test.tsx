@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { InsightsSummary } from '../bridge.js';
+import type { InsightsSummary } from '../screen-contracts.js';
 import InsightsScreen from './InsightsScreen.js';
 
 const summary: InsightsSummary = {

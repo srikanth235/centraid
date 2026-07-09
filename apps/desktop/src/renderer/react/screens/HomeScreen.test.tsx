@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { HomeAppItemDTO, HomeAutoItemDTO, HomeBridgeProps } from '../bridge.js';
+import type { HomeAppItemDTO, HomeAutoItemDTO, HomeBridgeProps } from '../screen-contracts.js';
 import HomeScreen from './HomeScreen.js';
 
 const appItems: HomeAppItemDTO[] = [

@@ -4,7 +4,7 @@ import type {
   PhoneDeviceDTO,
   PhonePairingDTO,
   PhoneStatusDTO,
-} from '../bridge.js';
+} from '../screen-contracts.js';
 import styles from './PhoneScreen.module.css';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {

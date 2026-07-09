@@ -1,10 +1,9 @@
 // React entry for the renderer — issue #325.
 //
 // React owns `#root`: this module mounts the App shell (via the first-run
-// onboarding gate below) and publishes `window.CentraidReact`, the one handoff
-// seam still standing — the vanilla builder window hosts the React chat pane
-// through it (see ./bridge.ts). A dev-only component gallery renders on the
-// `#ui-preview` hash.
+// onboarding gate below). A dev-only component gallery renders on the
+// `#ui-preview` hash. No vanilla↔React bridge remains — every screen, the
+// builder included, is a React component the shell mounts directly.
 //
 // Bundled by Vite (see vite.config.ts) into dist/renderer/react-boot.js and
 // loaded as a plain <script type="module"> — no dev server, so the strict
@@ -13,8 +12,6 @@
 import { createRoot, type Root } from 'react-dom/client';
 import { Gallery } from './ui/index.js';
 import App from './shell/App.js';
-import type { CentraidReactBridge } from './bridge.js';
-import BuilderChatPane from './screens/BuilderChatPane.js';
 import OnboardingScreen from './screens/OnboardingScreen.js';
 
 const PREVIEW_HASH = '#ui-preview';
@@ -97,17 +94,5 @@ void (async (): Promise<void> => {
     />,
   );
 })();
-
-// Vanilla→React handoff bridge (#325 R4). After the flip the only vanilla host
-// still embedding a React screen is the builder window's chat pane. Every other
-// screen is mounted directly by its shell route or the boot sequence above.
-const bridge: CentraidReactBridge = {
-  mountBuilderChat(host, props) {
-    const screenRoot = createRoot(host);
-    screenRoot.render(<BuilderChatPane {...props} />);
-    return () => screenRoot.unmount();
-  },
-};
-window.CentraidReact = bridge;
 
 console.log('[react] renderer ready — App on #root; open %s for the component gallery', PREVIEW_HASH);

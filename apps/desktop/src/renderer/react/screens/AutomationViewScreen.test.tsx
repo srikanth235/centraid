@@ -1,7 +1,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AutomationViewBridgeProps, AutomationViewData } from '../bridge.js';
+import type { AutomationViewBridgeProps, AutomationViewData } from '../screen-contracts.js';
 import AutomationViewScreen from './AutomationViewScreen.js';
 
 function makeData(over: Partial<AutomationViewData> = {}): AutomationViewData {
