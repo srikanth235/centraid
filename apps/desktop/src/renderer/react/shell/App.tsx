@@ -11,6 +11,7 @@ import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
+import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
@@ -112,6 +113,8 @@ export default function App(): JSX.Element {
               refreshApps={refresh}
             />
           );
+        case 'assistant':
+          return <AssistantRoute />;
         case 'insights':
           return <InsightsRoute />;
         case 'automations':
