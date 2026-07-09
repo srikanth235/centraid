@@ -730,16 +730,10 @@ button {
   justify-content: center;
   cursor: pointer;
 }
-.d-av {
-  border-radius: 999px;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
+   People-specific touch kept on top of the kit's styling. */
+.kit-avatar {
   font-family: var(--font-title);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  flex-shrink: 0;
 }
 .d-card-select {
   position: absolute;
@@ -896,9 +890,6 @@ button {
 }
 .d-row[data-selected='true'] {
   background: var(--sel);
-}
-.d-row .d-av {
-  cursor: pointer;
 }
 .d-row-main {
   flex: 1;

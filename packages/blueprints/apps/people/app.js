@@ -16,6 +16,7 @@ import {
   armConfirm,
   debounce,
   fmtMoney,
+  letterAvatar,
   outcomeMessage,
   readFailed,
   showSkeleton,
@@ -267,14 +268,6 @@ function daysSinceIso(iso) {
 
 // ---------- Identity helpers ----------
 
-function initials(name) {
-  return String(name ?? '')
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-}
 function hashInt(s) {
   let n = 0;
   const str = String(s ?? '');
@@ -861,13 +854,7 @@ function gridCard(p) {
     style: `background:color-mix(in oklab, ${color} 12%, transparent);`,
     onclick: () => openDetails(p.party_id),
   });
-  top.appendChild(
-    h(
-      'span',
-      { class: 'd-av', style: `width:58px;height:58px;font-size:21px;background:${color};` },
-      initials(p.name),
-    ),
-  );
+  top.appendChild(letterAvatar(p.name, { size: '58px', color }));
   card.appendChild(top);
 
   const sel = h('button', {
@@ -929,20 +916,13 @@ function listRow(p) {
   if (selected) check.appendChild(el(I.check));
   row.appendChild(check);
 
-  row.appendChild(
-    h(
-      'span',
-      {
-        class: 'd-av',
-        style: `width:34px;height:34px;font-size:12px;background:${color};`,
-        onclick: (e) => {
-          e.stopPropagation();
-          openDetails(p.party_id);
-        },
-      },
-      initials(p.name),
-    ),
-  );
+  const av = letterAvatar(p.name, { size: '34px', color });
+  av.style.cursor = 'pointer';
+  av.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDetails(p.party_id);
+  });
+  row.appendChild(av);
 
   const main = h('div', { class: 'd-row-main', onclick: () => openDetails(p.party_id) });
   const titleEl = h('div', { class: 'd-row-title' }, p.name);
@@ -1177,19 +1157,14 @@ function renderJournal(root) {
   for (const j of entries) {
     if (j.kind === 'auto') {
       const color = j.avatar_color || PALETTE[hashInt(j.name) % PALETTE.length];
+      const jAv = letterAvatar(j.name, { size: '40px', color });
+      jAv.style.cursor = 'pointer';
+      jAv.addEventListener('click', () => j.party_id && openDetails(j.party_id));
       entriesWrap.appendChild(
         h(
           'div',
           { class: 'j-entry' },
-          h(
-            'span',
-            {
-              class: 'd-av',
-              style: `width:40px;height:40px;flex-shrink:0;font-size:14px;background:${color};cursor:pointer;`,
-              onclick: () => j.party_id && openDetails(j.party_id),
-            },
-            initials(j.name),
-          ),
+          jAv,
           h(
             'div',
             { style: 'flex:1;min-width:0;' },
@@ -1250,24 +1225,14 @@ function renderActivity(root) {
   }
   recent.forEach((a) => {
     const color = a.avatar_color || PALETTE[hashInt(a.name) % PALETTE.length];
+    const aAv = letterAvatar(a.name, { size: '36px', color });
+    aAv.style.cursor = 'pointer';
+    aAv.addEventListener('click', () => a.party_id && openDetails(a.party_id));
     wrap.appendChild(
       h(
         'div',
         { class: 'd-activity-item' },
-        h(
-          'div',
-          { class: 'd-activity-rail' },
-          h(
-            'span',
-            {
-              class: 'd-av',
-              style: `width:36px;height:36px;font-size:12px;background:${color};cursor:pointer;`,
-              onclick: () => a.party_id && openDetails(a.party_id),
-            },
-            initials(a.name),
-          ),
-          h('span', { class: 'd-activity-line' }),
-        ),
+        h('div', { class: 'd-activity-rail' }, aAv, h('span', { class: 'd-activity-line' })),
         h(
           'div',
           { style: 'flex:1;min-width:0;padding-top:2px;' },
@@ -1435,10 +1400,9 @@ function renderDetails() {
       h(
         'span',
         {
-          class: 'd-av',
-          style: `width:72px;height:72px;font-size:26px;background:${color};box-shadow:0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent);`,
+          style: `display:inline-flex;border-radius:999px;box-shadow:0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent);`,
         },
-        initials(nameGuess),
+        letterAvatar(nameGuess, { size: '72px', color }),
       ),
     ),
   );

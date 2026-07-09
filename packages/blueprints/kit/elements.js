@@ -76,8 +76,12 @@ function avatarInitials(name) {
 }
 
 /**
- * `<kit-avatar name size shape src>` — a letter (or photo) avatar with a stable
- * hashed hue. Mirrors the former `letterAvatar()` builder exactly.
+ * `<kit-avatar name size shape src color initials>` — a letter (or photo)
+ * avatar. The fill defaults to a stable hashed hue; `color` pins an explicit
+ * one (a persisted per-contact colour, a server-assigned palette slot).
+ * `initials` pins the letters when the caller knows better than the name
+ * split ("You"). Type scales with `size` so one element serves 28px list
+ * rows and 58px cards alike.
  */
 export class KitAvatar extends KitElement {
   static properties = {
@@ -85,6 +89,8 @@ export class KitAvatar extends KitElement {
     size: { type: String },
     shape: { type: String },
     src: { type: String },
+    color: { type: String },
+    initials: { type: String },
   };
 
   constructor() {
@@ -93,17 +99,20 @@ export class KitAvatar extends KitElement {
     this.size = '2.25rem';
     this.shape = '';
     this.src = '';
+    this.color = '';
+    this.initials = '';
   }
 
   render() {
     const text = String(this.name ?? '?').trim() || '?';
-    const style = `width:${this.size};height:${this.size};background:hsl(${avatarHue(text)} 45% 42%)`;
+    const fill = this.color || `hsl(${avatarHue(text)} 45% 42%)`;
+    const style = `width:${this.size};height:${this.size};font-size:calc(${this.size} * 0.36);background:${fill}`;
     return html`<span
       class="kit-avatar"
       style=${style}
       aria-hidden="true"
       data-shape=${this.shape || nothing}
-      >${this.src ? html`<img src=${this.src} alt="" />` : avatarInitials(text)}</span
+      >${this.src ? html`<img src=${this.src} alt="" />` : this.initials || avatarInitials(text)}</span
     >`;
   }
 }

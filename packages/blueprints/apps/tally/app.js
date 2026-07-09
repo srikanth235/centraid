@@ -13,6 +13,7 @@ import {
   armConfirm,
   debounce,
   fmtMoney,
+  letterAvatar,
   localDayKey,
   outcomeMessage,
   readFailed,
@@ -370,7 +371,7 @@ function renderSidebar() {
         'aria-current': String(state.view === 'friend' && state.friendId === f.party_id),
         onclick: () => setNav({ view: 'friend', friendId: f.party_id, search: '' }),
       },
-      h('span', { class: 's-av', style: `background:${f.color};` }, f.initials),
+      letterAvatar(f.name, { size: '28px', color: f.color, initials: f.initials }),
       h(
         'span',
         { class: 's-li-main' },
@@ -466,11 +467,7 @@ function balRow(p, kind) {
       class: 's-bal-row',
       onclick: () => setNav({ view: 'friend', friendId: p.party_id, search: '' }),
     },
-    h(
-      'span',
-      { class: 's-av', style: `width:34px;height:34px;font-size:13px;background:${p.color};` },
-      p.initials,
-    ),
+    letterAvatar(p.name, { size: '34px', color: p.color, initials: p.initials }),
     h(
       'span',
       { class: 's-bal-main' },
@@ -687,14 +684,7 @@ function renderLedger(wrap) {
           h(
             'span',
             { class: 's-balchip' },
-            h(
-              'span',
-              {
-                class: 's-av',
-                style: `width:22px;height:22px;font-size:9px;background:${m.color};`,
-              },
-              m.initials,
-            ),
+            letterAvatar(m.name, { size: '22px', color: m.color, initials: m.initials }),
             h('span', {}, text),
           ),
         );
@@ -867,11 +857,7 @@ function buildDetail() {
           style:
             'display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line);',
         },
-        h(
-          'span',
-          { class: 's-av', style: `width:28px;height:28px;font-size:11px;background:${s.color};` },
-          s.initials,
-        ),
+        letterAvatar(s.name, { size: '28px', color: s.color, initials: s.initials }),
         h(
           'span',
           { style: 'flex:1;font:var(--t-body);font-size:13.5px;' },
@@ -1046,11 +1032,7 @@ function buildExpenseModal() {
       'div',
       { class: 's-splitrow' },
       box,
-      h(
-        'span',
-        { class: 's-av', style: `width:26px;height:26px;font-size:10px;background:${m.color};` },
-        m.initials,
-      ),
+      letterAvatar(m.name, { size: '26px', color: m.color, initials: m.initials }),
       h('span', { class: 's-splitname' }, m.is_me || m.party_id === me ? 'You' : m.name),
     );
     if (exp.method === 'equal') {

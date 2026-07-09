@@ -289,19 +289,10 @@ select {
   justify-content: center;
   font-size: 15px;
 }
-.s-av {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font: var(--t-tiny);
-  font-size: 11px;
+/* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
+   Tally-specific touch kept on top of the kit's styling. */
+.kit-avatar {
   font-family: var(--font-title);
-  font-weight: 600;
 }
 .s-li-main {
   flex: 1;

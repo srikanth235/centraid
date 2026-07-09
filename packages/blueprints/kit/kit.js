@@ -187,11 +187,19 @@ export function debounce(fn, ms = 200) {
 
 // ---------- Letter avatars ----------
 
-/** A letter avatar element with a deterministic hashed hue (see `<kit-avatar>`). */
-export function letterAvatar(name, { size = '2.25rem' } = {}) {
+/**
+ * A letter avatar element (see `<kit-avatar>`). Hue hashes from the name
+ * unless `color` pins one; `initials` pins the letters; `src` swaps in a
+ * photo; `shape: 'rounded'` squares the corners for file/doc tiles.
+ */
+export function letterAvatar(name, { size = '2.25rem', color, initials, src, shape } = {}) {
   const el = document.createElement('kit-avatar');
   el.name = String(name ?? '?');
   el.size = size;
+  if (color) el.color = color;
+  if (initials) el.initials = initials;
+  if (src) el.src = src;
+  if (shape) el.shape = shape;
   return el;
 }
 
