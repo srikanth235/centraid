@@ -5,11 +5,13 @@ import {
   deleteAutomation,
   listAutomations,
   runAutomationNow,
+  updateAppMeta,
 } from '../../../gateway-client.js';
 import type { HomeMenuAnchor } from '../../bridge.js';
 import HomeScreen from '../../screens/HomeScreen.js';
 import { useShellActions } from '../actions.js';
 import { openMenu } from '../contextMenu.js';
+import { openPrompt } from '../prompt.js';
 import type { ShellMenuAnchor } from '../Sidebar.js';
 import PageScroll from '../PageScroll.js';
 import { PageLoading } from '../status.js';
@@ -91,7 +93,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       else if (pick === 'reveal') void window.CentraidApi.openAppFolder({ id: app.id });
       else if (pick === 'star') toggleStar(app.id);
       else if (pick === 'share') showToast('Sharing isn’t available yet.');
-      else if (pick === 'rename') showToast('Rename from the builder for now.');
+      else if (pick === 'rename') void renameAppFlow(app);
       else if (pick === 'delete') void deleteAppFlow(app);
     });
   };
@@ -112,6 +114,23 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
       showToast(`Deleted ${draft ? 'draft ' : ''}"${app.name}"`);
     } catch (err) {
       showToast(`Could not delete: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    void refreshApps();
+  };
+
+  const renameAppFlow = async (app: AppMetaResolvedType): Promise<void> => {
+    const next = await openPrompt({
+      title: 'Rename app',
+      initial: app.name,
+      placeholder: 'App name',
+      confirmLabel: 'Rename',
+    });
+    if (!next) return; // cancelled, empty, or unchanged
+    try {
+      await updateAppMeta({ id: app.id, name: next });
+      showToast(`Renamed to "${next}"`);
+    } catch (err) {
+      showToast(`Could not rename: ${err instanceof Error ? err.message : String(err)}`);
     }
     void refreshApps();
   };

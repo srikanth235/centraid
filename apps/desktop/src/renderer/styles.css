@@ -4014,6 +4014,24 @@ select.input option {
   font-family: var(--font-sans);
   font-size: 14px;
 }
+/* Single-line text field for the prompt dialog (rename etc.). */
+.modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 4px;
+  padding: 10px 12px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 4%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+}
+.modal-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
+}
 .sheet-chips {
   display: flex;
   flex-wrap: wrap;
