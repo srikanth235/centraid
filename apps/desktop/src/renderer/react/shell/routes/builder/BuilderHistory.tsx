@@ -2,6 +2,8 @@ import { type JSX, useEffect, useState } from 'react';
 import { activateVersion, listVersions } from '../../../../gateway-client.js';
 import { relativeWhen, shortVersionTitle } from '../../../../format.js';
 import styles from './BuilderHistory.module.css';
+import controlsCss from '../../../styles/controls.module.css';
+import { cx } from '../../../ui/cx.js';
 
 // Version-history list inside the builder chat pane's History view (React port
 // of builder.ts renderHistoryInto). Newest first; each row can Restore a prior
@@ -88,7 +90,7 @@ export default function BuilderHistory({
               {!isCurrent ? (
                 <button
                   type="button"
-                  className="btn btn-soft tiny-btn"
+                  className={cx("btn", controlsCss.soft, "tiny-btn")}
                   onClick={() => restore(v.versionId, shortVersionTitle(v))}
                 >
                   Restore

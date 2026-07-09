@@ -2,6 +2,7 @@ import { type CSSProperties, type JSX, useEffect, useRef } from 'react';
 import { themes } from '@centraid/design-tokens';
 import { appLiveUrl } from '../../../gateway-client.js';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
+import styles from './AppFrame.module.css';
 
 // The sandboxed user-app iframe host — ports the vanilla mountUserApp
 // (app-appview.ts). Every Centraid app (published or draft) is served by the
@@ -83,10 +84,10 @@ export default function AppFrame({
 
   return (
     <div
-      className="app-view-fullbleed"
+      className={styles.viewFullbleed}
       style={{ '--accent-color': accentColor } as CSSProperties}
     >
-      <div className="app-view-frame" ref={wrapRef}>
+      <div className={styles.viewFrame} ref={wrapRef}>
         {/* Centraid apps are trusted local blueprint code served from the gateway
             origin: they need same-origin (vault fetches, module imports) *and*
             scripts, which the sandbox rule flags together. Intentional — the

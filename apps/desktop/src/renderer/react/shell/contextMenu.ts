@@ -1,12 +1,12 @@
 import type { ShellMenuAnchor } from './Sidebar.js';
 import { iconSvg } from './iconSvg.js';
+import styles from './contextMenu.module.css';
 
 // Context menu — the generic anchored popup menu, ported from the vanilla
-// app-cards.ts openMenu/closeContextMenu. A body-portal overlay (same
-// ctx-backdrop / ctx-menu / ctx-item global classes) with the same edge-flip
-// positioning, callable from any surface. The item lists + the picked-action
-// dispatch (app menu, template menu) are the caller's — this owns only the
-// popup mechanics.
+// app-cards.ts openMenu/closeContextMenu. A body-portal overlay with the same
+// edge-flip positioning, callable from any surface. The item lists + the
+// picked-action dispatch (app menu, template menu) are the caller's — this
+// owns only the popup mechanics.
 
 export interface CtxItem {
   id: string;
@@ -37,7 +37,7 @@ export function openMenu(
   closeContextMenu();
 
   ctxBackdrop = document.createElement('div');
-  ctxBackdrop.className = 'ctx-backdrop';
+  ctxBackdrop.className = styles.backdrop ?? '';
   ctxBackdrop.addEventListener('click', closeContextMenu);
   ctxBackdrop.addEventListener('contextmenu', (e) => {
     e.preventDefault();
@@ -46,17 +46,17 @@ export function openMenu(
   document.body.append(ctxBackdrop);
 
   ctxMenu = document.createElement('div');
-  ctxMenu.className = 'ctx-menu';
+  ctxMenu.className = styles.menu ?? '';
   ctxMenu.setAttribute('role', 'menu');
   for (const it of items) {
     if (it === 'sep') {
       const sep = document.createElement('div');
-      sep.className = 'ctx-sep';
+      sep.className = styles.sep ?? '';
       ctxMenu.append(sep);
       continue;
     }
     const btn = document.createElement('button');
-    btn.className = 'ctx-item';
+    btn.className = styles.item ?? '';
     btn.setAttribute('role', 'menuitem');
     btn.dataset.danger = String(!!it.danger);
     btn.innerHTML = `${iconSvg(it.icon, 15)}<span>${it.label}</span>`;

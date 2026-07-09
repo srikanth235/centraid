@@ -85,3 +85,17 @@
 .card :global(.input)[type='password'] {
   font-family: ui-monospace, 'JetBrains Mono', monospace;
 }
+.danger {
+  background: var(--c-rose);
+  color: white;
+}
+.danger:hover {
+  background: color-mix(in oklab, var(--c-rose) 88%, black);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}

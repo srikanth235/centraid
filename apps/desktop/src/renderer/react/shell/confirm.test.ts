@@ -14,7 +14,7 @@ describe('openConfirm', () => {
     const card = document.querySelector('.card')!;
     expect(card.textContent).toContain('Delete?');
     expect(card.textContent).toContain('Are you sure');
-    (card.querySelector('.btn-danger, .btn-primary') as HTMLButtonElement).click();
+    (card.querySelector('.danger, .btn-primary') as HTMLButtonElement).click();
     expect(await p).toBe(true);
     expect(document.querySelector('.card')).toBeNull();
   });
@@ -31,7 +31,7 @@ describe('openConfirm', () => {
 
   it('uses the danger button style when danger is set', () => {
     void openConfirm({ title: 'T', message: 'M', danger: true });
-    expect(document.querySelector('.btn-danger')).not.toBeNull();
+    expect(document.querySelector('.danger')).not.toBeNull();
   });
 
   it('Enter confirms and Escape cancels', async () => {

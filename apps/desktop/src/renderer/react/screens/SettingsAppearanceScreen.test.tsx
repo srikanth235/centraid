@@ -46,7 +46,7 @@ describe('SettingsAppearanceScreen', () => {
     const el = mount(makeProps());
     expect(el.querySelectorAll('.themeCard').length).toBe(THEME_PRESETS.length);
     expect(el.querySelectorAll('.swatch').length).toBe(5);
-    expect(el.querySelectorAll('.ap-preview-tile').length).toBe(4);
+    expect(el.querySelectorAll('.previewTile').length).toBe(4);
     // active theme marked
     expect(
       (el.querySelector('.themeCard[data-name="light"]') as HTMLElement).dataset.active,

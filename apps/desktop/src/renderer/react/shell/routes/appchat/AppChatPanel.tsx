@@ -17,6 +17,7 @@ import { useAppChat } from './useAppChat.js';
 import styles from './AppChatPanel.module.css';
 import { cx } from '../../../ui/cx.js';
 import tgCss from '../../../styles/toolGroup.module.css';
+import chatCss from '../../../styles/chatMessage.module.css';
 
 // Inline glyphs (kept tiny — the same shapes the vanilla emitted) so the panel
 // doesn't need to reach through the shared Icon set for one-offs.
@@ -216,20 +217,20 @@ function Message({
 }): JSX.Element {
   if (m.kind === 'user') {
     return (
-      <div className="msg-user">
-        <div className="msg-user-bubble">{m.text}</div>
+      <div className={chatCss.user}>
+        <div className={chatCss.userBubble}>{m.text}</div>
       </div>
     );
   }
   if (m.kind === 'ai') {
     const text = m.text || (m.streaming ? '…' : '');
     return (
-      <div className={m.error ? cx('msg-ai', styles.aiError) : 'msg-ai'}>
+      <div className={m.error ? cx(chatCss.ai, styles.aiError) : chatCss.ai}>
         <div className="msg-ai-author">
           <span className="msg-ai-author-dot" style={{ background: app.color }} />
           <span className="msg-ai-author-name">{app.name.toLowerCase()}</span>
         </div>
-        <div className="msg-ai-text">
+        <div className={chatCss.aiText}>
           {text.split('\n\n').map((p, i) => (
             <p key={i}>{p}</p>
           ))}
@@ -393,7 +394,7 @@ export default function AppChatPanel({
     if (c.chatLoading) {
       return (
         <div className={styles.chatLoading}>
-          <span className="pulse" /> Loading chat…
+          <span className={chatCss.pulse} /> Loading chat…
         </div>
       );
     }
@@ -459,8 +460,8 @@ export default function AppChatPanel({
         ))}
         {c.thinking && (
           <div className={styles.row}>
-            <span className="msg-status">
-              <span className="pulse" /> Thinking…
+            <span className={chatCss.status}>
+              <span className={chatCss.pulse} /> Thinking…
             </span>
           </div>
         )}
@@ -558,7 +559,7 @@ export default function AppChatPanel({
         </div>
 
         <div
-          className="chat-scroll app-chat-scroll"
+          className={cx(chatCss.scroll, "app-chat-scroll")}
           hidden={onHistory}
           ref={scrollRef}
           onScroll={onScroll}

@@ -32,3 +32,16 @@
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
 }
+.soft {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.soft:hover {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+}
+.note {
+  color: var(--ink-3, rgba(0, 0, 0, 0.55));
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 2px 0 8px;
+}

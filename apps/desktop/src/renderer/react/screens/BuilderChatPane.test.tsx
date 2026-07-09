@@ -76,10 +76,10 @@ describe('BuilderChatPane', () => {
       }),
     );
     expect(el.querySelector('.chatDivider')?.textContent).toBe('Today');
-    expect(el.querySelector('.msg-status')?.textContent).toContain('Published v2');
-    expect(el.querySelector('.msg-user-bubble')?.textContent).toBe('Add a header');
+    expect(el.querySelector('.status')?.textContent).toContain('Published v2');
+    expect(el.querySelector('.userBubble')?.textContent).toBe('Add a header');
     expect((el.querySelector('.chatThinking') as HTMLElement).dataset.streaming).toBe('true');
-    expect(el.querySelectorAll('.msg-ai-text p').length).toBe(2);
+    expect(el.querySelectorAll('.aiText p').length).toBe(2);
   });
 
   it('renders a collapsed tool group with a change card, toggles on click', () => {

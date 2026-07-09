@@ -1,0 +1,54 @@
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, -8px);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.toast {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elev);
+  color: var(--ink);
+  border: 0.5px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  animation: toast-in 0.2s ease-out;
+}
+:root[data-theme='dark'] .toast {
+  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 0.5px solid var(--line);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    inset 0 0.5px 0 color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.toast > span:has(> svg) {
+  display: inline-flex;
+  align-items: center;
+}
+.toast svg {
+  display: block;
+  color: var(--accent);
+}
+.toast.toastAction {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+.toast.toastAction :global(.tiny-btn) {
+  margin-left: 6px;
+}

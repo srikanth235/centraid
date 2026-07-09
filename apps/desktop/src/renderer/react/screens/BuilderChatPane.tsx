@@ -4,6 +4,7 @@ import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from 
 import styles from './BuilderChatPane.module.css';
 import { cx } from '../ui/cx.js';
 import tgCss from '../styles/toolGroup.module.css';
+import chatCss from '../styles/chatMessage.module.css';
 
 // Builder-specific glyphs not in the shared icon set (mirrors the inline SVGs
 // in builder.ts), as small components so the React pane paints identically.
@@ -118,16 +119,16 @@ function Message({
     case 'status':
       return (
         <div className={styles.chatStatusRow}>
-          <span className="msg-status">
-            {m.spinning ? <span className="pulse" /> : <Icon name="Check" size={12} strokeWidth={2.5} />}
+          <span className={chatCss.status}>
+            {m.spinning ? <span className={chatCss.pulse} /> : <Icon name="Check" size={12} strokeWidth={2.5} />}
             {' ' + m.text}
           </span>
         </div>
       );
     case 'user':
       return (
-        <div className="msg-user">
-          <div className="msg-user-bubble">{m.text}</div>
+        <div className={chatCss.user}>
+          <div className={chatCss.userBubble}>{m.text}</div>
         </div>
       );
     case 'thinking':
@@ -144,11 +145,11 @@ function Message({
       return <ToolGroup m={m} onToggleGroup={onToggleGroup} />;
     case 'ai':
       return (
-        <div className="msg-ai">
+        <div className={chatCss.ai}>
           <span className={styles.msgAiAvatar}>
             <Icon name="Sparkle" size={11} />
           </span>
-          <div className="msg-ai-text">
+          <div className={chatCss.aiText}>
             {m.paras.map((p, i) => (
               <p key={i}>{p}</p>
             ))}
@@ -231,7 +232,7 @@ export default function BuilderChatPane({
 
   return (
     <div className={styles.chatBody}>
-      <div className="chat-scroll" ref={scrollRef}>
+      <div className={chatCss.scroll} ref={scrollRef}>
         {snap.messages.map((m, i) => (
           <Message key={i} m={m} onToggleGroup={onToggleGroup} />
         ))}

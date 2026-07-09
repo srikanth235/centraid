@@ -176,13 +176,13 @@ export default function SettingsAppearanceScreen({
         </DrawerRow>
         <DrawerRow label="Preview" hint="How the home grid looks with your current choices." full>
           <div className="ap-preview-host">
-            <div className="ap-preview">
+            <div className={styles.preview}>
               {PREVIEW_SEEDS.map((s) => {
                 const finish = tileFinish(s.color, curTile);
                 return (
-                  <div key={s.name} className="ap-preview-tile">
+                  <div key={s.name} className={styles.previewTile}>
                     <div
-                      className="ap-preview-tile-icon"
+                      className={styles.previewTileIcon}
                       style={{
                         background: finish.background,
                         boxShadow: finish.boxShadow,
@@ -191,7 +191,7 @@ export default function SettingsAppearanceScreen({
                     >
                       <Icon name={s.icon} size={18} strokeWidth={1.85} />
                     </div>
-                    <span className="ap-preview-tile-name">{s.name}</span>
+                    <span className={styles.previewTileName}>{s.name}</span>
                   </div>
                 );
               })}

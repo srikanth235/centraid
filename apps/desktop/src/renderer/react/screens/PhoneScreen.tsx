@@ -8,6 +8,7 @@ import type {
 import styles from './PhoneScreen.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
 import linkBtnCss from '../styles/linkBtn.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 import { cx } from '../ui/cx.js';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
@@ -156,7 +157,7 @@ export default function PhoneScreen({
       </div>
 
       <div className={styles.devices}>
-        <div className="drawer-group-label">Paired phones</div>
+        <div className={drawerGroupCss.groupLabel}>Paired phones</div>
         {status.devices.length > 0 ? (
           status.devices.map((device) => (
             <DeviceRow key={device.deviceId} device={device} onRevoke={onRevoke} />

@@ -1,9 +1,12 @@
+import toastCss from '../styles/toast.module.css';
+import { cx } from '../ui/cx.js';
+
 // Global toast — a transient confirmation pinned to the top-center of the
 // window. Ported from the vanilla app.ts `showToast`; it portals to
 // document.body (not #root), so it works whether React or the vanilla shell
 // owns the root. Kept as a plain function (no React) since it's imperative and
-// self-disposing. Same `.preview-toast.global-toast` classes (global, in
-// styles.css) so it looks identical.
+// self-disposing. Shares the settings-drawer toast styling (`toast.module.css`)
+// so it looks identical.
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -15,7 +18,7 @@ export function showToast(message: string): void {
   if (toastTimer) clearTimeout(toastTimer);
 
   const toast = document.createElement('div');
-  toast.className = 'preview-toast global-toast';
+  toast.className = cx(toastCss.toast, 'global-toast');
   const icon = document.createElement('span');
   icon.innerHTML = CHECK_SVG;
   const text = document.createElement('span');

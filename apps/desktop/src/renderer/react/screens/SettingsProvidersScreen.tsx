@@ -9,6 +9,9 @@ import type {
   SettingsProvidersBridgeProps,
 } from '../screen-contracts.js';
 import styles from './SettingsProvidersScreen.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
+import controlsCss from '../styles/controls.module.css';
+import { cx } from '../ui/cx.js';
 
 const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
 const TIER_LABEL: Record<(typeof TIER_ORDER)[number], string> = {
@@ -283,11 +286,11 @@ export default function SettingsProvidersScreen({
   const cards = status?.cards ?? [];
 
   return (
-    <div className="drawer-group">
-      <div className="drawer-group-label">Connected</div>
-      <div className="drawer-group-body">
+    <div className={drawerGroupCss.group}>
+      <div className={drawerGroupCss.groupLabel}>Connected</div>
+      <div className={drawerGroupCss.groupBody}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="settings-note">
+          <div className={controlsCss.note}>
             Switch the active agent below; set each agent’s default model. Detection is CLI-only —
             the gateway ran `&lt;bin&gt; --version`; Centraid doesn’t inspect how each agent
             authenticates.
@@ -319,7 +322,7 @@ export default function SettingsProvidersScreen({
           </div>
           <div className={styles.panel}>
             {status === null ? (
-              <div className="settings-note">Reading credential status…</div>
+              <div className={controlsCss.note}>Reading credential status…</div>
             ) : (
               cards.map((card) => (
                 <AgentEntry
@@ -339,7 +342,7 @@ export default function SettingsProvidersScreen({
       <div className="sheet-actions">
         <button
           type="button"
-          className="btn btn-soft"
+          className={cx("btn", controlsCss.soft)}
           disabled={busyModels}
           onClick={() => doRefresh(refreshModels, setBusyModels)}
         >
@@ -348,7 +351,7 @@ export default function SettingsProvidersScreen({
         </button>
         <button
           type="button"
-          className="btn btn-soft"
+          className={cx("btn", controlsCss.soft)}
           disabled={busyTools}
           onClick={() => doRefresh(refreshTools, setBusyTools)}
         >

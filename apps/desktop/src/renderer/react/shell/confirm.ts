@@ -55,12 +55,12 @@ export function openConfirm(opts: ConfirmOpts): Promise<boolean> {
     cancelBtn.addEventListener('click', () => finish(false));
 
     const confirmBtn = document.createElement('button');
-    confirmBtn.className = opts.danger ? 'btn btn-danger' : 'btn btn-primary';
+    confirmBtn.className = opts.danger ? cx('btn', modalCss.danger) : 'btn btn-primary';
     confirmBtn.textContent = opts.confirmLabel ?? 'Confirm';
     confirmBtn.addEventListener('click', () => finish(true));
 
     const actions = document.createElement('div');
-    actions.className = 'sheet-actions';
+    actions.className = modalCss.actions ?? '';
     actions.append(cancelBtn, confirmBtn);
     card.append(closeBtn, heading, body, actions);
 

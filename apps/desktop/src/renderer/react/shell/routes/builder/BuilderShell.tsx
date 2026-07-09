@@ -15,6 +15,7 @@ import BuilderPreview from './BuilderPreview.js';
 import type { Tab } from './builderModel.js';
 import { type UseBuilderInput, useBuilder } from './useBuilder.js';
 import styles from './BuilderShell.module.css';
+import rightPaneCss from './rightPane.module.css';
 import { cx } from '../../../ui/cx.js';
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
@@ -277,7 +278,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   }
 
   const rightPaneClass = [
-    'right-pane',
+    rightPaneCss.pane ?? '',
     !vm.isAutomation && vm.tab === 'preview' ? 'preview-pane' : '',
     !vm.isAutomation && vm.tab === 'preview' && vm.previewDevice !== 'desktop' ? 'has-phone' : '',
   ]

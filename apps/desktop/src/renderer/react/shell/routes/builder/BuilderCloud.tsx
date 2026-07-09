@@ -13,6 +13,7 @@ import { relativeWhen } from '../../../../format.js';
 import { iconSvg } from '../../iconSvg.js';
 import { cx } from '../../../ui/cx.js';
 import styles from './BuilderCloud.module.css';
+import toastCss from '../../../styles/toast.module.css';
 
 // React port of the vanilla builder's Cloud tab (builder.ts `renderCloud`,
 // ~lines 1722–2463). Renders the same global `.cloud-*` class names — the
@@ -100,12 +101,12 @@ function formatPreviewUrl(src: string): string {
 }
 
 // Ephemeral confirmation toast — mirrors the vanilla builder's `showToast`
-// (a `.preview-toast` appended to <body>, auto-removed after 2.4s).
+// (a `toastCss.toast` appended to <body>, auto-removed after 2.4s).
 function showToast(text: string): void {
-  const existing = document.body.querySelector('.preview-toast');
+  const existing = toastCss.toast ? document.body.querySelector(`.${toastCss.toast}`) : null;
   if (existing) existing.remove();
   const toast = document.createElement('div');
-  toast.className = 'preview-toast';
+  toast.className = toastCss.toast ?? '';
   toast.innerHTML = `${iconSvg('Check', 13, 2.5)} <span></span>`;
   const span = toast.querySelector('span');
   if (span) span.textContent = text;

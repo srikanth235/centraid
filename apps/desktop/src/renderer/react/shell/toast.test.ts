@@ -14,7 +14,7 @@ describe('showToast', () => {
     showToast('Saved');
     const toast = document.querySelector('.global-toast');
     expect(toast?.textContent).toContain('Saved');
-    expect(toast?.classList.contains('preview-toast')).toBe(true);
+    expect(toast?.classList.contains('toast')).toBe(true);
     vi.advanceTimersByTime(2000);
     expect(document.querySelector('.global-toast')).toBeNull();
   });

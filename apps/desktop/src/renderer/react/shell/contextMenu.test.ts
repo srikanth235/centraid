@@ -23,9 +23,9 @@ describe('context menu', () => {
       () => {},
     );
     expect(isContextMenuOpen()).toBe(true);
-    const menu = document.querySelector('.ctx-menu')!;
-    expect(menu.querySelectorAll('.ctx-item')).toHaveLength(2);
-    expect(menu.querySelector('.ctx-sep')).not.toBeNull();
+    const menu = document.querySelector('.menu')!;
+    expect(menu.querySelectorAll('.item')).toHaveLength(2);
+    expect(menu.querySelector('.sep')).not.toBeNull();
     expect(menu.textContent).toContain('Open');
     expect(
       (menu.querySelector('[data-danger="true"]') as HTMLElement).textContent,
@@ -35,7 +35,7 @@ describe('context menu', () => {
   it('fires onPick with the item id and closes', () => {
     const onPick = vi.fn();
     openMenu([{ id: 'star', label: 'Star', icon: 'Star' }], anchor, onPick);
-    (document.querySelector('.ctx-item') as HTMLButtonElement).click();
+    (document.querySelector('.item') as HTMLButtonElement).click();
     expect(onPick).toHaveBeenCalledWith('star');
     expect(isContextMenuOpen()).toBe(false);
   });
@@ -43,7 +43,7 @@ describe('context menu', () => {
   it('closes on backdrop click without picking', () => {
     const onPick = vi.fn();
     openMenu([{ id: 'x', label: 'X', icon: 'X' }], anchor, onPick);
-    (document.querySelector('.ctx-backdrop') as HTMLElement).click();
+    (document.querySelector('.backdrop') as HTMLElement).click();
     expect(onPick).not.toHaveBeenCalled();
     expect(isContextMenuOpen()).toBe(false);
   });
@@ -51,6 +51,6 @@ describe('context menu', () => {
   it('replaces an open menu rather than stacking', () => {
     openMenu([{ id: 'a', label: 'A', icon: 'Star' }], anchor, () => {});
     openMenu([{ id: 'b', label: 'B', icon: 'Star' }], anchor, () => {});
-    expect(document.querySelectorAll('.ctx-menu')).toHaveLength(1);
+    expect(document.querySelectorAll('.menu')).toHaveLength(1);
   });
 });

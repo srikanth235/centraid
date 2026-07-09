@@ -6,6 +6,7 @@ import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } fro
 import styles from './SettingsProfilesScreen.module.css';
 import { cx } from '../ui/cx.js';
 import controlsCss from '../styles/controls.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 
 function Avatar({
   icon,
@@ -153,10 +154,10 @@ export default function SettingsProfilesScreen({
 }: SettingsProfilesBridgeProps): JSX.Element {
   return (
     <>
-      <div className="drawer-group">
-        <div className="drawer-group-label">Spaces</div>
-        <div className="drawer-group-body">
-          <div className="settings-note">
+      <div className={drawerGroupCss.group}>
+        <div className={drawerGroupCss.groupLabel}>Spaces</div>
+        <div className={drawerGroupCss.groupBody}>
+          <div className={controlsCss.note}>
             Each space is a vault — its own apps, chats, and data, deny-by-default to every app
             until you grant access. Switch from here or from the switcher at the top of the sidebar
             (⌘⇧G).
@@ -183,10 +184,10 @@ export default function SettingsProfilesScreen({
         </div>
       </div>
 
-      <div className="drawer-group">
-        <div className="drawer-group-label">Connections</div>
-        <div className="drawer-group-body">
-          <div className="settings-note">
+      <div className={drawerGroupCss.group}>
+        <div className={drawerGroupCss.groupLabel}>Connections</div>
+        <div className={drawerGroupCss.groupBody}>
+          <div className={controlsCss.note}>
             Gateways this desktop can talk to. Each connection hosts its own set of spaces.
           </div>
           <div className={styles.profManageList}>

@@ -55,6 +55,6 @@ describe('AppFrame', () => {
   it('shows an error message when the gateway is unreachable', async () => {
     appLiveUrl.mockRejectedValue(new Error('offline'));
     const el = await render();
-    expect(el.querySelector('.app-view-frame')?.textContent).toContain('Could not reach the gateway');
+    expect(el.querySelector('.viewFrame')?.textContent).toContain('Could not reach the gateway');
   });
 });

@@ -144,13 +144,6 @@ select.input option {
   text-transform: uppercase;
   user-select: none;
 }
-.titlebar .crumb {
-  color: var(--ink);
-}
-.titlebar .crumb-sep {
-  margin: 0 4px;
-  color: var(--ink-4);
-}
 .titlebar button {
   -webkit-app-region: no-drag;
 }
@@ -184,20 +177,6 @@ select.input option {
 }
 .btn-primary:hover {
   background: color-mix(in oklab, var(--accent) 88%, black);
-}
-.btn-danger {
-  background: var(--c-rose);
-  color: white;
-}
-.btn-danger:hover {
-  background: color-mix(in oklab, var(--c-rose) 88%, black);
-}
-.btn-soft {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
-.btn-soft:hover {
-  background: color-mix(in oklab, var(--ink) 10%, transparent);
 }
 .btn-ghost {
   background: transparent;
@@ -292,45 +271,6 @@ select.input option {
 .app-tile:active {
   transform: scale(0.97);
 }
-.app-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  color: white;
-  position: relative;
-  overflow: hidden;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 4px 12px rgba(0, 0, 0, 0.06);
-  transition: transform 0.15s;
-}
-.app-icon svg {
-  width: 28px;
-  height: 28px;
-}
-.app-tile-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink);
-  margin: 0;
-  letter-spacing: 0.005em;
-}
-.app-tile-desc {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin: 0;
-  line-height: 1.35;
-  max-width: 150px;
-}
-.app-tile:hover .tile-action-label,
-.app-tile:focus-visible .tile-action-label {
-  opacity: 1;
-  transform: translateY(0);
-}
 
 /* ---------- App view ---------- */
 .app-view {
@@ -341,75 +281,11 @@ select.input option {
   /* Anchor for the bottom-right chat FAB + slide-out panel. */
   position: relative;
 }
-.app-topbar {
-  flex: none;
-  height: 56px;
-  padding: 0 24px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elev);
-}
-.app-topbar-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--r-sm);
-  display: grid;
-  place-items: center;
-  color: white;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-}
-.app-topbar-icon svg {
-  width: 16px;
-  height: 16px;
-}
-.app-topbar-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.005em;
-}
-.app-topbar .spacer {
-  flex: 1;
-}
-.app-title {
-  font-family: var(--font-display);
-  font-size: 32px;
-  letter-spacing: -0.025em;
-  margin: 0;
-  font-weight: 700;
-  color: var(--ink);
-}
-.app-subtitle {
-  margin: 8px 0 0;
-  color: var(--ink-3);
-  font-size: 14px;
-}
-.app-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 28px;
-}
-
 /* ---------- Running app view (mountUserApp) ----------
    The iframe fills the main pane edge-to-edge: no card, no max-width,
    no padding. The parent .app-body keeps its scroll behavior in case
    the host shell ever needs it, but the inner container drops every
    constraint when carrying a live app. */
-.app-view-fullbleed > .app-view-frame {
-  flex: 1 1 auto;
-  display: flex;
-  min-height: 0;
-}
-.app-view-fullbleed > .app-view-frame > iframe {
-  flex: 1 1 auto;
-  border: 0;
-  width: 100%;
-  min-height: 0;
-}
 
 /* ---------- Cards ---------- */
 .card {
@@ -442,49 +318,7 @@ select.input option {
   color: var(--ink-3);
   font-size: 14px;
 }
-.empty .empty-art {
-  margin: 0 auto 16px;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-}
-.tap-circle.sm {
-  width: 22px;
-  height: 22px;
-}
-.tap-circle.sm svg {
-  width: 11px;
-  height: 11px;
-}
-.journal-list-item .date {
-  font-size: 13px;
-  font-weight: 500;
-}
-.journal-list-item .preview {
-  font-size: 11px;
-  color: var(--ink-3);
-  margin-top: 3px;
-  line-height: 1.35;
-  max-height: 2.7em;
-  overflow: hidden;
-}
-
 /* ---------- Builder mode ---------- */
-.app-tile-add .app-icon {
-  background: transparent;
-  color: var(--ink-3);
-  border: 1px dashed var(--line-strong);
-  box-shadow: none;
-}
-.app-tile-add:hover .app-icon {
-  color: var(--ink);
-  border-color: var(--ink-3);
-  background: var(--bg-elev);
-}
 
 .builder {
   flex: 1;
@@ -544,31 +378,6 @@ select.input option {
    back/forward arrows. The chat pane carries no header of its own. */
 
 /* Header shown when chat pane is in History view */
-.chat-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 26px 24px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.msg-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--ink-3);
-  background: var(--bg-sunken);
-  padding: 6px 12px;
-  border-radius: 999px;
-}
-.msg-status .pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: pulse-fade 1s infinite;
-}
 @keyframes pulse-fade {
   0%,
   100% {
@@ -578,42 +387,8 @@ select.input option {
     opacity: 1;
   }
 }
-.msg-user {
-  display: flex;
-  justify-content: flex-end;
-  margin: 0;
-}
-.msg-user-bubble {
-  max-width: 84%;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 0.5px solid color-mix(in srgb, var(--accent) 28%, transparent);
-  color: var(--ink);
-  padding: 10px 14px;
-  border-radius: 14px 14px 4px 14px;
-  font-size: 14px;
-  line-height: 1.45;
-}
 /* Agent message — flat prose with a small sparkle avatar at the lead.
    No bubble: the assistant turn reads as plain prose (matches RBChat). */
-.msg-ai {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0;
-}
-.msg-ai-text {
-  flex: 1;
-  min-width: 0;
-}
-.msg-ai-text p {
-  margin: 0 0 8px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--ink-2);
-}
-.msg-ai-text p:last-child {
-  margin-bottom: 0;
-}
 
 /* ---- Agent progress strip (one determinate strip per build turn) ----
    4 dots (filled as tool calls complete) + a live verb + mono filename +
@@ -661,15 +436,6 @@ select.input option {
    URL bar) and a scrollable content area. The toolbar sits *inside* the
    pane — directly above the surface it controls — instead of riding in
    the window titlebar. */
-.right-pane {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-  background: var(--bg);
-  position: relative;
-  overflow: hidden;
-}
 /* §B3 — right-pane toolbar. Mode tabs at the leading edge; the preview
    URL pill + device pill ride the trailing edge, pushed there by the
    flex spacer. Non-preview tabs hide the preview-only controls. */
@@ -709,50 +475,15 @@ select.input option {
 /* Tablet device frame — sits on the same `has-phone` dotted backdrop as
    mobile but with a wider canvas. iPad-class viewports (~820pt) map well
    to the gateway-served preview iframes. */
-.preview-toast {
-  position: absolute;
-  top: 76px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--bg-elev);
-  color: var(--ink);
-  border: 0.5px solid var(--line);
-  padding: 8px 14px;
-  border-radius: 999px;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: var(--shadow-md);
-  z-index: 10;
-  animation: toast-in 0.2s ease-out;
-}
 /* Dark theme: match the glass aesthetic the chrome uses elsewhere —
    translucent elevated surface with backdrop blur, so the pill reads
    as part of the same material as floating panels (settings popover,
    command palette) instead of a stark inverted bubble. */
-:root[data-theme='dark'] .preview-toast {
-  background: color-mix(in srgb, var(--bg-elev) 80%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.32),
-    inset 0 0.5px 0 color-mix(in srgb, var(--ink) 8%, transparent);
-}
 /* The check glyph is wrapped in a <span>; the SVG inside defaults to
    inline baseline alignment, which leaves it sitting low against the
    text cap-height. Force the wrapper into a flex cell so the SVG
    centers vertically with the message instead of sitting on the
    text baseline. */
-.preview-toast > span:has(> svg) {
-  display: inline-flex;
-  align-items: center;
-}
-.preview-toast svg {
-  display: block;
-  color: var(--accent);
-}
 @keyframes toast-in {
   from {
     transform: translate(-50%, -8px);
@@ -836,58 +567,6 @@ select.input option {
 .tile-more-btn:focus-visible {
   opacity: 1;
 }
-
-.ctx-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: transparent;
-}
-.ctx-menu {
-  position: fixed;
-  z-index: 71;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 4px;
-  min-width: 180px;
-  box-shadow: var(--shadow-lg);
-  animation: m-fade 0.12s ease-out;
-}
-.ctx-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 0;
-  background: transparent;
-  border-radius: var(--r-sm);
-  font-size: 13px;
-  color: var(--ink);
-  text-align: left;
-}
-.ctx-item:hover {
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-}
-.ctx-item[data-danger='true'] {
-  color: var(--c-rose);
-}
-.ctx-item[data-danger='true']:hover {
-  background: color-mix(in oklab, var(--c-rose) 12%, transparent);
-}
-.ctx-item svg {
-  color: var(--ink-3);
-  flex: none;
-}
-.ctx-item[data-danger='true'] svg {
-  color: var(--c-rose);
-}
-.ctx-sep {
-  height: 1px;
-  background: var(--line);
-  margin: 4px 6px;
-}
 /* Drafts are clickable but behave differently — give them a slightly
    muted look so the difference reads at a glance. */
 .app-tile[data-draft='true'] {
@@ -939,19 +618,8 @@ select.input option {
   }
 }
 /* Single-line text field for the prompt dialog (rename etc.). */
-.sheet-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 22px;
-}
 
 /* ---------- Template tiles (in the Templates section) ---------- */
-.app-tile-installing {
-  pointer-events: none;
-  opacity: 0.55;
-}
 
 /* ---------- Mobile/tablet preview backdrop ----------
    Scoped to the content area so the dotted wall only paints behind the
@@ -984,84 +652,6 @@ select.input option {
 }
 .between {
   justify-content: space-between;
-}
-.hide {
-  display: none !important;
-}
-.settings-note {
-  color: var(--ink-3, rgba(0, 0, 0, 0.55));
-  font-size: 12px;
-  line-height: 1.45;
-  padding: 2px 0 8px;
-}
-.preview-toast.preview-toast-action {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-}
-.preview-toast.preview-toast-action .tiny-btn {
-  margin-left: 6px;
-}
-
-/* App-icon tile finishes are computed in TS via `tileFinish(color, variant)`
-   from @centraid/design-tokens and applied as inline styles per tile.
-   See app.ts → renderTile. The "new app" dashed tile is the one exception:
-   it keeps its empty-state look regardless of the user's variant pref. */
-.app-tile-add .app-icon {
-  background: transparent !important;
-  color: var(--ink-3) !important;
-  box-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-/* ---------- Settings drawer (right-side panel) ----------
-   Replaces the older centered-modal settings sheet. Content stacks
-   vertically; segmented controls span the panel width so 4-option groups
-   (tile treatment) don't collide with their row label. */
-.drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.32);
-  z-index: 80;
-  animation: m-fade 0.18s ease-out;
-}
-@keyframes drawer-slide {
-  from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-.drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 18px 22px;
-  border-bottom: 1px solid var(--line);
-}
-.drawer-head h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.018em;
-  color: var(--ink);
-}
-.drawer-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px 22px;
-}
-.drawer-foot {
-  padding: 14px 22px;
-  border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--ink-4);
 }
 /* §C1 — Settings inner-sidebar shell: a left page nav + a content
    pane that shows exactly one discrete page at a time. */
@@ -1101,59 +691,9 @@ select.input option {
 
 /* §C2 — Appearance live-preview tile. A 4-up grid of app tiles whose
    surfaces ride the live accent / tile-variant choices. */
-.ap-preview {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  padding: 18px;
-  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-}
-.ap-preview-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-}
-.ap-preview-tile-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.ap-preview-tile-name {
-  font-size: 10px;
-  color: var(--ink);
-  text-align: center;
-}
 
 /* §C — RefinedSettingsV2 `Sec`: a titled section. The label is a plain
    bold heading; the body sits under a hairline rule. */
-.drawer-group {
-  margin-top: 28px;
-}
-.drawer-group:first-child {
-  margin-top: 4px;
-}
-.drawer-group-label {
-  font-family: var(--font-display);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--ink);
-  margin-bottom: 6px;
-}
-.drawer-group-body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding-top: 8px;
-  border-top: 0.5px solid var(--line);
-}
 /* §C — `Row`: two-column grid — label + hint on the left, control right. */
 /* `full` row — control stacked below the label across the row width. */
 
@@ -1175,16 +715,6 @@ select.input option {
 /* Inline-ish action button — text-only, accent-coloured. Used by the
    Match-system action in the Appearance panel and similar one-shot
    triggers that shouldn't read as primary CTAs. */
-.share-access-row .label {
-  font-size: 13.5px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.share-access-row .hint {
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 2px;
-}
 
 /* ============================================================
    Centraid Bold · Atmospheric chrome (v0.6)
@@ -1481,14 +1011,6 @@ select.input option {
   cursor: default;
   pointer-events: none;
 }
-.cd-sb-item .cd-sb-icon {
-  flex: 0 0 auto;
-  color: var(--ink-3);
-  display: inline-flex;
-}
-.cd-sb-item[data-active='true'] .cd-sb-icon {
-  color: var(--ink);
-}
 .cd-sb-item .cd-sb-label {
   flex: 1 1 auto;
   min-width: 0;
@@ -1501,13 +1023,6 @@ select.input option {
   color: var(--ink-4);
   font-family: var(--font-mono);
   font-size: 11px;
-}
-.cd-sb-item .cd-sb-dot {
-  flex: 0 0 auto;
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  display: inline-block;
 }
 .cd-sb-section {
   margin-top: 14px;
@@ -1569,16 +1084,12 @@ select.input option {
 }
 
 /* Accent-tinted sidebar row — the "Build new" entry point (§G3). */
-.cd-sb-item[data-accent='true'],
-.cd-sb-item[data-accent='true'] .cd-sb-icon {
+.cd-sb-item[data-accent='true'] {
   color: var(--accent);
 }
 .cd-sb-item[data-accent='true']:hover {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.cd-sb-item[data-accent='true']:hover .cd-sb-icon {
-  color: var(--accent);
 }
 
 /* The live status pill trailing the Settings row keeps its intrinsic
@@ -2177,15 +1688,6 @@ select.input option {
   background: color-mix(in srgb, var(--ink) 9%, transparent);
   color: var(--ink);
 }
-/* The status dot and `•••` both want the trailing edge. When the action
-   is available (hover/focus/open), suppress the dot so the affordances
-   don't overlap. Resting state keeps the dot as a passive status hint. */
-.cd-sb-app-row:hover .cd-sb-item .cd-sb-dot,
-.cd-sb-app-row:focus-within .cd-sb-item .cd-sb-dot,
-.cd-sb-app-row:has(.cd-card-more[data-open='true']) .cd-sb-item .cd-sb-dot {
-  opacity: 0;
-}
-
 /* Template preview — the modal-card variant that lets users see what a
    template is before committing to a clone. Reuses the modal chrome but
    adds a head row with a tinted icon next to the title (Notion-style). */
@@ -2301,9 +1803,9 @@ select.input option {
 
 /* ---------- Chat history view ---------- */
 
-/* The in-app chat panel reuses the builder's chat classes (.msg-user,
-   .msg-ai, .tool-group, etc.) inside `.chat-scroll`. The override below
-   tightens padding for the narrower 420px panel. */
+/* The in-app chat panel reuses the builder's chat-bubble classes
+   (chatMessage.module.css) and tool-group classes (toolGroup.module.css).
+   The override below tightens padding for the narrower 420px panel. */
 /* §D1 — copilot empty state: an intro card + a recent-chats list. */
 /* §D1 — recent-chats list in the empty state. */
 /* §D3 — copilot header ⋯ overflow menu. */

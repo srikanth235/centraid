@@ -2,6 +2,7 @@ import type { JSX, ReactNode } from 'react';
 import styles from './settings-controls.module.css';
 import { cx } from '../ui/cx.js';
 import segCss from '../styles/seg.module.css';
+import drawerGroupCss from '../styles/drawerGroup.module.css';
 
 // Shared Settings control primitives — React ports of the vanilla
 // drawerGroup / drawerRowH / makeSwitch / makeSegmented (app-settings.ts),
@@ -15,9 +16,9 @@ export function DrawerGroup({
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className="drawer-group">
-      <div className="drawer-group-label">{label}</div>
-      <div className="drawer-group-body">{children}</div>
+    <div className={drawerGroupCss.group}>
+      <div className={drawerGroupCss.groupLabel}>{label}</div>
+      <div className={drawerGroupCss.groupBody}>{children}</div>
     </div>
   );
 }
