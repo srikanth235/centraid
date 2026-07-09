@@ -1,8 +1,12 @@
 # Desktop renderer CSS conventions
 
-Status: **in progress** — the renderer is migrating off the monolithic global
-`src/renderer/styles.css` (issue #325, Phase 4) toward co-located, scoped CSS
-Modules. This doc is the north star for that migration and for all new work.
+Status: **primary migration complete** (issue #325, Phase 4). Every React
+screen's private styles have been carved out of the monolithic global
+`src/renderer/styles.css` into co-located, scoped CSS Modules; what remains in
+`styles.css` is the legitimate shared / vanilla-host layer (see layer 2). The
+file went from ~14,788 lines to ~9,800. This doc is the north star for that
+model and, more importantly, for **all new work** — new screens author a
+co-located `*.module.css`, never grow the monolith.
 
 ## The four layers
 
@@ -69,28 +73,73 @@ There is a mechanical extractor at `<scratch>/mod.mjs` for the common cases; it
 prints leftover `cd-*` refs (dynamic/unstyled classes) for manual review — always
 eyeball the diff, since there is no live-Electron visual check in CI.
 
-## Shared families (the larger remaining work)
+## What was migrated, and what stays global (and why)
 
-Some class families are shared across many screens and should become **shared
-modules** (one `*.module.css` imported by every consumer — same import → same
-scoped name), or better, **extracted components**:
+Every screen's **private** classes now live in a co-located module:
 
-- `cd-au-*` — automations (Templates, View, Overview, RunView, Discover, Home).
-- `cd-app-card*` / `cd-status*` / `cd-disc-*` — app cards + discover.
-- `cd-vault-*` / `cd-app-settings-*` — Import / Vault / Phone / app-settings.
-- Generic primitives: `cd-btn`, `cd-icon-btn`, `cd-chip`, `cd-kbd`, `cd-switch`,
-  `cd-eyebrow`, `cd-page-empty*`, `cd-main-scroll`.
+- `RunViewScreen`, `AutomationViewScreen`, `AutomationsOverviewScreen`,
+  `AutomationTemplatesScreen` — the `cd-au-*` per-screen sub-families.
+- `HomeScreen` (hero/composer/shelf/apps-grid), `DiscoverScreen` (`cd-disc-*`
+  gallery), `AssistantScreen` (chat shell), `AppSettingsPanel`
+  (`cd-app-settings-*`/`cd-app-order-*`), `SettingsAppearanceScreen`
+  (`cd-theme-*`), `PhoneScreen`, `ImportScreen`, `VaultScreen` (shared
+  `styles/vault.module.css`), `OnboardingScreen`, `PaletteScreen`,
+  `InsightsScreen`.
 
-Until those are consolidated, their classes stay in the global layer and screens
-reference them as plain strings. Note that many are also emitted by the still-
-vanilla host route modules (`app-*.ts`) — those cannot be scoped until the host
-surface itself is React (out of scope here).
+What **legitimately stays** in the global `styles.css` layer — do **not** try to
+scope these, it will desync from the vanilla emitter or a cross-boundary rule:
+
+- **Vanilla-emitted families.** `cd-prof-*` (`profiles.ts`), `cd-app-card*` /
+  `cd-status*` (`app-cards.ts`, and the shared `ui/AppCard` primitive),
+  `cd-au-btn*/-status*/-glyph/-loading/-crumb*/-actions/-chip*/-drawer*/-ov-row*`
+  and `cd-au-trigbadge*` (`app-automations-ui.ts` injects them into React hosts),
+  and the `cd-asst-rich/-chart/-stat/-table*` rich-answer HTML
+  (`app-assistant.ts`, injected via `dangerouslySetInnerHTML`). These are the
+  shared layer *by definition* — a class a `.ts` and a `.tsx` both name cannot be
+  hashed on one side only.
+- **Window/shell chrome.** `cd-tl-*` (builder titlebar), `cd-sb-*`/`cd-sidebar`,
+  `cd-window*`, `cd-tb-*`, `cd-brand*`, `cd-tooltip` — vanilla host surfaces.
+- **Genuinely cross-screen chrome** used by ≥2 React screens as plain strings:
+  `cd-app-settings-note/-section`, `cd-swatch/-swatches`, `cd-disc-seg*`,
+  `cd-link-btn`, `cd-page-empty*`, and the shared keyframes (`cd-pulse`,
+  `cd-spin`, …). Reuse is via the plain global class (or a `ui/` component), not
+  by copying rules.
+
+The next real reduction of `styles.css` comes only from **retiring the vanilla
+host surfaces themselves** (sidebar, titlebar, cards, profiles, rich-answer
+renderer) — a React-conversion of those hosts, out of scope for a CSS refactor.
+
+### The `:global()` escape hatch, in practice
+
+When a component-rooted rule reaches a kept global class
+(`.cd-app-settings-pane .cd-swatch`, `.cd-apps-grid .cd-app-card-wrap`), the rule
+moves into the component's module with the foreign class wrapped:
+`.settingsPane :global(.cd-swatch)`, `.appsGrid :global(.cd-app-card-wrap)`. The
+rule of thumb the carve used: a rule moves iff its selector is **rooted** at an
+in-scope class (the component owns the contextual style); a rule rooted at a
+foreign/vanilla class is left in the global layer (that surface owns it).
+
+### Shared keyframes + CSS Modules
+
+Vite scopes `animation-name` references inside a module *even when the keyframe
+is defined globally*. So any module that animates with a shared keyframe
+(`cd-pulse`/`cd-spin`) carries a **local copy** of that `@keyframes` block; Vite
+scopes the local def and the ref to the same generated name, so they align. The
+global copy stays in `styles.css` for the vanilla + other consumers.
 
 ## Serving + design-sync
 
 Component modules are bundled by Vite into `dist/renderer/react-boot.css`, linked
-blocking in `index.html` ahead of the module scripts. The claude.ai/design
-desktop-shell sync (`.design-sync/desktop-src/`) still ships `styles.css`
-verbatim; once the `ui/` primitives (`Button`/`AppCard`/…) move to modules, that
-build must be re-plumbed to also ship `react-boot.css`, and the design bundle
-reset + re-uploaded (a `/design-sync` step run interactively — it needs OAuth).
+blocking in `index.html` ahead of the module scripts (grows as screens migrate;
+no FOUC).
+
+The claude.ai/design desktop-shell sync (`.design-sync/desktop-src/`) ships only
+the four **`ui/` primitives** (`Icon`/`Button`/`Logo`/`AppCard`) plus
+`styles.css`. Those primitives render **global** classes (`cd-btn*`,
+`cd-app-card*`, `cd-status`, `cd-disc-badge`) that are co-emitted by vanilla and
+therefore stay in `styles.css` — so the design bundle remains complete with
+`styles.css` alone. **No `react-boot.css` re-plumb is needed** (the module CSS is
+for the app's own screens, which the design bundle does not ship). The only
+follow-up is an optional content refresh — re-uploading the (now smaller)
+`styles.css` so the design bundle reflects the dead-rule cleanup — a
+`/design-sync` step run interactively (it needs OAuth).
