@@ -144,21 +144,6 @@ select.input option {
   text-transform: uppercase;
   user-select: none;
 }
-.titlebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-}
-.titlebar-side {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-.titlebar-side.is-end {
-  justify-content: flex-end;
-}
 .titlebar .crumb {
   color: var(--ink);
 }
@@ -168,21 +153,6 @@ select.input option {
 }
 .titlebar button {
   -webkit-app-region: no-drag;
-}
-
-/* Wordmark — SVG logo mark. */
-.wordmark {
-  width: 22px;
-  height: 22px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.wordmark svg {
-  width: 22px;
-  height: 22px;
-  display: block;
 }
 
 /* ---------- Buttons ---------- */
@@ -297,70 +267,6 @@ select.input option {
   max-width: 972px;
   margin-inline: auto;
 }
-.home-hero {
-  padding: 56px 0 44px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 40px;
-  display: flex;
-  align-items: flex-start;
-  gap: 28px;
-}
-.home-hero .wordmark {
-  width: 88px;
-  height: 88px;
-  flex: none;
-  margin-top: -4px;
-}
-.home-hero .wordmark svg {
-  width: 88px;
-  height: 88px;
-}
-.home-hero h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 48px;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  color: var(--ink);
-}
-.home-hero p {
-  margin: 12px 0 0;
-  color: var(--ink-2);
-  font-size: 15px;
-  max-width: 520px;
-  line-height: 1.5;
-}
-.home-hero-copy {
-  min-width: 0;
-}
-.home-hero-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 22px;
-}
-.home-section-title {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--ink-3);
-  /* Only set block-axis margins; inline-axis stays `auto` from `.home > *`
-     so the section title centers on the same x as the grid below it. */
-  margin-block: 0 20px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-/* Give the section title breathing room when it follows a previous grid
-   (e.g. "Templates" section title under the "Apps" grid). */
-.home-grid + .home-section-title {
-  margin-top: 36px;
-}
-.home-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 20px;
-}
 
 /* ---------- App tile ---------- */
 .app-tile {
@@ -419,17 +325,6 @@ select.input option {
   margin: 0;
   line-height: 1.35;
   max-width: 150px;
-}
-.tile-action-label {
-  margin-top: 2px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--accent);
-  opacity: 0;
-  transform: translateY(-2px);
-  transition:
-    opacity 0.12s,
-    transform 0.12s;
 }
 .app-tile:hover .tile-action-label,
 .app-tile:focus-visible .tile-action-label {
@@ -559,11 +454,6 @@ select.input option {
 .row + .row {
   margin-top: 8px;
 }
-.row-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
 .muted {
   color: var(--ink-3);
 }
@@ -586,28 +476,6 @@ select.input option {
   background: var(--bg-sunken);
   color: var(--ink-3);
 }
-
-/* ---------- Round button used as toggle ---------- */
-.tap-circle {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid var(--line-strong);
-  background: transparent;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: white;
-  transition: all 0.2s;
-}
-.tap-circle[data-on='true'] {
-  background: var(--accent-color, var(--accent));
-  border-color: var(--accent-color, var(--accent));
-}
-.tap-circle svg {
-  width: 14px;
-  height: 14px;
-}
 .tap-circle.sm {
   width: 22px;
   height: 22px;
@@ -615,281 +483,6 @@ select.input option {
 .tap-circle.sm svg {
   width: 11px;
   height: 11px;
-}
-
-/* ---------- Inline add bar ---------- */
-.add-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 6px 6px 6px 14px;
-  margin-bottom: 16px;
-}
-.add-bar input {
-  flex: 1;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font-size: 14px;
-  padding: 10px 0;
-}
-
-/* ---------- Habits-specific ---------- */
-.habits-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 14px 16px;
-}
-.habits-row + .habits-row {
-  margin-top: 8px;
-}
-.habits-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-.habits-week {
-  display: flex;
-  gap: 5px;
-  margin-top: 6px;
-  align-items: center;
-}
-.habits-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: transparent;
-  border: 1px solid var(--line-strong);
-  display: grid;
-  place-items: center;
-  color: rgba(255, 255, 255, 0.7);
-  flex: none;
-}
-.habits-dot[data-on='true'] {
-  background: var(--accent-color, var(--accent));
-  border-color: transparent;
-}
-.habits-dot[data-today='true'] {
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent-color, var(--accent)) 30%, transparent);
-}
-.habits-dot svg {
-  width: 7px;
-  height: 7px;
-}
-.habits-streak {
-  margin-left: 10px;
-  font-size: 11px;
-  color: var(--ink-3);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---------- Hydrate ---------- */
-.hydrate-count {
-  font-size: 72px;
-  font-weight: 500;
-  text-align: center;
-  letter-spacing: -0.02em;
-  margin: 24px 0 8px;
-  font-variant-numeric: tabular-nums;
-}
-.hydrate-count small {
-  color: var(--ink-3);
-  font-size: 28px;
-  font-weight: 400;
-}
-.hydrate-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 12px;
-  max-width: 540px;
-  margin: 0 auto 28px;
-}
-.hydrate-cup {
-  aspect-ratio: 1;
-  border-radius: 14px;
-  border: 1px dashed var(--line-strong);
-  background: transparent;
-  display: grid;
-  place-items: center;
-  color: white;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-.hydrate-cup[data-on='true'] {
-  background: var(--accent-color, var(--accent));
-  border: none;
-}
-.hydrate-cup:active {
-  transform: scale(0.94);
-}
-.hydrate-cup svg {
-  width: 28px;
-  height: 28px;
-}
-.hydrate-actions {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-/* ---------- Focus / Pomodoro ---------- */
-.focus-stage {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 28px;
-  padding: 40px 0;
-}
-.focus-mode-tabs {
-  display: inline-flex;
-  gap: 4px;
-  background: var(--bg-sunken);
-  border-radius: 999px;
-  padding: 4px;
-}
-.focus-mode-tabs button {
-  padding: 8px 16px;
-  border: 0;
-  background: transparent;
-  border-radius: 999px;
-  font-size: 13px;
-  color: var(--ink-3);
-  font-weight: 500;
-}
-.focus-mode-tabs button[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
-}
-.focus-dial {
-  width: 280px;
-  height: 280px;
-  border-radius: 50%;
-  border: 2px solid var(--accent-color, var(--accent));
-  display: grid;
-  place-items: center;
-  position: relative;
-  box-shadow: inset 0 0 0 10px
-    color-mix(in oklab, var(--accent-color, var(--accent)) 8%, transparent);
-}
-.focus-time {
-  font-size: 68px;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-.focus-progress-ring {
-  position: absolute;
-  inset: -2px;
-  width: calc(100% + 4px);
-  height: calc(100% + 4px);
-  transform: rotate(-90deg);
-}
-.focus-progress-ring circle {
-  fill: none;
-  stroke-width: 3;
-}
-.focus-actions {
-  display: flex;
-  gap: 10px;
-}
-.focus-stats {
-  display: flex;
-  gap: 36px;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-3);
-  font-size: 13px;
-}
-.focus-stats b {
-  color: var(--ink);
-  font-size: 16px;
-  display: block;
-  font-weight: 600;
-}
-
-/* ---------- Mood ---------- */
-.mood-prompt {
-  font-size: 22px;
-  line-height: 1.4;
-  margin: 8px 0 24px;
-}
-.mood-row {
-  display: flex;
-  gap: 10px;
-}
-.mood-btn {
-  flex: 1;
-  height: 72px;
-  border-radius: 18px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  font-size: 32px;
-  display: grid;
-  place-items: center;
-  transition:
-    transform 0.1s,
-    background 0.15s;
-}
-.mood-btn:hover {
-  transform: translateY(-2px);
-}
-.mood-btn[data-on='true'] {
-  background: var(--accent-color, var(--accent));
-  border-color: transparent;
-}
-.mood-history {
-  margin-top: 36px;
-  display: grid;
-  grid-template-columns: repeat(15, 1fr);
-  gap: 6px;
-}
-.mood-history-cell {
-  aspect-ratio: 1;
-  border-radius: 6px;
-  background: var(--bg-sunken);
-  display: grid;
-  place-items: center;
-  font-size: 14px;
-}
-
-/* ---------- Journal ---------- */
-.journal-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 28px;
-}
-.journal-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: calc(100vh - 280px);
-  overflow-y: auto;
-  padding-right: 6px;
-}
-.journal-list-item {
-  border: 0;
-  background: transparent;
-  padding: 10px 12px;
-  text-align: left;
-  border-radius: 10px;
-  cursor: pointer;
-  color: var(--ink-2);
-  transition: background 0.15s;
-}
-.journal-list-item:hover {
-  background: var(--bg-sunken);
-}
-.journal-list-item[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  border: 1px solid var(--line);
 }
 .journal-list-item .date {
   font-size: 13px;
@@ -902,97 +495,6 @@ select.input option {
   line-height: 1.35;
   max-height: 2.7em;
   overflow: hidden;
-}
-.journal-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.journal-date-label {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 24px;
-  color: var(--ink);
-  letter-spacing: -0.025em;
-}
-.journal-textarea {
-  flex: 1;
-  min-height: 360px;
-  background: transparent;
-  border: 0;
-  outline: none;
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--ink);
-  resize: none;
-}
-.journal-textarea::placeholder {
-  color: var(--ink-4);
-}
-
-/* ---------- Plants ---------- */
-.plant-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 14px 16px;
-}
-.plant-row + .plant-row {
-  margin-top: 8px;
-}
-.plant-row .plant-meta {
-  flex: 1;
-  min-width: 0;
-}
-.plant-name {
-  font-size: 14px;
-  font-weight: 500;
-}
-.plant-status {
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-top: 2px;
-}
-.plant-status[data-due='true'] {
-  color: var(--c-ochre);
-  font-weight: 500;
-}
-.plant-status[data-overdue='true'] {
-  color: var(--c-rose);
-  font-weight: 500;
-}
-
-/* ---------- Gifts ---------- */
-.gift-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.gift-card + .gift-card {
-  margin-top: 8px;
-}
-.gift-recipient {
-  font-size: 12px;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 500;
-}
-.gift-text {
-  font-size: 14px;
-  line-height: 1.5;
-}
-.gift-card[data-bought='true'] .gift-text {
-  text-decoration: line-through;
-  color: var(--ink-3);
 }
 
 /* ---------- Builder mode ---------- */
@@ -1014,59 +516,6 @@ select.input option {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-wall);
-}
-.builder-topbar {
-  flex: none;
-  height: 56px;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-elev);
-  gap: 12px;
-}
-.builder-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-  min-width: 0;
-}
-.builder-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-  margin-left: auto;
-  justify-content: flex-end;
-}
-
-/* Topbar icon-button cluster: history toggle + sidebar toggle */
-.topbar-toggles {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex: none;
-}
-.topbar-icon-btn {
-  border: 0;
-  background: transparent;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  cursor: pointer;
-}
-.topbar-icon-btn:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.topbar-icon-btn[data-active='true'] {
-  background: var(--bg-sunken);
-  color: var(--ink);
 }
 
 /* URL bar slot — flexes to absorb middle slack; hidden when not in Preview.
@@ -1117,93 +566,6 @@ select.input option {
   box-shadow:
     inset 0 0 0 0.5px var(--line),
     0 1px 3px rgba(0, 0, 0, 0.35);
-}
-.proj-name {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.15;
-  flex: 0 1 210px;
-  inline-size: 210px;
-  min-inline-size: 0;
-  max-inline-size: 210px;
-}
-.proj-name b,
-.proj-name span {
-  display: block;
-  box-sizing: border-box;
-  inline-size: 100%;
-  max-inline-size: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.proj-name b {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.proj-name b[contenteditable] {
-  cursor: text;
-  border-radius: 3px;
-  padding: 0 3px;
-  margin: 0 -3px;
-  outline: none;
-  transition: background 0.12s;
-}
-.proj-name b[contenteditable]:hover {
-  background: var(--bg-sunken);
-}
-.proj-name b[contenteditable]:focus {
-  background: var(--bg-sunken);
-  box-shadow: 0 0 0 1px var(--border);
-  /* When the field is focused, let the user scroll horizontally to see
-     and edit past the visible width. Scrollbar is hidden to keep the
-     header clean. */
-  overflow-x: auto;
-  text-overflow: clip;
-  scrollbar-width: none;
-}
-.proj-name b[contenteditable]:focus::-webkit-scrollbar {
-  display: none;
-}
-.proj-name span {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.proj-name span[contenteditable] {
-  cursor: text;
-  border-radius: 3px;
-  padding: 0 3px;
-  margin: 0 -3px;
-  outline: none;
-  transition: background 0.12s;
-  min-width: 1ch;
-}
-.proj-name span[contenteditable]:hover {
-  background: var(--bg-sunken);
-}
-.proj-name span[contenteditable]:focus {
-  background: var(--bg-sunken);
-  box-shadow: 0 0 0 1px var(--border);
-  overflow-x: auto;
-  text-overflow: clip;
-  scrollbar-width: none;
-}
-.proj-name span[contenteditable]:focus::-webkit-scrollbar {
-  display: none;
-}
-.proj-name span[contenteditable]:empty::before {
-  content: attr(data-placeholder);
-  color: var(--ink-4, var(--ink-3));
-  opacity: 0.7;
-}
-.mode-tabs {
-  display: inline-flex;
-  gap: 2px;
-  background: var(--bg-sunken);
-  border-radius: 999px;
-  padding: 4px;
 }
 .mode-tab {
   border: 0;
@@ -1444,30 +806,10 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
-
-
-
-
-
-
-
-
-
-
   .ab-progress-dots i {
     animation: none;
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 .ab-progress-main {
   flex: 1;
@@ -1794,26 +1136,6 @@ select.input option {
   background: color-mix(in oklab, var(--ink) 5%, transparent);
   border-color: color-mix(in oklab, var(--ink) 14%, transparent);
   color: var(--ink);
-}
-.hint-card {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-bottom: 8px;
-}
-.hint-card a {
-  color: var(--accent);
-  text-decoration: none;
-  margin-left: auto;
-}
-.hint-card a:hover {
-  text-decoration: underline;
 }
 
 .chat-input {
@@ -2313,16 +1635,6 @@ select.input option {
   min-width: 0;
   text-align: left;
 }
-.cloud-rail-badge {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg-elev);
-  color: var(--ink-3);
-  border: 1px solid var(--line);
-  flex: none;
-}
 .cloud-rail-item[data-ready='false'] .cloud-rail-label {
   opacity: 0.7;
 }
@@ -2392,12 +1704,6 @@ select.input option {
   padding: 14px 16px;
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
-.cloud-stat-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
-}
 .cloud-stat-value {
   margin-top: 4px;
   font-size: 24px;
@@ -2423,277 +1729,6 @@ select.input option {
   margin-top: 4px;
   font-size: 11px;
   color: var(--ink-3);
-}
-
-/* Database — table-card grid + detail drawer */
-.cloud-table-grid {
-  margin-top: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-.cloud-table-card {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 14px 16px;
-  background: var(--bg-elev);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  text-align: left;
-  color: var(--ink);
-  transition:
-    border-color 0.12s ease,
-    background 0.12s ease;
-}
-.cloud-table-card:hover {
-  border-color: var(--ink-3);
-}
-.cloud-table-card[data-active='true'] {
-  border-color: var(--ink);
-  background: var(--bg-sunken);
-}
-.cloud-table-card svg {
-  flex: none;
-  opacity: 0.85;
-}
-.cloud-table-card-text {
-  flex: 1;
-  min-width: 0;
-}
-.cloud-table-card-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cloud-table-card-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cloud-table-detail {
-  margin-top: 24px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 20px;
-  background: var(--bg-elev);
-}
-.cloud-table-detail-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.cloud-table-detail-head:not(:first-child) {
-  margin-top: 24px;
-}
-.cloud-table-detail-head h3 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-}
-.cloud-cols {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.cloud-cols-row {
-  display: grid;
-  grid-template-columns: minmax(120px, 1fr) minmax(80px, 0.7fr) minmax(120px, 1.2fr);
-  gap: 12px;
-  padding: 8px 14px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--line);
-  align-items: center;
-}
-.cloud-cols-row:last-child {
-  border-bottom: 0;
-}
-.cloud-cols-head {
-  background: var(--bg-sunken);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-3);
-}
-.cloud-cols-name {
-  font-weight: 500;
-  color: var(--ink);
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 12px;
-}
-.cloud-cols-type {
-  color: var(--ink-2, var(--ink));
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  font-size: 12px;
-}
-.cloud-cols-flags em {
-  font-style: normal;
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-  margin-right: 4px;
-}
-.cloud-sql-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cloud-sql-row pre {
-  margin: 4px 0 0 0;
-  padding: 8px 10px;
-  background: var(--bg-sunken);
-  border-radius: 6px;
-  font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-.cloud-sql-block {
-  margin: 0;
-  padding: 12px 14px;
-  background: var(--bg-sunken);
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  color: var(--ink);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* Database — row browser (below the columns table in the detail drawer) */
-.cloud-rows-wrap {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 16px;
-}
-.cloud-rows-body {
-  overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.cloud-rows-grid {
-  display: grid;
-  gap: 0;
-  min-width: 100%;
-}
-.cloud-rows-cell {
-  padding: 8px 10px;
-  font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  color: var(--ink);
-  border-bottom: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 320px;
-}
-.cloud-rows-cell:last-child {
-  border-right: none;
-}
-.cloud-rows-head-cell {
-  background: var(--bg-sunken);
-  color: var(--ink-2);
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-}
-.cloud-cell-null {
-  color: var(--ink-3);
-  font-style: italic;
-}
-.cloud-cell-num {
-  color: var(--ink);
-}
-.cloud-cell-text {
-  color: var(--ink);
-}
-.cloud-cell-json {
-  color: var(--ink-2);
-}
-.cloud-rows-pager {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  justify-content: flex-end;
-}
-.cloud-rows-pager-label {
-  font-size: 12px;
-  color: var(--ink-3);
-  margin-right: auto;
-}
-.cloud-rows-pager-btn {
-  padding: 4px 10px;
-  font-size: 12px;
-}
-.cloud-rows-pager-btn[disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-/* SQL editor — textarea + Run + result grid */
-.cloud-sql-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cloud-sql-textarea {
-  width: 100%;
-  min-height: 140px;
-  resize: vertical;
-  padding: 12px 14px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--ink);
-  font-size: 13px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  outline: none;
-}
-.cloud-sql-textarea:focus {
-  border-color: var(--accent, #5847e0);
-}
-.cloud-sql-controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.cloud-sql-run-btn {
-  padding: 6px 16px;
-}
-.cloud-sql-hint {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.cloud-sql-output {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 80px;
-}
-.cloud-sql-meta {
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cloud-sql-error {
-  padding: 10px 12px;
-  border: 1px solid var(--danger, #e25555);
-  background: color-mix(in srgb, var(--danger, #e25555) 8%, transparent);
-  color: var(--danger, #e25555);
-  border-radius: 8px;
-  font-size: 12px;
-  font-family: var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
-  white-space: pre-wrap;
 }
 
 /* Logs — filter chips + newest-first row list */
@@ -3395,30 +2430,10 @@ select.input option {
 }
 @media (max-width: 720px) {
 
-
-
-
-
-
-
-
-
-
-
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 /* Caps section label — "Status" / "Recent activity" headings that sit
    above the stat grid and the activity feed on the Cloud Overview. */
@@ -3642,26 +2657,6 @@ select.input option {
   align-items: center;
   gap: 8px;
 }
-.cloud-stat-copy {
-  margin-top: 10px;
-  align-self: flex-start;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-2);
-  background: var(--bg-sunken);
-  border: 1px solid var(--line);
-  padding: 5px 11px;
-  border-radius: 7px;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-.cloud-stat-copy:hover {
-  background: var(--bg-elev);
-  color: var(--ink);
-}
 
 /* ---------- Code view: lang dots, tree groups, active-row accent stripe
               ---------- */
@@ -3811,36 +2806,12 @@ select.input option {
   padding: 6px 12px;
   font-size: 12px;
 }
-
-/* ---------- Tile context menu (right-click) ---------- */
-.tile-more-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  background: rgba(20, 24, 32, 0.04);
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  color: var(--ink-3);
-  opacity: 0;
-  padding: 0;
-  transition:
-    opacity 0.12s,
-    background 0.12s;
-}
 .app-tile {
   position: relative;
 }
 .app-tile:hover .tile-more-btn,
 .tile-more-btn:focus-visible {
   opacity: 1;
-}
-.tile-more-btn:hover {
-  background: rgba(20, 24, 32, 0.1);
-  color: var(--ink);
 }
 
 .ctx-backdrop {
@@ -3893,28 +2864,6 @@ select.input option {
   height: 1px;
   background: var(--line);
   margin: 4px 6px;
-}
-
-.tile-badge {
-  position: absolute;
-  bottom: 26px;
-  right: 8px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent);
-  background: color-mix(in oklab, var(--accent) 12%, var(--bg-app));
-  padding: 2px 5px;
-  border-radius: 3px;
-  pointer-events: none;
-}
-.tile-badge[data-kind='draft'] {
-  /* Drafts read as in-progress / not-yet-runnable. Use a subdued amber so
-     they're visually distinct from published "NEW" tiles. */
-  color: #b78a14;
-  background: color-mix(in oklab, #b78a14 14%, var(--bg-app));
 }
 /* Drafts are clickable but behave differently — give them a slightly
    muted look so the difference reads at a glance. */
@@ -4032,12 +2981,6 @@ select.input option {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 20%, transparent);
 }
-.sheet-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 16px;
-}
 .sheet-actions {
   display: flex;
   align-items: center;
@@ -4102,15 +3045,6 @@ select.input option {
 .flex {
   display: flex;
 }
-.flex-1 {
-  flex: 1;
-}
-.gap-2 {
-  gap: 8px;
-}
-.gap-3 {
-  gap: 12px;
-}
 .col {
   display: flex;
   flex-direction: column;
@@ -4121,60 +3055,8 @@ select.input option {
 .between {
   justify-content: space-between;
 }
-.mt-1 {
-  margin-top: 8px;
-}
-.mt-2 {
-  margin-top: 16px;
-}
-.mt-3 {
-  margin-top: 24px;
-}
-.mt-4 {
-  margin-top: 36px;
-}
 .hide {
   display: none !important;
-}
-
-/* Settings modal & titlebar action */
-.titlebar-action {
-  margin-left: auto;
-}
-.btn-settings {
-  width: auto;
-  padding: 0 12px 0 9px;
-  gap: 6px;
-  display: inline-flex;
-  align-items: center;
-  transition:
-    background 120ms ease,
-    color 120ms ease;
-}
-.btn-settings-label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  line-height: 1;
-}
-.settings-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
-}
-.settings-label {
-  color: var(--ink-2, rgba(0, 0, 0, 0.78));
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-.settings-hint {
-  color: var(--ink-3, rgba(0, 0, 0, 0.55));
-  font-size: 11px;
-  line-height: 1.4;
 }
 .settings-note {
   color: var(--ink-3, rgba(0, 0, 0, 0.55));
@@ -4216,21 +3098,6 @@ select.input option {
   background: rgba(0, 0, 0, 0.32);
   z-index: 80;
   animation: m-fade 0.18s ease-out;
-}
-.drawer-panel {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 400px;
-  max-width: 90vw;
-  background: var(--bg-elev);
-  border-left: 1px solid var(--line);
-  box-shadow: var(--shadow-lg);
-  z-index: 81;
-  display: flex;
-  flex-direction: column;
-  animation: drawer-slide 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 @keyframes drawer-slide {
   from {
@@ -4390,31 +3257,6 @@ select.input option {
   display: block;
 }
 
-/* §C3 — AI provider state badge. */
-.provider-badge {
-  flex: none;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  color: var(--ink-3);
-}
-.provider-badge[data-tone='on'] {
-  background: hsla(101 28% 42% / 0.16);
-  color: var(--c-forest, #5c8a4e);
-}
-.provider-badge[data-tone='standby'] {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--accent);
-}
-.provider-badge[data-tone='off'] {
-  background: var(--bg-sunken);
-  color: var(--ink-4);
-}
-
 /* Active-agent segmented switch (Settings → Agents). One control for which
    agent runs: a pill slides under the active segment, tinted with that agent's
    accent. Unavailable agents are dimmed and non-interactive. */
@@ -4493,13 +3335,6 @@ select.input option {
 }
 .agent-switch-seg[data-unavail='true'] .agent-switch-dot {
   background: var(--ink-4) !important;
-}
-.agent-switch-tag {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-4);
 }
 
 /* Agent config panel — one surface, a row per agent (hairline-divided). The
@@ -4829,14 +3664,6 @@ select.input option {
   font-weight: 500;
   color: var(--ink);
 }
-.drawer-row-static {
-  font-size: 13px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-}
 /* §C — `Row`: two-column grid — label + hint on the left, control right. */
 .drawer-row-grid {
   display: grid;
@@ -4908,15 +3735,6 @@ select.input option {
 .cd-settings-page .seg button[data-active='true'] {
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
-}
-
-/* Inline row variant — label left, control right (Cool blue cast,
-   Sidebar visible). The default drawer-row stacks label above control. */
-.drawer-row-inline {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 /* §C — RefinedSettingsV2 `Tog`: a 34×20 pill toggle. Off = ink wash with
@@ -5004,80 +3822,6 @@ select.input option {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-
-/* ---------- Share dialog ----------
-   Centered modal. Read-only link + radio access controls. Dimmed
-   backdrop with a 2px blur — matches the design system's blur-on-floating
-   rule (sheets/cards stay solid, only floating chrome blurs). */
-.share-card {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: min(460px, calc(100vw - 48px));
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-2xl, 20px);
-  padding: 24px;
-  z-index: 65;
-  box-shadow: var(--shadow-lg);
-  animation: m-rise 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
-}
-.share-card h3 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 20px;
-  letter-spacing: -0.02em;
-  margin: 0 0 4px;
-  color: var(--ink);
-}
-.share-card p.share-sub {
-  margin: 0;
-  font-size: 13px;
-  color: var(--ink-3);
-}
-.share-link-row {
-  margin-top: 18px;
-  display: flex;
-  gap: 8px;
-}
-.share-link-input {
-  flex: 1;
-  height: 36px;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 0;
-  background: var(--bg-sunken);
-  font-family: var(--font-mono);
-  font-size: 12.5px;
-  color: var(--ink-2);
-  outline: none;
-}
-.share-access {
-  margin-top: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.share-access-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  cursor: pointer;
-  padding: 12px;
-  border-radius: 10px;
-  background: transparent;
-  box-shadow: 0 0 0 0.5px var(--line);
-  transition: background 0.12s;
-}
-.share-access-row[data-active='true'] {
-  background: var(--bg-app);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-.share-access-row input[type='radio'] {
-  accent-color: var(--accent);
-  margin-top: 3px;
-}
 .share-access-row .label {
   font-size: 13.5px;
   font-weight: 500;
@@ -5087,12 +3831,6 @@ select.input option {
   font-size: 12px;
   color: var(--ink-3);
   margin-top: 2px;
-}
-.share-actions {
-  margin-top: 18px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 
 /* ============================================================
@@ -6369,15 +5107,6 @@ select.input option {
 /* Automations tab: morph the dense tile grid into roomier cards so the
    trigger + integration metadata each automation carries has space. */
 
-
-
-
-
-
-
-
-
-
 /* Staggered rise-in applied per cell on each tab switch (see renderTab).
    `both` holds the hidden `from` state through the per-cell delay; the JS
    strips the class on animationend so hover transforms aren't pinned. */
@@ -6391,8 +5120,6 @@ select.input option {
     transform: none;
   }
 }
-
-
 
 /* §A2 — quiet inspiration footer. */
 
@@ -6782,13 +5509,6 @@ select.input option {
   color: var(--accent);
 }
 
-
-
-
-
-
-
-
 /* Hover-revealed `•••` action trigger. Lives as a sibling of the card so
    we don't nest a button inside a button; revealed on the wrap's hover or
    focus-within so keyboard tabbers see it. `data-open="true"` keeps it
@@ -6964,19 +5684,6 @@ select.input option {
     hsl(0 0% calc(var(--bg-l) + 2%)) 0%,
     hsl(0 0% calc(var(--bg-l) - 2%)) 100%
   );
-}
-
-/* Builder app-meta strip — sits under the titlebar */
-.cd-app-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 40%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  flex: none;
 }
 
 /* Builder titlebar identity lockup — a soft ink-washed pill carrying the
@@ -8055,31 +6762,11 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
-
-
-
-
-
-
-
-
-
-
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 /* Enumerated empty / CLI unavailable — muted, not an error. */
 .app-chat-am-empty {
@@ -8462,30 +7149,10 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
-
-
-
-
-
-
-
-
-
-
   .ab-section-flash {
     animation: none;
   }
 }
-
-
-
-
-
-
-
-
-
-
 
 .ab-diff-ribbon {
   display: inline-flex;
@@ -8936,7 +7603,6 @@ select.input option {
   flex: none;
 }
 
-
 /* ── Automation viewer ── */
 .cd-au-loading {
   max-width: 1080px;
@@ -9064,31 +7730,10 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
-
-
-
-
-
-
-
-
-
-
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
 
 /* Trigger badge — cron-clock / webhook glyph + schedule label. */
 .cd-au-trigbadge {
@@ -9181,8 +7826,6 @@ select.input option {
 /* ── Side rail: Last 30 days · Behavior + Tools ── */
 
 /* standing-order name becomes a link to the viewer */
-
-
 
 /* ── Run history rows become clickable threads ── */
 
@@ -9398,9 +8041,6 @@ select.input option {
 /* ── Overview health strip — Active / Paused / Drafts / Need attention ── */
 
 /* ── Overview loading skeleton + error states ── */
-
-
-
 
 /* ── Assistant (shell-level vault Q&A) ─────────────────────────────────
    Two-pane chat: past conversations left, active thread right. Answers
