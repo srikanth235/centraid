@@ -1,0 +1,17 @@
+.pageHead {
+  max-width: 1080px;
+  margin: 0 auto 28px;
+}
+.pageHead h1 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.pageHead p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink-3);
+}

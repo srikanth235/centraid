@@ -75,7 +75,7 @@ describe('PhoneScreen', () => {
     });
     const props = makeProps({ beginPairing });
     const el = await mount(props);
-    const connect = el.querySelector('.cd-btn-primary') as HTMLButtonElement;
+    const connect = el.querySelector('.btnPrimary') as HTMLButtonElement;
     await act(async () => connect.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelector('.qr')).toBeTruthy();
     expect(el.textContent).toContain('Cancel pairing');

@@ -191,7 +191,7 @@ export default function DiscoverScreen({
       <div className={styles.wrap}>
         <div className={styles.head}>
           <div className={styles.headText}>
-            <div className="cd-eyebrow">Discover</div>
+            <div className={styles.eyebrow}>Discover</div>
             <h1>Templates</h1>
             <p>
               Start from a blueprint — an app you open or an automation that runs for you. Clone it,

@@ -504,75 +504,6 @@ select.input option {
    mode; we layer our own shadow here. */
 /* Device switcher — a rounded-rect segmented cluster with icon-only
    pill items (refined proposal RBPaneToolbar). */
-.urlbar-device {
-  display: inline-flex;
-  padding: 2px;
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  border-radius: 7px;
-  gap: 1px;
-  flex: none;
-}
-.urlbar-device-btn {
-  border: 0;
-  background: transparent;
-  width: 26px;
-  height: 20px;
-  padding: 0;
-  border-radius: 5px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--ink-3);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 500;
-  transition:
-    background 120ms,
-    color 120ms,
-    box-shadow 120ms;
-}
-.urlbar-device-btn:hover {
-  color: var(--ink);
-}
-.urlbar-device-btn[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow:
-    inset 0 0 0 0.5px var(--line),
-    0 1px 3px rgba(0, 0, 0, 0.35);
-}
-.mode-tab {
-  border: 0;
-  background: transparent;
-  padding: 7px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink-3);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition:
-    background 0.12s ease,
-    color 0.12s ease;
-}
-.mode-tab:hover {
-  color: var(--ink);
-}
-.mode-tab[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
-}
-.mode-tab svg {
-  display: block;
-}
-.mode-tab span {
-  display: inline;
-}
 
 .builder-body {
   flex: 1;
@@ -742,77 +673,7 @@ select.input option {
 /* §B3 — right-pane toolbar. Mode tabs at the leading edge; the preview
    URL pill + device pill ride the trailing edge, pushed there by the
    flex spacer. Non-preview tabs hide the preview-only controls. */
-.rb-toolbar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 0.5px solid var(--line);
-  background: color-mix(in srgb, var(--bg-elev) 30%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  position: relative;
-  z-index: 1;
-}
-.rb-toolbar-spacer {
-  flex: 1;
-}
-.rb-toolbar-share {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.rb-toolbar-share:hover {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink);
-}
-.rb-toolbar:not([data-tab='preview']) .rb-url,
-.rb-toolbar:not([data-tab='preview']) .urlbar-device {
-  display: none;
-}
 /* Preview URL pill — recessed track, sync-state dot, mono URL, reload. */
-.rb-url {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 24px;
-  padding: 0 4px 0 10px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 6px;
-  max-width: 320px;
-  min-width: 0;
-}
-.rb-url-dot {
-  flex: none;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-.rb-url-dot[data-state='live'] {
-  background: var(--ok, #3fb950);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok, #3fb950) 22%, transparent);
-}
-.rb-url-dot[data-state='local'] {
-  background: var(--accent);
-}
-.rb-url-dot[data-state='building'] {
-  background: var(--warn, #d29922);
-  animation: rb-url-pulse 1.3s ease-in-out infinite;
-}
 @keyframes rb-url-pulse {
   0%,
   100% {
@@ -821,36 +682,6 @@ select.input option {
   50% {
     opacity: 1;
   }
-}
-.rb-url-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 11.5px;
-  color: var(--ink-2);
-}
-.rb-url-refresh {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--ink-3);
-  cursor: pointer;
-  transition:
-    background 120ms,
-    color 120ms;
-}
-.rb-url-refresh:hover {
-  background: var(--bg-elev);
-  color: var(--ink);
 }
 .right-pane-content {
   flex: 1;
@@ -1850,23 +1681,6 @@ select.input option {
 }
 
 /* Sidebar destination pages — Discover / Starred / Automations (§G3). */
-.cd-page-head {
-  max-width: 1080px;
-  margin: 0 auto 28px;
-}
-.cd-page-head h1 {
-  margin: 0 0 6px;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 26px;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-.cd-page-head p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--ink-3);
-}
 
 /* Day-1 home — centered hero with the composer as the centre of gravity.
    The scroll column centers its content vertically when the page is the
@@ -1895,13 +1709,6 @@ select.input option {
 /* Loaded-home greeting header — eyebrow + "Your apps." + build pill. */
 
 /* "Starred" + "All apps" sections */
-.cd-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-3);
-}
 
 /* Home library layout toggle (Tiles | Rows) — a small segmented icon pair on
    the right of the shelf header. The pressed segment reads as an elevated
@@ -2424,82 +2231,10 @@ select.input option {
    gradient app-icon, editable app name, and a compact status badge.
    Lives in cd-tl-nav, hugging the back/forward arrows (refined proposal
    RefinedBuilder). */
-.cd-tl-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  margin-left: 6px;
-  padding: 4px 10px 4px 6px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  border: 0.5px solid var(--line);
-  min-width: 0;
-}
-.cd-tl-app-icon {
-  width: 20px;
-  height: 20px;
-  flex: none;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-}
-.cd-tl-identity b {
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--ink);
-  outline: none;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-tl-identity b[contenteditable] {
-  cursor: text;
-  border-radius: 3px;
-  padding: 0 3px;
-  margin: 0 -3px;
-  transition: background 0.12s;
-}
-.cd-tl-identity b[contenteditable]:hover,
-.cd-tl-identity b[contenteditable]:focus {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-}
 
 /* Status badge — uppercase-mono pill with a pulsing dot. The dynamic
    text (Draft / Editing… / Publishing… / Live · v…) is composed by
    paintStatus(); colour is driven by the parent's [data-state]. */
-.cd-tl-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--accent-light) 18%, transparent);
-  color: var(--accent-light);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-.cd-tl-status-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: currentColor;
-  flex-shrink: 0;
-  animation: cd-pulse 1400ms ease-in-out infinite;
-}
-.cd-tl-status[data-state='idle-live'] {
-  background: color-mix(in srgb, var(--success) 18%, transparent);
-  color: var(--success);
-}
-.cd-tl-status[data-state='idle-live'] .cd-tl-status-dot {
-  animation: none;
-}
 @keyframes cd-pulse {
   0%,
   100% {
@@ -2520,64 +2255,11 @@ select.input option {
 }
 
 /* Trailing builder titlebar cluster — history, more, Publish. */
-.cd-tl-builder-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.cd-tl-publish {
-  height: 28px;
-  padding: 0 12px;
-  gap: 6px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.cd-tl-publish svg {
-  display: block;
-}
 
 /* Pill-tab cluster (Preview / Code) — matches .urlbar-device so the two
    segmented controls in the right-pane toolbar read as one visual
    system: recessed track + lifted active pill with hairline + drop
    shadow. */
-.cd-tabs-pill {
-  display: inline-flex;
-  padding: 2px;
-  background: var(--bg-sunken);
-  border: 0.5px solid var(--line);
-  border-radius: 7px;
-  gap: 1px;
-}
-.cd-tabs-pill button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 20px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  background: transparent;
-  color: var(--ink-3);
-  font-size: 11.5px;
-  font-weight: 500;
-  transition:
-    background 120ms,
-    color 120ms,
-    box-shadow 120ms;
-}
-.cd-tabs-pill button:hover {
-  color: var(--ink);
-}
-.cd-tabs-pill button[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow:
-    inset 0 0 0 0.5px var(--line),
-    0 1px 3px rgba(0, 0, 0, 0.35);
-}
 
 /* §D — App-view titlebar identity lockup: gradient app-icon tile + name
    + a LIVE status chip, in a soft ink-washed pill. */
@@ -2602,13 +2284,6 @@ select.input option {
 .cd-btn-ghost:hover {
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink);
-}
-.cd-btn-primary {
-  background: var(--accent);
-  color: #fff;
-}
-.cd-btn-primary:hover {
-  background: color-mix(in oklab, var(--accent) 88%, white 12%);
 }
 .cd-btn[disabled] {
   opacity: 0.45;

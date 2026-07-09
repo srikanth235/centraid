@@ -8,6 +8,7 @@ import type {
 import styles from './PhoneScreen.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
 import linkBtnCss from '../styles/linkBtn.module.css';
+import { cx } from '../ui/cx.js';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className={appSettingsCss.appSettingsNote}>{children}</div>;
@@ -147,7 +148,7 @@ export default function PhoneScreen({
               Your phone connects directly to this desktop over an end-to-end encrypted tunnel —
               from any network, with the gateway never exposed. Publish an app here, open it there.
             </div>
-            <button type="button" className="cd-btn cd-btn-primary" onClick={onConnect}>
+            <button type="button" className={cx("cd-btn", styles.btnPrimary)} onClick={onConnect}>
               Connect a phone
             </button>
           </>

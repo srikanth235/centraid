@@ -1,5 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import mainScrollCss from '../styles/mainScroll.module.css';
+import styles from './PageScroll.module.css';
 
 // Port of the vanilla `pageScroll` — the standard `.has-wall > .cd-main-scroll`
 // page body the shell frame hosts, with an optional `.cd-page-head` title row.
@@ -17,7 +18,7 @@ export default function PageScroll({
     <div className="has-wall">
       <div className={mainScrollCss.mainScroll}>
         {title !== undefined || subtitle !== undefined ? (
-          <div className="cd-page-head">
+          <div className={styles.pageHead}>
             <h1>{title}</h1>
             <p>{subtitle}</p>
           </div>

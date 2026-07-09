@@ -59,3 +59,10 @@
   background: var(--danger);
   color: #fff;
 }
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+}
+.btnPrimary:hover {
+  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+}

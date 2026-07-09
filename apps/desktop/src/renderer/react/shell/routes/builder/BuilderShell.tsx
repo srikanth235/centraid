@@ -14,6 +14,8 @@ import BuilderHistory from './BuilderHistory.js';
 import BuilderPreview from './BuilderPreview.js';
 import type { Tab } from './builderModel.js';
 import { type UseBuilderInput, useBuilder } from './useBuilder.js';
+import styles from './BuilderShell.module.css';
+import { cx } from '../../../ui/cx.js';
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
 const SmartphoneIcon =
@@ -112,9 +114,9 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
 
   // ── Titlebar lead: identity lockup ──────────────────────────────────────
   const titlebarLead = (
-    <span className="cd-tl-identity">
+    <span className={styles.tlIdentity}>
       <span
-        className="cd-tl-app-icon"
+        className={styles.tlAppIcon}
         style={{ background: finish.background, color: finish.glyphColor, boxShadow: finish.boxShadow || undefined }}
         dangerouslySetInnerHTML={{ __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9) }}
       />
@@ -138,8 +140,8 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           }
         }}
       />
-      <span className="cd-tl-status" data-state={vm.statusState}>
-        <span className="cd-tl-status-dot" />
+      <span className={styles.tlStatus} data-state={vm.statusState}>
+        <span className={styles.tlStatusDot} />
         <span className="cd-tl-status-text">{vm.statusText}</span>
       </span>
     </span>
@@ -149,7 +151,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   const primaryGlyph =
     vm.primaryKind === 'publish' ? 'Share' : vm.primaryKind === 'disable' ? 'Pause' : 'Play';
   const titlebarRight = (
-    <span className="cd-tl-builder-actions">
+    <span className={styles.tlBuilderActions}>
       {!vm.isAutomation && (
         <button
           type="button"
@@ -170,7 +172,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       />
       <button
         type="button"
-        className="btn btn-primary cd-tl-publish"
+        className={cx("btn", "btn-primary", styles.tlPublish)}
         data-kind={vm.primaryKind}
         disabled={vm.primaryDisabled}
         onClick={vm.handlePrimary}
@@ -184,13 +186,13 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   // ── Right-pane toolbar ──────────────────────────────────────────────────
   const tabs = vm.isAutomation ? AUTO_TABS : APP_TABS;
   const devicePill = (
-    <div className="urlbar-device">
+    <div className={styles.device}>
       {([['mobile', SmartphoneIcon], ['tablet', TabletIcon], ['desktop', MonitorIcon]] as const).map(
         ([d, glyph]) => (
           <button
             key={d}
             type="button"
-            className="urlbar-device-btn"
+            className={styles.deviceBtn}
             aria-label={d}
             title={`${d[0]!.toUpperCase()}${d.slice(1)} preview`}
             data-active={String(vm.previewDevice === d)}
@@ -202,12 +204,12 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     </div>
   );
   const urlPill = (
-    <div className="rb-url" title={previewInfo?.src}>
-      <span className="rb-url-dot" data-state={previewInfo ? 'local' : 'building'} />
-      <span className="rb-url-text">{previewInfo ? formatPreviewUrl(previewInfo.src) : 'Building…'}</span>
+    <div className={styles.url} title={previewInfo?.src}>
+      <span className={styles.urlDot} data-state={previewInfo ? 'local' : 'building'} />
+      <span className={styles.urlText}>{previewInfo ? formatPreviewUrl(previewInfo.src) : 'Building…'}</span>
       <button
         type="button"
-        className="rb-url-refresh"
+        className={styles.urlRefresh}
         aria-label="Reload preview"
         title="Reload preview"
         onClick={() => vm.setTab('preview')}
@@ -216,26 +218,26 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     </div>
   );
   const rbToolbar = (
-    <div className="rb-toolbar" data-tab={vm.tab}>
+    <div className={styles.toolbar} data-tab={vm.tab}>
       {urlPill}
-      <div className="rb-toolbar-spacer" />
+      <div className={styles.toolbarSpacer} />
       {devicePill}
       {!vm.isAutomation && (
         <button
           type="button"
-          className="rb-toolbar-share"
+          className={styles.toolbarShare}
           aria-label="Open in new tab"
           title="Open in new tab"
           onClick={() => previewInfo && window.open(previewInfo.src, '_blank', 'noopener')}
           dangerouslySetInnerHTML={{ __html: iconSvg('Share', 12) }}
         />
       )}
-      <span className="cd-tabs-pill">
+      <span className={styles.tabsPill}>
         {tabs.map(([key, label, glyph]) => (
           <button
             key={key}
             type="button"
-            className="mode-tab"
+            className={styles.tab}
             aria-label={label}
             title={label}
             data-active={String(vm.tab === key)}

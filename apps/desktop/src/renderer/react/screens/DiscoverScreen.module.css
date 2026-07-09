@@ -226,3 +226,10 @@
     grid-template-columns: 1fr;
   }
 }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-3);
+}

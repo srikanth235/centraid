@@ -117,7 +117,7 @@ describe('App root', () => {
       starredBtn.click();
     });
     expect(el.textContent).toContain('Nothing starred yet');
-    expect(el.querySelector('.cd-page-head')?.textContent).toContain('Starred');
+    expect(el.querySelector('.pageHead')?.textContent).toContain('Starred');
   });
 
   it('opens the ⌘K command palette listing the app + a create row', async () => {
