@@ -29,6 +29,7 @@
     "@centraid/app-engine": "workspace:*",
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
+    "lit": "3.3.3",
     "typescript": "catalog:"
   },
   "engines": {
