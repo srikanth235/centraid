@@ -7,7 +7,11 @@ vi.mock('../../../gateway-client.js', () => ({
   listAutomationRuns: vi.fn(),
 }));
 
-import { buildOverviewData, type AutomationFeedEntry } from './automationsData.js';
+import {
+  buildAutomationViewData,
+  buildOverviewData,
+  type AutomationFeedEntry,
+} from './automationsData.js';
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
   ({
@@ -66,5 +70,41 @@ describe('buildOverviewData', () => {
   it('uses the empty-state subtitle when there are no rows', () => {
     const data = buildOverviewData([], []);
     expect(data.subtitle).toBe('Conversations that run on their own.');
+  });
+});
+
+const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
+  ({
+    id: 'digest',
+    ref: 'digest/main',
+    name: 'Daily Digest',
+    enabled: true,
+    triggers: [{ kind: 'cron', expr: '0 9 * * *' }],
+    manifest: { requires: { mcps: [] }, history: { keep: 'forever' } },
+    ...over,
+  }) as unknown as CentraidAutomationRow;
+
+describe('buildAutomationViewData', () => {
+  it('derives hero + status + 30-day KPIs for a cron automation', () => {
+    const recent = Date.now() - 60_000;
+    const data = buildAutomationViewData(viewRow(), [
+      entry({ startedAt: recent, endedAt: recent + 2000 }).run,
+    ]);
+    expect(data?.name).toBe('Daily Digest');
+    expect(data?.kindEyebrow).toBe('Cron schedule');
+    expect(data?.heroIcon).toBe('Clock');
+    expect(data?.enabled).toBe(true);
+    expect(data?.kpis.total).toBe('1');
+    expect(data?.runs).toHaveLength(1);
+  });
+
+  it('marks a webhook automation and derives a pending webhook when unbound', () => {
+    const data = buildAutomationViewData(
+      viewRow({ triggers: [{ kind: 'webhook', pending: true } as never] }),
+      [],
+    );
+    expect(data?.kindEyebrow).toBe('Webhook');
+    expect(data?.webhook).toEqual({ pending: true, url: null });
+    expect(data?.kpis.total).toBe('0');
   });
 });
