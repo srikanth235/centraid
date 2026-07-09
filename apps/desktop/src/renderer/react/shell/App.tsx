@@ -9,6 +9,7 @@ import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
 import { useShellApps } from './useShellApps.js';
+import AutomationsRoute from './routes/AutomationsRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast are
@@ -63,6 +64,8 @@ function renderRoute(nav: ShellNav): JSX.Element {
   switch (nav.route.kind) {
     case 'insights':
       return <InsightsRoute />;
+    case 'automations':
+      return <AutomationsRoute />;
     case 'starred':
       // Port of the vanilla renderStarred — a pure empty-state page.
       return (
