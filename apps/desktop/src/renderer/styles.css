@@ -4263,13 +4263,6 @@ select.input option {
   overflow: hidden;
   display: flex;
 }
-.cd-settings-shell {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 232px 1fr;
-  overflow: hidden;
-}
 .cd-settings-nav {
   display: flex;
   flex-direction: column;
@@ -4324,21 +4317,6 @@ select.input option {
   cursor: pointer;
   transition: background 100ms;
 }
-.cd-settings-nav-icon {
-  display: inline-flex;
-  flex: 0 0 auto;
-  color: var(--ink-3);
-}
-.cd-settings-nav-label {
-  flex: 1;
-  min-width: 0;
-}
-.cd-settings-nav-hint {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: 9.5px;
-  color: var(--ink-4);
-}
 .cd-settings-nav-item:hover {
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   color: var(--ink);
@@ -4346,18 +4324,6 @@ select.input option {
 .cd-settings-nav-item[data-active='true'] {
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
-}
-.cd-settings-nav-item[data-active='true'] .cd-settings-nav-icon {
-  color: var(--accent);
-}
-.cd-settings-nav-foot {
-  margin-top: auto;
-  padding: 12px 10px 0;
-}
-.cd-settings-nav-ver {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ink-4);
 }
 
 /* Content pane — scrolls independently; controls capped at 640px wide. */
@@ -6380,18 +6346,6 @@ select.input option {
    ("Weekdays at 11:30 PM") so the times right-align into a column. */
 /* Star flag rides the same vertically-centred right edge as the ⋯ in rows. */
 
-/* §A2 — ambient build pill. Collapsed it's a slim ~360px bar floated to
-   the right of the greeting; expanded it swaps in a composer card. */
-.cd-build-pill-label + .cd-kbd,
-.cd-build-pill .cd-kbd {
-  font-size: 10.5px;
-  letter-spacing: 0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  color: var(--ink-4);
-}
-
 /* §A1 — HomeShelf: tabbed shelf at the bottom of the Day-1 home. Same
    surface as the rest of Home; same RefinedAppTile the All apps page uses. */
 /* Automations tab: morph the dense tile grid into roomier cards so the
@@ -6576,7 +6530,6 @@ select.input option {
   font-size: 9.5px;
   letter-spacing: 0.06em;
 }
-.cd-app-card-foot-sep,
 .cd-app-card-foot-time {
   color: var(--ink-4);
   overflow: hidden;
@@ -6915,20 +6868,6 @@ select.input option {
 .cd-sb-app-row:focus-within .cd-sb-item .cd-sb-dot,
 .cd-sb-app-row:has(.cd-card-more[data-open='true']) .cd-sb-item .cd-sb-dot {
   opacity: 0;
-}
-
-/* Inline rename — flips the card title into a contenteditable field
-   styled like a borderless input. We keep the title's typography so the
-   commit feels seamless rather than a focus jump into a new control. */
-.cd-app-card-name-editing {
-  outline: none;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  box-shadow: 0 0 0 1.5px var(--accent);
-  border-radius: 4px;
-  padding: 1px 4px;
-  margin: -1px -4px;
-  cursor: text;
-  caret-color: var(--accent);
 }
 
 /* Template preview — the modal-card variant that lets users see what a
@@ -8406,203 +8345,6 @@ select.input option {
 
 /* Settings → Phone (issue #263). "Connect phone" pairing QR + the paired
  * device allowlist — one row per phone with a transport-level Revoke. */
-
-/* Run audit (issue #80). The "Runs" link in the foot expands a
- * per-automation history panel below the card. Newest run first;
- * clicking a run expands its node timeline. */
-.cd-app-runs-empty {
-  color: color-mix(in oklab, var(--ink) 45%, transparent);
-  font-style: italic;
-  padding: 6px 0;
-}
-.cd-app-runs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cd-app-run {
-  border: 1px solid color-mix(in oklab, var(--ink) 8%, transparent);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.cd-app-run[data-ok='false'] {
-  border-color: color-mix(in srgb, var(--danger, #e25555) 30%, transparent);
-}
-.cd-app-run-head {
-  display: grid;
-  grid-template-columns: 16px auto auto auto 1fr;
-  gap: 8px;
-  align-items: center;
-  width: 100%;
-  background: none;
-  border: none;
-  text-align: left;
-  padding: 6px 10px;
-  cursor: pointer;
-  color: inherit;
-}
-.cd-app-run-head:hover {
-  background: color-mix(in oklab, var(--ink) 4%, transparent);
-}
-.cd-app-run-status {
-  font-weight: 600;
-}
-.cd-app-run[data-ok='true'] .cd-app-run-status {
-  color: var(--success, #2a8c2a);
-}
-.cd-app-run[data-ok='false'] .cd-app-run-status {
-  color: var(--danger, #e25555);
-}
-.cd-app-run-when {
-  font-variant-numeric: tabular-nums;
-  color: color-mix(in oklab, var(--ink) 70%, transparent);
-}
-.cd-app-run-trigger,
-.cd-app-run-duration {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: color-mix(in oklab, var(--ink) 50%, transparent);
-}
-.cd-app-run-summary {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: color-mix(in oklab, var(--ink) 65%, transparent);
-}
-.cd-app-run-nodes {
-  padding: 4px 10px 8px;
-  border-top: 1px solid color-mix(in oklab, var(--ink) 6%, transparent);
-}
-.cd-app-run-node {
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
-}
-.cd-app-run-node[data-ok='false'] {
-  background: color-mix(in srgb, var(--danger, #e25555) 6%, transparent);
-}
-.cd-app-run-node-head {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.cd-app-run-node-pos {
-  font-weight: 600;
-  color: color-mix(in oklab, var(--ink) 70%, transparent);
-}
-.cd-app-run-node-kind {
-  text-transform: uppercase;
-  font-size: 9px;
-  color: color-mix(in oklab, var(--ink) 50%, transparent);
-}
-.cd-app-run-node-duration {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: color-mix(in oklab, var(--ink) 50%, transparent);
-}
-.cd-app-run-node-error {
-  margin-top: 4px;
-  color: var(--danger, #e25555);
-  white-space: pre-wrap;
-}
-.cd-app-run-node-payload {
-  margin-top: 4px;
-}
-.cd-app-run-node-payload summary {
-  cursor: pointer;
-  color: color-mix(in oklab, var(--ink) 55%, transparent);
-}
-.cd-app-run-node-payload pre {
-  margin: 4px 0 0;
-  padding: 6px 8px;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  border-radius: 4px;
-  max-height: 180px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* Pinned-run replay + DAG timeline (issue #80 follow-up). */
-.cd-app-runs {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.cd-app-run[data-pinned='true'] {
-  border-color: color-mix(in oklab, var(--accent, #0a84ff) 40%, transparent);
-}
-.cd-app-run-pin-flag {
-  margin-left: 2px;
-}
-.cd-app-run-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding: 0 10px 6px;
-}
-.cd-app-run-pin {
-  font-size: 10px;
-  padding: 2px 9px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in oklab, var(--ink) 18%, transparent);
-  background: none;
-  color: color-mix(in oklab, var(--ink) 65%, transparent);
-  cursor: pointer;
-}
-.cd-app-run-pin:hover {
-  color: var(--ink);
-  border-color: color-mix(in oklab, var(--ink) 35%, transparent);
-}
-.cd-app-run[data-pinned='true'] .cd-app-run-pin {
-  color: var(--accent, #0a84ff);
-  border-color: color-mix(in oklab, var(--accent, #0a84ff) 45%, transparent);
-}
-.cd-app-run-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.cd-app-run-lane {
-  border-left: 2px solid color-mix(in oklab, var(--accent, #0a84ff) 35%, transparent);
-  padding-left: 6px;
-}
-.cd-app-run-lane-label {
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: color-mix(in oklab, var(--accent, #0a84ff) 70%, transparent);
-  margin-bottom: 3px;
-}
-.cd-app-run-lane-nodes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.cd-app-run-lane-nodes > .cd-app-run-node {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-.cd-app-run-node[data-kind='invoke'] {
-  background: color-mix(in oklab, var(--accent, #0a84ff) 7%, transparent);
-}
-.cd-app-run-node-expand {
-  margin-top: 4px;
-  font-family: var(--font-mono, monospace);
-  font-size: 10px;
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  color: var(--accent, #0a84ff);
-}
-.cd-app-run-node-children {
-  margin-top: 4px;
-  padding-left: 8px;
-  border-left: 2px solid color-mix(in oklab, var(--ink) 12%, transparent);
-}
 
 /* Pill toggle — custom, not a native checkbox. Matches the dignity
  * of the surrounding typography; iOS-style affordance reads as
