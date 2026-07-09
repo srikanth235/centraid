@@ -65,24 +65,26 @@ const COMPONENTS = [
     tag: 'kit-avatar',
     name: 'Avatar',
     group: 'Brand',
-    subtitle: 'Letter avatar with a stable hashed hue',
-    viewport: { width: 320, height: 120 },
+    subtitle: 'Letter avatar — hashed hue, or pinned color/initials',
+    viewport: { width: 380, height: 120 },
     body: `<div style="display:flex;gap:12px;align-items:center">
   <kit-avatar name="Ada Lovelace"></kit-avatar>
   <kit-avatar name="Grace Hopper" size="3rem"></kit-avatar>
   <kit-avatar name="Katherine Johnson" shape="rounded"></kit-avatar>
+  <kit-avatar name="You" initials="You" color="#0FA678" size="2.5rem"></kit-avatar>
 </div>`,
   },
   {
     tag: 'kit-meter',
     name: 'Meter',
     group: 'Data',
-    subtitle: 'Slim proportion bar — default / warn / danger',
-    viewport: { width: 320, height: 140 },
+    subtitle: 'Slim proportion bar — default / warn / danger / ok',
+    viewport: { width: 320, height: 170 },
     body: `<div style="display:flex;flex-direction:column;gap:12px;width:240px">
   <kit-meter ratio="0.4"></kit-meter>
   <kit-meter ratio="0.72" tone="warn"></kit-meter>
   <kit-meter ratio="0.95" tone="danger"></kit-meter>
+  <kit-meter ratio="0.85" tone="ok"></kit-meter>
 </div>`,
   },
   {
