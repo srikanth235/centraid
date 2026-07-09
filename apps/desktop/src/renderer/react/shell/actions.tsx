@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
+import type { ConfirmOpts } from './confirm.js';
 import type { ShellMenuAnchor } from './Sidebar.js';
 
 // The cross-cutting action surface the route wrappers consume — the React
@@ -18,6 +19,8 @@ export interface ShellActions {
   openCommandPalette: () => void;
   /** Right-click / ••• menu for an installed app or draft. */
   openContextMenu: (app: AppMetaResolvedType, anchor: ShellMenuAnchor) => void;
+  /** Promise-based confirm dialog (delete flows). */
+  confirm: (opts: ConfirmOpts) => Promise<boolean>;
   /** Navigate — mirrors ShellApp's nav so deep children can route without
    *  threading `nav` all the way down. Set by App.tsx per render. */
   navigate: (route: ShellRoute) => void;

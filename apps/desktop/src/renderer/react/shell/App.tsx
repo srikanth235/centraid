@@ -1,6 +1,7 @@
 import { type JSX, useCallback } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
+import { openConfirm } from './confirm.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import PageScroll from './PageScroll.js';
@@ -19,6 +20,7 @@ import InsightsRoute from './routes/InsightsRoute.js';
 function makeActions(nav: ShellNav): ShellActions {
   return {
     showToast,
+    confirm: openConfirm,
     navigate: nav.navigate,
     enterBuilder: (opts) =>
       nav.navigate({
