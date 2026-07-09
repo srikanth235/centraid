@@ -2,6 +2,7 @@ import { type JSX, useCallback } from 'react';
 import type { ShellRoute } from '../../app-shell-context.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
+import PageScroll from './PageScroll.js';
 import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useAppearance } from './useAppearance.js';
@@ -36,6 +37,13 @@ function renderRoute(nav: ShellNav): JSX.Element {
   switch (nav.route.kind) {
     case 'insights':
       return <InsightsRoute />;
+    case 'starred':
+      // Port of the vanilla renderStarred — a pure empty-state page.
+      return (
+        <PageScroll title="Starred" subtitle="Apps you star show up here for quick access.">
+          <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
+        </PageScroll>
+      );
     default:
       // Staged: ported one-by-one from the vanilla app-*.ts render fns.
       return <PageEmpty message="This screen is being migrated to React." />;

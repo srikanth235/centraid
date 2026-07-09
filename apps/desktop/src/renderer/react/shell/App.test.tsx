@@ -92,6 +92,18 @@ describe('App root', () => {
     expect(el.querySelector('.cd-main-scroll')).not.toBeNull();
   });
 
+  it('renders the Starred empty state natively', async () => {
+    const el = await mount();
+    const starredBtn = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+      b.textContent?.includes('Starred'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      starredBtn.click();
+    });
+    expect(el.textContent).toContain('Nothing starred yet');
+    expect(el.querySelector('.cd-page-head')?.textContent).toContain('Starred');
+  });
+
   it('binds the sidebar toggle to the appearance pref', async () => {
     const el = await mount();
     expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');
