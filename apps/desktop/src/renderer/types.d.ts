@@ -152,83 +152,6 @@ declare global {
     | 'automations'
     | 'settings';
 
-  /**
-   * Renderer-facing profile record fed into the profile switcher's
-   * presentation layer (`window.Profiles`). Since #280 a profile IS a
-   * VAULT: `id` is the vaultId, `name` maps to `core_vault.display_name`,
-   * and `color`/`icon`/`blurb` come from the vault's own presentation
-   * settings — nothing is persisted client-side. `kind` reflects the
-   * hosting CONNECTION (local runtime vs remote endpoint). `appsCount`
-   * is known only for the active profile (others omit it).
-   */
-  interface ProfileView {
-    id: string;
-    name: string;
-    /** `#RRGGBB` avatar color (maps to the vault's presentation settings). */
-    color: string;
-    icon: IconName;
-    blurb: string;
-    kind: 'local' | 'remote';
-    /** True for the ACTIVE vault — the registry refuses to delete it. */
-    primordial: boolean;
-    /** App count, when known (active profile only). */
-    appsCount?: number;
-  }
-
-  /**
-   * Profile switcher presentation API (apps/desktop/src/renderer/profiles.ts).
-   * Owns the avatar, sidebar-head switcher, dropdown, add/edit modal,
-   * delete dialog, toast, and the Settings manage body. All data + IPC
-   * wiring stays in app.ts, which feeds `ProfileView` records in and
-   * receives plain callbacks out.
-   */
-  interface ProfilesApi {
-    readonly PROFILE_COLORS: readonly string[];
-    readonly PROFILE_ICONS: readonly IconName[];
-    readonly DEFAULT_ICON: IconName;
-    /** Normalize a backend icon string into a renderable icon name. */
-    safeIcon: (name: string | undefined) => IconName;
-    avatar: (profile: { icon: IconName; color: string }, size?: number) => HTMLElement;
-    buildSwitcherHeader: (opts: {
-      active: ProfileView;
-      open?: boolean;
-      onToggle: (anchor: DOMRect) => void;
-    }) => HTMLElement;
-    openDropdown: (opts: {
-      anchor: DOMRect;
-      profiles: ProfileView[];
-      activeId: string;
-      onSwitch: (id: string) => void;
-      onEdit: (p: ProfileView) => void;
-      onAdd: () => void;
-      onManage: () => void;
-      /** Other gateway endpoints ("connections", #280). */
-      connections?: Array<{ id: string; name: string; active: boolean; kind: 'local' | 'remote' }>;
-      onSwitchConnection?: (id: string) => void;
-    }) => { close: () => void };
-    openModal: (opts: {
-      mode: 'add' | 'edit';
-      initial: { name?: string; icon?: IconName; color?: string; blurb?: string };
-      onCommit: (data: { name: string; icon: IconName; color: string; blurb: string }) => void;
-      onCancel: () => void;
-      onDelete?: (() => void) | null;
-    }) => { close: () => void };
-    openDeleteDialog: (opts: {
-      profile: ProfileView;
-      onConfirm: () => void;
-      onCancel: () => void;
-    }) => { close: () => void };
-    toast: (opts: { msg: string; kind?: 'ok' | 'del' }) => void;
-    buildManageBody: (opts: {
-      profiles: ProfileView[];
-      activeId: string;
-      onSwitch: (id: string) => void;
-      onEdit: (p: ProfileView) => void;
-      onDelete: (p: ProfileView) => void;
-      onAdd: () => void;
-    }) => HTMLElement;
-  }
-
   interface AppChatMountOptions {
     view: HTMLElement;
     app: AppMetaResolved;
@@ -243,7 +166,6 @@ declare global {
     Store: CentraidStore;
     DateUtil: CentraidDateUtil;
     Centraid: CentraidRoot;
-    Profiles: ProfilesApi;
     AppChat: { mount: (opts: AppChatMountOptions) => () => void };
   }
 
@@ -260,5 +182,4 @@ declare global {
   var Store: CentraidStore;
   var DateUtil: CentraidDateUtil;
   var Centraid: CentraidRoot;
-  var Profiles: ProfilesApi;
 }

@@ -11,8 +11,14 @@ import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
 import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
+import type { ProfileRowDTO } from '../../screen-contracts.js';
 import { importCallbacks, loadProfilesData, phoneCallbacks } from './settingsAccountData.js';
-import { openSpaceModal, requestDeleteSpace, type SpaceModalDeps } from './spaceModals.js';
+import { createSpace, deleteSpace, loadSpaceInitial, saveSpace } from './spaceModals.js';
+import SpaceModal, {
+  DEFAULT_SPACE_ICON,
+  randomSpaceColor,
+  type SpaceModalInitial,
+} from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -60,20 +66,67 @@ export interface SettingsRouteProps {
 export default function SettingsRoute({ prefs, setPrefs, initialPage }: SettingsRouteProps): JSX.Element {
   const [page, setPage] = useState<SettingsPageId>(initialPage ?? 'appearance');
   const def = PAGES.find((p) => p.id === page);
-  const { showToast, navigate } = useShellActions();
+  const { showToast, navigate, confirm } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
   const [spacesNonce, setSpacesNonce] = useState(0);
   const spaces = useAsyncData(loadProfilesData, [spacesNonce]);
-  const spaceDeps: SpaceModalDeps = useMemo(
-    () => ({
-      onChanged: () => setSpacesNonce((n) => n + 1),
-      navigateHome: () => navigate({ kind: 'home' }),
-    }),
-    [navigate],
-  );
+  const refreshSpaces = (): void => setSpacesNonce((n) => n + 1);
+  // The add/rename modal state (null = closed). `row` is set for edit/delete.
+  const [spaceModal, setSpaceModal] = useState<{
+    mode: 'add' | 'edit';
+    row?: ProfileRowDTO;
+    initial: SpaceModalInitial;
+  } | null>(null);
+
+  const openAddSpace = (): void =>
+    setSpaceModal({ mode: 'add', initial: { icon: DEFAULT_SPACE_ICON, color: randomSpaceColor() } });
+  const openEditSpace = (row: ProfileRowDTO): void => {
+    void loadSpaceInitial(row).then((initial) => setSpaceModal({ mode: 'edit', row, initial }));
+  };
+  const removeSpace = (row: ProfileRowDTO): void => {
+    void (async () => {
+      const ok = await confirm({
+        title: 'Delete space?',
+        message: `Delete "${row.name}"? Its vault and everything in it are removed. This can’t be undone.`,
+        confirmLabel: 'Delete',
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        await deleteSpace(row.id);
+        showToast(`Deleted · ${row.name}`);
+        refreshSpaces();
+      } catch (err) {
+        showToast(`Delete failed: ${String(err)}`);
+      }
+    })();
+  };
+  const commitSpace = (data: Parameters<typeof createSpace>[0]): void => {
+    const modal = spaceModal;
+    if (!modal) return;
+    void (async () => {
+      try {
+        if (modal.mode === 'add') {
+          await createSpace(data);
+          setSpaceModal(null);
+          showToast(`Space created · ${data.name}`);
+          refreshSpaces();
+          navigate({ kind: 'home' });
+        } else if (modal.row) {
+          await saveSpace(modal.row.id, data);
+          setSpaceModal(null);
+          showToast(`Saved · ${data.name}`);
+          refreshSpaces();
+        }
+      } catch (err) {
+        showToast(`Save failed: ${String(err)}`);
+      }
+    })();
+  };
 
   return (
+    <>
     <div className="cd-settings-main">
       <aside className="cd-settings-nav">
         <div className="cd-settings-nav-head">
@@ -165,16 +218,16 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
                 onSwitch={(id) => void window.CentraidApi.setActiveVault({ vaultId: id })}
                 onConnect={(id) => void window.CentraidApi.setActiveGateway({ id })}
                 onRemoveConnection={(id) => void window.CentraidApi.removeGateway({ id })}
-                // Add / rename / delete open the vanilla `window.Profiles` modal
-                // cluster; the gateway I/O + re-scope live in spaceModals.ts.
-                onAdd={() => openSpaceModal('add', undefined, spaceDeps)}
+                // Add / rename / delete drive the React <SpaceModal> below; the
+                // gateway I/O + re-scope live in spaceModals.ts.
+                onAdd={openAddSpace}
                 onEdit={(id) => {
                   const row = spaces.data.profiles.find((p) => p.id === id);
-                  if (row) openSpaceModal('edit', row, spaceDeps);
+                  if (row) openEditSpace(row);
                 }}
                 onDelete={(id) => {
                   const row = spaces.data.profiles.find((p) => p.id === id);
-                  if (row) requestDeleteSpace(row, spaceDeps);
+                  if (row) removeSpace(row);
                 }}
               />
             )
@@ -184,5 +237,23 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
         </div>
       </section>
     </div>
+    {spaceModal ? (
+      <SpaceModal
+        mode={spaceModal.mode}
+        initial={spaceModal.initial}
+        onCancel={() => setSpaceModal(null)}
+        onCommit={commitSpace}
+        {...(spaceModal.mode === 'edit' && spaceModal.row && !spaceModal.row.primordial
+          ? {
+              onDelete: () => {
+                const row = spaceModal.row!;
+                setSpaceModal(null);
+                removeSpace(row);
+              },
+            }
+          : {})}
+      />
+    ) : null}
+    </>
   );
 }
