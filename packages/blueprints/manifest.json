@@ -648,7 +648,8 @@
         "queries/items.js",
         "queries/search.js",
         "queries/trash.js",
-        "queries/watchtower.js"
+        "queries/watchtower.js",
+        "wall.css"
       ],
       "appKnobs": [
         {
@@ -726,7 +727,8 @@
         "queries/friend.js",
         "queries/group.js",
         "queries/search.js",
-        "seed.js"
+        "seed.js",
+        "wall.css"
       ],
       "appKnobs": [
         {

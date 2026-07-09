@@ -414,6 +414,10 @@ kit-reference-strip {
 .kit-bar-fill[data-tone='warn'] {
   background: var(--warn, #d97706);
 }
+/* Healthy / passing reading (e.g. a strong password). */
+.kit-bar-fill[data-tone='ok'] {
+  background: var(--ok, #16a34a);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .kit-bar-fill {

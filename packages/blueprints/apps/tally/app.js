@@ -9,7 +9,16 @@
 // Every write is a typed vault command — consent-checked and receipted. The
 // app stores nothing of its own: revoke the grant and this page goes dark.
 
-import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  debounce,
+  fmtMoney,
+  localDayKey,
+  outcomeMessage,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -93,10 +102,10 @@ function tint(color) {
 
 // ---------- Formatting (money is minor units end-to-end) ----------
 
-// Mirror the prototype: "$X.XX" of the absolute value, in cents.
+// Absolute value, localized via the kit — the dashboard's currency, not a
+// hardcoded "$" (callers phrase direction themselves: "owes you …").
 function money(minor) {
-  const v = Math.abs(Number(minor ?? 0)) / 100;
-  return '$' + v.toFixed(2);
+  return fmtMoney(Math.abs(Number(minor ?? 0)), dash.currency || 'USD');
 }
 // Parse a decimal-dollar string → integer cents.
 function toCents(str) {
@@ -104,12 +113,8 @@ function toCents(str) {
   if (!Number.isFinite(n)) return NaN;
   return Math.round(n * 100);
 }
-function pad(n) {
-  return (n < 10 ? '0' : '') + n;
-}
 function todayKey() {
-  const d = new Date();
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  return localDayKey(new Date());
 }
 function first(name) {
   return String(name ?? '').split(/\s+/)[0] || name || '';
@@ -163,15 +168,7 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  } else {
-    notice(outcomeMessage(outcome) ?? 'The write did not go through.');
-  }
+  notice(outcomeMessage(outcome) ?? 'The write did not go through.');
   return false;
 }
 

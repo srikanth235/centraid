@@ -210,13 +210,7 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it will appear once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  }
+  notice(outcomeMessage(outcome) ?? '');
   return false;
 }
 
@@ -1165,13 +1159,9 @@ $('proposeForm').addEventListener('submit', async (e) => {
     setSmartDefaults();
     toast('Event proposed.');
     await load();
-  } else if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it will appear once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-    await load();
+  } else {
+    notice(outcomeMessage(outcome) ?? '');
+    if (outcome?.status === 'denied') await load();
   }
 });
 

@@ -634,17 +634,10 @@ textarea {
   gap: 10px;
   margin-top: 10px;
 }
-.v-strbar {
+/* The bar itself is the kit meter (<kit-meter> → .kit-bar); it only needs
+   to stretch across the row here. */
+.v-strength .kit-bar {
   flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-.v-strbar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
 }
 /* TOTP */
 .v-otp {
@@ -732,36 +725,6 @@ textarea {
   letter-spacing: 0.05em;
   padding: 3px 8px;
   border-radius: 5px;
-}
-
-/* Toast */
-.v-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  z-index: 80;
-  background: var(--ink);
-  color: var(--bg-elev);
-  padding: 10px 18px;
-  border-radius: 999px;
-  font: var(--t-strong);
-  font-size: 13px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  animation: v-toast 0.2s var(--ease);
-}
-@keyframes v-toast {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
 }
 
 /* Modal */

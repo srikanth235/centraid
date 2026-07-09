@@ -12,7 +12,9 @@ import {
   appendWithChips,
   armConfirm,
   attachMentionField,
+  debounce,
   inlineLinkIds,
+  outcomeMessage,
   readFailed,
   relTime,
   removeReference,
@@ -66,20 +68,16 @@ function narrate(outcome, onDenied, friendly) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
+  if (outcome?.status === 'failed' && friendly) {
     const predicate = String(outcome.predicate ?? '');
-    const known = friendly ? Object.keys(friendly).find((k) => predicate.includes(k)) : undefined;
-    notice(
-      known
-        ? friendly[known]
-        : `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
-    );
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-    if (onDenied) onDenied();
+    const known = Object.keys(friendly).find((k) => predicate.includes(k));
+    if (known) {
+      notice(friendly[known]);
+      return false;
+    }
   }
+  if (outcome?.status === 'denied' && onDenied) onDenied();
+  notice(outcomeMessage(outcome) ?? '');
   return false;
 }
 
@@ -461,11 +459,10 @@ function snippetInto(el, snippet) {
 // app never greps an unbounded table in memory. `searchSeq` drops stale
 // replies when the owner types faster than the vault answers.
 const searchInput = $('searchInput');
-let searchDebounce = 0;
 let searchSeq = 0;
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(async () => {
+searchInput.addEventListener(
+  'input',
+  debounce(async () => {
     const raw = searchInput.value.trim();
     searchTerm = raw.toLowerCase();
     if (!raw) {
@@ -484,8 +481,8 @@ searchInput.addEventListener('input', () => {
     if (seq !== searchSeq) return;
     searchResults = rows;
     renderNotes();
-  }, 120);
-});
+  }, 120),
+);
 
 function clearSearch() {
   searchInput.value = '';

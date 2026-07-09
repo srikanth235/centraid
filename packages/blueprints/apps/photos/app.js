@@ -9,7 +9,15 @@
 // asset. The app stores nothing: revoke the grant and this page goes dark
 // while the library remains the owner's.
 
-import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  debounce,
+  localDayKey,
+  outcomeMessage,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -80,17 +88,15 @@ async function act(action, input) {
 // ---------- Formatting ----------
 
 function dayKey(iso) {
-  return String(iso ?? '').slice(0, 10);
-}
-
-function isoDayOffset(days) {
-  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+  // Local wall-clock bucketing (kit localDayKey), never the UTC slice — an
+  // evening photo must not land on tomorrow's stack.
+  return iso ? localDayKey(iso) : '';
 }
 
 function fmtDay(key) {
   if (!key) return 'Undated';
-  if (key === isoDayOffset(0)) return 'Today';
-  if (key === isoDayOffset(-1)) return 'Yesterday';
+  if (key === localDayKey(new Date())) return 'Today';
+  if (key === localDayKey(new Date(Date.now() - 86400000))) return 'Yesterday';
   try {
     return new Date(`${key}T00:00:00`).toLocaleDateString(undefined, {
       weekday: 'short',

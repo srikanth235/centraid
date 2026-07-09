@@ -12,6 +12,7 @@ import {
   attachMentionField,
   debounce,
   inlineLinkIds,
+  localDayKey,
   outcomeMessage,
   readFailed,
   removeReference,
@@ -41,16 +42,13 @@ let searchSnippets = null; // task_id → ⟦…⟧ hit snippet for the matched 
 let readFailedShown = false;
 
 function todayStr() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localDayKey(new Date());
 }
 
 function plusDays(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localDayKey(d);
 }
 
 function fmtDay(iso) {

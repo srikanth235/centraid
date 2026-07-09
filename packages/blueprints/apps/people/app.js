@@ -12,7 +12,15 @@
 // and the drawer grows small "+ add" affordances (tasks, gifts, dates,
 // relationships, debts) alongside the notes input the prototype shipped.
 
-import { armConfirm, debounce, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  debounce,
+  fmtMoney,
+  outcomeMessage,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -140,13 +148,7 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  }
+  notice(outcomeMessage(outcome) ?? '');
   return false;
 }
 
@@ -1768,8 +1770,8 @@ function renderDetails() {
       net === 0
         ? 'settled'
         : net > 0
-          ? `net owes you $${(net / 100).toFixed(2)}`
-          : `net you owe $${(-net / 100).toFixed(2)}`;
+          ? `net owes you ${fmtMoney(net, 'USD')}`
+          : `net you owe ${fmtMoney(-net, 'USD')}`;
     const netEl = h(
       'span',
       {
@@ -1782,7 +1784,7 @@ function renderDetails() {
       const kv = h('div', { class: 'd-kv' });
       for (const b of debts) {
         const owe = b.direction === 'owe';
-        const amount = `$${(b.amount_minor / 100).toFixed(2)}`;
+        const amount = fmtMoney(b.amount_minor, 'USD');
         kv.appendChild(
           h(
             'div',

@@ -11,7 +11,15 @@
 // Every write is a typed vault command — consent-checked and receipted. The app
 // stores nothing of its own: revoke the grant and this page goes dark.
 
-import { armConfirm, debounce, outcomeMessage, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  barSpan,
+  debounce,
+  outcomeMessage,
+  readFailed,
+  showSkeleton,
+  toast,
+} from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -157,15 +165,7 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  } else {
-    notice(outcomeMessage(outcome) ?? 'The write did not go through.');
-  }
+  notice(outcomeMessage(outcome) ?? 'The write did not go through.');
   return false;
 }
 
@@ -212,20 +212,21 @@ function purgeCountdown(iso) {
 
 // ---------- Secret helpers (strength, TOTP, generator) ----------
 
-// Length + character-class score, 0..5 → { pct, label, color }. Mirrors the
-// server's strengthScore so the meter agrees with Watchtower's "weak".
+// Length + character-class score, 0..5 → { ratio, tone, label, color } for a
+// kit-meter + label. Mirrors the server's strengthScore so the meter agrees
+// with Watchtower's "weak".
 function strength(pw) {
-  if (!pw) return { pct: '0%', label: '', color: 'var(--ink-3)' };
+  if (!pw) return { ratio: 0, tone: '', label: '', color: 'var(--ink-3)' };
   let s = 0;
   if (pw.length >= 8) s++;
   if (pw.length >= 14) s++;
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
   if (/[0-9]/.test(pw)) s++;
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  const pct = Math.min(100, (s / 5) * 100);
   const label = s <= 2 ? 'Weak' : s === 3 ? 'Fair' : s === 4 ? 'Good' : 'Strong';
+  const tone = s <= 2 ? 'danger' : s === 3 ? 'warn' : 'ok';
   const color = s <= 2 ? 'var(--danger)' : s === 3 ? 'var(--warn)' : 'var(--ok)';
-  return { pct: pct + '%', label, color };
+  return { ratio: s / 5, tone, label, color };
 }
 
 // Real RFC-6238 TOTP, computed client-side after the seed is read. base32
@@ -984,9 +985,7 @@ function fieldRow(f) {
   if (f.strength && revealed && f.val) {
     const st = strength(f.val);
     const meter = h('div', { class: 'v-strength' });
-    const bar = h('div', { class: 'v-strbar' });
-    bar.appendChild(h('i', { style: `width:${st.pct};background:${st.color};` }));
-    meter.appendChild(bar);
+    meter.appendChild(barSpan(st.ratio, { tone: st.tone }));
     meter.appendChild(
       h('span', { style: `font:var(--t-mono);font-size:10px;color:${st.color};` }, st.label),
     );
@@ -1086,9 +1085,7 @@ function renderGenerator(root) {
 
   const st = strength(state.genValue);
   const meter = h('div', { class: 'v-strength' });
-  const bar = h('div', { class: 'v-strbar' });
-  bar.appendChild(h('i', { style: `width:${st.pct};background:${st.color};` }));
-  meter.appendChild(bar);
+  meter.appendChild(barSpan(st.ratio, { tone: st.tone }));
   meter.appendChild(
     h('span', { style: `font:var(--t-mono);font-size:10px;color:${st.color};` }, st.label),
   );

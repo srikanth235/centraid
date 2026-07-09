@@ -214,9 +214,10 @@ export function lineChart(points, { width = 640, height = 160, label = 'Trend' }
 }
 
 /** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
-export function barSpan(ratio) {
+export function barSpan(ratio, { tone } = {}) {
   const el = document.createElement('kit-meter');
   el.ratio = ratio;
+  if (tone) el.tone = tone;
   return el;
 }
 

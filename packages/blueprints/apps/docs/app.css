@@ -458,19 +458,6 @@ button {
   font-size: 10.5px;
   color: var(--ink-3);
 }
-.d-storage-bar {
-  height: 6px;
-  border-radius: var(--r-pill);
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-.d-storage-bar > i {
-  display: block;
-  height: 100%;
-  border-radius: var(--r-pill);
-  background: var(--accd);
-  transition: width 0.35s var(--ease);
-}
 .d-storage-label {
   font: var(--t-small);
   color: var(--ink-2);
