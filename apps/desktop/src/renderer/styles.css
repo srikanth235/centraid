@@ -806,10 +806,12 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 .ab-progress-main {
   flex: 1;
@@ -2430,10 +2432,12 @@ select.input option {
 }
 @media (max-width: 720px) {
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 /* Caps section label — "Status" / "Recent activity" headings that sit
    above the stat grid and the activity feed on the Cloud Overview. */
@@ -4289,206 +4293,13 @@ select.input option {
 }
 
 /* Head row */
-.cd-prof-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 8px;
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms;
-}
-.cd-prof-head:hover {
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-}
-.cd-prof-head[data-open='true'] {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-.cd-prof-head-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-prof-head-name {
-  display: block;
-  font: var(--t-title);
-  font-weight: 600;
-  font-size: 13.5px;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-prof-head-sub {
-  display: block;
-  margin-top: 1px;
-  font: var(--t-mono);
-  font-size: 10px;
-  color: var(--ink-4);
-}
-.cd-prof-head-chev {
-  flex-shrink: 0;
-  display: inline-flex;
-  color: var(--ink-4);
-}
 
 /* Dropdown */
-.cd-prof-pop-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  background: transparent;
-}
-.cd-prof-pop {
-  position: fixed;
-  z-index: 1101;
-  width: 256px;
-  max-width: calc(100vw - 16px);
-  padding: 6px;
-  border-radius: 13px;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.2),
-    0 22px 60px -16px rgba(0, 0, 0, 0.5);
-  animation: cd-pop 140ms cubic-bezier(0.2, 0.7, 0.3, 1.4);
-}
-.cd-prof-pop-eyebrow {
-  font-size: 9.5px;
-  padding: 5px 9px 6px;
-}
-.cd-prof-pop-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.cd-prof-pop-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  background: transparent;
-  transition: background 100ms;
-}
-.cd-prof-pop-row:hover,
-.cd-prof-pop-row:focus-visible {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  outline: none;
-}
-.cd-prof-pop-row[data-active='true'] {
-  background: color-mix(in srgb, var(--accent) 11%, transparent);
-}
-.cd-prof-pop-text {
-  flex: 1;
-  min-width: 0;
-}
-.cd-prof-pop-name {
-  display: block;
-  font: var(--t-title);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-prof-pop-sub {
-  display: block;
-  margin-top: 1px;
-  font: var(--t-small);
-  font-size: 11px;
-  color: var(--ink-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.cd-prof-pop-edit {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: none;
-  display: none;
-  place-items: center;
-  cursor: pointer;
-  background: color-mix(in srgb, var(--ink) 8%, transparent);
-  color: var(--ink-2);
-}
-.cd-prof-pop-row:hover .cd-prof-pop-edit,
-.cd-prof-pop-row:focus-within .cd-prof-pop-edit {
-  display: grid;
-}
 /* On hover/focus the edit button becomes the trailing slot, so the
    check/spacer must collapse — otherwise the pencil is pushed left and
    misaligns row-to-row. */
-.cd-prof-pop-row:hover .cd-prof-pop-check,
-.cd-prof-pop-row:focus-within .cd-prof-pop-check,
-.cd-prof-pop-row:hover .cd-prof-pop-spacer,
-.cd-prof-pop-row:focus-within .cd-prof-pop-spacer {
-  display: none;
-}
 /* Edit, check, and spacer share an identical 24px trailing box so the
    trailing column lines up across every row in every state. */
-.cd-prof-pop-check {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  color: var(--accent);
-}
-.cd-prof-pop-spacer {
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-}
-.cd-prof-pop-divider {
-  height: 0.5px;
-  margin: 6px;
-  background: var(--line);
-}
-.cd-prof-pop-action {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 7px 8px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  background: transparent;
-  color: var(--ink);
-  text-align: left;
-  font: var(--t-body);
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 100ms;
-}
-.cd-prof-pop-action:hover,
-.cd-prof-pop-action:focus-visible {
-  background: color-mix(in srgb, var(--ink) 6%, transparent);
-  outline: none;
-}
-.cd-prof-pop-action--muted {
-  color: var(--ink-2);
-}
-.cd-prof-pop-action-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--ink) 5%, transparent);
-  color: var(--ink-2);
-}
 
 /* Overlays — modal + dialog share the centered scrim shell */
 .cd-prof-overlay {
@@ -4701,110 +4512,8 @@ select.input option {
 }
 
 /* Delete dialog */
-.cd-prof-dialog {
-  position: relative;
-  width: 392px;
-  max-width: 100%;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 16px;
-  box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.25),
-    0 32px 80px -20px rgba(0, 0, 0, 0.6);
-  padding: 22px 22px 18px;
-  animation: cd-pop 180ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.cd-prof-dialog-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.cd-prof-dialog-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-  color: var(--danger);
-}
-.cd-prof-dialog-title {
-  margin: 0;
-  font: var(--t-h3);
-  font-size: 15.5px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.01em;
-}
-.cd-prof-dialog-body {
-  margin: 14px 0 0;
-  font: var(--t-body);
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--ink-3);
-}
-.cd-prof-dialog-body b {
-  color: var(--ink-2);
-  font-weight: 600;
-}
-.cd-prof-dialog-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-  margin-top: 20px;
-}
-.cd-prof-dialog-confirm {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 16px;
-  border-radius: 8px;
-  border: none;
-  background: var(--danger);
-  color: #fff;
-  font: var(--t-body);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
 
 /* Toast */
-.cd-prof-toast {
-  position: fixed;
-  bottom: 22px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 1300;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 14px;
-  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  border: 0.5px solid var(--line);
-  border-radius: 999px;
-  box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.45);
-  font: var(--t-body);
-  font-size: 12.5px;
-  color: var(--ink);
-  animation: cd-pop 200ms cubic-bezier(0.2, 0.7, 0.3, 1);
-}
-.cd-prof-toast-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: color-mix(in srgb, var(--success) 22%, transparent);
-  color: var(--success);
-}
-.cd-prof-toast[data-kind='del'] .cd-prof-toast-icon {
-  background: color-mix(in srgb, var(--danger) 20%, transparent);
-  color: var(--danger);
-}
 
 /* Settings → Account → Profiles manage cards */
 .cd-prof-manage {
@@ -6762,11 +6471,13 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 /* Enumerated empty / CLI unavailable — muted, not an error. */
 .app-chat-am-empty {
@@ -7149,10 +6860,12 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 .ab-diff-ribbon {
   display: inline-flex;
@@ -7730,10 +7443,12 @@ select.input option {
 }
 @media (prefers-reduced-motion: reduce) {
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 /* Trigger badge — cron-clock / webhook glyph + schedule label. */
 .cd-au-trigbadge {
