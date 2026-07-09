@@ -23,14 +23,13 @@ import {
   type VaultListEntry,
 } from './gateway-client.js';
 import {
-  chevronDown,
   colorForIcon,
   relativeTime,
   tileVisualFromListing,
   triggersSummary,
 } from './app-format.js';
-import { buildLayoutToggle } from './app-glyphs.js';
 import { auStatusForRow, glyphForId, hueForId } from './automation-identity.js';
+import { requireReactBridge } from './react/bridge.js';
 import type { AuStatusKind, HomeAppItemDTO, HomeAutoItemDTO } from './react/bridge.js';
 import { ACCENT_PALETTE } from './app-shell-context.js';
 import type {
@@ -986,233 +985,166 @@ import { createAppViewModule } from './app-appview.js';
     // is loaded. The vanilla shell derives the card DTOs + owns the context/more
     // menus and the gateway I/O through the callbacks; React renders. The
     // vanilla `renderDay1Home` below is the fallback.
-    const homeBridge = window.CentraidReact;
-    if (homeBridge?.mountHome) {
-      const apps = [...getApps(), ...drafts];
-      const runs = runEntries
-        .filter((e) => e.automationId)
-        .slice()
-        .sort((a, b) => b.run.startedAt - a.run.startedAt);
-      const lastByRef = new Map<string, AutomationFeedEntry>();
-      for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
-      let attention = 0;
-      for (const r of automationRows) {
-        const last = lastByRef.get(r.ref);
-        if (last && !last.run.ok) attention += 1;
-      }
-      const recent = (iso?: string): boolean => {
-        if (!iso) return false;
-        const t = new Date(iso).getTime();
-        return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
-      };
-      const AU_LABEL: Record<AuStatusKind, string> = {
-        active: 'Active',
-        draft: 'Draft',
-        failed: 'Failed',
-        paused: 'Paused',
-        running: 'Running',
-        success: 'Success',
-      };
-      const appItems: HomeAppItemDTO[] = apps.map((a) => {
-        const draft = isDraft(a);
-        const ua = draft ? undefined : findUserApp(a.id);
-        const tone = draft ? 'draft' : recent(ua?.createdAt) ? 'new' : null;
-        const finish = window.CentraidTokens.tileFinish(a.color, prefs.tileVariant);
-        return {
-          desc: a.desc || '',
-          draft,
-          iconKey: a.iconKey,
-          id: a.id,
-          name: a.name,
-          starred: isStarred(a.id),
-          stamp: draft ? 'saved' : relativeTime(ua?.updatedAt),
-          tile: {
-            background: finish.background,
-            boxShadow: finish.boxShadow,
-            glyphColor: finish.glyphColor,
-          },
-          tone,
-        };
-      });
-      const automationItems: HomeAutoItemDTO[] = automationRows.map((row) => {
-        const last = lastByRef.get(row.ref);
-        const isWebhook =
-          row.triggers.some((t) => t.kind === 'webhook') &&
-          !row.triggers.some((t) => t.kind === 'cron');
-        const statusKind = auStatusForRow(row.enabled, !!last) as AuStatusKind;
-        return {
-          blurb: row.manifest.description || triggersSummary(row.triggers),
-          footOk: !!last?.run.ok,
-          footTimeLabel: last
-            ? relativeTime(new Date(last.run.startedAt).toISOString())
-            : 'No runs yet',
-          glyphIcon: glyphForId(row.id),
-          hue: hueForId(row.id),
-          integrations: [...(row.manifest.requires.mcps ?? [])],
-          name: row.name,
-          ref: row.ref,
-          starred: isStarred(row.ref),
-          statusKind,
-          statusLabel: AU_LABEL[statusKind],
-          triggerIcon: isWebhook ? 'Webhook' : 'Clock',
-          triggerLabel: triggersSummary(row.triggers),
-        };
-      });
-      registerCleanup(
-        homeBridge.mountHome(scroll, {
-          appItems,
-          attention,
-          automationItems,
-          counts: {
-            all: apps.length + automationRows.length,
-            apps: apps.length,
-            automations: automationRows.length,
-          },
-          dateLabel: heroDateLabel(),
-          onAppContext: (id, anchor) => {
-            const a = apps.find((x) => x.id === id);
-            if (a) openContextMenu(a, anchor as Parameters<typeof openContextMenu>[1]);
-          },
-          onAutomationMenu: (ref, anchor) => {
-            const row = automationRows.find((r) => r.ref === ref);
-            if (!row) return;
-            const isStar = isStarred(ref);
-            cardsMod.openMenu(
-              [
-                { icon: 'Eye', id: 'open', label: 'Open' },
-                { icon: 'Play', id: 'run', label: 'Run now' },
-                { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
-                { icon: 'Star', id: 'star', label: isStar ? 'Unstar' : 'Star' },
-                'sep',
-                { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
-              ],
-              anchor as Parameters<typeof cardsMod.openMenu>[1],
-              (menuId) => {
-                if (menuId === 'open') renderAutomationView(row.ref);
-                else if (menuId === 'run')
-                  void runAutomationNow({ automationId: row.ref })
-                    .then(({ runId }) => autoMod.renderRunView(row.ref, runId))
-                    .catch((err: unknown) =>
-                      showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
-                    );
-                else if (menuId === 'edit') enterAutomationBuilder({ automationId: row.id });
-                else if (menuId === 'star') {
-                  toggleStar(row.ref);
-                  renderHome();
-                } else if (menuId === 'delete')
-                  void cardsMod
-                    .openConfirm({
-                      confirmLabel: 'Delete',
-                      danger: true,
-                      message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-                      title: 'Delete automation?',
-                    })
-                    .then((ok) => {
-                      if (!ok) return;
-                      void deleteAutomation({ automationId: row.ref })
-                        .then(() => {
-                          showToast(`Deleted "${row.name}"`);
-                          renderHome();
-                        })
-                        .catch((err: unknown) =>
-                          showToast(
-                            `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
-                          ),
-                        );
-                    });
-              },
-            );
-          },
-          onBrowseTemplates: () => renderDiscover(),
-          onBuild: (p) => enterBuilder({ initialPrompt: p }),
-          onEnterDraft: (id) => {
-            const a = apps.find((x) => x.id === id);
-            if (a) enterBuilder({ appContext: a });
-          },
-          onOpenApp: (id) => openApp(id),
-          onOpenAutomation: (ref) => renderAutomationView(ref),
-          suggestions: [...HERO_SUGGESTIONS],
-        }),
-      );
-      const sidebarR = buildHomeSidebar({ page: 'home' });
-      const built = window.Chrome.buildWindow({
-        ...chromeNav(),
-        main,
-        onNewChat: openNewAppSheet,
-        onToggleSidebar: toggleSidebar,
-        showNewChat: true,
-        sidebar: sidebarR,
-        sidebarOpen: prefs.sidebarOpen,
-      });
-      currentSetSidebarOpen = built.setSidebarOpen;
-      root.replaceChildren(built.root);
-      return;
+    const homeBridge = requireReactBridge();
+    const apps = [...getApps(), ...drafts];
+    const runs = runEntries
+      .filter((e) => e.automationId)
+      .slice()
+      .sort((a, b) => b.run.startedAt - a.run.startedAt);
+    const lastByRef = new Map<string, AutomationFeedEntry>();
+    for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
+    let attention = 0;
+    for (const r of automationRows) {
+      const last = lastByRef.get(r.ref);
+      if (last && !last.run.ok) attention += 1;
     }
-
-    // Home is always the composer-led layout — centered composer hero +
-    // tabbed discovery shelf — regardless of how many apps exist. The
-    // shelf's "Browse all →" is the only path to the alternate (Discover)
-    // page; the workspace never auto-switches based on app count.
-    renderDay1Home(scroll, automationRows, runEntries);
-
-    const sidebar = buildHomeSidebar({ page: 'home' });
-    const { root: shell, setSidebarOpen } = window.Chrome.buildWindow({
+    const recent = (iso?: string): boolean => {
+      if (!iso) return false;
+      const t = new Date(iso).getTime();
+      return !Number.isNaN(t) && Date.now() - t < 24 * 60 * 60 * 1000;
+    };
+    const AU_LABEL: Record<AuStatusKind, string> = {
+      active: 'Active',
+      draft: 'Draft',
+      failed: 'Failed',
+      paused: 'Paused',
+      running: 'Running',
+      success: 'Success',
+    };
+    const appItems: HomeAppItemDTO[] = apps.map((a) => {
+      const draft = isDraft(a);
+      const ua = draft ? undefined : findUserApp(a.id);
+      const tone = draft ? 'draft' : recent(ua?.createdAt) ? 'new' : null;
+      const finish = window.CentraidTokens.tileFinish(a.color, prefs.tileVariant);
+      return {
+        desc: a.desc || '',
+        draft,
+        iconKey: a.iconKey,
+        id: a.id,
+        name: a.name,
+        starred: isStarred(a.id),
+        stamp: draft ? 'saved' : relativeTime(ua?.updatedAt),
+        tile: {
+          background: finish.background,
+          boxShadow: finish.boxShadow,
+          glyphColor: finish.glyphColor,
+        },
+        tone,
+      };
+    });
+    const automationItems: HomeAutoItemDTO[] = automationRows.map((row) => {
+      const last = lastByRef.get(row.ref);
+      const isWebhook =
+        row.triggers.some((t) => t.kind === 'webhook') &&
+        !row.triggers.some((t) => t.kind === 'cron');
+      const statusKind = auStatusForRow(row.enabled, !!last) as AuStatusKind;
+      return {
+        blurb: row.manifest.description || triggersSummary(row.triggers),
+        footOk: !!last?.run.ok,
+        footTimeLabel: last
+          ? relativeTime(new Date(last.run.startedAt).toISOString())
+          : 'No runs yet',
+        glyphIcon: glyphForId(row.id),
+        hue: hueForId(row.id),
+        integrations: [...(row.manifest.requires.mcps ?? [])],
+        name: row.name,
+        ref: row.ref,
+        starred: isStarred(row.ref),
+        statusKind,
+        statusLabel: AU_LABEL[statusKind],
+        triggerIcon: isWebhook ? 'Webhook' : 'Clock',
+        triggerLabel: triggersSummary(row.triggers),
+      };
+    });
+    registerCleanup(
+      homeBridge.mountHome(scroll, {
+        appItems,
+        attention,
+        automationItems,
+        counts: {
+          all: apps.length + automationRows.length,
+          apps: apps.length,
+          automations: automationRows.length,
+        },
+        dateLabel: heroDateLabel(),
+        onAppContext: (id, anchor) => {
+          const a = apps.find((x) => x.id === id);
+          if (a) openContextMenu(a, anchor as Parameters<typeof openContextMenu>[1]);
+        },
+        onAutomationMenu: (ref, anchor) => {
+          const row = automationRows.find((r) => r.ref === ref);
+          if (!row) return;
+          const isStar = isStarred(ref);
+          cardsMod.openMenu(
+            [
+              { icon: 'Eye', id: 'open', label: 'Open' },
+              { icon: 'Play', id: 'run', label: 'Run now' },
+              { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
+              { icon: 'Star', id: 'star', label: isStar ? 'Unstar' : 'Star' },
+              'sep',
+              { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
+            ],
+            anchor as Parameters<typeof cardsMod.openMenu>[1],
+            (menuId) => {
+              if (menuId === 'open') renderAutomationView(row.ref);
+              else if (menuId === 'run')
+                void runAutomationNow({ automationId: row.ref })
+                  .then(({ runId }) => autoMod.renderRunView(row.ref, runId))
+                  .catch((err: unknown) =>
+                    showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`),
+                  );
+              else if (menuId === 'edit') enterAutomationBuilder({ automationId: row.id });
+              else if (menuId === 'star') {
+                toggleStar(row.ref);
+                renderHome();
+              } else if (menuId === 'delete')
+                void cardsMod
+                  .openConfirm({
+                    confirmLabel: 'Delete',
+                    danger: true,
+                    message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
+                    title: 'Delete automation?',
+                  })
+                  .then((ok) => {
+                    if (!ok) return;
+                    void deleteAutomation({ automationId: row.ref })
+                      .then(() => {
+                        showToast(`Deleted "${row.name}"`);
+                        renderHome();
+                      })
+                      .catch((err: unknown) =>
+                        showToast(
+                          `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+                        ),
+                      );
+                  });
+            },
+          );
+        },
+        onBrowseTemplates: () => renderDiscover(),
+        onBuild: (p) => enterBuilder({ initialPrompt: p }),
+        onEnterDraft: (id) => {
+          const a = apps.find((x) => x.id === id);
+          if (a) enterBuilder({ appContext: a });
+        },
+        onOpenApp: (id) => openApp(id),
+        onOpenAutomation: (ref) => renderAutomationView(ref),
+        suggestions: [...HERO_SUGGESTIONS],
+      }),
+    );
+    const sidebarR = buildHomeSidebar({ page: 'home' });
+    const built = window.Chrome.buildWindow({
       ...chromeNav(),
       main,
       onNewChat: openNewAppSheet,
       onToggleSidebar: toggleSidebar,
       showNewChat: true,
-      sidebar,
+      sidebar: sidebarR,
       sidebarOpen: prefs.sidebarOpen,
     });
-    currentSetSidebarOpen = setSidebarOpen;
-    // Atomic swap: replace the old view with the freshly-built shell in a
-    // single mutation, so there's never a blank frame between the two.
-    root.replaceChildren(shell);
+    currentSetSidebarOpen = built.setSidebarOpen;
+    root.replaceChildren(built.root);
   }
-
-  // Home: centered composer hero, then ONE unified "library" shelf that clubs
-  // the user's apps and automations together — mirroring Discover. A segmented
-  // All / Apps / Automations filter sits in the shelf header; below it the two
-  // kinds render as kind-grouped sections of matching cards.
-  function renderDay1Home(
-    scroll: HTMLElement,
-    automationRows: CentraidAutomationRow[],
-    runEntries: AutomationFeedEntry[],
-  ): void {
-    scroll.classList.add('cd-day1-scroll');
-    scroll.append(buildHomeHero());
-    scroll.append(buildHomeLibrary(automationRows, runEntries));
-  }
-
-  // Shared composer behaviour — wires submit/keydown onto a textarea +
-  // build button pair. Used by the Day-1 hero.
-  function wireComposer(ta: HTMLTextAreaElement, buildBtn: HTMLElement): void {
-    const submit = (): void => {
-      const v = ta.value.trim();
-      if (v) enterBuilder({ initialPrompt: v });
-    };
-    ta.addEventListener('input', () => {
-      if (ta.value.trim()) buildBtn.removeAttribute('disabled');
-      else buildBtn.setAttribute('disabled', '');
-    });
-    ta.addEventListener('keydown', (e) => {
-      const k = e as KeyboardEvent;
-      if (k.key === 'Enter' && (k.metaKey || k.ctrlKey)) {
-        k.preventDefault();
-        submit();
-      }
-    });
-    buildBtn.addEventListener('click', submit);
-  }
-
-  // Microphone glyph — not in the shared icon set; inlined to match the
-  // design's voice affordance.
-  const MIC_SVG =
-    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round">' +
-    '<rect x="9" y="2" width="6" height="11" rx="3"/>' +
-    '<path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg>';
 
   // Today's date as the hero eyebrow, e.g. "TUESDAY · 19 MAY". Renderer
   // code, so `new Date()` is fine here (the workflow-script ban doesn't apply).
@@ -1226,416 +1158,6 @@ import { createAppViewModule } from './app-appview.js';
   // Example prompts under the composer — clicking one seeds the box and
   // focuses it (a starting point, not an auto-submit).
   const HERO_SUGGESTIONS = ['Habit tracker', 'Weekly review', 'Inbox digest', 'Invoice filer'];
-
-  function buildHomeHero(): HTMLElement {
-    const wrap = el('div', { class: 'cd-hero' });
-
-    // Date eyebrow + heading, kept tight together above the composer.
-    wrap.append(
-      el('div', { class: 'cd-hero-head' }, [
-        el('div', { class: 'cd-hero-date' }, heroDateLabel()),
-        // Personalized heading — no user-profile source exists in the
-        // renderer, so we fall back to the un-named form rather than fake one.
-        el('h1', {}, 'What should we build?'),
-      ]),
-    );
-
-    // Day1Composer — bg-elev card with descriptive placeholder + toolbar.
-    const composer = el('div', { class: 'cd-composer' });
-    const ta = el('textarea', {
-      class: 'cd-composer-input',
-      placeholder: 'Describe an app you want — a habit tracker, a journal, a tiny tool…',
-      rows: '2',
-    }) as HTMLTextAreaElement;
-
-    const buildBtn = el('button', { class: 'cd-composer-send', type: 'button', disabled: '' });
-    buildBtn.innerHTML = Icon.ArrowRight({ size: 14 });
-    wireComposer(ta, buildBtn);
-
-    const toolbar = el('div', { class: 'cd-composer-toolbar' }, [
-      el('button', {
-        class: 'cd-icon-btn cd-composer-attach',
-        type: 'button',
-        title: 'Attach',
-        trustedHtml: Icon.Plus({ size: 14 }),
-      }),
-      el('span', { class: 'cd-composer-spacer' }),
-      el('span', { class: 'cd-composer-mode' }, [
-        el('span', { trustedHtml: Icon.Sparkle({ size: 11 }) }),
-        el('span', {}, 'Build'),
-        el('span', { trustedHtml: chevronDown(9) }),
-      ]),
-      el('button', {
-        class: 'cd-icon-btn cd-composer-mic',
-        type: 'button',
-        title: 'Voice',
-        trustedHtml: MIC_SVG,
-      }),
-      el('span', { class: 'cd-kbd cd-composer-kbd' }, '⌘↵'),
-      buildBtn,
-    ]);
-
-    composer.append(ta, toolbar);
-
-    // Suggestion chips sit just under the composer; clicking one fills the
-    // textarea (firing `input` so the build button enables) and focuses it.
-    const chips = el('div', { class: 'cd-hero-suggestions' });
-    for (const s of HERO_SUGGESTIONS) {
-      chips.append(
-        el(
-          'button',
-          {
-            class: 'cd-chip',
-            type: 'button',
-            onClick: () => {
-              ta.value = s;
-              ta.dispatchEvent(new Event('input'));
-              ta.focus();
-            },
-          },
-          s,
-        ),
-      );
-    }
-
-    wrap.append(el('div', { class: 'cd-hero-composer-wrap' }, [composer, chips]));
-    return wrap;
-  }
-
-  function homeSectionEmpty(icon: IconNameType, title: string, sub: string): HTMLElement {
-    return el('div', { class: 'cd-shelf-empty' }, [
-      el('div', {
-        class: 'cd-shelf-empty-icon',
-        trustedHtml: (Icon[icon] ?? Icon.Sparkle)({ size: 20 }),
-      }),
-      el('div', { class: 'cd-shelf-empty-title' }, title),
-      el('div', { class: 'cd-shelf-empty-sub' }, sub),
-    ]);
-  }
-
-  // Home → Library: one shelf that clubs the user's apps and automations
-  // together — the Discover pattern applied to the user's own stuff. A
-  // segmented All / Apps / Automations filter rides the header; the body
-  // paints kind-grouped sections of matching cards (apps via renderAppCard,
-  // automations via renderHomeAutomationCard). The automation status summary
-  // and a "Browse templates →" link to Discover sit opposite the filter.
-  function buildHomeLibrary(
-    automationRows: readonly CentraidAutomationRow[],
-    entries: readonly AutomationFeedEntry[],
-  ): HTMLElement {
-    const apps: AppMetaResolvedType[] = [...getApps(), ...drafts];
-
-    // Most-recent run per automation — drives each card's status pill + the
-    // header's "needs attention" count.
-    const runs = entries
-      .filter((e) => e.automationId)
-      .slice()
-      .sort((a, b) => b.run.startedAt - a.run.startedAt);
-    const lastByRef = new Map<string, AutomationFeedEntry>();
-    for (const e of runs) if (!lastByRef.has(e.automationId)) lastByRef.set(e.automationId, e);
-
-    let attention = 0;
-    for (const r of automationRows) {
-      const last = lastByRef.get(r.ref);
-      if (last && !last.run.ok) attention += 1;
-    }
-
-    const section = el('section', { class: 'cd-hsec cd-home-lib' });
-
-    // ── Kind filter — segmented control, reusing Discover's pill styling. ──
-    let kind: 'all' | 'app' | 'automation' = 'all';
-    // Tiles (the repeat()-grid default) vs. Rows (full-width compact strips).
-    // Session-only: defaults to tiles on every Home render, no pref write.
-    let layout: 'tiles' | 'rows' = 'tiles';
-    const seg = el('div', {
-      class: 'cd-disc-seg',
-      role: 'tablist',
-      'aria-label': 'Filter your library by kind',
-    });
-    const sync = (): void => {
-      for (const b of seg.querySelectorAll<HTMLElement>('.cd-disc-seg-b'))
-        b.dataset.active = String(b.dataset.k === kind);
-    };
-    const segDefs = [
-      { k: 'all', label: 'All', count: apps.length + automationRows.length, icon: null },
-      { k: 'app', label: 'Apps', count: apps.length, icon: 'Home' },
-      { k: 'automation', label: 'Automations', count: automationRows.length, icon: 'Bolt' },
-    ] as const;
-    for (const d of segDefs) {
-      seg.append(
-        el(
-          'button',
-          {
-            class: 'cd-disc-seg-b',
-            type: 'button',
-            role: 'tab',
-            'data-k': d.k,
-            onClick: () => {
-              kind = d.k;
-              sync();
-              paint();
-            },
-          },
-          [
-            ...(d.icon
-              ? [
-                  el('span', {
-                    class: 'cd-disc-seg-ic',
-                    'aria-hidden': 'true',
-                    trustedHtml: Icon[d.icon]({ size: 13 }),
-                  }),
-                ]
-              : []),
-            el('span', {}, d.label),
-            el('span', { class: 'cd-disc-seg-n' }, `· ${d.count}`),
-          ],
-        ),
-      );
-    }
-
-    // Status summary — only the "⚠ N needs attention" badge (shown when a
-    // most-recent run failed); the "N active" count was dropped.
-    const head = el('div', { class: 'cd-home-lib-head' }, [
-      seg,
-      el('span', { class: 'cd-hsec-spacer' }),
-    ]);
-    if (attention > 0) {
-      head.append(
-        el('div', { class: 'cd-hsec-status' }, [
-          el('span', { class: 'cd-hsec-stat', 'data-tone': 'attention' }, [
-            el('span', { 'aria-hidden': 'true', trustedHtml: Icon.AlertTriangle({ size: 13 }) }),
-            el('span', {}, `${attention} needs attention`),
-          ]),
-        ]),
-      );
-    }
-    head.append(
-      el('button', { class: 'cd-hsec-browse', type: 'button', onClick: renderDiscover }, [
-        el('span', {}, 'Browse templates'),
-        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.ChevronRight({ size: 14 }) }),
-      ]),
-    );
-
-    // ── Layout toggle — Tiles | Rows, far right of the header. Flips the
-    // grid's data-layout (read by paint on repaint); the chosen layout lives
-    // only for this Home session. Shared with Discover. ──
-    head.append(
-      buildLayoutToggle(
-        el,
-        () => layout,
-        (mode) => {
-          layout = mode;
-          paint();
-        },
-      ),
-    );
-
-    // ── Body — ONE unified grid (apps + automations in a single tile/row
-    // grid, no per-kind sub-headers), matching the gallery spec. The kind
-    // filter narrows what the grid holds; the grid repaints in place. ──
-    const body = el('div', { class: 'cd-home-lib-body' });
-
-    function paint(): void {
-      // Apps lead, automations follow — one mixed grid (the segmented filter
-      // above is the only kind divider, per the design).
-      const cards: HTMLElement[] = [];
-      if (kind === 'all' || kind === 'app') cards.push(...apps.map((a) => renderAppCard(a, true)));
-      if (kind === 'all' || kind === 'automation')
-        cards.push(...automationRows.map((r) => renderHomeAutomationCard(r, lastByRef.get(r.ref))));
-
-      if (cards.length === 0) {
-        const empty =
-          kind === 'automation'
-            ? homeSectionEmpty(
-                'Bolt',
-                'No automations yet',
-                'A saved conversation that fires on a trigger. Start from a template, or describe one from scratch.',
-              )
-            : kind === 'app'
-              ? homeSectionEmpty(
-                  'Sparkle',
-                  'No apps yet',
-                  'Describe an app in the box above — Centraid will build it for you.',
-                )
-              : homeSectionEmpty(
-                  'Sparkle',
-                  'Nothing here yet',
-                  'Describe an app or automation in the box above to get started.',
-                );
-        body.replaceChildren(empty);
-        return;
-      }
-
-      body.replaceChildren(
-        el('div', { class: 'cd-apps-grid cd-apps-grid--small', 'data-layout': layout }, cards),
-      );
-    }
-
-    section.append(head, body);
-    sync();
-    paint();
-    return section;
-  }
-
-  // One automation as a Home library card — built in the app-card visual
-  // family (.cd-app-card--small) so apps and automations sit in one uniform
-  // grid. The identity hue glyph tile + status pill stand in for the app icon
-  // and state strip; the trigger summary fills the blurb line. Clicking opens
-  // the automation viewer.
-  function renderHomeAutomationCard(
-    row: CentraidAutomationRow,
-    last: AutomationFeedEntry | undefined,
-  ): HTMLElement {
-    const integrations = row.manifest.requires.mcps ?? [];
-    const isStar = isStarred(row.ref);
-    const wrap = el('div', { class: 'cd-app-card-wrap' });
-    wrap.dataset.starred = String(isStar);
-    const card = el('button', {
-      class: 'cd-app-card cd-app-card--small',
-      type: 'button',
-      onClick: () => renderAutomationView(row.ref),
-    });
-    card.dataset.kind = 'automation';
-    // Blurb is the automation's own description; the schedule moves into the
-    // trigger chip below so the two read as distinct facts (matches the spec).
-    const blurb = row.manifest.description || triggersSummary(row.triggers);
-    card.append(
-      el('div', { class: 'cd-app-card-head' }, [
-        autoMod.autoGlyphTile(row.id, { size: 52, glyphSize: 24 }),
-        el('div', { class: 'cd-app-card-head-text' }, [
-          el('div', { class: 'cd-app-card-name-row' }, [
-            el('div', { class: 'cd-app-card-name' }, row.name),
-          ]),
-          el('div', { class: 'cd-app-card-desc' }, blurb),
-        ]),
-      ]),
-    );
-    // Meta strip — status pill · trigger chip · integration dots. Sits in the
-    // card body (tiles) / inline (rows); the footer below carries the kind
-    // badge + last-run time.
-    const isWebhook =
-      row.triggers.some((t) => t.kind === 'webhook') &&
-      !row.triggers.some((t) => t.kind === 'cron');
-    const metaStrip = el('div', { class: 'cd-app-card-meta' }, [
-      autoMod.auStatusPill(auStatusForRow(row.enabled, !!last)),
-      el('span', { class: 'cd-app-card-trig' }, [
-        el('span', {
-          'aria-hidden': 'true',
-          trustedHtml: (isWebhook ? Icon.Webhook : Icon.Clock)({ size: 12 }),
-        }),
-        el('span', {}, triggersSummary(row.triggers)),
-      ]),
-    ]);
-    if (integrations.length > 0) metaStrip.append(autoMod.integrationDots([...integrations]));
-    card.append(metaStrip);
-    // Footer — AUTOMATION kind badge (left) + last-run time (right), the time
-    // led by a success tick when the most recent run succeeded.
-    const foot = el('div', { class: 'cd-app-card-foot' });
-    foot.append(cardsMod.kindBadgeEl('automation'));
-    const okTone = last?.run.ok ? 'true' : undefined;
-    const timeEl = el('span', { class: 'cd-app-card-foot-time', 'data-ok': okTone });
-    if (last?.run.ok) {
-      timeEl.append(
-        el('span', { 'aria-hidden': 'true', trustedHtml: Icon.CheckCircle({ size: 13 }) }),
-      );
-    }
-    timeEl.append(
-      el(
-        'span',
-        {},
-        last ? relativeTime(new Date(last.run.startedAt).toISOString()) : 'No runs yet',
-      ),
-    );
-    foot.append(timeEl);
-    card.append(foot);
-    wrap.append(card);
-
-    // Inline hover toolbar — Run now, Star, overflow ⋯ (Open / Edit / Delete).
-    // Matches the app card's toolbar so both kinds share one action pattern.
-    const runNow = (): void => {
-      void (async () => {
-        try {
-          const { runId } = await runAutomationNow({ automationId: row.ref });
-          renderRunView(row.ref, runId);
-        } catch (err) {
-          showToast(`Run failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      })();
-    };
-    const confirmDelete = (): void => {
-      void (async () => {
-        const ok = await cardsMod.openConfirm({
-          title: 'Delete automation?',
-          message: `Delete "${row.name}"? This removes it from the gateway and deletes its run history. This can't be undone.`,
-          confirmLabel: 'Delete',
-          danger: true,
-        });
-        if (!ok) return;
-        try {
-          await deleteAutomation({ automationId: row.ref });
-          showToast(`Deleted "${row.name}"`);
-          renderHome();
-        } catch (err) {
-          showToast(
-            `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      })();
-    };
-    // Single overflow ⋯ affordance — Run / Edit / Star / Delete all live in the
-    // menu so the card stays clean (no multi-button hover toolbar). A persistent
-    // gold star flag marks starred rows when idle; hovering swaps in the ⋯.
-    const moreBtn = el('button', {
-      class: 'cd-card-act cd-card-act-more',
-      type: 'button',
-      'aria-label': 'Automation actions',
-      'aria-haspopup': 'menu',
-      trustedHtml: Icon.MoreHoriz({ size: 16 }),
-      onClick: (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const t = e.currentTarget as HTMLElement;
-        t.dataset.open = 'true';
-        cardsMod.openMenu(
-          [
-            { icon: 'Eye', id: 'open', label: 'Open' },
-            { icon: 'Play', id: 'run', label: 'Run now' },
-            { icon: 'Pencil', id: 'edit', label: 'Edit in builder' },
-            { icon: 'Star', id: 'star', label: isStar ? 'Unstar' : 'Star' },
-            'sep',
-            { danger: true, icon: 'Trash', id: 'delete', label: 'Delete' },
-          ],
-          { kind: 'rect', rect: t.getBoundingClientRect() },
-          (id) => {
-            if (id === 'open') renderAutomationView(row.ref);
-            else if (id === 'run') runNow();
-            else if (id === 'edit') enterAutomationBuilder({ automationId: row.id });
-            else if (id === 'star') {
-              toggleStar(row.ref);
-              renderHome();
-            } else if (id === 'delete') confirmDelete();
-          },
-        );
-      },
-    });
-    wrap.append(el('div', { class: 'cd-card-actions' }, [moreBtn]));
-    if (isStar)
-      wrap.append(
-        el('span', {
-          class: 'cd-card-star-flag',
-          'aria-hidden': 'true',
-          trustedHtml: Icon.Star({ size: 14 }),
-        }),
-      );
-    return wrap;
-  }
-
-  // ---------- Sidebar destination pages ----------
-  // Discover / Starred / Automations are top-level sidebar destinations
-  // added by Refined Screens §G3. Discover surfaces the template gallery
-  // (which §A3 removes from Home); Starred and Automations are wired here
-  // with their list/empty states — the per-app star toggle (§A3) and the
-  // scheduler backing Automations (§E3) land in later steps.
 
   function renderSimpleEmpty(message: string): HTMLElement {
     return el('div', { class: 'cd-page-empty' }, [
@@ -1810,7 +1332,6 @@ import { createAppViewModule } from './app-appview.js';
   // inferAppMeta are wired inside the module's enterBuilder. Only the bindings
   // app.ts itself calls are named here.
   const cardsMod = createCardsModule(ctx);
-  const renderAppCard = cardsMod.renderAppCard;
   const closeContextMenu = cardsMod.closeContextMenu;
   const openContextMenu = cardsMod.openContextMenu;
   const openTemplateContextMenu = cardsMod.openTemplateContextMenu;
