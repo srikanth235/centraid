@@ -814,3 +814,19 @@ declare global {
     CentraidReact?: CentraidReactBridge;
   }
 }
+
+// The React island bundle (react-boot.js) publishes `window.CentraidReact` and
+// is loaded unconditionally by index.html — and always before the first route
+// paints (the boot sequence awaits a settings IPC first, by which point every
+// deferred module script, this bundle included, has run). So route modules can
+// treat the bridge as guaranteed present. This accessor centralises that
+// invariant: it returns the bridge or throws a clear error if the bundle failed
+// to load, instead of every call site re-deriving an optional guard + a dead
+// vanilla fallback (issue #325, Phase 4 — the coexistence scaffolding is gone).
+export function requireReactBridge(): CentraidReactBridge {
+  const bridge = window.CentraidReact;
+  if (!bridge) {
+    throw new Error('React renderer bundle (react-boot.js) is not loaded');
+  }
+  return bridge;
+}

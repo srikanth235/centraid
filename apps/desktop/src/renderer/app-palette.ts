@@ -8,13 +8,12 @@
 // through `ctx.shell.*` because that registry is populated after this factory
 // runs; plain shell helpers are destructured up front.
 //
-// Issue #325, Phase 3: the group-building (`collectGroups`) is hoisted to the
-// factory scope so both the React `PaletteScreen` (via the
-// `window.CentraidReact.mountPalette` bridge) and the vanilla fallback compute
-// the same rows. React owns the overlay + search + keyboard nav when the bundle
-// is loaded; the vanilla builder below is the fallback.
+// The React `PaletteScreen` owns the overlay + search + keyboard nav (via the
+// `window.CentraidReact.mountPalette` bridge). This module owns the data: the
+// group-building (`collectGroups`) and the DTO mapping (`toDTOGroups`) that
+// feed it.
 import { relativeTime } from './app-format.js';
-import type { PaletteGroupDTO } from './react/bridge.js';
+import { requireReactBridge, type PaletteGroupDTO } from './react/bridge.js';
 import type { ShellContext, TemplateEntry } from './app-shell-context.js';
 
 export interface PaletteModule {
@@ -60,8 +59,8 @@ export function createPaletteModule(ctx: ShellContext): PaletteModule {
     }
   }
 
-  // The grouped results for a query. Shared by the React screen and the vanilla
-  // fallback. `run` closures call `closeCommandPalette` + the shell.
+  // The grouped results for a query, fed to the React PaletteScreen. `run`
+  // closures call `closeCommandPalette` + the shell.
   function collectGroups(
     q: string,
     templates: readonly TemplateEntry[],
@@ -218,187 +217,29 @@ export function createPaletteModule(ctx: ShellContext): PaletteModule {
 
   function openCommandPalette(): void {
     if (paletteCleanup) return;
-
-    // React path — mount PaletteScreen when the bundle is loaded.
-    const bridge = window.CentraidReact;
-    if (bridge?.mountPalette) {
-      const host = el('div', { class: 'cd-palette-react-host' });
-      document.body.append(host);
-      let templates: TemplateEntry[] = [];
-      let refresh: (() => void) | null = null;
-      let dispose: (() => void) | null = null;
-      const close = (): void => {
-        dispose?.();
-        host.remove();
-      };
-      dispose = bridge.mountPalette(host, {
-        buildGroups: (query) => toDTOGroups(collectGroups(query, templates)),
-        onClose: () => closeCommandPalette(),
-        onReady: (r) => {
-          refresh = r;
-        },
-      });
-      paletteCleanup = close;
-      // Templates load async — refresh the open palette when they arrive so the
-      // "N curated templates" count fills in.
-      void loadAvailableTemplates().then((t) => {
-        templates = t;
-        refresh?.();
-      });
-      return;
-    }
-
-    openCommandPaletteVanilla();
-  }
-
-  // §F — the vanilla fallback: a 640px command card over a dimmed, blurred copy
-  // of the current screen with up/down + Enter keyboard navigation.
-  function openCommandPaletteVanilla(): void {
-    const backdrop = el('div', { class: 'cd-palette-backdrop' });
-    const card = el('div', {
-      class: 'cd-palette',
-      role: 'dialog',
-      'aria-label': 'Command palette',
-    });
-
-    const input = el('input', {
-      class: 'cd-palette-input',
-      type: 'text',
-      autocomplete: 'off',
-      placeholder: 'Search apps, chats, templates — or describe a new one…',
-    }) as HTMLInputElement;
-    const inputRow = el('div', { class: 'cd-palette-inputrow' }, [
-      el('span', { class: 'cd-palette-search-icon', trustedHtml: Icon.Search({ size: 16 }) }),
-      input,
-      el('span', { class: 'cd-palette-esc' }, 'esc'),
-    ]);
-    const resultsEl = el('div', { class: 'cd-palette-results' });
-
-    const kbd = (k: string): HTMLElement => el('span', { class: 'cd-palette-kbd' }, k);
-    const footer = el('div', { class: 'cd-palette-footer' }, [
-      kbd('↑↓'),
-      el('span', {}, 'navigate'),
-      kbd('↵'),
-      el('span', {}, 'open'),
-      kbd('⌘↵'),
-      el('span', {}, 'open in new window'),
-      el('span', { class: 'cd-palette-footer-sp' }),
-      kbd('esc'),
-      el('span', {}, 'close'),
-    ]);
-    card.append(inputRow, resultsEl, footer);
-    backdrop.append(card);
-    document.body.append(backdrop);
-
+    const host = el('div', { class: 'cd-palette-react-host' });
+    document.body.append(host);
     let templates: TemplateEntry[] = [];
+    let refresh: (() => void) | null = null;
+    let dispose: (() => void) | null = null;
+    const close = (): void => {
+      dispose?.();
+      host.remove();
+    };
+    dispose = requireReactBridge().mountPalette(host, {
+      buildGroups: (query) => toDTOGroups(collectGroups(query, templates)),
+      onClose: () => closeCommandPalette(),
+      onReady: (r) => {
+        refresh = r;
+      },
+    });
+    paletteCleanup = close;
+    // Templates load async — refresh the open palette when they arrive so the
+    // "N curated templates" count fills in.
     void loadAvailableTemplates().then((t) => {
       templates = t;
-      render();
+      refresh?.();
     });
-
-    let rows: PaletteRow[] = [];
-    let active = 0;
-
-    const highlight = (): void => {
-      const rowEls = resultsEl.querySelectorAll<HTMLElement>('.cd-palette-row');
-      let i = 0;
-      for (const r of rowEls) {
-        r.dataset.active = String(i === active);
-        if (i === active) r.scrollIntoView({ block: 'nearest' });
-        i += 1;
-      }
-    };
-
-    const render = (): void => {
-      const q = input.value.trim();
-      rows = [];
-      resultsEl.replaceChildren();
-      for (const g of collectGroups(q, templates)) {
-        resultsEl.append(el('div', { class: 'cd-palette-group' }, g.group));
-        for (const item of g.items) {
-          rows.push(item);
-
-          let lead: HTMLElement;
-          if (item.variant === 'app' && item.app) {
-            lead = el('div', { class: 'cd-palette-row-tile' });
-            const finish = window.CentraidTokens.tileFinish(item.app.color, 'gradient');
-            lead.style.background = finish.background;
-            lead.style.color = finish.glyphColor;
-            if (finish.boxShadow) lead.style.boxShadow = finish.boxShadow;
-            lead.innerHTML = Icon[item.app.iconKey]
-              ? Icon[item.app.iconKey]({ size: 14, strokeWidth: 1.85 })
-              : Icon.Sparkle({ size: 14 });
-          } else {
-            lead = el('span', {
-              class: 'cd-palette-row-icon',
-              'data-accent': item.accent ? 'true' : undefined,
-              trustedHtml: item.icon,
-            });
-            if (item.tint && !item.accent) lead.style.color = item.tint;
-          }
-
-          const txt = el('div', { class: 'cd-palette-row-text' }, [
-            el('div', { class: 'cd-palette-row-label' }, item.label),
-          ]);
-          if (item.sub) txt.append(el('div', { class: 'cd-palette-row-sub' }, item.sub));
-
-          const rowChildren: HTMLElement[] = [lead, txt];
-          if (item.kbd) {
-            rowChildren.push(el('span', { class: 'cd-palette-row-kbd' }, item.kbd));
-          } else if (item.meta) {
-            rowChildren.push(el('span', { class: 'cd-palette-row-meta' }, item.meta));
-          }
-
-          resultsEl.append(
-            el(
-              'button',
-              {
-                class: 'cd-palette-row',
-                'data-variant': item.variant ?? 'action',
-                type: 'button',
-                onClick: () => item.run(),
-              },
-              rowChildren,
-            ),
-          );
-        }
-      }
-      if (active >= rows.length) active = Math.max(0, rows.length - 1);
-      highlight();
-    };
-
-    input.addEventListener('input', () => {
-      active = 0;
-      render();
-    });
-    input.addEventListener('keydown', (e) => {
-      const k = e as KeyboardEvent;
-      if (k.key === 'Escape') {
-        k.preventDefault();
-        closeCommandPalette();
-      } else if (k.key === 'ArrowDown') {
-        k.preventDefault();
-        active = Math.min(rows.length - 1, active + 1);
-        highlight();
-      } else if (k.key === 'ArrowUp') {
-        k.preventDefault();
-        active = Math.max(0, active - 1);
-        highlight();
-      } else if (k.key === 'Enter') {
-        k.preventDefault();
-        rows[active]?.run();
-      }
-    });
-    backdrop.addEventListener('click', (e) => {
-      if (e.target === backdrop) closeCommandPalette();
-    });
-
-    paletteCleanup = (): void => {
-      backdrop.remove();
-    };
-
-    render();
-    input.focus();
   }
 
   return { openCommandPalette, closeCommandPalette };
