@@ -264,7 +264,7 @@ export function createAutomationsModule(ctx: ShellContext): AutomationsModule {
 
   // The run viewer is its own module; the automation view + overview rows open
   // runs through this binding (and via ctx.shell.renderRunView elsewhere).
-  const { renderRunView } = createRunViewModule(ctx, ui);
+  const { renderRunView } = createRunViewModule(ctx);
 
   // The Automations landing — a single overview rather than the old
   // two-tab (Executions / Standing orders) shell: your automations on
