@@ -1,12 +1,17 @@
 # Desktop renderer CSS conventions
 
-Status: **primary migration complete** (issue #325, Phase 4). Every React
-screen's private styles have been carved out of the monolithic global
-`src/renderer/styles.css` into co-located, scoped CSS Modules; what remains in
-`styles.css` is the legitimate shared / vanilla-host layer (see layer 2). The
-file went from ~14,788 lines to ~9,800. This doc is the north star for that
-model and, more importantly, for **all new work** — new screens author a
-co-located `*.module.css`, never grow the monolith.
+Status: **modularization complete** (issue #325, R6/M5). There is no more
+vanilla renderer — R5 deleted every `.ts` CSS-emitting file, so the old
+"shared with a vanilla host" rationale for keeping a class global no longer
+applies to anything. Every class that is safely scopable (owned by exactly one
+surface, or shared by React files that can agree on one module) has been
+carved out of the monolithic `src/renderer/styles.css` into co-located or
+shared CSS Modules. The file went from ~14,788 lines (pre-R1) to ~2,600. What
+remains is a small, permanent global layer: reset/tokens/base, the two design-
+sync primitive families, and the window-chrome family (see "What stays
+global" below) — not a migration backlog. This doc is the north star for
+**all new work** — new screens author a co-located `*.module.css`, never grow
+the monolith.
 
 ## The four layers
 
@@ -16,12 +21,10 @@ co-located `*.module.css`, never grow the monolith.
    px-radius, or font stack a token already covers.
 
 2. **Global base — `styles.css`.** Reset, `:root` token wiring, base element
-   defaults, and the genuinely app-global / vanilla-host surfaces (window chrome,
-   the builder `cd-tl-*` titlebar, the sandboxed-app iframe host, kit). This file
-   is **frozen and shrinking**: it is not where new component styles go. As
-   screens migrate, their private rules leave; what remains is the shared/global
-   layer. (It is still served as a blocking `<link>` and copied verbatim by the
-   claude.ai/design sync.)
+   defaults, and the two families that legitimately stay global forever (see
+   "What stays global"). This file is **frozen and small**: it is not where new
+   component styles go. (It is still served as a blocking `<link>` and copied
+   verbatim by the claude.ai/design sync.)
 
 3. **Component/screen modules — `*.module.css`, co-located.** Each screen/
    component owns a `Foo.module.css` next to `Foo.tsx`. Classes are scoped by
@@ -37,109 +40,120 @@ co-located `*.module.css`, never grow the monolith.
 ## The one rule that keeps it clean
 
 **No component reaches into another's internals.** The old monolith is full of
-cross-surface combinators like `.cd-tl-main .cd-btn` (a vanilla titlebar styling
-a React button). Don't add new ones. If surface A must affect element B, pass a
-prop or a `data-*` attribute that B owns — never a descendant selector across the
-boundary. (Existing cross-boundary combinators are why some classes must stay
-global during the migration; see "shared/entangled" below.)
+cross-surface combinators like `.cd-tl-main .cd-btn` (the shell titlebar styling
+a button). Don't add new ones. If surface A must affect element B, pass a prop
+or a `data-*` attribute that B owns — never a descendant selector across the
+boundary. (Existing cross-boundary combinators inside the chrome family are why
+`ShellFrame`/`Sidebar` stay entirely global — see "What stays global" below.)
 
-## How to migrate a screen (the proven recipe)
+## How to author a new screen's CSS
 
-Onboarding, Palette, and Insights are worked examples (commits on `main`).
+Onboarding, Palette, and Insights (and every screen listed below) are worked
+examples (commits on `main`).
 
-1. **Classify the screen's classes.** A class is **private** iff it is used only
-   by that one `.tsx` and no vanilla `.ts`, and no CSS rule mixes it with a class
-   owned elsewhere. Everything else is **shared** and stays global.
-   - Helper: `node <scratch>/clean.mjs` reports `shared=[…]` and
-     `foreignCombo=[…]` per screen (accounts for cross-`.tsx` and vanilla usage).
-2. **Lift the private rules** out of `styles.css` into `Foo.module.css`, renaming
-   `.cd-foo-bar` → `.bar` (camelCase). Keyframes move too — Vite scopes them and
-   rewrites the `animation:` references automatically.
-3. **Rewrite the `.tsx`:** `className="cd-foo-bar"` → `className={styles.bar}`;
-   multi-class → `className={cx(styles.a, styles.b)}`; a **shared** class stays a
-   plain string, so a mixed element is `cx(styles.priv, 'cd-shared')`.
-4. **Shared class touched by a combinator** you're keeping (e.g.
-   `.cd-app-settings-pane .cd-swatch`): in the module write
+1. **Classify the screen's classes.** A class is **private** iff it's used only
+   by that one `.tsx`/`.ts` and no CSS rule mixes it with a class owned
+   elsewhere (i.e. it's "rooted" — the first class in at least one selector's
+   comma-group). A class used by ≥2 React files is **shared** — put it in one
+   `react/styles/<name>.module.css` all consumers import (see `vault.module.css`,
+   `toolGroup.module.css`, `automation.module.css` for the pattern), never
+   duplicated per-file and never left as a bare global string. A class that's
+   only ever reached as a descendant of a foreign root (e.g. `.tool-group
+   .tg-row-clickable`) can't be scoped without moving the foreign-rooted rule
+   too — either co-locate both ends into one shared module (the `toolGroup`
+   fix), or leave it global if the foreign root is chrome/design-sync (below).
+2. **Lift the rules** out of `styles.css` into `Foo.module.css`, renaming
+   `.cd-foo-bar` → `.fooBar` (camelCase; strip the family prefix unless two
+   prefixes in the same file collide on the stripped name, e.g. `chat-body` /
+   `thinking-body` both → `body` — then use full-name camelCase for that file's
+   whole scope set). Keyframes move too — Vite scopes `animation-name`
+   references inside a module even when the keyframe is defined elsewhere, so
+   any module animating with a shared keyframe (`cd-pulse`/`cd-spin`) needs a
+   **local copy** of that `@keyframes` block; the global copy stays in
+   `styles.css` for other consumers.
+3. **Rewrite the source:** `className="cd-foo-bar"` → `className={styles.fooBar}`;
+   multi-class → `className={cx(styles.a, styles.b)}`; a **shared** global class
+   stays a plain string, so a mixed element is `cx(styles.priv, 'cd-shared')`.
+   `.ts` string-builders (`el.className = '...'`, template-literal HTML) follow
+   the same rule — `styles.x` types as `string | undefined` under
+   `noUncheckedIndexedAccess`, so a bare direct assignment needs `?? ''`
+   (`cx(...)` already returns `string`, no coercion needed).
+4. **Foreign class you're keeping global, reached from a scoped rule**
+   (`.cd-app-settings-pane .cd-swatch`): in the module write
    `.pane :global(.cd-swatch) { … }` — the `:global()` escape hatch keeps the
-   shared class un-scoped.
-5. **Tests:** class-based selectors use the **local** name (`.bar`); Vitest's
+   foreign class un-scoped while the rule that reaches it still moves.
+5. **Tests:** class-based selectors use the **local** name (`.fooBar`); Vitest's
    `classNameStrategy: 'non-scoped'` (in `vitest.config.ts`) makes
-   `styles.bar === 'bar'`, so `.bar` selectors and `toContain('bar')` both match.
-6. **Verify:** `bun run typecheck` (both graphs) + `bun run --filter
-   @centraid/desktop test` + `bun run build`. Commit one screen (or a small
-   batch) at a time.
+   `styles.fooBar === 'fooBar'`, so `.fooBar` selectors and `toContain('fooBar')`
+   both match.
+6. **Verify:** `bun run typecheck` (both graphs) + `bun run test` (in
+   `apps/desktop`) + `bun run build` + `oxlint src/renderer/react`. Also run an
+   integrity check before committing — confirm no class your module claims is
+   still bare-referenced by a *live* selector in `styles.css` (a comment
+   mentioning the old name is fine; an actual `.foo {}` or combinator rule means
+   you stranded it and it needs to stay global, or its foreign-rooted rule needs
+   to move with it into a shared module). There's no live-Electron visual check
+   in CI — eyeball every diff, since a class silently losing its rule (or a
+   module-write tool clobbering pre-existing content instead of appending) is
+   invisible to typecheck/tests/build.
 
-There is a mechanical extractor at `<scratch>/mod.mjs` for the common cases; it
-prints leftover `cd-*` refs (dynamic/unstyled classes) for manual review — always
-eyeball the diff, since there is no live-Electron visual check in CI.
+## What stays global, and why
 
-## What was migrated, and what stays global (and why)
+Two families are **permanently** global — do not attempt to scope these, they
+are not migration debt:
 
-Every screen's **private** classes now live in a co-located module:
+- **Design-sync primitives.** `cd-app-card*`, `cd-btn*`, `cd-status`,
+  `cd-status-dot`, `cd-disc-badge` — rendered by the shared `ui/AppCard.tsx` and
+  `ui/Button.tsx` components. The claude.ai/design bundle ships `styles.css`
+  verbatim and expects these classes to exist globally under exactly these
+  names; scoping them would desync the design-sync bundle from the app.
+- **Window/shell chrome.** `cd-window*`, `cd-sidebar*`, `cd-sb-*` (`Sidebar.tsx`),
+  `cd-tl-*`/`cd-main`/`cd-traffic-lights-spacer` (`ShellFrame.tsx`), `cd-tb-btn*`,
+  `cd-tooltip`, `cd-kbd`, `chip` — `ShellFrame.tsx` and `Sidebar.tsx` are densely
+  cross-combinated with each other and with per-screen content (e.g.
+  `.cd-window[data-sidebar='closed'] .cd-tl-side`,
+  `.cd-app-card-wrap:hover .cd-card-more`); scoping either file strands classes
+  the other reaches into. Confirmed via a reverted attempt (10 stranded
+  classes) — this is the one part of the shell intentionally left as the old
+  global-string style, forever.
 
-- `RunViewScreen`, `AutomationViewScreen`, `AutomationsOverviewScreen`,
-  `AutomationTemplatesScreen` — the `cd-au-*` per-screen sub-families.
-- `HomeScreen` (hero/composer/shelf/apps-grid), `DiscoverScreen` (`cd-disc-*`
-  gallery), `AssistantScreen` (chat shell), `AppSettingsPanel`
-  (`cd-app-settings-*`/`cd-app-order-*`), `SettingsAppearanceScreen`
-  (`cd-theme-*`), `PhoneScreen`, `ImportScreen`, `VaultScreen` (shared
-  `styles/vault.module.css`), `OnboardingScreen`, `PaletteScreen`,
-  `InsightsScreen`.
+Everything else — every per-screen private family and every cross-screen
+shared family that isn't one of the two above — has been carved into a module.
+A `full.mjs`-style classifier (defined-in-`styles.css` × referenced-by) run
+against the current tree should turn up nothing beyond: these two families,
+handful of narrow-name false positives from comments/keyframe-name substrings
+(e.g. `ab-` inside `ab-diff-flash`), and the small 2-rule `.empty`/`.empty-art`
+family (shared by ~4 screens as plain strings — small enough that a shared
+module wasn't worth the churn).
 
-What **legitimately stays** in the global `styles.css` layer — do **not** try to
-scope these, it will desync from the vanilla emitter or a cross-boundary rule:
+### Two tooling pitfalls hit during the carve (worth knowing before automating this again)
 
-- **Vanilla-emitted families.** `cd-prof-*` (`profiles.ts`), `cd-app-card*` /
-  `cd-status*` (`app-cards.ts`, and the shared `ui/AppCard` primitive),
-  `cd-au-btn*/-status*/-glyph/-loading/-crumb*/-actions/-chip*/-drawer*/-ov-row*`
-  and `cd-au-trigbadge*` (`app-automations-ui.ts` injects them into React hosts),
-  and the `cd-asst-rich/-chart/-stat/-table*` rich-answer HTML
-  (`app-assistant.ts`, injected via `dangerouslySetInnerHTML`). These are the
-  shared layer *by definition* — a class a `.ts` and a `.tsx` both name cannot be
-  hashed on one side only.
-- **Window/shell chrome.** `cd-tl-*` (builder titlebar), `cd-sb-*`/`cd-sidebar`,
-  `cd-window*`, `cd-tb-*`, `cd-brand*`, `cd-tooltip` — vanilla host surfaces.
-- **Genuinely cross-screen chrome** used by ≥2 React screens as plain strings:
-  `cd-app-settings-note/-section`, `cd-swatch/-swatches`, `cd-disc-seg*`,
-  `cd-link-btn`, `cd-page-empty*`, and the shared keyframes (`cd-pulse`,
-  `cd-spin`, …). Reuse is via the plain global class (or a `ui/` component), not
-  by copying rules.
-
-The next real reduction of `styles.css` comes only from **retiring the vanilla
-host surfaces themselves** (sidebar, titlebar, cards, profiles, rich-answer
-renderer) — a React-conversion of those hosts, out of scope for a CSS refactor.
-
-### The `:global()` escape hatch, in practice
-
-When a component-rooted rule reaches a kept global class
-(`.cd-app-settings-pane .cd-swatch`, `.cd-apps-grid .cd-app-card-wrap`), the rule
-moves into the component's module with the foreign class wrapped:
-`.settingsPane :global(.cd-swatch)`, `.appsGrid :global(.cd-app-card-wrap)`. The
-rule of thumb the carve used: a rule moves iff its selector is **rooted** at an
-in-scope class (the component owns the contextual style); a rule rooted at a
-foreign/vanilla class is left in the global layer (that surface owns it).
-
-### Shared keyframes + CSS Modules
-
-Vite scopes `animation-name` references inside a module *even when the keyframe
-is defined globally*. So any module that animates with a shared keyframe
-(`cd-pulse`/`cd-spin`) carries a **local copy** of that `@keyframes` block; Vite
-scopes the local def and the ref to the same generated name, so they align. The
-global copy stays in `styles.css` for the vanilla + other consumers.
+- **A class can be "rooted" (owns a rule) and *also* reached from a foreign
+  combinator elsewhere** (`.cd-tl-side { … }` plus
+  `.cd-window[data-sidebar='closed'] .cd-tl-side { … }`). A naive
+  private-class check that only looks for "is this the first class in *some*
+  selector" will misclassify it as safely scopable. The fix is a **fixpoint**:
+  carve, then check whether any moved class is still referenced by a *kept*
+  rule; if so, exclude it and reprocess, until nothing is left stranded.
+- **A module-carve tool must *append* to an existing `.module.css`, never
+  overwrite it.** A screen migrated in an earlier pass may already have a
+  module with unrelated content; a tool that blindly `writeFileSync`s the
+  newly-carved rules (especially when that set is empty, e.g. every candidate
+  got fixpoint-excluded) silently wipes the file to empty. Always read-merge
+  the CSS text and the `class → local-name` map with what's already there.
 
 ## Serving + design-sync
 
 Component modules are bundled by Vite into `dist/renderer/react-boot.css`, linked
-blocking in `index.html` ahead of the module scripts (grows as screens migrate;
-no FOUC).
+blocking in `index.html` ahead of the module scripts (no FOUC).
 
 The claude.ai/design desktop-shell sync (`.design-sync/desktop-src/`) ships only
 the four **`ui/` primitives** (`Icon`/`Button`/`Logo`/`AppCard`) plus
-`styles.css`. Those primitives render **global** classes (`cd-btn*`,
-`cd-app-card*`, `cd-status`, `cd-disc-badge`) that are co-emitted by vanilla and
-therefore stay in `styles.css` — so the design bundle remains complete with
-`styles.css` alone. **No `react-boot.css` re-plumb is needed** (the module CSS is
-for the app's own screens, which the design bundle does not ship). The only
-follow-up is an optional content refresh — re-uploading the (now smaller)
-`styles.css` so the design bundle reflects the dead-rule cleanup — a
+`styles.css`. Those primitives render the **design-sync global classes**
+(`cd-btn*`, `cd-app-card*`, `cd-status*`, `cd-disc-badge`) described above, which
+stay in `styles.css` — so the design bundle remains complete with `styles.css`
+alone. **No `react-boot.css` re-plumb is needed** (the module CSS is for the
+app's own screens, which the design bundle does not ship). The only follow-up
+is an optional content refresh — re-uploading the (now much smaller)
+`styles.css` so the design bundle reflects the full modularization — a
 `/design-sync` step run interactively (it needs OAuth).
