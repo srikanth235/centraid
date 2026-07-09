@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import type { AsstMsgDTO, AssistantBridgeProps, AssistantSnapshot } from '../bridge.js';
+import styles from './AssistantScreen.module.css';
+import { cx } from '../ui/cx.js';
 
 function ToolsMsg({
   label,
@@ -9,14 +11,14 @@ function ToolsMsg({
   calls: { tool: string; sql?: string; state: string; meta: string }[];
 }): JSX.Element {
   return (
-    <div className="cd-asst-msg cd-asst-msg-tools">
-      <details className="cd-asst-tools">
+    <div className={cx(styles.msg, styles.msgTools)}>
+      <details className={styles.tools}>
         <summary>{label}</summary>
-        <div className="cd-asst-tools-body">
+        <div className={styles.toolsBody}>
           {calls.map((c, i) => (
-            <div key={i} className="cd-asst-tool" data-state={c.state}>
+            <div key={i} className={styles.tool} data-state={c.state}>
               {c.sql ? <pre className="cd-asst-pre">{c.sql}</pre> : <span>{c.tool}</span>}
-              <div className="cd-asst-tool-meta">{c.meta}</div>
+              <div className={styles.toolMeta}>{c.meta}</div>
             </div>
           ))}
         </div>
@@ -34,7 +36,7 @@ function Message({
 }): JSX.Element {
   if (m.kind === 'user') {
     return (
-      <div className="cd-asst-msg cd-asst-msg-user">
+      <div className={cx(styles.msg, styles.msgUser)}>
         <div>{m.text}</div>
       </div>
     );
@@ -44,16 +46,16 @@ function Message({
   }
   if (m.streaming) {
     return (
-      <div className="cd-asst-msg cd-asst-msg-ai">
-        <div className="cd-asst-live">{m.text}</div>
-        <span className="cd-asst-cursor" />
+      <div className={cx(styles.msg, styles.msgAi)}>
+        <div className={styles.live}>{m.text}</div>
+        <span className={styles.cursor} />
       </div>
     );
   }
   // Final AI answer — the vanilla `richAnswer` HTML, injected + re-hydrated.
   return (
     <div
-      className="cd-asst-msg cd-asst-msg-ai"
+      className={cx(styles.msg, styles.msgAi)}
       data-error={m.error ? 'true' : undefined}
       ref={(node) => {
         if (node) hydrateRefs(node);
@@ -80,7 +82,12 @@ export default function AssistantScreen({
   onDeleteThread,
   hydrateRefs,
 }: AssistantBridgeProps): JSX.Element {
-  const [snap, setSnap] = useState<AssistantSnapshot>({ threads: [], empty: true, busy: false, messages: [] });
+  const [snap, setSnap] = useState<AssistantSnapshot>({
+    threads: [],
+    empty: true,
+    busy: false,
+    messages: [],
+  });
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -101,85 +108,85 @@ export default function AssistantScreen({
   };
 
   return (
-    <div className="cd-asst">
-      <aside className="cd-asst-side">
-          <button type="button" className="cd-asst-new" onClick={() => onSelectThread(null)}>
-            + New conversation
-          </button>
-          <div className="cd-asst-threads">
-            {snap.threads.length === 0 ? (
-              <div className="cd-asst-threads-empty">No conversations yet</div>
-            ) : (
-              snap.threads.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className="cd-asst-thread"
-                  data-active={t.active ? 'true' : undefined}
-                  onClick={() => onSelectThread(t.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    onDeleteThread(t.id);
-                  }}
-                >
-                  <span className="cd-asst-thread-title">{t.title || 'New conversation'}</span>
-                  <span className="cd-asst-thread-time">{t.timeLabel}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </aside>
-
-        <section className="cd-asst-chat">
-          <div className="cd-asst-scroll" ref={scrollRef}>
-            {snap.empty ? (
-              <div className="cd-asst-empty">
-                <div className="cd-asst-empty-title">Ask your vault</div>
-                <div className="cd-asst-empty-sub">
-                  Questions can span everything the vault holds — people, notes, money, events — and
-                  their connections.
-                </div>
-                <div className="cd-asst-suggest">
-                  {suggestions.map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      className="cd-asst-suggest-chip"
-                      onClick={() => setDraft(q)}
-                    >
-                      {q}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              snap.messages.map((m, i) => <Message key={i} m={m} hydrateRefs={hydrateRefs} />)
-            )}
-          </div>
-          <div className="cd-asst-composer">
-            <textarea
-              className="cd-asst-input"
-              rows={1}
-              placeholder="Ask your vault anything…"
-              data-busy={snap.busy ? '' : undefined}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+    <div className={styles.asst}>
+      <aside className={styles.side}>
+        <button type="button" className={styles.new} onClick={() => onSelectThread(null)}>
+          + New conversation
+        </button>
+        <div className={styles.threads}>
+          {snap.threads.length === 0 ? (
+            <div className={styles.threadsEmpty}>No conversations yet</div>
+          ) : (
+            snap.threads.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={styles.thread}
+                data-active={t.active ? 'true' : undefined}
+                onClick={() => onSelectThread(t.id)}
+                onContextMenu={(e) => {
                   e.preventDefault();
-                  send();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="cd-asst-send"
-              aria-label={snap.busy ? 'Stop' : 'Send'}
-              onClick={() => (snap.busy ? onStop() : send())}
-            >
-              {snap.busy ? '■' : '↑'}
-            </button>
-          </div>
+                  onDeleteThread(t.id);
+                }}
+              >
+                <span className={styles.threadTitle}>{t.title || 'New conversation'}</span>
+                <span className={styles.threadTime}>{t.timeLabel}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <section className={styles.chat}>
+        <div className={styles.scroll} ref={scrollRef}>
+          {snap.empty ? (
+            <div className={styles.empty}>
+              <div className={styles.emptyTitle}>Ask your vault</div>
+              <div className={styles.emptySub}>
+                Questions can span everything the vault holds — people, notes, money, events — and
+                their connections.
+              </div>
+              <div className={styles.suggest}>
+                {suggestions.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className={styles.suggestChip}
+                    onClick={() => setDraft(q)}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            snap.messages.map((m, i) => <Message key={i} m={m} hydrateRefs={hydrateRefs} />)
+          )}
+        </div>
+        <div className={styles.composer}>
+          <textarea
+            className={styles.input}
+            rows={1}
+            placeholder="Ask your vault anything…"
+            data-busy={snap.busy ? '' : undefined}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+          <button
+            type="button"
+            className={styles.send}
+            aria-label={snap.busy ? 'Stop' : 'Send'}
+            onClick={() => (snap.busy ? onStop() : send())}
+          >
+            {snap.busy ? '■' : '↑'}
+          </button>
+        </div>
       </section>
     </div>
   );

@@ -1452,10 +1452,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3399,10 +3401,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -6657,10 +6661,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 
 
@@ -6680,10 +6686,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -6720,10 +6728,12 @@ select.input option {
 
 
 
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
+
 
 
 /* §A2 — quiet inspiration footer. */
@@ -8479,11 +8489,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -9240,10 +9252,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -9838,10 +9852,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -10328,162 +10344,9 @@ button.cd-au-run:hover .cd-au-run-go {
    Two-pane chat: past conversations left, active thread right. Answers
    are markdown-lite prose plus renderer-drawn blocks (table / chart /
    stat), entity ref chips, and a collapsible per-turn queries pill. */
-.cd-asst {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-columns: 232px 1fr;
-}
-@media (max-width: 760px) {
-
-
-
-
-
-
-
-
-
-  .cd-asst {
-    grid-template-columns: 0 1fr;
-  }
-  .cd-asst-side {
-    display: none;
-  }
-}
-
-
-
-
-
-
-
-
-
-.cd-asst-side {
-  border-right: 0.5px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: 10px 8px;
-  gap: 8px;
-}
-.cd-asst-new {
-  border: 0.5px solid var(--line-strong);
-  border-radius: var(--r-md, 10px);
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 12.5px;
-  padding: 7px 10px;
-  cursor: pointer;
-  text-align: left;
-}
-.cd-asst-new:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.cd-asst-threads {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.cd-asst-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  border: 0;
-  background: transparent;
-  border-radius: 8px;
-  padding: 7px 9px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  color: var(--ink-2);
-}
-.cd-asst-thread:hover {
-  background: var(--bg-elev);
-}
-.cd-asst-thread[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-}
-.cd-asst-thread-title {
-  font-size: 12.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-.cd-asst-thread-time {
-  font-size: 10.5px;
-  color: var(--ink-4);
-}
-.cd-asst-threads-empty {
-  color: var(--ink-4);
-  font-size: 12px;
-  padding: 8px 9px;
-}
-
-.cd-asst-chat {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  min-width: 0;
-}
-.cd-asst-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px 22px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
 .cd-asst-loading {
   color: var(--ink-3);
   font-size: 12.5px;
-}
-.cd-asst-msg {
-  max-width: 760px;
-  width: 100%;
-  margin: 0 auto;
-}
-.cd-asst-msg-user > div {
-  margin-left: auto;
-  width: fit-content;
-  max-width: 78%;
-  background: var(--bg-elev);
-  border: 0.5px solid var(--line);
-  border-radius: 14px 14px 4px 14px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--ink);
-  white-space: pre-wrap;
-}
-.cd-asst-msg-ai {
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--ink);
-}
-.cd-asst-msg-ai[data-error='true'] {
-  color: var(--danger);
-}
-.cd-asst-live {
-  white-space: pre-wrap;
-}
-.cd-asst-cursor {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  margin-left: 2px;
-  background: var(--accent);
-  animation: cd-asst-blink 1s steps(2) infinite;
-  vertical-align: text-bottom;
 }
 @keyframes cd-asst-blink {
   50% {
@@ -10629,123 +10492,7 @@ button.cd-au-run:hover .cd-au-run-go {
 }
 
 /* The per-turn queries pill (transparency drawer) */
-.cd-asst-tools {
-  border: 0.5px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-sunken);
-  font-size: 12px;
-  color: var(--ink-3);
-}
-.cd-asst-tools > summary {
-  cursor: pointer;
-  padding: 6px 12px;
-  list-style: none;
-  user-select: none;
-}
-.cd-asst-tools > summary::before {
-  content: '▸ ';
-  color: var(--ink-4);
-}
-.cd-asst-tools[open] > summary::before {
-  content: '▾ ';
-}
-.cd-asst-tools-body {
-  padding: 0 12px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.cd-asst-tool .cd-asst-pre {
-  margin: 0;
-}
-.cd-asst-tool-meta {
-  font-size: 11px;
-  color: var(--ink-4);
-  padding-top: 3px;
-}
-.cd-asst-tool[data-state='error'] .cd-asst-tool-meta {
-  color: var(--danger);
-}
 
 /* Composer */
-.cd-asst-composer {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  padding: 10px 22px 16px;
-  max-width: 804px;
-  width: 100%;
-  margin: 0 auto;
-}
-.cd-asst-input {
-  flex: 1;
-  resize: none;
-  min-height: 40px;
-  max-height: 160px;
-  border: 0.5px solid var(--line-strong);
-  border-radius: 12px;
-  background: var(--bg-elev);
-  color: var(--ink);
-  font: inherit;
-  font-size: 13px;
-  padding: 10px 12px;
-}
-.cd-asst-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.cd-asst-send {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  border: 0;
-  background: var(--accent);
-  color: var(--ink-inv, #fff);
-  font-size: 16px;
-  cursor: pointer;
-  flex: none;
-}
-.cd-asst-send:hover {
-  background: var(--accent-light);
-}
 
 /* Empty state */
-.cd-asst-empty {
-  margin: auto;
-  max-width: 560px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 40px 20px;
-}
-.cd-asst-empty-title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  color: var(--ink);
-}
-.cd-asst-empty-sub {
-  font-size: 13px;
-  color: var(--ink-3);
-}
-.cd-asst-suggest {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  padding-top: 8px;
-}
-.cd-asst-suggest-chip {
-  border: 0.5px solid var(--line-strong);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  border-radius: 999px;
-  padding: 7px 14px;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.cd-asst-suggest-chip:hover {
-  border-color: var(--accent);
-  color: var(--ink);
-}
