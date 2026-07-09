@@ -5,6 +5,7 @@ import type {
   PhonePairingDTO,
   PhoneStatusDTO,
 } from '../bridge.js';
+import styles from './PhoneScreen.module.css';
 
 function Note({ children }: { children: React.ReactNode }): JSX.Element {
   return <div className="cd-app-settings-note">{children}</div>;
@@ -21,16 +22,16 @@ function DeviceRow({
   const added = new Date(device.addedAt);
   const addedLabel = Number.isNaN(added.getTime()) ? '' : ` · added ${added.toLocaleDateString()}`;
   return (
-    <div className="cd-phone-device-row">
-      <div className="cd-phone-device-info">
-        <div className="cd-phone-device-name">{device.name}</div>
-        <div className="cd-phone-device-meta">
+    <div className={styles.deviceRow}>
+      <div className={styles.deviceInfo}>
+        <div className={styles.deviceName}>{device.name}</div>
+        <div className={styles.deviceMeta}>
           {`${device.platform}${addedLabel} · ${device.endpointId.slice(0, 10)}…`}
         </div>
       </div>
       <button
         type="button"
-        className="cd-phone-revoke-btn"
+        className={styles.revokeBtn}
         disabled={busy}
         onClick={() => {
           setBusy(true);
@@ -123,11 +124,11 @@ export default function PhoneScreen({
         <Note>The tunnel endpoint is starting…</Note>
       ) : null}
 
-      <div className="cd-phone-pairing">
+      <div className={styles.pairing}>
         {pairing ? (
           <>
             <img
-              className="cd-phone-qr"
+              className={styles.qr}
               alt="Pairing QR code — scan from the Centraid mobile app"
               src={pairing.info.qrDataUrl}
             />
@@ -151,7 +152,7 @@ export default function PhoneScreen({
         )}
       </div>
 
-      <div className="cd-phone-devices">
+      <div className={styles.devices}>
         <div className="drawer-group-label">Paired phones</div>
         {status.devices.length > 0 ? (
           status.devices.map((device) => (

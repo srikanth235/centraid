@@ -1447,10 +1447,12 @@ select.input option {
 
 
 
+
   .ab-progress-dots i {
     animation: none;
   }
 }
+
 
 
 
@@ -3384,10 +3386,12 @@ select.input option {
 
 
 
+
   .cloud-stat-grid {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7022,10 +7026,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 
 
 
@@ -7035,10 +7041,12 @@ select.input option {
 
 
 
+
   .cd-shelf-grid[data-layout='cards'] {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -7065,10 +7073,12 @@ select.input option {
 
 
 
+
   .cd-shelf-reveal {
     animation: none;
   }
 }
+
 
 
 
@@ -7777,6 +7787,7 @@ select.input option {
 
 
 
+
   .cd-disc-head {
     flex-direction: column;
     gap: 14px;
@@ -7785,6 +7796,7 @@ select.input option {
     grid-template-columns: 1fr;
   }
 }
+
 
 
 
@@ -9101,11 +9113,13 @@ select.input option {
 
 
 
+
   .app-chat-am-loaddots i {
     animation: none;
     opacity: 0.6;
   }
 }
+
 
 
 
@@ -9905,67 +9919,6 @@ select.input option {
 
 /* Settings → Phone (issue #263). "Connect phone" pairing QR + the paired
  * device allowlist — one row per phone with a transport-level Revoke. */
-.cd-phone-pairing {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding-bottom: 14px;
-}
-.cd-phone-qr {
-  width: 224px;
-  height: 224px;
-  border-radius: 10px;
-  border: 0.5px solid var(--line);
-  background: #fff;
-  padding: 8px;
-}
-.cd-phone-devices {
-  display: flex;
-  flex-direction: column;
-  margin-top: 6px;
-  padding-top: 12px;
-  border-top: 0.5px solid var(--line);
-}
-.cd-phone-device-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 2px;
-}
-.cd-phone-device-row + .cd-phone-device-row {
-  border-top: 0.5px solid var(--line);
-}
-.cd-phone-device-info {
-  min-width: 0;
-  flex: 1;
-}
-.cd-phone-device-name {
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-1, var(--ink));
-  overflow-wrap: anywhere;
-}
-.cd-phone-device-meta {
-  font-size: 11px;
-  color: var(--ink-2);
-}
-.cd-phone-revoke-btn {
-  flex: none;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
-  background: color-mix(in srgb, var(--danger) 10%, transparent);
-  color: var(--danger);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.cd-phone-revoke-btn:hover {
-  background: var(--danger);
-  color: #fff;
-}
 
 /* Run audit (issue #80). The "Runs" link in the foot expands a
  * per-automation history panel below the card. Newest run first;
@@ -10457,10 +10410,12 @@ select.input option {
 
 
 
+
   .ab-section-flash {
     animation: none;
   }
 }
+
 
 
 
@@ -11045,10 +11000,12 @@ select.input option {
 
 
 
+
   .cd-au-status-ic[data-spin='true'] {
     animation: none;
   }
 }
+
 
 
 
@@ -11552,6 +11509,7 @@ button.cd-au-run:hover .cd-au-run-go {
 
 
 
+
   .cd-asst {
     grid-template-columns: 0 1fr;
   }
@@ -11559,6 +11517,7 @@ button.cd-au-run:hover .cd-au-run-go {
     display: none;
   }
 }
+
 
 
 
