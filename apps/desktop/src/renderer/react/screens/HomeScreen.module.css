@@ -298,8 +298,11 @@
   transform: translateY(-50%) translateY(3px);
 }
 .appsGrid[data-layout='rows'] :global(.cd-app-card-wrap):hover :global(.cd-card-actions),
-.appsGrid[data-layout='rows'] :global(.cd-app-card-wrap):has(:focus-visible) :global(.cd-card-actions),
-.appsGrid[data-layout='rows'] :global(.cd-card-actions):has(:global(.cd-card-act)[data-open='true']) {
+.appsGrid[data-layout='rows']
+  :global(.cd-app-card-wrap):has(:focus-visible)
+  :global(.cd-card-actions),
+.appsGrid[data-layout='rows']
+  :global(.cd-card-actions):has(:global(.cd-card-act)[data-open='true']) {
   transform: translateY(-50%);
 }
 .appsGrid[data-layout='rows'] :global(.cd-card-star-flag) {
