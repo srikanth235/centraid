@@ -534,6 +534,155 @@ kit-reference-strip,
   color: #fff;
 }
 
+/* ---------- Icon buttons ----------------------------------------------------
+   Square, icon-only. Generalizes the six near-identical hand-rolled icon
+   buttons docs grew (theme toggle, sidebar close, tool row, kebab, details
+   close, quick-look controls) plus photos' equivalents. Size is a custom
+   prop so a dense row (e.g. a kebab at 30px) can dial it down per instance:
+     <button class="kit-icon-btn" style="--kit-icon-btn-size: 1.875rem">…</button>
+   Transparent base — this sits on app chrome, not a card. */
+
+.kit-icon-btn {
+  --kit-icon-btn-size: 2.1rem;
+  width: var(--kit-icon-btn-size);
+  height: var(--kit-icon-btn-size);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted, #667085);
+  border-radius: calc(var(--kit-radius) * 0.55);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s var(--kit-ease),
+    color 0.15s var(--kit-ease);
+}
+.kit-icon-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+.kit-icon-btn:hover {
+  background: var(--kit-surface-2);
+  color: var(--text, #16181d);
+}
+.kit-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kit-icon-btn.danger:hover {
+  color: var(--danger, #f04452);
+}
+
+/* ---------- Text input ------------------------------------------------------
+   THE text input primitive — apps had none and hand-rolled bare `input`
+   rules per family. `.bare` drops the border/fill for inline-editing
+   contexts (rename a row/folder/chip in place); it still earns a full
+   accent border + focus ring on focus, never a half-drawn underline. */
+
+.kit-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text, #16181d);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: calc(var(--kit-radius) * 0.7);
+  padding: 0.5rem 0.7rem;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color 0.15s var(--kit-ease),
+    box-shadow 0.15s var(--kit-ease);
+}
+.kit-input::placeholder {
+  color: var(--kit-faint);
+}
+.kit-input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--kit-accent) 50%, var(--kit-line-strong));
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-input.bare {
+  border-color: transparent;
+  background: transparent;
+  padding: 0.3rem 0.4rem;
+}
+.kit-input.bare:focus {
+  border-color: var(--kit-accent);
+  background: var(--surface, #fff);
+}
+
+/* ---------- Search pill ------------------------------------------------------
+   Union of docs' `.d-search` and photos' `.search`: a leading icon, a plain
+   `<input>` child (no extra class needed — this selector owns its look),
+   an optional trailing `kbd` shortcut hint. App-specific width/placement
+   (max-width, flex basis, margin) stays in app.css.
+     <label class="kit-search">
+       <svg>…</svg>
+       <input type="search" placeholder="Search">
+       <kbd>/</kbd>
+     </label> */
+
+.kit-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  padding: 0 0.6rem 0 0.9rem;
+  transition:
+    border-color 0.15s var(--kit-ease),
+    box-shadow 0.15s var(--kit-ease);
+}
+.kit-search:focus-within {
+  border-color: color-mix(in oklab, var(--kit-accent) 50%, var(--kit-line-strong));
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-search svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--kit-faint);
+  pointer-events: none;
+}
+.kit-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0;
+  color: var(--text, #16181d);
+  font: inherit;
+}
+.kit-search input:focus {
+  outline: none;
+}
+.kit-search input::placeholder {
+  color: var(--kit-faint);
+}
+.kit-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.kit-search kbd {
+  flex: none;
+  font-family: var(--kit-mono);
+  font-size: 0.68rem;
+  color: var(--kit-faint);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
 /* ---------- Chips -----------------------------------------------------------
    Filter/toggle pills. Selected speaks in two registers: the default fills
    with the deep accent (notes/photos voice); `.quiet` selects with the soft
@@ -912,6 +1061,104 @@ kit-reference-strip,
   .kit-bar-fill {
     transition: none;
   }
+}
+
+/* ---------- Viewer nav arrows ----------------------------------------------
+   Circular prev/next overlay for full-screen media viewers (docs' quick-look,
+   photos' lightbox — the two were near-byte-identical). Lives on a dark
+   viewer surface, so the on-dark whites below are hardcoded, not routed
+   through ink tokens. `.prev`/`.next` position it; the viewer sets the
+   containing box to `position: relative`. */
+
+.kit-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s var(--kit-ease);
+}
+.kit-viewer-nav:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.kit-viewer-nav:disabled,
+.kit-viewer-nav[disabled] {
+  opacity: 0.25;
+  pointer-events: none;
+}
+.kit-viewer-nav.prev {
+  left: 0.75rem;
+}
+.kit-viewer-nav.next {
+  right: 0.75rem;
+}
+
+/* ---------- Drag-and-drop scrim --------------------------------------------
+   Full-viewport drop target: an accent-tinted scrim (`.kit-drop`) behind a
+   centered message card (`.kit-drop-card`). Union of docs' opaque, themed
+   card and photos' translucent white-on-black one — the themed surface card
+   wins (it stays legible in both themes); the accent tint splits the
+   difference between docs' 14% and photos' 20% mix. Scrim itself ignores
+   pointer events so the drop target underneath keeps receiving drag events;
+   toggle visibility with `[hidden]`. */
+
+.kit-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--kit-accent) 16%, rgba(15, 18, 26, 0.45));
+  pointer-events: none;
+  animation: kit-fade 0.14s ease-out;
+}
+.kit-drop[hidden] {
+  display: none;
+}
+.kit-drop-card {
+  border: 2px dashed var(--kit-accent);
+  border-radius: var(--kit-radius);
+  background: var(--surface, #fff);
+  color: var(--text, #16181d);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 1.6rem 2.4rem;
+  box-shadow: var(--kit-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-drop {
+    animation: none;
+  }
+}
+
+/* ---------- Bounded-browse footer ------------------------------------------
+   The quiet "showing N of M" line under a windowed list (docs' window foot,
+   photos' equivalent). Mono for the numbers, tiny, centered, wraps on narrow
+   widths. */
+
+.kit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 1.25rem 0 0.5rem;
+  font-family: var(--kit-mono);
+  font-size: 0.72rem;
+  color: var(--kit-faint);
 }
 
 /* ---------- Ask / assistant (chat to your vault) -------------------------- */
@@ -1533,4 +1780,18 @@ kit-reference-strip,
   margin: 0;
   font-size: 0.78rem;
   color: var(--muted, #777);
+}
+
+/* ---------- Text utilities -------------------------------------------------- */
+/* Promoted from photos' `.muted`/`.small` verbatim, onto kit tokens. Small,
+   composable riders for a line that just needs quieter ink or smaller type
+   (a caption, a hint, a secondary label) — not a family of their own. */
+
+.kit-muted {
+  color: var(--kit-faint);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.kit-small {
+  font-size: 0.8rem;
 }
