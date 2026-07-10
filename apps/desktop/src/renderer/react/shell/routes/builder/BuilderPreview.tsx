@@ -11,7 +11,11 @@ import { cx } from '../../../ui/cx.js';
 // frame the same way the running-app view does it: a `#theme=…&bgL=…` hash for
 // first paint plus a `centraid:theme` postMessage on load.
 
-const PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-same-origin';
+// NO sandbox on the preview iframe, matching AppFrame: allow-scripts +
+// allow-same-origin made the sandbox self-escapable (zero isolation; the CSP
+// and consent gates are the real boundary), and sandbox flags propagate into
+// nested browsing contexts where Chromium's PDF viewer refuses to run —
+// blanking in-app document previews (docs quick-look) in drafts too.
 
 export interface PreviewResolved {
   src: string;
@@ -139,7 +143,6 @@ export default function BuilderPreview({
               title="App preview"
               src={resolved.themedSrc}
               style={{ border: 0, height: '100%', width: '100%' }}
-              sandbox={PREVIEW_SANDBOX}
               referrerPolicy="no-referrer"
               data-centraid-app="1"
               onLoad={(e) => {

@@ -89,15 +89,20 @@ export default function AppFrame({
     >
       <div className={styles.viewFrame} ref={wrapRef}>
         {/* Centraid apps are trusted local blueprint code served from the gateway
-            origin: they need same-origin (vault fetches, module imports) *and*
-            scripts, which the sandbox rule flags together. Intentional — the
-            vanilla mountUserApp used the same grant. */}
+            origin: they need same-origin (vault fetches, module imports) and
+            scripts. NO sandbox attribute, deliberately: with allow-scripts +
+            allow-same-origin the sandbox was self-escapable anyway (the framed
+            doc can reach the parent and strip the attribute — the browser logs
+            exactly that advisory), so it bought no isolation — the real
+            boundaries are the app CSP and the vault consent gates. And sandbox
+            flags propagate to every NESTED browsing context, where Chromium's
+            native PDF viewer refuses to instantiate under any token set —
+            silently blanking in-app document previews (docs quick-look). */}
         {/* eslint-disable react/iframe-missing-sandbox */}
         <iframe
           ref={frameRef}
           src="about:blank"
           data-centraid-app="1"
-          sandbox="allow-scripts allow-forms allow-same-origin"
           referrerPolicy="no-referrer"
           title="app"
         />
