@@ -74,7 +74,7 @@ kit-reference-strip {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  z-index: 60;
+  z-index: 80;
   width: min(27rem, calc(100vw - 2rem));
   pointer-events: none;
 }
@@ -482,6 +482,7 @@ kit-reference-strip {
   padding: 0.35rem 0.9rem;
   min-height: 2.4rem;
   cursor: pointer;
+  text-decoration: none; /* anchors-as-buttons (e.g. a download link) */
   -webkit-tap-highlight-color: transparent;
   transition:
     color 0.15s var(--kit-ease),
@@ -633,12 +634,12 @@ kit-reference-strip {
    Backdrop + centered card. The backdrop dims with the theme's own ink (never
    a fixed tint); the card is the standard raised surface. Width is the one
    knob apps keep — set it with an app class on the same element. Layering:
-   modal 50 < popover 55 < toasts 60. */
+   app chrome < modal 70 < popover 75 < toasts 80. */
 
 .kit-modal-back {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 70;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -699,7 +700,7 @@ kit-reference-strip {
 
 .kit-popover {
   position: fixed;
-  z-index: 55;
+  z-index: 75;
   min-width: 190px;
   max-width: 260px;
   background: var(--surface, #fff);

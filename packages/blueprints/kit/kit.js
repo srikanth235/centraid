@@ -422,9 +422,16 @@ export function closePopover() {
  * `build` receives the popover box and appends its content (see `popItem`).
  * Options: `focus` moves focus to the first field/button inside (form
  * popovers); `className` adds an app class for width/spacing overrides;
- * `role` overrides the default `menu` (use `dialog` for form popovers).
+ * `role` overrides the default `menu` (use `dialog` for form popovers);
+ * `onClose` runs once when the popover closes by any path (Escape, outside
+ * click, scroll, resize, programmatic) — the teardown point for popovers
+ * that attach document-level helpers.
  */
-export function openPopover(anchor, build, { focus = false, className, role = 'menu' } = {}) {
+export function openPopover(
+  anchor,
+  build,
+  { focus = false, className, role = 'menu', onClose } = {},
+) {
   closePopover();
   const box = h('div', { class: className ? `kit-popover ${className}` : 'kit-popover', role });
   build(box);
@@ -449,7 +456,11 @@ export function openPopover(anchor, build, { focus = false, className, role = 'm
     if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
   };
   const onScroll = (e) => {
-    if (!box.contains(e.target)) closePopover();
+    // Scrolling inside the popover — or inside the kit's own body-level
+    // @-mention list — must not close the popover hosting it.
+    if (box.contains(e.target)) return;
+    if (e.target instanceof Element && e.target.closest?.('.kit-mention-pop')) return;
+    closePopover();
   };
   const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
   window.addEventListener('resize', closePopover);
@@ -460,6 +471,7 @@ export function openPopover(anchor, build, { focus = false, className, role = 'm
     document.removeEventListener('click', onDoc);
     window.removeEventListener('resize', closePopover);
     window.removeEventListener('scroll', onScroll, true);
+    onClose?.();
   };
   if (focus) box.querySelector('input, select, textarea, button')?.focus();
 }
