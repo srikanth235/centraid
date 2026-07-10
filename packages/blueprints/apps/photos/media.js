@@ -43,6 +43,19 @@ export function setThumbSrc(img, asset) {
   // the grid loads ~KB thumbs, never full originals. A 404 (no variant
   // produced) falls back to the original bytes — a tile never goes blank.
   if (typeof asset.thumb_uri === 'string') {
+    // Known-small assets (longest edge within THUMB_EDGE) never get a thumb
+    // staged — upload only downsizes larger ones — so the variant probe is a
+    // guaranteed 404: load the original directly instead of paying (and
+    // console-logging) a doomed round-trip on every grid render. Assets
+    // without recorded dimensions still probe and fall back.
+    const knownSmall =
+      asset.width != null &&
+      asset.height != null &&
+      Math.max(asset.width, asset.height) <= THUMB_EDGE;
+    if (knownSmall) {
+      img.src = asset.content_uri;
+      return;
+    }
     img.onerror = () => {
       img.onerror = null;
       img.src = asset.content_uri;

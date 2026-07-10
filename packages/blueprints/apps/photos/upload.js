@@ -46,22 +46,25 @@ function dHashFromImage(img) {
 // The grid's thumbnail, produced at upload time on this device (the canvas
 // is the one raster codec every client has) and staged as the `thumb`
 // variant beside the original. Dimensions + perceptual hash ride for free.
+//
+// Decodes via createImageBitmap(file) — NOT `img.src = URL.createObjectURL()`:
+// the gateway serves apps under `img-src 'self' data:` (no `blob:`), so a
+// blob-URL <img> is CSP-refused and the whole pipeline silently died (no
+// thumb variant, no dims, no phash — and every grid load then 404s on
+// `?variant=thumb` before falling back to the originals). createImageBitmap
+// reads the File directly, no URL fetch for CSP to police.
 async function stageClientThumb(file, parentSha) {
   try {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.src = url;
-    await img.decode();
-    const dims =
-      img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
-    const phash = dHashFromImage(img);
-    const long = Math.max(img.naturalWidth, img.naturalHeight);
+    const bitmap = await createImageBitmap(file);
+    const dims = bitmap.width > 0 ? { width: bitmap.width, height: bitmap.height } : null;
+    const phash = dHashFromImage(bitmap);
+    const long = Math.max(bitmap.width, bitmap.height);
     if (long > THUMB_EDGE) {
       const scale = THUMB_EDGE / long;
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.82));
       if (blob) {
         await fetch(`${BLOB_ROUTE}?variant=thumb&variant_of=${parentSha}&media_type=image/jpeg`, {
@@ -71,7 +74,7 @@ async function stageClientThumb(file, parentSha) {
         });
       }
     }
-    URL.revokeObjectURL(url);
+    bitmap.close();
     return dims ? { ...dims, ...(phash ? { phash } : {}) } : phash ? { phash } : null;
   } catch {
     return null; // no thumb is a slower grid, never a failed upload

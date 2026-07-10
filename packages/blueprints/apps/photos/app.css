@@ -513,7 +513,10 @@ button:focus-visible {
   justify-content: center;
   gap: 0.75rem;
   padding: 2rem 1rem;
-  background: color-mix(in oklab, var(--ink) 88%, #000);
+  /* Theme-stable near-black scrim. Deriving from --ink flipped this LIGHT in
+     dark mode (ink is near-white there) — a washed-out photo viewer. A photo
+     lightbox dims to dark in both themes; keep the app hue's cast. */
+  background: hsl(var(--app-hue) 25% 6% / 0.94);
   cursor: pointer;
 }
 .lightbox[hidden] {
