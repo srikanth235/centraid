@@ -225,7 +225,7 @@ test('shape-drifted artifacts (added field, removed field, type change) are all 
     }),
   });
   expect(added.status).toBe(400);
-  expect((await added.json()).message).toMatch(/exactly the staged fields/);
+  expect(((await added.json()) as { message: string }).message).toMatch(/exactly the staged fields/);
 
   const removedFieldItem = stageGmailSend(plane);
   const removed = await fetch(`${base}/centraid/_vault/outbox/${removedFieldItem}`, {
@@ -236,7 +236,9 @@ test('shape-drifted artifacts (added field, removed field, type change) are all 
     }),
   });
   expect(removed.status).toBe(400);
-  expect((await removed.json()).message).toMatch(/exactly the staged fields/);
+  expect(((await removed.json()) as { message: string }).message).toMatch(
+    /exactly the staged fields/,
+  );
 
   const typeChangedItem = stageGmailSend(plane);
   const typeChanged = await fetch(`${base}/centraid/_vault/outbox/${typeChangedItem}`, {
@@ -247,7 +249,9 @@ test('shape-drifted artifacts (added field, removed field, type change) are all 
     }),
   });
   expect(typeChanged.status).toBe(400);
-  expect((await typeChanged.json()).message).toMatch(/must stay a string/);
+  expect(((await typeChanged.json()) as { message: string }).message).toMatch(
+    /must stay a string/,
+  );
 
   // None of the refused edits touched the staged rows.
   for (const id of [addedFieldItem, removedFieldItem, typeChangedItem]) {
@@ -288,7 +292,7 @@ test('an artifact edit on discard is refused — discarding sends nothing, so no
     }),
   });
   expect(res.status).toBe(400);
-  expect((await res.json()).message).toMatch(/only applies to "approve"/);
+  expect(((await res.json()) as { message: string }).message).toMatch(/only applies to "approve"/);
   expect(rawOf(plane, itemId).status).toBe('pending');
 });
 
