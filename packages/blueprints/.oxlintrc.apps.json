@@ -4,7 +4,7 @@
     "browser": true,
     "es2024": true
   },
-  "ignorePatterns": ["kit/lit-core.min.js"],
+  "ignorePatterns": ["kit/lit-core.min.js", "kit/react-core.min.js"],
   "rules": {
     "no-undef": "error"
   }

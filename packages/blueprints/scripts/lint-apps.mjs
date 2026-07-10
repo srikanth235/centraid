@@ -23,7 +23,7 @@ const OXLINT = path.resolve(PKG, '../../node_modules/.bin/oxlint');
 const apps = readdirSync(path.join(PKG, 'apps'), { withFileTypes: true })
   .filter((e) => e.isDirectory())
   .map((e) => `apps/${e.name}/app.js`);
-const targets = [...apps, 'kit/kit.js', 'kit/elements.js'];
+const targets = [...apps, 'kit/kit.js', 'kit/elements.js', 'kit/jsx-runtime.js'];
 
 try {
   execFileSync(
