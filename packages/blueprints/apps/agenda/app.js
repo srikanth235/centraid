@@ -17,6 +17,11 @@ import {
   toast,
   wireAttachInput,
 } from './kit.js';
+// Aliased: the app already has a module-level `render()` orchestrator
+// (dispatches to the active view's render*); `litRender` is Lit's standalone
+// DOM-commit function driving the month/week/list containers and the
+// overlay panel (kit-owned containers, per the app's Lit conventions).
+import { createRef, html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -284,9 +289,13 @@ async function load() {
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     $('proposeForm').hidden = true;
-    $('dayList').innerHTML = '';
-    $('monthGrid').innerHTML = '';
-    $('weekView').innerHTML = '';
+    // monthGrid may still be holding the raw (non-Lit) skeleton if this is
+    // the very first read — route through mountMonth so that guard clear
+    // still happens; weekView/dayList never receive non-Lit content, so a
+    // plain commit is safe there.
+    litRender(nothing, $('dayList'));
+    mountMonth(nothing);
+    litRender(nothing, $('weekView'));
     $('calendarChips').hidden = true;
     $('empty').hidden = true;
     $('noCalendars').hidden = true;
@@ -327,16 +336,15 @@ function render() {
 function renderCalendars() {
   const select = $('calendarSelect');
   const previous = select.value; // keep a mid-form choice across focus refreshes
-  select.innerHTML = '';
-  for (const c of calendars) {
-    const opt = document.createElement('option');
-    opt.value = c.calendar_id;
-    opt.textContent = c.name ?? 'Calendar';
-    select.appendChild(opt);
-  }
-  if (previous && calendars.some((c) => c.calendar_id === previous)) {
-    select.value = previous;
-  }
+  litRender(
+    html`${calendars.map(
+      (c) =>
+        html`<option value=${c.calendar_id} ?selected=${c.calendar_id === previous}>
+          ${c.name ?? 'Calendar'}
+        </option>`,
+    )}`,
+    select,
+  );
   $('proposeForm').hidden = calendars.length === 0;
   $('noCalendars').hidden = calendars.length > 0;
 }
@@ -344,37 +352,50 @@ function renderCalendars() {
 function renderChips() {
   const host = $('calendarChips');
   host.hidden = calendars.length < 2;
-  host.innerHTML = '';
-  for (const c of calendars) {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'cal-chip';
-    const shown = !hiddenCals.has(c.calendar_id);
-    chip.setAttribute('aria-pressed', String(shown));
-    chip.title = shown ? 'Hide this calendar' : 'Show this calendar';
-    const dot = document.createElement('span');
-    dot.className = 'cal-dot';
-    dot.style.background = colorFor(c.calendar_id);
-    const name = document.createElement('span');
-    name.textContent = c.name ?? 'Calendar';
-    chip.append(dot, name);
-    chip.addEventListener('click', () => {
-      if (hiddenCals.has(c.calendar_id)) hiddenCals.delete(c.calendar_id);
-      else hiddenCals.add(c.calendar_id);
-      renderChips();
-      render();
-    });
-    host.appendChild(chip);
-  }
+  litRender(
+    html`${calendars.map((c) => {
+      const shown = !hiddenCals.has(c.calendar_id);
+      return html`<button
+        type="button"
+        class="cal-chip"
+        aria-pressed=${String(shown)}
+        title=${shown ? 'Hide this calendar' : 'Show this calendar'}
+        @click=${() => {
+          if (hiddenCals.has(c.calendar_id)) hiddenCals.delete(c.calendar_id);
+          else hiddenCals.add(c.calendar_id);
+          renderChips();
+          render();
+        }}
+      >
+        <span class="cal-dot" style=${`background:${colorFor(c.calendar_id)}`}></span>
+        <span>${c.name ?? 'Calendar'}</span>
+      </button>`;
+    })}`,
+    host,
+  );
 }
 
 // ---------- Month view: a Monday-first CSS-grid calendar ----------
 
 const MAX_PILLS = 3;
 
-function renderMonth() {
+// `#monthGrid` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, in `load()`). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first call — it only appends past
+// them — so the very first Lit commit here must clear that skeleton itself;
+// every commit after that must go through `litRender` alone (a raw clear once
+// Lit owns the container corrupts its part cache).
+let monthMounted = false;
+function mountMonth(templateResult) {
   const grid = $('monthGrid');
-  grid.innerHTML = '';
+  if (!monthMounted) {
+    grid.replaceChildren();
+    monthMounted = true;
+  }
+  litRender(templateResult, grid);
+}
+
+function renderMonth() {
   $('empty').hidden = true;
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
@@ -385,94 +406,97 @@ function renderMonth() {
 
   const byDay = bucketByDay(visibleEvents());
 
-  // Weekday header row, Monday first.
-  const head = document.createElement('div');
-  head.className = 'grid-row';
-  head.setAttribute('role', 'row');
-  const monday = new Date(2024, 0, 1); // a known Monday
-  for (let i = 0; i < 7; i += 1) {
-    const h = document.createElement('span');
-    h.className = 'dow muted small';
-    h.setAttribute('role', 'columnheader');
-    h.textContent = new Date(
-      monday.getFullYear(),
-      monday.getMonth(),
-      monday.getDate() + i,
-    ).toLocaleDateString(undefined, { weekday: 'narrow' });
-    head.appendChild(h);
-  }
-  grid.appendChild(head);
-
   // 6 weeks × 7 days from the Monday on or before the 1st.
   const gridStart = startOfWeek(new Date(year, month, 1));
   const todayKey = localDayKey(new Date());
+  const weeks = [];
   for (let w = 0; w < 6; w += 1) {
-    const row = document.createElement('div');
-    row.className = 'grid-row';
-    row.setAttribute('role', 'row');
+    const days = [];
     for (let i = 0; i < 7; i += 1) {
-      const date = new Date(
-        gridStart.getFullYear(),
-        gridStart.getMonth(),
-        gridStart.getDate() + w * 7 + i,
+      days.push(
+        new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + w * 7 + i),
       );
-      const key = localDayKey(date);
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.setAttribute('role', 'gridcell');
-      cell.tabIndex = 0;
-      if (date.getMonth() !== month) cell.dataset.outside = 'true';
-      if (key === todayKey) cell.dataset.today = 'true';
-      const segs = byDay.get(key) ?? [];
-      cell.setAttribute(
-        'aria-label',
-        `${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${segs.length === 0 ? 'no events' : `${segs.length} event${segs.length === 1 ? '' : 's'}`}. Press Enter to propose an event.`,
-      );
-      const num = document.createElement('span');
-      num.className = 'cell-date';
-      num.textContent = String(date.getDate());
-      cell.appendChild(num);
-      for (const seg of segs.slice(0, MAX_PILLS)) {
-        cell.appendChild(renderPill(seg));
-      }
-      if (segs.length > MAX_PILLS) {
-        const more = document.createElement('button');
-        more.type = 'button';
-        more.className = 'more muted small';
-        more.textContent = `+${segs.length - MAX_PILLS} more`;
-        more.addEventListener('click', () => openDayPanel(key, more));
-        cell.appendChild(more);
-      }
-      // Clicking the cell itself (not a pill) starts a proposal on that day.
-      cell.addEventListener('click', (e) => {
-        if (e.target.closest('.pill, .more')) return;
-        prefillCreate(date);
-      });
-      cell.addEventListener('keydown', (e) => {
-        if (e.target !== cell) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          prefillCreate(date);
-        }
-      });
-      row.appendChild(cell);
     }
-    grid.appendChild(row);
+    weeks.push(days);
   }
+  mountMonth(monthTemplate(weeks, byDay, month, todayKey));
 }
 
-function renderPill(seg) {
+/**
+ * Weekday header row + 6 weeks × 7 days, Monday first, as a Lit template.
+ * `.grid-row` is `display: contents` (app.css) so each `.cell`/`.dow` lands
+ * as a direct grid item of `#monthGrid` — kept as a plain function (not a
+ * component) so that flattening holds; a per-cell custom element host would
+ * still be an extra node even at `display: contents` untangled from the
+ * `.grid-row` wrapper, and aria roles (`role="row"`/`"gridcell"`) must live
+ * on real elements, not a component host.
+ */
+function monthTemplate(weeks, byDay, month, todayKey) {
+  const monday = new Date(2024, 0, 1); // a known Monday
+  return html`<div class="grid-row" role="row">
+      ${Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+        return html`<span class="dow muted small" role="columnheader"
+          >${d.toLocaleDateString(undefined, { weekday: 'narrow' })}</span
+        >`;
+      })}
+    </div>
+    ${weeks.map(
+      (days) => html`<div class="grid-row" role="row">
+        ${days.map((date) => dayCellTpl(date, byDay, month, todayKey))}
+      </div>`,
+    )}`;
+}
+
+function dayCellTpl(date, byDay, month, todayKey) {
+  const key = localDayKey(date);
+  const segs = byDay.get(key) ?? [];
+  const label = `${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}, ${segs.length === 0 ? 'no events' : `${segs.length} event${segs.length === 1 ? '' : 's'}`}. Press Enter to propose an event.`;
+  return html`<div
+    class="cell"
+    role="gridcell"
+    tabindex="0"
+    data-outside=${date.getMonth() !== month ? 'true' : nothing}
+    data-today=${key === todayKey ? 'true' : nothing}
+    aria-label=${label}
+    @click=${(e) => {
+      if (e.target.closest('.pill, .more')) return;
+      prefillCreate(date);
+    }}
+    @keydown=${(e) => {
+      if (e.target !== e.currentTarget) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        prefillCreate(date);
+      }
+    }}
+  >
+    <span class="cell-date">${date.getDate()}</span>
+    ${segs.slice(0, MAX_PILLS).map((seg) => pillTpl(seg))}
+    ${segs.length > MAX_PILLS
+      ? html`<button
+          type="button"
+          class="more muted small"
+          @click=${(e) => openDayPanel(key, e.currentTarget)}
+        >
+          +${segs.length - MAX_PILLS} more
+        </button>`
+      : nothing}
+  </div>`;
+}
+
+function pillTpl(seg) {
   const ev = seg.ev;
-  const pill = document.createElement('button');
-  pill.type = 'button';
-  pill.className = 'pill';
-  pill.dataset.status = ev.status;
-  pill.style.setProperty('--ev-color', colorFor(ev.calendar_id));
-  pill.textContent =
-    seg.startsHere && !seg.spansAll ? `${fmtTime(ev.dtstart)} ${ev.summary}` : ev.summary;
-  pill.title = `${fmtRange(ev)} — ${ev.summary}`;
-  pill.addEventListener('click', () => openEventDetail(ev, pill));
-  return pill;
+  return html`<button
+    type="button"
+    class="pill"
+    data-status=${ev.status}
+    style=${`--ev-color:${colorFor(ev.calendar_id)}`}
+    title=${`${fmtRange(ev)} — ${ev.summary}`}
+    @click=${(e) => openEventDetail(ev, e.currentTarget)}
+  >
+    ${seg.startsHere && !seg.spansAll ? `${fmtTime(ev.dtstart)} ${ev.summary}` : ev.summary}
+  </button>`;
 }
 
 // ---------- Week view: hour axis + 7 positioned columns ----------
@@ -511,9 +535,10 @@ function layoutDay(items) {
   return placed;
 }
 
+// `#weekView` never receives non-Lit content (unlike `#monthGrid`, no
+// skeleton targets it), so its first commit needs no mount guard.
 function renderWeek() {
   const host = $('weekView');
-  host.innerHTML = '';
   $('empty').hidden = true;
   const start = startOfWeek(cursor);
   const end6 = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
@@ -527,105 +552,87 @@ function renderWeek() {
     days.push(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
   }
 
-  const wrap = document.createElement('div');
-  wrap.className = 'week-wrap';
+  // A callback ref would only fire once (Lit reuses the `.week-scroll` node
+  // across re-renders of the same shape); scrollTop must be set imperatively
+  // right after the commit instead, every render — matching the vanilla
+  // behavior this replaces (land on 7am on every navigation/refresh).
+  const scrollRef = createRef();
+  litRender(weekTemplate(days, byDay, todayKey, scrollRef), host);
+  if (scrollRef.value) scrollRef.value.scrollTop = 7 * HOUR_PX;
+}
 
-  // Day headers.
-  const head = document.createElement('div');
-  head.className = 'week-head';
-  head.appendChild(document.createElement('span')); // axis corner
-  for (const d of days) {
-    const cellHead = document.createElement('div');
-    cellHead.className = 'week-day-head';
-    if (localDayKey(d) === todayKey) cellHead.dataset.today = 'true';
-    const dow = document.createElement('span');
-    dow.className = 'week-dow muted small';
-    dow.textContent = d.toLocaleDateString(undefined, { weekday: 'short' });
-    const num = document.createElement('span');
-    num.className = 'week-num';
-    num.textContent = String(d.getDate());
-    cellHead.append(dow, num);
-    head.appendChild(cellHead);
-  }
-  wrap.appendChild(head);
-
-  // All-day lane: whole-day segments of multi-day events.
+function weekTemplate(days, byDay, todayKey, scrollRef) {
   const hasAllDay = days.some((d) => (byDay.get(localDayKey(d)) ?? []).some((s) => s.spansAll));
-  if (hasAllDay) {
-    const lane = document.createElement('div');
-    lane.className = 'week-allday';
-    lane.appendChild(document.createElement('span'));
-    for (const d of days) {
-      const cell = document.createElement('div');
-      cell.className = 'week-allday-cell';
-      for (const seg of (byDay.get(localDayKey(d)) ?? []).filter((s) => s.spansAll)) {
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'allday-chip';
-        chip.style.setProperty('--ev-color', colorFor(seg.ev.calendar_id));
-        chip.textContent = seg.ev.summary;
-        chip.title = fmtRange(seg.ev);
-        chip.addEventListener('click', () => openEventDetail(seg.ev, chip));
-        cell.appendChild(chip);
-      }
-      lane.appendChild(cell);
-    }
-    wrap.appendChild(lane);
-  }
+  return html`<div class="week-wrap">
+    <div class="week-head">
+      <span></span>
+      ${days.map((d) => weekDayHeadTpl(d, todayKey))}
+    </div>
+    ${hasAllDay
+      ? html`<div class="week-allday">
+          <span></span>
+          ${days.map((d) => weekAllDayCellTpl(d, byDay))}
+        </div>`
+      : nothing}
+    <div class="week-scroll" ${ref(scrollRef)}>
+      <div class="week-grid">
+        ${weekAxisTpl()} ${days.map((d) => weekColTpl(d, byDay, todayKey))}
+      </div>
+    </div>
+  </div>`;
+}
 
-  // Scrollable hour grid.
-  const scroll = document.createElement('div');
-  scroll.className = 'week-scroll';
-  const grid = document.createElement('div');
-  grid.className = 'week-grid';
+function weekDayHeadTpl(d, todayKey) {
+  return html`<div
+    class="week-day-head"
+    data-today=${localDayKey(d) === todayKey ? 'true' : nothing}
+  >
+    <span class="week-dow muted small"
+      >${d.toLocaleDateString(undefined, { weekday: 'short' })}</span
+    >
+    <span class="week-num">${d.getDate()}</span>
+  </div>`;
+}
 
-  const axis = document.createElement('div');
-  axis.className = 'week-axis';
-  axis.style.height = `${24 * HOUR_PX}px`;
-  for (let h = 1; h < 24; h += 1) {
-    const label = document.createElement('span');
-    label.className = 'week-hour muted small';
-    label.style.top = `${h * HOUR_PX}px`;
-    label.textContent = new Date(2024, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' });
-    axis.appendChild(label);
-  }
-  grid.appendChild(axis);
+function weekAllDayCellTpl(d, byDay) {
+  const segs = (byDay.get(localDayKey(d)) ?? []).filter((s) => s.spansAll);
+  return html`<div class="week-allday-cell">
+    ${segs.map(
+      (seg) => html`<button
+        type="button"
+        class="allday-chip"
+        style=${`--ev-color:${colorFor(seg.ev.calendar_id)}`}
+        title=${fmtRange(seg.ev)}
+        @click=${(e) => openEventDetail(seg.ev, e.currentTarget)}
+      >
+        ${seg.ev.summary}
+      </button>`,
+    )}
+  </div>`;
+}
 
-  for (const d of days) {
-    const key = localDayKey(d);
-    const col = document.createElement('div');
-    col.className = 'week-col';
-    col.style.height = `${24 * HOUR_PX}px`;
-    if (key === todayKey) col.dataset.today = 'true';
-    const dayStart = d.getTime();
-    const segs = (byDay.get(key) ?? []).filter((s) => !s.spansAll);
-    for (const seg of layoutDay(segs)) {
-      const block = document.createElement('button');
-      block.type = 'button';
-      block.className = 'week-ev';
-      block.dataset.status = seg.ev.status;
-      block.style.setProperty('--ev-color', colorFor(seg.ev.calendar_id));
-      const top = ((seg.segStart - dayStart) / 3600000) * HOUR_PX;
-      const height = Math.max(((seg.segEnd - seg.segStart) / 3600000) * HOUR_PX, 22);
-      block.style.top = `${top}px`;
-      block.style.height = `${height}px`;
-      block.style.left = `${(seg.col / seg.width) * 100}%`;
-      block.style.width = `calc(${100 / seg.width}% - 2px)`;
-      const name = document.createElement('span');
-      name.className = 'week-ev-title';
-      name.textContent = seg.ev.summary;
-      const time = document.createElement('span');
-      time.className = 'week-ev-time';
-      time.textContent = segTimeText(seg);
-      block.append(name, time);
-      block.title = `${fmtRange(seg.ev)} — ${seg.ev.summary}`;
-      block.addEventListener('click', () => openEventDetail(seg.ev, block));
-      col.appendChild(block);
-    }
-    // Click an empty slot to start a proposal at that half hour.
-    col.addEventListener('click', (e) => {
+function weekAxisTpl() {
+  return html`<div class="week-axis" style=${`height:${24 * HOUR_PX}px`}>
+    ${Array.from({ length: 23 }, (_, i) => {
+      const h = i + 1;
+      return html`<span class="week-hour muted small" style=${`top:${h * HOUR_PX}px`}
+        >${new Date(2024, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' })}</span
+      >`;
+    })}
+  </div>`;
+}
+
+function weekColTpl(d, byDay, todayKey) {
+  const key = localDayKey(d);
+  const dayStart = d.getTime();
+  const segs = (byDay.get(key) ?? []).filter((s) => !s.spansAll);
+  return html`<div
+    class="week-col"
+    style=${`height:${24 * HOUR_PX}px`}
+    data-today=${key === todayKey ? 'true' : nothing}
+    @click=${(e) => {
       if (e.target.closest('.week-ev')) return;
-      const rect = col.getBoundingClientRect();
+      const rect = e.currentTarget.getBoundingClientRect();
       const hour = Math.max(
         0,
         Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2),
@@ -638,24 +645,33 @@ function renderWeek() {
         (hour % 1) * 60,
       );
       prefillCreate(d, at);
-    });
-    grid.appendChild(col);
-  }
-  scroll.appendChild(grid);
-  wrap.appendChild(scroll);
-  host.appendChild(wrap);
-  // Land on the working day: 7:00 visible first, full day scrollable.
-  scroll.scrollTop = 7 * HOUR_PX;
+    }}
+  >
+    ${layoutDay(segs).map((seg) => weekEvTpl(seg, dayStart))}
+  </div>`;
+}
+
+function weekEvTpl(seg, dayStart) {
+  const top = ((seg.segStart - dayStart) / 3600000) * HOUR_PX;
+  const height = Math.max(((seg.segEnd - seg.segStart) / 3600000) * HOUR_PX, 22);
+  const style = `--ev-color:${colorFor(seg.ev.calendar_id)};top:${top}px;height:${height}px;left:${(seg.col / seg.width) * 100}%;width:calc(${100 / seg.width}% - 2px)`;
+  return html`<button
+    type="button"
+    class="week-ev"
+    data-status=${seg.ev.status}
+    style=${style}
+    title=${`${fmtRange(seg.ev)} — ${seg.ev.summary}`}
+    @click=${(e) => openEventDetail(seg.ev, e.currentTarget)}
+  >
+    <span class="week-ev-title">${seg.ev.summary}</span>
+    <span class="week-ev-time">${segTimeText(seg)}</span>
+  </button>`;
 }
 
 // ---------- List view ----------
 
-// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// the vault returns become <mark>, and event text never parses as HTML.
-
 function renderList() {
   const list = $('dayList');
-  list.innerHTML = '';
   // A search swaps the loaded window for the vault's FTS matches (which can
   // reach past events the window never loaded); the calendar chips filter
   // either set the same way.
@@ -664,86 +680,104 @@ function renderList() {
   $('empty').hidden = evs.length > 0;
   const byDay = bucketByDay(evs);
   const keys = [...byDay.keys()].sort();
-  for (const key of keys) {
-    const h = document.createElement('p');
-    h.className = 'day-label muted small';
-    h.dataset.day = key;
-    h.textContent = fmtDay(key);
-    list.appendChild(h);
-    for (const seg of byDay.get(key)) {
-      list.appendChild(renderRow(seg));
-    }
-  }
+  litRender(listTemplate(keys, byDay), list);
 }
 
-function renderRow(seg) {
-  const ev = seg.ev;
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.dataset.status = ev.status;
-  // The main body is a real button: clicking anywhere on the text opens the
-  // event detail panel (attach/cancel stay as their own controls).
-  const main = document.createElement('button');
-  main.type = 'button';
-  main.className = 'row-main';
-  const time = document.createElement('span');
-  time.className = 'row-time';
-  time.textContent = segTimeText(seg);
-  const dot = document.createElement('span');
-  dot.className = 'cal-dot';
-  dot.style.background = colorFor(ev.calendar_id);
-  const text = document.createElement('span');
-  text.className = 'row-text';
-  text.textContent = ev.summary;
-  // A vault search match carries its own snippet, already centered on the
-  // hit — it renders beneath the summary with the term marked.
-  if (ev.snippet) {
-    const snip = document.createElement('span');
-    snip.className = 'row-snippet muted small';
-    snippetInto(snip, ev.snippet);
-    text.append(document.createElement('br'), snip);
+/**
+ * Flat day-label + row (+ optional attachment strip) siblings, kept as a
+ * plain function (not per-row components): app.css leans on `.row:last-child`
+ * across the WHOLE rendered list, which only holds when `.row` stays a
+ * direct child of `#dayList`.
+ */
+function listTemplate(keys, byDay) {
+  const entries = [];
+  for (const key of keys) {
+    entries.push({ tpl: 'label', key: `label:${key}`, day: key });
+    for (const seg of byDay.get(key)) {
+      entries.push({ tpl: 'row', key: `row:${seg.ev.event_id}:${key}`, seg });
+      if (seg.ev.attachments?.length) {
+        entries.push({ tpl: 'attach', key: `attach:${seg.ev.event_id}:${key}`, seg });
+      }
+    }
   }
-  main.append(time, dot, text);
-  main.addEventListener('click', () => openEventDetail(ev, main));
-  const badge = document.createElement('span');
-  badge.className = 'badge';
-  badge.textContent = ev.status;
-  const attach = document.createElement('button');
-  attach.type = 'button';
-  attach.className = 'attach-btn';
-  attach.textContent = '⎘';
-  attach.title = 'Attach a file';
-  attach.setAttribute('aria-label', 'Attach a file');
-  attach.addEventListener('click', () => {
-    attachTarget = ev.event_id;
-    $('attachInput').click();
-  });
-  // Cancelling is medium-risk, so the vault parks it for the owner — the
-  // affordance is an ask, armed on first click and auto-disarmed by the kit.
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'attach-btn cancel-btn';
-  cancel.textContent = '✕';
-  cancel.title = 'Ask to cancel — the owner approves it';
-  cancel.setAttribute('aria-label', 'Ask to cancel this event');
-  cancel.addEventListener('click', async () => {
-    if (!armConfirm(cancel, { armedLabel: 'Ask to cancel?' })) return;
-    const outcome = await act('cancel-event', { event_id: ev.event_id });
-    if (narrate(outcome)) await load();
-  });
-  row.append(main, badge, cancel, attach);
+  return html`${repeat(
+    entries,
+    (e) => e.key,
+    (e) => {
+      if (e.tpl === 'label') {
+        return html`<p class="day-label muted small" data-day=${e.day}>${fmtDay(e.day)}</p>`;
+      }
+      if (e.tpl === 'attach') {
+        return html`<div
+          class="kit-attach-strip row-attachments"
+          ${ref((el) => {
+            if (el) renderAttachments(el, e.seg.ev.attachments, removeAttachment);
+          })}
+        ></div>`;
+      }
+      return rowTpl(e.seg);
+    },
+  )}`;
+}
 
-  // Any attachments render as a strip beneath the row.
-  if (ev.attachments?.length) {
-    const frag = document.createDocumentFragment();
-    frag.appendChild(row);
-    const strip = document.createElement('div');
-    strip.className = 'kit-attach-strip row-attachments';
-    renderAttachments(strip, ev.attachments, removeAttachment);
-    frag.appendChild(strip);
-    return frag;
-  }
-  return row;
+// One event row: the main body is a real button — clicking anywhere on the
+// text opens the event detail panel (attach/cancel stay as their own
+// controls). Cancelling is medium-risk, so the vault parks it for the
+// owner — the affordance is an ask, armed on first click (kit armConfirm).
+function rowTpl(seg) {
+  const ev = seg.ev;
+  return html`<div class="row" data-status=${ev.status}>
+    <button type="button" class="row-main" @click=${(e) => openEventDetail(ev, e.currentTarget)}>
+      <span class="row-time">${segTimeText(seg)}</span>
+      <span class="cal-dot" style=${`background:${colorFor(ev.calendar_id)}`}></span>
+      <span class="row-text"
+        >${ev.summary}${ev.snippet ? html`<br />${snippetSpanTpl(ev.snippet)}` : nothing}</span
+      >
+    </button>
+    <span class="badge">${ev.status}</span>
+    <button
+      type="button"
+      class="attach-btn cancel-btn"
+      title="Ask to cancel — the owner approves it"
+      aria-label="Ask to cancel this event"
+      @click=${(e) => cancelFromRow(ev, e.currentTarget)}
+    >
+      ✕
+    </button>
+    <button
+      type="button"
+      class="attach-btn"
+      title="Attach a file"
+      aria-label="Attach a file"
+      @click=${() => {
+        attachTarget = ev.event_id;
+        $('attachInput').click();
+      }}
+    >
+      ⎘
+    </button>
+  </div>`;
+}
+
+// A vault search match carries its own snippet, already centered on the hit —
+// it renders beneath the summary with the term marked. `snippetInto` mutates
+// real nodes (the ⟦…⟧ hit markers become <mark>), so it needs a ref, same as
+// the kit's other node-mutating helpers.
+function snippetSpanTpl(snippet) {
+  return html`<span
+    class="row-snippet muted small"
+    ${ref((el) => {
+      if (!el) return;
+      el.replaceChildren();
+      snippetInto(el, snippet);
+    })}
+  ></span>`;
+}
+
+async function cancelFromRow(ev, btn) {
+  if (!armConfirm(btn, { armedLabel: 'Ask to cancel?' })) return;
+  const outcome = await act('cancel-event', { event_id: ev.event_id });
+  if (narrate(outcome)) await load();
 }
 
 // ---------- Overlay: event detail popover + day panel ----------
@@ -752,114 +786,81 @@ let overlayReturn = null;
 
 function openOverlay(build, returnFocus) {
   overlayReturn = returnFocus ?? document.activeElement;
-  const panel = $('overlayPanel');
-  panel.innerHTML = '';
-  build(panel);
+  build($('overlayPanel'));
   $('overlay').hidden = false;
-  panel.focus();
+  $('overlayPanel').focus();
 }
 
 function closeOverlay() {
   if ($('overlay').hidden) return;
   $('overlay').hidden = true;
-  $('overlayPanel').innerHTML = '';
+  // `#overlayPanel` is Lit-owned once anything has been built into it (event
+  // detail or day panel) — commit an empty render instead of a raw clear, or
+  // the next `litRender` into it throws (corrupted part cache).
+  litRender(nothing, $('overlayPanel'));
   if (overlayReturn instanceof HTMLElement && overlayReturn.isConnected) overlayReturn.focus();
   overlayReturn = null;
 }
 
-function panelHeader(panel, title, colorBar) {
-  const head = document.createElement('div');
-  head.className = 'panel-head';
-  if (colorBar) {
-    const bar = document.createElement('span');
-    bar.className = 'panel-color';
-    bar.style.background = colorBar;
-    head.appendChild(bar);
-  }
-  const h = document.createElement('h2');
-  h.id = 'panelTitle';
-  h.textContent = title;
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'panel-close';
-  close.textContent = '×';
-  close.setAttribute('aria-label', 'Close');
-  close.addEventListener('click', closeOverlay);
-  head.append(h, close);
-  panel.appendChild(head);
+function panelHeaderTpl(title, colorBar) {
+  return html`<div class="panel-head">
+    ${colorBar
+      ? html`<span class="panel-color" style=${`background:${colorBar}`}></span>`
+      : nothing}
+    <h2 id="panelTitle">${title}</h2>
+    <button type="button" class="panel-close" aria-label="Close" @click=${closeOverlay}>×</button>
+  </div>`;
 }
 
 function openEventDetail(ev, returnFocus) {
   openOverlay((panel) => buildEventDetail(panel, ev), returnFocus);
 }
 
+// The event detail panel: meta, optional description/attachments, an inline
+// reschedule form, and the attach/cancel actions. A one-time build (the
+// panel isn't re-rendered reactively while open) — grab refs right after the
+// commit and wire behavior with closures, same shape as tasks' popovers.
 function buildEventDetail(panel, ev) {
-  panel.innerHTML = '';
-  panelHeader(panel, ev.summary, colorFor(ev.calendar_id));
+  const startRef = createRef();
+  const endRef = createRef();
+  const saveRef = createRef();
+  const cancelRef = createRef();
+  const noticeRef = createRef();
+  // Assigned once the template is committed (below); the inline `@click`/
+  // `@change` bindings close over these and only ever fire after the whole
+  // synchronous build has finished.
+  let onStartChange = () => {};
+  let onSave = () => {};
+  let onCancel = () => {};
 
-  const meta = document.createElement('div');
-  meta.className = 'panel-meta';
-  const when = document.createElement('p');
-  when.className = 'panel-when';
-  when.textContent = fmtRange(ev);
-  meta.appendChild(when);
-  const cal = calById.get(ev.calendar_id);
-  const line = document.createElement('p');
-  line.className = 'panel-cal muted';
-  const dot = document.createElement('span');
-  dot.className = 'cal-dot';
-  dot.style.background = colorFor(ev.calendar_id);
-  line.appendChild(dot);
-  line.appendChild(document.createTextNode(` ${cal?.name ?? 'No calendar'} · `));
-  const badge = document.createElement('span');
-  badge.className = 'badge';
-  badge.textContent = ev.status;
-  line.appendChild(badge);
-  meta.appendChild(line);
-  panel.appendChild(meta);
+  litRender(
+    eventDetailTemplate(ev, {
+      startRef,
+      endRef,
+      saveRef,
+      cancelRef,
+      noticeRef,
+      onStartChange: () => onStartChange(),
+      onSave: () => onSave(),
+      onCancel: () => onCancel(),
+    }),
+    panel,
+  );
 
-  if (ev.description) {
-    const desc = document.createElement('p');
-    desc.className = 'panel-desc';
-    desc.textContent = ev.description;
-    panel.appendChild(desc);
-  }
-
-  if (ev.attachments?.length) {
-    const strip = document.createElement('div');
-    strip.className = 'kit-attach-strip panel-attachments';
-    renderAttachments(strip, ev.attachments, removeAttachment);
-    panel.appendChild(strip);
-  }
+  const startEl = startRef.value;
+  const endEl = endRef.value;
+  const save = saveRef.value;
+  const cancel = cancelRef.value;
+  const noticeEl = noticeRef.value;
+  let lastStart = startEl.value;
 
   // Inline narration for outcomes that keep the panel open.
-  const panelNotice = document.createElement('p');
-  panelNotice.className = 'panel-notice muted';
-  panelNotice.setAttribute('role', 'status');
-  panelNotice.hidden = true;
   const sayInPanel = (text) => {
-    panelNotice.textContent = text;
-    panelNotice.hidden = !text;
+    noticeEl.textContent = text;
+    noticeEl.hidden = !text;
   };
 
-  // Edit time — wired to the reschedule action (same identity, new times).
-  const edit = document.createElement('div');
-  edit.className = 'panel-edit';
-  const editLabel = document.createElement('p');
-  editLabel.className = 'muted small panel-edit-label';
-  editLabel.textContent = 'Edit time';
-  const times = document.createElement('div');
-  times.className = 'panel-times';
-  const startEl = document.createElement('input');
-  startEl.type = 'datetime-local';
-  startEl.setAttribute('aria-label', 'Starts');
-  startEl.value = toLocalInput(ev.dtstart);
-  const endEl = document.createElement('input');
-  endEl.type = 'datetime-local';
-  endEl.setAttribute('aria-label', 'Ends');
-  endEl.value = toLocalInput(ev.dtend ?? ev.dtstart);
-  let lastStart = startEl.value;
-  startEl.addEventListener('change', () => {
+  onStartChange = () => {
     // Moving the start drags the end along, preserving the duration.
     const prev = new Date(lastStart);
     const end = new Date(endEl.value);
@@ -872,12 +873,9 @@ function buildEventDetail(panel, ev) {
       endEl.value = toLocalInput(new Date(next.getTime() + dur));
     }
     lastStart = startEl.value;
-  });
-  const save = document.createElement('button');
-  save.type = 'button';
-  save.className = 'kit-btn primary panel-save';
-  save.textContent = 'Save';
-  save.addEventListener('click', async () => {
+  };
+
+  onSave = async () => {
     const dtstart = toIsoUtc(startEl.value);
     const dtend = toIsoUtc(endEl.value);
     if (!dtstart || !dtend) {
@@ -902,27 +900,9 @@ function buildEventDetail(panel, ev) {
     } else if (outcome) {
       sayInPanel(outcomeMessage(outcome) ?? 'Something went wrong.');
     }
-  });
-  times.append(startEl, endEl, save);
-  edit.append(editLabel, times);
-  panel.appendChild(edit);
+  };
 
-  // Action row: attach + the cancellation ask.
-  const actions = document.createElement('div');
-  actions.className = 'panel-actions';
-  const attach = document.createElement('button');
-  attach.type = 'button';
-  attach.className = 'kit-btn';
-  attach.textContent = 'Attach a file';
-  attach.addEventListener('click', () => {
-    attachTarget = ev.event_id;
-    $('attachInput').click();
-  });
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'kit-btn danger';
-  cancel.textContent = 'Ask to cancel';
-  cancel.addEventListener('click', async () => {
+  onCancel = async () => {
     if (!armConfirm(cancel, { armedLabel: 'Ask to cancel?' })) return;
     cancel.disabled = true;
     const outcome = await act('cancel-event', { event_id: ev.event_id });
@@ -940,39 +920,95 @@ function buildEventDetail(panel, ev) {
     } else if (outcome) {
       sayInPanel(outcomeMessage(outcome) ?? 'Something went wrong.');
     }
-  });
-  actions.append(attach, cancel);
-  panel.appendChild(actions);
-  panel.appendChild(panelNotice);
+  };
+}
+
+function eventDetailTemplate(ev, refs) {
+  const cal = calById.get(ev.calendar_id);
+  return html`${panelHeaderTpl(ev.summary, colorFor(ev.calendar_id))}
+    <div class="panel-meta">
+      <p class="panel-when">${fmtRange(ev)}</p>
+      <p class="panel-cal muted">
+        <span class="cal-dot" style=${`background:${colorFor(ev.calendar_id)}`}></span>
+        ${cal?.name ?? 'No calendar'} · <span class="badge">${ev.status}</span>
+      </p>
+    </div>
+    ${ev.description ? html`<p class="panel-desc">${ev.description}</p>` : nothing}
+    ${ev.attachments?.length
+      ? html`<div
+          class="kit-attach-strip panel-attachments"
+          ${ref((el) => {
+            if (el) renderAttachments(el, ev.attachments, removeAttachment);
+          })}
+        ></div>`
+      : nothing}
+    <div class="panel-edit">
+      <p class="muted small panel-edit-label">Edit time</p>
+      <div class="panel-times">
+        <input
+          type="datetime-local"
+          aria-label="Starts"
+          .value=${toLocalInput(ev.dtstart)}
+          ${ref(refs.startRef)}
+          @change=${refs.onStartChange}
+        />
+        <input
+          type="datetime-local"
+          aria-label="Ends"
+          .value=${toLocalInput(ev.dtend ?? ev.dtstart)}
+          ${ref(refs.endRef)}
+        />
+        <button
+          type="button"
+          class="kit-btn primary panel-save"
+          ${ref(refs.saveRef)}
+          @click=${refs.onSave}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+    <div class="panel-actions">
+      <button
+        type="button"
+        class="kit-btn"
+        @click=${() => {
+          attachTarget = ev.event_id;
+          $('attachInput').click();
+        }}
+      >
+        Attach a file
+      </button>
+      <button type="button" class="kit-btn danger" ${ref(refs.cancelRef)} @click=${refs.onCancel}>
+        Ask to cancel
+      </button>
+    </div>
+    <p class="panel-notice muted" role="status" hidden ${ref(refs.noticeRef)}></p>`;
 }
 
 /** Every event of one day — the "+N more" expansion. */
 function openDayPanel(key, returnFocus) {
   openOverlay((panel) => {
-    panelHeader(panel, fmtDay(key));
-    const listEl = document.createElement('div');
-    listEl.className = 'panel-day-list';
     const segs = bucketByDay(visibleEvents()).get(key) ?? [];
-    for (const seg of segs) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'panel-day-item';
-      const dot = document.createElement('span');
-      dot.className = 'cal-dot';
-      dot.style.background = colorFor(seg.ev.calendar_id);
-      const time = document.createElement('span');
-      time.className = 'row-time';
-      time.textContent = segTimeText(seg);
-      const text = document.createElement('span');
-      text.className = 'row-text';
-      text.textContent = seg.ev.summary;
-      item.append(dot, time, text);
-      // Same overlay, swapped content — Esc still returns to the grid.
-      item.addEventListener('click', () => buildEventDetail($('overlayPanel'), seg.ev));
-      listEl.appendChild(item);
-    }
-    panel.appendChild(listEl);
+    litRender(dayPanelTemplate(key, segs), panel);
   }, returnFocus);
+}
+
+function dayPanelTemplate(key, segs) {
+  return html`${panelHeaderTpl(fmtDay(key))}
+    <div class="panel-day-list">
+      ${segs.map(
+        (seg) => html`<button
+          type="button"
+          class="panel-day-item"
+          @click=${() => buildEventDetail($('overlayPanel'), seg.ev)}
+        >
+          <span class="cal-dot" style=${`background:${colorFor(seg.ev.calendar_id)}`}></span>
+          <span class="row-time">${segTimeText(seg)}</span>
+          <span class="row-text">${seg.ev.summary}</span>
+        </button>`,
+      )}
+    </div>`;
 }
 
 $('overlay').addEventListener('click', (e) => {
