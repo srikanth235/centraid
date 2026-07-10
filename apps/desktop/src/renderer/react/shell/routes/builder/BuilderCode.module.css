@@ -149,7 +149,7 @@
   gap: 6px;
   flex: none;
 }
-.tabActions :global(.tiny-btn)[data-active='true'] {
+.tabActions .tabActionBtn[data-active='true'] {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
 }
@@ -467,4 +467,24 @@
   width: 2px;
   border-radius: 2px;
   background: var(--accent);
+}
+
+/* Syntax-token colors for the tokenized <pre> — passed into `tokenize()`
+   as its class map so the emitted HTML stays module-scoped. */
+.tokTag {
+  color: var(--c-rose);
+}
+.tokAttr {
+  color: var(--c-violet);
+}
+.tokStr {
+  color: var(--c-forest);
+}
+.tokKey {
+  color: var(--c-indigo);
+  font-weight: 500;
+}
+.tokCom {
+  color: var(--ink-4);
+  font-style: italic;
 }

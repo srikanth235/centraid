@@ -52,7 +52,7 @@ describe('openAutomationTemplatePreview', () => {
     expect(document.querySelector('.auDrawer')).toBeNull();
 
     openAutomationTemplatePreview(tmpl, onUse);
-    (document.querySelector('.cd-au-drawer-backdrop') as HTMLElement).click();
+    (document.querySelector('.auDrawerBackdrop') as HTMLElement).click();
     expect(document.querySelector('.auDrawer')).toBeNull();
     expect(onUse).not.toHaveBeenCalled();
   });

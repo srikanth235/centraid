@@ -1,0 +1,70 @@
+/* Sidebar-head vault switcher — ported pixel-for-pixel from the vanilla
+   `.cd-prof-head*` family (profiles.ts / styles.css). Rendered above
+   "Build new" (chrome.module.css's `.sbItem` list) as the Sidebar
+   `headSlot`, with its own bottom margin standing in for the vanilla's
+   never-actually-styled `.cd-sb-divider` spacer. */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms;
+}
+.head:hover {
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+}
+.head[data-open='true'] {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.head:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.avatar svg {
+  display: block;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+.name {
+  display: block;
+  font: var(--t-title);
+  font-weight: 600;
+  font-size: 13.5px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  display: block;
+  margin-top: 1px;
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
+.chev {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--ink-4);
+}

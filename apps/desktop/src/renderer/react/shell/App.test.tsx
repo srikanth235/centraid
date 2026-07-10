@@ -26,6 +26,8 @@ vi.mock('../../gateway-client.js', () => ({
       windowDays: 30,
       generatedAt: 0,
     }),
+  getBlocking: () =>
+    Promise.resolve({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] }),
 }));
 
 // The renderer's client-local store is a plain module now; back it with an
@@ -84,7 +86,7 @@ async function mount(): Promise<HTMLElement> {
 describe('App root', () => {
   it('renders the chrome frame with the app in the sidebar, opening on Home', async () => {
     const el = await mount();
-    expect(el.querySelector('.cd-window')).not.toBeNull();
+    expect(el.querySelector('.window')).not.toBeNull();
     expect(el.textContent).toContain('Todos');
     expect(el.textContent).toContain('Apps · 1');
     const activeHome = el.querySelector('[data-active="true"]');
@@ -93,7 +95,7 @@ describe('App root', () => {
 
   it('navigates to Insights via the sidebar and highlights it', async () => {
     const el = await mount();
-    const insightsBtn = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const insightsBtn = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Insights'),
     ) as HTMLButtonElement;
     await act(async () => {
@@ -110,7 +112,7 @@ describe('App root', () => {
 
   it('renders the Starred empty state natively', async () => {
     const el = await mount();
-    const starredBtn = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const starredBtn = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Starred'),
     ) as HTMLButtonElement;
     await act(async () => {
@@ -134,12 +136,12 @@ describe('App root', () => {
 
   it('binds the sidebar toggle to the appearance pref', async () => {
     const el = await mount();
-    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');
-    const toggle = el.querySelector('.cd-tl-side [aria-label="Hide sidebar"]') as HTMLButtonElement;
+    expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('open');
+    const toggle = el.querySelector('.tlSide [aria-label="Hide sidebar"]') as HTMLButtonElement;
     await act(async () => {
       toggle.click();
     });
-    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('closed');
+    expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('closed');
     expect(store.get('appearance')).toMatchObject({ sidebarOpen: false });
   });
 });

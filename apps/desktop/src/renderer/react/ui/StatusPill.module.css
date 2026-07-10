@@ -1,0 +1,36 @@
+/* Status pill — uppercase-mono status label with a glowing dot.
+   Replaces the floating NEW/DRAFT chips on tiles; also trails the
+   Settings sidebar row as the gateway "live" indicator. */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.status[data-tone='new'] {
+  color: var(--accent-light);
+}
+.status[data-tone='draft'] {
+  color: var(--icon-amber);
+}
+.status[data-tone='live'] {
+  color: var(--success);
+}
+/* Tighter tracking for dense contexts (card footers). */
+.tight {
+  letter-spacing: 0.06em;
+}
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
+}

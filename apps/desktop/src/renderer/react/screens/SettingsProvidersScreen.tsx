@@ -11,6 +11,7 @@ import type {
 import styles from './SettingsProvidersScreen.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
 import controlsCss from '../styles/controls.module.css';
+import buttonCss from '../ui/Button.module.css';
 import { cx } from '../ui/cx.js';
 
 const TIER_ORDER = ['smart', 'balanced', 'fast'] as const;
@@ -339,10 +340,10 @@ export default function SettingsProvidersScreen({
           </div>
         </div>
       </div>
-      <div className="sheet-actions">
+      <div className={styles.actionsRow}>
         <button
           type="button"
-          className={cx("btn", controlsCss.soft)}
+          className={cx(buttonCss.btn, controlsCss.soft)}
           disabled={busyModels}
           onClick={() => doRefresh(refreshModels, setBusyModels)}
         >
@@ -351,7 +352,7 @@ export default function SettingsProvidersScreen({
         </button>
         <button
           type="button"
-          className={cx("btn", controlsCss.soft)}
+          className={cx(buttonCss.btn, controlsCss.soft)}
           disabled={busyTools}
           onClick={() => doRefresh(refreshTools, setBusyTools)}
         >

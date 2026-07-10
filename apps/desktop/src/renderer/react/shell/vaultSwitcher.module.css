@@ -1,0 +1,147 @@
+/* Vault quick-switcher popover — ported pixel-for-pixel from the vanilla
+   `.cd-prof-pop*` family (profiles.ts / styles.css §5610+). Body-portalled
+   by vaultSwitcher.ts, same mechanics as contextMenu.module.css. */
+
+@keyframes vsPop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: transparent;
+}
+.pop {
+  position: fixed;
+  z-index: 1101;
+  width: 256px;
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border-radius: 13px;
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  animation: vsPop 140ms cubic-bezier(0.2, 0.7, 0.3, 1.4);
+}
+.eyebrow {
+  font: var(--t-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  padding: 5px 9px 6px;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  text-align: left;
+  transition: background 100ms;
+}
+.row:hover,
+.row:focus-visible {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  outline: none;
+}
+.row[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+}
+.avatar svg {
+  display: block;
+}
+.text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.name {
+  display: block;
+  font: var(--t-title);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sub {
+  display: block;
+  margin-top: 1px;
+  font: var(--t-small);
+  font-size: 11px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.check {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+.check svg {
+  display: block;
+}
+.divider {
+  height: 0.5px;
+  margin: 6px;
+  background: var(--line);
+}
+.action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: var(--t-body);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 100ms;
+}
+.action:hover,
+.action:focus-visible {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  outline: none;
+}
+.action svg {
+  color: var(--ink-2);
+  flex: none;
+}

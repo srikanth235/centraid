@@ -1,11 +1,12 @@
+import buttonCss from '../ui/Button.module.css';
 import modalCss from '../styles/modal.module.css';
 import { cx } from '../ui/cx.js';
 // Text-prompt dialog — a promise-based modal (backdrop + card + a single text
 // field + Cancel/Save, Esc = cancel, Enter = save). Sibling of confirm.ts's
 // `openConfirm`; it portals to document.body and resolves the trimmed string, or
 // null when cancelled/emptied/unchanged, so it's imperatively awaitable from any
-// route. Reuses the same global modal classes in styles.css. Kept as a plain
-// function (no React) for the same await ergonomics as openConfirm.
+// route. Kept as a plain function (no React) for the same await ergonomics as
+// openConfirm.
 
 const X_SVG =
   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
@@ -44,7 +45,7 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     card.setAttribute('aria-label', opts.title);
 
     const closeBtn = document.createElement('button');
-    closeBtn.className = cx("btn-icon", modalCss.close);
+    closeBtn.className = cx(buttonCss.icon, modalCss.close);
     closeBtn.setAttribute('aria-label', 'Close');
     closeBtn.innerHTML = X_SVG;
     closeBtn.addEventListener('click', () => finish(null));
@@ -59,17 +60,19 @@ export function openPrompt(opts: PromptOpts): Promise<string | null> {
     if (opts.placeholder) input.placeholder = opts.placeholder;
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'btn btn-ghost';
+    cancelBtn.className = cx(buttonCss.btn, buttonCss.ghost);
     cancelBtn.textContent = 'Cancel';
     cancelBtn.addEventListener('click', () => finish(null));
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'btn btn-primary';
+    saveBtn.className = cx(buttonCss.btn, buttonCss.primary);
     saveBtn.textContent = opts.confirmLabel ?? 'Save';
     saveBtn.addEventListener('click', commit);
 
     const actions = document.createElement('div');
-    actions.className = 'sheet-actions';
+    // `sheet-actions` was a dead class (no rule survived the carve); the
+    // modal module's actions row is the styled equivalent confirm.ts uses.
+    actions.className = modalCss.actions ?? '';
     actions.append(cancelBtn, saveBtn);
     card.append(closeBtn, heading, input, actions);
 

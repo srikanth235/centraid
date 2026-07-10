@@ -1,0 +1,357 @@
+/* Library tile ("RefinedAppTile") — the app/automation card shared by the
+   Home shelf, Discover grid, and the `<AppCard>` primitive. A vertical card:
+   gradient icon plate w/ status dot, name, 2-line blurb, state-aware foot
+   strip. Shared sizing/tone values come from the `--lib-*` design tokens so
+   Home and Discover tiles resolve identically.
+
+   `.wrap` is the grid item; it hosts the card and sibling hover affordances
+   (the `.actions` toolbar, the `.starFlag`) so we don't nest a button inside
+   a button. */
+
+.wrap {
+  position: relative;
+  display: block;
+  height: 100%;
+}
+
+/* `height: 100%` makes every tile fill its grid cell so a row of cards
+   shares one height regardless of how many lines the blurb wraps to. */
+.card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 92px;
+  padding: 12px;
+  background: var(--lib-tile-bg);
+  border: 0.5px solid var(--line);
+  border-radius: var(--lib-tile-radius);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  transition:
+    background 140ms,
+    transform 120ms;
+}
+.small {
+  min-height: var(--lib-tile-h);
+  padding: var(--lib-tile-pad);
+  /* Vertical rhythm between the head, the (automation) meta strip, and the
+     footer so nothing collides; the footer still floats to the bottom via its
+     margin-top:auto. */
+  gap: var(--lib-tile-gap);
+}
+.card:hover {
+  background: var(--lib-tile-bg-hover);
+}
+.card:active {
+  transform: scale(0.99);
+}
+
+/* Card-finish user preference (Settings → Appearance → Cards). Outlined is
+   the default look above; `flat` strips the border down to a plain elev
+   tile; `elevated` drops the border and adds depth. The `data-cards`
+   attribute rides an ancestor (set by the appearance controller). */
+:global([data-cards='flat']) .card {
+  background: var(--bg-elev);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+:global([data-cards='elevated']) .card {
+  border-color: transparent;
+  box-shadow: var(--shadow-md);
+}
+
+/* Tile header — gallery layout: glyph plate on its own row, name/blurb
+   stacked beneath it. (Rows layout flips this back to a horizontal head.) */
+.head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+}
+.headText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+/* Small (library) tiles read as prominent, app-store-style glyph plates —
+   big rounded squares with a generous glyph. */
+.small .icon {
+  width: var(--lib-tile-icon);
+  height: var(--lib-tile-icon);
+  border-radius: var(--lib-tile-icon-radius);
+}
+.icon svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+.small .icon svg {
+  width: 21px;
+  height: 21px;
+}
+/* Status dot riding the icon's top-right corner. */
+.iconDot {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2.5px var(--bg);
+}
+.iconDot[data-tone='new'] {
+  background: var(--accent-light);
+}
+.iconDot[data-tone='draft'] {
+  background: var(--icon-amber);
+}
+.iconDot[data-tone='template'] {
+  background: var(--success);
+}
+/* Name + an optional inline status pill riding to its right. The name
+   truncates; the pill never shrinks. */
+.nameRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.name {
+  font: var(--t-title);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.desc {
+  font: var(--t-small);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* State strip — a top-divided row: kind badge + status on the left,
+   timestamp right. */
+.foot {
+  margin-top: auto;
+  padding-top: 11px;
+  border-top: 0.5px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+/* A success tick can lead the timestamp for automations whose last run
+   was OK; the tick inherits the success hue. Font size pinned so it never
+   inherits the body's 16px and dwarfs the badges (most visible in rows). */
+.footTime {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.footTime svg {
+  display: block;
+}
+.footTime[data-ok='true'] svg {
+  color: var(--success);
+}
+
+/* Inline hover affordance — an overflow toolbar pinned to the card's
+   top-right that fades in on hover/focus and opens a menu holding every
+   action (Run/Edit · Star · Open · …). Lives as a wrap sibling so it never
+   nests inside the card button; `data-open` keeps it up while its menu is
+   mounted. */
+.actions {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
+  backdrop-filter: blur(10px) saturate(150%);
+  -webkit-backdrop-filter: blur(10px) saturate(150%);
+  box-shadow:
+    0 0 0 0.5px var(--line),
+    0 8px 20px -10px rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transform: translateY(3px);
+  z-index: 3;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+.wrap:hover .actions,
+.wrap:has(:focus-visible) .actions,
+.actions:has(.act[data-open='true']) {
+  opacity: 1;
+  transform: none;
+}
+/* Starred-but-idle: a persistent gold star flag marks the card. It sits in
+   the same top-right slot the actions toolbar rests in and yields to it on
+   hover/focus, so a card never shows both at once. Purely an indicator —
+   pointer-events:none keeps the toolbar underneath fully clickable. */
+.starFlag {
+  position: absolute;
+  right: 13px;
+  top: 13px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--icon-amber);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity 150ms ease;
+}
+.starFlag svg {
+  display: block;
+}
+.starFlag svg path {
+  fill: currentColor;
+}
+.wrap[data-starred='true'] .starFlag {
+  opacity: 1;
+}
+.wrap:hover .starFlag,
+.wrap:has(:focus-visible) .starFlag {
+  opacity: 0;
+}
+.act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  line-height: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.act:hover {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.act:active {
+  background: color-mix(in oklab, var(--ink) 18%, transparent);
+}
+.act[data-open='true'] {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.act svg {
+  display: block;
+}
+
+/* ── Rows layout ────────────────────────────────────────────────────────
+   When the hosting grid carries `data-layout='rows'` (the Tiles | Rows
+   toggle on Home/Discover), each card flattens into a horizontal strip:
+   glyph plate · name/blurb (grows) · meta/foot pinned right. The hover
+   toolbar re-pins to the vertically-centred right edge; the card reserves
+   right padding so the foot never sits under it. */
+:global([data-layout='rows']) .wrap {
+  height: auto;
+}
+:global([data-layout='rows']) .small {
+  min-height: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 108px 10px 14px;
+}
+/* Back to a horizontal head for the row strip — icon beside the title. */
+:global([data-layout='rows']) .head {
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+/* Slimmer glyph plate in the strip — the row's height is set by the text,
+   not a poster icon. */
+:global([data-layout='rows']) .small .icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+}
+:global([data-layout='rows']) .small .icon svg {
+  width: 19px;
+  height: 19px;
+}
+:global([data-layout='rows']) .desc {
+  -webkit-line-clamp: 1;
+}
+/* Foot flattens into a fixed-width tail riding the right edge. */
+:global([data-layout='rows']) .foot {
+  flex: 0 0 auto;
+  order: 2;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  justify-content: flex-end;
+  gap: 12px;
+}
+/* Timestamp right-aligns in a fixed slot wide enough for the longest stamp
+   ("Weekdays at 11:30 PM") so the times form a clean column. */
+:global([data-layout='rows']) .footTime {
+  min-width: 132px;
+  justify-content: flex-end;
+  text-align: right;
+}
+/* Hover toolbar + star flag re-pin to the vertically-centred right edge. */
+:global([data-layout='rows']) .actions {
+  top: 50%;
+  right: 14px;
+  bottom: auto;
+  transform: translateY(-50%) translateY(3px);
+}
+:global([data-layout='rows']) .wrap:hover .actions,
+:global([data-layout='rows']) .wrap:has(:focus-visible) .actions,
+:global([data-layout='rows']) .actions:has(.act[data-open='true']) {
+  transform: translateY(-50%);
+}
+:global([data-layout='rows']) .starFlag {
+  top: 50%;
+  right: 17px;
+  transform: translateY(-50%);
+}

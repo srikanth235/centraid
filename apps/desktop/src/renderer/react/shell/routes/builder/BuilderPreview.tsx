@@ -133,7 +133,7 @@ export default function BuilderPreview({
   return (
     <>
       <div className={styles.stage}>
-        <div className="preview-card-wrap" style={{ display: 'contents' }}>
+        <div style={{ display: 'contents' }}>
           <div className={cardClass} style={{ '--accent-color': accentColor } as CSSProperties}>
             <iframe
               title="App preview"

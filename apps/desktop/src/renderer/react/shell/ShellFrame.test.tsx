@@ -31,18 +31,18 @@ const base = {
 describe('ShellFrame', () => {
   it('renders the window grid with sidebar + main content', () => {
     const el = render(<ShellFrame {...base} />);
-    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');
+    expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('open');
     expect(el.querySelector('[data-testid="sb"]')).not.toBeNull();
     expect(el.querySelector('[data-testid="main"]')).not.toBeNull();
-    expect(el.querySelector<HTMLElement>('.cd-tl-main')?.dataset.layout).toBe('flat');
+    expect(el.querySelector<HTMLElement>('.tlMain')?.dataset.layout).toBe('flat');
   });
 
   it('marks the grid closed and shows the collapsed sidebar toggle in tlMain', () => {
     const el = render(<ShellFrame {...base} sidebarOpen={false} />);
-    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('closed');
+    expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('closed');
     // When collapsed the tlMain nav gains an extra sidebar toggle (open state
     // only carries the one in tlSide).
-    const tlMain = el.querySelector('.cd-tl-main')!;
+    const tlMain = el.querySelector('.tlMain')!;
     expect(tlMain.querySelector('[aria-label="Show sidebar"]')).not.toBeNull();
   });
 
@@ -61,7 +61,7 @@ describe('ShellFrame', () => {
       <ShellFrame {...base} canGoBack onBack={onBack} onToggleSidebar={onToggleSidebar} />,
     );
     act(() => (el.querySelector('[aria-label="Back"]') as HTMLButtonElement).click());
-    act(() => (el.querySelector('.cd-tl-side [aria-label="Hide sidebar"]') as HTMLButtonElement).click());
+    act(() => (el.querySelector('.tlSide [aria-label="Hide sidebar"]') as HTMLButtonElement).click());
     expect(onBack).toHaveBeenCalled();
     expect(onToggleSidebar).toHaveBeenCalled();
   });
@@ -77,8 +77,8 @@ describe('ShellFrame', () => {
 
   it('uses the grid layout with a center cluster', () => {
     const el = render(<ShellFrame {...base} titlebarCenter={<div data-testid="center">C</div>} />);
-    expect(el.querySelector<HTMLElement>('.cd-tl-main')?.dataset.layout).toBe('grid');
-    expect(el.querySelector('.cd-tl-nav')).not.toBeNull();
-    expect(el.querySelector('.cd-tl-context [data-testid="center"]')).not.toBeNull();
+    expect(el.querySelector<HTMLElement>('.tlMain')?.dataset.layout).toBe('grid');
+    expect(el.querySelector('.tlNav')).not.toBeNull();
+    expect(el.querySelector('.tlContext [data-testid="center"]')).not.toBeNull();
   });
 });

@@ -6,8 +6,10 @@
 
 import { BRAND, themes, type Theme, type ThemeName } from './themes';
 import { densities, type DensityScale } from './density';
+import { library } from './library';
 import { palette } from './palette';
 import { radii } from './radii';
+import { fontStacks, marketingType, type, typeShorthand } from './typography';
 
 function block(selector: string, props: Record<string, string>): string {
   const lines: string[] = [`${selector} {`];
@@ -83,6 +85,16 @@ export function toCss(): string {
   for (const [k, v] of Object.entries(radii)) staticProps[`--r-${k}`] = `${v}px`;
   // Brand teal — theme-independent, matches the logo / app-icon SVGs.
   staticProps['--brand'] = BRAND;
+  // Typography — web font stacks + the semantic type scale as CSS `font`
+  // shorthands (`font: var(--t-title)`). camelCase keys emit kebab-case
+  // (`bodyStrong` → `--t-body-strong`, `display1` → `--t-display-1`).
+  for (const [k, v] of Object.entries(fontStacks)) staticProps[`--font-${k}`] = v;
+  for (const [k, v] of Object.entries({ ...type, ...marketingType })) {
+    const kebab = k.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
+    staticProps[`--t-${kebab}`] = typeShorthand(v);
+  }
+  // Shared library-tile tokens (Home + Discover render the same tile).
+  for (const [k, v] of Object.entries(library)) staticProps[`--lib-${k}`] = v;
   Object.assign(staticProps, densityProps(densities.regular));
 
   const blocks = [
@@ -99,6 +111,24 @@ export function toCss(): string {
   for (const name of Object.keys(densities) as Array<keyof typeof densities>) {
     blocks.push(block(`[data-density='${name}']`, densityProps(densities[name])));
   }
+
+  // Tweaks · Cool blue cast — turning it off neutralises the dark ramp's
+  // hue + saturation (hue 0, sat 0%) while keeping the same --bg-l anchor,
+  // so the lightness slider still drives all four surfaces. Light themes
+  // have no blue cast to begin with and are unaffected. Redefining
+  // --bg-wall here neutralises the main panes AND the device-wall
+  // composite — which references var(--bg-wall) — in one place.
+  blocks.push(
+    block(`[data-theme='dark'][data-cool-cast='off']`, {
+      '--bg': 'hsl(0 0% var(--bg-l))',
+      '--bg-app': 'hsl(0 0% calc(var(--bg-l) - 5%))',
+      '--bg-elev': 'hsl(0 0% calc(var(--bg-l) + 4.5%))',
+      '--bg-sunken': 'hsl(0 0% calc(var(--bg-l) - 4%))',
+      '--bg-wall':
+        'linear-gradient(180deg, hsl(0 0% calc(var(--bg-l) + 2%)) 0%, hsl(0 0% calc(var(--bg-l) - 2%)) 100%)',
+      '--sidebar-bg': 'hsl(0 0% calc(var(--bg-l) + 2%) / 0.65)',
+    }),
+  );
 
   return blocks.join('\n\n') + '\n';
 }

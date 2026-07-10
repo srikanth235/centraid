@@ -158,14 +158,14 @@ function ToolGroupMsg({
   const hasError = m.calls.some((c) => c.state === 'error');
   return (
     <div
-      className={tgCss.group}
+      className={cx(tgCss.group, styles.panelMsg)}
       data-open={String(m.open)}
       data-running={String(isRunning)}
       data-error={String(hasError)}
     >
       <button
         type="button"
-        className={tgCss.groupPill}
+        className={cx(tgCss.groupPill, styles.panelToolPill)}
         aria-expanded={m.open}
         onClick={() => onToggleGroup(m.id)}
       >
@@ -217,7 +217,7 @@ function Message({
 }): JSX.Element {
   if (m.kind === 'user') {
     return (
-      <div className={chatCss.user}>
+      <div className={cx(chatCss.user, styles.panelMsg)}>
         <div className={chatCss.userBubble}>{m.text}</div>
       </div>
     );
@@ -225,12 +225,12 @@ function Message({
   if (m.kind === 'ai') {
     const text = m.text || (m.streaming ? '…' : '');
     return (
-      <div className={m.error ? cx(chatCss.ai, styles.aiError) : chatCss.ai}>
-        <div className="msg-ai-author">
-          <span className="msg-ai-author-dot" style={{ background: app.color }} />
-          <span className="msg-ai-author-name">{app.name.toLowerCase()}</span>
+      <div className={cx(chatCss.ai, styles.panelMsg, m.error && styles.aiError)}>
+        <div className={styles.msgAuthor}>
+          <span className={styles.msgAuthorDot} style={{ background: app.color }} />
+          <span className={styles.msgAuthorName}>{app.name.toLowerCase()}</span>
         </div>
-        <div className={chatCss.aiText}>
+        <div className={cx(chatCss.aiText, styles.panelMsgText)}>
           {text.split('\n\n').map((p, i) => (
             <p key={i}>{p}</p>
           ))}
@@ -243,10 +243,10 @@ function Message({
 
 /**
  * Per-app agentic chat copilot, ported to React (issue #325, full-React flip).
- * Renders the ambient FAB + slide-out panel as its own subtree using the same
- * global `.app-chat-*` classes the vanilla `window.AppChat.mount` emitted, and
- * drives an SSE turn against the app via `useAppChat`. Self-contained: it takes
- * only `{ app, appId }` and owns its own FAB/panel DOM.
+ * Renders the ambient FAB + slide-out panel as its own subtree — fully scoped
+ * to this route's CSS module (plus the shared chat-message/tool-group modules)
+ * — and drives an SSE turn against the app via `useAppChat`. Self-contained:
+ * it takes only `{ app, appId }` and owns its own FAB/panel DOM.
  */
 export default function AppChatPanel({
   app,
@@ -394,7 +394,7 @@ export default function AppChatPanel({
     if (c.chatLoading) {
       return (
         <div className={styles.chatLoading}>
-          <span className={chatCss.pulse} /> Loading chat…
+          <span className={styles.chatLoadingPulse} /> Loading chat…
         </div>
       );
     }
@@ -473,7 +473,8 @@ export default function AppChatPanel({
     <>
       <button
         type="button"
-        className={c.open ? cx(styles.chatFab, 'hidden') : styles.chatFab}
+        className={styles.chatFab}
+        data-hidden={c.open ? 'true' : undefined}
         title="Ask about this app"
         aria-label={`Ask ${app.name}`}
         onClick={() => c.toggle(true)}
@@ -487,7 +488,8 @@ export default function AppChatPanel({
       </button>
 
       <aside
-        className={cx(styles.chatPanel, c.open && 'open', onHistory && 'view-history')}
+        className={styles.chatPanel}
+        data-open={c.open ? 'true' : undefined}
         aria-hidden={c.open ? 'false' : 'true'}
       >
         <div className={styles.chatHead}>
@@ -548,7 +550,7 @@ export default function AppChatPanel({
             </div>
             <button
               type="button"
-              className={cx(styles.chatIconBtn, "app-chat-close")}
+              className={styles.chatIconBtn}
               aria-label="Minimize"
               title="Minimize"
               onClick={() => c.toggle(false)}
@@ -559,7 +561,7 @@ export default function AppChatPanel({
         </div>
 
         <div
-          className={cx(chatCss.scroll, "app-chat-scroll")}
+          className={cx(chatCss.scroll, styles.panelScroll)}
           hidden={onHistory}
           ref={scrollRef}
           onScroll={onScroll}
@@ -624,13 +626,12 @@ export default function AppChatPanel({
                 c.addFiles(files);
               }}
             />
-            <div className="app-chat-attach-chips">
+            {/* Pending-attachment chips. These carried `.app-chat-attach-chip(s)`
+                classes in the vanilla renderer, but no stylesheet has ever
+                styled them — they render unstyled by (shipped) design. */}
+            <div>
               {c.attachments.map((a, i) => (
-                <span
-                  key={`${a.hash}-${i}`}
-                  className="app-chat-attach-chip"
-                  title={a.filename ?? a.mime}
-                >
+                <span key={`${a.hash}-${i}`} title={a.filename ?? a.mime}>
                   {`${a.filename ?? a.mime} `}
                   <button
                     type="button"

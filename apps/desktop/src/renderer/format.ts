@@ -12,14 +12,38 @@ export function escapeHtml(s: string): string {
   return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 }
 
+/** Span classes for each syntax-token kind, supplied by the caller (the Code
+ * view passes its CSS-module locals so the emitted HTML stays scoped). */
+export interface TokenClasses {
+  tag: string;
+  attr: string;
+  str: string;
+  key: string;
+  com: string;
+}
+
+/** Default classes — the unscoped `tok-*` names, kept for tests/plain hosts. */
+export const DEFAULT_TOKEN_CLASSES: TokenClasses = {
+  attr: 'tok-attr',
+  com: 'tok-com',
+  key: 'tok-key',
+  str: 'tok-str',
+  tag: 'tok-tag',
+};
+
 /**
  * Minimal, dependency-free syntax highlighter for the Code view. Returns HTML
- * with `tok-*` span classes. Each pass wraps tokens in placeholder control
- * chars (not real `<span>`s) so a later regex can't match the literal text of an
- * earlier injection — e.g. `\s[\w-]+=` eating the ` class=` inside an inserted
- * span. Placeholders are swapped to spans only at the very end.
+ * with per-kind span classes (`classes`, defaulting to `tok-*`). Each pass
+ * wraps tokens in placeholder control chars (not real `<span>`s) so a later
+ * regex can't match the literal text of an earlier injection — e.g.
+ * `\s[\w-]+=` eating the ` class=` inside an inserted span. Placeholders are
+ * swapped to spans only at the very end.
  */
-export function tokenize(src: string, lang: CodeLang): string {
+export function tokenize(
+  src: string,
+  lang: CodeLang,
+  classes: TokenClasses = DEFAULT_TOKEN_CLASSES,
+): string {
   const TAG = '\x01';
   const ATTR = '\x02';
   const STR = '\x03';
@@ -52,11 +76,11 @@ export function tokenize(src: string, lang: CodeLang): string {
       .replaceAll(/\b(true|false|null)\b/g, `${KEY}$1${END}`);
   }
   return html
-    .replaceAll(TAG, '<span class="tok-tag">')
-    .replaceAll(ATTR, '<span class="tok-attr">')
-    .replaceAll(STR, '<span class="tok-str">')
-    .replaceAll(KEY, '<span class="tok-key">')
-    .replaceAll(COM, '<span class="tok-com">')
+    .replaceAll(TAG, `<span class="${classes.tag}">`)
+    .replaceAll(ATTR, `<span class="${classes.attr}">`)
+    .replaceAll(STR, `<span class="${classes.str}">`)
+    .replaceAll(KEY, `<span class="${classes.key}">`)
+    .replaceAll(COM, `<span class="${classes.com}">`)
     .replaceAll(END, '</span>');
 }
 

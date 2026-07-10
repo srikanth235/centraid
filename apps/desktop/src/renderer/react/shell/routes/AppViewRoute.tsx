@@ -10,6 +10,7 @@ import ShellFrame from '../ShellFrame.js';
 import AppFrame from './AppFrame.js';
 import AppSettingsController from './AppSettingsController.js';
 import styles from './AppViewRoute.module.css';
+import chrome from '../chrome.module.css';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
@@ -97,9 +98,9 @@ export default function AppViewRoute({
           Build
         </button>
       </div>
-      <span className="cd-tb-btn-wrap">
+      <span className={chrome.tbBtnWrap}>
         <button
-          className="cd-tb-btn"
+          className={chrome.tbBtn}
           type="button"
           aria-label="App settings"
           aria-haspopup="dialog"
@@ -107,10 +108,10 @@ export default function AppViewRoute({
           onClick={() => setSettingsOpen((open) => !open)}
           dangerouslySetInnerHTML={{ __html: iconSvg('Settings', 15) }}
         />
-        <span className="cd-tooltip">App settings</span>
+        <span className={chrome.tooltip}>App settings</span>
       </span>
       <button
-        className="cd-tb-btn"
+        className={chrome.tbBtn}
         type="button"
         aria-label="More"
         title="More"
@@ -133,12 +134,12 @@ export default function AppViewRoute({
       titlebarLead={brandChip}
       titlebarRight={titlebarRight}
     >
-      <div
-        className="app-view"
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-      >
+      <div className={styles.view}>
         <div className={styles.body}>
-          <div className={styles.bodyInner}>
+          {/* data-fullbleed replaces the vanilla `app-view-fullbleed` class
+              (mountUserApp added it imperatively): a hosted app fills the pane
+              edge-to-edge — no padding, no max-width. */}
+          <div className={styles.bodyInner} data-fullbleed="true">
             <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
           </div>
         </div>

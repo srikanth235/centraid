@@ -6,6 +6,7 @@ import type {
   PhoneStatusDTO,
 } from '../screen-contracts.js';
 import styles from './PhoneScreen.module.css';
+import buttonCss from '../ui/Button.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
 import linkBtnCss from '../styles/linkBtn.module.css';
 import drawerGroupCss from '../styles/drawerGroup.module.css';
@@ -149,7 +150,11 @@ export default function PhoneScreen({
               Your phone connects directly to this desktop over an end-to-end encrypted tunnel —
               from any network, with the gateway never exposed. Publish an app here, open it there.
             </div>
-            <button type="button" className={cx("cd-btn", styles.btnPrimary)} onClick={onConnect}>
+            <button
+              type="button"
+              className={cx(buttonCss.chrome, styles.btnPrimary)}
+              onClick={onConnect}
+            >
               Connect a phone
             </button>
           </>

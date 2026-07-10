@@ -43,12 +43,12 @@ function KnobControl({
   };
   if (knob.type === 'swatch') {
     return (
-      <div className={swatchCss.swatches} role="radiogroup" aria-label={knob.label}>
+      <div className={cx(swatchCss.swatches, styles.paneSwatches)} role="radiogroup" aria-label={knob.label}>
         {knob.options.map((o) => (
           <button
             key={o.value}
             type="button"
-            className={swatchCss.swatch}
+            className={cx(swatchCss.swatch, styles.paneSwatch)}
             role="radio"
             aria-checked={o.value === value}
             aria-label={o.label}
@@ -64,7 +64,7 @@ function KnobControl({
     );
   }
   return (
-    <div className={segCss.seg} role="tablist" aria-label={knob.label}>
+    <div className={cx(segCss.seg, styles.paneSeg)} role="tablist" aria-label={knob.label}>
       {knob.options.map((o) => (
         <button
           key={o.value}
@@ -311,7 +311,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
         <div className={styles.settingsPane} hidden={tab !== 'appearance'}>
           <div className={styles.settingsSectionHost}>
             {snap.knobs && snap.knobs.length > 0 ? (
-              <div className={appSettingsCss.appSettingsSection}>
+              <div className={cx(appSettingsCss.appSettingsSection, styles.paneSection)}>
                 <div className={styles.settingsSectionLabel}>Preferences</div>
                 {snap.knobs.map((knob) => (
                   <div key={knob.key} className={styles.settingsRow}>
@@ -331,7 +331,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
             {snap.orders.length === 0 ? (
               <div className={appSettingsCss.appSettingsNote}>No automations linked to this app yet.</div>
             ) : (
-              <div className={cx(appSettingsCss.appSettingsSection, styles.orders)}>
+              <div className={cx(appSettingsCss.appSettingsSection, styles.paneSection, styles.orders)}>
                 <div className={cx(styles.settingsSectionLabel, styles.ordersLabel)}>
                   Standing orders
                 </div>

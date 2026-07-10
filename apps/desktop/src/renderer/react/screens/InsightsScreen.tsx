@@ -113,7 +113,7 @@ function ChartStat({
   sub?: string;
 }): JSX.Element {
   return (
-    <div className="cd-ins-chart-stat">
+    <div>
       <div className={styles.chartStatLabel}>{label}</div>
       <div className={styles.chartStatValue}>{value}</div>
       {sub ? <div className={styles.chartStatSub}>{sub}</div> : null}
@@ -171,7 +171,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
           <h1>Insights</h1>
         </div>
         <div className={styles.filters}>
-          <span className={cx(styles.filter, 'cd-ins-filter-static')}>
+          <span className={styles.filter}>
             <span className={styles.filterIcon}>
               <Icon name="History" size={13} />
             </span>
@@ -180,7 +180,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
         </div>
       </div>
 
-      <div className="cd-ins-body">
+      <div>
         <div className={styles.kpis}>
           <StatCard
             icon={<Icon name="Activity" size={12} />}
@@ -254,7 +254,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                   <span className={cx(styles.th, styles.cApp)}>Source</span>
                   <span className={cx(styles.th, styles.cNum)}>Tokens</span>
                   <span className={cx(styles.th, styles.cNum)}>USD</span>
-                  <span className={cx(styles.th, 'cd-ins-c-mix')}>Mix</span>
+                  <span className={styles.th}>Mix</span>
                   <span className={cx(styles.th, styles.cRuns)}>Runs</span>
                 </div>
                 {summary.byAutomation.map((r) => (
@@ -269,7 +269,7 @@ export default function InsightsScreen({ summary }: InsightsBridgeProps): JSX.El
                     <span className={cx(styles.td, styles.cNum, styles.mono)}>
                       {insUsd(r.costUsd)}
                     </span>
-                    <span className={cx(styles.td, 'cd-ins-c-mix')}>
+                    <span className={styles.td}>
                       <span className={styles.mixbar}>
                         <span
                           className={styles.mixbarFill}

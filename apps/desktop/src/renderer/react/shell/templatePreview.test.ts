@@ -30,7 +30,7 @@ describe('openTemplatePreview', () => {
   it('fires onUse with the template and closes when "Use" is clicked', () => {
     const onUse = vi.fn();
     openTemplatePreview(tmpl, onUse);
-    const useBtn = [...document.querySelectorAll('.btn-primary')].find((b) =>
+    const useBtn = [...document.querySelectorAll('.primary')].find((b) =>
       b.textContent?.includes('Use this template'),
     ) as HTMLButtonElement;
     useBtn.click();
@@ -41,7 +41,7 @@ describe('openTemplatePreview', () => {
   it('closes on Cancel, backdrop click, and Escape without firing onUse', () => {
     const onUse = vi.fn();
     openTemplatePreview(tmpl, onUse);
-    (document.querySelector('.btn-ghost') as HTMLButtonElement).click();
+    (document.querySelector('.ghost') as HTMLButtonElement).click();
     expect(document.querySelector('.tmplPreview')).toBeNull();
 
     openTemplatePreview(tmpl, onUse);

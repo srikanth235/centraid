@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../screen-contracts.js';
 import styles from './BuilderChatPane.module.css';
+import buttonCss from '../ui/Button.module.css';
 import { cx } from '../ui/cx.js';
 import tgCss from '../styles/toolGroup.module.css';
 import chatCss from '../styles/chatMessage.module.css';
@@ -210,7 +211,7 @@ export default function BuilderChatPane({
         <div className={styles.chatpaneHead}>
           <button
             type="button"
-            className="btn-icon"
+            className={buttonCss.icon}
             aria-label="Back to chat"
             onClick={() => onSetView('chat')}
           >

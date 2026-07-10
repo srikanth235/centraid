@@ -1,3 +1,12 @@
+/* The wrapper itself must ride the flex chain: in the vanilla DOM the
+   fullbleed container and the frame's parent were one element; React splits
+   them (route bodyInner → this wrapper), so the wrapper stretches too. */
+.viewFullbleed {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .viewFullbleed > .viewFrame {
   flex: 1 1 auto;
   display: flex;

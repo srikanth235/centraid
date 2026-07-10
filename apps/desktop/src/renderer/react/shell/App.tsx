@@ -1,18 +1,24 @@
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
+import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
+import ProfileSwitcherHead from './ProfileSwitcherHead.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import PageScroll from './PageScroll.js';
 import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
+import { useActiveVault } from './useActiveVault.js';
 import { useAppearance } from './useAppearance.js';
+import { useBlockingCount } from './useBlockingCount.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
+import { closeVaultSwitcher, openVaultSwitcher } from './vaultSwitcher.js';
+import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
 import AutomationsRoute from './routes/AutomationsRoute.js';
@@ -57,6 +63,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'discover':
     case 'starred':
     case 'automations':
+    case 'approvals':
     case 'settings':
       return route.kind;
     default:
@@ -74,8 +81,11 @@ export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
   const { isStarred, toggleStar } = useStarred();
+  const activeVault = useActiveVault();
+  const blockingCount = useBlockingCount();
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
 
   // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
   // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
@@ -119,7 +129,12 @@ export default function App(): JSX.Element {
     };
     window.CentraidApi.onGatewayChanged?.(reScope);
     window.CentraidApi.onVaultChanged?.(reScope);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      // The vault switcher is a body-portalled overlay outside React's tree —
+      // drop it explicitly so it can't outlive the shell root (tests, HMR).
+      closeVaultSwitcher();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -128,25 +143,60 @@ export default function App(): JSX.Element {
       const { apps, drafts: draftApps } = toSidebarApps(userApps, drafts);
       const page = activePageFor(nav.route);
       const go = (route: ShellRoute) => () => nav.navigate(route);
+      const appsCount = userApps.length + drafts.length;
+      const headSlot = (
+        <ProfileSwitcherHead
+          active={
+            activeVault.active
+              ? {
+                  id: activeVault.active.vaultId,
+                  name: activeVault.active.name,
+                  color: activeVault.active.color ?? '#4E68DD',
+                  icon: (activeVault.active.icon as IconName) || 'Sparkle',
+                }
+              : undefined
+          }
+          subtitle={
+            activeVault.loading || !activeVault.active
+              ? '—'
+              : `${appsCount} app${appsCount === 1 ? '' : 's'}`
+          }
+          open={vaultSwitcherOpen}
+          onToggle={(anchor) => {
+            setVaultSwitcherOpen(true);
+            openVaultSwitcher({
+              anchor,
+              vaults: activeVault.vaults,
+              activeVaultId: activeVault.activeVaultId,
+              onSwitch: activeVault.switchVault,
+              onManage: go({ kind: 'settings' }),
+              onClose: () => setVaultSwitcherOpen(false),
+            });
+          }}
+        />
+      );
       return (
         <Sidebar
           apps={apps}
           drafts={draftApps}
           activePage={page}
           activeId={nav.route.kind === 'app' ? nav.route.id : undefined}
+          headSlot={activeVault.loading || activeVault.vaults.length > 0 ? headSlot : undefined}
           onHome={go({ kind: 'home' })}
           onAssistant={go({ kind: 'assistant' })}
           onInsights={go({ kind: 'insights' })}
           onDiscover={go({ kind: 'discover' })}
           onStarred={go({ kind: 'starred' })}
           onAutomations={go({ kind: 'automations' })}
+          onApprovals={go({ kind: 'approvals' })}
+          approvalsCount={blockingCount}
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
         />
       );
     },
-    [userApps, drafts],
+    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount],
   );
 
   const renderRoute = useCallback(
@@ -169,6 +219,8 @@ export default function App(): JSX.Element {
           return <InsightsRoute />;
         case 'automations':
           return <AutomationsRoute />;
+        case 'approvals':
+          return <ApprovalsRoute />;
         case 'automation-view':
           return <AutomationViewRoute automationId={nav.route.automationId} />;
         case 'run-view':

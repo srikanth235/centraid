@@ -66,7 +66,6 @@ export interface SpaceModalProps {
 function Avatar({ icon, color, size }: { icon: IconName; color: string; size: number }): JSX.Element {
   return (
     <span
-      className="cd-prof-avatar"
       style={{ background: color, width: size, height: size } as CSSProperties}
       dangerouslySetInnerHTML={{ __html: iconSvg(icon, Math.round(size * 0.42), 1.7) }}
     />
@@ -131,7 +130,7 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
         </div>
         <div className={styles.profModalBody}>
           <div className={styles.profModalPreview}>
-            <span className="cd-prof-modal-preview-avatar">
+            <span>
               <Avatar icon={icon} color={color} size={46} />
             </span>
             <div className={styles.profModalPreviewText}>

@@ -8,14 +8,16 @@ import {
   SidebarClosedGlyph,
   SidebarOpenGlyph,
 } from './glyphs.js';
+import { cx } from '../ui/cx.js';
+import chrome from './chrome.module.css';
 
-// React port of the vanilla `buildWindow` (chrome.ts). Builds the `.cd-window`
-// grid — a sidebar column (tlSide titlebar row + sidebar body) and a main
-// column (tlMain titlebar row + page content) — rendering the same global
-// chrome classes. State (sidebarOpen) is owned by the caller and passed in, so
-// the grid animates via the data-attribute exactly as the vanilla setter did.
+// The window chrome — a `.window` grid with a sidebar column (tlSide titlebar
+// row + sidebar body) and a main column (tlMain titlebar row + page content).
+// Styled by the shared chrome.module.css (one module for the whole chrome
+// family — see the header comment there). State (sidebarOpen) is owned by the
+// caller and passed in, so the grid animates via the data-attribute.
 
-// Titlebar icon button with tooltip + ⌘-shortcut chip (port of chrome tbBtn).
+// Titlebar icon button with tooltip + ⌘-shortcut chip.
 export function TbBtn(props: {
   icon: ReactNode;
   title?: string;
@@ -24,31 +26,35 @@ export function TbBtn(props: {
   disabled?: boolean;
   ariaLabel?: string;
   wrapClass?: string;
+  /** Keeps the button visually pressed while an anchored panel is open. */
+  open?: boolean;
+  /** Active toggle state (e.g. History while the pane shows history). */
+  active?: boolean;
 }): JSX.Element {
   return (
-    <span className={props.wrapClass ? `cd-tb-btn-wrap ${props.wrapClass}` : 'cd-tb-btn-wrap'}>
+    <span className={cx(chrome.tbBtnWrap, props.wrapClass)}>
       <button
-        className="cd-tb-btn"
+        className={chrome.tbBtn}
         type="button"
         aria-label={props.ariaLabel ?? props.title}
         disabled={props.disabled}
+        data-open={props.open ? 'true' : undefined}
+        data-active={props.active ? 'true' : undefined}
         onClick={props.onClick}
       >
         {props.icon}
       </button>
       {props.title ? (
-        <span className="cd-tooltip">
+        <span className={chrome.tooltip}>
           {props.title}
-          {props.shortcut ? <span className="cd-kbd">{props.shortcut}</span> : null}
+          {props.shortcut ? <span className={chrome.kbd}>{props.shortcut}</span> : null}
         </span>
       ) : null}
     </span>
   );
 }
 
-const Spacer = (): JSX.Element => (
-  <span className="cd-traffic-lights-spacer" aria-hidden="true" />
-);
+const Spacer = (): JSX.Element => <span className={chrome.spacer} aria-hidden="true" />;
 const Flex = (): JSX.Element => <span style={{ flex: 1 }} />;
 
 export interface ShellFrameProps {
@@ -124,7 +130,7 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
     props.showChatToggle ? (
       <TbBtn
         key="chat"
-        wrapClass="chat-toggle-wrap"
+        wrapClass={chrome.chatToggleWrap}
         icon={props.chatPaneOpen !== false ? <ChatPanelOpenGlyph /> : <ChatPanelClosedGlyph />}
         title={props.chatPaneOpen !== false ? 'Hide chat pane' : 'Show chat pane'}
         shortcut="⌘\"
@@ -136,8 +142,8 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
 
   const tlMainContent = props.titlebarCenter ? (
     <>
-      <div className="cd-tl-nav">{nav}</div>
-      <div className="cd-tl-context">
+      <div className={chrome.tlNav}>{nav}</div>
+      <div className={chrome.tlContext}>
         {props.titlebarCenter}
         {props.titlebarRight ? (
           <>
@@ -156,17 +162,17 @@ export default function ShellFrame(props: ShellFrameProps): JSX.Element {
   );
 
   return (
-    <div className="cd-window" data-sidebar={open ? 'open' : 'closed'}>
-      <aside className="cd-sidebar">
-        <div className="cd-tl-side">
+    <div className={chrome.window} data-sidebar={open ? 'open' : 'closed'}>
+      <aside className={chrome.sidebar}>
+        <div className={chrome.tlSide}>
           <Spacer />
           <Flex />
           <SidebarToggle open onClick={props.onToggleSidebar} />
         </div>
-        <div className="cd-sidebar-inner">{props.sidebar}</div>
+        <div className={chrome.sidebarInner}>{props.sidebar}</div>
       </aside>
-      <div className="cd-main">
-        <div className="cd-tl-main" data-layout={props.titlebarCenter ? 'grid' : 'flat'}>
+      <div className={chrome.main}>
+        <div className={chrome.tlMain} data-layout={props.titlebarCenter ? 'grid' : 'flat'}>
           {tlMainContent}
         </div>
         {props.children}

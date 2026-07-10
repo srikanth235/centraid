@@ -12,6 +12,7 @@ import {
 import { relativeWhen } from '../../../../format.js';
 import { iconSvg } from '../../iconSvg.js';
 import { cx } from '../../../ui/cx.js';
+import buttonCss from '../../../ui/Button.module.css';
 import styles from './BuilderCloud.module.css';
 import toastCss from '../../../styles/toast.module.css';
 
@@ -377,7 +378,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
               <button
                 type="button"
                 aria-label="Refresh logs"
-                className={cx("btn", "btn-ghost", styles.refreshBtn)}
+                className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh logs"
                 onClick={() => void refreshLogs()}
                 dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
@@ -387,7 +388,7 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
               <button
                 type="button"
                 aria-label="Refresh automations"
-                className={cx("btn", "btn-ghost", styles.refreshBtn)}
+                className={cx(buttonCss.btn, buttonCss.ghost, styles.refreshBtn)}
                 title="Refresh automations"
                 onClick={() => void refreshAutomations()}
                 dangerouslySetInnerHTML={{ __html: `${RefreshIcon(13)}<span>Refresh</span>` }}
@@ -827,7 +828,7 @@ function AutomationRow({
       <div className={styles.automationActions}>
         <button
           type="button"
-          className="btn btn-ghost cloud-automation-run"
+          className={cx(buttonCss.btn, buttonCss.ghost)}
           disabled={runState.kind === 'running'}
           onClick={() => onRun(row)}
         >
@@ -835,7 +836,7 @@ function AutomationRow({
         </button>
         <button
           type="button"
-          className="btn btn-ghost cloud-automation-delete"
+          className={cx(buttonCss.btn, buttonCss.ghost)}
           onClick={() => onDelete(row)}
         >
           Delete

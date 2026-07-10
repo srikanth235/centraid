@@ -1,5 +1,5 @@
 import { Store } from '../../store.js';
-import { type CSSProperties, type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type JSX, type ReactNode, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { AppearancePrefs } from '../../../../app-shell-context.js';
 import { useShellActions } from '../../actions.js';
@@ -15,7 +15,9 @@ import BuilderPreview from './BuilderPreview.js';
 import type { Tab } from './builderModel.js';
 import { type UseBuilderInput, useBuilder } from './useBuilder.js';
 import styles from './BuilderShell.module.css';
+import chrome from '../../chrome.module.css';
 import rightPaneCss from './rightPane.module.css';
+import buttonCss from '../../../ui/Button.module.css';
 import { cx } from '../../../ui/cx.js';
 
 // Inline device/reload glyphs (mirror builder.ts) — not in the design-token set.
@@ -143,7 +145,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       />
       <span className={styles.tlStatus} data-state={vm.statusState}>
         <span className={styles.tlStatusDot} />
-        <span className="cd-tl-status-text">{vm.statusText}</span>
+        <span>{vm.statusText}</span>
       </span>
     </span>
   );
@@ -156,7 +158,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       {!vm.isAutomation && (
         <button
           type="button"
-          className="cd-tb-btn"
+          className={chrome.tbBtn}
           aria-label="View history"
           title="View history"
           data-active={String(vm.historyToggleActive)}
@@ -166,14 +168,14 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       )}
       <button
         type="button"
-        className="cd-tb-btn"
+        className={chrome.tbBtn}
         aria-label="More app actions"
         title="More"
         dangerouslySetInnerHTML={{ __html: iconSvg('MoreHoriz', 14) }}
       />
       <button
         type="button"
-        className={cx("btn", "btn-primary", styles.tlPublish)}
+        className={cx(buttonCss.btn, buttonCss.primary, styles.tlPublish)}
         data-kind={vm.primaryKind}
         disabled={vm.primaryDisabled}
         onClick={vm.handlePrimary}
@@ -277,13 +279,10 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     );
   }
 
-  const rightPaneClass = [
-    rightPaneCss.pane ?? '',
-    !vm.isAutomation && vm.tab === 'preview' ? 'preview-pane' : '',
-    !vm.isAutomation && vm.tab === 'preview' && vm.previewDevice !== 'desktop' ? 'has-phone' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const rightPaneClass = cx(
+    rightPaneCss.pane,
+    !vm.isAutomation && vm.tab === 'preview' && vm.previewDevice !== 'desktop' && styles.hasPhone,
+  );
 
   return (
     <ShellFrame
@@ -302,9 +301,9 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
       titlebarLead={titlebarLead}
       titlebarRight={titlebarRight}
     >
-      <div className="builder" data-chat={chatVisible ? 'open' : 'closed'} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 } as CSSProperties}>
-        <div className="builder-body" data-sidebar="open">
-          <div className="chat-pane">
+      <div className={styles.builder} data-chat={chatVisible ? 'open' : 'closed'}>
+        <div className={styles.builderBody}>
+          <div className={styles.chatPane}>
             <BuilderChatPane
               onReady={(u) => vm.registerChatUpdater(u)}
               onSend={(t) => vm.sendUserPrompt(t)}
@@ -327,7 +326,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
           </div>
           <div className={rightPaneClass}>
             {rbToolbar}
-            <div className="right-pane-content">{pane}</div>
+            <div className={styles.rightPaneContent}>{pane}</div>
           </div>
         </div>
       </div>
