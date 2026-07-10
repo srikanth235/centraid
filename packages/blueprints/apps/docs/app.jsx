@@ -13,12 +13,24 @@
 // — the same star a favorited photo carries, so Starred here shows them too.
 // Sharing still has no vault signal (no per-person "shared" edge), so there
 // is honestly no sharing UI at all.
+//
+// React port (native web-components infra, see kit/react-core.min.js): the
+// static index.html body is unchanged, and this module owns one React root
+// per dynamic container (created once at boot) plus the same external
+// `state`/`data` objects and render orchestrator the Lit version used —
+// every write still mutates `state`, then calls `render()`, which fans out
+// to each root's `.render(...)` call. Popovers (kebab / move-to) stay plain
+// DOM built with kit's `h()`/`popItem()`, exactly as before — no React root
+// needed there. `emptyState()`/`showSkeleton()` remain the raw kit.js DOM
+// helpers because `#empty` and the boot skeleton in `#list` are the two
+// spots that were never Lit-rendered either; every OTHER container below was
+// Lit-templated before and is React-templated now.
 
+import { createRoot, useEffect, useRef } from './react-core.min.js';
 import {
   armConfirm,
   closePopover,
   debounce,
-  el,
   emptyState,
   fmtBytes as fmtBytesBase,
   h,
@@ -28,17 +40,14 @@ import {
   readFailed,
   runBulk as runBulkBase,
   showSkeleton,
-  snippetInto,
   stageFileBytes,
   toast,
   wireThemeToggle,
 } from './kit.js';
-// `h`/`el` stay imported: `h` builds the two action buttons handed to kit's
-// `emptyState()` (a real-DOM-node contract, not a template context) and `el`
-// parses this file's trusted static icon-SVG strings into nodes interpolated
-// straight into Lit templates — both are the "imperative island" / "one
-// literal" carve-outs the refactor brief sanctions, not reimplementations.
-import { html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
+// `h` stays imported: it builds the empty-state action buttons (a real-DOM-
+// node contract `emptyState()` expects, not a JSX context) and the plain-DOM
+// popover content (kebab menu, move-to tree) — both "imperative island" carve
+// -outs the refactor brief sanctions, not reimplementations of React.
 
 const $ = (id) => document.getElementById(id);
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -80,6 +89,16 @@ const RENAME_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"/></svg>';
 const DELETE_ICON =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>';
+
+// A trusted static SVG string rendered inline, with the exact DOM shape the
+// old `el(svg)` produced: no wrapper box in the layout (`display:contents`),
+// so flex/gap rules written against the *icon itself* being a flex child
+// (e.g. `.d-nav-item { gap: 11px }`) keep behaving identically. `<i>` (not
+// `<span>`) so it never collides with `.d-nav-item span:first-of-type`,
+// the one rule in app.css that counts sibling spans.
+function Icon({ svg }) {
+  return <i style={{ display: 'contents' }} dangerouslySetInnerHTML={{ __html: svg }} />;
+}
 
 // ---------- State ----------
 
@@ -319,8 +338,9 @@ function toggleSelect(id, index, shift) {
 // ---------- Popover (kebab + move) ----------
 
 // One "Move to…" target row. `popItem` (kit.js) builds the real button node;
-// Lit templates below interpolate it as-is — the target list mixes a fixed
-// depth-0 root with depth-1 folders, exactly as the vanilla builder did.
+// these popovers stay plain DOM (built with `h()`/`popItem()`), exactly as
+// before — the target list mixes a fixed depth-0 root with depth-1 folders,
+// same as the vanilla builder always did.
 function moveTargetBtn(folderId, name, depth, ids, single) {
   const btn = popItem(name, async () => {
     closePopover();
@@ -336,60 +356,60 @@ function openMovePopover(anchor, docs) {
   const ids = docs.map((d) => d.content_id);
   const single = docs.length === 1 ? docs[0] : null;
   openPopover(anchor, (box) => {
-    litRender(
-      html`
-        <p class="kit-popover-head">
-          ${single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`}
-        </p>
-        <div class="kit-popover-scroll">
-          ${moveTargetBtn(null, 'Documents', 0, ids, single)}
-          ${data.folders.map((f) => moveTargetBtn(f.folder_id, f.name, 1, ids, single))}
-        </div>
-      `,
-      box,
+    const head = h(
+      'p',
+      { class: 'kit-popover-head' },
+      single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
     );
+    const scroll = h(
+      'div',
+      { class: 'kit-popover-scroll' },
+      moveTargetBtn(null, 'Documents', 0, ids, single),
+      ...data.folders.map((f) => moveTargetBtn(f.folder_id, f.name, 1, ids, single)),
+    );
+    box.append(head, scroll);
   });
 }
 
 function openDocMenu(anchor, doc) {
   closePopover();
   openPopover(anchor, (box) => {
-    litRender(
-      html`
-        ${popItem('Open', () => {
+    box.append(
+      popItem('Open', () => {
+        closePopover();
+        openQuick(doc.content_id);
+      }),
+      h(
+        'a',
+        {
+          class: 'kit-popover-item',
+          role: 'menuitem',
+          href: doc.content_uri,
+          download: doc.title ?? 'file',
+          onclick: closePopover,
+        },
+        'Download',
+      ),
+      popItem('Rename', () => {
+        closePopover();
+        startRenameDoc(doc);
+      }),
+      popItem(doc.starred ? 'Remove star' : 'Star', () => {
+        closePopover();
+        toggleStar(doc);
+      }),
+      popItem('Move to…', () => openMovePopover(anchor, [doc])),
+      h('div', { class: 'kit-popover-sep' }),
+      popItem(
+        'Trash',
+        async (e) => {
+          const btn = e.currentTarget;
+          if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
           closePopover();
-          openQuick(doc.content_id);
-        })}
-        <a
-          class="kit-popover-item"
-          role="menuitem"
-          href=${doc.content_uri}
-          download=${doc.title ?? 'file'}
-          @click=${closePopover}
-          >Download</a
-        >
-        ${popItem('Rename', () => {
-          closePopover();
-          startRenameDoc(doc);
-        })}
-        ${popItem(doc.starred ? 'Remove star' : 'Star', () => {
-          closePopover();
-          toggleStar(doc);
-        })}
-        ${popItem('Move to…', () => openMovePopover(anchor, [doc]))}
-        <div class="kit-popover-sep"></div>
-        ${popItem(
-          'Trash',
-          async (e) => {
-            const btn = e.currentTarget;
-            if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
-            closePopover();
-            await trashDoc(doc);
-          },
-          { danger: true },
-        )}
-      `,
-      box,
+          await trashDoc(doc);
+        },
+        { danger: true },
+      ),
     );
   });
 }
@@ -554,196 +574,216 @@ async function uploadFiles(fileList) {
   await refresh();
 }
 
-// ---------- Sidebar render ----------
+// ---------- Sidebar components ----------
 
-function navItemTpl({ icon, label, active, count, onClick }) {
-  return html`<button
-    type="button"
-    class="d-nav-item"
-    aria-current=${String(!!active)}
-    @click=${onClick}
-  >
-    ${el(icon)}
-    <span>${label}</span>
-    ${count != null ? html`<span class="d-nav-count">${count}</span>` : nothing}
-  </button>`;
+function NavItem({ icon, label, active, count, onClick }) {
+  return (
+    <button type="button" className="d-nav-item" aria-current={String(!!active)} onClick={onClick}>
+      <Icon svg={icon} />
+      <span>{label}</span>
+      {count != null ? <span className="d-nav-count">{count}</span> : null}
+    </button>
+  );
 }
 
-function smartNavTpl(counts) {
-  return html`
-    ${navItemTpl({
-      icon: I.allDocs,
-      label: 'All documents',
-      active: state.nav.kind === 'all',
-      count: counts.all,
-      onClick: () => selectNav({ kind: 'all' }),
-    })}
-    ${navItemTpl({
-      icon: I.clock,
-      label: 'Recent',
-      active: state.nav.kind === 'recent',
-      onClick: () => selectNav({ kind: 'recent' }),
-    })}
-    ${navItemTpl({
-      icon: I.star,
-      label: 'Starred',
-      active: state.nav.kind === 'starred',
-      count: counts.starred,
-      onClick: () => selectNav({ kind: 'starred' }),
-    })}
-  `;
+function SmartNav({ counts }) {
+  return (
+    <>
+      <NavItem
+        icon={I.allDocs}
+        label="All documents"
+        active={state.nav.kind === 'all'}
+        count={counts.all}
+        onClick={() => selectNav({ kind: 'all' })}
+      />
+      <NavItem
+        icon={I.clock}
+        label="Recent"
+        active={state.nav.kind === 'recent'}
+        onClick={() => selectNav({ kind: 'recent' })}
+      />
+      <NavItem
+        icon={I.star}
+        label="Starred"
+        active={state.nav.kind === 'starred'}
+        count={counts.starred}
+        onClick={() => selectNav({ kind: 'starred' })}
+      />
+    </>
+  );
 }
 
-// The new-folder editor row: a plain closure var (not createRef) captures the
-// input node from the `ref()` callback, which runs synchronously during
-// commit — well before `commit()` can be invoked by a later click/keydown.
-function folderCreateEditTpl() {
-  let inputEl;
+// The new-folder editor row: an uncontrolled input, focused once on mount —
+// the React analogue of the old Lit `ref()` callback, which ran synchronously
+// during commit (well before `commit()` could be invoked by a later
+// click/keydown). React preserves this same host `<input>` node across
+// re-renders of the same tree shape, so typed text and focus both survive
+// unrelated re-renders exactly as they did under Lit.
+function FolderCreateEdit() {
+  const inputRef = useRef(null);
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
   const commit = () => {
-    const name = inputEl.value.trim();
+    const name = inputRef.current.value.trim();
     if (name) createFolder(name);
     else {
       state.creatingFolder = false;
       render();
     }
   };
-  return html`<div class="d-folder-edit">
-    <input
-      type="text"
-      placeholder="Folder name…"
-      aria-label="New folder name"
-      ${ref((node) => {
-        inputEl = node;
-        node?.focus();
-      })}
-      @keydown=${(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === 'Escape') {
-          state.creatingFolder = false;
-          render();
-        }
-      }}
-    />
-    <button type="button" @click=${commit}>Create</button>
-  </div>`;
+  return (
+    <div className="d-folder-edit">
+      <input
+        type="text"
+        placeholder="Folder name…"
+        aria-label="New folder name"
+        ref={inputRef}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+          if (e.key === 'Escape') {
+            state.creatingFolder = false;
+            render();
+          }
+        }}
+      />
+      <button type="button" onClick={commit}>
+        Create
+      </button>
+    </div>
+  );
 }
 
-function folderRenameEditTpl(f) {
-  let inputEl;
+function FolderRenameEdit({ f }) {
+  const inputRef = useRef(null);
+  useEffect(() => {
+    const node = inputRef.current;
+    if (node) {
+      node.focus();
+      node.select();
+    }
+  }, []);
   const commit = () => {
-    const name = inputEl.value.trim();
+    const name = inputRef.current.value.trim();
     if (name && name !== f.name) renameFolder(f.folder_id, name);
     else {
       state.renamingFolderId = null;
       render();
     }
   };
-  return html`<div class="d-folder-edit">
-    <input
-      type="text"
-      aria-label="Folder name"
-      .value=${f.name}
-      ${ref((node) => {
-        inputEl = node;
-        if (node) {
-          node.focus();
-          node.select();
-        }
-      })}
-      @keydown=${(e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === 'Escape') {
-          state.renamingFolderId = null;
-          render();
-        }
-      }}
-    />
-    <button type="button" @click=${commit}>Save</button>
-  </div>`;
+  return (
+    <div className="d-folder-edit">
+      <input
+        type="text"
+        aria-label="Folder name"
+        defaultValue={f.name}
+        ref={inputRef}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          }
+          if (e.key === 'Escape') {
+            state.renamingFolderId = null;
+            render();
+          }
+        }}
+      />
+      <button type="button" onClick={commit}>
+        Save
+      </button>
+    </div>
+  );
 }
 
-function folderRowTpl(f) {
-  if (state.renamingFolderId === f.folder_id) return folderRenameEditTpl(f);
+function FolderRow({ f }) {
+  if (state.renamingFolderId === f.folder_id) return <FolderRenameEdit f={f} />;
   const count = activeFiles().filter((d) => (d.folder_id ?? null) === f.folder_id).length;
   const active = state.nav.kind === 'folder' && state.nav.folderId === f.folder_id;
-  return html`<div class="d-folder">
-    ${navItemTpl({
-      icon: I.folder,
-      label: f.name,
-      active,
-      count: count || '',
-      onClick: () => selectNav({ kind: 'folder', folderId: f.folder_id }),
-    })}
-    <span class="d-folder-tools">
-      <button
-        type="button"
-        class="d-tool-btn"
-        aria-label="Rename ${f.name}"
-        @click=${(e) => {
-          e.stopPropagation();
-          state.renamingFolderId = f.folder_id;
-          render();
-        }}
-      >
-        ${el(RENAME_ICON)}
-      </button>
-      <button
-        type="button"
-        class="d-tool-btn danger"
-        aria-label="Delete ${f.name}"
-        @click=${(e) => {
-          e.stopPropagation();
-          if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
-          deleteFolder(f);
-        }}
-      >
-        ${el(DELETE_ICON)}
-      </button>
-    </span>
-  </div>`;
+  return (
+    <div className="d-folder">
+      <NavItem
+        icon={I.folder}
+        label={f.name}
+        active={active}
+        count={count || ''}
+        onClick={() => selectNav({ kind: 'folder', folderId: f.folder_id })}
+      />
+      <span className="d-folder-tools">
+        <button
+          type="button"
+          className="d-tool-btn"
+          aria-label={`Rename ${f.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            state.renamingFolderId = f.folder_id;
+            render();
+          }}
+        >
+          <Icon svg={RENAME_ICON} />
+        </button>
+        <button
+          type="button"
+          className="d-tool-btn danger"
+          aria-label={`Delete ${f.name}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+            deleteFolder(f);
+          }}
+        >
+          <Icon svg={DELETE_ICON} />
+        </button>
+      </span>
+    </div>
+  );
 }
 
-function folderListTpl(counts) {
-  return html`
-    ${state.creatingFolder ? folderCreateEditTpl() : nothing}
-    ${repeat(
-      data.folders,
-      (f) => f.folder_id,
-      (f) => folderRowTpl(f),
-    )}
-    ${navItemTpl({
-      icon: I.trash,
-      label: 'Trash',
-      active: state.nav.kind === 'trash',
-      count: counts.trash || '',
-      onClick: () => selectNav({ kind: 'trash' }),
-    })}
-  `;
+function FolderList({ counts }) {
+  return (
+    <>
+      {state.creatingFolder ? <FolderCreateEdit /> : null}
+      {data.folders.map((f) => (
+        <FolderRow key={f.folder_id} f={f} />
+      ))}
+      <NavItem
+        icon={I.trash}
+        label="Trash"
+        active={state.nav.kind === 'trash'}
+        count={counts.trash || ''}
+        onClick={() => selectNav({ kind: 'trash' })}
+      />
+    </>
+  );
 }
 
 // Storage → an honest footprint of what the drive is holding right now. The
 // vault gives no account-wide total, so we report real bytes + count over the
 // loaded window instead of a fabricated "used / total".
-function storageTpl() {
+function Storage() {
   const files = activeFiles();
   const bytes = files.reduce((s, f) => s + (f.byte_size ?? 0), 0);
-  return html`
-    <div class="d-storage-top">
-      <span class="lbl">Footprint</span>
-      <span class="val">${files.length}</span>
-    </div>
-    <div class="d-storage-label">
-      ${fmtBytes(bytes)} across ${files.length}
-      document${files.length === 1 ? '' : 's'}${driveTruncated ? ' — newest in view' : ''}
-    </div>
-  `;
+  return (
+    <>
+      <div className="d-storage-top">
+        <span className="lbl">Footprint</span>
+        <span className="val">{files.length}</span>
+      </div>
+      <div className="d-storage-label">
+        {fmtBytes(bytes)} across {files.length} document
+        {files.length === 1 ? '' : 's'}
+        {driveTruncated ? ' — newest in view' : ''}
+      </div>
+    </>
+  );
 }
+
+let smartNavRoot;
+let folderListRoot;
+let storageRoot;
 
 function renderSidebar() {
   const counts = {
@@ -751,12 +791,12 @@ function renderSidebar() {
     starred: activeFiles().filter((f) => f.starred).length,
     trash: trashedFiles().length,
   };
-  litRender(smartNavTpl(counts), $('smartNav'));
-  litRender(folderListTpl(counts), $('folderList'));
-  litRender(storageTpl(), $('storage'));
+  smartNavRoot.render(<SmartNav counts={counts} />);
+  folderListRoot.render(<FolderList counts={counts} />);
+  storageRoot.render(<Storage />);
 }
 
-// ---------- Toolbar render ----------
+// ---------- Toolbar components ----------
 
 const TYPE_CHIPS = [
   ['all', 'All'],
@@ -766,22 +806,29 @@ const TYPE_CHIPS = [
   ['sheet', 'Sheets'],
 ];
 
-function typeChipsTpl() {
-  return html`${TYPE_CHIPS.map(
-    ([key, label]) => html`<button
-      type="button"
-      class="kit-chip quiet"
-      aria-pressed=${String(state.type === key)}
-      @click=${() => {
-        state.type = key;
-        clearSelection();
-        render();
-      }}
-    >
-      ${label}
-    </button>`,
-  )}`;
+function TypeChips() {
+  return (
+    <>
+      {TYPE_CHIPS.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          className="kit-chip quiet"
+          aria-pressed={String(state.type === key)}
+          onClick={() => {
+            state.type = key;
+            clearSelection();
+            render();
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </>
+  );
 }
+
+let typeChipsRoot;
 
 function renderToolbar() {
   const rows = visibleRows;
@@ -800,7 +847,7 @@ function renderToolbar() {
   else sub = `${n} document${n === 1 ? '' : 's'}`;
   $('activeSub').textContent = sub;
 
-  litRender(typeChipsTpl(), $('typeChips'));
+  typeChipsRoot.render(<TypeChips />);
 
   const sortNames = { added: 'Date', name: 'Name', size: 'Size' };
   $('sortLabel').textContent = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
@@ -811,34 +858,38 @@ function renderToolbar() {
 
 // ---------- Bulk bar ----------
 
-function bulkBarTpl(n) {
+function BulkBar({ n }) {
   const inTrash = state.nav.kind === 'trash' && !state.search.trim();
-  return html`
-    <span class="d-bulk-count">${n} selected</span>
-    <div class="d-bulk-actions">
-      ${inTrash
-        ? html`<button
+  return (
+    <>
+      <span className="d-bulk-count">{n} selected</span>
+      <div className="d-bulk-actions">
+        {inTrash ? (
+          <button
             type="button"
-            class="kit-btn"
-            @click=${() =>
+            className="kit-btn"
+            onClick={() =>
               runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
                 progress: 'Restoring',
                 done: 'Restored',
-              })}
+              })
+            }
           >
             Restore
-          </button>`
-        : html`<button
+          </button>
+        ) : (
+          <>
+            <button
               type="button"
-              class="kit-btn"
-              @click=${(e) => openMovePopover(e.currentTarget, selectedDocs())}
+              className="kit-btn"
+              onClick={(e) => openMovePopover(e.currentTarget, selectedDocs())}
             >
               Move to…
             </button>
             <button
               type="button"
-              class="kit-btn danger"
-              @click=${(e) => {
+              className="kit-btn danger"
+              onClick={(e) => {
                 if (!armConfirm(e.currentTarget, { armedLabel: `Trash ${n} — sure?` })) return;
                 runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
                   progress: 'Trashing',
@@ -847,261 +898,306 @@ function bulkBarTpl(n) {
               }}
             >
               Trash
-            </button>`}
-      <button
-        type="button"
-        class="kit-btn"
-        @click=${() => {
-          clearSelection();
-          render();
-        }}
-      >
-        Clear
-      </button>
-    </div>
-  `;
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          className="kit-btn"
+          onClick={() => {
+            clearSelection();
+            render();
+          }}
+        >
+          Clear
+        </button>
+      </div>
+    </>
+  );
 }
+
+let bulkBarRoot;
 
 // The bar's stale content is left in place (hidden) when the selection drops
 // to zero, matching the old builder's behavior of never clearing it — only
-// the next non-empty selection re-populates it.
+// the next non-empty selection re-populates it. (Same reason `bulkBarRoot`
+// is never asked to render `null` here.)
 function renderBulk() {
   const bar = $('bulkBar');
   const n = state.selected.size;
   bar.hidden = n === 0;
   if (n === 0) return;
-  litRender(bulkBarTpl(n), bar);
+  bulkBarRoot.render(<BulkBar n={n} />);
 }
 
 // ---------- Rows: grid + list ----------
 
-function checkboxTpl(cls, selected, onClick, label) {
-  return html`<button
-    type="button"
-    class=${cls}
-    aria-pressed=${String(selected)}
-    aria-label=${label}
-    @click=${onClick}
-  >
-    ${selected ? el(I.check) : nothing}
-  </button>`;
-}
-
-function gridCardTpl(doc, index) {
-  const m = typeMeta(doc.media_type);
-  const selected = state.selected.has(doc.content_id);
-  return html`<div
-    class="d-card"
-    data-selected=${String(selected)}
-    @click=${(e) => {
-      if (e.target.closest('button, a')) return;
-      openDetails(doc.content_id);
-    }}
-  >
-    <div
-      class="d-thumb"
-      style="background:${tintBg(m.cv, 15)};"
-      @click=${(e) => {
-        e.stopPropagation();
-        openQuick(doc.content_id);
-      }}
-    >
-      ${isImage(doc)
-        ? html`<img src=${doc.content_uri} alt="" loading="lazy" />`
-        : html`<span class="d-thumb-label" style="color:var(${m.cv});">${m.label}</span>
-            <div class="d-thumb-lines">
-              <i style="width:70%;background:var(${m.cv});opacity:.18;"></i>
-              <i style="width:90%;background:var(${m.cv});opacity:.14;"></i>
-              <i style="width:55%;background:var(${m.cv});opacity:.14;"></i>
-            </div>`}
-    </div>
-    ${checkboxTpl(
-      'd-card-select',
-      selected,
-      (e) => {
-        e.stopPropagation();
-        toggleSelect(doc.content_id, index, e.shiftKey);
-      },
-      `Select ${doc.title ?? 'document'}`,
-    )}
-    <div class="d-card-body">
-      <div class="d-card-title">
-        ${doc.title ?? 'Untitled'}${doc.starred
-          ? html`<span class="d-star-ind" aria-label="Starred">★</span>`
-          : nothing}
-      </div>
-      <div class="d-card-meta">${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}</div>
-    </div>
-  </div>`;
-}
-
-function listRowTpl(doc, index) {
-  const m = typeMeta(doc.media_type);
-  const selected = state.selected.has(doc.content_id);
-  const trashed = state.nav.kind === 'trash' && !state.search.trim();
-  return html`<div
-    class="d-row"
-    data-selected=${String(selected)}
-    @click=${(e) => {
-      if (e.target.closest('button, a, input')) return;
-      openDetails(doc.content_id);
-    }}
-  >
-    ${checkboxTpl(
-      'd-check',
-      selected,
-      (e) => {
-        e.stopPropagation();
-        toggleSelect(doc.content_id, index, e.shiftKey);
-      },
-      `Select ${doc.title ?? 'document'}`,
-    )}
+function Checkbox({ cls, selected, onClick, label }) {
+  return (
     <button
       type="button"
-      class="d-badge"
-      style="background:${tintBg(m.cv, 16)};"
-      aria-label="Preview ${doc.title ?? 'document'}"
-      @click=${(e) => {
-        e.stopPropagation();
-        openQuick(doc.content_id);
+      className={cls}
+      aria-pressed={String(selected)}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {selected ? <Icon svg={I.check} /> : null}
+    </button>
+  );
+}
+
+function GridCard({ doc, index }) {
+  const m = typeMeta(doc.media_type);
+  const selected = state.selected.has(doc.content_id);
+  return (
+    <div
+      className="d-card"
+      data-selected={String(selected)}
+      onClick={(e) => {
+        if (e.target.closest('button, a')) return;
+        openDetails(doc.content_id);
       }}
     >
-      ${isImage(doc)
-        ? html`<img src=${doc.content_uri} alt="" loading="lazy" />`
-        : html`<span style="color:var(${m.cv});">${m.label}</span>`}
-    </button>
-    <div class="d-row-main">
-      <button
-        type="button"
-        class="d-row-title"
-        @click=${(e) => {
+      <div
+        className="d-thumb"
+        style={{ background: tintBg(m.cv, 15) }}
+        onClick={(e) => {
           e.stopPropagation();
           openQuick(doc.content_id);
         }}
       >
-        ${doc.title ?? 'Untitled'}${doc.starred
-          ? html`<span class="d-star-ind" aria-label="Starred">★</span>`
-          : nothing}
+        {isImage(doc) ? (
+          <img src={doc.content_uri} alt="" loading="lazy" />
+        ) : (
+          <>
+            <span className="d-thumb-label" style={{ color: `var(${m.cv})` }}>
+              {m.label}
+            </span>
+            <div className="d-thumb-lines">
+              <i style={{ width: '70%', background: `var(${m.cv})`, opacity: 0.18 }}></i>
+              <i style={{ width: '90%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
+              <i style={{ width: '55%', background: `var(${m.cv})`, opacity: 0.14 }}></i>
+            </div>
+          </>
+        )}
+      </div>
+      <Checkbox
+        cls="d-card-select"
+        selected={selected}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSelect(doc.content_id, index, e.shiftKey);
+        }}
+        label={`Select ${doc.title ?? 'document'}`}
+      />
+      <div className="d-card-body">
+        <div className="d-card-title">
+          {doc.title ?? 'Untitled'}
+          {doc.starred ? (
+            <span className="d-star-ind" aria-label="Starred">
+              ★
+            </span>
+          ) : null}
+        </div>
+        <div className="d-card-meta">
+          {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The search-hit snippet: replicated as JSX `<mark>` spans instead of calling
+// kit's `snippetInto()` — that helper mutates a container's DOM directly,
+// which must never target a React-owned node (this row lives in a React
+// root). Plain strings interleaved with `<mark>` reproduce the exact old
+// text-node + <mark> shape `.d-snippet mark` styles.
+function Snippet({ snippet }) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  return (
+    <div className="d-snippet">
+      {parts.map((part, i) => (!part ? null : i % 2 === 1 ? <mark key={i}>{part}</mark> : part))}
+    </div>
+  );
+}
+
+function ListRow({ doc, index }) {
+  const m = typeMeta(doc.media_type);
+  const selected = state.selected.has(doc.content_id);
+  const trashed = state.nav.kind === 'trash' && !state.search.trim();
+  return (
+    <div
+      className="d-row"
+      data-selected={String(selected)}
+      onClick={(e) => {
+        if (e.target.closest('button, a, input')) return;
+        openDetails(doc.content_id);
+      }}
+    >
+      <Checkbox
+        cls="d-check"
+        selected={selected}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSelect(doc.content_id, index, e.shiftKey);
+        }}
+        label={`Select ${doc.title ?? 'document'}`}
+      />
+      <button
+        type="button"
+        className="d-badge"
+        style={{ background: tintBg(m.cv, 16) }}
+        aria-label={`Preview ${doc.title ?? 'document'}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          openQuick(doc.content_id);
+        }}
+      >
+        {isImage(doc) ? (
+          <img src={doc.content_uri} alt="" loading="lazy" />
+        ) : (
+          <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
+        )}
       </button>
-      ${state.search.trim() && doc.snippet
-        ? html`<div
-            class="d-snippet"
-            ${ref((node) => {
-              if (!node) return;
-              node.replaceChildren();
-              snippetInto(node, doc.snippet);
-            })}
-          ></div>`
-        : nothing}
-      ${state.narrow
-        ? html`<div class="d-row-meta">
-            ${trashed
+      <div className="d-row-main">
+        <button
+          type="button"
+          className="d-row-title"
+          onClick={(e) => {
+            e.stopPropagation();
+            openQuick(doc.content_id);
+          }}
+        >
+          {doc.title ?? 'Untitled'}
+          {doc.starred ? (
+            <span className="d-star-ind" aria-label="Starred">
+              ★
+            </span>
+          ) : null}
+        </button>
+        {state.search.trim() && doc.snippet ? <Snippet snippet={doc.snippet} /> : null}
+        {state.narrow ? (
+          <div className="d-row-meta">
+            {trashed
               ? `from ${folderName(doc.folder_id)} · ${purgeCountdown(doc.purge_at)}`
               : state.search.trim()
                 ? `in ${folderName(doc.folder_id)}`
                 : `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`}
-          </div>`
-        : nothing}
-    </div>
-    <span class="d-cell where"
-      >${trashed ? `from ${folderName(doc.folder_id)}` : folderName(doc.folder_id)}</span
-    >
-    <span class="d-cell size">${fmtBytes(doc.byte_size)}</span>
-    <span class="d-cell added${trashed ? ' purge' : ''}"
-      >${trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at)}</span
-    >
-    <div class="d-row-end">
-      ${trashed
-        ? html`<button
+          </div>
+        ) : null}
+      </div>
+      <span className="d-cell where">
+        {trashed ? `from ${folderName(doc.folder_id)}` : folderName(doc.folder_id)}
+      </span>
+      <span className="d-cell size">{fmtBytes(doc.byte_size)}</span>
+      <span className={`d-cell added${trashed ? ' purge' : ''}`}>
+        {trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at)}
+      </span>
+      <div className="d-row-end">
+        {trashed ? (
+          <button
             type="button"
-            class="kit-btn"
-            @click=${(e) => {
+            className="kit-btn"
+            onClick={(e) => {
               e.stopPropagation();
               restoreDoc(doc);
             }}
           >
             Restore
-          </button>`
-        : html`<button
+          </button>
+        ) : (
+          <button
             type="button"
-            class="d-kebab"
-            aria-label="Actions for ${doc.title ?? 'document'}"
+            className="d-kebab"
+            aria-label={`Actions for ${doc.title ?? 'document'}`}
             aria-haspopup="menu"
-            @click=${(e) => {
+            onClick={(e) => {
               e.stopPropagation();
               openDocMenu(e.currentTarget, doc);
             }}
           >
-            ${el(I.dots)}
-          </button>`}
+            <Icon svg={I.dots} />
+          </button>
+        )}
+      </div>
     </div>
-  </div>`;
+  );
 }
 
-// `#grid`/`#list` are Lit-owned containers: `#list` starts holding the boot
-// `showSkeleton()` markup, so its very first commit must clear that non-Lit
-// content itself (`mounted` guard below); every commit after goes through
-// `litRender` alone. `#grid` never carries pre-Lit content but shares the same
-// guard for symmetry. Clearing between views goes through `render(nothing, …)`
-// — never a raw `replaceChildren()` — per the kit's Lit conventions.
+// `#grid`/`#list` are React-owned containers: `#list` starts holding the boot
+// `showSkeleton()` markup. Unlike Lit, React's first `root.render()` DOES
+// clear pre-existing children it never created (verified against the vendored
+// react-core under jsdom), so the `mounted` guards below are not load-bearing
+// — they only make the skeleton handoff explicit and independent of that React
+// behavior. Clearing between views goes through `root.render(null)` — never a
+// raw `replaceChildren()` after React owns the container.
+let gridRoot;
 let gridMounted = false;
-function mountGrid(tpl) {
+function mountGrid(node) {
   const grid = $('grid');
   if (!gridMounted) {
     grid.replaceChildren();
     gridMounted = true;
   }
-  litRender(tpl, grid);
+  gridRoot.render(node);
 }
+let listRoot;
 let listMounted = false;
-function mountList(tpl) {
+function mountList(node) {
   const list = $('list');
   if (!listMounted) {
     list.replaceChildren();
     listMounted = true;
   }
-  litRender(tpl, list);
+  listRoot.render(node);
 }
 
-function listHeadTpl(rows) {
+function ListHead({ rows }) {
   const allSel = rows.length > 0 && rows.every((d) => state.selected.has(d.content_id));
-  return html`
-    ${checkboxTpl(
-      'd-check',
-      allSel,
-      () => {
-        if (allSel) for (const d of rows) state.selected.delete(d.content_id);
-        else for (const d of rows) state.selected.add(d.content_id);
-        state.anchorIndex = null;
-        render();
-      },
-      allSel ? 'Deselect all' : 'Select all',
-    )}
-    <span style="width:34px;"></span>
-    <span class="d-col name">Name</span>
-    <span class="d-col where">Where</span>
-    <span class="d-col size">Size</span>
-    <span class="d-col added">Added</span>
-    <span class="d-col end"></span>
-  `;
+  return (
+    <>
+      <Checkbox
+        cls="d-check"
+        selected={allSel}
+        onClick={() => {
+          if (allSel) for (const d of rows) state.selected.delete(d.content_id);
+          else for (const d of rows) state.selected.add(d.content_id);
+          state.anchorIndex = null;
+          render();
+        }}
+        label={allSel ? 'Deselect all' : 'Select all'}
+      />
+      <span style={{ width: '34px' }}></span>
+      <span className="d-col name">Name</span>
+      <span className="d-col where">Where</span>
+      <span className="d-col size">Size</span>
+      <span className="d-col added">Added</span>
+      <span className="d-col end"></span>
+    </>
+  );
 }
 
-function windowFootTpl() {
-  return html`<span
-      >Showing your latest ${driveWindow} documents — older ones are a search away.</span
-    >
-    <button
-      type="button"
-      class="kit-btn"
-      @click=${async (e) => {
-        driveWindow += 200;
-        e.currentTarget.disabled = true;
-        await refresh();
-      }}
-    >
-      Show more
-    </button>`;
+function WindowFoot() {
+  return (
+    <>
+      <span>Showing your latest {driveWindow} documents — older ones are a search away.</span>
+      <button
+        type="button"
+        className="kit-btn"
+        onClick={async (e) => {
+          driveWindow += 200;
+          e.currentTarget.disabled = true;
+          await refresh();
+        }}
+      >
+        Show more
+      </button>
+    </>
+  );
 }
+
+let listHeadRoot;
+let windowFootRoot;
 
 function renderRows() {
   const rows = visibleRows;
@@ -1114,8 +1210,8 @@ function renderRows() {
   listWrap.hidden = true;
   empty.hidden = true;
   foot.hidden = true;
-  mountGrid(nothing);
-  mountList(nothing);
+  mountGrid(null);
+  mountList(null);
 
   if (rows.length === 0) {
     if (state.nav.kind === 'starred' && state.type === 'all') {
@@ -1179,28 +1275,28 @@ function renderRows() {
   if (state.view === 'grid') {
     grid.hidden = false;
     mountGrid(
-      html`${repeat(
-        rows,
-        (d) => d.content_id,
-        (d, i) => gridCardTpl(d, i),
-      )}`,
+      <>
+        {rows.map((d, i) => (
+          <GridCard key={d.content_id} doc={d} index={i} />
+        ))}
+      </>,
     );
   } else {
     listWrap.hidden = false;
     listHead.hidden = state.narrow;
-    if (!state.narrow) litRender(listHeadTpl(rows), listHead);
+    if (!state.narrow) listHeadRoot.render(<ListHead rows={rows} />);
     mountList(
-      html`${repeat(
-        rows,
-        (d) => d.content_id,
-        (d, i) => listRowTpl(d, i),
-      )}`,
+      <>
+        {rows.map((d, i) => (
+          <ListRow key={d.content_id} doc={d} index={i} />
+        ))}
+      </>,
     );
   }
 
   if (driveTruncated && !state.search.trim() && state.nav.kind !== 'starred') {
     foot.hidden = false;
-    litRender(windowFootTpl(), foot);
+    windowFootRoot.render(<WindowFoot />);
   }
 }
 
@@ -1217,7 +1313,7 @@ function closeDetails() {
   renderDetails();
 }
 
-function detailsTpl(doc) {
+function Details({ doc }) {
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
 
@@ -1229,105 +1325,120 @@ function detailsTpl(doc) {
     events.push({ text: `Filed in ${folderName(doc.folder_id)}`, date: fmtFull(doc.created_at) });
   events.push({ text: 'Uploaded to your vault', date: fmtFull(doc.created_at) });
 
-  return html`
-    <div class="d-details-backdrop" @click=${closeDetails}></div>
-    <aside class="d-details" role="dialog" aria-modal="true" aria-label="Document details">
-      <div class="d-details-head">
-        <span class="lbl">Details</span>
-        <button type="button" class="d-details-x" aria-label="Close" @click=${closeDetails}>
-          ${el(I.close)}
-        </button>
-      </div>
-      <div class="d-details-body">
-        <div class="d-hero" style="background:${tintBg(m.cv, 16)};">
-          ${isImage(doc)
-            ? html`<img src=${doc.content_uri} alt="" />`
-            : html`<span style="color:var(${m.cv});">${m.label}</span>`}
-        </div>
-        <div class="d-detail-name">${doc.title ?? 'Untitled'}</div>
-        <div class="d-detail-ext">${extOf(doc)} · ${fmtBytes(doc.byte_size)}</div>
-        <div class="d-detail-actions">
-          <button
-            type="button"
-            class="kit-btn d-detail-btn"
-            @click=${() => openQuick(doc.content_id)}
-          >
-            Open
+  return (
+    <>
+      <div className="d-details-backdrop" onClick={closeDetails}></div>
+      <aside className="d-details" role="dialog" aria-modal="true" aria-label="Document details">
+        <div className="d-details-head">
+          <span className="lbl">Details</span>
+          <button type="button" className="d-details-x" aria-label="Close" onClick={closeDetails}>
+            <Icon svg={I.close} />
           </button>
-          <a class="kit-btn d-detail-btn" href=${doc.content_uri} download=${doc.title ?? 'file'}
-            >Download</a
-          >
-          ${trashed
-            ? nothing
-            : html`<button
-                type="button"
-                class="kit-btn d-detail-btn"
-                @click=${() => toggleStar(doc)}
-              >
-                ${doc.starred ? '★ Starred' : '☆ Star'}
-              </button>`}
         </div>
-        <div class="d-detail-label">Details</div>
-        <dl class="d-detail-grid">
-          <dt>Type</dt>
-          <dd>${m.name}</dd>
-          <dt>Size</dt>
-          <dd>${fmtBytes(doc.byte_size)}</dd>
-          <dt>${trashed ? 'Was in' : 'Folder'}</dt>
-          <dd>${folderName(doc.folder_id)}</dd>
-          <dt>${trashed ? 'Purges' : 'Added'}</dt>
-          <dd>${trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
-        </dl>
-        <div class="d-detail-label">Activity</div>
-        <div>
-          ${events.map(
-            (ev, i) => html`<div class="d-activity-item">
-              <div class="d-activity-rail">
-                <span class="d-activity-dot"></span>
-                ${i < events.length - 1 ? html`<span class="d-activity-line"></span>` : nothing}
-              </div>
-              <div>
-                <div class="d-activity-text">${ev.text}</div>
-                <div class="d-activity-meta">
-                  <span class="d-activity-date">${ev.date}</span>
-                  <span class="d-receipt-chip">receipt</span>
+        <div className="d-details-body">
+          <div className="d-hero" style={{ background: tintBg(m.cv, 16) }}>
+            {isImage(doc) ? (
+              <img src={doc.content_uri} alt="" />
+            ) : (
+              <span style={{ color: `var(${m.cv})` }}>{m.label}</span>
+            )}
+          </div>
+          <div className="d-detail-name">{doc.title ?? 'Untitled'}</div>
+          <div className="d-detail-ext">
+            {extOf(doc)} · {fmtBytes(doc.byte_size)}
+          </div>
+          <div className="d-detail-actions">
+            <button
+              type="button"
+              className="kit-btn d-detail-btn"
+              onClick={() => openQuick(doc.content_id)}
+            >
+              Open
+            </button>
+            <a
+              className="kit-btn d-detail-btn"
+              href={doc.content_uri}
+              download={doc.title ?? 'file'}
+            >
+              Download
+            </a>
+            {trashed ? null : (
+              <button
+                type="button"
+                className="kit-btn d-detail-btn"
+                onClick={() => toggleStar(doc)}
+              >
+                {doc.starred ? '★ Starred' : '☆ Star'}
+              </button>
+            )}
+          </div>
+          <div className="d-detail-label">Details</div>
+          <dl className="d-detail-grid">
+            <dt>Type</dt>
+            <dd>{m.name}</dd>
+            <dt>Size</dt>
+            <dd>{fmtBytes(doc.byte_size)}</dd>
+            <dt>{trashed ? 'Was in' : 'Folder'}</dt>
+            <dd>{folderName(doc.folder_id)}</dd>
+            <dt>{trashed ? 'Purges' : 'Added'}</dt>
+            <dd>{trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
+          </dl>
+          <div className="d-detail-label">Activity</div>
+          <div>
+            {events.map((ev, i) => (
+              <div className="d-activity-item" key={i}>
+                <div className="d-activity-rail">
+                  <span className="d-activity-dot"></span>
+                  {i < events.length - 1 ? <span className="d-activity-line"></span> : null}
+                </div>
+                <div>
+                  <div className="d-activity-text">{ev.text}</div>
+                  <div className="d-activity-meta">
+                    <span className="d-activity-date">{ev.date}</span>
+                    <span className="d-receipt-chip">receipt</span>
+                  </div>
                 </div>
               </div>
-            </div>`,
-          )}
+            ))}
+          </div>
         </div>
-      </div>
-      <div class="d-details-foot">
-        ${trashed
-          ? html`<button type="button" class="kit-btn d-detail-btn" @click=${() => restoreDoc(doc)}>
+        <div className="d-details-foot">
+          {trashed ? (
+            <button type="button" className="kit-btn d-detail-btn" onClick={() => restoreDoc(doc)}>
               Restore
-            </button>`
-          : html`<button
+            </button>
+          ) : (
+            <>
+              <button
                 type="button"
-                class="kit-btn d-detail-btn"
-                @click=${(e) => openMovePopover(e.currentTarget, [doc])}
+                className="kit-btn d-detail-btn"
+                onClick={(e) => openMovePopover(e.currentTarget, [doc])}
               >
                 Move
               </button>
               <button
                 type="button"
-                class="kit-btn d-detail-btn danger"
-                @click=${(e) => {
+                className="kit-btn d-detail-btn danger"
+                onClick={(e) => {
                   if (!armConfirm(e.currentTarget, { armedLabel: 'Trash — sure?' })) return;
                   trashDoc(doc);
                 }}
               >
                 Trash
-              </button>`}
-      </div>
-    </aside>
-  `;
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+    </>
+  );
 }
 
+let detailsRootReact;
+
 function renderDetails() {
-  const root = $('detailsRoot');
   const doc = state.detailsId ? data.documents.find((d) => d.content_id === state.detailsId) : null;
-  litRender(doc ? detailsTpl(doc) : nothing, root);
+  detailsRootReact.render(doc ? <Details doc={doc} /> : null);
 }
 
 function extOf(doc) {
@@ -1338,8 +1449,6 @@ function extOf(doc) {
 }
 
 // ---------- Quick-look ----------
-
-let lastQuickId = null;
 
 function openQuick(id) {
   state.quickId = id;
@@ -1357,134 +1466,169 @@ function quickStep(delta) {
 
 // The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
 // vault blob URL or data: URI (CSP `default-src 'self'` — issue #296), and
-// re-setting `src` reloads/rescrolls it. The `lastQuickId` short-circuit below
-// keeps the exact old semantics (skip the render call entirely for an
-// unrelated re-render of the SAME open doc) rather than leaning on Lit's
-// value-diffing to avoid the reload, since that's the one guarantee this
-// overlay cannot regress on.
-function quickTpl(doc) {
+// re-setting `src` reloads/rescrolls it. Under Lit this needed an explicit
+// `lastQuickId` short-circuit to skip re-rendering entirely for an unrelated
+// re-render of the SAME open doc. React's reconciler gives the same guarantee
+// for free here: `renderQuick()` is called on every unrelated `render()` too,
+// but as long as the doc is unchanged the new element tree has the same
+// type/position/props at every node (including this `src` string, which is
+// never regenerated — it's the same field straight off the doc), so React
+// bails out of touching the real `<iframe>`/`<img>` DOM node at all. The
+// `key={doc.content_id}` on the stage element is the belt-and-braces part:
+// it forces a genuine remount (a real reload) exactly when the doc changes
+// (prev/next), and never otherwise.
+function QuickLook({ doc }) {
   const m = typeMeta(doc.media_type);
   const idx = visibleRows.findIndex((d) => d.content_id === doc.content_id);
 
   let stage;
   if (isImage(doc)) {
-    stage = html`<img class="d-quick-image" src=${doc.content_uri} alt=${doc.title ?? 'Image'} />`;
+    stage = (
+      <img
+        key={doc.content_id}
+        className="d-quick-image"
+        src={doc.content_uri}
+        alt={doc.title ?? 'Image'}
+      />
+    );
   } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
-    stage = html`<iframe
-      class="d-quick-frame"
-      src=${doc.content_uri}
-      title=${doc.title ?? 'PDF'}
-    ></iframe>`;
+    stage = (
+      <iframe
+        key={doc.content_id}
+        className="d-quick-frame"
+        src={doc.content_uri}
+        title={doc.title ?? 'PDF'}
+      />
+    );
   } else {
     // A document-page mock for docs / sheets / slides / other.
     const widths = [96, 88, 93, 70, 90, 82, 60];
-    stage = html`<div class="d-quick-page">
-      <i style="height:11px;width:44%;background:var(${m.cv});opacity:.85;margin-bottom:22px;"></i>
-      ${widths.map(
-        (w, i) =>
-          html`<i
-            style="height:7px;width:${w}%;background:${i < 4
-              ? '#e6e7ea'
-              : '#eceef1'};margin-bottom:${i === 3 ? 26 : 11}px;"
-          ></i>`,
-      )}
-    </div>`;
+    stage = (
+      <div className="d-quick-page" key={doc.content_id}>
+        <i
+          style={{
+            height: '11px',
+            width: '44%',
+            background: `var(${m.cv})`,
+            opacity: 0.85,
+            marginBottom: '22px',
+          }}
+        ></i>
+        {widths.map((w, i) => (
+          <i
+            key={i}
+            style={{
+              height: '7px',
+              width: `${w}%`,
+              background: i < 4 ? '#e6e7ea' : '#eceef1',
+              marginBottom: `${i === 3 ? 26 : 11}px`,
+            }}
+          ></i>
+        ))}
+      </div>
+    );
   }
 
-  return html`<div class="d-quick" role="dialog" aria-modal="true" aria-label="Quick look">
-    <div class="d-quick-top">
-      <span class="d-quick-badge" style="background:${tintBg(m.cv, 20)};color:var(${m.cv});"
-        >${m.label}</span
-      >
-      <span class="d-quick-title">${doc.title ?? 'Untitled'}</span>
-      <a class="d-quick-btn" href=${doc.content_uri} download=${doc.title ?? 'file'}
-        >${el(I.download)}Download</a
-      >
-      <button type="button" class="d-quick-btn icon" aria-label="Close" @click=${closeQuick}>
-        ${el(I.close)}
-      </button>
+  return (
+    <div className="d-quick" role="dialog" aria-modal="true" aria-label="Quick look">
+      <div className="d-quick-top">
+        <span
+          className="d-quick-badge"
+          style={{ background: tintBg(m.cv, 20), color: `var(${m.cv})` }}
+        >
+          {m.label}
+        </span>
+        <span className="d-quick-title">{doc.title ?? 'Untitled'}</span>
+        <a className="d-quick-btn" href={doc.content_uri} download={doc.title ?? 'file'}>
+          <Icon svg={I.download} />
+          Download
+        </a>
+        <button type="button" className="d-quick-btn icon" aria-label="Close" onClick={closeQuick}>
+          <Icon svg={I.close} />
+        </button>
+      </div>
+      <div className="d-quick-stage">
+        <button
+          type="button"
+          className="d-quick-nav prev"
+          aria-label="Previous"
+          disabled={idx <= 0}
+          onClick={() => quickStep(-1)}
+        >
+          <Icon svg={I.chevL} />
+        </button>
+        {stage}
+        <button
+          type="button"
+          className="d-quick-nav next"
+          aria-label="Next"
+          disabled={idx < 0 || idx >= visibleRows.length - 1}
+          onClick={() => quickStep(1)}
+        >
+          <Icon svg={I.chevR} />
+        </button>
+      </div>
+      <div className="d-quick-foot">
+        {folderName(doc.folder_id)} · {fmtBytes(doc.byte_size)} · added {fmtFull(doc.created_at)}
+      </div>
     </div>
-    <div class="d-quick-stage">
-      <button
-        type="button"
-        class="d-quick-nav prev"
-        aria-label="Previous"
-        ?disabled=${idx <= 0}
-        @click=${() => quickStep(-1)}
-      >
-        ${el(I.chevL)}
-      </button>
-      ${stage}
-      <button
-        type="button"
-        class="d-quick-nav next"
-        aria-label="Next"
-        ?disabled=${idx < 0 || idx >= visibleRows.length - 1}
-        @click=${() => quickStep(1)}
-      >
-        ${el(I.chevR)}
-      </button>
-    </div>
-    <div class="d-quick-foot">
-      ${folderName(doc.folder_id)} · ${fmtBytes(doc.byte_size)} · added ${fmtFull(doc.created_at)}
-    </div>
-  </div>`;
+  );
 }
 
+let quickRootReact;
+
 function renderQuick() {
-  const root = $('quickRoot');
   const doc = state.quickId ? data.documents.find((d) => d.content_id === state.quickId) : null;
-  if (!doc) {
-    litRender(nothing, root);
-    lastQuickId = null;
-    return;
-  }
-  if (doc.content_id === lastQuickId && root.firstElementChild) return; // avoid reloading an open iframe on unrelated renders
-  lastQuickId = doc.content_id;
-  litRender(quickTpl(doc), root);
+  quickRootReact.render(doc ? <QuickLook doc={doc} /> : null);
 }
 
 // ---------- New menu ----------
 
-function newMenuTpl() {
-  return html`
-    <button
-      type="button"
-      class="d-menu-item"
-      role="menuitem"
-      @click=${() => {
-        state.newMenuOpen = false;
-        renderNewMenu();
-        $('uploadInput').click();
-      }}
-    >
-      ${el(I.upload)}Upload files
-    </button>
-    <div class="d-menu-sep"></div>
-    <button
-      type="button"
-      class="d-menu-item"
-      role="menuitem"
-      @click=${() => {
-        state.newMenuOpen = false;
-        state.creatingFolder = true;
-        render();
-      }}
-    >
-      ${el(I.folderPlus)}New folder
-    </button>
-  `;
+function NewMenu() {
+  return (
+    <>
+      <button
+        type="button"
+        className="d-menu-item"
+        role="menuitem"
+        onClick={() => {
+          state.newMenuOpen = false;
+          renderNewMenu();
+          $('uploadInput').click();
+        }}
+      >
+        <Icon svg={I.upload} />
+        Upload files
+      </button>
+      <div className="d-menu-sep"></div>
+      <button
+        type="button"
+        className="d-menu-item"
+        role="menuitem"
+        onClick={() => {
+          state.newMenuOpen = false;
+          state.creatingFolder = true;
+          render();
+        }}
+      >
+        <Icon svg={I.folderPlus} />
+        New folder
+      </button>
+    </>
+  );
 }
+
+let newMenuRoot;
 
 function renderNewMenu() {
   const menu = $('newMenu');
   menu.hidden = !state.newMenuOpen;
   $('newBtn').setAttribute('aria-expanded', String(state.newMenuOpen));
   if (!state.newMenuOpen) {
-    litRender(nothing, menu);
+    newMenuRoot.render(null);
     return;
   }
-  litRender(newMenuTpl(), menu);
+  newMenuRoot.render(<NewMenu />);
 }
 
 // ---------- Navigation ----------
@@ -1716,6 +1860,21 @@ function measure() {
 }
 
 // ---------- Boot ----------
+
+// One React root per dynamic container, created once — every subsequent
+// state change re-renders into these same roots rather than recreating them.
+smartNavRoot = createRoot($('smartNav'));
+folderListRoot = createRoot($('folderList'));
+storageRoot = createRoot($('storage'));
+typeChipsRoot = createRoot($('typeChips'));
+bulkBarRoot = createRoot($('bulkBar'));
+gridRoot = createRoot($('grid'));
+listRoot = createRoot($('list'));
+listHeadRoot = createRoot($('listHead'));
+windowFootRoot = createRoot($('windowFoot'));
+detailsRootReact = createRoot($('detailsRoot'));
+quickRootReact = createRoot($('quickRoot'));
+newMenuRoot = createRoot($('newMenu'));
 
 $('root').classList.toggle('is-narrow', $('root').clientWidth < 860);
 state.narrow = $('root').clientWidth < 860;
