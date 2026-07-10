@@ -120,9 +120,10 @@ describe('S2 consent', () => {
       ],
     });
     const cred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+    // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
     expect(
       gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:ServiceProvision' }).rows,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     expect(() =>
       gw.read(cred, { entity: 'core.transaction', purpose: 'dpv:ServiceProvision' }),
     ).toThrow(/deny/);
@@ -210,13 +211,23 @@ describe('S3/S4 command execution', () => {
     });
     expect(outcome.status).toBe('failed');
     if (outcome.status !== 'failed') return;
-    expect(outcome.predicate).toContain('calendar_exists');
+    // The app-facing outcome carries the precondition's owner-facing
+    // message, not the raw `name: column op value` predicate string.
+    expect(outcome.predicate).toBe("That calendar doesn't exist.");
     const events = db.vault.prepare('SELECT count(*) AS n FROM core_event').get() as { n: number };
     expect(events.n).toBe(0);
     const inv = db.journal
       .prepare('SELECT status FROM agent_command_invocation WHERE invocation_id = ?')
       .get(outcome.invocationId) as { status: string };
     expect(inv.status).toBe('failed');
+    // The raw technical predicate is still recorded in the checks-table
+    // audit trail, unaffected by the friendly outward message.
+    const check = db.journal
+      .prepare(
+        `SELECT predicate FROM agent_invocation_check WHERE invocation_id = ? AND passed = 0`,
+      )
+      .get(outcome.invocationId) as { predicate: string };
+    expect(check.predicate).toContain('calendar_exists');
   });
 
   test('busy conflict precondition blocks a second overlapping proposal', () => {
@@ -235,7 +246,9 @@ describe('S3/S4 command execution', () => {
       purpose: 'dpv:ServiceProvision',
     });
     expect(outcome.status).toBe('failed');
-    if (outcome.status === 'failed') expect(outcome.predicate).toContain('no_busy_conflict');
+    if (outcome.status === 'failed') {
+      expect(outcome.predicate).toBe('This time conflicts with another event on your calendar.');
+    }
   });
 
   test('input schema violation is a contract failure', () => {
@@ -445,9 +458,10 @@ describe('confirmation routing + revocation + sweeps', () => {
 
   test('revocation cascade: agent goes dark instantly, receipts remain', () => {
     const { cred, grantId } = grantedAgent();
+    // 2 = the bootstrap-minted default "Personal" calendar + seedCalendar()'s.
     expect(
       gw.read(cred, { entity: 'schedule.calendar', purpose: 'dpv:ServiceProvision' }).rows,
-    ).toHaveLength(1);
+    ).toHaveLength(2);
     const before = db.journal.prepare('SELECT count(*) AS n FROM consent_receipt').get() as {
       n: number;
     };

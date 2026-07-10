@@ -347,6 +347,17 @@ const CREATE_NOTEBOOK: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // Same collision rule rename_notebook already enforces: two notebooks
+      // with the same name are indistinguishable in every filing UI, so
+      // refuse at create too — otherwise the duplicate can only be untangled
+      // by renaming one away, and rename itself refuses the colliding name.
+      name: 'name_unused',
+      sql: 'SELECT count(*) AS n FROM core_collection WHERE name = :name',
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
   ],
   postconditions: [
     {

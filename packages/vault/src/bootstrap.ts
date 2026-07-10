@@ -73,6 +73,8 @@ export interface BootstrapVaultOptions {
   vaultId?: string;
   /** Owner-facing vault name. Default: `<ownerName>'s vault`. */
   vaultName?: string;
+  /** IANA tz for the minted default "Personal" calendar. Default: UTC. */
+  defaultTz?: string;
 }
 
 /** Create the vault row, owner party, seed vocabulary and first device. */
@@ -114,6 +116,18 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
        VALUES (?, ?, ?, 'active', ?, '{}', ?)`,
     )
     .run(vaultId, ownerPartyId, displayName, options.baseCurrency ?? 'INR', now);
+  // Events require a calendar (schedule.propose_event's calendar_exists
+  // precondition) but no vault command creates one — without a minted
+  // default, a fresh vault can never hold a single event and Agenda's
+  // propose flow is a permanent dead end. One private "Personal" calendar
+  // makes the schedule domain usable from first boot, same spirit as the
+  // owner party row above.
+  db.vault
+    .prepare(
+      `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
+       VALUES (?, ?, 'Personal', NULL, ?, 'private', NULL)`,
+    )
+    .run(uuidv7(), ownerPartyId, options.defaultTz ?? 'UTC');
   // §03/§07: condition is the highest-sensitivity table — excluded from
   // default grant scopes. A minimization policy makes schema-wide scopes skip
   // it; only a scope naming the table explicitly covers it.

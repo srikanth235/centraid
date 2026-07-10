@@ -205,6 +205,14 @@ export interface ConditionSpec {
   column: string;
   op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
   value: number | string;
+  /**
+   * Owner-facing sentence shown in place of the raw `name: column op value`
+   * predicate when this condition fails — every command author's own
+   * words, not a debugging string. Optional so existing conditions keep
+   * working (raw predicate stays the fallback); backfill the high-traffic
+   * ones first.
+   */
+  message?: string;
 }
 
 /** Evidence citation a handler reports (S5: explanation is citation). */

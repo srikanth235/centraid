@@ -1084,6 +1084,7 @@ const DELETE_CIRCLE: CommandDefinition = {
       column: 'n',
       op: 'eq',
       value: 0,
+      message: 'This circle still has people in it — move them out first.',
     },
   ],
   postconditions: [

@@ -331,7 +331,14 @@ export function runContractAndExecute(
   }
   const failedPre = preResults.find((r) => !r.passed);
   if (failedPre) {
-    return denyContract(failedPre.predicate, { stage: 'contract', predicate: failedPre.predicate });
+    // `denyContract`'s argument becomes outcome.reason/predicate — the
+    // app-facing surface — so prefer the command author's own sentence
+    // there; the raw `name: column op value` string still goes into the
+    // receipt detail and the checks-table audit trail via writeCheck above.
+    return denyContract(failedPre.message ?? failedPre.predicate, {
+      stage: 'contract',
+      predicate: failedPre.predicate,
+    });
   }
   setInvocationStatus(db, invocationId, 'checked');
 
@@ -425,6 +432,9 @@ export function runContractAndExecute(
       for (const r of postResults)
         writeCheck(db.journal, invocationId, 'post', r.predicate, r.passed, r.observed);
       setInvocationStatus(db, invocationId, 'rolled_back');
+      // Same split as the precondition path above: friendly-or-raw for the
+      // app-facing reason/predicate, raw always in the receipt detail.
+      const friendly = failedPost.message ?? failedPost.predicate;
       const receiptId = writeReceipt(db.journal, {
         grantId: consent.grantId,
         invocationId,
@@ -435,17 +445,13 @@ export function runContractAndExecute(
         decision: 'deny',
         detail: { stage: 'execution', predicate: failedPost.predicate, risk: command.risk },
       });
-      writeExplanation(
-        db.journal,
-        invocationId,
-        `${command.name} rolled back: ${failedPost.predicate}.`,
-      );
+      writeExplanation(db.journal, invocationId, `${command.name} rolled back: ${friendly}.`);
       return {
         status: 'failed',
         invocationId,
         receiptId,
-        reason: failedPost.predicate,
-        predicate: failedPost.predicate,
+        reason: friendly,
+        predicate: friendly,
       };
     }
     // Demo-register writes join the seed registry INSIDE the transaction —
