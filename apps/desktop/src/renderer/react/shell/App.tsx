@@ -8,7 +8,6 @@ import { buildPaletteGroups } from './routes/paletteData.js';
 import ProfileSwitcherHead from './ProfileSwitcherHead.js';
 import Sidebar, { type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
-import PageScroll from './PageScroll.js';
 import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
@@ -29,6 +28,7 @@ import HomeRoute from './routes/HomeRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
 import SettingsRoute from './routes/SettingsRoute.js';
+import StarredRoute from './routes/StarredRoute.js';
 import TemplatesRoute from './routes/TemplatesRoute.js';
 
 // Build the ShellActions surface for the current render. Navigation + toast +
@@ -264,11 +264,14 @@ export default function App(): JSX.Element {
             />
           );
         case 'starred':
-          // Port of the vanilla renderStarred — a pure empty-state page.
           return (
-            <PageScroll title="Starred" subtitle="Apps you star show up here for quick access.">
-              <PageEmpty message="Nothing starred yet. Hover an app tile and tap the star." />
-            </PageScroll>
+            <StarredRoute
+              userApps={userApps}
+              drafts={drafts}
+              tileVariant={prefs.tileVariant}
+              isStarred={isStarred}
+              toggleStar={toggleStar}
+            />
           );
         default:
           // Staged: ported one-by-one from the vanilla app-*.ts render fns.

@@ -114,7 +114,8 @@ function MoreButton({ onOpen }: { onOpen: (a: HomeMenuAnchor) => void }): JSX.El
   );
 }
 
-function AppCard({
+// Shared with StarredScreen — the same card, filtered to starred items there.
+export function AppCard({
   a,
   onOpen,
   onEnterDraft,
@@ -177,7 +178,8 @@ function AppCard({
   );
 }
 
-function AutoCard({
+// Shared with StarredScreen — the same card, filtered to starred items there.
+export function AutoCard({
   r,
   onOpen,
   onMenu,

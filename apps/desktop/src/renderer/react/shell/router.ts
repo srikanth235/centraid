@@ -33,6 +33,7 @@ export function routeKey(route: ShellRoute): string {
     case 'discover':
     case 'starred':
     case 'automations':
+    case 'approvals':
     case 'templates':
       return route.kind;
     case 'automation-view':
