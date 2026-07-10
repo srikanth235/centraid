@@ -105,6 +105,27 @@ describe('kit smoke', () => {
     expect(document.querySelector('.kit-popover')).toBeNull();
   });
 
+  it('popover form options: className, role, focus, Escape-inside', () => {
+    const anchor = document.createElement('button');
+    document.body.appendChild(anchor);
+    openPopover(
+      anchor,
+      (box) => {
+        const input = document.createElement('input');
+        box.appendChild(input);
+      },
+      { focus: true, className: 't-when', role: 'dialog' },
+    );
+    const box = document.querySelector('.kit-popover');
+    expect(box.classList.contains('t-when')).toBe(true);
+    expect(box.getAttribute('role')).toBe('dialog');
+    expect(document.activeElement).toBe(box.querySelector('input'));
+    box.dispatchEvent(
+      new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+    );
+    expect(isPopoverOpen()).toBe(false);
+  });
+
   it('emptyState fills + unhides the container', () => {
     const box = document.createElement('div');
     box.hidden = true;

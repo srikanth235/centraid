@@ -417,14 +417,23 @@ export function closePopover() {
 }
 
 /**
- * Open a menu popover anchored to `anchor`: right-aligned, flips above when
- * the viewport runs out, closes on outside click / scroll / resize. `build`
- * receives the popover box and appends its content (see `popItem`).
+ * Open a popover anchored to `anchor`: right-aligned, flips above when the
+ * viewport runs out, closes on outside click / scroll / resize / Escape.
+ * `build` receives the popover box and appends its content (see `popItem`).
+ * Options: `focus` moves focus to the first field/button inside (form
+ * popovers); `className` adds an app class for width/spacing overrides;
+ * `role` overrides the default `menu` (use `dialog` for form popovers).
  */
-export function openPopover(anchor, build) {
+export function openPopover(anchor, build, { focus = false, className, role = 'menu' } = {}) {
   closePopover();
-  const box = h('div', { class: 'kit-popover', role: 'menu' });
+  const box = h('div', { class: className ? `kit-popover ${className}` : 'kit-popover', role });
   build(box);
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closePopover();
+    }
+  });
   document.body.appendChild(box);
   const rect = anchor.getBoundingClientRect();
   const left = Math.max(
@@ -452,6 +461,7 @@ export function openPopover(anchor, build) {
     window.removeEventListener('resize', closePopover);
     window.removeEventListener('scroll', onScroll, true);
   };
+  if (focus) box.querySelector('input, select, textarea, button')?.focus();
 }
 
 /** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
