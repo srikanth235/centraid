@@ -1,0 +1,106 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/learn.html?raw';
+
+const rail = [
+  {
+    "href": "#ontology",
+    "no": "§01",
+    "label": "The ontology idea",
+    "current": true
+  },
+  {
+    "href": "#skos",
+    "no": "§02",
+    "label": "Vocabularies (SKOS)",
+    "current": false
+  },
+  {
+    "href": "#shapes",
+    "no": "§03",
+    "label": "Borrowed shapes",
+    "current": false
+  },
+  {
+    "href": "#sqlite",
+    "no": "§04",
+    "label": "SQLite",
+    "current": false
+  },
+  {
+    "href": "#cas",
+    "no": "§05",
+    "label": "Content addressing",
+    "current": false
+  },
+  {
+    "href": "#p2p",
+    "no": "§06",
+    "label": "Peer-to-peer",
+    "current": false
+  },
+  {
+    "href": "#oauth",
+    "no": "§07",
+    "label": "OAuth & PKCE",
+    "current": false
+  },
+  {
+    "href": "#sealed",
+    "no": "§08",
+    "label": "Sealed secrets",
+    "current": false
+  },
+  {
+    "href": "#consent",
+    "no": "§09",
+    "label": "Consent lineage",
+    "current": false
+  },
+  {
+    "href": "#agents",
+    "no": "§10",
+    "label": "Agents & MCP",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "None of these ideas are ours. <em>The composition is.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../understand/",
+      "label": "understand",
+      "external": false
+    },
+    {
+      "href": "../ontology/",
+      "label": "ontology",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Learn the Foundations: Standards Behind Centraid"
+  description="Primers on the prior art behind Centraid: ontologies and SKOS, SQLite, content addressing, iroh peer-to-peer, OAuth with PKCE, sealed secrets, and MCP agents."
+  current="learn"
+  canonicalPath="learn/"
+  searchLabel="Learn"
+  searchKeywords="ontology skos vocabulary standards sqlite content addressing sha256 iroh quic nat traversal oauth pkce totp aes-gcm encryption consent prov odrl dpv mcp agents primer foundations"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>
