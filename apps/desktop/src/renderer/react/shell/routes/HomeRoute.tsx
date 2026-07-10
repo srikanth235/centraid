@@ -176,7 +176,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
 
   if (feed.status === 'loading') {
     return (
-      <PageScroll>
+      <PageScroll flush>
         <PageLoading label="Loading…" />
       </PageScroll>
     );
@@ -187,7 +187,7 @@ export default function HomeRoute(props: HomeRouteProps): JSX.Element {
   const automationItems = buildHomeAutoItems(rows, entries, isStarred);
 
   return (
-    <PageScroll>
+    <PageScroll flush>
       <HomeScreen
         suggestions={[...HERO_SUGGESTIONS]}
         dateLabel={heroDateLabel()}

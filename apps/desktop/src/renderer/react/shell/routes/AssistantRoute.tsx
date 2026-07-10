@@ -9,6 +9,7 @@ import {
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
 import { relativeTime } from '../../../app-format.js';
+import mainScrollCss from '../../styles/mainScroll.module.css';
 import type { AssistantSnapshot, AsstMsgDTO } from '../../screen-contracts.js';
 import AssistantScreen from '../../screens/AssistantScreen.js';
 import { useShellActions } from '../actions.js';
@@ -275,7 +276,7 @@ export default function AssistantRoute(): JSX.Element {
   }, []);
 
   return (
-    <div className="has-wall">
+    <div className={mainScrollCss.hasWall}>
       <AssistantScreen
         suggestions={SUGGESTIONS}
         onReady={(update) => {

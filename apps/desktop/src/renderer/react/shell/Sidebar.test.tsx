@@ -55,7 +55,7 @@ describe('Sidebar', () => {
   it('fires onAppClick with the app id', () => {
     const onAppClick = vi.fn();
     const el = render(<Sidebar {...base} onAppClick={onAppClick} />);
-    const todos = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const todos = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Todos'),
     ) as HTMLButtonElement;
     act(() => todos.click());
@@ -65,23 +65,38 @@ describe('Sidebar', () => {
   it('routes a row `•••` click through onAppContext with a rect anchor', () => {
     const onAppContext = vi.fn();
     const el = render(<Sidebar {...base} onAppContext={onAppContext} />);
-    const more = el.querySelector('.cd-sb-more') as HTMLButtonElement;
+    const more = el.querySelector('.rowMore') as HTMLButtonElement;
     act(() => more.click());
     expect(onAppContext).toHaveBeenCalledWith('todos', expect.objectContaining({ kind: 'rect' }));
   });
 
   it('disables Search when no handler is provided', () => {
     const el = render(<Sidebar {...base} />);
-    const search = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const search = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Search'),
     ) as HTMLButtonElement;
     expect(search.disabled).toBe(true);
   });
 
-  it('renders a head slot with a divider when provided', () => {
+  it('renders a head slot when provided', () => {
     const el = render(<Sidebar {...base} headSlot={<div data-testid="head">P</div>} />);
     expect(el.querySelector('[data-testid="head"]')).not.toBeNull();
-    expect(el.querySelector('.cd-sb-divider')).not.toBeNull();
+  });
+
+  it('renders the head slot above Build new — the profile switcher leads the column', () => {
+    const el = render(<Sidebar {...base} headSlot={<div data-testid="head">P</div>} />);
+    const head = el.querySelector('[data-testid="head"]')!;
+    const buildNew = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Build new'),
+    )!;
+    // DOCUMENT_POSITION_FOLLOWING on `head` relative to `buildNew` means head
+    // comes first in source order.
+    expect(head.compareDocumentPosition(buildNew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('omits the head slot entirely when none is supplied (no vault plane / not yet resolved)', () => {
+    const el = render(<Sidebar {...base} />);
+    expect(el.querySelector('[data-testid="head"]')).toBeNull();
   });
 
   it('shows the empty state when there are no apps or drafts', () => {

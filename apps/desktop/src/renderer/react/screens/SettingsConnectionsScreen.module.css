@@ -1,0 +1,219 @@
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.row + .row {
+  border-top: 1px solid var(--line);
+}
+
+/* Health dot + label — same three-state read as AutomationsOverviewScreen's
+   health tiles (--success / --icon-amber / --ink-3 / --danger), just at
+   row scale instead of tile scale. */
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--conn-health, var(--ink-3));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--conn-health, var(--ink-3)) 16%, transparent);
+}
+.dot[data-health='ok'] {
+  --conn-health: var(--success);
+}
+.dot[data-health='needs-auth'] {
+  --conn-health: var(--icon-amber);
+}
+.dot[data-health='paused'] {
+  --conn-health: var(--ink-3);
+}
+.dot[data-health='failing'] {
+  --conn-health: var(--danger);
+}
+
+.rowMeta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rowName {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.rowSub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rowAuthNote {
+  font-size: 11px;
+  color: var(--icon-amber);
+}
+
+.healthLabel {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--conn-health, var(--ink-3));
+}
+.healthLabel[data-health='ok'] {
+  --conn-health: var(--success);
+}
+.healthLabel[data-health='needs-auth'] {
+  --conn-health: var(--icon-amber);
+}
+.healthLabel[data-health='paused'] {
+  --conn-health: var(--ink-3);
+}
+.healthLabel[data-health='failing'] {
+  --conn-health: var(--danger);
+}
+
+.rowActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.removeBtn {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 30%, var(--line));
+}
+.removeBtn:hover {
+  background: color-mix(in oklab, var(--danger) 10%, transparent);
+  color: var(--danger);
+}
+
+.empty {
+  padding: 20px 16px;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+
+/* Add-connection wizard — an inline expanding card under the list, not a
+   modal (fewer moving parts; there's no reason to block the rest of the
+   page while filling this in). */
+.wizard {
+  margin-top: 14px;
+  padding: 16px;
+  border: 0.5px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--bg-sunken) 60%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.wizardRow {
+  display: flex;
+  gap: 12px;
+}
+.wizardRow > * {
+  flex: 1;
+  min-width: 0;
+}
+.wizardField {
+  display: block;
+}
+.wizardLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.textInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  caret-color: var(--accent);
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.textInput:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 32px 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background-color: var(--bg-sunken);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238a8f98' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+}
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 15%, transparent);
+}
+
+.setupGuide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.setupToggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.setupToggle:hover {
+  color: var(--ink);
+}
+.setupList {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.wizardFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

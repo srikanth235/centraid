@@ -264,3 +264,69 @@ test('pause and resume ride PATCH; providers expose the BYO wizard with the Goog
   )!;
   expect(github.credKind).toBe('api_key');
 });
+
+test('DELETE removes a connection with no history, 409s on a real refusal, 404s an unknown id', async () => {
+  const dir = await tempDir();
+  const registry = openVaultRegistry({ rootDir: dir, logger: silentLogger, ownerName: 'Priya' });
+  cleanups.push(() => registry.stop());
+  const broker = new ConnectionBroker(() => registry.current());
+  const base = await startHandlerServer(makeConnectionsRouteHandler(registry, broker));
+
+  const configured = (await (
+    await fetch(`${base}/centraid/_vault/connections`, {
+      method: 'POST',
+      body: JSON.stringify({
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        api_key: 'ghp_x',
+        allowed_hosts: ['api.github.com'],
+      }),
+    })
+  ).json()) as Record<string, unknown>;
+  const connectionId = configured.connection_id as string;
+
+  // Unknown id: 404, not a 400/409 (the command never even runs).
+  const unknown = await fetch(`${base}/centraid/_vault/connections/no-such-connection`, {
+    method: 'DELETE',
+  });
+  expect(unknown.status).toBe(404);
+
+  // A real refusal (undecided outbox history) maps to 409 with the reason.
+  const plane = registry.current();
+  const now = new Date().toISOString();
+  plane.db.vault
+    .prepare(
+      `INSERT INTO outbox_item
+         (item_id, connection_id, actor_id, actor_kind, verb, target, artifact_json,
+          request_json, status, staged_at)
+       VALUES ('item-1', ?, 'owner-1', 'owner', 'gmail.send', 'someone@example.com', '{}',
+               '{"method":"POST","url":"https://x"}', 'pending', ?)`,
+    )
+    .run(connectionId, now);
+  const blocked = await fetch(`${base}/centraid/_vault/connections/${connectionId}`, {
+    method: 'DELETE',
+  });
+  expect(blocked.status).toBe(409);
+  const blockedBody = (await blocked.json()) as { ok: boolean; error: string };
+  expect(blockedBody.ok).toBe(false);
+  expect(blockedBody.error).toMatch(/awaiting a decision/);
+  // Nothing moved — the connection survives the refusal.
+  const stillListed = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    connections: unknown[];
+  };
+  expect(stillListed.connections).toHaveLength(1);
+
+  // Clear the block, then the real delete succeeds.
+  plane.db.vault.prepare(`DELETE FROM outbox_item WHERE item_id = 'item-1'`).run();
+  const removed = await fetch(`${base}/centraid/_vault/connections/${connectionId}`, {
+    method: 'DELETE',
+  });
+  expect(removed.status).toBe(200);
+  const removedBody = (await removed.json()) as Record<string, unknown>;
+  expect(removedBody).toMatchObject({ ok: true, connection_id: connectionId });
+  const after = (await (await fetch(`${base}/centraid/_vault/connections`)).json()) as {
+    connections: unknown[];
+  };
+  expect(after.connections).toHaveLength(0);
+});

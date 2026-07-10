@@ -83,7 +83,7 @@ describe('DiscoverScreen', () => {
     expect(html).toContain('trig');
     expect(html).toContain('>Cron<');
     expect(count(html, 'auOvDot"')).toBe(2);
-    expect(html).toContain('cd-disc-badge');
+    expect(html).toContain('class="badge"');
   });
 
   it('shows the empty state when no templates match', () => {

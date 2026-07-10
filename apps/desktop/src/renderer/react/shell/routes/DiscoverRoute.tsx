@@ -58,7 +58,7 @@ export default function DiscoverRoute(): JSX.Element {
   const asEntry = (t: DiscoverTemplate): TemplateEntry => t as unknown as TemplateEntry;
 
   return (
-    <PageScroll>
+    <PageScroll flush>
       {state.status === 'loading' ? (
         <PageLoading label="Loading templates…" />
       ) : state.status === 'error' ? (

@@ -44,11 +44,3 @@
   display: block;
   color: var(--accent);
 }
-.toast.toastAction {
-  align-items: center;
-  display: flex;
-  gap: 10px;
-}
-.toast.toastAction :global(.tiny-btn) {
-  margin-left: 6px;
-}

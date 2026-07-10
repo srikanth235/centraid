@@ -1,0 +1,12 @@
+/* Shared atoms — the tiny cross-screen vocabulary. Deliberately minimal:
+   anything bigger than a two-line rule belongs in a component (react/ui)
+   or the owning screen's module, and an atom is only added here once it
+   has real consumers. */
+
+/* Centered quiet empty/placeholder state. */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-3);
+  font-size: 14px;
+}

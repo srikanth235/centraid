@@ -1,7 +1,7 @@
 import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
-import { Icon } from '../ui/index.js';
+import { Icon, KindBadge } from '../ui/index.js';
 import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './DiscoverScreen.module.css';
@@ -59,7 +59,7 @@ function RowsGlyph({ size = 15 }: { size?: number }): JSX.Element {
 
 function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
   return (
-    <div className={au.auOvDots} aria-hidden={names.length === 0}>
+    <div className={cx(au.auOvDots, styles.footDots)} aria-hidden={names.length === 0}>
       {names.slice(0, 4).map((name) => (
         <i
           key={name}
@@ -119,12 +119,12 @@ function TemplateCard({
         </div>
       </div>
       <div className={styles.cardFoot}>
-        <span className="cd-disc-badge" data-kind={auto ? 'automation' : 'app'}>
+        <KindBadge kind={auto ? 'automation' : 'app'}>
           <span aria-hidden="true" style={{ display: 'inline-flex' }}>
             {auto ? <Icon name="Bolt" size={12} /> : <GridGlyph size={12} sw={1.85} />}
           </span>
           <span>{auto ? 'Automation' : 'App'}</span>
-        </span>
+        </KindBadge>
         {auto ? (
           <>
             <span className={styles.trig}>
@@ -200,7 +200,11 @@ export default function DiscoverScreen({
           </div>
         </div>
         <div className={styles.toolbar}>
-          <div className={libCss.discSeg} role="tablist" aria-label="Filter templates by kind">
+          <div
+            className={cx(libCss.discSeg, styles.toolbarSeg)}
+            role="tablist"
+            aria-label="Filter templates by kind"
+          >
             {segDefs.map((d) => (
               <button
                 key={d.k}

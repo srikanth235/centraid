@@ -35,9 +35,6 @@
   font-size: 12px;
   color: var(--ink-3);
 }
-.ovHead :global(.cd-au-actions) {
-  margin-left: auto;
-}
 .empty {
   display: flex;
   flex-direction: column;

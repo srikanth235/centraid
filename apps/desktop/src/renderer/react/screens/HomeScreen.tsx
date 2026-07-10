@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX } from 'react';
-import { Icon } from '../ui/index.js';
+import { Icon, KindBadge, StatusPill } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
 import type {
   AuStatusKind,
@@ -12,6 +12,7 @@ import { INTEGRATION_HUES } from '../format.js';
 import styles from './HomeScreen.module.css';
 import { cx } from '../ui/cx.js';
 import au from '../styles/automation.module.css';
+import cardCss from '../ui/AppCard.module.css';
 import libCss from '../styles/library.module.css';
 import controlsCss from '../styles/controls.module.css';
 
@@ -24,6 +25,25 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   failed: 'AlertTriangle',
 };
 
+// Microphone glyph — not in the shared icon set; inlined to match the
+// design's voice affordance.
+function MicGlyph(): JSX.Element {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.85}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
+    </svg>
+  );
+}
 function GridGlyph({ size = 15, sw = 1.75 }: { size?: number; sw?: number }): JSX.Element {
   return (
     <svg
@@ -80,7 +100,7 @@ function MoreButton({ onOpen }: { onOpen: (a: HomeMenuAnchor) => void }): JSX.El
   return (
     <button
       type="button"
-      className="cd-card-act cd-card-act-more"
+      className={cardCss.act}
       aria-label="More actions"
       aria-haspopup="menu"
       onClick={(e) => {
@@ -106,10 +126,10 @@ function AppCard({
   onContext: (id: string, anchor: HomeMenuAnchor) => void;
 }): JSX.Element {
   return (
-    <div className="cd-app-card-wrap" data-app-id={a.id} data-starred={String(a.starred)}>
+    <div className={cardCss.wrap} data-app-id={a.id} data-starred={String(a.starred)}>
       <button
         type="button"
-        className="cd-app-card cd-app-card--small"
+        className={cx(cardCss.card, cardCss.small)}
         data-testid="app-tile"
         data-kind="app"
         onClick={() => (a.draft ? onEnterDraft(a.id) : onOpen(a.id))}
@@ -118,9 +138,9 @@ function AppCard({
           onContext(a.id, { kind: 'point', x: e.clientX, y: e.clientY });
         }}
       >
-        <div className="cd-app-card-head">
+        <div className={cardCss.head}>
           <div
-            className="cd-app-card-icon"
+            className={cardCss.icon}
             style={{
               background: a.tile.background,
               boxShadow: a.tile.boxShadow,
@@ -128,33 +148,28 @@ function AppCard({
             }}
           >
             <Icon name={a.iconKey as IconName} size={24} strokeWidth={1.9} />
-            {a.tone ? <span className="cd-app-card-icon-dot" data-tone={a.tone} /> : null}
+            {a.tone ? <span className={cardCss.iconDot} data-tone={a.tone} /> : null}
           </div>
-          <div className="cd-app-card-head-text">
-            <div className="cd-app-card-name-row">
-              <div className="cd-app-card-name">{a.name}</div>
-              {a.tone ? (
-                <span className="cd-status" data-tone={a.tone}>
-                  <span className="cd-status-dot" />
-                  {a.tone}
-                </span>
-              ) : null}
+          <div className={cardCss.headText}>
+            <div className={cardCss.nameRow}>
+              <div className={cardCss.name}>{a.name}</div>
+              {a.tone ? <StatusPill tone={a.tone}>{a.tone}</StatusPill> : null}
             </div>
-            <div className="cd-app-card-desc">{a.desc || 'No description yet.'}</div>
+            <div className={cardCss.desc}>{a.desc || 'No description yet.'}</div>
           </div>
         </div>
-        <div className="cd-app-card-foot">
-          <span className="cd-disc-badge" data-kind="app">
+        <div className={cardCss.foot}>
+          <KindBadge kind="app">
             <span>App</span>
-          </span>
-          <span className="cd-app-card-foot-time">{a.stamp}</span>
+          </KindBadge>
+          <span className={cardCss.footTime}>{a.stamp}</span>
         </div>
       </button>
-      <div className="cd-card-actions">
+      <div className={cardCss.actions}>
         <MoreButton onOpen={(anchor) => onContext(a.id, anchor)} />
       </div>
       {a.starred ? (
-        <span className="cd-card-star-flag" aria-hidden="true">
+        <span className={cardCss.starFlag} aria-hidden="true">
           <Icon name="Star" size={14} />
         </span>
       ) : null}
@@ -172,22 +187,22 @@ function AutoCard({
   onMenu: (ref: string, anchor: HomeMenuAnchor) => void;
 }): JSX.Element {
   return (
-    <div className="cd-app-card-wrap" data-starred={String(r.starred)}>
+    <div className={cardCss.wrap} data-starred={String(r.starred)}>
       <button
         type="button"
-        className="cd-app-card cd-app-card--small"
+        className={cx(cardCss.card, cardCss.small)}
         data-kind="automation"
         onClick={() => onOpen(r.ref)}
       >
-        <div className="cd-app-card-head">
+        <div className={cardCss.head}>
           <span className={au.auGlyph} data-hue={r.hue} style={{ width: 52, height: 52 }}>
             <Icon name={r.glyphIcon as IconName} size={24} />
           </span>
-          <div className="cd-app-card-head-text">
-            <div className="cd-app-card-name-row">
-              <div className="cd-app-card-name">{r.name}</div>
+          <div className={cardCss.headText}>
+            <div className={cardCss.nameRow}>
+              <div className={cardCss.name}>{r.name}</div>
             </div>
-            <div className="cd-app-card-desc">{r.blurb}</div>
+            <div className={cardCss.desc}>{r.blurb}</div>
           </div>
         </div>
         <div className={styles.appCardMeta}>
@@ -195,7 +210,7 @@ function AutoCard({
             <span className={au.auStatusIc} aria-hidden="true">
               <Icon name={STATUS_ICON[r.statusKind]} size={12} />
             </span>
-            <span className="cd-au-status-tx">{r.statusLabel}</span>
+            <span>{r.statusLabel}</span>
           </span>
           <span className={styles.appCardTrig}>
             <span aria-hidden="true">
@@ -216,11 +231,11 @@ function AutoCard({
             </div>
           ) : null}
         </div>
-        <div className="cd-app-card-foot">
-          <span className="cd-disc-badge" data-kind="automation">
+        <div className={cardCss.foot}>
+          <KindBadge kind="automation">
             <span>Automation</span>
-          </span>
-          <span className="cd-app-card-foot-time" data-ok={r.footOk ? 'true' : undefined}>
+          </KindBadge>
+          <span className={cardCss.footTime} data-ok={r.footOk ? 'true' : undefined}>
             {r.footOk ? (
               <span aria-hidden="true">
                 <Icon name="CheckCircle" size={13} />
@@ -230,11 +245,11 @@ function AutoCard({
           </span>
         </div>
       </button>
-      <div className="cd-card-actions">
+      <div className={cardCss.actions}>
         <MoreButton onOpen={(anchor) => onMenu(r.ref, anchor)} />
       </div>
       {r.starred ? (
-        <span className="cd-card-star-flag" aria-hidden="true">
+        <span className={cardCss.starFlag} aria-hidden="true">
           <Icon name="Star" size={14} />
         </span>
       ) : null}
@@ -276,8 +291,9 @@ function EmptyState({ kind }: { kind: 'all' | 'app' | 'automation' }): JSX.Eleme
  * Home screen, ported to React (issue #325, Phase 3). Composer hero (→ builder)
  * + the unified library shelf (segmented kind filter, Tiles/Rows toggle, one
  * mixed grid of app + automation cards, empty states, "needs attention" badge).
- * The vanilla shell derives the card DTOs + owns the context/more menus and the
- * gateway I/O through the callbacks; React renders. Same `cd-*` classes.
+ * The shell derives the card DTOs + owns the context/more menus and the
+ * gateway I/O through the callbacks; React renders. Tiles are composed from
+ * the shared AppCard module + StatusPill/KindBadge primitives.
  */
 export default function HomeScreen({
   suggestions,
@@ -360,7 +376,14 @@ export default function HomeScreen({
                   <Icon name="ChevronDown" size={9} />
                 </span>
               </span>
-              <span className={cx('cd-kbd', styles.composerKbd)}>⌘↵</span>
+              <button
+                type="button"
+                className={cx(controlsCss.iconBtn, styles.composerMic)}
+                title="Voice"
+              >
+                <MicGlyph />
+              </button>
+              <span className={styles.composerKbd}>⌘↵</span>
               <button
                 type="button"
                 className={styles.composerSend}
@@ -391,7 +414,11 @@ export default function HomeScreen({
 
       <section className={cx(styles.hsec, styles.homeLib)}>
         <div className={styles.homeLibHead}>
-          <div className={libCss.discSeg} role="tablist" aria-label="Filter your library by kind">
+          <div
+            className={cx(libCss.discSeg, styles.homeLibSeg)}
+            role="tablist"
+            aria-label="Filter your library by kind"
+          >
             {segDefs.map((d) => (
               <button
                 key={d.k}

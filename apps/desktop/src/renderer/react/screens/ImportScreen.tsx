@@ -10,7 +10,6 @@ import { relativeTime } from '../format.js';
 import styles from './ImportScreen.module.css';
 import vault from '../styles/vault.module.css';
 import appSettingsCss from '../styles/appSettings.module.css';
-import { cx } from '../ui/cx.js';
 
 const TEXT_KINDS = new Set(['ics', 'vcf', 'vcard', 'mbox', 'csv']);
 
@@ -81,7 +80,7 @@ function DraftSection({
     };
   }, [batch.batchId, loadRows]);
   return (
-    <div className={cx(appSettingsCss.appSettingsSection, "cd-import-draft")}>
+    <div className={appSettingsCss.appSettingsSection}>
       <div className={vault.label}>{`Draft · ${batch.label ?? batch.kind ?? 'import'}`}</div>
       <div className={appSettingsCss.appSettingsNote}>
         {`${summaryLine(batch.summary)} · staged ${relativeTime(batch.createdAt)}`}
@@ -275,7 +274,7 @@ export default function ImportScreen({
           <div className={vault.label}>History</div>
           {settled.map((batch) => (
             <div key={batch.batchId} className={styles.historyRow}>
-              <span className="cd-import-history-label">{batch.label ?? batch.kind ?? '?'}</span>
+              <span>{batch.label ?? batch.kind ?? '?'}</span>
               <span className={styles.historySub}>
                 {`${batch.status} · ${summaryLine(batch.summary)} · ${relativeTime(batch.createdAt)}`}
               </span>

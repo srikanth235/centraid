@@ -7,6 +7,7 @@ import {
 } from '../../../../gateway-client.js';
 import { iconSvg } from '../../iconSvg.js';
 import styles from './BuilderAutomationPane.module.css';
+import buttonCss from '../../../ui/Button.module.css';
 import { cx } from '../../../ui/cx.js';
 
 // React port of the vanilla builder's automation-mode right-pane views —
@@ -395,7 +396,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
         </div>
         <button
           type="button"
-          className={cx("btn", "btn-primary", styles.runbtn)}
+          className={cx(buttonCss.btn, buttonCss.primary, styles.runbtn)}
           disabled={busy}
           onClick={() => {
             void runOnce();

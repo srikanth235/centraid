@@ -1,5 +1,23 @@
+/* The screen host under the chrome titlebar (vanilla's `has-wall` div).
+   `.main` (chrome.module.css) is a flex column; without this the host
+   collapses to its content height and every `flex: 1` pane inside it
+   (mainScroll, the assistant split) loses its vertical fill — short
+   screens float to the top instead of centering / pinning composers. */
+.hasWall {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .mainScroll {
   flex: 1;
   overflow-y: auto;
   padding: 48px 56px 56px;
+}
+
+/* Screens whose content owns its own spacing (Day-1 home hero) drop the
+   standard page padding — vanilla stacked `.cd-day1-scroll` on the scroll. */
+.flush {
+  padding: 0;
 }

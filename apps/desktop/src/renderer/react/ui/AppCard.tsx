@@ -3,6 +3,9 @@ import { cx } from './cx.js';
 import { tileVisual } from './tile-visual.js';
 import type { AppMetaResolved, TileVariant } from '@centraid/design-tokens';
 import Icon from './Icon.js';
+import KindBadge from './KindBadge.js';
+import StatusPill from './StatusPill.js';
+import styles from './AppCard.module.css';
 
 export type AppCardTone = 'new' | 'draft' | null;
 
@@ -19,13 +22,13 @@ export interface AppCardProps {
 }
 
 /**
- * Home-grid app tile — a React port of the vanilla renderer's `cd-app-card`
- * composite (icon plate + name/blurb + footer). Desktop-specific (there is no
- * mobile twin for this exact composite; mobile's simpler launcher `<Tile>` is
- * the closest cousin). Emits the same `cd-app-card*` classes as the vanilla
- * builder, so it is styled by the global `styles.css` and renders identically
- * during coexistence. The icon plate's finish is computed through
- * ui-core's `tileVisual`, the one place desktop + mobile agree on tile paint.
+ * Home-grid app tile — icon plate + name/blurb + footer, styled by the
+ * co-located `AppCard.module.css` (shared with the Home shelf and Discover
+ * grid, which compose richer tiles from the same module). Desktop-specific
+ * (there is no mobile twin for this exact composite; mobile's simpler
+ * launcher `<Tile>` is the closest cousin). The icon plate's finish is
+ * computed through `tileVisual`, the one place desktop + mobile agree on
+ * tile paint.
  */
 export default function AppCard({
   app,
@@ -39,14 +42,14 @@ export default function AppCard({
   return (
     <button
       type="button"
-      className={cx('cd-app-card', { 'cd-app-card--small': small })}
+      className={cx(styles.card, small && styles.small)}
       data-testid="app-tile"
       data-kind="app"
       onClick={onOpen}
     >
-      <div className="cd-app-card-head">
+      <div className={styles.head}>
         <div
-          className="cd-app-card-icon"
+          className={styles.icon}
           style={{
             background: finish.background,
             boxShadow: finish.boxShadow,
@@ -54,26 +57,21 @@ export default function AppCard({
           }}
         >
           <Icon name={app.iconKey} size={24} strokeWidth={1.9} />
-          {tone ? <span className="cd-app-card-icon-dot" data-tone={tone} /> : null}
+          {tone ? <span className={styles.iconDot} data-tone={tone} /> : null}
         </div>
-        <div className="cd-app-card-head-text">
-          <div className="cd-app-card-name-row">
-            <div className="cd-app-card-name">{app.name}</div>
-            {tone ? (
-              <span className="cd-status" data-tone={tone}>
-                <span className="cd-status-dot" />
-                {tone}
-              </span>
-            ) : null}
+        <div className={styles.headText}>
+          <div className={styles.nameRow}>
+            <div className={styles.name}>{app.name}</div>
+            {tone ? <StatusPill tone={tone}>{tone}</StatusPill> : null}
           </div>
-          <div className="cd-app-card-desc">{app.desc || 'No description yet.'}</div>
+          <div className={styles.desc}>{app.desc || 'No description yet.'}</div>
         </div>
       </div>
-      <div className="cd-app-card-foot">
-        <span className="cd-disc-badge" data-kind="app">
+      <div className={styles.foot}>
+        <KindBadge kind="app">
           <span>App</span>
-        </span>
-        {stamp ? <span className="cd-app-card-foot-time">{stamp}</span> : null}
+        </KindBadge>
+        {stamp ? <span className={styles.footTime}>{stamp}</span> : null}
       </div>
     </button>
   );

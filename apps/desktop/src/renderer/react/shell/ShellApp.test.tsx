@@ -40,7 +40,7 @@ describe('ShellApp', () => {
         renderScreen={screenFor}
       />,
     );
-    expect(el.querySelector('.cd-window')).not.toBeNull();
+    expect(el.querySelector('.window')).not.toBeNull();
     expect(el.querySelector<HTMLElement>('[data-testid="screen"]')?.dataset.kind).toBe('home');
     expect(el.querySelector('[data-testid="sb"]')).not.toBeNull();
   });
@@ -69,7 +69,7 @@ describe('ShellApp', () => {
         renderScreen={screenFor}
       />,
     );
-    expect(el.querySelector('.cd-window')).toBeNull();
+    expect(el.querySelector('.window')).toBeNull();
     expect(el.querySelector('[data-testid="sb"]')).toBeNull();
     expect(el.querySelector<HTMLElement>('[data-testid="screen"]')?.dataset.kind).toBe('app');
   });
@@ -87,8 +87,8 @@ describe('ShellApp', () => {
         }}
       />,
     );
-    expect(el.querySelector<HTMLElement>('.cd-window')?.dataset.sidebar).toBe('open');
-    const toggle = el.querySelector('.cd-tl-side [aria-label="Hide sidebar"]') as HTMLButtonElement;
+    expect(el.querySelector<HTMLElement>('.window')?.dataset.sidebar).toBe('open');
+    const toggle = el.querySelector('.tlSide [aria-label="Hide sidebar"]') as HTMLButtonElement;
     act(() => toggle.click());
     // Controlled: the parent got the new value but didn't re-render, so the DOM
     // stays until the parent flips the prop — proves ShellApp deferred to it.
@@ -104,6 +104,6 @@ describe('ShellApp', () => {
     const el = render(
       <ShellApp initialRoute={r} renderSidebar={sidebarFor} renderScreen={screenFor} />,
     );
-    expect(el.querySelector('.cd-window')).toBeNull();
+    expect(el.querySelector('.window')).toBeNull();
   });
 });

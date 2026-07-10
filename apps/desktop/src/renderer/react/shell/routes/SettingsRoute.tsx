@@ -1,10 +1,11 @@
-import { type JSX, useMemo, useState } from 'react';
+import { Fragment, type JSX, useMemo, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
 import Icon from '../../ui/Icon.js';
 import ImportScreen from '../../screens/ImportScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
+import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
@@ -13,6 +14,14 @@ import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import type { ProfileRowDTO } from '../../screen-contracts.js';
 import { importCallbacks, loadProfilesData, phoneCallbacks } from './settingsAccountData.js';
+import {
+  beginConnectionAuthorize,
+  loadConnectionProvidersData,
+  loadConnectionsData,
+  makeDetachConnection,
+  submitConnectionForm,
+  updateConnectionStatus,
+} from './settingsConnectionsData.js';
 import { createSpace, deleteSpace, loadSpaceInitial, saveSpace } from './spaceModals.js';
 import SpaceModal, {
   DEFAULT_SPACE_ICON,
@@ -35,6 +44,7 @@ type SettingsPageId =
   | 'profiles'
   | 'phone'
   | 'import'
+  | 'connections'
   | 'providers';
 
 interface PageDef {
@@ -49,10 +59,11 @@ const PAGES: readonly PageDef[] = [
   { id: 'appearance', label: 'Appearance', section: 'Workspace', icon: 'Mood', subtitle: 'Visual treatment for Centraid chrome and the app tiles on your home screen.' },
   { id: 'layout', label: 'Layout', section: 'Workspace', icon: 'Code', subtitle: 'Density and surface treatment across every Centraid screen.' },
   { id: 'workspace', label: 'Workspace', section: 'Workspace', icon: 'Folder', subtitle: 'Sidebar and navigation.' },
-  { id: 'profiles', label: 'Spaces', section: 'Account', icon: 'Users', subtitle: 'Separate spaces — each one a vault with its own apps, chats, and data.' },
+  { id: 'profiles', label: 'Spaces', section: 'Account', icon: 'Users', subtitle: 'Separate spaces — each one a vault with its own apps, chats, and data. Switch, add, rename, recolor, or remove spaces; manage the connections that host them.' },
   { id: 'phone', label: 'Phone', section: 'Account', icon: 'Phone', subtitle: 'Use your published apps from your phone over an end-to-end encrypted tunnel.' },
   { id: 'import', label: 'Import', section: 'Account', icon: 'Save', subtitle: 'Bring your existing data into the vault — everything stages for review before it lands.' },
-  { id: 'providers', label: 'Agents', section: 'Models', icon: 'Sparkle', subtitle: 'The coding-agent CLIs the gateway can drive.' },
+  { id: 'connections', label: 'Connections', section: 'Account', icon: 'Plug', subtitle: 'Data sources the vault pulls from — Gmail, Calendar, GitHub, and anything else you connect yourself.' },
+  { id: 'providers', label: 'Agents', section: 'Models', icon: 'Sparkle', subtitle: 'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.' },
 ];
 
 const AUTO_SAVE = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
@@ -70,6 +81,7 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
   const { showToast, navigate, confirm } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
+  const detachConnection = useMemo(() => makeDetachConnection(confirm), [confirm]);
   const [spacesNonce, setSpacesNonce] = useState(0);
   const spaces = useAsyncData(loadProfilesData, [spacesNonce]);
   const refreshSpaces = (): void => setSpacesNonce((n) => n + 1);
@@ -135,8 +147,13 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
           <div className={styles.settingsNavTitle}>Personal</div>
         </div>
         {SECTIONS.map((section) => (
-          <div key={section} className={styles.settingsNavSection}>
-            <div className="cd-settings-nav-section-label">{section}</div>
+          // Fragment, not a wrapping div: the section label and its nav
+          // items must be flat siblings inside <aside>, matching the
+          // vanilla DOM (app-settings.ts innerNav.append(...) flat list).
+          // A wrapping div here previously made the mono-font section-label
+          // style cascade onto the nav item buttons via `font: inherit`.
+          <Fragment key={section}>
+            <div className={styles.settingsNavSection}>{section}</div>
             {PAGES.filter((p) => p.section === section).map((p) => (
               <button
                 key={p.id}
@@ -149,8 +166,11 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
                 <span>{p.label}</span>
               </button>
             ))}
-          </div>
+          </Fragment>
         ))}
+        <div className={styles.settingsNavFoot}>
+          <span className={styles.settingsNavVer}>v0.5.2</span>
+        </div>
       </aside>
 
       <section className={styles.settingsContent}>
@@ -207,6 +227,16 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
             <PhoneScreen {...phoneProps} />
           ) : page === 'import' ? (
             <ImportScreen {...importProps} />
+          ) : page === 'connections' ? (
+            <SettingsConnectionsScreen
+              loadConnections={loadConnectionsData}
+              loadProviders={loadConnectionProvidersData}
+              configureConnection={submitConnectionForm}
+              setConnectionStatus={updateConnectionStatus}
+              detachConnection={detachConnection}
+              beginAuthorize={beginConnectionAuthorize}
+              showToast={showToast}
+            />
           ) : page === 'profiles' ? (
             spaces.status === 'loading' ? (
               <PageLoading label="Loading spaces…" />

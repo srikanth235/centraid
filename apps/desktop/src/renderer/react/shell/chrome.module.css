@@ -1,0 +1,453 @@
+/* Window chrome — the `.window` grid (sidebar column + main column), the
+   split titlebar (tlSide / tlMain), toolbar icon buttons w/ tooltip + ⌘-kbd
+   chip, and the sidebar item family. ShellFrame.tsx and Sidebar.tsx are
+   densely cross-combinated (e.g. collapsing the sidebar hides tlSide and
+   reveals the main-pane traffic-light spacer), so the whole family lives in
+   this ONE module — both components import it, keeping every combinator
+   inside a single scope. Screens never reach into these classes; they get
+   chrome affordances via the exported TbBtn component and ShellFrame slots. */
+
+.window {
+  position: relative;
+  flex: 1;
+  /* Without min-height: 0 the flex parent (#root) lets the window grow to
+     its content's min-content height when the main column's content is tall
+     — defeating the inner main-scroll overflow. */
+  min-height: 0;
+  background: var(--bg);
+  overflow: visible;
+  display: grid;
+  grid-template-columns: var(--sidebar-w, 260px) 1fr;
+  /* Codex-style chrome: no dedicated 44px top row. Each pane absorbs its
+     own chrome into its first flex child (tlSide is the first child of
+     .sidebar, tlMain is the first child of .main). */
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: 'side main';
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.window[data-sidebar='closed'] {
+  --sidebar-w: 0px;
+}
+
+/* Title-bar halves. Each lives INSIDE its pane (sidebar / main) as that
+   pane's first row. The whole strip is draggable; interactive bits opt
+   back out. */
+.tlSide,
+.tlMain {
+  -webkit-app-region: drag;
+  user-select: none;
+  overflow: visible;
+}
+.tlSide {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 10px;
+  position: relative;
+  z-index: 3;
+}
+.tlMain {
+  flex: 0 0 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 4px;
+  min-width: 0;
+  position: relative;
+  z-index: 4;
+  border-bottom: 0.5px solid var(--line-strong);
+}
+/* Grid layout — used by the Builder so the chrome row's two cells line up
+   with the columns of the builder body below it. Col 1 spans the chat-pane
+   width (matches its minmax), col 2 spans the right-pane (1fr). The cells
+   own their own horizontal padding instead of tlMain, so col 1's right
+   edge meets col 2's left edge with no padding gutter. */
+.tlMain[data-layout='grid'] {
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr;
+  padding: 0;
+  gap: 0;
+  /* Same easing as the builder body so the chrome cells animate in
+     lockstep with the panes below when the chat-pane collapses. */
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.tlNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px;
+  min-width: 0;
+}
+/* Chat-pane toggle pinned to the right edge of the nav cell — sits at
+   the chat-pane / canvas boundary, mirroring the affordance pattern of
+   the workspace-sidebar toggle (which lives at the left edge of the
+   sidebar). One toggle per panel, each at its panel's edge. */
+.tlNav .chatToggleWrap {
+  margin-left: auto;
+}
+.tlContext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 14px;
+  min-width: 0;
+}
+
+/* Reserve space for the real macOS traffic lights (Electron paints them
+   at x=16, y=16 because titleBarStyle is "hiddenInset"). The spacer is
+   wider than the native control cluster so the first toolbar icon has the
+   same calm breathing room as Codex's chrome. */
+.tlSide .spacer {
+  width: 64px;
+  height: 1px;
+  flex: 0 0 auto;
+  display: inline-block;
+}
+/* When the sidebar collapses, keep tlSide taking its 44px slot — using
+   `visibility: hidden` instead of `display: none` so the sidebar inner
+   ("New app", "Search", etc.) doesn't slide up into the tlSide slot
+   during the 240ms width animation. The parent sidebar is 0 wide +
+   overflow:hidden once collapsed, so tlSide isn't visible regardless. */
+.window[data-sidebar='closed'] .tlSide {
+  visibility: hidden;
+}
+.window[data-sidebar='closed'] .tlMain .spacer {
+  display: inline-block;
+}
+.tlMain .spacer {
+  display: none;
+  width: 64px;
+  height: 1px;
+  flex: 0 0 auto;
+}
+.tlMain button,
+.tlSide button,
+.tlMain .tbBtnWrap,
+.tlSide .tbBtnWrap,
+/* App-name contenteditable inside the builder chrome must accept
+   clicks (otherwise the surrounding tlMain drag region eats them). */
+.tlMain [contenteditable] {
+  -webkit-app-region: no-drag;
+}
+
+/* Toolbar icon button + tooltip + ⌘-kbd chip.
+   Buttons are 26×26 to match the design's chrome scale. With
+   align-items:center on the 44px titlebar and the macOS traffic-light
+   cluster also centring at y=22, icons and traffic-lights sit on the
+   same horizontal line. */
+.tbBtnWrap {
+  position: relative;
+  display: inline-flex;
+}
+.tlSide .tbBtnWrap,
+.tlMain .tbBtnWrap {
+  transform: translateY(2px);
+}
+.tbBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 140ms,
+    color 140ms,
+    opacity 140ms;
+}
+.tbBtn svg {
+  display: block;
+}
+.tbBtn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.tbBtn[disabled],
+.tbBtn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+/* Active toggle state — e.g. the builder titlebar's History button when
+   the chat pane is showing version history. */
+.tbBtn[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+/* Popover anchor state — `data-open` is set while an anchored panel is
+   mounted so the button stays visually "pressed". */
+.tbBtn[data-open='true'] {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+.tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: color-mix(in srgb, var(--bg-elev) 92%, transparent);
+  color: var(--ink);
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms 80ms;
+  z-index: 50;
+  box-shadow: var(--shadow-md);
+}
+.tbBtnWrap:hover .tooltip {
+  opacity: 1;
+}
+/* Titlebar nav cluster sits flush against the traffic-lights / left edge,
+   so centering a tooltip on a button there overflows left and gets
+   clipped. Anchor those tooltips to the button's left edge instead so
+   they grow rightward into the wide-open titlebar space. Covers both
+   the grid layout (.tlNav) and the flat layout (direct children of
+   .tlMain — the Home titlebar uses the latter). */
+.tlNav .tbBtnWrap .tooltip,
+.tlMain > .tbBtnWrap .tooltip {
+  left: 0;
+  transform: none;
+}
+.tooltip .kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  margin-left: 2px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-2);
+}
+
+/* Sidebar column */
+.sidebar {
+  grid-area: side;
+  overflow: hidden;
+  position: relative;
+  background: var(--sidebar-bg);
+  backdrop-filter: var(--sidebar-blur, none);
+  -webkit-backdrop-filter: var(--sidebar-blur, none);
+  border-right: var(--sidebar-divider);
+  display: flex;
+  flex-direction: column;
+}
+.sidebarInner {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  /* tlSide sits above us in the .sidebar flex column, so claim the
+     remaining space via flex: 1 and scroll on overflow. */
+  flex: 1;
+  min-height: 0;
+  padding: 6px 8px 8px;
+  overflow-y: auto;
+}
+.window[data-sidebar='closed'] .sidebar {
+  border-right: none;
+}
+
+/* Sidebar items */
+.sbItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px;
+  margin-block: 1.5px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.sbItem:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+.sbItem[aria-current='true'],
+.sbItem[data-active='true'] {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+.sbItem[data-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+.sbItem .sbLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sbItem .sbMeta {
+  flex: 0 0 auto;
+  color: var(--ink-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.sbSection {
+  margin-top: 14px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sbSection .sbSectionActions {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 100ms;
+}
+.sbSection:hover .sbSectionActions {
+  opacity: 1;
+}
+.sbSectionBtn {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sbSectionBtn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+/* Small icon tile rendered inline in sidebar app rows. Matches the
+   home-grid tile look in miniature so the sidebar tells the user
+   which apps they own at a glance. */
+.sbAppIcon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  color: #fff;
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18);
+}
+.sbAppIcon svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Accent-tinted sidebar row — the "Build new" entry point. */
+.sbItem[data-accent='true'] {
+  color: var(--accent);
+}
+.sbItem[data-accent='true']:hover {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* App row — the row itself is a slim button, so the wrap is the
+   positioning context and the hover-revealed `•••` action sits flush
+   with the row's right edge, vertically centred to the row's baseline. */
+.sbAppRow {
+  position: relative;
+  display: block;
+}
+.rowMore {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Buttons inherit a non-zero line-height from `font: inherit`, which
+     adds half-leading above and below the inline content box. Even with
+     flex centering, that half-leading visually biases the icon upward
+     in narrow buttons. Zeroing line-height (and padding/border) here
+     guarantees the SVG's bounding box is the only thing flex centers
+     against. */
+  line-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  /* Muted resting tone — sidebar rows already carry a status dot at the
+     same edge, so the action reads as a supporting glyph until hover. */
+  color: var(--ink-4);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  opacity: 0;
+  z-index: 3;
+  transition:
+    opacity 140ms ease,
+    background 120ms,
+    color 120ms;
+}
+.rowMore svg {
+  display: block;
+}
+.sbAppRow:hover .rowMore,
+.sbAppRow:focus-within .rowMore,
+.rowMore:focus-visible,
+.rowMore[data-open='true'] {
+  opacity: 1;
+}
+.rowMore:hover {
+  background: color-mix(in oklab, var(--ink) 12%, transparent);
+  color: var(--ink);
+}
+.rowMore:active {
+  background: color-mix(in oklab, var(--ink) 18%, transparent);
+}
+/* When the action is open, the row's own hover state would compete with
+   the `•••` background; nudge the row back to its resting tone so focus
+   reads as "this menu owns the moment". */
+.sbAppRow:has(.rowMore[data-open='true']) .sbItem {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+
+/* Main area — shares the wall surface with the titlebar (inside .main)
+   so the chrome and the content below visually flow as one surface. The
+   only structural separator is the vertical sidebar/main divider.
+   `--bg-wall` is a gradient in dark mode and a flat near-white in light
+   mode (see packages/design-tokens themes). */
+.main {
+  grid-area: main;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-wall);
+}

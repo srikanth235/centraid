@@ -98,10 +98,11 @@ describe('HomeScreen', () => {
   it('renders the composer hero, suggestions, filter, and the unified grid', () => {
     const el = mount(makeProps());
     expect(el.querySelector('.composerInput')).toBeTruthy();
+    expect(el.querySelector('.composerMic')).toBeTruthy();
     expect(el.querySelectorAll('.heroSuggestions .chip').length).toBe(2);
     expect(el.querySelectorAll('.discSegB').length).toBe(3);
     // 2 apps + 1 automation card
-    expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(3);
+    expect(el.querySelectorAll('.wrap').length).toBe(3);
     // draft app has a status pill + is starred flag
     expect(el.textContent).toContain('Digest');
     expect(el.querySelector('[data-kind="automation"]')).toBeTruthy();
@@ -125,7 +126,7 @@ describe('HomeScreen', () => {
   it('opens an app, enters a draft, and right-clicks for the context menu', () => {
     const props = makeProps();
     const el = mount(props);
-    const cards = [...el.querySelectorAll('.cd-app-card[data-kind="app"]')] as HTMLButtonElement[];
+    const cards = [...el.querySelectorAll('.card[data-kind="app"]')] as HTMLButtonElement[];
     act(() => cards[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onOpenApp).toHaveBeenCalledWith('todos');
     act(() => cards[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
@@ -144,7 +145,7 @@ describe('HomeScreen', () => {
       (b) => (b as HTMLElement).dataset.k === 'automation',
     ) as HTMLButtonElement;
     act(() => autoTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(el.querySelectorAll('.cd-app-card-wrap').length).toBe(1);
+    expect(el.querySelectorAll('.wrap').length).toBe(1);
     expect(el.querySelector('[data-kind="app"]')).toBeNull();
     const rowsBtn = [...el.querySelectorAll('.libLayoutBtn')].find(
       (b) => (b as HTMLElement).dataset.layout === 'rows',
@@ -156,12 +157,12 @@ describe('HomeScreen', () => {
   it('opens an automation + its more-menu, and browses templates', () => {
     const props = makeProps();
     const el = mount(props);
-    const autoCard = el.querySelector('.cd-app-card[data-kind="automation"]') as HTMLButtonElement;
+    const autoCard = el.querySelector('.card[data-kind="automation"]') as HTMLButtonElement;
     act(() => autoCard.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
-    const autoWrap = autoCard.closest('.cd-app-card-wrap') as HTMLElement;
+    const autoWrap = autoCard.closest('.wrap') as HTMLElement;
     act(() =>
-      (autoWrap.querySelector('.cd-card-act-more') as HTMLButtonElement).dispatchEvent(
+      (autoWrap.querySelector('button[aria-label="More actions"]') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );

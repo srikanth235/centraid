@@ -106,7 +106,7 @@
     opacity 0.15s ease,
     transform 0.15s ease;
 }
-.chatAmPop:global(.open) {
+.chatAmPop[data-open='true'] {
   opacity: 1;
   transform: none;
   pointer-events: auto;
@@ -300,7 +300,7 @@
   border-radius: 5px;
   cursor: pointer;
 }
-.chatAmStaleBtn:global(.primary) {
+.chatAmStaleBtn.chatAmStalePrimary {
   background: var(--c-amber, #e89a3c);
   border-color: var(--c-amber, #e89a3c);
   color: #2a1c06;

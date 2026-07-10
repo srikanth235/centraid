@@ -276,7 +276,7 @@ export default function AutomationViewScreen({
             <span className={au.auStatusIc} aria-hidden="true">
               <Icon name={STATUS_ICON[d.statusKind]} size={12} />
             </span>
-            <span className="cd-au-status-tx">{d.statusLabel}</span>
+            <span>{d.statusLabel}</span>
           </span>
           <div className={styles.heroToggle}>
             <span className={styles.heroToggleLbl}>Enabled</span>

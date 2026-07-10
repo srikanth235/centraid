@@ -796,6 +796,30 @@ export class VaultPlane {
     }));
   }
 
+  /**
+   * One outbox item's verb + artifact + request, read directly off the
+   * row — SERVER-SIDE ONLY. Never rides `GET /outbox` or `GET /blocking`
+   * (this class's `listOutbox` deliberately omits `request_json`; see its
+   * doc comment). The edit-before-approve route (`outbox-edit.ts`) uses
+   * this to rebuild a wire request from an owner-edited artifact without
+   * ever handing the raw request to the owner surface.
+   */
+  rawOutboxItem(
+    itemId: string,
+  ):
+    | { verb: string; artifact: Record<string, unknown>; request: Record<string, unknown> }
+    | undefined {
+    const row = this.db.vault
+      .prepare('SELECT verb, artifact_json, request_json FROM outbox_item WHERE item_id = ?')
+      .get(itemId) as { verb: string; artifact_json: string; request_json: string } | undefined;
+    if (!row) return undefined;
+    return {
+      verb: row.verb,
+      artifact: JSON.parse(row.artifact_json) as Record<string, unknown>,
+      request: JSON.parse(row.request_json) as Record<string, unknown>,
+    };
+  }
+
   /** Owner decision on one outbox item — rides the typed command, receipted. */
   decideOutbox(input: {
     itemId: string;

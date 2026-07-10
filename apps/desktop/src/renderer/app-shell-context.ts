@@ -51,6 +51,7 @@ export type ShellRoute =
   | { kind: 'discover' }
   | { kind: 'starred' }
   | { kind: 'automations' }
+  | { kind: 'approvals' }
   | { kind: 'templates' }
   | { automationId: string; kind: 'automation-view' }
   | { automationId: string; kind: 'run-view'; runId: string }

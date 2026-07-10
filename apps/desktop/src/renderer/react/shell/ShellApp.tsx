@@ -88,7 +88,7 @@ export default function ShellApp({
 
   const screen = renderScreen(nav);
 
-  // Full-bleed routes render their own `.cd-window` (app view / builder),
+  // Full-bleed routes render their own window frame (app view / builder),
   // so the shell frame steps aside entirely.
   if (isFullBleed(route)) return <>{screen}</>;
 

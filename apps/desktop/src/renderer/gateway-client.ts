@@ -488,3 +488,13 @@ export * from './gateway-client-conversation.js';
 // lives in `gateway-client-vault.ts`. Re-exported here so the per-app
 // Vault tab imports it from the same barrel.
 export * from './gateway-client-vault.js';
+
+// The broker-owned OAuth / BYO-client connections surface (issue #304)
+// lives in `gateway-client-connections.ts`. Re-exported here so the
+// Settings → Connections screen imports it from the same barrel.
+export * from './gateway-client-connections.js';
+
+// The outbox / blocking-inbox / standing-grant surface (issues #306, #308)
+// lives in `gateway-client-outbox.ts`. Re-exported here so the Approvals
+// screen imports it from the same barrel.
+export * from './gateway-client-outbox.js';

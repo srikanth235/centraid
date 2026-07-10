@@ -313,3 +313,58 @@
     inset 0 0 0 0.5px var(--line),
     0 1px 3px rgba(0, 0, 0, 0.35);
 }
+
+/* ── Builder frame — the two-pane body under the shell titlebar ──────────
+   Chat pane (left, collapsible) + right pane (preview / code / cloud).
+   Collapsing animates the grid column to 0, matching the workspace-sidebar
+   motion in chrome.module.css. */
+.builder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-wall);
+}
+.builderBody {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(360px, 420px) 1fr;
+  min-height: 0;
+  transition: grid-template-columns 240ms cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+/* Chat-pane collapsed — driven by the chat-toggle in the chrome row. The
+   chat-pane width animates to 0 and its border-right vanishes so the
+   canvas reads as having the full floor. */
+.builder[data-chat='closed'] .builderBody {
+  grid-template-columns: 0 1fr;
+}
+.builder[data-chat='closed'] .builderBody .chatPane {
+  border-right: 0;
+}
+.chatPane {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  min-height: 0;
+  overflow: hidden;
+}
+/* The right pane's scrollable content area, under its persistent toolbar. */
+.rightPaneContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+}
+/* Mobile/tablet preview backdrop — scoped to the content area so the
+   dotted wall only paints behind the device frame, not behind the
+   right-pane toolbar above it. */
+.hasPhone .rightPaneContent {
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 / 22px 22px,
+    var(--device-wall);
+}

@@ -1,8 +1,12 @@
+/* Vanilla split this into .cd-settings-main (flex) + a .cd-settings-shell
+   grid wrapper; the React tree has no shell layer, so the grid lives here —
+   fixed 232px nav column, content takes the rest. */
 .settingsMain {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  display: flex;
+  display: grid;
+  grid-template-columns: 232px 1fr;
 }
 .settingsNav {
   display: flex;
@@ -66,6 +70,17 @@
   background: color-mix(in srgb, var(--ink) 8%, transparent);
   color: var(--ink);
 }
+/* Version stamp pinned to the bottom of the nav column (vanilla
+   .cd-settings-nav-foot / .cd-settings-nav-ver). */
+.settingsNavFoot {
+  margin-top: auto;
+  padding: 12px 10px 0;
+}
+.settingsNavVer {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-4);
+}
 .settingsContent {
   min-width: 0;
   overflow-y: auto;
@@ -108,20 +123,4 @@
 }
 .settingsPage {
   display: block;
-}
-.settingsPage :global(.seg) {
-  display: inline-flex;
-  padding: 3px;
-  gap: 0;
-  border: 0.5px solid var(--line);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ink) 3%, transparent);
-}
-.settingsPage :global(.seg) button {
-  padding: 6px 12px;
-  font-size: 12.5px;
-}
-.settingsPage :global(.seg) button[data-active='true'] {
-  background: var(--bg-elev);
-  box-shadow: 0 0 0 0.5px var(--line);
 }

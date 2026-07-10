@@ -1,4 +1,4 @@
-.tmplPreview :global(.cd-tmpl-preview-head) {
+.tmplPreviewHead {
   display: flex;
   align-items: center;
   gap: 14px;

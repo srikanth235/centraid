@@ -12,17 +12,17 @@ afterEach(() => {
 describe('showToast', () => {
   it('mounts a global toast with the message and auto-dismisses after 2s', () => {
     showToast('Saved');
-    const toast = document.querySelector('.global-toast');
+    const toast = document.querySelector('[data-global-toast]');
     expect(toast?.textContent).toContain('Saved');
     expect(toast?.classList.contains('toast')).toBe(true);
     vi.advanceTimersByTime(2000);
-    expect(document.querySelector('.global-toast')).toBeNull();
+    expect(document.querySelector('[data-global-toast]')).toBeNull();
   });
 
   it('replaces an existing toast rather than stacking', () => {
     showToast('one');
     showToast('two');
-    const toasts = document.querySelectorAll('.global-toast');
+    const toasts = document.querySelectorAll('[data-global-toast]');
     expect(toasts).toHaveLength(1);
     expect(toasts[0]?.textContent).toContain('two');
   });

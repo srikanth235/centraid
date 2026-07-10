@@ -3,6 +3,8 @@ import { activateVersion, listVersions } from '../../../../gateway-client.js';
 import { relativeWhen, shortVersionTitle } from '../../../../format.js';
 import styles from './BuilderHistory.module.css';
 import controlsCss from '../../../styles/controls.module.css';
+import buttonCss from '../../../ui/Button.module.css';
+import atomsCss from '../../../styles/atoms.module.css';
 import { cx } from '../../../ui/cx.js';
 
 // Version-history list inside the builder chat pane's History view (React port
@@ -45,11 +47,11 @@ export default function BuilderHistory({
     };
   }, [appId, nonce]);
 
-  if (!appId) return <div className="empty">No app yet.</div>;
-  if (error) return <div className="empty">No versions yet. Publish to create the first one.</div>;
-  if (!data) return <div className="empty">Loading…</div>;
+  if (!appId) return <div className={atomsCss.empty}>No app yet.</div>;
+  if (error) return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
+  if (!data) return <div className={atomsCss.empty}>Loading…</div>;
   if (data.versions.length === 0) {
-    return <div className="empty">No versions yet. Publish to create the first one.</div>;
+    return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
   }
 
   const sorted = [...data.versions].sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
@@ -90,7 +92,7 @@ export default function BuilderHistory({
               {!isCurrent ? (
                 <button
                   type="button"
-                  className={cx("btn", controlsCss.soft, "tiny-btn")}
+                  className={cx(buttonCss.btn, controlsCss.soft, buttonCss.sm)}
                   onClick={() => restore(v.versionId, shortVersionTitle(v))}
                 >
                   Restore

@@ -21,7 +21,7 @@
 .rowFull .rowControl {
   margin-top: 8px;
 }
-.rowGrid :global(.drawer-row-head) {
+.rowGrid .rowHead {
   padding-top: 4px;
 }
 .rowHint {

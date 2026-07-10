@@ -14,14 +14,14 @@ describe('openConfirm', () => {
     const card = document.querySelector('.card')!;
     expect(card.textContent).toContain('Delete?');
     expect(card.textContent).toContain('Are you sure');
-    (card.querySelector('.danger, .btn-primary') as HTMLButtonElement).click();
+    (card.querySelector('.danger, .primary') as HTMLButtonElement).click();
     expect(await p).toBe(true);
     expect(document.querySelector('.card')).toBeNull();
   });
 
   it('resolves false on Cancel and on backdrop click', async () => {
     const p1 = openConfirm({ title: 'T', message: 'M' });
-    (document.querySelector('.btn-ghost') as HTMLButtonElement).click();
+    (document.querySelector('.ghost') as HTMLButtonElement).click();
     expect(await p1).toBe(false);
 
     const p2 = openConfirm({ title: 'T', message: 'M' });

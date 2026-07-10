@@ -1,0 +1,27 @@
+/* Kind badge — the small uppercase-mono APP / AUTOMATION classifier chip
+   shared by library tiles (Home, Discover) and card footers. */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.badge svg {
+  display: block;
+}
+.badge[data-kind='automation'] {
+  color: var(--accent);
+}
+/* Rows layout — the badge takes a fixed slot (shared `--lib-row-badge-w`
+   token) so APP / AUTOMATION align into a column across Home and Discover
+   row strips. */
+:global([data-layout='rows']) .badge {
+  width: var(--lib-row-badge-w);
+}
