@@ -87,7 +87,10 @@ export async function launchApp(opts = {}) {
   // instead of <OnboardingScreen/> (see src/renderer/react/boot.tsx).
   await page.getByRole('heading', { name: 'What should we build?' }).waitFor({
     state: 'visible',
-    timeout: 45_000,
+    // Bumped from 45s: under heavy concurrent load on a shared dev machine
+    // (multiple Electron instances from parallel sessions), first paint can
+    // take well past 45s even though the app itself isn't hung.
+    timeout: 120_000,
   });
 
   return {

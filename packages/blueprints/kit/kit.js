@@ -692,14 +692,13 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     var input = form.querySelector('input');
     var lastFocus = null;
 
-    var grantChecked = false;
     function open() {
       lastFocus = document.activeElement;
       ov.hidden = false;
-      if (!grantChecked) {
-        grantChecked = true;
-        refreshGrantChip(ov.querySelector('[data-kit-grant]'));
-      }
+      // Re-check on every open, not just the first — a grant can change
+      // (revoke, re-grant, scope widening) between opens within the same
+      // iframe session, and the chip should never show stale consent state.
+      refreshGrantChip(ov.querySelector('[data-kit-grant]'));
       setTimeout(function () {
         input && input.focus();
       }, 60);
@@ -946,8 +945,11 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         }
         return fetchJson('/centraid/_vault/apps').then(function (a) {
           var apps = (a.ok && a.body && a.body.apps) || [];
+          // `apps[].appId` is the internal consent_app UUID minted at
+          // enrollment, not the manifest id `appId()` reads off the runtime
+          // bridge — `name` is the field that carries the manifest id.
           var mine = apps.filter(function (x) {
-            return x.appId === appId();
+            return x.name === appId();
           })[0];
           if (!mine) {
             chip.textContent = 'not enrolled — vault calls deny';

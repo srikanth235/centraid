@@ -1,9 +1,9 @@
 import { beforeEach, expect, test } from 'vitest';
-import { bootstrapVault, type BootstrapResult } from '../bootstrap.js';
+import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
 import { createGateway, Gateway } from '../gateway/gateway.js';
 import { isSealedValue, sealAad, unsealValue } from '../schema/sealed.js';
-import type { Credential } from '../gateway/types.js';
+import type { Credential, InvokeOutcome } from '../gateway/types.js';
 import { LOCKER_ITEM_TYPE, registerLockerCommands } from './locker.js';
 
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
@@ -153,6 +153,30 @@ test('purge removes the row, its tags and its star for good', () => {
   expect(row(id)).toBeUndefined();
   expect(tagsOf(id)).toEqual([]);
   expect(starCount(id)).toBe(0);
+});
+
+test('purge parks for an app-kind caller — the manifest advertises "confirmation: required" and the gateway must actually enforce it', () => {
+  const id = addLogin();
+  const app = enrollApp(db, { name: 'locker' });
+  createGrant(db, {
+    appId: app.appId,
+    purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+    grantedByPartyId: boot.ownerPartyId,
+    scopes: [{ schema: 'locker', verbs: 'read+act' }],
+  });
+  const appCred: Credential = { kind: 'app', appId: app.appId, signingKey: app.signingKey };
+  const outcome: InvokeOutcome = gw.invoke(appCred, {
+    command: 'locker.purge_item',
+    input: { item_id: id },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('parked');
+  // Nothing executed — the row is untouched until the owner approves.
+  expect(row(id)).toBeDefined();
+  if (outcome.status !== 'parked') return;
+  const released = gw.confirm(owner, outcome.invocationId, true);
+  expect(released.status).toBe('executed');
+  expect(row(id)).toBeUndefined();
 });
 
 test('unstar clears the flag idempotently', () => {

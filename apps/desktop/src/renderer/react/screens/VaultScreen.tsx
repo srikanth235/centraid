@@ -49,6 +49,15 @@ function GrantSection({
   onRevoke: (grantId: string) => void;
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
+  // `grants` is a fresh array from every reload — including the one that
+  // follows a grant/revoke action completing — so resetting on change
+  // un-disables the button that action just flipped. Without this, the
+  // "Grant access" button that appears after a Revoke inherits the `busy`
+  // this same component instance set for the Revoke click, since the
+  // grants.length===0 → >0 branch swap doesn't remount GrantSection.
+  useEffect(() => {
+    setBusy(false);
+  }, [grants]);
   return (
     <div className={cx(appSettingsCss.appSettingsSection, vault.grants)}>
       <div className={vault.label}>{`Access · ${vaultName}`}</div>
