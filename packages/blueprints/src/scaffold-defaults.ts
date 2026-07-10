@@ -245,7 +245,11 @@ bun install   # or: npm install
 
 ## Layout
 
-- \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
+- \`index.html\`, \`app.css\`, \`app.jsx\` — static, served from \`/centraid/${id}/\`.
+  \`app.jsx\` is a React component; the gateway transpiles it per-request
+  (esbuild, \`jsx: 'automatic'\`) — no local build step. Import
+  \`createRoot\`/hooks from \`./react-core.min.js\`, the same shared
+  sibling-import mechanism as \`./kit.js\`.
 - \`queries/<name>.js\` — pure function bodies invoked via
   \`window.centraid.read({ query: '<name>', input })\` → dispatched
   against the \`queries[]\` entry in \`app.json\`.
@@ -274,10 +278,10 @@ gateway applies ext-table DDL on publish — never run DDL from code.
 ## Phone-readiness
 
 The mobile shell is a thin viewer — on the phone this blueprint IS the
-UI. Keep the kit references (\`kit.js\` / \`kit.css\` are served by the runtime
-from one shared canonical copy — reference them from \`index.html\` / \`app.js\`,
-never copy them into the app folder), and keep the scaffold's responsive
-conventions intact: \`viewport-fit=cover\` in the
+UI. Keep the kit reference (\`kit.css\` is served by the runtime from one
+shared canonical copy — reference it from \`index.html\`, never copy it
+into the app folder), and keep the scaffold's responsive conventions
+intact: \`viewport-fit=cover\` in the
 viewport meta, \`env(safe-area-inset-*)\` body padding, the single 720px
 breakpoint, ≥ 44px hit targets, and the \`prefers-reduced-motion\` guard.
 Build on these; never strip them.

@@ -50,6 +50,7 @@ export { validateManifestAt } from '../validate-manifest.js';
 const EDITABLE_EXT = new Set([
   '.ts',
   '.js',
+  '.jsx',
   '.mjs',
   '.html',
   '.htm',

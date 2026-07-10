@@ -11,7 +11,13 @@ You are working inside a centraid app app folder. Your job is to author or modif
 ```
 <app root>/
   index.html               # entry page; static assets sit alongside
-  app.css, app.js, ...     # static assets (extension allowlist below)
+  app.css, app.jsx, ...    # static assets (extension allowlist below).
+                           # app.jsx is a React component — the gateway
+                           # transpiles .jsx per-request (esbuild,
+                           # jsx: 'automatic'), no local build step.
+                           # Import createRoot/hooks from
+                           # ./react-core.min.js, the same shared
+                           # sibling-import mechanism as ./kit.js.
   app.json                 # the APP MANIFEST — see "App manifest" below
   package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
   queries/<name>.js        # dispatched against queries[name] in the manifest
@@ -21,6 +27,22 @@ You are working inside a centraid app app folder. Your job is to author or modif
 ```
 
 Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/openclaw-plugin` (installed as a devDependency).
+
+### UI dialect — React or Lit (both supported)
+
+Two UI dialects are first-class; the runtime serves both:
+
+- **React** — `app.jsx`, imports from `./react-core.min.js` (createRoot, hooks, flushSync). The **default for new apps**: fresh scaffolds ship a React `app.jsx`.
+- **Lit** — `app.js`, imports `html`/`render`/directives from `./lit-core.min.js` (and optionally the kit's `KitElement` from `./elements.js`). This is the dialect of the bundled blueprint apps.
+
+**When modifying an existing app, keep its dialect.** Detect it before writing UI code: an `app.jsx` entry means React; an `app.js` importing `./lit-core.min.js` means Lit. Never convert an app between dialects unless the user explicitly asks for a rewrite.
+
+Everything else is dialect-independent: `window.centraid` read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes (`class=` in Lit templates, `className=` in JSX), and the inline settings bridge in `index.html`.
+
+Lit-specific traps (React apps have neither):
+
+1. Lit's standalone `render()` does **not** clear a container's pre-existing children on first commit — containers pre-filled with skeleton markup need a one-shot `replaceChildren()` mount guard before the first render.
+2. Once Lit owns a container, never raw-clear it (`innerHTML = ''` corrupts Lit's part cache and the next render throws) — clear with `render(nothing, container)`.
 
 ### App manifest — `app.json` (source of truth)
 
@@ -82,7 +104,7 @@ Rules:
 
 ### Static asset extension allowlist (anything else is rejected at upload)
 
-`.html .htm .css .js .mjs .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
+`.html .htm .css .js .mjs .jsx .json .md .txt .svg .png .jpg .jpeg .webp .gif .ico .woff .woff2 .ttf .otf .map`
 
 ### Handler contract
 
@@ -313,12 +335,12 @@ When the user's request includes scheduled behaviour: build the UI / queries / a
 
 ### Security model (do not weaken)
 
-- Static-serve same-origin only with strict CSP — don't request inline scripts; structure html so logic loads from `.js` files.
+- Static-serve same-origin only with strict CSP — don't request inline scripts; structure html so logic loads from `.js` / `.jsx` files.
 - The plugin runs handlers in worker threads with crash + timeout isolation. Do not rely on shared globals across handler invocations.
 
 ### Build / publish expectations
 
-There is **no build step**. The publish step uploads the app folder as-is; the runtime loads `.js` files directly. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/openclaw-plugin` resolves — it changes nothing at runtime.
+There is **no build step**. The publish step uploads the app folder as-is; the runtime loads `.js` files directly and transpiles `.jsx` files per-request (esbuild, `jsx: 'automatic'`) — you never run a bundler yourself. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/openclaw-plugin` resolves — it changes nothing at runtime.
 
 ### When asked to scaffold a new app
 

@@ -257,12 +257,15 @@ function renderExemplarsBlock(): string {
   return [
     '### Reference exemplars',
     '',
-    'When unsure about a pattern, read the bundled templates — they are the',
-    'canonical references for what a well-grounded centraid app looks like:',
+    'When unsure about a pattern, read the bundled blueprint apps — they are the',
+    'canonical references for what a well-grounded centraid app looks like.',
+    'They are written in the **Lit dialect** (`app.js` + `./lit-core.min.js`):',
     '',
-    '- `@centraid/blueprints/apps/todos/` — the tightest single-list example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the `.head/.add-bar/.list/.row/.empty` class shapes, and how it never hardcodes a color.',
-    '- `@centraid/blueprints/apps/journal/` — a slightly richer surface (cards, editing, dated entries). Use for any app that has a "compose + browse" rhythm.',
+    '- `@centraid/blueprints/apps/tasks/` — the tightest list/board example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the kit.css primitives (`.kit-btn`, `.kit-chip`, `.kit-banner`), the `#consentBanner` denied-state pattern, and how it never hardcodes a color.',
+    '- `@centraid/blueprints/apps/notes/` — a richer "compose + browse" surface (editor, list, autosave). Use for any app with that rhythm.',
     '',
-    "You can read these directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/todos/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
+    'For a **React** app (`app.jsx`, the default for new apps), the scaffolded `app.jsx` you start from is the canonical shape: createRoot at the bottom, one App component owning the loading/error/denied triad, `window.centraid.onChange(refresh)` in an effect, kit.css classes via `className=`.',
+    '',
+    "You can read the blueprints directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/tasks/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
   ].join('\n');
 }

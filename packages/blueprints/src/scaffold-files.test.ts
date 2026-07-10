@@ -14,7 +14,7 @@ describe('scaffoldAppFiles', () => {
     expect(files.has('index.html')).toBeTruthy();
     expect(files.has('tokens.css')).toBeTruthy();
     expect(files.has('app.css')).toBeTruthy();
-    expect(files.has('app.js')).toBeTruthy();
+    expect(files.has('app.jsx')).toBeTruthy();
     expect(files.has('automations/README.md')).toBeTruthy();
     expect(files.has('README.md')).toBeTruthy();
     // No empty dirs in a file map.
