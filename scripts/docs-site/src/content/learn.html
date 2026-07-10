@@ -1,0 +1,559 @@
+<!-- HERO -->
+      <section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">α</div>
+        <p class="eyebrow r">Learn it · the foundations</p>
+        <h1 class="r" style="--d: 0.1s">Nothing here is invented. <em>That's the point.</em></h1>
+        <p class="lede r" style="--d: 0.22s">
+          Centraid is composed from ideas that already earned their keep — W3C vocabularies, IETF
+          protocols, a database that is just a file, cryptographic keys as identity. This page is
+          ten short primers, one per idea: the problem it solves, where it came from, and how it
+          shows up in Centraid. <b>No prior knowledge assumed</b>, no information overload — just
+          enough of each to read the rest of the docs with confidence.
+        </p>
+      </section>
+
+      <!-- §01 THE ONTOLOGY IDEA -->
+      <section class="sec wrap" id="ontology">
+        <p class="eyebrow r">§01 · the ontology idea</p>
+        <h2 class="r" style="--d: 0.06s">Agree on the nouns, <em>once.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Every app you've ever used has quietly invented its own idea of "a person" and "an
+            event." Your calendar, your budgeting app and your photo library each keep a private
+            definition, so a question that spans them &mdash; "who did I spend money on and see in
+            person this month?" &mdash; has no single place to ask. That's the silo disease: not
+            missing data, but data that can't recognize itself across apps.
+          </p>
+          <p>
+            An <b>ontology</b> is the fix, and the word is less exotic than it sounds: it's a
+            formal agreement about which things exist and how they relate to each other, written
+            down once instead of reinvented per app. Centraid's ontology declares nine load-bearing
+            types &mdash; <code>party</code> · <code>place</code> · <code>event</code> ·
+            <code>account</code> · <code>transaction</code> · <code>content_item</code> ·
+            <code>activity</code> · <code>observation</code> · <code>link</code> &mdash; plus SKOS
+            concepts for vocabulary, all living in one canonical core.
+          </p>
+          <p>
+            Hard Rule #2 is <b>"Extend, don't fork."</b> A domain that needs a workout doesn't
+            invent a second activity table &mdash; it holds a <code>UNIQUE NOT NULL</code> foreign
+            key back to the core row it specializes, like
+            <code>health.workout.activity_id</code>. Every row's identity is a <b>UUIDv7</b>: an
+            immutable, meaningless key, so merges just join two rows on a
+            <code>core.link</code> same-as relation instead of renumbering anything. And the apps
+            you already know &mdash; Gmail, Drive, Photos &mdash; are treated as evidence of what a
+            domain needs, never as the authority on how to model it:
+            <b>"Gmail stars &ne; Drive stars &ne; Photos favorites is a fragmentation artifact of
+            separate databases, not a design to copy."</b>
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../ontology/">the full explorable model</a> ·
+            <a href="../data/#ontology">Data § the ontology</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- §02 VOCABULARIES -->
+      <section class="sec wrap" id="skos">
+        <p class="eyebrow r">§02 · vocabularies</p>
+        <h2 class="r" style="--d: 0.06s">Naming things is <em>its own hard problem.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Categories, tags and folders drift apart in every app that grows past its first year
+            &mdash; one app's "Groceries" is another's "Food &amp; Dining," and neither knows about
+            the other. Fixing identity (the previous section) doesn't fix naming, which needs its
+            own answer.
+          </p>
+          <p>
+            The prior art is <b>SKOS</b>, a W3C standard for controlled vocabularies: it defines
+            concept schemes, concepts, preferred and alternate labels, and broader/narrower
+            hierarchies for organizing terms. Centraid's tables mirror SKOS names literally &mdash;
+            <code>core_concept.pref_label</code> is <code>skos:prefLabel</code>,
+            <code>core_concept.broader_concept_id</code> is <code>skos:broader</code> &mdash; with
+            one simplification: hierarchy is single-parent, a plain foreign key rather than a
+            graph of RDF triples.
+          </p>
+          <p>
+            The payoff is that <b>"Groceries" is one node</b> &mdash; the budget, the agent and the
+            export all cite the same row, so a rename touches a label, never an identity. SKOS
+            concepts are the sole classification mechanism across Centraid: one flags-scheme tag
+            replaced every per-app favorite boolean, and Docs folders are concepts too, not a
+            separate filesystem-style hierarchy.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../ontology/">the full explorable model</a> ·
+            <a href="../data/#ontology">Data § the ontology</a> ·
+            <a href="https://www.w3.org/TR/skos-primer/" target="_blank" rel="noopener"
+              >w3.org/TR/skos-primer</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- §03 BORROWED SHAPES -->
+      <section class="dark" id="shapes">
+        <div class="wrap">
+          <p class="eyebrow r">§03 · borrowed shapes</p>
+          <h2 class="r" style="--d: 0.06s">You don't invent a calendar event <em>in 2026.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Decades of standards already encode the hard-won details of contacts, calendars, money
+            and health data &mdash; the RSVP states, the reconciliation ids, the units of measure.
+            Centraid's ontology doc footers its sources for exactly this reason: vCard · schema.org
+            · RFC 5545 / JSCalendar · ISO 20022 / OFX · FHIR / Open mHealth · W3C PROV · ODRL / DPV
+            · SKOS · MCP.
+          </p>
+          <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Standard</th>
+                  <th>What it settled</th>
+                  <th>Where it lives in Centraid</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>vCard 4.0</td>
+                  <td>Name fields, contact channels, group membership</td>
+                  <td>
+                    <code>party_identifier.scheme</code> mirrors vCard EMAIL/TEL/URL; the
+                    <code>label</code> column is vCard TYPE (home/work/cell)
+                  </td>
+                </tr>
+                <tr>
+                  <td>iCalendar RFC 5545 + JSCalendar</td>
+                  <td>The attendee RSVP state machine</td>
+                  <td>
+                    <code>attendee.partstat</code> is the PARTSTAT machine
+                    (needs&#8209;action/accepted/declined/tentative); <code>event.ical_uid</code>
+                    survives round-trips to external calendars
+                  </td>
+                </tr>
+                <tr>
+                  <td>schema.org</td>
+                  <td>A shared shape for people, places and creative work</td>
+                  <td>
+                    <code>party.kind</code> mirrors the Person/Organization split;
+                    <code>content_item</code> follows schema.org/CreativeWork
+                  </td>
+                </tr>
+                <tr>
+                  <td>FHIR + Open mHealth + UCUM</td>
+                  <td>One shape for any measurement, clinical or not</td>
+                  <td>
+                    <code>observation</code> follows FHIR Observation, with UCUM units on
+                    <code>value_num</code> &mdash; "the same shape serves heart rates and water
+                    meters"
+                  </td>
+                </tr>
+                <tr>
+                  <td>ISO 20022 / OFX</td>
+                  <td>Idempotent bank imports</td>
+                  <td>
+                    <code>transaction.external_id</code> is the OFX FITID / provider id, so
+                    re-importing a statement never double-posts
+                  </td>
+                </tr>
+                <tr>
+                  <td>Double-entry &amp; envelope budgeting (YNAB-style)</td>
+                  <td>Splits that reconcile, budgets that don't lie</td>
+                  <td>
+                    <code>txn_split</code> rows must sum to the parent amount;
+                    <code>budget</code> progress is a projection over
+                    <code>core.transaction</code>, never a stored balance
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              Some shapes get reused past their home domain &mdash; RRULE from RFC 5545 is stored,
+              not just for calendar events, as the recurrence <em>format</em> for money cadences
+              and medication schedules alike; Centraid never claims a full recurrence-expansion
+              engine, only a shared way to write "every 2 weeks" down.
+            </p>
+            <p>
+              Borrowing shapes keeps round-trips honest &mdash; an <code>ical_uid</code> survives
+              export and re-import unchanged &mdash; and it keeps divergences deliberate: an
+              employment claim isn't a card field, because a job history needs provenance a vCard
+              can't carry, so it's a <code>core.link</code> instead.
+            </p>
+            <p class="aside">
+              Go deeper: <a href="../ontology/">the full explorable model</a> ·
+              <a href="https://datatracker.ietf.org/doc/html/rfc5545" target="_blank" rel="noopener"
+                >RFC 5545</a
+              >
+              ·
+              <a href="https://hl7.org/fhir/" target="_blank" rel="noopener">hl7.org/fhir</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §04 SQLITE -->
+      <section class="sec wrap" id="sqlite">
+        <p class="eyebrow r">§04 · sqlite</p>
+        <h2 class="r" style="--d: 0.06s">A database you can <em>put in your pocket.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Picture "a database" and you probably picture a server somewhere — something you rent,
+            log into, and hope stays up. <b>SQLite</b> inverts that: it's a library your program
+            links against, not a service you talk to over a network. The database is an ordinary
+            file on disk. No server, no daemon, nothing to rent — which is exactly why it's widely
+            described as the most deployed database engine in the world, quietly running inside
+            phones, browsers and appliances everywhere.
+          </p>
+          <p>
+            That inversion is the sovereignty story. A <b>vault</b> is a directory of SQLite files
+            on a machine you control: <code>vault.db</code> holds every schema of the ontology —
+            the whole model, in one ACID boundary, so a single transaction can commit provenance,
+            core rows and domain rows together with foreign keys engine-enforced. Alongside it,
+            <code>journal.db</code> is the append-only audit stream — receipts, provenance, command
+            invocations — kept separate so it can grow fast without ever touching the model.
+          </p>
+          <p>
+            Three SQLite features do real work here. <b>WAL</b> mode
+            (<code>PRAGMA journal_mode = WAL</code>) means readers never block a writer, with the
+            write-ahead log checkpointed back into the database files on stop. <b>FTS5</b> gives
+            every text-bearing entity a full-text shadow table, searched only through
+            consent-checked queries — sealed (encrypted) columns are structurally banned from ever
+            landing in one. And <code>CHECK (json_valid(...))</code> constraints guard every
+            embedded JSON column, so malformed JSON simply can't be written.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../data/#vault">Data § the vault</a> ·
+            <a href="https://sqlite.org/" target="_blank" rel="noopener">sqlite.org</a>
+          </p>
+        </div>
+      </section>
+
+      <!-- §05 CONTENT ADDRESSING -->
+      <section class="sec wrap" id="cas">
+        <p class="eyebrow r">§05 · content addressing</p>
+        <h2 class="r" style="--d: 0.06s">Name the bytes by what they <em>are.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Most storage names a file by where it sits — a path, a bucket key, a row id. Change
+            the location and every reference breaks. <b>Content addressing</b> is the idea git made
+            famous: name the bytes by what they <em>are</em>, using a hash of their contents. The
+            name and the data become the same fact, so integrity checks and deduplication fall out
+            for free — two copies of the same photo are just one blob.
+          </p>
+          <p>
+            Centraid identifies every blob by its <code>sha256</code>, giving it a
+            <code>blob:sha256-&lt;hex&gt;</code> URI. On disk that lands under a two-character
+            fan-out directory (so no folder holds too many files), written to a temp path and then
+            renamed into place — an atomic move, never a partial write.
+          </p>
+          <p>
+            Two twists make this more than a git trick. First, <b>Centraid owns the meaning and
+            rents the bytes</b>: a row can re-home its bytes to any S3-compatible remote — AWS,
+            MinIO, R2, B2 — without touching a single relationship, and the gateway never trusts a
+            remote's ETag; it re-hashes from its own local spool before believing anything matches.
+            Second, the <b>claim pattern</b>: raw bytes arriving over the wire is not itself a vault
+            write — the typed command that claims them is. Uploads stage under a
+            <code>staged_sha</code>, and a single transaction promotes that stage into real content
+            rows. Bytes are only ever servable once a reference — a content link, a folder tag, a
+            cover — actually claims them; egress is derived, never just granted.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../data/#blobs">Data § blobs</a> ·
+            <a
+              href="https://git-scm.com/book/en/v2/Git-Internals-Git-Objects"
+              target="_blank"
+              rel="noopener"
+              >git internals</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- §06 P2P -->
+      <section class="dark" id="p2p">
+        <div class="wrap">
+          <p class="eyebrow r">§06 · peer-to-peer</p>
+          <h2 class="r" style="--d: 0.06s">Two phones behind NAT, <em>no middleman.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Your phone and your desktop almost certainly have no public address — both sit behind
+            NAT, a router quietly hiding them from the open internet. That single fact is why
+            personal software normally rents a cloud middleman just to let your own devices talk.
+            Centraid instead rides <b>iroh</b>, an open-source peer-to-peer library, over
+            <b>QUIC</b> — the modern transport that runs on UDP with TLS 1.3 built in and can carry
+            many independent streams on one connection, so a live SSE feed is just a stream that
+            stays open.
+          </p>
+          <div class="grid cols-3" style="margin-top: 30px">
+            <div class="card r" style="--d: 0.1s">
+              <p class="c-no">the fast path</p>
+              <h3>Direct, punched</h3>
+              <p>
+                Both devices are behind NAT with no public IP, so iroh punches a direct hole
+                through it — traffic goes device to device, no server in the middle.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.18s">
+              <p class="c-no">the fallback</p>
+              <h3>Relay fallback</h3>
+              <p>
+                When punching fails — symmetric NAT, strict firewalls — traffic relays through
+                iroh's public n0 network, still end-to-end encrypted. Centraid rents no relay fleet
+                of its own.
+              </p>
+            </div>
+            <div class="card r" style="--d: 0.26s">
+              <p class="c-no">the identity</p>
+              <h3>Keys are addresses</h3>
+              <p>
+                A device's network identity <em>is</em> its Ed25519 public key. The handshake
+                proves it — no account, no TLS certificate, no exposed port.
+              </p>
+            </div>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              Joining that network is a one-time pairing ticket, not a login: desktop shows a QR
+              code that burns on first use, or a headless gateway mints a pasteable ticket over SSH
+              that pins the gateway's key up front, closing the trust-on-first-use gap entirely.
+              From there, <b>enrollment is the whole access-control list</b> — one revocable row per
+              device key per vault, no roles, no permission matrix. Revocation bites mid-session,
+              re-checked on every stream, and an unenrolled key is refused at the transport layer
+              with a QUIC close code 401, before it ever reaches an application. The result is a
+              star, not a mesh: Centraid refuses the hardest problem in personal software —
+              multi-master sync — by never having it. One always-on gateway per person; every
+              device is just a client around it.
+            </p>
+            <p class="aside">
+              Go deeper: <a href="../devices/#iroh">Devices § connectivity</a> ·
+              <a href="../devices/#pairing">Devices § pairing</a> ·
+              <a href="https://www.iroh.computer/" target="_blank" rel="noopener">iroh.computer</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §07 OAUTH & PKCE -->
+      <section class="sec wrap" id="oauth">
+        <p class="eyebrow r">§07 · oauth &amp; pkce</p>
+        <h2 class="r" style="--d: 0.06s">Sign in <em>at the source,</em> not into the app.</h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            An automation that wants your mail or your bank feed needs credentials — but handing
+            it your password hands it everything, forever. There has to be a way to grant a
+            narrower, revocable slice of access instead.
+          </p>
+          <p>
+            <b>OAuth 2.0</b> is the standard answer: you sign in <i>at the provider</i>, not
+            inside the requesting app, and the app receives a scoped, revocable <b>token</b>
+            instead of your password. <b>PKCE</b> (RFC 7636, "Proof Key for Code Exchange") closes
+            a gap for apps that can't hold a secret: the app generates a one-time
+            <code>code_verifier</code>, sends its hashed <code>S256</code>
+            <code>code_challenge</code> up front, and proves at the end that the same app that
+            started the sign-in is the one finishing it — so a stolen authorization code is
+            useless to anyone else.
+          </p>
+          <p>
+            Centraid is <b>BYO OAuth client</b> in v0 — you register your own client with the
+            provider; there's no Centraid-hosted relay standing between you and it, on purpose.
+            The gateway runs the ceremony over a loopback callback with single-use state, then
+            seals the resulting tokens at rest and refreshes them single-flight so two requests
+            never race. The part worth teaching: automation code never touches a token — it
+            writes a placeholder like <code>{{connection:mail}}</code>, and the broker injects the
+            real credential outside the sandbox, refusing any host not on that credential's
+            <code>allowed_hosts</code> pin. Unless a credential explicitly opts into writes, the
+            injected fetch stays read-only.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../data/#connections">Data § connections</a> ·
+            <a href="https://oauth.net/2/" target="_blank" rel="noopener">oauth.net/2</a> ·
+            <a href="https://datatracker.ietf.org/doc/html/rfc7636" target="_blank" rel="noopener"
+              >RFC 7636</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- §08 SEALED SECRETS -->
+      <section class="sec wrap" id="sealed">
+        <p class="eyebrow r">§08 · sealed secrets</p>
+        <h2 class="r" style="--d: 0.06s">Encrypted at the <em>column,</em> not the disk.</h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            Full-disk encryption protects a stolen laptop; it does nothing once the app is
+            running and the disk is already unlocked. Passwords, card numbers, TOTP seeds — the
+            columns that actually hurt if leaked — need protection that survives a compromised
+            query, not just a compromised drive.
+          </p>
+          <p>
+            Centraid encrypts those columns cell-by-cell with <b>AES-256-GCM</b>, an authenticated
+            cipher: tampering is detected, not just hidden. Each ciphertext binds its AAD to
+            <code>table.column:rowid</code>, so a cell copied into another row simply fails to
+            decrypt. Reads show the placeholder <code>«sealed»</code> by default; seeing the real
+            value is its own consent verb, <b>reveal</b>, and every reveal is receipted. Sealed
+            cells are structurally invisible to full-text search, and the audit journal stores
+            keyed hashes of them, never plaintext.
+          </p>
+          <p>
+            The sealing key itself (the DEK) lives in a <code>keys/</code> directory deliberately
+            <i>outside</i> the vault — so the obvious backup move, copying the vault directory,
+            carries ciphertext only. Key export, restore and rotation are shell-only:
+            <code>centraid-gateway key status|export|restore|rotate</code>. The same boundary
+            powers the Locker app's <b>TOTP</b> codes (RFC 6238) — the open standard behind every
+            authenticator app, an HMAC over a 30-second time counter. Centraid computes the 6
+            digits <i>inside</i> the sealed boundary against the RFC's own test vectors; only the
+            digits ever emerge, receipted, and redacted from the transcript.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../data/#sealed">Data § sealed</a> ·
+            <a href="https://datatracker.ietf.org/doc/html/rfc6238" target="_blank" rel="noopener"
+              >RFC 6238</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- §09 CONSENT LINEAGE -->
+      <section class="dark" id="consent">
+        <div class="wrap">
+          <p class="eyebrow r">§09 · consent lineage</p>
+          <h2 class="r" style="--d: 0.06s">
+            "Ask permission" already had <em>a body of standards.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            Centraid didn't invent consent-as-infrastructure — it composes a handful of open
+            standards for provenance, permission and disclosure that already answer pieces of the
+            problem.
+          </p>
+          <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Standard</th>
+                  <th>What it contributes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>W3C PROV</td>
+                  <td>
+                    Who touched what — entity, activity, agent, <code>wasDerivedFrom</code>.
+                    Centraid's provenance rows follow this shape, then hash-chain each row to its
+                    predecessor for tamper-evidence, beyond vanilla PROV.
+                  </td>
+                </tr>
+                <tr>
+                  <td>W3C ODRL</td>
+                  <td>
+                    A machine-readable language for permission rules. Grant scopes and row filters
+                    are ODRL-shaped constraints, not free-text policy.
+                  </td>
+                </tr>
+                <tr>
+                  <td>W3C DPV</td>
+                  <td>
+                    A shared vocabulary of <i>purposes</i>. Every grant is purpose-bound —
+                    <code>dpv:Billing</code>, <code>dpv:HealthMonitoring</code> — not just
+                    scope-bound.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Kantara Consent Receipts</td>
+                  <td>Every access decision leaves a receipt, chained to its provenance row.</td>
+                </tr>
+                <tr>
+                  <td>Solid</td>
+                  <td>
+                    The pod model: a vault is a personal data boundary you own, and app grants
+                    echo Solid's app-grant shape.
+                  </td>
+                </tr>
+                <tr>
+                  <td>GDPR</td>
+                  <td>
+                    Arts. 5, 20, 22 — storage-limitation policy rows, portable export jobs, and
+                    explanations for automated decisions.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="prose r" style="--d: 0.3s">
+            <p>
+              Where Centraid diverges is enforcement: there's exactly <b>one door</b>, and a grant
+              is evaluated on every read and every action — consent is data the data carries, not
+              a setting checked once at login. Commands judged risky <b>park</b> for the owner to
+              decide instead of running. And anything bound for the outside world — an email, a
+              bank transfer — is staged as an inert <b>outbox</b> artifact holding placeholders,
+              never live credentials, until the owner acts on it.
+            </p>
+            <p class="aside">
+              Go deeper: <a href="../data/#consent">Data § consent</a> ·
+              <a href="https://www.w3.org/TR/prov-overview/" target="_blank" rel="noopener"
+                >W3C PROV</a
+              >
+              ·
+              <a href="https://www.w3.org/TR/odrl-model/" target="_blank" rel="noopener">ODRL</a>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- §10 AGENTS & MCP -->
+      <section class="sec wrap" id="agents">
+        <p class="eyebrow r">§10 · agents &amp; mcp</p>
+        <h2 class="r" style="--d: 0.06s">Same three tools, <em>whichever model is driving.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            An LLM agent is just a model in a loop: read the situation, decide, call a tool,
+            observe what came back, repeat. The open question every agent framework has to answer
+            is how tools get handed to the model in the first place.
+          </p>
+          <p>
+            <b>MCP</b> (Model Context Protocol) is the answer that stuck — an open protocol for
+            describing and calling tools that any model can use the same way, regardless of which
+            lab built it.
+          </p>
+          <p>
+            Centraid's agent runs in-process against exactly <b>three tools</b>, served over an
+            in-process MCP server: <code>vault_sql</code> (consent-checked reads),
+            <code>vault_invoke</code> (typed commands) and <code>vault_content</code> (bytes).
+            That surface is identical whether the model behind it is Claude, Codex, or the
+            OpenClaw plugin. Every vault command is MCP-shaped — a JSON-Schema input/output
+            contract plus declared pre/postconditions — but Centraid's twist is durability: a tool
+            call isn't an ephemeral protocol message, it's a row. Every invocation is checked,
+            receipted and auditable after the fact, and SSE streams both chat turns and automation
+            runs live as they happen.
+          </p>
+          <p class="aside">
+            Go deeper: <a href="../devices/#runtimes">Devices § runtimes</a> ·
+            <a href="../data/#assistant">Data § the assistant</a> ·
+            <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener"
+              >modelcontextprotocol.io</a
+            >
+          </p>
+        </div>
+      </section>
+
+      <!-- CLOSING -->
+      <section class="sec wrap" id="composition">
+        <p class="eyebrow r">the composition</p>
+        <h2 class="r" style="--d: 0.06s">Ten borrowed ideas, <em>one new thing.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            None of these primers describe a Centraid invention. The contribution is the
+            <b>composition</b>: one ontology drawn from the standards, in one SQLite file you can
+            copy, with bytes named by hash, devices named by key, credentials brokered by the
+            rules, secrets sealed cell-by-cell, consent checked at one door, and an agent that
+            acts only through typed, receipted commands. Each idea is decades old or
+            battle-tested; stacking them is what makes personal software ownable.
+          </p>
+          <p class="aside">
+            Ready for the real thing? The system map is at
+            <a href="../understand/">Understand § the whole system</a>, and the deep end is
+            <a href="../ontology/">the ontology chapter</a>.
+          </p>
+        </div>
+        <div class="chapter-next r">
+          <a href="../">← docs home</a>
+          <a href="../understand/">next: how the system fits together →</a>
+        </div>
+      </section>
