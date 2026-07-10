@@ -51,9 +51,8 @@
 
   --danger: #c8382f;
 
-  /* Radii — hard-edged: cards 14, buttons 6, chips/pills 999. */
+  /* Radii — hard-edged cards 14; buttons/chips are kit pills (kit.css). */
   --r-card: 14px;
-  --r-btn: 6px;
   --r-md: 10px;
   --r-pill: 999px;
 
@@ -563,7 +562,7 @@ button {
 }
 .d-search input:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .d-topbar-tools {
   margin-left: auto;
@@ -572,27 +571,10 @@ button {
   gap: 8px;
   flex-shrink: 0;
 }
-.d-viewtoggle {
-  display: flex;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-}
-.d-viewbtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Grid/list toggle: kit.css .kit-seg; segments are icon-only squares here. */
+.d-topbar-tools .kit-seg > button {
   width: 32px;
-  height: 30px;
-  border: none;
-  border-radius: var(--r-btn);
-  background: none;
-  color: var(--ink-3);
-}
-.d-viewbtn[aria-pressed='true'] {
-  background: var(--accd);
-  color: #fff;
+  padding: 0;
 }
 .d-themebtn {
   display: flex;
@@ -614,38 +596,11 @@ button {
   align-items: center;
 }
 
-/* Trust banners */
-.d-banner {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  border-radius: var(--r-md);
-  padding: 12px 16px 12px 34px;
+/* Trust banners: kit.css .kit-banner owns the shape; d-banner is only the
+   layout hook aligning it with the padded topbar/toolbar (the child selector
+   outweighs kit-banner's own margin-bottom, which loads after app.css). */
+.d-main > .d-banner {
   margin: 14px 22px 0;
-  font: var(--t-small);
-  color: var(--ink-2);
-  box-shadow: var(--shadow-sm);
-}
-.d-banner::before {
-  content: '';
-  position: absolute;
-  left: 14px;
-  top: 15px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--_accent);
-  box-shadow: 0 0 0 3px var(--accs);
-}
-.d-banner strong {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-  margin-bottom: 1px;
-}
-.d-banner.notice::before {
-  background: var(--ink-3);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-3) 16%, transparent);
 }
 
 /* Toolbar */
@@ -681,46 +636,14 @@ button {
   gap: 8px;
   flex-wrap: wrap;
 }
-.d-chip {
-  padding: 6px 13px;
-  border-radius: var(--r-pill);
-  font: var(--t-small);
-  font-size: 12.5px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-}
-.d-chip:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.d-chip[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--accd);
-  font-weight: 600;
-}
+/* Type filter chips: kit.css .kit-chip.quiet (soft tint + accent-ink select). */
 .d-toolbar-div {
   width: 1px;
   height: 22px;
   background: var(--line);
   margin: 0 2px;
 }
-.d-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-}
-.d-sort:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
+/* Sort + bulk/restore/window-foot buttons: kit.css .kit-btn (pill). */
 
 /* Bulk bar */
 .d-bulk {
@@ -744,24 +667,6 @@ button {
   display: flex;
   gap: 7px;
 }
-.d-bulk-btn {
-  padding: 6px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-}
-.d-bulk-btn:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.d-bulk-btn.danger:hover {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
 /* Scroll region */
 .d-scroll {
   flex: 1;
@@ -1087,20 +992,6 @@ button {
   background: var(--bg);
   color: var(--ink);
 }
-.d-restore {
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12px;
-  padding: 5px 12px;
-}
-.d-restore:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-
 /* Window footer (bounded browse) */
 .d-window-foot {
   display: flex;
@@ -1113,19 +1004,6 @@ button {
   flex-wrap: wrap;
   text-align: center;
 }
-.d-window-foot button {
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  padding: 5px 12px;
-}
-.d-window-foot button:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-
 /* Empty states + the kebab/move popover live in kit.css (.kit-empty*, .kit-popover*). */
 
 /* ---------- Details drawer ---------- */
@@ -1224,21 +1102,11 @@ button {
   gap: 7px;
   margin: 18px 0;
 }
+/* Drawer action/footer buttons are kit pills; d-detail-btn keeps only the
+   row-fill layout + link reset (the Download button is an <a>). */
 .d-detail-btn {
   flex: 1;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-  text-align: center;
   text-decoration: none;
-}
-.d-detail-btn:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
 }
 .d-detail-label {
   font: var(--t-tiny);
@@ -1318,10 +1186,6 @@ button {
   padding: 12px 18px;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
-}
-.d-details-foot .d-detail-btn.danger:hover {
-  border-color: var(--danger);
-  color: var(--danger);
 }
 
 /* ---------- Quick-look ---------- */

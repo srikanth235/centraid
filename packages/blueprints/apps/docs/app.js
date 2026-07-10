@@ -751,7 +751,7 @@ function renderToolbar() {
         'button',
         {
           type: 'button',
-          class: 'd-chip',
+          class: 'kit-chip quiet',
           'aria-pressed': String(state.type === key),
           onclick: () => {
             state.type = key;
@@ -786,7 +786,7 @@ function renderBulk() {
         'button',
         {
           type: 'button',
-          class: 'd-bulk-btn',
+          class: 'kit-btn',
           onclick: () =>
             runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
               progress: 'Restoring',
@@ -797,10 +797,10 @@ function renderBulk() {
       ),
     );
   } else {
-    const move = h('button', { type: 'button', class: 'd-bulk-btn' }, 'Move to…');
+    const move = h('button', { type: 'button', class: 'kit-btn' }, 'Move to…');
     move.addEventListener('click', () => openMovePopover(move, selectedDocs()));
     actions.appendChild(move);
-    const trash = h('button', { type: 'button', class: 'd-bulk-btn danger' }, 'Trash');
+    const trash = h('button', { type: 'button', class: 'kit-btn danger' }, 'Trash');
     trash.addEventListener('click', () => {
       if (!armConfirm(trash, { armedLabel: `Trash ${n} — sure?` })) return;
       runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
@@ -815,7 +815,7 @@ function renderBulk() {
       'button',
       {
         type: 'button',
-        class: 'd-bulk-btn',
+        class: 'kit-btn',
         onclick: () => {
           clearSelection();
           render();
@@ -985,7 +985,7 @@ function listRow(doc, index) {
         'button',
         {
           type: 'button',
-          class: 'd-restore',
+          class: 'kit-btn',
           onclick: (e) => {
             e.stopPropagation();
             restoreDoc(doc);
@@ -1107,6 +1107,7 @@ function renderRows() {
       'button',
       {
         type: 'button',
+        class: 'kit-btn',
         onclick: async () => {
           driveWindow += 200;
           more.disabled = true;
@@ -1179,12 +1180,12 @@ function renderDetails() {
     { class: 'd-detail-actions' },
     h(
       'button',
-      { type: 'button', class: 'd-detail-btn', onclick: () => openQuick(doc.content_id) },
+      { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => openQuick(doc.content_id) },
       'Open',
     ),
     h(
       'a',
-      { class: 'd-detail-btn', href: doc.content_uri, download: doc.title ?? 'file' },
+      { class: 'kit-btn d-detail-btn', href: doc.content_uri, download: doc.title ?? 'file' },
       'Download',
     ),
     // A trashed document refuses star changes (the star survives restore).
@@ -1192,7 +1193,7 @@ function renderDetails() {
       ? null
       : h(
           'button',
-          { type: 'button', class: 'd-detail-btn', onclick: () => toggleStar(doc) },
+          { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => toggleStar(doc) },
           doc.starred ? '★ Starred' : '☆ Star',
         ),
   );
@@ -1249,15 +1250,15 @@ function renderDetails() {
     foot.appendChild(
       h(
         'button',
-        { type: 'button', class: 'd-detail-btn', onclick: () => restoreDoc(doc) },
+        { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => restoreDoc(doc) },
         'Restore',
       ),
     );
   } else {
-    const move = h('button', { type: 'button', class: 'd-detail-btn' }, 'Move');
+    const move = h('button', { type: 'button', class: 'kit-btn d-detail-btn' }, 'Move');
     move.addEventListener('click', () => openMovePopover(move, [doc]));
     foot.appendChild(move);
-    const trash = h('button', { type: 'button', class: 'd-detail-btn danger' }, 'Trash');
+    const trash = h('button', { type: 'button', class: 'kit-btn d-detail-btn danger' }, 'Trash');
     trash.addEventListener('click', () => {
       if (!armConfirm(trash, { armedLabel: 'Trash — sure?' })) return;
       trashDoc(doc);

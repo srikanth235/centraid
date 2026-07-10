@@ -182,8 +182,8 @@
             />
           </div>
           <div class="d-topbar-tools">
-            <div class="d-viewtoggle" role="group" aria-label="View">
-              <button type="button" class="d-viewbtn" id="viewGrid" aria-label="Grid view">
+            <div class="kit-seg" role="group" aria-label="View">
+              <button type="button" id="viewGrid" aria-label="Grid view">
                 <svg
                   width="17"
                   height="17"
@@ -200,7 +200,7 @@
                   <rect x="14" y="14" width="7" height="7" rx="1" />
                 </svg>
               </button>
-              <button type="button" class="d-viewbtn" id="viewList" aria-label="List view">
+              <button type="button" id="viewList" aria-label="List view">
                 <svg
                   width="17"
                   height="17"
@@ -225,7 +225,7 @@
           </div>
         </div>
 
-        <div id="consentBanner" class="d-banner" hidden>
+        <div id="consentBanner" class="kit-banner d-banner" hidden>
           <strong>No vault access yet.</strong>
           <span id="consentDetail"
             >Ask the owner to approve this app's requested scopes in vault settings.</span
@@ -233,7 +233,7 @@
         </div>
         <div
           id="noticeBanner"
-          class="d-banner notice"
+          class="kit-banner notice d-banner"
           role="status"
           aria-live="polite"
           hidden
@@ -247,7 +247,7 @@
           <div class="d-toolbar-tools">
             <div class="d-chips" id="typeChips" role="group" aria-label="Filter by type"></div>
             <span class="d-toolbar-div" aria-hidden="true"></span>
-            <button type="button" class="d-sort" id="sortBtn">
+            <button type="button" class="kit-btn" id="sortBtn">
               <svg
                 width="15"
                 height="15"

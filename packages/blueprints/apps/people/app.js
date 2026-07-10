@@ -683,7 +683,7 @@ function renderToolbar() {
           'button',
           {
             type: 'button',
-            class: 'd-chip',
+            class: 'kit-chip quiet',
             'aria-pressed': String(state.chip === key),
             onclick: () => {
               state.chip = key;
@@ -710,7 +710,7 @@ function renderBulk() {
   const n = state.selected.size;
   bar.hidden = n === 0;
   if (n === 0) return;
-  const fav = h('button', { type: 'button', class: 'd-bulk-btn' }, 'Favorite');
+  const fav = h('button', { type: 'button', class: 'kit-btn' }, 'Favorite');
   fav.addEventListener('click', () =>
     runBulk([...state.selected], (id) => act('star-person', { party_id: id }), {
       progress: 'Favoriting',
@@ -722,7 +722,7 @@ function renderBulk() {
     'button',
     {
       type: 'button',
-      class: 'd-bulk-btn',
+      class: 'kit-btn',
       onclick: () => {
         clearSelection();
         render();
@@ -1021,7 +1021,7 @@ function renderJournal(root) {
     'button',
     {
       type: 'button',
-      class: 'd-btn-primary',
+      class: 'kit-btn primary',
       disabled: !journalDraft.trim() || undefined,
       onclick: async () => {
         const text = journalDraft.trim();
@@ -1305,19 +1305,19 @@ function renderDetails() {
     // Quick log + favorite
     const msgBtn = h('button', {
       type: 'button',
-      class: 'd-detail-btn primary',
+      class: 'kit-btn primary d-detail-btn',
       html: `${I.message}Message`,
       onclick: () => logInteraction(dp, 'Message', 'Sent a message'),
     });
     const callBtn = h('button', {
       type: 'button',
-      class: 'd-detail-btn',
+      class: 'kit-btn d-detail-btn',
       html: `${I.call}Call`,
       onclick: () => logInteraction(dp, 'Call', 'Gave them a call'),
     });
     const starBtn = h(
       'button',
-      { type: 'button', class: 'd-detail-btn', onclick: () => toggleStar(dp) },
+      { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => toggleStar(dp) },
       dp.starred ? '★ Favorite' : '☆ Favorite',
     );
     body.appendChild(h('div', { class: 'd-detail-actions' }, msgBtn, callBtn, starBtn));
@@ -1342,7 +1342,10 @@ function renderDetails() {
         ),
         h(
           'span',
-          { class: 'd-chip-sm', style: `border-color:${st.color};color:${st.color};` },
+          {
+            class: 'kit-chip quiet d-chip-sm',
+            style: `border-color:${st.color};color:${st.color};`,
+          },
           st.label,
         ),
       ),
@@ -1587,7 +1590,7 @@ function renderDetails() {
               'button',
               {
                 type: 'button',
-                class: 'd-chip-sm',
+                class: 'kit-chip quiet d-chip-sm',
                 style: `border-color:${given ? 'color-mix(in oklab, var(--ok) 30%, transparent)' : 'color-mix(in oklab, var(--c-family) 30%, transparent)'};background:${given ? 'color-mix(in oklab, var(--ok) 14%, transparent)' : 'color-mix(in oklab, var(--c-family) 14%, transparent)'};color:${given ? 'var(--ok)' : 'var(--c-family)'};`,
                 onclick: () => drawerAct('toggle-gift', { gift_id: g.gift_id }, 'Gift updated'),
               },
@@ -1662,7 +1665,7 @@ function renderDetails() {
               'button',
               {
                 type: 'button',
-                class: 'd-chip-sm',
+                class: 'kit-chip quiet d-chip-sm',
                 style: 'border-color:var(--line);color:var(--ink-2);',
                 onclick: () => drawerAct('settle-debt', { debt_id: b.debt_id }, 'Debt settled'),
               },
@@ -1675,7 +1678,7 @@ function renderDetails() {
     }
     if (detailAdders.debt) {
       let dir = 'owe';
-      const seg = h('div', { class: 'd-seg' });
+      const seg = h('div', { class: 'kit-seg d-seg' });
       const oweB = h('button', { type: 'button', 'aria-pressed': 'true' }, 'You owe');
       const owedB = h('button', { type: 'button', 'aria-pressed': 'false' }, 'Owes you');
       oweB.addEventListener('click', () => {
@@ -1764,7 +1767,11 @@ function renderDetails() {
 
   const foot = h('div', { class: 'd-details-foot' });
   if (dp) {
-    const moveBtn = h('button', { type: 'button', class: 'd-detail-btn' }, 'Move to circle');
+    const moveBtn = h(
+      'button',
+      { type: 'button', class: 'kit-btn d-detail-btn' },
+      'Move to circle',
+    );
     moveBtn.addEventListener('click', () => openPersonMenu(moveBtn, dp));
     foot.appendChild(moveBtn);
   }
@@ -1807,7 +1814,7 @@ function openAddModal() {
   const circleWrap = h('div', { class: 'd-pick' });
   const submit = h(
     'button',
-    { type: 'button', class: 'd-btn-primary', disabled: true },
+    { type: 'button', class: 'kit-btn primary', disabled: true },
     'Add person',
   );
   const paintSubmit = () => {
@@ -1823,7 +1830,7 @@ function openAddModal() {
           'button',
           {
             type: 'button',
-            class: 'd-pickbtn',
+            class: 'kit-chip quiet',
             'aria-pressed': String(model.circleId === c.circle_id),
             onclick: () => {
               model.circleId = c.circle_id;
@@ -1851,7 +1858,7 @@ function openAddModal() {
           'button',
           {
             type: 'button',
-            class: 'd-pickbtn',
+            class: 'kit-chip quiet',
             'aria-pressed': String(model.cadence === o.d),
             onclick: () => {
               model.cadence = o.d;
@@ -1892,7 +1899,7 @@ function openAddModal() {
 
   const modal = h(
     'div',
-    { class: 'd-modal', onclick: (e) => e.stopPropagation() },
+    { class: 'kit-modal', onclick: (e) => e.stopPropagation() },
     h('h2', {}, 'Add someone'),
     h('p', { class: 'hint' }, 'Who do you want to keep up with?'),
     nameI,
@@ -1903,12 +1910,12 @@ function openAddModal() {
     cadenceWrap,
     h(
       'div',
-      { class: 'd-modal-foot' },
-      h('button', { type: 'button', class: 'd-btn-ghost', onclick: close }, 'Cancel'),
+      { class: 'kit-modal-foot d-modal-foot' },
+      h('button', { type: 'button', class: 'kit-btn', onclick: close }, 'Cancel'),
       submit,
     ),
   );
-  root.replaceChildren(h('div', { class: 'd-modal-back', onclick: close }, modal));
+  root.replaceChildren(h('div', { class: 'kit-modal-back', onclick: close }, modal));
   setTimeout(() => nameI.focus(), 0);
 }
 
