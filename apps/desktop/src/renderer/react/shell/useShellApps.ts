@@ -1,7 +1,24 @@
 import { Store } from './store.js';
 import { useCallback, useEffect, useState } from 'react';
 import { colorForIcon, tileVisualFromListing } from '../../app-format.js';
-import { listApps } from '../../gateway-client.js';
+import { listApps, listVaults } from '../../gateway-client.js';
+
+// Pins are per-vault state: the reconcile below prunes them against the
+// active vault's listing, so pins carried across a vault switch would all
+// look orphaned and be destroyed (then persisted). Resolve which vault the
+// client currently addresses the same way useActiveVault does — the auth
+// pointer, falling back to the registry's first (the gateway's default) so
+// the implicit-default and explicit-id spellings of the same vault agree.
+async function activeVaultKey(): Promise<string> {
+  try {
+    const auth = await window.CentraidApi.getGatewayAuth();
+    if (auth.vaultId) return auth.vaultId;
+    const vaults = await listVaults();
+    return vaults?.[0]?.vaultId ?? '';
+  } catch {
+    return '';
+  }
+}
 
 export interface ShellAppsController {
   userApps: UserAppMeta[];
@@ -40,7 +57,21 @@ export function useShellApps(): ShellAppsController {
     const liveIds = new Set(projs.map((p) => p.id));
     // Read the current pins straight from the Store so refresh() doesn't need
     // userApps in its dep list (avoids a stale-closure re-fetch loop).
-    const pins = Store.get<UserAppMeta[]>('home.userApps', []);
+    let pins = Store.get<UserAppMeta[]>('home.userApps', []);
+    // Vault switch: park the outgoing vault's pins and pull the incoming
+    // vault's set BEFORE the orphan prune below — otherwise every pin of the
+    // old vault looks deleted against the new vault's listing and the prune
+    // destroys them permanently (the "installed app demoted to DRAFT" bug).
+    const vid = await activeVaultKey();
+    const pinsVault = Store.get<string | null>('home.userApps.vault', null);
+    if (pinsVault !== null && pinsVault !== vid) {
+      const byVault = Store.get<Record<string, UserAppMeta[]>>('home.userApps.byVault', {});
+      byVault[pinsVault] = pins;
+      Store.set('home.userApps.byVault', byVault);
+      pins = byVault[vid] ?? [];
+      Store.set('home.userApps', pins);
+    }
+    if (pinsVault !== vid) Store.set('home.userApps.vault', vid);
     // Prune orphan pins (app deleted out-of-band), then overlay tile identity
     // AND name/description — the gateway listing is the source of truth for
     // both (a rename via updateAppMeta only lands on the server; without
