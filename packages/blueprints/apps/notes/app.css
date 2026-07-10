@@ -145,7 +145,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 
 input[type='text'],
@@ -171,7 +171,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 textarea {
   resize: vertical;
@@ -185,51 +185,7 @@ select {
   min-height: 2.4rem;
 }
 
-.primary {
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--accent-deep);
-  color: var(--on-accent);
-  font-weight: 600;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    filter 0.15s var(--ease),
-    transform 0.08s var(--ease);
-}
-.primary:hover {
-  filter: brightness(1.08);
-}
-.primary:active {
-  transform: scale(0.98);
-}
-.small-btn {
-  font-size: 0.85rem;
-  padding: 0.45rem 0.95rem;
-  min-height: 2.6rem;
-}
-
-.ghost {
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 0.8125rem;
-  padding: 0.35rem 0.8rem;
-  min-height: 2.4rem;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-.ghost:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.ghost.danger:hover,
-.ghost.danger[data-kit-armed] {
-  border-color: var(--danger);
-  color: var(--danger);
-}
+/* Buttons: kit.css .kit-btn / .kit-btn.primary / .kit-btn.danger (shared). */
 
 /* ---------- Search ------------------------------------------------------- */
 
@@ -255,7 +211,7 @@ select {
 .search-wrap input[type='search']:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 .search-hint {
   position: absolute;
@@ -345,26 +301,7 @@ mark {
 .chips:empty {
   display: none;
 }
-.chip {
-  font-size: 0.8rem;
-  padding: 0.3rem 0.85rem;
-  min-height: 2.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 0.15s var(--ease),
-    background 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-.chip[aria-pressed='true'] {
-  background: var(--accent-deep);
-  border-color: transparent;
-  color: var(--on-accent);
-  font-weight: 500;
-}
+/* Notebook filter pills: kit.css .kit-chip (shared); selected fills accent-deep. */
 .chip-tool {
   min-width: 2.4rem;
   min-height: 2.4rem;
@@ -429,7 +366,7 @@ input.chip-rename-input {
     align-items: center;
     gap: 0.15rem;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip {
+  :root:not([data-app-width='narrow']) .side-nav .kit-chip {
     display: flex;
     align-items: center;
     text-align: left;
@@ -439,11 +376,11 @@ input.chip-rename-input {
     border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip-group .chip {
+  :root:not([data-app-width='narrow']) .side-nav .chip-group .kit-chip {
     flex: 1;
     min-width: 0;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] {
+  :root:not([data-app-width='narrow']) .side-nav .kit-chip[aria-pressed='true'] {
     background: var(--accent-soft);
     color: var(--accent-deep);
     font-weight: 600;
@@ -498,7 +435,7 @@ input.chip-rename-input {
 }
 .note:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
   border-radius: var(--radius-sm);
 }
 .note-title {
@@ -647,7 +584,7 @@ input.chip-rename-input {
 }
 .note-body:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
   border-radius: var(--radius-sm);
 }
 .note-body-input {
@@ -767,11 +704,6 @@ input.chip-rename-input {
   height: 1px;
   opacity: 0;
 }
-.attach-add .ghost {
-  display: inline-flex;
-  align-items: center;
-}
-
 /* ---------- Cross-references (issue #272) -------------------------------- */
 
 /* Layout wrapper around the strip stays app-owned; the strip itself and its
@@ -806,8 +738,7 @@ input.chip-rename-input {
 
 @media (prefers-reduced-motion: reduce) {
   .pin-btn,
-  .note,
-  .primary {
+  .note {
     transition: none;
   }
 }

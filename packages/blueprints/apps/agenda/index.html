@@ -73,12 +73,12 @@
           <input id="startInput" type="datetime-local" aria-label="Starts" />
           <input id="endInput" type="datetime-local" aria-label="Ends" />
           <select id="calendarSelect" aria-label="Calendar"></select>
-          <button type="submit" class="primary">Propose</button>
+          <button type="submit" class="kit-btn primary">Propose</button>
         </div>
       </form>
 
       <div class="agenda-bar">
-        <div class="view-toggle" role="group" aria-label="View">
+        <div class="kit-seg" role="group" aria-label="View">
           <button type="button" id="monthViewBtn" aria-pressed="true">Month</button>
           <button type="button" id="weekViewBtn" aria-pressed="false">Week</button>
           <button type="button" id="listViewBtn" aria-pressed="false">List</button>
@@ -116,10 +116,10 @@
       </p>
 
       <!-- Event detail / day panel overlay — content is built per open. -->
-      <div id="overlay" class="overlay" hidden>
+      <div id="overlay" class="kit-modal-back" hidden>
         <div
           id="overlayPanel"
-          class="panel"
+          class="kit-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="panelTitle"

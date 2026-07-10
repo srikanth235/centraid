@@ -312,17 +312,17 @@ function visibleAssets() {
 function chip(label, active, onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'chip';
+  btn.className = 'kit-chip';
   btn.dataset.active = active ? 'true' : 'false';
   btn.textContent = label;
   btn.addEventListener('click', onClick);
   return btn;
 }
 
-function ghostBtn(label, onClick) {
+function kitBtn(label, onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'ghost';
+  btn.className = 'kit-btn';
   btn.textContent = label;
   btn.addEventListener('click', onClick);
   return btn;
@@ -385,7 +385,7 @@ function renderChips() {
   }
   const add = document.createElement('button');
   add.type = 'button';
-  add.className = 'chip chip-new';
+  add.className = 'kit-chip chip-new';
   add.textContent = '＋ New album';
   add.addEventListener('click', () => {
     const input = inlineInput({
@@ -428,10 +428,10 @@ function renderAlbumTools() {
   label.textContent = `${count} ${count === 1 ? 'photo' : 'photos'} in this album`;
   tools.appendChild(label);
 
-  tools.appendChild(ghostBtn('Add photos', () => openPicker()));
+  tools.appendChild(kitBtn('Add photos', () => openPicker()));
 
   tools.appendChild(
-    ghostBtn('Rename', () => {
+    kitBtn('Rename', () => {
       const input = inlineInput({
         value: album.title ?? '',
         placeholder: 'Album name',
@@ -450,7 +450,7 @@ function renderAlbumTools() {
     }),
   );
 
-  const del = ghostBtn('Delete album', async () => {
+  const del = kitBtn('Delete album', async () => {
     if (!armConfirm(del, { armedLabel: 'Delete album?' })) return;
     const outcome = await act('delete-album', { album_id: album.album_id });
     if (narrate(outcome)) {
@@ -527,7 +527,7 @@ function renderGrid() {
       selectedAlbum || searchQuery
         ? `This view covers your latest ${libraryWindow} photos — older ones may be missing. `
         : `Showing your latest ${libraryWindow} photos. `;
-    const more = ghostBtn('Show more', async () => {
+    const more = kitBtn('Show more', async () => {
       more.disabled = true;
       libraryWindow += 500;
       await refresh();
@@ -766,7 +766,7 @@ function renderSelectionBar() {
   menuWrap.className = 'bar-menu-wrap';
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
-  addBtn.className = 'ghost bar-btn';
+  addBtn.className = 'kit-btn bar-btn';
   addBtn.textContent = 'Add to album ▾';
   addBtn.disabled = n === 0;
   addBtn.setAttribute('aria-haspopup', 'true');
@@ -811,7 +811,7 @@ function renderSelectionBar() {
 
   const del = document.createElement('button');
   del.type = 'button';
-  del.className = 'ghost bar-btn danger';
+  del.className = 'kit-btn bar-btn danger';
   del.textContent = 'Delete';
   del.disabled = n === 0;
   del.addEventListener('click', () => {
@@ -1125,7 +1125,7 @@ function renderLightbox() {
 
   const actions = document.createElement('div');
   actions.className = 'lightbox-actions';
-  const fav = ghostBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
+  const fav = kitBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
     await toggleFavorite(asset, note); // refresh re-renders this lightbox
   });
   fav.classList.add('lightbox-fav');
@@ -1134,13 +1134,13 @@ function renderLightbox() {
   actions.appendChild(fav);
   if (isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')) {
     const dl = document.createElement('a');
-    dl.className = 'ghost lightbox-download';
+    dl.className = 'kit-btn lightbox-download';
     dl.textContent = 'Download';
     dl.href = asset.content_uri;
     dl.download = (asset.title ?? '').trim() || `photo-${asset.asset_id}`;
     actions.appendChild(dl);
   }
-  const del = ghostBtn('Delete photo', async () => {
+  const del = kitBtn('Delete photo', async () => {
     if (!armConfirm(del, { armedLabel: 'Delete photo?' })) return;
     const outcome = await act('delete-asset', { asset_id: asset.asset_id });
     if (narrate(outcome, note)) {
@@ -1179,7 +1179,7 @@ function openPicker() {
   p.innerHTML = '';
 
   const panel = document.createElement('div');
-  panel.className = 'picker-panel';
+  panel.className = 'kit-modal picker-panel';
   panel.addEventListener('click', (e) => e.stopPropagation());
 
   const head = document.createElement('h2');
@@ -1201,7 +1201,7 @@ function openPicker() {
   count.className = 'picker-count';
   const addBtn = document.createElement('button');
   addBtn.type = 'button';
-  addBtn.className = 'primary small-btn';
+  addBtn.className = 'kit-btn primary';
   const syncFoot = () => {
     count.textContent = picked.size === 0 ? 'Pick photos to add' : `${picked.size} selected`;
     addBtn.textContent = picked.size === 0 ? 'Add' : `Add ${picked.size}`;
@@ -1228,7 +1228,7 @@ function openPicker() {
   const foot = document.createElement('div');
   foot.className = 'picker-foot';
   foot.appendChild(count);
-  foot.appendChild(ghostBtn('Cancel', closePicker));
+  foot.appendChild(kitBtn('Cancel', closePicker));
   addBtn.addEventListener('click', async () => {
     const ids = [...picked];
     addBtn.disabled = true;
@@ -1362,7 +1362,7 @@ async function renderFaces(host, assetId, note) {
       if (region.party_id === person.party_id) option.selected = true;
       picker.appendChild(option);
     }
-    const confirm = ghostBtn('Confirm', async () => {
+    const confirm = kitBtn('Confirm', async () => {
       const partyId = picker.value;
       if (!partyId) {
         note.textContent = 'Pick a person first.';
@@ -1371,7 +1371,7 @@ async function renderFaces(host, assetId, note) {
       const outcome = await act('confirm-face', { region_id: region.region_id, party_id: partyId });
       if (narrate(outcome, note)) await renderFaces(host, assetId, note);
     });
-    const reject = ghostBtn('✕', async () => {
+    const reject = kitBtn('✕', async () => {
       const outcome = await act('reject-face', { region_id: region.region_id });
       if (narrate(outcome, note)) await renderFaces(host, assetId, note);
     });

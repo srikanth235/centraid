@@ -10,9 +10,12 @@
 import {
   armConfirm,
   attachMentionField,
+  closePopover,
   debounce,
   inlineLinkIds,
+  isPopoverOpen,
   localDayKey,
+  openPopover,
   outcomeMessage,
   readFailed,
   removeReference,
@@ -316,7 +319,7 @@ function renderBoard(open, counts) {
     label.textContent = `Showing your newest ${windowSize} open tasks — the rest are a search away. `;
     const more = document.createElement('button');
     more.type = 'button';
-    more.className = 'ghost';
+    more.className = 'kit-btn';
     more.textContent = 'Show more';
     more.addEventListener('click', async () => {
       boardWindow += 500;
@@ -351,48 +354,19 @@ function renderLogbook(logbook) {
   }
 }
 
-// ---------- Popovers (one shared host: reschedule, priority, effort & notes) ----------
+// ---------- Popovers (kit openPopover: reschedule, priority, effort & notes) ----------
 
-let popoverEl = null;
-let popoverCleanup = null; // teardown for the open popover (e.g. detach a mention field)
-
-function closePopover() {
-  popoverCleanup?.();
-  popoverCleanup = null;
-  popoverEl?.remove();
-  popoverEl = null;
+// Both of tasks' popovers are little forms, not menus: focus the first field,
+// announce as a dialog, and let `.t-pop` carry the app's width/spacing deltas
+// on top of the kit surface. `onClose` tears down document-level helpers
+// (the details popover's mention field) on any close path.
+function openTaskPopover(anchor, build, { onClose } = {}) {
+  openPopover(anchor, build, { focus: true, className: 't-pop', role: 'dialog', onClose });
 }
-
-function openPopover(anchor, build) {
-  closePopover();
-  const pop = document.createElement('div');
-  pop.className = 'popover';
-  build(pop);
-  pop.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      closePopover();
-    }
-  });
-  document.body.appendChild(pop);
-  popoverEl = pop;
-  const r = anchor.getBoundingClientRect();
-  const left = Math.max(
-    8,
-    Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - pop.offsetWidth - 8),
-  );
-  pop.style.left = `${left}px`;
-  pop.style.top = `${r.bottom + window.scrollY + 6}px`;
-  pop.querySelector('input, select, button')?.focus();
-}
-
-document.addEventListener('pointerdown', (e) => {
-  if (popoverEl && !popoverEl.contains(e.target)) closePopover();
-});
 
 // The reschedule popover: Things' "When" — presets plus an exact date.
 function openDuePopover(anchor, task) {
-  openPopover(anchor, (pop) => {
+  openTaskPopover(anchor, (pop) => {
     const label = document.createElement('span');
     label.className = 'pop-label';
     label.textContent = 'When';
@@ -402,7 +376,7 @@ function openDuePopover(anchor, task) {
     const preset = (text, input) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'ghost';
+      btn.className = 'kit-btn';
       btn.textContent = text;
       btn.addEventListener('click', () => {
         closePopover();
@@ -433,124 +407,129 @@ function openDuePopover(anchor, task) {
 // where they live; an emptied textarea becomes the explicit
 // clear_description intent.
 function openEditPopover(anchor, task) {
-  openPopover(anchor, (pop) => {
-    const prioLabel = document.createElement('label');
-    prioLabel.className = 'pop-label';
-    prioLabel.textContent = 'Priority';
-    const sel = document.createElement('select');
-    for (const [value, text] of [
-      ['0', 'No priority'],
-      ['1', 'High'],
-      ['5', 'Medium'],
-      ['9', 'Low'],
-    ]) {
-      const opt = document.createElement('option');
-      opt.value = value;
-      opt.textContent = text;
-      sel.appendChild(opt);
-    }
-    const p = Number(task.priority ?? 0);
-    sel.value = p <= 0 ? '0' : p <= 3 ? '1' : p <= 6 ? '5' : '9';
-    prioLabel.appendChild(sel);
-    pop.appendChild(prioLabel);
+  let detachMention = null;
+  openTaskPopover(
+    anchor,
+    (pop) => {
+      const prioLabel = document.createElement('label');
+      prioLabel.className = 'pop-label';
+      prioLabel.textContent = 'Priority';
+      const sel = document.createElement('select');
+      for (const [value, text] of [
+        ['0', 'No priority'],
+        ['1', 'High'],
+        ['5', 'Medium'],
+        ['9', 'Low'],
+      ]) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = text;
+        sel.appendChild(opt);
+      }
+      const p = Number(task.priority ?? 0);
+      sel.value = p <= 0 ? '0' : p <= 3 ? '1' : p <= 6 ? '5' : '9';
+      prioLabel.appendChild(sel);
+      pop.appendChild(prioLabel);
 
-    const effortLabel = document.createElement('label');
-    effortLabel.className = 'pop-label';
-    effortLabel.textContent = 'Effort (min)';
-    const eff = document.createElement('input');
-    eff.type = 'number';
-    eff.min = '1';
-    eff.step = '1';
-    eff.placeholder = 'Est. min';
-    if (task.effort_min) eff.value = String(task.effort_min);
-    effortLabel.appendChild(eff);
-    pop.appendChild(effortLabel);
+      const effortLabel = document.createElement('label');
+      effortLabel.className = 'pop-label';
+      effortLabel.textContent = 'Effort (min)';
+      const eff = document.createElement('input');
+      eff.type = 'number';
+      eff.min = '1';
+      eff.step = '1';
+      eff.placeholder = 'Est. min';
+      if (task.effort_min) eff.value = String(task.effort_min);
+      effortLabel.appendChild(eff);
+      pop.appendChild(effortLabel);
 
-    const notesLabel = document.createElement('label');
-    notesLabel.className = 'pop-label';
-    notesLabel.textContent = 'Notes';
-    const notes = document.createElement('textarea');
-    notes.rows = 3;
-    notes.placeholder = 'Add a note… (@ to mention, ⌘↵ saves)';
-    notes.setAttribute('aria-label', 'Notes');
-    if (task.description) notes.value = String(task.description);
-    notesLabel.appendChild(notes);
-    pop.appendChild(notesLabel);
+      const notesLabel = document.createElement('label');
+      notesLabel.className = 'pop-label';
+      notesLabel.textContent = 'Notes';
+      const notes = document.createElement('textarea');
+      notes.rows = 3;
+      notes.placeholder = 'Add a note… (@ to mention, ⌘↵ saves)';
+      notes.setAttribute('aria-label', 'Notes');
+      if (task.description) notes.value = String(task.description);
+      notesLabel.appendChild(notes);
+      pop.appendChild(notesLabel);
 
-    // @-mentions on the note (issues #272 + #282): the kit field owns the
-    // popover, the pick→insert→assert, and (on save) the reconcile. The
-    // reference strip is the durable home; a note has no read-view render, so
-    // the strip is where a reference shows.
-    const refsOf = () => (task.references ||= []);
-    const strip = document.createElement('div');
-    strip.className = 'kit-ref-strip pop-refs';
-    const renderStrip = () =>
-      renderReferenceStrip(strip, refsOf(), {
-        inlineIds: inlineLinkIds(notes.value, refsOf()),
-        onRemove: async (ref) => {
-          const outcome = await removeReference(ref.link_id);
-          if (outcome?.status === 'executed') {
-            task.references = refsOf().filter((r) => r.link_id !== ref.link_id);
-          }
-          renderStrip();
-        },
+      // @-mentions on the note (issues #272 + #282): the kit field owns the
+      // popover, the pick→insert→assert, and (on save) the reconcile. The
+      // reference strip is the durable home; a note has no read-view render, so
+      // the strip is where a reference shows.
+      const refsOf = () => (task.references ||= []);
+      const strip = document.createElement('div');
+      strip.className = 'kit-ref-strip pop-refs';
+      const renderStrip = () =>
+        renderReferenceStrip(strip, refsOf(), {
+          inlineIds: inlineLinkIds(notes.value, refsOf()),
+          onRemove: async (ref) => {
+            const outcome = await removeReference(ref.link_id);
+            if (outcome?.status === 'executed') {
+              task.references = refsOf().filter((r) => r.link_id !== ref.link_id);
+            }
+            renderStrip();
+          },
+        });
+      const field = attachMentionField(notes, {
+        from: () => ({ type: 'schedule.task', id: task.task_id }),
+        references: refsOf,
+        onChange: renderStrip,
       });
-    const field = attachMentionField(notes, {
-      from: () => ({ type: 'schedule.task', id: task.task_id }),
-      references: refsOf,
-      onChange: renderStrip,
-    });
-    popoverCleanup = field.detach;
-    pop.appendChild(strip);
-    renderStrip();
+      detachMention = field.detach;
+      pop.appendChild(strip);
+      renderStrip();
 
-    const mention = document.createElement('button');
-    mention.type = 'button';
-    mention.className = 'pop-mention';
-    mention.textContent = '＋ Mention';
-    mention.addEventListener('click', () => field.startMention());
-    pop.appendChild(mention);
+      const mention = document.createElement('button');
+      mention.type = 'button';
+      mention.className = 'pop-mention';
+      mention.textContent = '＋ Mention';
+      mention.addEventListener('click', () => field.startMention());
+      pop.appendChild(mention);
 
-    const doSave = async () => {
-      const input = { task_id: task.task_id, priority: Number(sel.value) };
-      const minutes = Number(eff.value);
-      if (minutes > 0) input.effort_min = Math.round(minutes);
-      // Notes: send only what changed — a new text sets, an emptied
-      // textarea clears; untouched notes stay out of the command.
-      const note = notes.value.trim();
-      const prev = String(task.description ?? '');
-      const changed = (note && note !== prev) || (!note && prev);
-      if (note && note !== prev) input.description = note;
-      if (!note && prev) input.clear_description = true;
-      const subject = { type: 'schedule.task', id: task.task_id };
-      const references = refsOf();
-      closePopover();
-      await write('edit', input);
-      // The saved note is the settled text — reconcile the anchors against it
-      // (re-baseline live selectors, retract orphaned mentions with Undo),
-      // then re-read so the board reflects any retraction.
-      if (changed) {
-        await field.reconcile(note, { from: subject, references });
-        await refresh();
-      }
-    };
+      const doSave = async () => {
+        const input = { task_id: task.task_id, priority: Number(sel.value) };
+        const minutes = Number(eff.value);
+        if (minutes > 0) input.effort_min = Math.round(minutes);
+        // Notes: send only what changed — a new text sets, an emptied
+        // textarea clears; untouched notes stay out of the command.
+        const note = notes.value.trim();
+        const prev = String(task.description ?? '');
+        const changed = (note && note !== prev) || (!note && prev);
+        if (note && note !== prev) input.description = note;
+        if (!note && prev) input.clear_description = true;
+        const subject = { type: 'schedule.task', id: task.task_id };
+        const references = refsOf();
+        closePopover();
+        await write('edit', input);
+        // The saved note is the settled text — reconcile the anchors against it
+        // (re-baseline live selectors, retract orphaned mentions with Undo),
+        // then re-read so the board reflects any retraction.
+        if (changed) {
+          await field.reconcile(note, { from: subject, references });
+          await refresh();
+        }
+      };
 
-    // Keyboard flow inside the textarea: Cmd/Ctrl+Enter saves (Escape
-    // already closes via the popover's own handler).
-    notes.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        doSave();
-      }
-    });
+      // Keyboard flow inside the textarea: Cmd/Ctrl+Enter saves (Escape
+      // already closes via the popover's own handler).
+      notes.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          doSave();
+        }
+      });
 
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = 'pop-save';
-    save.textContent = 'Save';
-    save.addEventListener('click', doSave);
-    pop.appendChild(save);
-  });
+      const save = document.createElement('button');
+      save.type = 'button';
+      save.className = 'kit-btn primary';
+      save.textContent = 'Save';
+      save.addEventListener('click', doSave);
+      pop.appendChild(save);
+    },
+    { onClose: () => detachMention?.() },
+  );
 }
 
 // ---------- Completing and cancelling, with an undo window ----------
@@ -749,7 +728,7 @@ function rowActions(task, subtask) {
   const inProcess = task.status === 'in-process';
   const start = document.createElement('button');
   start.type = 'button';
-  start.className = 'ghost';
+  start.className = 'kit-btn';
   start.textContent = inProcess ? 'pause' : 'start';
   start.title = inProcess ? 'Back to To Do' : 'Mark in progress';
   start.addEventListener('click', () =>
@@ -763,7 +742,7 @@ function rowActions(task, subtask) {
   if (!subtask) {
     const sub = document.createElement('button');
     sub.type = 'button';
-    sub.className = 'ghost';
+    sub.className = 'kit-btn';
     sub.textContent = '+sub';
     sub.title = 'Add a subtask';
     sub.addEventListener('click', () => {
@@ -777,7 +756,7 @@ function rowActions(task, subtask) {
 
   const info = document.createElement('button');
   info.type = 'button';
-  info.className = 'ghost';
+  info.className = 'kit-btn';
   info.textContent = 'ⓘ';
   info.title = 'Edit priority, effort and notes';
   info.setAttribute('aria-label', 'Edit priority, effort and notes');
@@ -786,7 +765,7 @@ function rowActions(task, subtask) {
 
   const attach = document.createElement('button');
   attach.type = 'button';
-  attach.className = 'ghost';
+  attach.className = 'kit-btn';
   attach.textContent = '⎘';
   attach.title = 'Attach a file';
   attach.setAttribute('aria-label', 'Attach a file');
@@ -798,7 +777,7 @@ function rowActions(task, subtask) {
 
   const cancel = document.createElement('button');
   cancel.type = 'button';
-  cancel.className = 'ghost danger';
+  cancel.className = 'kit-btn danger';
   cancel.textContent = '✕';
   cancel.title = 'Cancel this task';
   cancel.addEventListener('click', () => {
@@ -1011,7 +990,10 @@ document.addEventListener('keydown', (e) => {
     e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLSelectElement;
   if (e.key === 'Escape') {
-    if (popoverEl) {
+    // Escape pressed INSIDE the popover never reaches here (the kit box stops
+    // propagation and closes itself); this only catches a stray Escape while
+    // a popover is open but focus sits elsewhere on the page.
+    if (isPopoverOpen()) {
       closePopover();
       return;
     }

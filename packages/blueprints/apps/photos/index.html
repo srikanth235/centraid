@@ -61,8 +61,8 @@
             ×
           </button>
         </div>
-        <button id="selectBtn" type="button" class="ghost head-btn">Select</button>
-        <button id="uploadBtn" type="button" class="primary small-btn">＋ Add photos</button>
+        <button id="selectBtn" type="button" class="kit-btn head-btn">Select</button>
+        <button id="uploadBtn" type="button" class="kit-btn primary">＋ Add photos</button>
       </header>
 
       <div id="consentBanner" class="kit-banner" hidden>
@@ -96,9 +96,7 @@
             <section id="grid" class="grid" aria-label="Photo library"></section>
             <div id="empty" class="empty" hidden>
               <p id="emptyText">No photos yet — your library starts with the first upload.</p>
-              <button id="emptyUpload" type="button" class="primary small-btn">
-                ＋ Add photos
-              </button>
+              <button id="emptyUpload" type="button" class="kit-btn primary">＋ Add photos</button>
             </div>
           </div>
         </div>
@@ -125,7 +123,13 @@
         aria-label="Selection actions"
         hidden
       ></div>
-      <div id="picker" class="picker" role="dialog" aria-label="Add photos to album" hidden></div>
+      <div
+        id="picker"
+        class="kit-modal-back"
+        role="dialog"
+        aria-label="Add photos to album"
+        hidden
+      ></div>
       <div id="dropOverlay" class="drop-overlay" aria-hidden="true" hidden>
         <div class="drop-card">Drop to add to your library</div>
       </div>

@@ -875,7 +875,7 @@ function buildEventDetail(panel, ev) {
   });
   const save = document.createElement('button');
   save.type = 'button';
-  save.className = 'primary panel-save';
+  save.className = 'kit-btn primary panel-save';
   save.textContent = 'Save';
   save.addEventListener('click', async () => {
     const dtstart = toIsoUtc(startEl.value);
@@ -912,7 +912,7 @@ function buildEventDetail(panel, ev) {
   actions.className = 'panel-actions';
   const attach = document.createElement('button');
   attach.type = 'button';
-  attach.className = 'panel-btn';
+  attach.className = 'kit-btn';
   attach.textContent = 'Attach a file';
   attach.addEventListener('click', () => {
     attachTarget = ev.event_id;
@@ -920,7 +920,7 @@ function buildEventDetail(panel, ev) {
   });
   const cancel = document.createElement('button');
   cancel.type = 'button';
-  cancel.className = 'panel-btn panel-danger';
+  cancel.className = 'kit-btn danger';
   cancel.textContent = 'Ask to cancel';
   cancel.addEventListener('click', async () => {
     if (!armConfirm(cancel, { armedLabel: 'Ask to cancel?' })) return;

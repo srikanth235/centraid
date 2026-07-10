@@ -449,7 +449,7 @@ function renderChips() {
     }
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'chip';
+    chip.className = 'kit-chip';
     chip.textContent = nb.name ?? 'Notebook';
     chip.setAttribute('aria-pressed', String(nb.notebook_id === activeNotebook));
     chip.addEventListener('click', async () => {
@@ -473,7 +473,7 @@ function renderChips() {
   }
   const add = document.createElement('button');
   add.type = 'button';
-  add.className = 'chip chip-add';
+  add.className = 'kit-chip chip-add';
   add.textContent = '+ Notebook';
   add.addEventListener('click', () => {
     $('notebookForm').hidden = false;
@@ -627,7 +627,7 @@ function renderNotes() {
     label.textContent = `Showing your latest ${libraryWindow} notes — older ones are a search away. `;
     const more = document.createElement('button');
     more.type = 'button';
-    more.className = 'chip';
+    more.className = 'kit-chip';
     more.textContent = 'Show more';
     more.addEventListener('click', async () => {
       libraryWindow += 200;
