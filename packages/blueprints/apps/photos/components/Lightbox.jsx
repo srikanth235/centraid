@@ -142,7 +142,7 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
       <div className="lightbox-meta">
         <input
           type="text"
-          className="lightbox-title"
+          className="kit-input lightbox-title"
           defaultValue={asset.title ?? ''}
           placeholder="Add a caption"
           aria-label="Caption"
@@ -158,7 +158,7 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
         />
         <input
           type="datetime-local"
-          className="lightbox-when"
+          className="kit-input lightbox-when"
           defaultValue={toLocalInputValue(asset.captured_at ?? asset.taken_at)}
           aria-label="Capture time"
           onChange={async (e) => {
@@ -271,7 +271,7 @@ export function LightboxShell({
         <button
           key={variant}
           type="button"
-          className={`lightbox-nav ${variant}`}
+          className={`kit-viewer-nav ${variant}`}
           aria-label={name}
           disabled={idx < 0 || !list[idx + delta]}
           onClick={(e) => {

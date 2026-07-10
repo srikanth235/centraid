@@ -146,7 +146,7 @@ export function GridBody({
           <h2 className="month-label">{fmtMonth(mk)}</h2>
           {[...days].map(([dk, dayAssets]) => (
             <Fragment key={dk}>
-              <p className="day-label muted small">{fmtDay(dk)}</p>
+              <p className="day-label kit-muted kit-small">{fmtDay(dk)}</p>
               {dayAssets.map((asset) => (
                 <TileWrap
                   key={asset.asset_id}
@@ -166,7 +166,7 @@ export function GridBody({
         </Fragment>
       ))}
       {truncated ? (
-        <div className="window-footer">
+        <div className="kit-foot">
           <span>
             {selected || query
               ? `This view covers your latest ${windowSize} photos — older ones may be missing. `

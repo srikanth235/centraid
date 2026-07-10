@@ -27,7 +27,9 @@ export function PickerView({ album, candidates, picked, onToggle, onCancel, onSu
       <h2 className="picker-head">Add to “{album.title ?? 'Album'}”</h2>
       <div className="picker-grid">
         {candidates.length === 0 ? (
-          <p className="picker-empty muted">Everything in your library is already in this album.</p>
+          <p className="picker-empty kit-muted">
+            Everything in your library is already in this album.
+          </p>
         ) : (
           candidates.map((asset) => (
             <PickerTile

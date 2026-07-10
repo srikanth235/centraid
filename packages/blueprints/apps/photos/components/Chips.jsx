@@ -47,7 +47,7 @@ export function ChipsView({
       {editing ? (
         <InlineInput
           key="new-album"
-          className="chip-input"
+          className="kit-input bare chip-input"
           placeholder="Album name"
           label="New album name"
           onSubmit={onSubmitNewAlbum}

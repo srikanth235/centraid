@@ -1,69 +1,18 @@
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-sans);
 
-  /* Photos identity accent — violet. Swappable via --app-color. */
-  --accent: #7c5bd9;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #120a2e);
-  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 12%, transparent);
-  --on-accent: #ffffff;
-
-  --ink: hsl(255 20% 13%);
-  --ink-soft: hsl(255 7% 42%);
-  --ink-faint: hsl(255 8% 60%);
-
-  --bg: hsl(255 20% 98%);
-  --surface: #ffffff;
-  --surface-2: hsl(255 22% 96%);
-
-  --line: rgba(28, 22, 44, 0.09);
-  --line-strong: rgba(28, 22, 44, 0.16);
-
-  --danger: #d0342c;
-
-  --text: var(--ink);
-  --muted: var(--ink-soft);
-
-  --radius: 0.75rem;
-  --radius-sm: 0.5rem;
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --shadow-md: 0 10px 26px -14px rgba(18, 12, 28, 0.28), 0 2px 6px -3px rgba(18, 12, 28, 0.12);
-  --shadow-lg: 0 26px 60px -24px rgba(18, 12, 28, 0.4);
-
-  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
-}
-
-:root[data-theme='dark'] {
-  --bg-l: 10%;
-  --ink: hsl(255 16% 94%);
-  --ink-soft: hsl(255 9% 66%);
-  --ink-faint: hsl(255 9% 48%);
-  --bg: var(--bg-wall);
-  --surface: hsl(255 12% calc(var(--bg-l) + 5%));
-  --surface-2: hsl(255 11% calc(var(--bg-l) + 8.5%));
-  --line: hsla(255 30% 76% / 0.1);
-  --line-strong: hsla(255 30% 78% / 0.2);
-  --danger: #f0645b;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f2edff);
-  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg-l: 10%;
-    --ink: hsl(255 16% 94%);
-    --ink-soft: hsl(255 9% 66%);
-    --ink-faint: hsl(255 9% 48%);
-    --bg: var(--bg-wall);
-    --surface: hsl(255 12% 15%);
-    --surface-2: hsl(255 11% 18.5%);
-    --line: hsla(255 30% 76% / 0.1);
-    --line-strong: hsla(255 30% 78% / 0.2);
-    --danger: #f0645b;
-    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f2edff);
-  }
+  /* Photos identity accent — violet. tokens.css's --c-violet #7C5BD9 IS this
+     hue's palette color; --_accent (var(--app-color, var(--accent))) is the
+     canonical indirection every accent-consuming rule below reads through.
+     Everything else this app used to define locally — the ink ramp,
+     --bg/--surface/--surface-2, --line/--line-strong, shadows, --danger,
+     --radius/--radius-sm, --ease, --mono, --text/--muted, --on-accent,
+     --accent-soft/--accent-deep, and both dark-mode blocks — now comes from
+     kit/tokens.css (loaded between wall.css and this file), hue-parameterized
+     off --app-hue instead of hand-copied per app. */
+  --app-hue: 255;
+  --accent: var(--c-violet);
 }
 
 * {
@@ -111,76 +60,24 @@ main {
   letter-spacing: -0.02em;
   margin: 0 0.25rem 0 0;
 }
-.search {
+/* Search pill: kit.css .kit-search (shared) owns the box/icon/input/kbd —
+   this app only keeps the header-row placement (flex, min-width). */
+.kit-search {
   flex: 1;
   min-width: 11rem;
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 2.6rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0 0.4rem 0 0.95rem;
-  transition:
-    border-color 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
 }
-.search:focus-within {
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-.search-icon {
-  color: var(--ink-faint);
+/* kit-icon-btn doesn't set a font-size for a plain glyph child (only its
+   own svg sizing) — the "×" needs one. ID selector always wins regardless
+   of kit.css's later load, no compound-class trick needed. */
+#searchClear {
   font-size: 1.1rem;
   line-height: 1;
-}
-.search input {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  background: transparent;
-  padding: 0.5rem 0;
-  border-radius: 0;
-  color: var(--ink);
-  font: inherit;
-}
-.search input::placeholder {
-  color: var(--ink-faint);
-}
-.search input:focus {
-  outline: none;
-}
-.search input::-webkit-search-cancel-button {
-  display: none;
-}
-.search-clear {
-  width: 2rem;
-  height: 2rem;
-  flex: none;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ink-soft);
-  font-size: 1.1rem;
-  line-height: 1;
-}
-.search-clear:hover {
-  background: var(--surface-2);
 }
 /* "Select" toggle in the header: kit-btn base; app owns only the on-state. */
 .kit-btn.head-btn[data-active='true'] {
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
   color: var(--accent-deep);
   background: var(--accent-soft);
-}
-.muted {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  margin: 0;
-}
-.small {
-  font-size: 0.8rem;
 }
 
 /* ---------- Trust banners ------------------------------------------------ */
@@ -202,22 +99,10 @@ button:focus-visible {
   outline: none;
   box-shadow: var(--kit-focus-ring);
 }
-input {
-  font: inherit;
-  font-size: 0.9rem;
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0.45rem 0.6rem;
-  -webkit-appearance: none;
-  appearance: none;
-}
-input:focus {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
+/* Text inputs: kit.css .kit-input / .kit-input.bare (shared) — this app no
+   longer styles the bare `input` element itself; every input in markup/JSX
+   carries `kit-input` explicitly (InlineInput.jsx defaults to it). */
+
 /* Buttons: kit.css .kit-btn / .kit-btn.primary / .kit-btn.danger (shared). */
 
 /* ---------- Album chips + tools ----------------------------------------- */
@@ -236,13 +121,17 @@ input:focus {
    (double class beats the later-loaded kit.css base). */
 .kit-chip.chip-new {
   border-style: dashed;
-  color: var(--ink-faint);
+  color: var(--ink-3);
 }
 .kit-chip.chip-new:hover {
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line));
+  border-color: color-mix(in oklab, var(--_accent) 45%, var(--line));
   color: var(--accent-deep);
 }
-.chip-input {
+/* New-album chip input: kit-input.bare is the base look; this compound
+   selector out-specifies kit.css's own two-class rule (kit.css loads after
+   app.css, so a plain `.chip-input` single class would lose the cascade tie)
+   to restore the pill shape + fixed width this chip-row context wants. */
+.kit-input.bare.chip-input {
   border-radius: 999px;
   font-size: 0.8rem;
   padding: 0.3rem 0.75rem;
@@ -347,24 +236,24 @@ input:focus {
   background: color-mix(in oklab, var(--bg) 88%, transparent);
   backdrop-filter: blur(6px);
 }
-.day-label {
+/* Day header rides `kit-muted kit-small` in markup for class-token
+   consistency, but keeps its own mono/uppercase/faint treatment — this
+   compound selector out-specifies kit.css's later-loaded single-class
+   `.kit-muted`/`.kit-small` rules so this stays a distinct, smaller,
+   monospaced label rather than picking up kit-muted's plain-text look. */
+.day-label.kit-muted {
   grid-column: 1 / -1;
   margin: 0.4rem 0 0.2rem;
   font-family: var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-size: 0.66rem;
-  color: var(--ink-faint);
+  color: var(--ink-3);
 }
-.window-footer {
+/* Bounded-browse footer: kit.css .kit-foot (shared) owns the copy/mono
+   look; this grid needs it to span every track column. */
+.kit-foot {
   grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 1.25rem 0 0.5rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
 }
 .tile-wrap {
   position: relative;
@@ -645,35 +534,9 @@ input:focus {
   object-fit: contain;
   border-radius: var(--radius-sm);
 }
-.lightbox-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2.75rem;
-  height: 2.75rem;
-  border: none;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-  font-size: 1.4rem;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-tap-highlight-color: transparent;
-}
-.lightbox-nav:hover {
-  background: rgba(255, 255, 255, 0.28);
-}
-.lightbox-nav[disabled] {
-  opacity: 0.25;
-}
-.lightbox-nav.prev {
-  left: 0.75rem;
-}
-.lightbox-nav.next {
-  right: 0.75rem;
-}
+/* Nav arrows: kit.css .kit-viewer-nav(.prev/.next) (shared — byte-identical
+   to what this app hand-rolled; kit's hover is rgba(255,255,255,.26) vs the
+   old .28, accepted). */
 .lightbox-panel {
   width: min(30rem, 100%);
   background: var(--surface);
@@ -691,14 +554,19 @@ input:focus {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+/* Caption/capture-time fields: kit-input (in markup/JSX) supplies the box;
+   these keep only layout. */
 .lightbox-title {
   flex: 1;
   min-width: 10rem;
 }
-.lightbox-when {
+/* Compound selector — kit-input's own `color` (kit.css, loaded after
+   app.css) would otherwise beat a plain `.lightbox-when` at equal
+   specificity and erase the muted capture-time tone. */
+.kit-input.lightbox-when {
   flex: none;
   font-family: var(--mono);
-  color: var(--ink-soft);
+  color: var(--ink-2);
 }
 .lightbox-albums {
   display: flex;
@@ -740,7 +608,7 @@ input:focus {
 }
 /* Triple class so the on-state outlives kit-btn's later-loaded hover rule. */
 .kit-btn.lightbox-fav.faved {
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line));
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line));
   color: var(--accent-deep);
 }
 .lightbox-stage img.zoomable {
@@ -783,28 +651,18 @@ input:focus {
   padding: 1rem;
 }
 
-.empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-  text-align: center;
-  padding: 3rem 1rem;
-}
-.empty[hidden] {
-  display: none;
-}
-.empty p {
-  margin: 0;
-}
-.footnote {
-  margin-top: 2rem;
+/* Empty library state: kit.css .kit-empty/.kit-empty-title/.kit-empty-sub
+   (shared — the icon/title/sub family docs also uses; no icon here). */
+
+/* Trust statement footer: kit-muted/kit-small (markup) set the base tone/
+   size; this compound selector out-specifies kit.css's later-loaded
+   single-class rules to add the divider + spacing only this line needs. */
+.footnote.kit-muted {
+  margin: 2rem 0 0;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
   text-align: center;
-  color: var(--ink-faint);
+  color: var(--ink-3);
   font-size: 0.78rem;
 }
 
@@ -842,7 +700,14 @@ input:focus {
   position: relative;
   display: flex;
 }
-.album-menu {
+/* "Add to album" flyout: kit.css .kit-popover/.kit-popover-item (shared) own
+   the surface/border/shadow/rows — this menu keeps its own React-state
+   open/close (not kit.js's openPopover() singleton), so only positioning +
+   a couple of layout tweaks stay local. */
+.kit-popover.album-menu {
+  /* Compound selector — kit-popover's `position: fixed` (kit.css, loaded
+     after app.css) would otherwise win the cascade tie over a plain
+     `.album-menu` at equal specificity. */
   position: absolute;
   bottom: calc(100% + 0.5rem);
   left: 50%;
@@ -852,34 +717,15 @@ input:focus {
   min-width: 12rem;
   max-height: 40vh;
   overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  padding: 0.3rem;
 }
 .album-menu-item {
-  border: none;
-  background: none;
-  color: var(--ink);
-  text-align: left;
-  font-size: 0.85rem;
-  padding: 0.6rem 0.7rem;
   min-height: 2.5rem;
-  border-radius: var(--radius-sm);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.album-menu-item:hover,
-.album-menu-item:focus-visible {
-  background: var(--surface-2);
-}
 .album-menu-empty {
-  margin: 0;
   padding: 0.6rem 0.7rem;
-  color: var(--ink-soft);
-  font-size: 0.8rem;
   max-width: 14rem;
 }
 .bar-close {
@@ -899,30 +745,10 @@ body.has-selection .kit-toasts {
   bottom: 4.75rem;
 }
 
-/* ---------- Drop-to-add overlay ----------------------------------------- */
-
-.drop-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--app-color, var(--accent)) 20%, rgba(10, 8, 16, 0.5));
-  pointer-events: none;
-}
-.drop-overlay[hidden] {
-  display: none;
-}
-.drop-card {
-  border: 2px dashed rgba(255, 255, 255, 0.85);
-  border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-size: 1.1rem;
-  font-weight: 600;
-  padding: 2rem 3rem;
-}
+/* Drop-to-add scrim: kit.css .kit-drop/.kit-drop-card (shared). Deliberate
+   visual delta — kit's card is an opaque themed surface (dashed accent
+   border, var(--surface) bg/var(--text) ink) instead of this app's old
+   translucent white-on-black one, which was illegible in light theme. */
 
 /* ---------- Album picker ------------------------------------------------- */
 
@@ -953,11 +779,12 @@ body.has-selection .kit-toasts {
   gap: 3px;
   align-content: start;
 }
+/* Color comes from the `kit-muted` class on this element now (kit.css loads
+   after this file, so it would win an overlapping declaration here anyway). */
 .picker-empty {
   grid-column: 1 / -1;
   padding: 1.5rem 0;
   text-align: center;
-  color: var(--ink-soft);
 }
 .picker-tile {
   position: relative;
@@ -983,7 +810,7 @@ body.has-selection .kit-toasts {
   outline-offset: -2px;
 }
 .picker-tile[aria-pressed='true'] {
-  outline: 3px solid var(--app-color, var(--accent));
+  outline: 3px solid var(--_accent);
   outline-offset: -3px;
 }
 .picker-tile[aria-pressed='true']::after {

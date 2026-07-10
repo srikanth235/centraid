@@ -7,7 +7,10 @@ export function InlineInput({
   value = '',
   placeholder,
   label,
-  className,
+  // kit-input is the text-input primitive (app.css no longer styles a bare
+  // `input` element) — every caller gets it unless it composes its own
+  // (Chips.jsx's new-album chip rides `kit-input bare chip-input`).
+  className = 'kit-input',
   autoSelect = false,
   onSubmit,
   onCancel,

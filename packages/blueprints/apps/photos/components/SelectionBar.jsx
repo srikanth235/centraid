@@ -36,15 +36,23 @@ export function SelectionBarView({
           Add to album ▾
         </button>
         {menuOpen ? (
-          <div className="album-menu" role="menu">
+          // kit-popover/kit-popover-item are the shared CSS classes; the
+          // JS-positioned openPopover() helper is a bigger behavioral swap
+          // than this app wants (this menu's open/close is React state, not
+          // an imperative singleton), so `.album-menu` stays as a thin local
+          // positioning rule (compound selector — kit.css loads after
+          // app.css and would otherwise win the `position` tie).
+          <div className="kit-popover album-menu" role="menu">
             {albumList.length === 0 ? (
-              <p className="album-menu-empty">No albums yet — make one from the chips above.</p>
+              <p className="album-menu-empty kit-muted">
+                No albums yet — make one from the chips above.
+              </p>
             ) : (
               albumList.map((album) => (
                 <button
                   key={album.album_id}
                   type="button"
-                  className="album-menu-item"
+                  className="kit-popover-item album-menu-item"
                   role="menuitem"
                   onClick={() => {
                     onCloseMenu();

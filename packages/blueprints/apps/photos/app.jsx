@@ -159,6 +159,11 @@ function renderGrid() {
           : selectedAlbum
             ? 'Nothing in this album yet.'
             : 'No photos yet — your library starts with the first upload.';
+    // `#emptyUpload` is a stable node wired once at boot (wireUpload, in
+    // upload.js) — kit.js's own `emptyState()` helper replaces its
+    // container's children on every call, which would silently drop that
+    // listener. The kit-empty markup stays static in index.html instead;
+    // this orchestrator only ever flips text/hidden on existing nodes.
     $('emptyUpload').hidden = searching || selectedAlbum === FAVORITES || selectedAlbum === TRASH;
   }
   // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
