@@ -183,6 +183,7 @@ export default function App(): JSX.Element {
           activeId={nav.route.kind === 'app' ? nav.route.id : undefined}
           headSlot={activeVault.loading || activeVault.vaults.length > 0 ? headSlot : undefined}
           onHome={go({ kind: 'home' })}
+          onSearch={() => setPaletteOpen(true)}
           onAssistant={go({ kind: 'assistant' })}
           onInsights={go({ kind: 'insights' })}
           onDiscover={go({ kind: 'discover' })}

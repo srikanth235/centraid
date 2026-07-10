@@ -36,6 +36,7 @@ const PROPOSE_EVENT: CommandDefinition = {
       column: 'n',
       op: 'eq',
       value: 1,
+      message: "That calendar doesn't exist.",
     },
     {
       name: 'no_busy_conflict',
@@ -46,12 +47,14 @@ const PROPOSE_EVENT: CommandDefinition = {
       column: 'n',
       op: 'eq',
       value: 0,
+      message: 'This time conflicts with another event on your calendar.',
     },
     {
       name: 'dtend_after_dtstart',
       sql: 'SELECT (:dtend > :dtstart) AS n',
       column: 'n',
       op: 'eq',
+      message: 'An event must end after it starts.',
       value: 1,
     },
   ],
@@ -183,6 +186,11 @@ const RESCHEDULE_EVENT: CommandDefinition = {
   ],
   idempotency: 'retry-safe',
   risk: 'medium',
+  // Restates a commitment others may hold (issue #306 decision 1) — parks
+  // for owner confirmation on every non-owner invocation. Without this the
+  // manifest's and Agenda's "parks for the owner" claim was cosmetic: any
+  // caller with the install-time grant moved the event immediately.
+  confirm: true,
   handler: rescheduleEvent,
 };
 
@@ -318,6 +326,10 @@ const CANCEL_EVENT: CommandDefinition = {
   // Like reschedule_event: restates a commitment others may hold — above
   // routine upkeep, so apps (ceiling low) park it for the owner.
   risk: 'medium',
+  // Parking rides `confirm` alone (see CommandDefinition.risk) — the
+  // comment above always intended this command to park; without the flag
+  // the cancellation executed immediately under the install-time grant.
+  confirm: true,
   handler: cancelEvent,
 };
 

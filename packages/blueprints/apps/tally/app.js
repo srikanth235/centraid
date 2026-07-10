@@ -83,6 +83,22 @@ function tint(color) {
 function money(minor) {
   return fmtMoney(Math.abs(Number(minor ?? 0)), dash.currency || 'USD');
 }
+// The bare currency symbol for the amount-input prefixes. Every rendered
+// amount already follows the vault's base currency via fmtMoney (₹, €, …),
+// so a hard-coded "$" next to the input lies whenever the vault isn't USD —
+// derive the symbol from the same currency instead.
+function curSymbol() {
+  const currency = dash.currency || 'USD';
+  try {
+    return (
+      new Intl.NumberFormat(undefined, { style: 'currency', currency })
+        .formatToParts(0)
+        .find((p) => p.type === 'currency')?.value ?? currency
+    );
+  } catch {
+    return currency;
+  }
+}
 // Parse a decimal-dollar string → integer cents.
 function toCents(str) {
   const n = parseFloat(str);
@@ -1057,7 +1073,7 @@ function expenseModalTpl() {
       />
       <div class="s-field">
         <div class="s-amtwrap">
-          <span class="cur">$</span>
+          <span class="cur">${curSymbol()}</span>
           <input
             class="s-amt"
             .value=${live(exp.amount)}
@@ -1205,6 +1221,11 @@ async function deleteExpense(expenseId) {
   if (!narrate(outcome)) return;
   toast('Expense deleted · receipted.');
   closeAllModals();
+  // closeAllModals() only nulls the state — every other caller follows it
+  // with its own renderModals(), and render()/refreshAll() never touch
+  // #modalRoot, so without this the detail/edit modal for the now-deleted
+  // expense stays painted on screen until something else repaints modals.
+  renderModals();
   await refreshAll();
 }
 
@@ -1289,7 +1310,7 @@ function settleModalTpl() {
       <div class="s-field">
         <div class="s-flabel">Amount</div>
         <div class="s-amtwrap">
-          <span class="cur">$</span>
+          <span class="cur">${curSymbol()}</span>
           <input
             class="s-amt"
             .value=${live(st.amount)}

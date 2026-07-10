@@ -164,6 +164,13 @@ test('create_notebook orders siblings and refuses a missing parent', () => {
   if (orphan.status === 'failed') expect(orphan.predicate).toContain('parent_exists_if_given');
 });
 
+test('create_notebook refuses a name collision, same as rename_notebook', () => {
+  createNotebook('Scratchpad');
+  const dupe = invoke('knowledge.create_notebook', { name: 'Scratchpad' });
+  expect(dupe.status).toBe('failed');
+  if (dupe.status === 'failed') expect(dupe.predicate).toContain('name_unused');
+});
+
 test('create_note writes provenance for the note', () => {
   const { note_id } = createNote({ title: 'Receipted', body_text: 'x' });
   const prov = db.journal

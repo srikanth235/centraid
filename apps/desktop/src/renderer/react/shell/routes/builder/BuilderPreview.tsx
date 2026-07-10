@@ -145,6 +145,7 @@ export default function BuilderPreview({
               style={{ border: 0, height: '100%', width: '100%' }}
               referrerPolicy="no-referrer"
               data-centraid-app="1"
+              allow="clipboard-write; clipboard-read"
               onLoad={(e) => {
                 try {
                   e.currentTarget.contentWindow?.postMessage(

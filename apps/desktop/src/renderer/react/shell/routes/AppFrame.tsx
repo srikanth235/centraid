@@ -105,6 +105,7 @@ export default function AppFrame({
           data-centraid-app="1"
           referrerPolicy="no-referrer"
           title="app"
+          allow="clipboard-write; clipboard-read"
         />
         {/* eslint-enable react/iframe-missing-sandbox */}
       </div>

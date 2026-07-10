@@ -30,6 +30,8 @@ export function lookupCommand(vault: DatabaseSync, name: string): CommandRow | u
 export interface ConditionResult {
   name: string;
   predicate: string;
+  /** The spec's owner-facing `message`, when it supplied one. */
+  message?: string;
   passed: boolean;
   observed: Record<string, unknown>;
 }
@@ -83,6 +85,7 @@ export function evaluateConditions(
       return {
         name: spec.name,
         predicate,
+        message: spec.message,
         passed: compare(spec.op, row[spec.column], spec.value),
         observed: row,
       };
@@ -90,6 +93,7 @@ export function evaluateConditions(
       return {
         name: spec.name,
         predicate,
+        message: spec.message,
         passed: false,
         observed: { error: err instanceof Error ? err.message : String(err) },
       };

@@ -225,6 +225,9 @@ export function createLogic({ state, data, render, refresh }) {
   const RENAME_NOTEBOOK_FRIENDLY = {
     name_unused_by_owner: 'You already have a notebook with that name.',
   };
+  const CREATE_NOTEBOOK_FRIENDLY = {
+    name_unused: 'You already have a notebook with that name.',
+  };
   const DELETE_NOTEBOOK_FRIENDLY = {
     notebook_has_no_children: 'This notebook still has notebooks inside it — delete or move those first.',
   };
@@ -238,7 +241,7 @@ export function createLogic({ state, data, render, refresh }) {
   async function createNotebook(name) {
     const n = String(name ?? '').trim();
     if (!n) return undefined;
-    const outcome = await write('create-notebook', { name: n });
+    const outcome = await write('create-notebook', { name: n }, { friendly: CREATE_NOTEBOOK_FRIENDLY });
     if (outcome?.status === 'executed') {
       state.nav = { kind: 'notebook', notebookId: outcome.output?.notebook_id };
       state.creatingNotebook = false;
@@ -301,19 +304,28 @@ export function createLogic({ state, data, render, refresh }) {
     state.search = raw;
     if (!raw.trim()) {
       state.searchResults = null;
+      notice('');
       render();
       return;
     }
     const seq = ++searchSeq;
     let rows = [];
+    // A denied/broken search must not look like "no matches" — the same
+    // honesty app.jsx's refresh() already gives the library read.
+    let deniedMessage = '';
     try {
       const res = await window.centraid.read({ query: 'search', input: { term: raw } });
-      rows = res?.notes ?? [];
+      if (res?.vaultDenied) {
+        deniedMessage = res.vaultDenied.message || 'The vault denied this search.';
+      } else {
+        rows = res?.notes ?? [];
+      }
     } catch {
-      rows = [];
+      deniedMessage = 'Couldn’t reach the vault — retrying when you come back.';
     }
     if (seq !== searchSeq) return;
     state.searchResults = rows;
+    notice(deniedMessage);
     render();
   }, 120);
 

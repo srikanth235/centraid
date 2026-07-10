@@ -326,7 +326,9 @@ test('circles create with unique names, rename, and delete only when empty', () 
   const partyId = addPerson({ circle_id: work });
   const nonEmpty = invoke('people.delete_circle', { circle_id: work });
   expect(nonEmpty.status).toBe('failed');
-  if (nonEmpty.status === 'failed') expect(nonEmpty.predicate).toContain('circle_is_empty');
+  if (nonEmpty.status === 'failed') {
+    expect(nonEmpty.predicate).toBe('This circle still has people in it — move them out first.');
+  }
   expect(invoke('people.move_person', { party_id: partyId }).status).toBe('executed');
   expect(invoke('people.delete_circle', { circle_id: work }).status).toBe('executed');
 });

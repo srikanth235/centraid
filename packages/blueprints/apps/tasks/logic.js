@@ -301,7 +301,13 @@ export function buildSections(data, state) {
       .filter(Boolean);
   }
 
-  const allow = VIEW_BUCKETS[state.view] ?? VIEW_BUCKETS.all;
+  // A search is a global "find tasks" action, not a per-view filter — once
+  // the owner is searching, don't also restrict results to the currently
+  // selected focus view's bucket allow-list (e.g. Today = overdue+today
+  // only). Doing so silently hides real matches whose due date falls
+  // outside the current view, which reads as a false "No matches" empty
+  // state even though the task exists and matched.
+  const allow = searching ? VIEW_BUCKETS.all : (VIEW_BUCKETS[state.view] ?? VIEW_BUCKETS.all);
   const grouped = new Map(BUCKETS.map((b) => [b.key, []]));
   for (const task of open) grouped.get(bucketFor(task, today, weekEnd)).push(task);
   const byUrgency = (a, b) => {

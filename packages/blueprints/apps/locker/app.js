@@ -382,13 +382,25 @@ function scheduleClipboardClear(secret) {
   }, CLIP_CLEAR_S * 1000);
 }
 function copy(text, label, secret) {
-  try {
-    navigator.clipboard && navigator.clipboard.writeText(text);
-    if (secret) scheduleClipboardClear(text);
-  } catch {
-    /* clipboard unavailable — nothing to log */
+  // writeText returns a promise — a sync try/catch never sees its rejection
+  // (it surfaced as an unhandled NotAllowedError pageerror: the shell's app
+  // iframe carries no clipboard-write permissions policy, see
+  // apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx). Toast
+  // success only once the write actually lands; otherwise say so instead of
+  // claiming a copy that never happened.
+  const okToast = () =>
+    toast((label || 'Copied') + ' copied' + (secret ? ' · clears in ' + CLIP_CLEAR_S + 's' : ''));
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    toast('Copy is unavailable here.');
+    return;
   }
-  toast((label || 'Copied') + ' copied' + (secret ? ' · clears in ' + CLIP_CLEAR_S + 's' : ''));
+  navigator.clipboard.writeText(text).then(
+    () => {
+      if (secret) scheduleClipboardClear(text);
+      okToast();
+    },
+    () => toast('Copy is unavailable here.'),
+  );
 }
 
 // ---------- Data helpers ----------

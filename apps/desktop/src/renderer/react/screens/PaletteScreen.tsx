@@ -96,11 +96,25 @@ export default function PaletteScreen({
     row?.run();
   };
 
+  // Escape must close the dialog no matter where focus sits — the input's
+  // onKeyDown below only fires while the input has focus, and a click on the
+  // results whitespace or the footer hint bar moves focus off it, stranding
+  // the palette open (backdrop click aside).
+  useEffect(() => {
+    const onDocKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  }, [onClose]);
+
   const onKeyDown = (e: React.KeyboardEvent): void => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'ArrowDown') {
+    // Escape is handled by the document-level listener above (it also
+    // covers the input-focused case — keydown bubbles to document).
+    if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((a) => Math.min(rows.length - 1, a + 1));
     } else if (e.key === 'ArrowUp') {

@@ -3,7 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listApps = vi.fn();
-vi.mock('../../gateway-client.js', () => ({ listApps: () => listApps() }));
+vi.mock('../../gateway-client.js', () => ({
+  listApps: () => listApps(),
+  listVaults: () => Promise.resolve([]),
+}));
 // tileVisualFromListing/colorForIcon are pure — use the real ones.
 // The client-local store is a plain module now; back it with an in-memory Map.
 const store = vi.hoisted(() => new Map<string, unknown>());
@@ -41,6 +44,7 @@ afterEach(() => {
   host?.remove();
   root = null;
   host = null;
+  delete (window as { CentraidApi?: unknown }).CentraidApi;
 });
 
 let ctl: ReturnType<typeof useShellApps>;
@@ -112,6 +116,31 @@ describe('useShellApps', () => {
   it('empties drafts when the listing fetch fails', async () => {
     listApps.mockRejectedValue(new Error('offline'));
     await mount();
+    expect(ctl.drafts).toEqual([]);
+  });
+
+  it('a vault switch parks the outgoing vault’s pins instead of pruning them', async () => {
+    // Reproduces the DRAFT-demotion bug: pins live in a non-vault-scoped
+    // store, so a switch to an empty vault made every pin look orphaned,
+    // and the prune destroyed them permanently.
+    const api = (vaultId: string) => ({ getGatewayAuth: async () => ({ baseUrl: '', vaultId }) });
+    (window as unknown as { CentraidApi: unknown }).CentraidApi = api('A');
+    store.set('home.userApps', [{ id: 'notes', name: 'Notes', iconKey: 'Todo', color: '#1' }]);
+    listApps.mockResolvedValue([{ id: 'notes', name: 'Notes', kind: 'app' }]);
+    await mount();
+    expect(ctl.userApps.map((a) => a.id)).toEqual(['notes']);
+
+    // Switch to empty vault B: Home empties, but A's pins are parked.
+    (window as unknown as { CentraidApi: unknown }).CentraidApi = api('B');
+    listApps.mockResolvedValue([]);
+    await act(async () => ctl.refresh());
+    expect(ctl.userApps).toEqual([]);
+
+    // Back to A: the pin is restored, not demoted to a draft.
+    (window as unknown as { CentraidApi: unknown }).CentraidApi = api('A');
+    listApps.mockResolvedValue([{ id: 'notes', name: 'Notes', kind: 'app' }]);
+    await act(async () => ctl.refresh());
+    expect(ctl.userApps.map((a) => a.id)).toEqual(['notes']);
     expect(ctl.drafts).toEqual([]);
   });
 
