@@ -31,6 +31,11 @@ ds-bundle/
 .design-sync/ds-src/components/
 .design-sync/ds-src/previews/
 .design-sync/ds-src/manifest.json
+
+# Per-app scratch trees the boot harness builds (app.js + symlinked kit assets);
+# they must live inside the package because vite refuses to load a dynamically
+# imported module from outside the project root. See src/app-boot-harness.ts.
+packages/blueprints/.app-boot/
 # issue #325: second design system — the desktop React shell (Icon/Button/
 # Logo/AppCard). Generated bundle + the input package's copied-fresh source,
 # fonts, and styles (build.mjs regenerates them all from apps/desktop each run).

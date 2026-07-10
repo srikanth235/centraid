@@ -30,7 +30,7 @@ const {
   renderAttachments,
   snippetInto,
 } = await import(kitUrl);
-const { html, render, repeat, classMap, live, ref, createRef } = await import(litUrl);
+const { html, render, repeat, classMap, live, ref, createRef, nothing } = await import(litUrl);
 const { KitElement } = await import(elementsUrl);
 
 describe('kit smoke', () => {
@@ -198,5 +198,30 @@ describe('kit smoke', () => {
     });
     expect(document.querySelectorAll('.kit-popover-item').length).toBe(2);
     closePopover();
+  });
+
+  // The two container-ownership rules every blueprint app now depends on. They
+  // are Lit semantics, not ours, so pin them: a lit upgrade that changed either
+  // would silently break the apps' skeleton mounts and consent-denied clears.
+  it('render() does NOT clear a container it renders into for the first time', () => {
+    const box = document.createElement('div');
+    box.innerHTML = '<span class="skeleton">…</span>';
+    render(html`<p class="fresh">one</p>`, box);
+    // Hence every app's one-shot replaceChildren() mount guard over its skeleton.
+    expect(box.querySelector('.skeleton'), 'skeleton should survive — guard needed').toBeTruthy();
+    expect(box.querySelector('.fresh')).toBeTruthy();
+  });
+
+  it('raw-clearing a Lit-owned container breaks it; render(nothing) does not', () => {
+    const raw = document.createElement('div');
+    render(html`<p class="a">one</p>`, raw);
+    raw.innerHTML = ''; // drops the marker nodes Lit's part still references
+    expect(() => render(html`<p class="b">two</p>`, raw)).toThrow();
+
+    const clean = document.createElement('div');
+    render(html`<p class="a">one</p>`, clean);
+    render(nothing, clean);
+    render(html`<p class="b">two</p>`, clean);
+    expect(clean.querySelector('.b')).toBeTruthy();
   });
 });
