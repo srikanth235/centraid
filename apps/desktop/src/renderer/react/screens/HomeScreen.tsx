@@ -25,6 +25,25 @@ const STATUS_ICON: Record<AuStatusKind, IconName> = {
   failed: 'AlertTriangle',
 };
 
+// Microphone glyph — not in the shared icon set; inlined to match the
+// design's voice affordance.
+function MicGlyph(): JSX.Element {
+  return (
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.85}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M5 10a7 7 0 0 0 14 0M12 17v4" />
+    </svg>
+  );
+}
 function GridGlyph({ size = 15, sw = 1.75 }: { size?: number; sw?: number }): JSX.Element {
   return (
     <svg
@@ -357,6 +376,13 @@ export default function HomeScreen({
                   <Icon name="ChevronDown" size={9} />
                 </span>
               </span>
+              <button
+                type="button"
+                className={cx(controlsCss.iconBtn, styles.composerMic)}
+                title="Voice"
+              >
+                <MicGlyph />
+              </button>
               <span className={styles.composerKbd}>⌘↵</span>
               <button
                 type="button"

@@ -98,6 +98,7 @@ describe('HomeScreen', () => {
   it('renders the composer hero, suggestions, filter, and the unified grid', () => {
     const el = mount(makeProps());
     expect(el.querySelector('.composerInput')).toBeTruthy();
+    expect(el.querySelector('.composerMic')).toBeTruthy();
     expect(el.querySelectorAll('.heroSuggestions .chip').length).toBe(2);
     expect(el.querySelectorAll('.discSegB').length).toBe(3);
     // 2 apps + 1 automation card

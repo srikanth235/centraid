@@ -20,8 +20,12 @@
  *   DELETE /centraid/_vault/grants/<grantId>           — revoke (cascade runs)
  *   GET    /centraid/_vault/parked                     — invocations awaiting confirmation
  *   POST   /centraid/_vault/parked/<invocationId>      — {approve: boolean} → outcome
- *   GET    /centraid/_vault/outbox?status=             — external-write artifacts (issue #306)
- *   POST   /centraid/_vault/outbox/<itemId>            — {decision, artifact?, request?, always_allow?, note?}
+ *   GET    /centraid/_vault/outbox?status=             — external-write artifacts (issue #306), each carrying
+ *                                                        `canEdit` (verb has a request rebuilder, outbox-edit.ts)
+ *   POST   /centraid/_vault/outbox/<itemId>            — {decision, artifact?, always_allow?, note?} — an
+ *                                                        edited `artifact` on an `approve` rebuilds the wire
+ *                                                        request server-side (issue #308 A5 UI slice); a raw
+ *                                                        `request` from the client is refused, not accepted
  *   GET    /centraid/_vault/outbox-grants              — standing (actor, verb, target) rules
  *   DELETE /centraid/_vault/outbox-grants/<grantId>    — revoke a standing rule
  *   GET    /centraid/_vault/blocking                   — things waiting on the owner (outbox + needs-auth + parked + scope requests)
@@ -44,10 +48,16 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
-import type { GrantRequest, VaultPlane } from '../serve/vault-plane.js';
+import type { GrantRequest, OutboxItemSummary, VaultPlane } from '../serve/vault-plane.js';
 import type { AnchorSelector } from '../serve/vault-picker.js';
 import { VaultRegistryError, type VaultInfo, type VaultRegistry } from '../serve/vault-registry.js';
 import { vaultContext, type DeviceAccess } from '../serve/vault-context.js';
+import {
+  assertArtifactShapeUnchanged,
+  outboxVerbIsEditable,
+  rebuilderForVerb,
+  type OutboxWireRequest,
+} from '../serve/outbox-edit.js';
 import {
   mediaLocationPolicy,
   readBlobStoreSettings,
@@ -76,6 +86,18 @@ export interface VaultRouteOptions {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Overlay `canEdit` on outbox rows for the owner surface (issue #308 A5 UI
+ * slice) — whether the item's verb has a request rebuilder
+ * (`outbox-edit.ts`). An overlay here, not a `vault-plane.ts` field, keeps
+ * the plane free of an import on the gateway's verb registry.
+ */
+function withCanEdit(
+  items: readonly OutboxItemSummary[],
+): Array<OutboxItemSummary & { canEdit: boolean }> {
+  return items.map((item) => ({ ...item, canEdit: outboxVerbIsEditable(item.verb) }));
 }
 
 export function makeVaultRouteHandler(
@@ -314,7 +336,7 @@ export function makeVaultRouteHandler(
               .map((s) => s.trim())
               .filter(Boolean)
           : undefined;
-        return sendJson(res, 200, { items: plane.listOutbox(statuses) });
+        return sendJson(res, 200, { items: withCanEdit(plane.listOutbox(statuses)) });
       }
 
       if (method === 'POST' && segments[0] === 'outbox' && segments.length === 2) {
@@ -325,11 +347,64 @@ export function makeVaultRouteHandler(
             message: 'outbox decision body needs {decision: "approve" | "discard"}',
           });
         }
+        // The owner surface edits the ARTIFACT only — the wire request may
+        // carry `{{connection:…}}` placeholders and connector plumbing it
+        // never parses (see `listOutbox`'s doc comment). A raw `request`
+        // from the client is refused outright rather than silently
+        // ignored, so a caller is never left thinking an edit took effect
+        // when it didn't.
+        if (body.request !== undefined) {
+          return sendJson(res, 400, {
+            error: 'bad_request',
+            message:
+              'the outbox route never accepts a raw "request" from the owner surface — edit the artifact and the gateway rebuilds the wire request server-side',
+          });
+        }
+        const itemId = segments[1] ?? '';
+        let rebuiltRequest: Record<string, unknown> | undefined;
+        if (isRecord(body.artifact)) {
+          // Edit-then-send is an approve-time act (issue #308 A5 UI
+          // slice): discarding sends nothing, so there is nothing an
+          // artifact edit could change about the outcome.
+          if (body.decision !== 'approve') {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message:
+                'an artifact edit only applies to "approve" — discarding sends nothing, so there is nothing to edit',
+            });
+          }
+          const original = plane.rawOutboxItem(itemId);
+          if (!original) {
+            return sendJson(res, 404, {
+              error: 'not_found',
+              message: `no outbox item ${itemId}`,
+            });
+          }
+          const rebuild = rebuilderForVerb(original.verb);
+          if (!rebuild) {
+            return sendJson(res, 400, {
+              error: 'edit_unsupported',
+              message: `editing isn't supported for ${original.verb} yet — approve or deny as staged`,
+            });
+          }
+          try {
+            assertArtifactShapeUnchanged(original.artifact, body.artifact);
+            rebuiltRequest = rebuild(
+              original.request as unknown as OutboxWireRequest,
+              body.artifact,
+            ) as unknown as Record<string, unknown>;
+          } catch (err) {
+            return sendJson(res, 400, {
+              error: 'bad_request',
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
         const outcome = plane.decideOutbox({
-          itemId: segments[1] ?? '',
+          itemId,
           decision: body.decision,
           ...(isRecord(body.artifact) ? { artifact: body.artifact } : {}),
-          ...(isRecord(body.request) ? { request: body.request } : {}),
+          ...(rebuiltRequest ? { request: rebuiltRequest } : {}),
           ...(typeof body.always_allow === 'boolean' ? { alwaysAllow: body.always_allow } : {}),
           ...(typeof body.note === 'string' ? { note: body.note } : {}),
         });
@@ -352,7 +427,8 @@ export function makeVaultRouteHandler(
       // BLOCKING = things waiting on the owner; REVIEW = what happened,
       // salience-ranked, with receipts.
       if (method === 'GET' && segments[0] === 'blocking' && segments.length === 1) {
-        return sendJson(res, 200, plane.blocking());
+        const blocking = plane.blocking();
+        return sendJson(res, 200, { ...blocking, outbox: withCanEdit(blocking.outbox) });
       }
 
       // Manifest scope-widening requests (issue #308 A3): a published

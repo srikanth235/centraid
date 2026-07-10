@@ -4,6 +4,7 @@
 // ceiling and parks for the owner — the pause between draft and send.
 
 import { beforeEach, describe, expect, test } from 'vitest';
+import { uuidv7 } from '../ids.js';
 import {
   bootstrapVault,
   createGrant,
@@ -617,5 +618,159 @@ describe('credential commands are confirm-gated (issue #308 A1/A2)', () => {
       purpose: 'dpv:ServiceProvision',
     });
     expect(flipped.status).toBe('executed');
+  });
+});
+
+// Issue #304 UI's missing delete: `sync.remove_connection` is the real
+// delete, distinct from `configure_credential({cred_kind:'none'})`'s detach.
+describe('sync.remove_connection', () => {
+  function makeConnection(): string {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.configure_credential',
+      input: {
+        kind: 'pull.github',
+        label: 'personal',
+        cred_kind: 'api_key',
+        api_key: 'ghp_x',
+        allowed_hosts: ['api.github.com'],
+      },
+      purpose: 'dpv:ServiceProvision',
+    }) as { output: { connection_id: string } };
+    return outcome.output.connection_id;
+  }
+
+  test('happy path: deletes the connection, its credential, health and cursor rows, and receipts the act', () => {
+    const connectionId = makeConnection();
+    db.vault
+      .prepare(
+        `INSERT INTO sync_connection_cursor (cursor_id, connection_id, key, value_json, updated_at)
+         VALUES (?, ?, 'page', '"abc"', ?)`,
+      )
+      .run(uuidv7(), connectionId, new Date().toISOString());
+
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: connectionId },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('executed');
+    expect((outcome as { receiptId: string }).receiptId).toBeTruthy();
+    expect(db.vault.prepare('SELECT * FROM sync_connection').get()).toBeUndefined();
+    expect(db.vault.prepare('SELECT * FROM sync_connection_credential').get()).toBeUndefined();
+    expect(db.vault.prepare('SELECT * FROM sync_connection_health').get()).toBeUndefined();
+    expect(db.vault.prepare('SELECT * FROM sync_connection_cursor').get()).toBeUndefined();
+  });
+
+  test('refuses removal while an outbox item is still pending a decision', () => {
+    const connectionId = makeConnection();
+    db.vault
+      .prepare(
+        `INSERT INTO outbox_item
+           (item_id, connection_id, actor_id, actor_kind, verb, target, artifact_json,
+            request_json, status, staged_at)
+         VALUES (?, ?, ?, 'owner', 'gmail.send', 'someone@example.com', '{}',
+                 '{"method":"POST","url":"https://x"}', 'pending', ?)`,
+      )
+      .run(uuidv7(), connectionId, boot.ownerPartyId, new Date().toISOString());
+
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: connectionId },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { reason: string }).reason).toMatch(/awaiting a decision/);
+    // Nothing moved — the connection survives a refused removal.
+    expect(db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get()).toEqual({ n: 1 });
+  });
+
+  test('refuses removal when the connection carries terminal (receipted) outbox history', () => {
+    const connectionId = makeConnection();
+    db.vault
+      .prepare(
+        `INSERT INTO outbox_item
+           (item_id, connection_id, actor_id, actor_kind, verb, target, artifact_json,
+            request_json, status, staged_at, decided_at, drained_at, result_json)
+         VALUES (?, ?, ?, 'owner', 'gmail.send', 'someone@example.com', '{}',
+                 '{"method":"POST","url":"https://x"}', 'sent', ?, ?, ?, '{}')`,
+      )
+      .run(
+        uuidv7(),
+        connectionId,
+        boot.ownerPartyId,
+        new Date().toISOString(),
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: connectionId },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { reason: string }).reason).toMatch(/sync history/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get()).toEqual({ n: 1 });
+    // The receipted outbox row is untouched — history is never shredded.
+    expect(db.vault.prepare('SELECT count(*) AS n FROM outbox_item').get()).toEqual({ n: 1 });
+  });
+
+  test('refuses removal when the connection carries import-batch or run history', () => {
+    const connectionId = makeConnection();
+    db.vault
+      .prepare(
+        `INSERT INTO sync_import_batch (batch_id, connection_id, status, created_at, summary_json)
+         VALUES (?, ?, 'published', ?, '{}')`,
+      )
+      .run(uuidv7(), connectionId, new Date().toISOString());
+
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: connectionId },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('failed');
+    expect((outcome as { reason: string }).reason).toMatch(/sync_import_batch/);
+    expect(db.vault.prepare('SELECT count(*) AS n FROM sync_connection').get()).toEqual({ n: 1 });
+  });
+
+  test('clears (never blocks on) a nullable locker_item service anchor', () => {
+    const connectionId = makeConnection();
+    const itemId = uuidv7();
+    const now = new Date().toISOString();
+    db.vault
+      .prepare(
+        `INSERT INTO locker_item (item_id, type, title, connection_id, created_at, updated_at)
+         VALUES (?, 'login', 'GitHub', ?, ?, ?)`,
+      )
+      .run(itemId, connectionId, now, now);
+
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: connectionId },
+      purpose: 'dpv:ServiceProvision',
+    });
+
+    expect(outcome.status).toBe('executed');
+    expect(db.vault.prepare('SELECT * FROM sync_connection').get()).toBeUndefined();
+    // The login itself survives; only the service anchor is cleared.
+    const item = db.vault
+      .prepare('SELECT connection_id, title FROM locker_item WHERE item_id = ?')
+      .get(itemId) as { connection_id: string | null; title: string };
+    expect(item.connection_id).toBeNull();
+    expect(item.title).toBe('GitHub');
+  });
+
+  test('an unknown connection id fails the connection_exists precondition', () => {
+    const outcome = gw.invoke(owner, {
+      command: 'sync.remove_connection',
+      input: { connection_id: 'no-such-connection' },
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(outcome.status).toBe('failed');
   });
 });

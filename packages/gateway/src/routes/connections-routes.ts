@@ -8,12 +8,15 @@
  * browser here, and the request authenticates by its single-use `state`
  * capability instead.
  *
- *   GET   /centraid/_vault/connections                    — list + health (never a secret cell)
- *   GET   /centraid/_vault/connections/providers          — BYO-client wizard presets (Google, GitHub…)
- *   POST  /centraid/_vault/connections                    — configure a credential (sync.configure_credential)
- *   PATCH /centraid/_vault/connections/<id>               — {status, note?} pause / resume
- *   POST  /centraid/_vault/connections/<id>/authorize     — {redirect_uri?} → {auth_url, state}
- *   GET   /centraid/_vault/oauth/callback?state=&code=    — finish the ceremony (browser-facing HTML)
+ *   GET    /centraid/_vault/connections                    — list + health (never a secret cell)
+ *   GET    /centraid/_vault/connections/providers          — BYO-client wizard presets (Google, GitHub…)
+ *   POST   /centraid/_vault/connections                    — configure a credential (sync.configure_credential)
+ *   PATCH  /centraid/_vault/connections/<id>               — {status, note?} pause / resume
+ *   DELETE /centraid/_vault/connections/<id>               — remove entirely (sync.remove_connection); 404
+ *                                                             unknown id, 409 when undecided outbox items or
+ *                                                             receipted sync history block the delete
+ *   POST   /centraid/_vault/connections/<id>/authorize     — {redirect_uri?} → {auth_url, state}
+ *   GET    /centraid/_vault/oauth/callback?state=&code=    — finish the ceremony (browser-facing HTML)
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -180,6 +183,37 @@ export function makeConnectionsRouteHandler(
         status: body.status,
         ...(body.note ? { note: body.note } : {}),
       });
+      return true;
+    }
+
+    // DELETE /connections/<id> — remove entirely (sync.remove_connection).
+    // Checked for existence up front so an unknown id answers 404 rather
+    // than folding into the command's generic refusal 409 — the two are
+    // different problems (nothing to delete vs. won't delete this yet).
+    if (segments.length === 1 && method === 'DELETE') {
+      const connectionId = segments[0]!;
+      const exists = plane.db.vault
+        .prepare('SELECT 1 AS x FROM sync_connection WHERE connection_id = ?')
+        .get(connectionId);
+      if (!exists) {
+        sendJson(res, 404, { error: `no such connection ${connectionId}` });
+        return true;
+      }
+      const outcome = plane.gateway.invoke(plane.ownerCredential, {
+        command: 'sync.remove_connection',
+        input: { connection_id: connectionId },
+        purpose: 'dpv:ServiceProvision',
+      });
+      if (outcome.status === 'executed') {
+        sendJson(res, 200, { ok: true, ...(outcome.output as Record<string, unknown>) });
+        options.onConnectionChanged?.();
+        return true;
+      }
+      const reason = 'reason' in outcome ? outcome.reason : outcome.status;
+      // A refused removal (undecided outbox items, or receipted sync
+      // history) is a real state conflict, not a bad request — 409, mirroring
+      // vault-routes.ts's outbox decide/revoke convention.
+      sendJson(res, outcome.status === 'denied' ? 403 : 409, { ok: false, error: reason });
       return true;
     }
 

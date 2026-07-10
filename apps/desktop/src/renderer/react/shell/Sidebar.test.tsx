@@ -83,6 +83,22 @@ describe('Sidebar', () => {
     expect(el.querySelector('[data-testid="head"]')).not.toBeNull();
   });
 
+  it('renders the head slot above Build new — the profile switcher leads the column', () => {
+    const el = render(<Sidebar {...base} headSlot={<div data-testid="head">P</div>} />);
+    const head = el.querySelector('[data-testid="head"]')!;
+    const buildNew = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Build new'),
+    )!;
+    // DOCUMENT_POSITION_FOLLOWING on `head` relative to `buildNew` means head
+    // comes first in source order.
+    expect(head.compareDocumentPosition(buildNew) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('omits the head slot entirely when none is supplied (no vault plane / not yet resolved)', () => {
+    const el = render(<Sidebar {...base} />);
+    expect(el.querySelector('[data-testid="head"]')).toBeNull();
+  });
+
   it('shows the empty state when there are no apps or drafts', () => {
     const el = render(<Sidebar {...base} apps={[]} drafts={[]} />);
     expect(el.textContent).toContain('No apps yet');

@@ -26,6 +26,8 @@ vi.mock('../../gateway-client.js', () => ({
       windowDays: 30,
       generatedAt: 0,
     }),
+  getBlocking: () =>
+    Promise.resolve({ outbox: [], needsAuth: [], parked: [], scopeRequests: [] }),
 }));
 
 // The renderer's client-local store is a plain module now; back it with an

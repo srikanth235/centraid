@@ -849,6 +849,185 @@ function storeTokens(ctx: HandlerCtx): Record<string, unknown> {
   return { connection_id: input.connection_id, status: 'active' };
 }
 
+// ── Removal (issue #304 UI's missing delete) ────────────────────────────
+// `sync.remove_connection` is the owner's actual delete — as opposed to
+// `configure_credential({cred_kind:'none'})`'s detach, which only forgets
+// the secret and leaves the connection row, its cursors and its sync
+// history untouched. Removal is destructive and irreversible: Tier 4 (risk
+// high, confirm-gated), the same ceremony `core.merge_party` uses.
+//
+// What may be deleted vs what blocks deletion is discovered LIVE off the
+// schema — `PRAGMA foreign_key_list` over every table, the same technique
+// `core.merge_party` uses to find every FK into `core_party` ("no hand-kept
+// table list to rot"):
+//   - `sync_connection_credential` / `sync_connection_health` already carry
+//     `ON DELETE CASCADE` (the issue #304 sidecars) — SQLite drops them with
+//     the parent row. Deleted explicitly here too so the receipt's write
+//     list stays complete even if a future migration drops the cascade.
+//   - `sync_connection_cursor` is pure incremental-sync POSITION — no audit
+//     value, so it is deleted outright alongside the connection.
+//   - `locker_item.connection_id` is a nullable "which service is this
+//     login for" anchor (issue #310 S3) — cleared (`SET NULL`), never a
+//     reason to block removal; the login itself is untouched.
+//   - `outbox_item`, `sync_import_batch`, `sync_external_entity` and
+//     `sync_connection_run` are NOT NULL, un-cascaded FKs carrying
+//     RECEIPTED history (drained sends, staged/published import batches,
+//     dedup mappings, connector run logs) — issues #290/#306's audit trail
+//     must never be shredded by a connection cleanup, so ANY row here
+//     blocks the delete. `outbox_item` gets its own earlier, more
+//     actionable refusal when the blocking rows are merely undecided
+//     (`pending`/`approved`) — those the owner can still approve, discard,
+//     or let drain, so that message names the fix. Once every item is
+//     terminal (`sent`/`discarded`/`failed`) it IS history, and joins the
+//     general "this connection has sync history" refusal alongside the
+//     other tables — the owner's remedy there is `sync.set_connection_status`
+//     (pause) or `configure_credential({cred_kind:'none'})` (detach), never
+//     removal. Deleting receipted history is not on offer.
+
+interface ConnectionFkRef {
+  table: string;
+  column: string;
+  notNull: boolean;
+}
+
+/**
+ * Every live FK column referencing `sync_connection(connection_id)`,
+ * excluding the two sidecars SQLite already cascades on delete.
+ */
+function connectionFkRefs(ctx: HandlerCtx): ConnectionFkRef[] {
+  const tables = ctx.db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%_fts%' AND name != 'sync_connection'`,
+    )
+    .all() as { name: string }[];
+  const refs: ConnectionFkRef[] = [];
+  for (const { name } of tables) {
+    const fks = ctx.db.prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`).all() as {
+      table: string;
+      from: string;
+      on_delete: string;
+    }[];
+    for (const fk of fks) {
+      if (fk.table !== 'sync_connection') continue;
+      if (fk.on_delete === 'CASCADE') continue;
+      const col = (
+        ctx.db.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all() as {
+          name: string;
+          notnull: number;
+        }[]
+      ).find((c) => c.name === fk.from);
+      refs.push({ table: name, column: fk.from, notNull: col?.notnull === 1 });
+    }
+  }
+  return refs;
+}
+
+const REMOVE_CONNECTION: CommandDefinition = {
+  name: 'sync.remove_connection',
+  ownerSchema: 'sync',
+  inputSchema: {
+    type: 'object',
+    required: ['connection_id'],
+    additionalProperties: false,
+    properties: { connection_id: { type: 'string', minLength: 1 } },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['connection_id'],
+    properties: { connection_id: { type: 'string' } },
+  },
+  preconditions: [
+    {
+      name: 'connection_exists',
+      sql: `SELECT count(*) AS n FROM sync_connection WHERE connection_id = :connection_id`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'connection_gone',
+      sql: `SELECT count(*) AS n FROM sync_connection WHERE connection_id = :connection_id`,
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
+  idempotency: 'once',
+  // Tier 4 (issue #306): irreversible, so it stays loud on purpose — same
+  // stance as core.merge_party.
+  risk: 'high',
+  confirm: true,
+  handler: removeConnection,
+};
+
+function removeConnection(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { connection_id: string };
+  const connectionId = input.connection_id;
+  const connection = ctx.db
+    .prepare('SELECT kind, label FROM sync_connection WHERE connection_id = ?')
+    .get(connectionId) as { kind: string; label: string };
+  const name = `${connection.kind} "${connection.label}"`;
+
+  // Undecided outbox items get first say — the owner has a real lever
+  // (approve/discard/let it drain) that clears the block without losing
+  // anything, so name that fix specifically before the general history one.
+  const undecided = ctx.db
+    .prepare(
+      `SELECT count(*) AS n FROM outbox_item WHERE connection_id = ? AND status IN ('pending','approved')`,
+    )
+    .get(connectionId) as { n: number };
+  if (undecided.n > 0) {
+    throw new Error(
+      `${name} has ${undecided.n} outbox item(s) still awaiting a decision — approve, discard, or let them drain before removing this connection`,
+    );
+  }
+
+  const refs = connectionFkRefs(ctx).filter((r) => r.table !== 'sync_connection_cursor');
+  const historyBlocks: string[] = [];
+  for (const ref of refs) {
+    if (!ref.notNull) continue; // nullable anchors are cleared below, never a block
+    const row = ctx.db
+      .prepare(`SELECT count(*) AS n FROM "${ref.table}" WHERE "${ref.column}" = ?`)
+      .get(connectionId) as { n: number };
+    if (row.n > 0) historyBlocks.push(`${row.n} ${ref.table} row(s)`);
+  }
+  if (historyBlocks.length > 0) {
+    throw new Error(
+      `${name} has sync history that removal would erase (${historyBlocks.join(', ')}) — receipted history is never deleted; pause the connection, or detach its credential, instead of removing it`,
+    );
+  }
+
+  // Nullable service anchors (a locker login's "which connection is this
+  // for" tag) are convenience metadata, not audit — cleared, never a reason
+  // to keep the connection around.
+  for (const ref of refs) {
+    if (ref.notNull) continue;
+    ctx.db
+      .prepare(`UPDATE "${ref.table}" SET "${ref.column}" = NULL WHERE "${ref.column}" = ?`)
+      .run(connectionId);
+  }
+
+  // Pure incremental-sync position — no audit value, discarded outright.
+  ctx.db.prepare('DELETE FROM sync_connection_cursor WHERE connection_id = ?').run(connectionId);
+  // Cascades automatically (ON DELETE CASCADE) but deleted explicitly too
+  // so the write list stays honest even if the cascade is ever dropped.
+  ctx.db
+    .prepare('DELETE FROM sync_connection_credential WHERE connection_id = ?')
+    .run(connectionId);
+  ctx.db.prepare('DELETE FROM sync_connection_health WHERE connection_id = ?').run(connectionId);
+  ctx.db.prepare('DELETE FROM sync_connection WHERE connection_id = ?').run(connectionId);
+  ctx.wrote('sync.connection', connectionId);
+  ctx.cite({
+    claim: `removed connection ${name} — no undecided outbox items or sync history existed to protect`,
+    entityType: 'sync.connection',
+    entityId: connectionId,
+  });
+  return { connection_id: connectionId };
+}
+
 /** Register the staging + connection-lifecycle commands on a gateway. */
 export function registerSyncCommands(gateway: Gateway): void {
   gateway.registerCommand(STAGE_ROWS);
@@ -859,4 +1038,5 @@ export function registerSyncCommands(gateway: Gateway): void {
   gateway.registerCommand(SET_CONNECTION_STATUS);
   gateway.registerCommand(CONFIGURE_CREDENTIAL);
   gateway.registerCommand(STORE_TOKENS);
+  gateway.registerCommand(REMOVE_CONNECTION);
 }

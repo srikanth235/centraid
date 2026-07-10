@@ -62,6 +62,11 @@
 .composerSpacer {
   flex: 1;
 }
+.composerAttach,
+.composerMic {
+  width: 28px;
+  height: 28px;
+}
 .composerMode {
   display: inline-flex;
   align-items: center;

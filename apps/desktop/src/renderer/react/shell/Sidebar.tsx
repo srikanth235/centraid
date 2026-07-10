@@ -33,6 +33,7 @@ export type SidebarPage =
   | 'discover'
   | 'starred'
   | 'automations'
+  | 'approvals'
   | 'settings';
 
 export interface SidebarApp {
@@ -59,6 +60,9 @@ export interface SidebarProps {
   onDiscover?: () => void;
   onStarred?: () => void;
   onAutomations?: () => void;
+  onApprovals?: () => void;
+  /** Count badge next to "Approvals" — omitted (no live count source yet) shows no badge. */
+  approvalsCount?: number;
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
@@ -219,6 +223,14 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         active={props.activePage === 'automations'}
         disabled={!props.onAutomations}
         onClick={props.onAutomations}
+      />
+      <SbItem
+        icon={<Icon name="CheckCircle" size={15} />}
+        label="Approvals"
+        meta={props.approvalsCount ? String(props.approvalsCount) : undefined}
+        active={props.activePage === 'approvals'}
+        disabled={!props.onApprovals}
+        onClick={props.onApprovals}
       />
 
       <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />
