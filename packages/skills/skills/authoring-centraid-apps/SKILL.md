@@ -37,6 +37,8 @@ Two UI dialects are first-class; the runtime serves both:
 
 **When modifying an existing app, keep its dialect.** Detect it before writing UI code: an `app.jsx` entry means React; an `app.js` importing `./lit-core.min.js` means Lit. Never convert an app between dialects unless the user explicitly asks for a rewrite.
 
+React apps may (and beyond a few hundred lines, should) split into modules: `app.jsx` stays the entry/orchestrator, pure view components live in `components/<Name>.jsx`, JSX-free helpers in sibling `.js` files. The gateway transpiles every `.jsx` per-request at any depth. Two rules keep this working: every relative import carries its extension (`./components/Grid.jsx`, never `./components/Grid` — tooling resolves extensionless imports but a real browser 404s), and from a subdirectory the shared runtime imports go up one level (`../react-core.min.js`, `../kit.js`). Keep every file under 500 lines.
+
 Everything else is dialect-independent: `window.centraid` read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes (`class=` in Lit templates, `className=` in JSX), and the inline settings bridge in `index.html`.
 
 Lit-specific traps (React apps have neither):
