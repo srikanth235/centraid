@@ -1,3 +1,7 @@
+/* oxlint-disable typescript-eslint/ban-ts-comment -- the package tsconfig has
+   no DOM lib (the blueprints "src" is node-side); this one file runs the
+   browser kit under jsdom, so DOM globals are runtime-real but invisible to
+   tsc. Suppressing per-file beats adding DOM types to the whole package. */
 // @ts-nocheck — imports the untyped browser kit (plain JS + DOM globals)
 // @vitest-environment jsdom
 // Runtime smoke test: evaluates the real kit modules (elements.js + kit.js)
@@ -10,6 +14,8 @@ import { describe, expect, it } from 'vitest';
 // lit-core bundle (which its DOM-less config can't type-check). The file URL
 // loads natively; jsdom's globals are already installed by the environment.
 const kitUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/kit.js')).href;
+const litUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/lit-core.min.js')).href;
+const elementsUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/elements.js')).href;
 const {
   barSpan,
   el,
@@ -24,6 +30,8 @@ const {
   renderAttachments,
   snippetInto,
 } = await import(kitUrl);
+const { html, render, repeat, classMap, live, ref, createRef } = await import(litUrl);
+const { KitElement } = await import(elementsUrl);
 
 describe('kit smoke', () => {
   it('defines the custom elements', () => {
@@ -147,5 +155,48 @@ describe('kit smoke', () => {
     expect(fmtBytes(0, '—')).toBe('—');
     expect(fmtBytes(500)).toBe('500 B');
     expect(fmtBytes(1024 * 1024 * 1.3)).toBe('1.3 MB');
+  });
+
+  it('lit bundle exports the app-layer surface', () => {
+    for (const [name, fn] of Object.entries({ render, repeat, classMap, live, ref, createRef })) {
+      expect(fn, name).toBeTypeOf('function');
+    }
+  });
+
+  it('KitElement subclasses render light DOM and stamp data-kit-host', async () => {
+    class SmokeCard extends KitElement {
+      static properties = { label: { type: String } };
+      render() {
+        return html`<span class="smoke-label">${this.label}</span>`;
+      }
+    }
+    customElements.define('smoke-card', SmokeCard);
+    const card = document.createElement('smoke-card');
+    card.label = 'hi <b>there</b>';
+    document.body.appendChild(card);
+    await card.updateComplete;
+    expect(card.shadowRoot).toBeNull();
+    expect(Object.hasOwn(card.dataset, 'kitHost')).toBe(true);
+    const span = card.querySelector('.smoke-label');
+    // Lit templates escape interpolated strings — no live <b> element.
+    expect(span.textContent).toBe('hi <b>there</b>');
+    expect(span.querySelector('b')).toBeNull();
+  });
+
+  it('standalone render() drives kit-owned containers (popover pattern)', () => {
+    const anchor = document.createElement('button');
+    document.body.appendChild(anchor);
+    openPopover(anchor, (box) => {
+      render(
+        html`${repeat(
+          ['a', 'b'],
+          (x) => x,
+          (x) => html`<button class=${classMap({ 'kit-popover-item': true })}>${x}</button>`,
+        )}`,
+        box,
+      );
+    });
+    expect(document.querySelectorAll('.kit-popover-item').length).toBe(2);
+    closePopover();
   });
 });

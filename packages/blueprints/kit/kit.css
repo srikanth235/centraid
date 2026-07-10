@@ -50,7 +50,13 @@
    render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
    is `display: contents` so it contributes no box of its own — the emitted
    `.kit-*` tree lays out exactly as the former vanilla builders' output did,
-   and every rule in this file continues to style it unchanged. */
+   and every rule in this file continues to style it unchanged.
+
+   `[data-kit-host]` is stamped by the exported `KitElement` base on connect,
+   so APP-level components inherit the same contract without registering their
+   tag here. The kit's own tags stay listed explicitly: they cover the pre-
+   upgrade window before `connectedCallback` runs. An app component whose host
+   should BE a box overrides via `x-foo[data-kit-host] { display: block; }`. */
 kit-avatar,
 kit-meter,
 kit-line-chart,
@@ -58,7 +64,8 @@ kit-bar-chart,
 kit-skeleton,
 kit-toast,
 kit-mention-chip,
-kit-reference-strip {
+kit-reference-strip,
+[data-kit-host] {
   display: contents;
 }
 

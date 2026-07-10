@@ -54,10 +54,22 @@ export function entityKindLabel(type) {
  * Shared base: light-DOM rendering (so `kit.css` + app CSS vars apply to the
  * emitted `.kit-*` markup) with a `display: contents` host (so the element adds
  * no layout box — the rendered tree lays out exactly as the old builder's did).
+ *
+ * Exported for the apps: app-level components extend this and inherit the
+ * whole styling contract. The host stamps `data-kit-host` on connect, which is
+ * what `kit.css` keys the `display: contents` rule on — app elements need no
+ * per-tag CSS registration. A component that wants its host to BE a layout box
+ * overrides with a compound selector in its own app.css (e.g.
+ * `x-foo[data-kit-host] { display: block; }`).
  */
-class KitElement extends LitElement {
+export class KitElement extends LitElement {
   createRenderRoot() {
     return this;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.setAttribute('data-kit-host', '');
   }
 }
 
