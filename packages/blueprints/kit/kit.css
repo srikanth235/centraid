@@ -45,6 +45,17 @@
   --kit-mono: var(--mono, ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace);
 }
 
+/* The `hidden` attribute must ALWAYS hide, even when a class on the same
+   element sets `display:` (an author display beats the UA's plain
+   `[hidden] { display: none }`, so `.kit-ask-ov { display: flex }` alone
+   made the Ask panel permanently visible in any app without its own global
+   guard — photos shipped that way; docs was masked by an identical rule in
+   its app.css). One kit-wide guard retires the per-element
+   `.kit-*[hidden]` whack-a-mole for every current and future app. */
+[hidden] {
+  display: none !important;
+}
+
 /* ---------- Native Web Component hosts (issue #327) ----------------------- */
 /* The kit's presentation primitives are custom elements (elements.js) that
    render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
