@@ -53,6 +53,21 @@ export interface BiStream {
   readonly recv: RecvStream;
 }
 
+/**
+ * A flat snapshot of one of a connection's candidate paths (direct IP vs
+ * relay). Exposed for observability only (cross-network-relay.mjs uses it
+ * to confirm a connection actually took the relay path instead of a lucky
+ * direct route) — nothing in the pairing/tunnel protocol depends on it.
+ */
+export interface PathSnapshot {
+  id: string;
+  isSelected: boolean;
+  remoteAddr: string;
+  isIp: boolean;
+  isRelay: boolean;
+  rttMs: number;
+}
+
 export interface Connection {
   alpn(): Array<number>;
   remoteId(): EndpointId;
@@ -62,6 +77,8 @@ export interface Connection {
   close(errorCode: bigint, reason: Array<number>): void;
   stableId(): number;
   rtt(): number | null;
+  /** Candidate paths this connection has tried; `isSelected` marks the active one. */
+  paths(): Array<PathSnapshot>;
 }
 
 export interface Accepting {
