@@ -21,6 +21,11 @@ import {
   stageFileBytes,
   toast,
 } from './kit.js';
+// Aliased to `litRender` so every call site reads unambiguously against this
+// app's own `renderGrid`/`renderChips`/`renderSelectionBar`/… orchestrators —
+// those rebuild app state and re-render; `litRender` is Lit's standalone
+// DOM-commit function that actually paints a container.
+import { createRef, html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -309,15 +314,10 @@ function visibleAssets() {
 
 // ---------- Small builders ----------
 
-function chip(label, active, onClick) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'kit-chip';
-  btn.dataset.active = active ? 'true' : 'false';
-  btn.textContent = label;
-  btn.addEventListener('click', onClick);
-  return btn;
-}
+// Joins truthy class fragments — the Lit-template analogue of the old
+// `classList.add()` chains, so a tile's class string composes exactly as
+// before (e.g. "tile-wrap selected faved").
+const cls = (...parts) => parts.filter(Boolean).join(' ');
 
 function kitBtn(label, onClick) {
   const btn = document.createElement('button');
@@ -357,6 +357,18 @@ function inlineInput({ value = '', placeholder, label, onSubmit, onCancel }) {
   return input;
 }
 
+// A tile's media fill (fillTileMedia, below) is imperative — image decode,
+// video setup, placeholder text — and must run exactly once per mounted
+// element. `mountMedia` is that guard: keyed `repeat()` reuses a tile's DOM
+// node across refreshes (same asset_id, same node), and the dataset check
+// stops a re-render from reassigning `img.src` and flickering/refetching an
+// image that's already showing.
+function mountMedia(el, asset) {
+  if (!el || el.dataset.mediaFor === asset.asset_id) return;
+  el.dataset.mediaFor = asset.asset_id;
+  fillTileMedia(el, asset);
+}
+
 // ---------- Albums toolbar ----------
 
 function renderToolbar() {
@@ -366,178 +378,266 @@ function renderToolbar() {
   $('selectBtn').hidden = selectedAlbum === TRASH;
 }
 
+function selectAlbum(albumId) {
+  selectedAlbum = albumId;
+  if (selectMode) exitSelectMode();
+  renderToolbar();
+  renderGrid();
+}
+
+function chipTpl(label, active, onClick, extraClass) {
+  return html`<button
+    type="button"
+    class=${extraClass ? `kit-chip ${extraClass}` : 'kit-chip'}
+    data-active=${active ? 'true' : 'false'}
+    @click=${onClick}
+  >
+    ${label}
+  </button>`;
+}
+
+// The raw <input> node while "＋ New album" is being typed, else null — a
+// singleton, not per-album state (unlike the rename input below).
+let newAlbumInput = null;
+
+function startNewAlbum() {
+  newAlbumInput = inlineInput({
+    placeholder: 'Album name',
+    label: 'New album name',
+    onSubmit: async (title) => {
+      const outcome = await act('create-album', { title });
+      newAlbumInput = null;
+      if (narrate(outcome)) {
+        if (outcome.output?.album_id) selectedAlbum = outcome.output.album_id;
+        await refresh();
+      } else {
+        renderToolbar();
+      }
+    },
+    onCancel: () => {
+      newAlbumInput = null;
+      renderToolbar();
+    },
+  });
+  newAlbumInput.className = 'chip-input';
+  renderToolbar();
+  newAlbumInput.focus();
+}
+
+function chipsTemplate() {
+  return html`${chipTpl('All', selectedAlbum === null, () => selectAlbum(null))}${chipTpl(
+    '♥ Favorites',
+    selectedAlbum === FAVORITES,
+    () => selectAlbum(FAVORITES),
+  )}${repeat(
+    albums,
+    (a) => a.album_id,
+    (album) =>
+      chipTpl(album.title ?? 'Album', selectedAlbum === album.album_id, () =>
+        selectAlbum(album.album_id),
+      ),
+  )}${newAlbumInput
+    ? newAlbumInput
+    : html`<button type="button" class="kit-chip chip-new" @click=${startNewAlbum}>
+        ＋ New album
+      </button>`}${trash.length > 0
+    ? chipTpl(
+        `Trash (${trash.length})`,
+        selectedAlbum === TRASH,
+        () => selectAlbum(TRASH),
+        'chip-trash',
+      )
+    : nothing}`;
+}
+
 function renderChips() {
   const nav = $('albumChips');
-  nav.innerHTML = '';
   nav.hidden = false;
-  const pick = (albumId) => () => {
-    selectedAlbum = albumId;
-    if (selectMode) exitSelectMode();
-    renderToolbar();
-    renderGrid();
-  };
-  nav.appendChild(chip('All', selectedAlbum === null, pick(null)));
-  nav.appendChild(chip('♥ Favorites', selectedAlbum === FAVORITES, pick(FAVORITES)));
-  for (const album of albums) {
-    nav.appendChild(
-      chip(album.title ?? 'Album', selectedAlbum === album.album_id, pick(album.album_id)),
-    );
-  }
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'kit-chip chip-new';
-  add.textContent = '＋ New album';
-  add.addEventListener('click', () => {
-    const input = inlineInput({
-      placeholder: 'Album name',
-      label: 'New album name',
-      onSubmit: async (title) => {
-        const outcome = await act('create-album', { title });
-        if (narrate(outcome)) {
-          if (outcome.output?.album_id) selectedAlbum = outcome.output.album_id;
-          await refresh();
-        } else {
-          renderToolbar();
-        }
-      },
-      onCancel: renderToolbar,
-    });
-    input.className = 'chip-input';
-    add.replaceWith(input);
-    input.focus();
+  litRender(chipsTemplate(), nav);
+}
+
+// The raw <input> node while an album rename is in progress, else null, plus
+// which album it belongs to — `renderAlbumTools` discards it the moment the
+// selected album no longer matches (switching albums must never show album
+// X's half-typed rename inside album Y's tools).
+let renamingAlbumInput = null;
+let renamingAlbumForId = null;
+
+function startRenameAlbum(album) {
+  renamingAlbumForId = album.album_id;
+  renamingAlbumInput = inlineInput({
+    value: album.title ?? '',
+    placeholder: 'Album name',
+    label: 'Rename album',
+    onSubmit: async (title) => {
+      const outcome = await act('rename-album', { album_id: album.album_id, title });
+      renamingAlbumInput = null;
+      renamingAlbumForId = null;
+      if (narrate(outcome)) await refresh();
+      else renderToolbar();
+    },
+    onCancel: () => {
+      renamingAlbumInput = null;
+      renamingAlbumForId = null;
+      renderToolbar();
+    },
   });
-  nav.appendChild(add);
-  // The trash shelf only earns a chip while something is in it.
-  if (trash.length > 0) {
-    const t = chip(`Trash (${trash.length})`, selectedAlbum === TRASH, pick(TRASH));
-    t.classList.add('chip-trash');
-    nav.appendChild(t);
-  }
+  renderToolbar();
+  renamingAlbumInput.focus();
+  renamingAlbumInput.select();
+}
+
+function albumToolsTemplate(album) {
+  if (renamingAlbumInput && renamingAlbumForId === album.album_id) return renamingAlbumInput;
+  const count = albumAssets().length;
+  return html`<span class="album-tools-label"
+      >${count} ${count === 1 ? 'photo' : 'photos'} in this album</span
+    >
+    <button type="button" class="kit-btn" @click=${openPicker}>Add photos</button>
+    <button type="button" class="kit-btn" @click=${() => startRenameAlbum(album)}>Rename</button>
+    <button
+      type="button"
+      class="kit-btn danger"
+      @click=${async (e) => {
+        if (!armConfirm(e.currentTarget, { armedLabel: 'Delete album?' })) return;
+        const outcome = await act('delete-album', { album_id: album.album_id });
+        if (narrate(outcome)) {
+          selectedAlbum = null;
+          toast('Album deleted — its photos stay in your library.');
+          await refresh();
+        }
+      }}
+    >
+      Delete album
+    </button>`;
 }
 
 function renderAlbumTools() {
   const tools = $('albumTools');
-  tools.innerHTML = '';
   const album = albums.find((a) => a.album_id === selectedAlbum);
   tools.hidden = !album;
-  if (!album) return;
-
-  const count = albumAssets().length;
-  const label = document.createElement('span');
-  label.className = 'album-tools-label';
-  label.textContent = `${count} ${count === 1 ? 'photo' : 'photos'} in this album`;
-  tools.appendChild(label);
-
-  tools.appendChild(kitBtn('Add photos', () => openPicker()));
-
-  tools.appendChild(
-    kitBtn('Rename', () => {
-      const input = inlineInput({
-        value: album.title ?? '',
-        placeholder: 'Album name',
-        label: 'Rename album',
-        onSubmit: async (title) => {
-          const outcome = await act('rename-album', { album_id: album.album_id, title });
-          if (narrate(outcome)) await refresh();
-          else renderToolbar();
-        },
-        onCancel: renderToolbar,
-      });
-      tools.innerHTML = '';
-      tools.appendChild(input);
-      input.focus();
-      input.select();
-    }),
-  );
-
-  const del = kitBtn('Delete album', async () => {
-    if (!armConfirm(del, { armedLabel: 'Delete album?' })) return;
-    const outcome = await act('delete-album', { album_id: album.album_id });
-    if (narrate(outcome)) {
-      selectedAlbum = null;
-      toast('Album deleted — its photos stay in your library.');
-      await refresh();
-    }
-  });
-  del.classList.add('danger');
-  tools.appendChild(del);
+  if (!album) {
+    renamingAlbumInput = null;
+    renamingAlbumForId = null;
+    litRender(nothing, tools);
+    return;
+  }
+  if (renamingAlbumForId !== album.album_id) {
+    renamingAlbumInput = null;
+    renamingAlbumForId = null;
+  }
+  litRender(albumToolsTemplate(album), tools);
 }
 
 // ---------- Grid ----------
 
-function renderGrid() {
+// `#grid` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, at boot). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first call — it only appends past
+// them — so the very first Lit commit must clear that skeleton itself; every
+// commit after that goes through `litRender` alone (a raw clear once Lit owns
+// the container corrupts its part cache).
+let gridMounted = false;
+function mountGrid(templateResult) {
   const grid = $('grid');
-  grid.classList.toggle('selecting', selectMode);
-  grid.innerHTML = '';
-  const shown = visibleAssets();
-  const empty = $('empty');
-  empty.hidden = shown.length > 0;
-  if (shown.length === 0) {
-    const searching = searchQuery !== '';
-    $('emptyText').textContent = searching
-      ? `No matches for “${searchQuery}”.`
-      : selectedAlbum === FAVORITES
-        ? 'No favorites yet — tap the heart on any photo.'
-        : selectedAlbum === TRASH
-          ? 'Trash is empty.'
-          : selectedAlbum
-            ? 'Nothing in this album yet.'
-            : 'No photos yet — your library starts with the first upload.';
-    $('emptyUpload').hidden = searching || selectedAlbum === FAVORITES || selectedAlbum === TRASH;
+  if (!gridMounted) {
+    grid.replaceChildren();
+    gridMounted = true;
   }
-  // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
-  if (selectedAlbum === TRASH) {
-    for (const asset of shown) grid.appendChild(renderTrashTile(asset));
-    return;
-  }
-  // Google-Photos-style timeline: sticky month headers, day labels inside.
-  const months = new Map(); // month key -> Map(day key -> assets)
-  for (const asset of shown) {
-    const dk = dayKey(asset.taken_at);
-    const mk = dk.slice(0, 7);
-    if (!months.has(mk)) months.set(mk, new Map());
-    const days = months.get(mk);
-    if (!days.has(dk)) days.set(dk, []);
-    days.get(dk).push(asset);
-  }
-  for (const [mk, days] of months) {
-    const mh = document.createElement('h2');
-    mh.className = 'month-label';
-    mh.textContent = fmtMonth(mk);
-    grid.appendChild(mh);
-    for (const [dk, dayAssets] of days) {
-      const h = document.createElement('p');
-      h.className = 'day-label muted small';
-      h.textContent = fmtDay(dk);
-      grid.appendChild(h);
-      for (const asset of dayAssets) {
-        grid.appendChild(renderTile(asset));
-      }
-    }
-  }
-  // The window is honest about its edge: All, Favorites, albums and the
-  // client-side search all filter the same loaded slice, so any of them can
-  // silently miss photos older than the window. "Show more" grows it — with
-  // no search plane, that is the only road back in time.
-  if (libraryTruncated) {
-    const footer = document.createElement('div');
-    footer.className = 'window-footer';
-    const label = document.createElement('span');
-    label.textContent =
-      selectedAlbum || searchQuery
-        ? `This view covers your latest ${libraryWindow} photos — older ones may be missing. `
-        : `Showing your latest ${libraryWindow} photos. `;
-    const more = kitBtn('Show more', async () => {
-      more.disabled = true;
-      libraryWindow += 500;
-      await refresh();
-    });
-    footer.append(label, more);
-    grid.appendChild(footer);
-  }
+  litRender(templateResult, grid);
 }
 
-// The visual guts of a tile — shared by the grid and the album picker.
+// One grid tile: the media button, the always-present select dot, the
+// hover-reveal favorite heart, and (inside an album) the leave-album control.
+// Kept as a plain function — not a component — so `.tile-wrap` elements stay
+// DIRECT children of `#grid`: the timeline leans on `.grid`'s CSS Grid track
+// flow plus `grid-column: 1 / -1` sticky month/day labels between tiles.
+function tileTpl(asset, inAlbum) {
+  const selected = selectedIds.has(asset.asset_id);
+  return html`<div
+    class=${cls('tile-wrap', selected && 'selected', asset.favorite && 'faved')}
+    data-asset-id=${asset.asset_id}
+  >
+    <button
+      type="button"
+      class="tile"
+      ${ref((el) => mountMedia(el, asset))}
+      @click=${(e) => {
+        if (selectMode) toggleSelect(asset.asset_id, e.shiftKey);
+        else openLightbox(asset.asset_id);
+      }}
+    ></button>
+    <button
+      type="button"
+      class="tile-check"
+      aria-label=${selected ? 'Deselect' : 'Select'}
+      @click=${(e) => {
+        e.stopPropagation();
+        if (!selectMode) enterSelectMode();
+        toggleSelect(asset.asset_id, e.shiftKey);
+      }}
+    ></button>
+    <button
+      type="button"
+      class="tile-heart"
+      aria-pressed=${asset.favorite ? 'true' : 'false'}
+      aria-label=${asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
+      @click=${(e) => {
+        e.stopPropagation();
+        toggleFavorite(asset);
+      }}
+    >
+      <span aria-hidden="true">${asset.favorite ? '♥' : '♡'}</span>
+    </button>
+    ${inAlbum
+      ? html`<button
+          type="button"
+          class="tile-remove"
+          title="Remove from album"
+          aria-label="Remove from album"
+          @click=${async () => {
+            const outcome = await act('remove-from-album', {
+              album_id: selectedAlbum,
+              asset_id: asset.asset_id,
+            });
+            if (narrate(outcome)) await refresh();
+          }}
+        >
+          <span aria-hidden="true">×</span>
+        </button>`
+      : nothing}
+  </div>`;
+}
+
+// A trash tile: the photo, a purge countdown when one is derivable, and
+// Restore — nothing else. No lightbox, no selection, no albums, no hearts.
+function trashTileTpl(asset) {
+  return html`<div class="tile-wrap trash" data-asset-id=${asset.asset_id}>
+    <div class="tile" ${ref((el) => mountMedia(el, asset))}></div>
+    ${asset.purge_in_days != null
+      ? html`<span class="tile-purge"
+          >${asset.purge_in_days === 0
+            ? 'purges today'
+            : `purges in ${asset.purge_in_days} ${asset.purge_in_days === 1 ? 'day' : 'days'}`}</span
+        >`
+      : nothing}
+    <button
+      type="button"
+      class="tile-restore"
+      aria-label="Restore ${asset.title ?? 'photo'}"
+      @click=${async (e) => {
+        e.currentTarget.disabled = true;
+        if (!(await restoreAsset(asset.asset_id))) e.currentTarget.disabled = false;
+      }}
+    >
+      Restore
+    </button>
+  </div>`;
+}
+
+// The visual guts of a tile — shared by the grid, the trash shelf and the
+// album picker. Imperative on purpose: `mountMedia` guards it to run once per
+// mounted element, exactly like the old code's one-time build.
 function fillTileMedia(tile, asset) {
   if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
     const vid = document.createElement('video');
@@ -570,74 +670,84 @@ function fillTileMedia(tile, asset) {
   }
 }
 
-function renderTile(asset) {
-  const wrap = document.createElement('div');
-  wrap.className = 'tile-wrap';
-  wrap.dataset.assetId = asset.asset_id;
-  if (selectedIds.has(asset.asset_id)) wrap.classList.add('selected');
+// Bucket header + its tiles (open library only — the trash shelf forgoes the
+// timeline). Months/days regroup via plain (unkeyed) `.map()` on every render
+// — same as the grouping `Map`s themselves, rebuilt fresh each time — while
+// each day's tiles ride a keyed `repeat()` on `asset_id`, so a tile (and its
+// `<img>`) persists across refreshes instead of reloading.
+function gridTemplate(months, inAlbum) {
+  return html`${[...months].map(
+    ([mk, days]) => html`<h2 class="month-label">${fmtMonth(mk)}</h2>
+      ${[...days].map(
+        ([dk, dayAssets]) => html`<p class="day-label muted small">${fmtDay(dk)}</p>
+          ${repeat(
+            dayAssets,
+            (a) => a.asset_id,
+            (asset) => tileTpl(asset, inAlbum),
+          )}`,
+      )}`,
+  )}${libraryTruncated
+    ? html`<div class="window-footer">
+        <span
+          >${selectedAlbum || searchQuery
+            ? `This view covers your latest ${libraryWindow} photos — older ones may be missing. `
+            : `Showing your latest ${libraryWindow} photos. `}</span
+        >
+        <button
+          type="button"
+          class="kit-btn"
+          @click=${async (e) => {
+            e.target.disabled = true;
+            libraryWindow += 500;
+            await refresh();
+          }}
+        >
+          Show more
+        </button>
+      </div>`
+    : nothing}`;
+}
 
-  const tile = document.createElement('button');
-  tile.type = 'button';
-  tile.className = 'tile';
-  fillTileMedia(tile, asset);
-  tile.addEventListener('click', (e) => {
-    if (selectMode) toggleSelect(asset.asset_id, e.shiftKey);
-    else openLightbox(asset.asset_id);
-  });
-  wrap.appendChild(tile);
-
-  // The selection dot: always present so select mode is one tap away;
-  // outside select mode it surfaces on hover/focus as an accelerator.
-  const check = document.createElement('button');
-  check.type = 'button';
-  check.className = 'tile-check';
-  check.setAttribute('aria-label', selectedIds.has(asset.asset_id) ? 'Deselect' : 'Select');
-  check.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (!selectMode) enterSelectMode();
-    toggleSelect(asset.asset_id, e.shiftKey);
-  });
-  wrap.appendChild(check);
-
-  // The favorite heart: hover reveal on desktop, always on for touch and
-  // for photos already favorited; the toggle rides update-asset.
-  if (asset.favorite) wrap.classList.add('faved');
-  const heart = document.createElement('button');
-  heart.type = 'button';
-  heart.className = 'tile-heart';
-  heart.setAttribute('aria-pressed', asset.favorite ? 'true' : 'false');
-  heart.setAttribute('aria-label', asset.favorite ? 'Remove from favorites' : 'Add to favorites');
-  const heartGlyph = document.createElement('span');
-  heartGlyph.textContent = asset.favorite ? '♥' : '♡';
-  heartGlyph.setAttribute('aria-hidden', 'true');
-  heart.appendChild(heartGlyph);
-  heart.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleFavorite(asset);
-  });
-  wrap.appendChild(heart);
-
-  // Inside an album, each tile offers the one contextual edit: leave it.
-  if (albums.some((a) => a.album_id === selectedAlbum)) {
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'tile-remove';
-    rm.title = 'Remove from album';
-    rm.setAttribute('aria-label', 'Remove from album');
-    const glyph = document.createElement('span');
-    glyph.textContent = '×';
-    glyph.setAttribute('aria-hidden', 'true');
-    rm.appendChild(glyph);
-    rm.addEventListener('click', async () => {
-      const outcome = await act('remove-from-album', {
-        album_id: selectedAlbum,
-        asset_id: asset.asset_id,
-      });
-      if (narrate(outcome)) await refresh();
-    });
-    wrap.appendChild(rm);
+function renderGrid() {
+  const grid = $('grid');
+  grid.classList.toggle('selecting', selectMode);
+  const shown = visibleAssets();
+  const empty = $('empty');
+  empty.hidden = shown.length > 0;
+  if (shown.length === 0) {
+    const searching = searchQuery !== '';
+    $('emptyText').textContent = searching
+      ? `No matches for “${searchQuery}”.`
+      : selectedAlbum === FAVORITES
+        ? 'No favorites yet — tap the heart on any photo.'
+        : selectedAlbum === TRASH
+          ? 'Trash is empty.'
+          : selectedAlbum
+            ? 'Nothing in this album yet.'
+            : 'No photos yet — your library starts with the first upload.';
+    $('emptyUpload').hidden = searching || selectedAlbum === FAVORITES || selectedAlbum === TRASH;
   }
-  return wrap;
+  // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
+  if (selectedAlbum === TRASH) {
+    mountGrid(html`${repeat(shown, (a) => a.asset_id, trashTileTpl)}`);
+    return;
+  }
+  // Google-Photos-style timeline: sticky month headers, day labels inside.
+  const inAlbum = albums.some((a) => a.album_id === selectedAlbum);
+  const months = new Map(); // month key -> Map(day key -> assets)
+  for (const asset of shown) {
+    const dk = dayKey(asset.taken_at);
+    const mk = dk.slice(0, 7);
+    if (!months.has(mk)) months.set(mk, new Map());
+    const days = months.get(mk);
+    if (!days.has(dk)) days.set(dk, []);
+    days.get(dk).push(asset);
+  }
+  // The window is honest about its edge: All, Favorites, albums and the
+  // client-side search all filter the same loaded slice, so any of them can
+  // silently miss photos older than the window. "Show more" grows it — with
+  // no search plane, that is the only road back in time.
+  mountGrid(gridTemplate(months, inAlbum));
 }
 
 async function toggleFavorite(asset, noteEl) {
@@ -656,40 +766,6 @@ async function restoreAsset(assetId, { quiet = false } = {}) {
   if (!quiet) toast('Photo restored to your library.');
   await refresh();
   return true;
-}
-
-// A trash tile: the photo, a purge countdown when one is derivable, and
-// Restore — nothing else. No lightbox, no selection, no albums, no hearts.
-function renderTrashTile(asset) {
-  const wrap = document.createElement('div');
-  wrap.className = 'tile-wrap trash';
-  wrap.dataset.assetId = asset.asset_id;
-  const tile = document.createElement('div');
-  tile.className = 'tile';
-  fillTileMedia(tile, asset);
-  wrap.appendChild(tile);
-
-  if (asset.purge_in_days != null) {
-    const label = document.createElement('span');
-    label.className = 'tile-purge';
-    label.textContent =
-      asset.purge_in_days === 0
-        ? 'purges today'
-        : `purges in ${asset.purge_in_days} ${asset.purge_in_days === 1 ? 'day' : 'days'}`;
-    wrap.appendChild(label);
-  }
-
-  const restore = document.createElement('button');
-  restore.type = 'button';
-  restore.className = 'tile-restore';
-  restore.textContent = 'Restore';
-  restore.setAttribute('aria-label', `Restore ${asset.title ?? 'photo'}`);
-  restore.addEventListener('click', async () => {
-    restore.disabled = true;
-    if (!(await restoreAsset(asset.asset_id))) restore.disabled = false;
-  });
-  wrap.appendChild(restore);
-  return wrap;
 }
 
 // ---------- Multi-select ----------
@@ -711,6 +787,7 @@ function exitSelectMode() {
   $('selectBtn').textContent = 'Select';
   delete $('selectBtn').dataset.active;
   document.body.classList.remove('has-selection');
+  closeAlbumMenu();
   renderGrid();
   renderSelectionBar();
 }
@@ -728,106 +805,117 @@ function toggleSelect(assetId, shiftKey) {
         else selectedIds.delete(list[i].asset_id);
       }
       selectAnchor = assetId;
-      applySelection();
+      renderGrid();
+      renderSelectionBar();
       return;
     }
   }
   if (selectedIds.has(assetId)) selectedIds.delete(assetId);
   else selectedIds.add(assetId);
   selectAnchor = assetId;
-  applySelection();
+  renderGrid();
+  renderSelectionBar();
 }
 
-// Update tile state in place — no full re-render on every tap.
-function applySelection() {
-  for (const wrap of $('grid').querySelectorAll('.tile-wrap')) {
-    const on = selectedIds.has(wrap.dataset.assetId);
-    wrap.classList.toggle('selected', on);
-    const check = wrap.querySelector('.tile-check');
-    if (check) check.setAttribute('aria-label', on ? 'Deselect' : 'Select');
+// ---------- Selection bar ----------
+
+// The "Add to album ▾" menu is a small, transient popover that only this app
+// owns (it isn't a kit popover) — a raw DOM node while open, else null, kept
+// deliberately imperative like the old code: an away-click listener is
+// added/removed in lockstep with it, which is more fragile to reason about
+// as reactive state than as a plain open/close pair.
+let albumMenuNode = null;
+
+function closeAlbumMenu() {
+  if (!albumMenuNode) return;
+  albumMenuNode = null;
+  document.removeEventListener('click', onAlbumMenuAway, true);
+}
+
+function onAlbumMenuAway(e) {
+  const wrap = $('selectionBar').querySelector('.bar-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    closeAlbumMenu();
+    renderSelectionBar();
   }
+}
+
+function toggleAlbumMenu(countEl) {
+  if (albumMenuNode) {
+    closeAlbumMenu();
+    renderSelectionBar();
+    return;
+  }
+  const menu = document.createElement('div');
+  menu.className = 'album-menu';
+  menu.setAttribute('role', 'menu');
+  if (albums.length === 0) {
+    const none = document.createElement('p');
+    none.className = 'album-menu-empty';
+    none.textContent = 'No albums yet — make one from the chips above.';
+    menu.appendChild(none);
+  }
+  for (const album of albums) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'album-menu-item';
+    item.setAttribute('role', 'menuitem');
+    item.textContent = album.title ?? 'Album';
+    item.addEventListener('click', () => {
+      closeAlbumMenu();
+      renderSelectionBar();
+      batchAddToAlbum([...selectedIds], album, countEl);
+    });
+    menu.appendChild(item);
+  }
+  albumMenuNode = menu;
   renderSelectionBar();
+  document.addEventListener('click', onAlbumMenuAway, true);
+}
+
+function selectionBarTemplate() {
+  const n = selectedIds.size;
+  const countRef = createRef();
+  return html`<span class="bar-count" ${ref(countRef)}
+      >${n === 0 ? 'Select photos' : `${n} selected`}</span
+    >
+    <div class="bar-menu-wrap">
+      <button
+        type="button"
+        class="kit-btn bar-btn"
+        aria-haspopup="true"
+        ?disabled=${n === 0}
+        @click=${() => toggleAlbumMenu(countRef.value)}
+      >
+        Add to album ▾
+      </button>
+      ${albumMenuNode ?? nothing}
+    </div>
+    <button
+      type="button"
+      class="kit-btn bar-btn danger"
+      ?disabled=${n === 0}
+      @click=${(e) => {
+        if (batchBusy || selectedIds.size === 0) return;
+        if (!armConfirm(e.currentTarget, { armedLabel: `Delete ${selectedIds.size}?` })) return;
+        batchDelete([...selectedIds], countRef.value);
+      }}
+    >
+      Delete
+    </button>
+    <button type="button" class="bar-close" aria-label="Exit selection" @click=${exitSelectMode}>
+      ×
+    </button>`;
 }
 
 function renderSelectionBar() {
   const bar = $('selectionBar');
   bar.hidden = !selectMode;
-  bar.innerHTML = '';
-  if (!selectMode) return;
-
-  const n = selectedIds.size;
-  const count = document.createElement('span');
-  count.className = 'bar-count';
-  count.textContent = n === 0 ? 'Select photos' : `${n} selected`;
-  bar.appendChild(count);
-
-  // Add to album — a small menu that opens above the bar.
-  const menuWrap = document.createElement('div');
-  menuWrap.className = 'bar-menu-wrap';
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'kit-btn bar-btn';
-  addBtn.textContent = 'Add to album ▾';
-  addBtn.disabled = n === 0;
-  addBtn.setAttribute('aria-haspopup', 'true');
-  addBtn.addEventListener('click', () => {
-    const open = menuWrap.querySelector('.album-menu');
-    if (open) {
-      open.remove();
-      return;
-    }
-    const menu = document.createElement('div');
-    menu.className = 'album-menu';
-    menu.setAttribute('role', 'menu');
-    if (albums.length === 0) {
-      const none = document.createElement('p');
-      none.className = 'album-menu-empty';
-      none.textContent = 'No albums yet — make one from the chips above.';
-      menu.appendChild(none);
-    }
-    for (const album of albums) {
-      const item = document.createElement('button');
-      item.type = 'button';
-      item.className = 'album-menu-item';
-      item.setAttribute('role', 'menuitem');
-      item.textContent = album.title ?? 'Album';
-      item.addEventListener('click', () => {
-        menu.remove();
-        batchAddToAlbum([...selectedIds], album, count);
-      });
-      menu.appendChild(item);
-    }
-    menuWrap.appendChild(menu);
-    const away = (e) => {
-      if (!menuWrap.contains(e.target)) {
-        menu.remove();
-        document.removeEventListener('click', away, true);
-      }
-    };
-    document.addEventListener('click', away, true);
-  });
-  menuWrap.appendChild(addBtn);
-  bar.appendChild(menuWrap);
-
-  const del = document.createElement('button');
-  del.type = 'button';
-  del.className = 'kit-btn bar-btn danger';
-  del.textContent = 'Delete';
-  del.disabled = n === 0;
-  del.addEventListener('click', () => {
-    if (batchBusy || selectedIds.size === 0) return;
-    if (!armConfirm(del, { armedLabel: `Delete ${selectedIds.size}?` })) return;
-    batchDelete([...selectedIds], count);
-  });
-  bar.appendChild(del);
-
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'bar-close';
-  close.textContent = '×';
-  close.setAttribute('aria-label', 'Exit selection');
-  close.addEventListener('click', exitSelectMode);
-  bar.appendChild(close);
+  if (!selectMode) {
+    litRender(nothing, bar);
+    return;
+  }
+  litRender(selectionBarTemplate(), bar);
 }
 
 function setBarBusy(on) {
@@ -918,7 +1006,7 @@ function closeLightbox() {
   lightboxAssetId = null;
   const box = $('lightbox');
   box.hidden = true;
-  box.innerHTML = '';
+  litRender(nothing, box);
 }
 
 function step(delta) {
@@ -973,6 +1061,145 @@ function wireZoom(img) {
   img.addEventListener('click', (e) => e.stopPropagation());
 }
 
+// The stage's media (image/video/placeholder), keyed by `asset_id` in
+// `lightboxTpl` below: stepping to a different photo always mints a fresh
+// element (so zoom state never bleeds from one photo to the next), while a
+// background refresh landing on the SAME photo reuses the node (so the image
+// doesn't reload/flicker). `wireZoom` is guarded per-element so that reuse
+// never double-attaches its pointer/dblclick listeners.
+function stageTpl(asset, setInfo) {
+  if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
+    return html`<video
+      .src=${asset.content_uri}
+      .muted=${true}
+      .playsInline=${true}
+      .controls=${true}
+      preload="metadata"
+      aria-label=${asset.title ?? 'Video'}
+    ></video>`;
+  }
+  if (isRenderableUri(asset.content_uri)) {
+    const needsProbe = asset.width == null || asset.height == null;
+    return html`<img
+      .src=${asset.content_uri}
+      alt=${asset.title ?? asset.kind ?? 'Photo'}
+      ${ref((el) => {
+        if (!el || el.dataset.zoomWired) return;
+        el.dataset.zoomWired = '1';
+        wireZoom(el);
+      })}
+      @load=${(e) => {
+        if (needsProbe) setInfo(e.target.naturalWidth, e.target.naturalHeight);
+      }}
+    />`;
+  }
+  return html`<div class="lightbox-placeholder">${asset.media_type ?? asset.kind ?? 'media'}</div>`;
+}
+
+function lightboxTpl(asset, metaNode, infoNode, facesHostNode, noteNode, setInfo) {
+  const list = visibleAssets();
+  const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
+  return html`<div class="lightbox-stage" @click=${(e) => e.stopPropagation()}>
+      ${repeat(
+        [asset],
+        (a) => a.asset_id,
+        (a) => stageTpl(a, setInfo),
+      )}
+    </div>
+    ${[
+      ['prev', -1, '‹', 'Previous photo'],
+      ['next', 1, '›', 'Next photo'],
+    ].map(
+      ([variant, delta, glyph, name]) => html`<button
+        type="button"
+        class="lightbox-nav ${variant}"
+        aria-label=${name}
+        ?disabled=${idx < 0 || !list[idx + delta]}
+        @click=${(e) => {
+          e.stopPropagation();
+          step(delta);
+        }}
+      >
+        ${glyph}
+      </button>`,
+    )}
+    <div class="lightbox-panel" @click=${(e) => e.stopPropagation()}>
+      ${metaNode} ${infoNode}
+      ${albums.length > 0
+        ? html`<div class="lightbox-albums">
+            ${repeat(
+              albums,
+              (a) => a.album_id,
+              (album) => {
+                const member = asset.album_ids?.includes(album.album_id) ?? false;
+                return html`<button
+                  type="button"
+                  class="kit-chip"
+                  data-active=${member ? 'true' : 'false'}
+                  @click=${async () => {
+                    const outcome = await act(member ? 'remove-from-album' : 'add-to-album', {
+                      album_id: album.album_id,
+                      asset_id: asset.asset_id,
+                    });
+                    if (narrate(outcome, noteNode)) await refresh();
+                  }}
+                >
+                  ${member ? `✓ ${album.title ?? 'Album'}` : (album.title ?? 'Album')}
+                </button>`;
+              },
+            )}
+          </div>`
+        : nothing}
+      ${facesHostNode}
+      <div class="lightbox-actions">
+        <button
+          type="button"
+          class=${cls('kit-btn', 'lightbox-fav', asset.favorite && 'faved')}
+          aria-pressed=${asset.favorite ? 'true' : 'false'}
+          @click=${async () => {
+            await toggleFavorite(asset, noteNode); // refresh re-renders this lightbox
+          }}
+        >
+          ${asset.favorite ? '♥ Favorited' : '♡ Favorite'}
+        </button>
+        ${isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')
+          ? html`<a
+              class="kit-btn lightbox-download"
+              href=${asset.content_uri}
+              download=${(asset.title ?? '').trim() || `photo-${asset.asset_id}`}
+              >Download</a
+            >`
+          : nothing}
+        <button
+          type="button"
+          class="kit-btn danger"
+          @click=${async (e) => {
+            if (!armConfirm(e.currentTarget, { armedLabel: 'Delete photo?' })) return;
+            const outcome = await act('delete-asset', { asset_id: asset.asset_id });
+            if (narrate(outcome, noteNode)) {
+              closeLightbox();
+              toast('Moved to trash — it leaves every album it was in.', {
+                undoLabel: 'Undo',
+                onUndo: () => restoreAsset(asset.asset_id),
+              });
+              await refresh();
+            }
+          }}
+        >
+          Delete photo
+        </button>
+      </div>
+      ${noteNode}
+    </div>`;
+}
+
+// The lightbox rebuilds its meta form (caption + capture time), info line
+// and faces host as plain imperative nodes on every call — exactly as the
+// pre-Lit version did — because they're written into by scattered async
+// handlers (save, faces confirm/reject, load-driven dimension probe) whose
+// closures are simplest when they close over a real, already-existing
+// element rather than a Lit part whose commit order isn't guaranteed to
+// precede theirs.
 function renderLightbox() {
   const box = $('lightbox');
   const asset = assets.find((a) => a.asset_id === lightboxAssetId);
@@ -980,56 +1207,6 @@ function renderLightbox() {
     closeLightbox();
     return;
   }
-  box.innerHTML = '';
-  const swallow = (el) => el.addEventListener('click', (e) => e.stopPropagation());
-
-  const stage = document.createElement('div');
-  stage.className = 'lightbox-stage';
-  swallow(stage);
-  let stageImg = null;
-  if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
-    const vid = document.createElement('video');
-    vid.src = asset.content_uri;
-    vid.controls = true;
-    vid.playsInline = true;
-    vid.setAttribute('aria-label', asset.title ?? 'Video');
-    stage.appendChild(vid);
-  } else if (isRenderableUri(asset.content_uri)) {
-    stageImg = document.createElement('img');
-    stageImg.src = asset.content_uri; // the lightbox keeps the original bytes
-    stageImg.alt = asset.title ?? asset.kind ?? 'Photo';
-    wireZoom(stageImg);
-    stage.appendChild(stageImg);
-  } else {
-    const placeholder = document.createElement('div');
-    placeholder.className = 'lightbox-placeholder';
-    placeholder.textContent = asset.media_type ?? asset.kind ?? 'media';
-    stage.appendChild(placeholder);
-  }
-  box.appendChild(stage);
-
-  const list = visibleAssets();
-  const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
-  for (const [cls, delta, glyph, name] of [
-    ['prev', -1, '‹', 'Previous photo'],
-    ['next', 1, '›', 'Next photo'],
-  ]) {
-    const nav = document.createElement('button');
-    nav.type = 'button';
-    nav.className = `lightbox-nav ${cls}`;
-    nav.textContent = glyph;
-    nav.setAttribute('aria-label', name);
-    nav.disabled = idx < 0 || !list[idx + delta];
-    nav.addEventListener('click', (e) => {
-      e.stopPropagation();
-      step(delta);
-    });
-    box.appendChild(nav);
-  }
-
-  const panel = document.createElement('div');
-  panel.className = 'lightbox-panel';
-  swallow(panel);
 
   const note = document.createElement('p');
   note.className = 'lightbox-note';
@@ -1068,7 +1245,6 @@ function renderLightbox() {
     if (narrate(outcome, note)) await refresh();
   });
   meta.append(cap, when);
-  panel.appendChild(meta);
 
   // Info line: kind · dimensions · size · when.
   const info = document.createElement('p');
@@ -1087,77 +1263,15 @@ function renderLightbox() {
     info.textContent = parts.join(' · ');
   };
   setInfo();
-  if (stageImg && (asset.width == null || asset.height == null)) {
-    stageImg.addEventListener('load', () => setInfo(stageImg.naturalWidth, stageImg.naturalHeight));
-  }
-  panel.appendChild(info);
-
-  // Album membership: one chip per album, click to join or leave.
-  if (albums.length > 0) {
-    const strip = document.createElement('div');
-    strip.className = 'lightbox-albums';
-    for (const album of albums) {
-      const member = asset.album_ids?.includes(album.album_id) ?? false;
-      strip.appendChild(
-        chip(
-          member ? `✓ ${album.title ?? 'Album'}` : (album.title ?? 'Album'),
-          member,
-          async () => {
-            const outcome = await act(member ? 'remove-from-album' : 'add-to-album', {
-              album_id: album.album_id,
-              asset_id: asset.asset_id,
-            });
-            if (narrate(outcome, note)) await refresh();
-          },
-        ),
-      );
-    }
-    panel.appendChild(strip);
-  }
 
   // People (issue #299): the enricher's face proposals with the owner's
   // confirm/reject loop. Loaded async so an empty vault costs nothing; the
   // section only appears when regions exist.
   const facesHost = document.createElement('div');
   facesHost.className = 'lightbox-faces';
-  panel.appendChild(facesHost);
   renderFaces(facesHost, asset.asset_id, note);
 
-  const actions = document.createElement('div');
-  actions.className = 'lightbox-actions';
-  const fav = kitBtn(asset.favorite ? '♥ Favorited' : '♡ Favorite', async () => {
-    await toggleFavorite(asset, note); // refresh re-renders this lightbox
-  });
-  fav.classList.add('lightbox-fav');
-  if (asset.favorite) fav.classList.add('faved');
-  fav.setAttribute('aria-pressed', asset.favorite ? 'true' : 'false');
-  actions.appendChild(fav);
-  if (isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')) {
-    const dl = document.createElement('a');
-    dl.className = 'kit-btn lightbox-download';
-    dl.textContent = 'Download';
-    dl.href = asset.content_uri;
-    dl.download = (asset.title ?? '').trim() || `photo-${asset.asset_id}`;
-    actions.appendChild(dl);
-  }
-  const del = kitBtn('Delete photo', async () => {
-    if (!armConfirm(del, { armedLabel: 'Delete photo?' })) return;
-    const outcome = await act('delete-asset', { asset_id: asset.asset_id });
-    if (narrate(outcome, note)) {
-      closeLightbox();
-      toast('Moved to trash — it leaves every album it was in.', {
-        undoLabel: 'Undo',
-        onUndo: () => restoreAsset(asset.asset_id),
-      });
-      await refresh();
-    }
-  });
-  del.classList.add('danger');
-  actions.appendChild(del);
-  panel.appendChild(actions);
-  panel.appendChild(note);
-
-  box.appendChild(panel);
+  litRender(lightboxTpl(asset, meta, info, facesHost, note, setInfo), box);
   box.hidden = false;
 }
 
@@ -1165,100 +1279,94 @@ $('lightbox').addEventListener('click', closeLightbox);
 
 // ---------- Album picker ("Add photos" from inside an album) ----------
 
+let pickerAlbum = null;
+const pickerPicked = new Set();
+
 function closePicker() {
   const p = $('picker');
   p.hidden = true;
-  p.innerHTML = '';
+  litRender(nothing, p);
+  pickerAlbum = null;
+  pickerPicked.clear();
+}
+
+function pickerTileTpl(asset) {
+  const picked = pickerPicked.has(asset.asset_id);
+  return html`<button
+    type="button"
+    class="picker-tile"
+    aria-pressed=${picked ? 'true' : 'false'}
+    aria-label=${asset.title ?? 'Photo'}
+    ${ref((el) => mountMedia(el, asset))}
+    @click=${() => {
+      if (pickerPicked.has(asset.asset_id)) pickerPicked.delete(asset.asset_id);
+      else pickerPicked.add(asset.asset_id);
+      renderPicker();
+    }}
+  ></button>`;
+}
+
+async function submitPicker(e) {
+  const btn = e.currentTarget;
+  const album = pickerAlbum;
+  const ids = [...pickerPicked];
+  btn.disabled = true;
+  let ok = 0;
+  let parked = 0;
+  let skipped = 0;
+  for (let i = 0; i < ids.length; i += 1) {
+    btn.textContent = `Adding ${i + 1} of ${ids.length}…`;
+    const outcome = await act('add-to-album', { album_id: album.album_id, asset_id: ids[i] });
+    if (outcome?.status === 'executed') ok += 1;
+    else if (outcome?.status === 'parked') parked += 1;
+    else skipped += 1;
+  }
+  closePicker();
+  await refresh();
+  const parts = [];
+  if (ok > 0) parts.push(`Added ${ok} to “${album.title ?? 'Album'}”`);
+  if (parked > 0) parts.push(`${parked} awaiting approval`);
+  if (skipped > 0) parts.push(`${skipped} already there`);
+  toast(parts.join(' · ') || 'Nothing to add');
+}
+
+// The picker's own `.kit-modal` rides the shared modal shell as a compound
+// class (`kit-modal picker-panel`) — app.css keys its photo-grid shape off
+// that pair, so both classes must stay on the one panel element.
+function pickerTpl(album) {
+  const candidates = assets.filter((a) => !(a.album_ids ?? []).includes(album.album_id));
+  const n = pickerPicked.size;
+  return html`<div class="kit-modal picker-panel" @click=${(e) => e.stopPropagation()}>
+    <h2 class="picker-head">Add to “${album.title ?? 'Album'}”</h2>
+    <div class="picker-grid">
+      ${candidates.length === 0
+        ? html`<p class="picker-empty muted">
+            Everything in your library is already in this album.
+          </p>`
+        : repeat(candidates, (a) => a.asset_id, pickerTileTpl)}
+    </div>
+    <div class="picker-foot">
+      <span class="picker-count">${n === 0 ? 'Pick photos to add' : `${n} selected`}</span>
+      <button type="button" class="kit-btn" @click=${closePicker}>Cancel</button>
+      <button type="button" class="kit-btn primary" ?disabled=${n === 0} @click=${submitPicker}>
+        ${n === 0 ? 'Add' : `Add ${n}`}
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderPicker() {
+  if (!pickerAlbum) return;
+  litRender(pickerTpl(pickerAlbum), $('picker'));
 }
 
 function openPicker() {
   const album = albums.find((a) => a.album_id === selectedAlbum);
   if (!album) return;
-  const picked = new Set();
-  const p = $('picker');
-  p.innerHTML = '';
-
-  const panel = document.createElement('div');
-  panel.className = 'kit-modal picker-panel';
-  panel.addEventListener('click', (e) => e.stopPropagation());
-
-  const head = document.createElement('h2');
-  head.className = 'picker-head';
-  head.textContent = `Add to “${album.title ?? 'Album'}”`;
-  panel.appendChild(head);
-
-  const candidates = assets.filter((a) => !(a.album_ids ?? []).includes(album.album_id));
-  const grid = document.createElement('div');
-  grid.className = 'picker-grid';
-  if (candidates.length === 0) {
-    const none = document.createElement('p');
-    none.className = 'picker-empty muted';
-    none.textContent = 'Everything in your library is already in this album.';
-    grid.appendChild(none);
-  }
-
-  const count = document.createElement('span');
-  count.className = 'picker-count';
-  const addBtn = document.createElement('button');
-  addBtn.type = 'button';
-  addBtn.className = 'kit-btn primary';
-  const syncFoot = () => {
-    count.textContent = picked.size === 0 ? 'Pick photos to add' : `${picked.size} selected`;
-    addBtn.textContent = picked.size === 0 ? 'Add' : `Add ${picked.size}`;
-    addBtn.disabled = picked.size === 0;
-  };
-
-  for (const asset of candidates) {
-    const tile = document.createElement('button');
-    tile.type = 'button';
-    tile.className = 'picker-tile';
-    tile.setAttribute('aria-pressed', 'false');
-    tile.setAttribute('aria-label', asset.title ?? 'Photo');
-    fillTileMedia(tile, asset);
-    tile.addEventListener('click', () => {
-      if (picked.has(asset.asset_id)) picked.delete(asset.asset_id);
-      else picked.add(asset.asset_id);
-      tile.setAttribute('aria-pressed', picked.has(asset.asset_id) ? 'true' : 'false');
-      syncFoot();
-    });
-    grid.appendChild(tile);
-  }
-  panel.appendChild(grid);
-
-  const foot = document.createElement('div');
-  foot.className = 'picker-foot';
-  foot.appendChild(count);
-  foot.appendChild(kitBtn('Cancel', closePicker));
-  addBtn.addEventListener('click', async () => {
-    const ids = [...picked];
-    addBtn.disabled = true;
-    let ok = 0;
-    let parked = 0;
-    let skipped = 0;
-    for (let i = 0; i < ids.length; i += 1) {
-      addBtn.textContent = `Adding ${i + 1} of ${ids.length}…`;
-      const outcome = await act('add-to-album', {
-        album_id: album.album_id,
-        asset_id: ids[i],
-      });
-      if (outcome?.status === 'executed') ok += 1;
-      else if (outcome?.status === 'parked') parked += 1;
-      else skipped += 1;
-    }
-    closePicker();
-    await refresh();
-    const parts = [];
-    if (ok > 0) parts.push(`Added ${ok} to “${album.title ?? 'Album'}”`);
-    if (parked > 0) parts.push(`${parked} awaiting approval`);
-    if (skipped > 0) parts.push(`${skipped} already there`);
-    toast(parts.join(' · ') || 'Nothing to add');
-  });
-  foot.appendChild(addBtn);
-  panel.appendChild(foot);
-  syncFoot();
-
-  p.appendChild(panel);
-  p.hidden = false;
+  pickerAlbum = album;
+  pickerPicked.clear();
+  renderPicker();
+  $('picker').hidden = false;
 }
 
 $('picker').addEventListener('click', closePicker);
