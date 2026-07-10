@@ -496,7 +496,7 @@ button {
 }
 .d-search input:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .d-topbar-tools {
   margin-left: auto;
@@ -505,27 +505,14 @@ button {
   gap: 8px;
   flex-shrink: 0;
 }
-.d-viewtoggle {
-  display: flex;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-}
-.d-viewbtn {
+/* View toggle: kit.css .kit-seg owns the track + selected voice; only the
+   icon-square width is ours (kit's text padding would over-widen an icon). */
+.d-viewtoggle > .d-viewbtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 30px;
-  border: none;
-  border-radius: var(--r-btn);
-  background: none;
-  color: var(--ink-3);
-}
-.d-viewbtn[aria-pressed='true'] {
-  background: var(--accd);
-  color: #fff;
+  width: 34px;
+  padding: 0;
 }
 .d-themebtn {
   display: flex;
@@ -547,38 +534,10 @@ button {
   align-items: center;
 }
 
-/* Trust banners (not in the prototype — added to mirror Docs' consent UX) */
-.d-banner {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  border-radius: var(--r-md);
-  padding: 12px 16px 12px 34px;
+/* Trust banners: kit.css .kit-banner (+.notice) owns the look; only page
+   placement is ours (the .d-banner hook also drives narrow/denied layout). */
+.kit-banner.d-banner {
   margin: 14px 22px 0;
-  font: var(--t-small);
-  color: var(--ink-2);
-  box-shadow: var(--shadow-sm);
-}
-.d-banner::before {
-  content: '';
-  position: absolute;
-  left: 14px;
-  top: 15px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--_accent);
-  box-shadow: 0 0 0 3px var(--accs);
-}
-.d-banner strong {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-  margin-bottom: 1px;
-}
-.d-banner.notice::before {
-  background: var(--ink-3);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-3) 16%, transparent);
 }
 
 /* Toolbar */
@@ -614,25 +573,7 @@ button {
   gap: 8px;
   flex-wrap: wrap;
 }
-.d-chip {
-  padding: 6px 13px;
-  border-radius: var(--r-pill);
-  font: var(--t-small);
-  font-size: 12.5px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-}
-.d-chip:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.d-chip[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--accd);
-  font-weight: 600;
-}
+/* Status filter chips: kit.css .kit-chip.quiet (shared toggle-chip voice). */
 .d-toolbar-div {
   width: 1px;
   height: 22px;
@@ -676,19 +617,7 @@ button {
   display: flex;
   gap: 7px;
 }
-.d-bulk-btn {
-  padding: 6px 13px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-}
-.d-bulk-btn:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
+/* Bulk-bar actions: kit.css .kit-btn (quiet pill). */
 
 .d-scroll {
   flex: 1;
@@ -730,16 +659,10 @@ button {
   justify-content: center;
   cursor: pointer;
 }
-.d-av {
-  border-radius: 999px;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
+   People-specific touch kept on top of the kit's styling. */
+.kit-avatar {
   font-family: var(--font-title);
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  flex-shrink: 0;
 }
 .d-card-select {
   position: absolute;
@@ -897,9 +820,6 @@ button {
 .d-row[data-selected='true'] {
   background: var(--sel);
 }
-.d-row .d-av {
-  cursor: pointer;
-}
 .d-row-main {
   flex: 1;
   min-width: 0;
@@ -970,87 +890,8 @@ button {
   color: var(--ink);
 }
 
-/* ---------- Empty ---------- */
-
-.d-empty {
-  text-align: center;
-  padding: 64px 20px;
-  animation: d-fade 0.3s ease;
-}
-.d-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--r-card);
-  background: var(--bg-sunken);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 16px;
-  color: var(--ink-3);
-}
-.d-empty-title {
-  font: var(--t-strong);
-  margin-bottom: 4px;
-}
-.d-empty-sub {
-  font: var(--t-small);
-  color: var(--ink-2);
-  max-width: 38ch;
-  margin: 0 auto;
-}
-
-/* ---------- Popover ---------- */
-
-.d-popover {
-  position: fixed;
-  z-index: 55;
-  min-width: 206px;
-  max-width: 260px;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow-lg);
-  padding: 5px;
-  animation: d-rise 0.14s var(--ease);
-}
-.d-popover-head {
-  font: var(--t-tiny);
-  text-transform: uppercase;
-  letter-spacing: var(--tk-eye);
-  color: var(--ink-3);
-  padding: 8px 10px 6px;
-}
-.d-popover-item {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  width: 100%;
-  padding: 8px 11px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink);
-  font: var(--t-body);
-  text-align: left;
-}
-.d-popover-item:hover:not(:disabled) {
-  background: var(--bg-sunken);
-}
-.d-popover-item:disabled {
-  color: var(--ink-3);
-  cursor: default;
-}
-.d-popover-sep {
-  height: 1px;
-  background: var(--line);
-  margin: 4px 8px;
-}
-.d-dotmini {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  flex-shrink: 0;
-}
+/* Empty state + popover + status dot come from kit.css
+   (.kit-empty*, .kit-popover*, .kit-dotmini). */
 
 /* ---------- Details drawer ---------- */
 
@@ -1128,33 +969,10 @@ button {
   gap: 7px;
   margin: 18px 0;
 }
+/* Drawer quick actions: kit.css .kit-btn (+.primary); only the equal-width
+   flex split is ours. */
 .d-detail-btn {
   flex: 1;
-  padding: 9px 10px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-  text-align: center;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.d-detail-btn:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.d-detail-btn.primary {
-  background: var(--accd);
-  border-color: var(--accd);
-  color: #fff;
-}
-.d-detail-btn.primary:hover {
-  filter: brightness(1.07);
-  color: #fff;
 }
 .d-detail-label {
   font: var(--t-tiny);
@@ -1327,33 +1145,22 @@ button {
   background: var(--accd);
   border-color: var(--accd);
 }
-.d-chip-sm {
+/* Micro chips ride kit.css .kit-chip.quiet; the compact mono-eyebrow sizing
+   is the People delta (needs the compound selector to outrank kit.css, which
+   loads after app.css). Some are plain status <span>s, not toggles. */
+.kit-chip.d-chip-sm {
+  min-height: 0;
   padding: 3px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
   font: var(--t-mono);
   font-size: 10px;
   text-transform: uppercase;
 }
+span.d-chip-sm {
+  cursor: default;
+}
+/* Debt-direction toggle: kit.css .kit-seg; keep it rigid inside the add row. */
 .d-seg {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow: hidden;
   flex-shrink: 0;
-}
-.d-seg button {
-  border: none;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 11.5px;
-  padding: 4px 11px;
-}
-.d-seg button[aria-pressed='true'] {
-  background: var(--sel);
-  color: var(--accd);
-  font-weight: 600;
 }
 .d-activity-item {
   display: flex;
@@ -1398,33 +1205,15 @@ button {
 
 /* ---------- Modal ---------- */
 
-.d-modal-back {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: rgba(30, 15, 20, 0.42);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: d-fade 0.2s ease;
-}
-.d-modal {
-  width: min(440px, 100%);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow-lg);
-  padding: 22px;
-  animation: d-rise 0.18s var(--ease);
-}
-.d-modal h2 {
+/* Modal shell: kit.css .kit-modal-back / .kit-modal (kit's min(28rem,100%)
+   width ≈ the old 440px); the inner voice below stays People's. */
+.kit-modal h2 {
   margin: 0 0 4px;
   font: var(--t-title);
   font-size: 20px;
   letter-spacing: -0.02em;
 }
-.d-modal p.hint {
+.kit-modal p.hint {
   margin: 0 0 16px;
   font: var(--t-small);
   color: var(--ink-2);
@@ -1442,7 +1231,7 @@ button {
 }
 .d-input:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .d-modal-label {
   font: var(--t-tiny);
@@ -1456,50 +1245,13 @@ button {
   flex-wrap: wrap;
   gap: 7px;
 }
-.d-pickbtn {
-  padding: 7px 13px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-}
-.d-pickbtn[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--accd);
-  font-weight: 600;
-}
+/* Picker chips (circle/cadence): kit.css .kit-chip.quiet — they're
+   aria-pressed toggles, same voice as the toolbar filters. */
+/* Modal footer: kit.css .kit-modal-foot; People right-aligns its actions. */
 .d-modal-foot {
-  display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 22px;
 }
-.d-btn-ghost {
-  padding: 9px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.d-btn-primary {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accd);
-  color: #fff;
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.d-btn-primary:disabled {
-  background: color-mix(in oklab, var(--ink) 8%, transparent);
-  color: var(--ink-3);
-  cursor: not-allowed;
-}
+/* Ghost/primary modal buttons: kit.css .kit-btn / .kit-btn.primary. */
 
 /* ---------- Journal + activity ---------- */
 

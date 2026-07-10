@@ -10,7 +10,7 @@
  * CLI / local paths.
  */
 
-import { toCss, type ColorKey, type IconName } from '@centraid/design-tokens';
+import type { ColorKey, IconName } from '@centraid/design-tokens';
 import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 import { AppScaffoldError } from './scaffold-types.js';
@@ -48,11 +48,15 @@ export interface ScaffoldAppOpts {
 
 /**
  * Build the file map for a fresh app (issue #141): package.json,
- * app.json (the manifest), index.html, tokens.css (a frozen
- * design-tokens snapshot), app.css, app.js, README.md, and the
- * automations/ brief. The git store tracks files, so empty canonical
- * subdirs (queries/actions) are not emitted — they appear once the
- * agent writes the first handler.
+ * app.json (the manifest), index.html, app.css, app.jsx (a React
+ * starter — the gateway transpiles `.jsx` per-request via esbuild, no
+ * local build step), README.md, and the automations/ brief. The design
+ * system (wall.css, tokens.css, kit.css) is NOT copied into the app:
+ * those resolve via the runtime's shared-asset fallback to the live kit
+ * dir, so every app tracks token/primitive updates without re-scaffold.
+ * The git store tracks files, so empty canonical subdirs
+ * (queries/actions) are not emitted — they appear once the agent writes
+ * the first handler.
  */
 export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): ScaffoldFile[] {
   validateAppId(id);
@@ -75,10 +79,9 @@ export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): Scaffo
   return [
     { path: 'package.json', content: appPackageJson(id) },
     { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
-    { path: 'index.html', content: DEFAULT_INDEX_HTML(id, name) },
-    { path: 'tokens.css', content: toCss() },
+    { path: 'index.html', content: DEFAULT_INDEX_HTML(name) },
     { path: 'app.css', content: DEFAULT_APP_CSS },
-    { path: 'app.js', content: DEFAULT_APP_JS },
+    { path: 'app.jsx', content: DEFAULT_APP_JSX },
     { path: 'automations/README.md', content: AUTOMATIONS_README },
     { path: 'README.md', content: README_TEMPLATE(id) },
   ];
@@ -173,41 +176,113 @@ export function appPackageJson(id: string): string {
 }
 
 // The scaffold's index.html wires the visual contract: an inline live-
-// settings bridge runs synchronously before paint, then tokens.css (the
-// design-tokens snapshot), then app.css (per-app styles built on top).
-const DEFAULT_INDEX_HTML = (id: string, name: string): string => `<!doctype html>
+// settings bridge runs synchronously before paint, then the shared
+// design-system sheets (wall.css page background, tokens.css blueprint
+// token layer — both served from the kit dir, no local copies), then
+// app.css (per-app styles built on top), then kit.css primitives.
+const DEFAULT_INDEX_HTML = (name: string): string => `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>${escapeHtml(name)}</title>
     <script>${INLINE_SETTINGS_BRIDGE}</script>
+    <link rel="stylesheet" href="wall.css" />
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="./kit.css" />
   </head>
   <body>
-    <main>
-      <header class="head">
-        <h1>${escapeHtml(name)}</h1>
-        <p class="muted">App id: <code>${escapeHtml(id)}</code></p>
-      </header>
-      <section class="surface" aria-label="Get started">
-        <p>Edit <code>index.html</code>, add queries under <code>queries/</code>, and the agent will reshape this scaffold into your app.</p>
-      </section>
-    </main>
-    <script type="module" src="app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="./app.jsx"></script>
   </body>
 </html>
 `;
 
-const DEFAULT_APP_JS = `// Runs in the browser. Invoke handlers via the three-tool surface
-// exposed on window.centraid:
-//   const rows = await window.centraid.read({ query: 'list-things' });
+// Runs in the browser as a transpiled ES module (the gateway compiles
+// `.jsx` per-request via esbuild, `jsx: 'automatic'`) — no local build step.
+// `./react-core.min.js` is the same shared-sibling-import mechanism apps
+// already use for `./kit.js`; the transform's injected `./jsx-runtime.js`
+// import resolves as a shared asset automatically.
+const DEFAULT_APP_JSX = `import { createRoot, useState, useEffect } from './react-core.min.js';
+
+// Invoke handlers via the three-tool surface exposed on window.centraid:
+//   const data = await window.centraid.read({ query: 'list-things' });
 //   await window.centraid.write({ action: 'add-thing', input: { name } });
 //
-// Remember the state triad: render Empty / Loading / Error views for
-// every async surface. Toggle elements via the \`hidden\` attribute so
-// screen readers don't announce all three at once.
+// A query handler that touches the vault returns { vaultDenied } until the
+// owner approves this app's requested scopes — render the #consentBanner
+// below instead of the normal view while that shape is present. Remember
+// the state triad (Empty / Loading / Error) for every async surface.
+
+function App() {
+  const [state, setState] = useState({ loading: true, error: null, denied: null });
+
+  async function refresh() {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      // Replace 'list-things' with a real query once one is declared in
+      // app.json#queries and authored under queries/.
+      const data = await window.centraid.read({ query: 'list-things' });
+      setState({ loading: false, error: null, denied: data?.vaultDenied ?? null });
+    } catch (err) {
+      setState({ loading: false, error: err?.message ?? 'Something went wrong.', denied: null });
+    }
+  }
+
+  useEffect(() => {
+    void refresh();
+    // Keep the UI in sync with writes that happen behind its back (the
+    // assistant, another window, an automation) — see the
+    // authoring-centraid-apps skill's "Reactive data" section.
+    const off = window.centraid.onChange(() => {
+      void refresh();
+    });
+    return off;
+  }, []);
+
+  return (
+    <main>
+      <header className="head">
+        <h1>Your app</h1>
+        <p className="muted">Add queries and actions, then reshape this component to render them.</p>
+      </header>
+
+      <div id="consentBanner" className="kit-banner" hidden={!state.denied}>
+        <strong>No vault access yet.</strong>
+        <span>
+          {state.denied?.message ?? "Ask the owner to approve this app's requested scopes in vault settings."}
+        </span>
+      </div>
+
+      {state.loading && <p className="loading">Loading…</p>}
+      {state.error && (
+        <p className="error" role="alert">
+          {state.error}
+        </p>
+      )}
+      {!state.loading && !state.error && !state.denied && (
+        <section className="surface" aria-label="Get started">
+          <p>
+            Edit <code>app.jsx</code>, add queries under <code>queries/</code>, and the agent will
+            reshape this scaffold into your app.
+          </p>
+          <button
+            type="button"
+            className="kit-btn primary"
+            onClick={() => {
+              void refresh();
+            }}
+          >
+            Refresh
+          </button>
+        </section>
+      )}
+    </main>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
 `;
 
 // Default per-app knob list embedded in every new app's `app.json`

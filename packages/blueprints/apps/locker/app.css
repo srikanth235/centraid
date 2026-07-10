@@ -51,6 +51,17 @@
   --t-small: 400 0.8rem/1.45 var(--font-sans);
   --t-tiny: 600 0.6rem/1.4 var(--mono);
   --t-mono: 500 0.72rem/1.4 var(--mono);
+
+  /* ---- Kit contract bridge (buttons / chips / modal / focus ring render
+     on-brand) — kit.css reads these, they follow the theme vars. ---- */
+  --surface: var(--bg-elev);
+  --surface-2: var(--bg-sunken);
+  --text: var(--ink);
+  --muted: var(--ink-2);
+  --ink-faint: var(--ink-3);
+  --radius: 0.75rem;
+  --accent-soft: var(--accs);
+  --accent-deep: var(--accd);
 }
 :root[data-theme='dark'] {
   --ink: hsl(214 16% 93%);
@@ -374,7 +385,7 @@ textarea {
 .v-search input:focus {
   border-color: var(--selb);
   background: var(--bg-elev);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .v-items {
   flex: 1;
@@ -634,17 +645,10 @@ textarea {
   gap: 10px;
   margin-top: 10px;
 }
-.v-strbar {
+/* The bar itself is the kit meter (<kit-meter> → .kit-bar); it only needs
+   to stretch across the row here. */
+.v-strength .kit-bar {
   flex: 1;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--bg-sunken);
-  overflow: hidden;
-}
-.v-strbar i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
 }
 /* TOTP */
 .v-otp {
@@ -734,60 +738,8 @@ textarea {
   border-radius: 5px;
 }
 
-/* Toast */
-.v-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 26px;
-  transform: translateX(-50%);
-  z-index: 80;
-  background: var(--ink);
-  color: var(--bg-elev);
-  padding: 10px 18px;
-  border-radius: 999px;
-  font: var(--t-strong);
-  font-size: 13px;
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  animation: v-toast 0.2s var(--ease);
-}
-@keyframes v-toast {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-/* Modal */
-.v-modal-back {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: rgba(12, 18, 32, 0.46);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: v-fade 0.2s ease;
-}
-.v-modal {
-  width: min(460px, 100%);
-  max-height: 92vh;
-  overflow: auto;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow-lg);
-  padding: 22px;
-  animation: v-rise 0.18s var(--ease);
-}
-.v-modal h2 {
+/* Modal (kit-modal shell; app keeps only the heading + field styles) */
+.kit-modal h2 {
   margin: 0 0 14px;
   font: var(--t-title);
   font-size: 20px;
@@ -813,7 +765,7 @@ textarea {
 }
 .v-in:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .v-in.mono {
   font-family: var(--mono);
@@ -823,24 +775,6 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.v-typechip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12px;
-}
-.v-typechip[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--ink);
-  font-weight: 600;
 }
 .v-genrow {
   display: flex;
@@ -893,44 +827,10 @@ textarea {
 .v-switch.on i {
   left: 18px;
 }
-.v-modal-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 20px;
-}
+/* Layout-only: pushes a foot's delete button to the far left (kit-btn danger
+   carries the visual). */
 .v-del {
   margin-right: auto;
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: none;
-  color: var(--danger);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.v-btn-ghost {
-  padding: 9px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.v-btn-primary {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accd);
-  color: #fff;
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.v-btn-primary:disabled {
-  background: color-mix(in oklab, var(--ink) 8%, transparent);
-  color: var(--ink-3);
-  cursor: not-allowed;
 }
 
 /* Lock */
@@ -979,7 +879,7 @@ textarea {
 }
 .v-lock-in:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .v-lock-btn {
   width: 280px;
@@ -991,16 +891,6 @@ textarea {
   font: var(--t-strong);
 }
 
-@keyframes v-rise {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
 @keyframes v-fade {
   from {
     opacity: 0;

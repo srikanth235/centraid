@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import type { ServerResponse } from 'node:http';
+import * as esbuild from 'esbuild';
 import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
 import { sendError } from './http-utils.js';
 
@@ -18,8 +19,93 @@ import { sendError } from './http-utils.js';
  * which in turn imports `lit-core.min.js` (the vendored runtime-only Lit
  * bundle). Both are relative same-origin ESM imports resolved the same way as
  * `kit.js`, so they must fall back to the shared dir too.
+ *
+ * `react-core.min.js` (vendored runtime-only React bundle) and
+ * `jsx-runtime.js` (the `automatic` JSX runtime esbuild's transform imports,
+ * see {@link transformJsx}) round out the set for builder-generated `.jsx`
+ * apps that don't ship their own copies.
+ *
+ * `tokens.css` (the generated blueprint-app token layer, see
+ * packages/blueprints/scripts/vendor-tokens.mjs) and `wall.css` (the shared
+ * "wall" surface gradient, copied verbatim from packages/design-tokens) are
+ * shared the same way — an app with its own `wall.css` (e.g. people, for its
+ * warm-blush light-mode override) still wins via the per-app-copy precedence
+ * above.
  */
-const SHARED_ASSET_FILES = new Set(['kit.js', 'kit.css', 'elements.js', 'lit-core.min.js']);
+const SHARED_ASSET_FILES = new Set([
+  'kit.js',
+  'kit.css',
+  'elements.js',
+  'lit-core.min.js',
+  'react-core.min.js',
+  'jsx-runtime.js',
+  'tokens.css',
+  'wall.css',
+]);
+
+/**
+ * Per-file JSX transform cache, keyed by the absolute resolved file path.
+ * Unbounded: a gateway serves a bounded set of installed apps (each app
+ * folder has a small, fixed number of `.jsx` files), so there's no need for
+ * eviction — this isn't a general-purpose cache serving arbitrary input.
+ *
+ * `ok: false` entries cache a *failed* transform (syntactically broken JSX
+ * mid-generation is normal for a builder agent writing files incrementally)
+ * against the file's current `mtimeMs`, so a hot preview-reload loop doesn't
+ * re-run esbuild on every request for a file that hasn't changed — it only
+ * re-transforms once the mtime moves.
+ */
+type JsxCacheEntry = { mtimeMs: number } & (
+  | { ok: true; code: string }
+  | { ok: false; error: string }
+);
+const jsxCache = new Map<string, JsxCacheEntry>();
+
+// esbuild's `automatic` JSX runtime emits an extensionless relative import —
+// `import { jsx as _jsx } from "./jsx-runtime";` — which browsers can't
+// resolve (no bare-specifier/extension-less resolution over HTTP). Rewrite
+// the exact module specifier to carry the `.js` extension so it resolves the
+// same way `kit.js`'s other relative imports do. esbuild always emits double
+// quotes, but a single-quoted form costs nothing extra to also handle.
+const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
+
+/**
+ * Transform a `.jsx` source file to plain JS via esbuild's `automatic` JSX
+ * runtime, with an mtime-keyed cache (see {@link jsxCache}). On a transform
+ * failure (normal mid-edit for a builder agent), returns a 200-able JS body
+ * that logs the esbuild error to the console instead of throwing — a broken
+ * `.jsx` file must not 500 the whole preview iframe, and there's no existing
+ * "friendly broken preview" precedent elsewhere in this codebase to follow,
+ * so this keeps the iframe alive and puts the error where a builder agent's
+ * own tooling (devtools) can see it.
+ */
+async function transformJsx(file: string, source: Buffer): Promise<string> {
+  const stat = await fs.stat(file);
+  const cached = jsxCache.get(file);
+  if (cached && cached.mtimeMs === stat.mtimeMs) {
+    if (cached.ok) return cached.code;
+    return errorShim(cached.error);
+  }
+
+  try {
+    const result = await esbuild.transform(source.toString('utf8'), {
+      loader: 'jsx',
+      jsx: 'automatic',
+      jsxImportSource: '.',
+    });
+    const code = result.code.replace(JSX_RUNTIME_SPECIFIER_RE, '$1./jsx-runtime.js$1');
+    jsxCache.set(file, { mtimeMs: stat.mtimeMs, ok: true, code });
+    return code;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    jsxCache.set(file, { mtimeMs: stat.mtimeMs, ok: false, error: message });
+    return errorShim(message);
+  }
+}
+
+function errorShim(message: string): string {
+  return `// JSX transform failed — see the logged error below.\nconsole.error(${JSON.stringify(message)});\n`;
+}
 
 /**
  * Settings to bake into the served HTML's `<html>` tag. Two parallel maps:
@@ -92,6 +178,17 @@ export async function serveStatic(
     } catch {
       return sendError(res, 404, 'not_found', 'Asset not found.');
     }
+  }
+
+  // Builder-generated apps may ship `app.jsx` source directly — the git code
+  // store stays source-only (no persisted build artifacts), so the compile
+  // to plain JS happens transparently at serve time, per-request, cached by
+  // mtime (see {@link transformJsx}). Applies identically to the live
+  // `/centraid/<id>/...` path and the draft `/centraid/_draft/<sid>/<id>/...`
+  // path — both funnel through this same `serveStatic` call.
+  if (file.endsWith('.jsx')) {
+    const code = await transformJsx(file, buf);
+    buf = Buffer.from(code, 'utf8');
   }
 
   const contentType = contentTypeFor(file);

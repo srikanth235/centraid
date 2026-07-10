@@ -41,13 +41,23 @@ export function useShellApps(): ShellAppsController {
     // Read the current pins straight from the Store so refresh() doesn't need
     // userApps in its dep list (avoids a stale-closure re-fetch loop).
     const pins = Store.get<UserAppMeta[]>('home.userApps', []);
-    // Prune orphan pins (app deleted out-of-band), then overlay tile identity.
+    // Prune orphan pins (app deleted out-of-band), then overlay tile identity
+    // AND name/description — the gateway listing is the source of truth for
+    // both (a rename via updateAppMeta only lands on the server; without
+    // this overlay the Home tile's cached pin keeps showing the stale name
+    // forever, since setUserApps() is never otherwise called after a rename).
     const reconciled = pins
       .filter((a) => liveIds.has(a.id) || (a.centraidAppId != null && liveIds.has(a.centraidAppId)))
       .map((a) => {
         const row = projs.find((p) => p.id === a.id || p.id === a.centraidAppId);
-        const vis = row ? tileVisualFromListing(row) : null;
-        return vis ? { ...a, iconKey: vis.iconKey, colorKey: vis.colorKey, color: vis.color } : a;
+        if (!row) return a;
+        const vis = tileVisualFromListing(row);
+        return {
+          ...a,
+          ...(vis ? { iconKey: vis.iconKey, colorKey: vis.colorKey, color: vis.color } : {}),
+          ...(row.name ? { name: row.name } : {}),
+          ...(row.description !== undefined ? { desc: row.description } : {}),
+        };
       });
     if (reconciled.length !== pins.length) Store.set('home.userApps', reconciled);
     setUserAppsState(reconciled);

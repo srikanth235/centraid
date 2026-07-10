@@ -1,5 +1,4 @@
-/* The app-view frame — fills the main pane and anchors the bottom-right
-   chat FAB + slide-out panel (position: relative). */
+/* The app-view frame — fills the main pane. */
 .view {
   flex: 1;
   display: flex;

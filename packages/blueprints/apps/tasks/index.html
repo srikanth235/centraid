@@ -52,7 +52,7 @@
             placeholder="Quick find ( / )"
             aria-label="Search tasks"
           />
-          <div id="viewSwitch" class="seg" role="group" aria-label="View">
+          <div id="viewSwitch" class="kit-seg" role="group" aria-label="View">
             <button type="button" data-view="all" class="on" aria-pressed="true">All</button>
             <button type="button" data-view="today" aria-pressed="false">Today</button>
             <button type="button" data-view="upcoming" aria-pressed="false">Upcoming</button>
@@ -60,13 +60,19 @@
         </div>
       </header>
 
-      <div id="consentBanner" class="banner" hidden>
+      <div id="consentBanner" class="kit-banner" hidden>
         <strong>No vault access yet.</strong>
         <span id="consentDetail"
           >Ask the owner to approve this app's requested scopes in vault settings.</span
         >
       </div>
-      <div id="noticeBanner" class="banner notice" role="status" aria-live="polite" hidden></div>
+      <div
+        id="noticeBanner"
+        class="kit-banner notice"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></div>
 
       <form id="quickAdd" autocomplete="off">
         <div id="parentChip" class="parent-chip" hidden>
@@ -95,7 +101,7 @@
             placeholder="Est. min"
             aria-label="Estimated minutes"
           />
-          <button type="submit" id="addBtn">Add</button>
+          <button type="submit" id="addBtn" class="kit-btn primary">Add</button>
         </div>
         <p id="nlPreview" class="nl-preview" aria-live="polite" hidden></p>
       </form>
@@ -105,7 +111,7 @@
       <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a task" />
 
       <section id="board" aria-label="Open tasks"></section>
-      <p id="empty" class="empty" hidden>Nothing to do — enjoy your day.</p>
+      <p id="empty" class="kit-empty-card" hidden>Nothing to do — enjoy your day.</p>
 
       <details id="logbook" hidden>
         <summary>Logbook <span id="logbookCount" class="muted small"></span></summary>

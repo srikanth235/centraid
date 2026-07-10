@@ -10,21 +10,29 @@
 import {
   armConfirm,
   attachMentionField,
+  closePopover,
   debounce,
   inlineLinkIds,
+  isPopoverOpen,
+  localDayKey,
+  openPopover,
   outcomeMessage,
   readFailed,
   removeReference,
+  renderAttachments,
   renderReferenceStrip,
   showSkeleton,
+  snippetInto,
   toast,
+  wireAttachInput,
 } from './kit.js';
+// Aliased: the app already has a module-level `render()` orchestrator
+// (re-renders the board + logbook from `lastData`); `litRender` is Lit's
+// standalone DOM-commit function used to drive the two list containers and
+// the popover boxes (kit-owned containers, per the app's Lit conventions).
+import { createRef, html, nothing, ref, render as litRender, repeat, svg } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
-// Small files stay one-call inline; larger files stream to the vault's blob
-// staging route (issue #296).
-const BLOB_ROUTE = '/centraid/_vault/blobs';
-const INLINE_ATTACH_BYTES = 256 * 1024;
 
 const OPEN_STATUSES = new Set(['needs-action', 'in-process']);
 const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -41,16 +49,13 @@ let searchSnippets = null; // task_id → ⟦…⟧ hit snippet for the matched 
 let readFailedShown = false;
 
 function todayStr() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localDayKey(new Date());
 }
 
 function plusDays(days) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localDayKey(d);
 }
 
 function fmtDay(iso) {
@@ -104,105 +109,7 @@ async function act(action, input) {
   }
 }
 
-// ---------- Attachments (shared pattern across apps) ----------
-// Read a File as a base64 data: URI — small attachments travel inline, so the
-// browser does the encoding before the data ever leaves the app.
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
-
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// attach action claims the returned sha (that claim is the receipt).
-async function stageFileBytes(file) {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
-
-function fmtBytes(n) {
-  if (!n) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Render an attachment strip: images as thumbnails, everything else as a
-// download tile, each with a remove control wired to the detach action.
-function renderAttachments(stripEl, list, onRemove) {
-  stripEl.innerHTML = '';
-  for (const a of list ?? []) {
-    const tile = document.createElement('div');
-    tile.className = 'attach-tile';
-    if (String(a.media_type).startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = a.content_uri;
-      img.alt = a.title ?? 'attachment';
-      tile.appendChild(img);
-    } else {
-      const link = document.createElement('a');
-      link.className = 'attach-file';
-      link.href = a.content_uri;
-      link.download = a.title ?? 'file';
-      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
-      tile.appendChild(link);
-    }
-    const meta = document.createElement('span');
-    meta.className = 'attach-meta';
-    meta.textContent = fmtBytes(a.byte_size);
-    tile.appendChild(meta);
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'attach-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove';
-    rm.addEventListener('click', () => onRemove(a.attachment_id));
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
-}
-
-// Wire a file <input> so each chosen file is attached to the current subject.
-function wireAttachInput(inputEl, getSubjectId) {
-  inputEl.addEventListener('change', async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
-      // Large files stage through the blob route and attach by sha; small
-      // ones keep the one-call inline data: URI path (issue #296).
-      let input;
-      try {
-        if (file.size > INLINE_ATTACH_BYTES) {
-          const staged = await stageFileBytes(file);
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
-        } else {
-          const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
-        }
-      } catch {
-        notice('Could not read that file.');
-        continue;
-      }
-      const outcome = await act('attach', input);
-      if (!narrate(outcome)) break;
-    }
-    inputEl.value = '';
-    await refresh();
-  });
-}
-
+// ---------- Attachments (kit renderAttachments / wireAttachInput) ----------
 // The task a click on a row's attach button will pin the next file onto. One
 // hidden file input is shared across the whole board; the button sets this.
 let attachTarget = null;
@@ -210,6 +117,7 @@ let attachTarget = null;
 async function removeAttachment(attachmentId) {
   const outcome = await act('detach', { attachment_id: attachmentId });
   if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+  return outcome;
 }
 
 // The board window: the board query reads only this many newest open tasks
@@ -217,6 +125,22 @@ async function removeAttachment(attachmentId) {
 // search reaches the rest through the vault's FTS index.
 let boardWindow = 500;
 let boardTruncated = false;
+
+// `#board` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, below). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first call into it — it only
+// appends past them — so the very first Lit commit into `#board` must clear
+// that skeleton itself; every commit after that must go through `litRender`
+// alone (a raw clear once Lit owns the container corrupts its part cache).
+let boardMounted = false;
+function mountBoard(templateResult) {
+  const board = $('board');
+  if (!boardMounted) {
+    board.replaceChildren();
+    boardMounted = true;
+  }
+  litRender(templateResult, board);
+}
 
 async function refresh() {
   let data;
@@ -237,7 +161,7 @@ async function refresh() {
   $('quickAdd').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
-    $('board').innerHTML = '';
+    mountBoard(nothing);
     $('logbook').hidden = true;
     $('empty').hidden = true;
     $('subtitle').textContent = 'Your canonical task list, from the vault.';
@@ -333,33 +257,7 @@ const DROP_DUE = {
   week: () => plusDays(7),
 };
 
-function wireDropTarget(header, key) {
-  if (!(key in DROP_DUE) && key !== 'anytime') return;
-  header.addEventListener('dragover', (e) => {
-    if (!dragTaskId) return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    header.classList.add('drop');
-  });
-  header.addEventListener('dragleave', () => header.classList.remove('drop'));
-  header.addEventListener('drop', (e) => {
-    e.preventDefault();
-    header.classList.remove('drop');
-    const id = dragTaskId;
-    dragTaskId = null;
-    if (!id) return;
-    const input =
-      key === 'anytime'
-        ? { task_id: id, clear_due: true }
-        : { task_id: id, due_at: DROP_DUE[key]() };
-    write('edit', input);
-  });
-}
-
 function renderBoard(open, counts) {
-  const board = $('board');
-  board.innerHTML = '';
-  boardRows = [];
   closePopover();
   const today = todayStr();
   const dueToday = open.filter((t) => t.due_at && String(t.due_at).slice(0, 10) <= today).length;
@@ -370,26 +268,24 @@ function renderBoard(open, counts) {
 
   const weekEnd = plusDays(7);
   const visible = applySearch(open);
-  const groups = new Map(BUCKETS.map((b) => [b.key, []]));
-  for (const task of visible) groups.get(bucketFor(task, today, weekEnd)).push(task);
+  const grouped = new Map(BUCKETS.map((b) => [b.key, []]));
+  for (const task of visible) grouped.get(bucketFor(task, today, weekEnd)).push(task);
 
+  // Groups feed the template; flatOrder mirrors the exact order the template
+  // will emit `.row` elements in, so it can be zipped with the post-render
+  // DOM query below to rebuild `boardRows`.
   let shown = 0;
+  const groups = [];
+  const flatOrder = [];
   for (const { key, label } of BUCKETS) {
     if (!VIEW_BUCKETS[state.view].has(key)) continue;
-    const tasks = groups.get(key);
+    const tasks = grouped.get(key);
     if (!tasks.length) continue;
     shown += tasks.length;
-    const h = document.createElement('p');
-    h.className = 'section-label muted small';
-    h.dataset.bucket = key;
-    h.textContent = `${label} · ${tasks.length}`;
-    wireDropTarget(h, key);
-    board.appendChild(h);
+    groups.push({ key, label, tasks });
     for (const task of tasks) {
-      board.appendChild(renderRow(task));
-      for (const child of task.children ?? []) {
-        board.appendChild(renderRow(child, { subtask: true }));
-      }
+      flatOrder.push(task);
+      for (const child of task.children ?? []) flatOrder.push(child);
     }
   }
 
@@ -408,27 +304,79 @@ function renderBoard(open, counts) {
 
   // The window is honest about its edge: the board shows the newest open
   // tasks, "Show more" grows the slice, search reaches everything beyond it.
-  if (boardTruncated && !state.search.trim()) {
-    const footer = document.createElement('div');
-    footer.className = 'window-footer';
-    const label = document.createElement('span');
-    const windowSize = lastData?.window ?? boardWindow;
-    label.textContent = `Showing your newest ${windowSize} open tasks — the rest are a search away. `;
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'ghost';
-    more.textContent = 'Show more';
-    more.addEventListener('click', async () => {
-      boardWindow += 500;
-      more.disabled = true;
-      await refresh();
-    });
-    footer.append(label, more);
-    board.appendChild(footer);
-  }
+  const footer =
+    boardTruncated && !state.search.trim() ? { windowSize: lastData?.window ?? boardWindow } : null;
+
+  mountBoard(boardTemplate(groups, footer));
+
+  const rowEls = [...$('board').querySelectorAll('.row[data-task-id]')];
+  boardRows = flatOrder.map((task, i) => {
+    const row = rowEls[i];
+    return {
+      task,
+      row,
+      text: row?.querySelector('.row-text'),
+      dueBtn: row?.querySelector('.due-btn'),
+    };
+  });
 
   if (selectedId && !selectedEntry()) selectedId = null;
   if (selectedId) setSelected(selectedId, { scroll: false });
+}
+
+/** Bucket header + its rows (open board only — the logbook has no buckets). */
+function boardTemplate(groups, footer) {
+  return html`${groups.map(
+    (g) => html`<p
+        class="section-label muted small"
+        data-bucket=${g.key}
+        @dragover=${(e) => {
+          if (!(g.key in DROP_DUE) && g.key !== 'anytime') return;
+          if (!dragTaskId) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          e.currentTarget.classList.add('drop');
+        }}
+        @dragleave=${(e) => e.currentTarget.classList.remove('drop')}
+        @drop=${(e) => {
+          e.preventDefault();
+          e.currentTarget.classList.remove('drop');
+          const id = dragTaskId;
+          dragTaskId = null;
+          if (!id) return;
+          const input =
+            g.key === 'anytime'
+              ? { task_id: id, clear_due: true }
+              : { task_id: id, due_at: DROP_DUE[g.key]() };
+          write('edit', input);
+        }}
+      >
+        ${g.label} · ${g.tasks.length}
+      </p>
+      ${repeat(
+        g.tasks,
+        (t) => t.task_id,
+        (t) =>
+          html`${taskRowTpl(t)}${(t.children ?? []).map((c) => taskRowTpl(c, { subtask: true }))}`,
+      )}`,
+  )}${footer
+    ? html`<div class="window-footer">
+        <span
+          >Showing your newest ${footer.windowSize} open tasks — the rest are a search away.
+        </span>
+        <button
+          type="button"
+          class="kit-btn"
+          @click=${async (e) => {
+            e.target.disabled = true;
+            boardWindow += 500;
+            await refresh();
+          }}
+        >
+          Show more
+        </button>
+      </div>`
+    : nothing}`;
 }
 
 // ---------- The logbook (closed top-level tasks) ----------
@@ -444,87 +392,65 @@ function renderLogbook(logbook) {
   const details = $('logbook');
   details.hidden = visible.length === 0;
   $('logbookCount').textContent = visible.length ? `· ${visible.length}` : '';
-  const list = $('logbookList');
-  list.innerHTML = '';
-  for (const task of visible) {
-    list.appendChild(renderRow(task, { closed: true }));
-  }
-}
-
-// ---------- Popovers (one shared host: reschedule, priority, effort & notes) ----------
-
-let popoverEl = null;
-let popoverCleanup = null; // teardown for the open popover (e.g. detach a mention field)
-
-function closePopover() {
-  popoverCleanup?.();
-  popoverCleanup = null;
-  popoverEl?.remove();
-  popoverEl = null;
-}
-
-function openPopover(anchor, build) {
-  closePopover();
-  const pop = document.createElement('div');
-  pop.className = 'popover';
-  build(pop);
-  pop.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      closePopover();
-    }
-  });
-  document.body.appendChild(pop);
-  popoverEl = pop;
-  const r = anchor.getBoundingClientRect();
-  const left = Math.max(
-    8,
-    Math.min(r.left + window.scrollX, window.scrollX + window.innerWidth - pop.offsetWidth - 8),
+  litRender(
+    html`${repeat(
+      visible,
+      (t) => t.task_id,
+      (t) => taskRowTpl(t, { closed: true }),
+    )}`,
+    $('logbookList'),
   );
-  pop.style.left = `${left}px`;
-  pop.style.top = `${r.bottom + window.scrollY + 6}px`;
-  pop.querySelector('input, select, button')?.focus();
 }
 
-document.addEventListener('pointerdown', (e) => {
-  if (popoverEl && !popoverEl.contains(e.target)) closePopover();
-});
+// ---------- Popovers (kit openPopover: reschedule, priority, effort & notes) ----------
+
+// Both of tasks' popovers are little forms, not menus: focus the first field,
+// announce as a dialog, and let `.t-pop` carry the app's width/spacing deltas
+// on top of the kit surface. `onClose` tears down document-level helpers
+// (the details popover's mention field) on any close path.
+function openTaskPopover(anchor, build, { onClose } = {}) {
+  openPopover(anchor, build, { focus: true, className: 't-pop', role: 'dialog', onClose });
+}
 
 // The reschedule popover: Things' "When" — presets plus an exact date.
 function openDuePopover(anchor, task) {
-  openPopover(anchor, (pop) => {
-    const label = document.createElement('span');
-    label.className = 'pop-label';
-    label.textContent = 'When';
-    pop.appendChild(label);
-    const presets = document.createElement('div');
-    presets.className = 'pop-row';
-    const preset = (text, input) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'ghost';
-      btn.textContent = text;
-      btn.addEventListener('click', () => {
-        closePopover();
-        write('edit', { task_id: task.task_id, ...input });
-      });
-      presets.appendChild(btn);
-    };
-    preset('Today', { due_at: todayStr() });
-    preset('Tomorrow', { due_at: plusDays(1) });
-    preset('Next week', { due_at: plusDays(7) });
-    if (task.due_at) preset('Clear', { clear_due: true });
-    pop.appendChild(presets);
-    const date = document.createElement('input');
-    date.type = 'date';
-    date.setAttribute('aria-label', 'Due date');
-    if (task.due_at) date.value = String(task.due_at).slice(0, 10);
-    date.addEventListener('change', () => {
-      if (!date.value) return;
-      closePopover();
-      write('edit', { task_id: task.task_id, due_at: date.value });
-    });
-    pop.appendChild(date);
+  openTaskPopover(anchor, (pop) => {
+    const presets = [
+      ['Today', { due_at: todayStr() }],
+      ['Tomorrow', { due_at: plusDays(1) }],
+      ['Next week', { due_at: plusDays(7) }],
+    ];
+    if (task.due_at) presets.push(['Clear', { clear_due: true }]);
+    litRender(
+      html`
+        <span class="pop-label">When</span>
+        <div class="pop-row">
+          ${presets.map(
+            ([label, input]) => html`<button
+              type="button"
+              class="kit-btn"
+              @click=${() => {
+                closePopover();
+                write('edit', { task_id: task.task_id, ...input });
+              }}
+            >
+              ${label}
+            </button>`,
+          )}
+        </div>
+        <input
+          type="date"
+          aria-label="Due date"
+          .value=${task.due_at ? String(task.due_at).slice(0, 10) : ''}
+          @change=${(e) => {
+            if (!e.target.value) return;
+            closePopover();
+            write('edit', { task_id: task.task_id, due_at: e.target.value });
+          }}
+        />
+      `,
+      pop,
+    );
   });
 }
 
@@ -533,124 +459,133 @@ function openDuePopover(anchor, task) {
 // where they live; an emptied textarea becomes the explicit
 // clear_description intent.
 function openEditPopover(anchor, task) {
-  openPopover(anchor, (pop) => {
-    const prioLabel = document.createElement('label');
-    prioLabel.className = 'pop-label';
-    prioLabel.textContent = 'Priority';
-    const sel = document.createElement('select');
-    for (const [value, text] of [
-      ['0', 'No priority'],
-      ['1', 'High'],
-      ['5', 'Medium'],
-      ['9', 'Low'],
-    ]) {
-      const opt = document.createElement('option');
-      opt.value = value;
-      opt.textContent = text;
-      sel.appendChild(opt);
-    }
-    const p = Number(task.priority ?? 0);
-    sel.value = p <= 0 ? '0' : p <= 3 ? '1' : p <= 6 ? '5' : '9';
-    prioLabel.appendChild(sel);
-    pop.appendChild(prioLabel);
+  let detachMention = null;
+  openTaskPopover(
+    anchor,
+    (pop) => {
+      const priorityOptions = [
+        ['0', 'No priority'],
+        ['1', 'High'],
+        ['5', 'Medium'],
+        ['9', 'Low'],
+      ];
+      const p = Number(task.priority ?? 0);
+      const currentPriority = p <= 0 ? '0' : p <= 3 ? '1' : p <= 6 ? '5' : '9';
 
-    const effortLabel = document.createElement('label');
-    effortLabel.className = 'pop-label';
-    effortLabel.textContent = 'Effort (min)';
-    const eff = document.createElement('input');
-    eff.type = 'number';
-    eff.min = '1';
-    eff.step = '1';
-    eff.placeholder = 'Est. min';
-    if (task.effort_min) eff.value = String(task.effort_min);
-    effortLabel.appendChild(eff);
-    pop.appendChild(effortLabel);
+      const selRef = createRef();
+      const effRef = createRef();
+      const notesRef = createRef();
+      const stripRef = createRef();
+      // Assigned once the form is built (below); the template's own click/
+      // keydown handlers close over this binding and only ever invoke it
+      // after the whole synchronous build has finished.
+      let doSave = () => {};
 
-    const notesLabel = document.createElement('label');
-    notesLabel.className = 'pop-label';
-    notesLabel.textContent = 'Notes';
-    const notes = document.createElement('textarea');
-    notes.rows = 3;
-    notes.placeholder = 'Add a note… (@ to mention, ⌘↵ saves)';
-    notes.setAttribute('aria-label', 'Notes');
-    if (task.description) notes.value = String(task.description);
-    notesLabel.appendChild(notes);
-    pop.appendChild(notesLabel);
+      // A one-time build (the popover isn't re-rendered reactively while
+      // open), so plain initial-value bindings suffice — no live().
+      litRender(
+        html`
+          <label class="pop-label"
+            >Priority
+            <select ${ref(selRef)}>
+              ${priorityOptions.map(
+                ([value, text]) =>
+                  html`<option value=${value} ?selected=${value === currentPriority}>
+                    ${text}
+                  </option>`,
+              )}
+            </select></label
+          >
+          <label class="pop-label"
+            >Effort (min)
+            <input
+              ${ref(effRef)}
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Est. min"
+              .value=${task.effort_min ? String(task.effort_min) : ''}
+          /></label>
+          <label class="pop-label"
+            >Notes
+            <textarea
+              ${ref(notesRef)}
+              rows="3"
+              placeholder="Add a note… (@ to mention, ⌘↵ saves)"
+              aria-label="Notes"
+              .value=${task.description ? String(task.description) : ''}
+              @keydown=${(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  doSave();
+                }
+              }}
+            ></textarea>
+          </label>
+          <div class="kit-ref-strip pop-refs" ${ref(stripRef)}></div>
+          <button type="button" class="pop-mention" @click=${() => field.startMention()}>
+            ＋ Mention
+          </button>
+          <button type="button" class="kit-btn primary" @click=${() => doSave()}>Save</button>
+        `,
+        pop,
+      );
 
-    // @-mentions on the note (issues #272 + #282): the kit field owns the
-    // popover, the pick→insert→assert, and (on save) the reconcile. The
-    // reference strip is the durable home; a note has no read-view render, so
-    // the strip is where a reference shows.
-    const refsOf = () => (task.references ||= []);
-    const strip = document.createElement('div');
-    strip.className = 'kit-ref-strip pop-refs';
-    const renderStrip = () =>
-      renderReferenceStrip(strip, refsOf(), {
-        inlineIds: inlineLinkIds(notes.value, refsOf()),
-        onRemove: async (ref) => {
-          const outcome = await removeReference(ref.link_id);
-          if (outcome?.status === 'executed') {
-            task.references = refsOf().filter((r) => r.link_id !== ref.link_id);
-          }
-          renderStrip();
-        },
+      const sel = selRef.value;
+      const eff = effRef.value;
+      const notes = notesRef.value;
+      const strip = stripRef.value;
+
+      // @-mentions on the note (issues #272 + #282): the kit field owns the
+      // popover, the pick→insert→assert, and (on save) the reconcile. The
+      // reference strip is the durable home; a note has no read-view render, so
+      // the strip is where a reference shows.
+      const refsOf = () => (task.references ||= []);
+      const renderStrip = () =>
+        renderReferenceStrip(strip, refsOf(), {
+          inlineIds: inlineLinkIds(notes.value, refsOf()),
+          onRemove: async (r) => {
+            const outcome = await removeReference(r.link_id);
+            if (outcome?.status === 'executed') {
+              task.references = refsOf().filter((x) => x.link_id !== r.link_id);
+            }
+            renderStrip();
+          },
+        });
+      const field = attachMentionField(notes, {
+        from: () => ({ type: 'schedule.task', id: task.task_id }),
+        references: refsOf,
+        onChange: renderStrip,
       });
-    const field = attachMentionField(notes, {
-      from: () => ({ type: 'schedule.task', id: task.task_id }),
-      references: refsOf,
-      onChange: renderStrip,
-    });
-    popoverCleanup = field.detach;
-    pop.appendChild(strip);
-    renderStrip();
+      detachMention = field.detach;
+      renderStrip();
 
-    const mention = document.createElement('button');
-    mention.type = 'button';
-    mention.className = 'pop-mention';
-    mention.textContent = '＋ Mention';
-    mention.addEventListener('click', () => field.startMention());
-    pop.appendChild(mention);
-
-    const doSave = async () => {
-      const input = { task_id: task.task_id, priority: Number(sel.value) };
-      const minutes = Number(eff.value);
-      if (minutes > 0) input.effort_min = Math.round(minutes);
-      // Notes: send only what changed — a new text sets, an emptied
-      // textarea clears; untouched notes stay out of the command.
-      const note = notes.value.trim();
-      const prev = String(task.description ?? '');
-      const changed = (note && note !== prev) || (!note && prev);
-      if (note && note !== prev) input.description = note;
-      if (!note && prev) input.clear_description = true;
-      const subject = { type: 'schedule.task', id: task.task_id };
-      const references = refsOf();
-      closePopover();
-      await write('edit', input);
-      // The saved note is the settled text — reconcile the anchors against it
-      // (re-baseline live selectors, retract orphaned mentions with Undo),
-      // then re-read so the board reflects any retraction.
-      if (changed) {
-        await field.reconcile(note, { from: subject, references });
-        await refresh();
-      }
-    };
-
-    // Keyboard flow inside the textarea: Cmd/Ctrl+Enter saves (Escape
-    // already closes via the popover's own handler).
-    notes.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        doSave();
-      }
-    });
-
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = 'pop-save';
-    save.textContent = 'Save';
-    save.addEventListener('click', doSave);
-    pop.appendChild(save);
-  });
+      doSave = async () => {
+        const input = { task_id: task.task_id, priority: Number(sel.value) };
+        const minutes = Number(eff.value);
+        if (minutes > 0) input.effort_min = Math.round(minutes);
+        // Notes: send only what changed — a new text sets, an emptied
+        // textarea clears; untouched notes stay out of the command.
+        const note = notes.value.trim();
+        const prev = String(task.description ?? '');
+        const changed = (note && note !== prev) || (!note && prev);
+        if (note && note !== prev) input.description = note;
+        if (!note && prev) input.clear_description = true;
+        const subject = { type: 'schedule.task', id: task.task_id };
+        const references = refsOf();
+        closePopover();
+        await write('edit', input);
+        // The saved note is the settled text — reconcile the anchors against it
+        // (re-baseline live selectors, retract orphaned mentions with Undo),
+        // then re-read so the board reflects any retraction.
+        if (changed) {
+          await field.reconcile(note, { from: subject, references });
+          await refresh();
+        }
+      };
+    },
+    { onClose: () => detachMention?.() },
+  );
 }
 
 // ---------- Completing and cancelling, with an undo window ----------
@@ -686,165 +621,20 @@ async function cancelTask(task) {
 
 // ---------- One task row ----------
 
-// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// the vault returns become <mark>, and task text never parses as HTML.
-function snippetInto(el, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      el.appendChild(mark);
-    } else {
-      el.appendChild(document.createTextNode(parts[i]));
-    }
-  }
-}
-
 // A clean inline-SVG "text lines" marker for rows that carry a note — no
 // emoji, inherits currentColor so themes and hover states just work.
-const NOTE_GLYPH_SVG =
-  '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" ' +
-  'stroke-linecap="round" aria-hidden="true"><path d="M1.5 2.5h9M1.5 6h9M1.5 9.5h5.5"/></svg>';
-
-function renderRow(task, { subtask = false, closed = false } = {}) {
-  const row = document.createElement('div');
-  row.className = subtask ? 'row subtask' : 'row';
-  const isDone = !OPEN_STATUSES.has(task.status);
-  row.dataset.status = task.status;
-  row.dataset.done = String(isDone);
-
-  const circle = document.createElement('button');
-  circle.type = 'button';
-  circle.className = 'circle';
-  circle.dataset.on = String(task.status === 'completed');
-  circle.title = isDone ? 'Reopen' : 'Complete';
-  circle.setAttribute('aria-label', circle.title);
-  if (task.status === 'completed') circle.textContent = '✓';
-  if (task.status === 'cancelled') circle.textContent = '✕';
-  circle.addEventListener('click', () => {
-    if (isDone) {
-      write('set-status', { task_id: task.task_id, status: 'needs-action' });
-    } else {
-      completeTask(task, row, circle);
-    }
-  });
-
-  const text = document.createElement('span');
-  text.className = 'row-text';
-  text.textContent = task.title;
-  if (!closed) {
-    text.title = 'Click to rename';
-    text.addEventListener('click', () => beginRename(row, text, task));
-  }
-
-  // The title column: the title line (title + note glyph when the task
-  // carries one), with the note's first line beneath it, muted and truncated.
-  const main = document.createElement('span');
-  main.className = 'row-main';
-  const titleLine = document.createElement('span');
-  titleLine.className = 'row-title-line';
-  titleLine.appendChild(text);
-  main.appendChild(titleLine);
-  const note = String(task.description ?? '').trim();
-  if (note) {
-    let glyph;
-    if (closed) {
-      glyph = document.createElement('span');
-    } else {
-      glyph = document.createElement('button');
-      glyph.type = 'button';
-      glyph.title = 'Notes';
-      glyph.setAttribute('aria-label', `Notes for “${task.title}”`);
-      glyph.addEventListener('click', () => openEditPopover(glyph, task));
-    }
-    glyph.className = 'note-glyph';
-    glyph.innerHTML = NOTE_GLYPH_SVG;
-    titleLine.appendChild(glyph);
-  }
-  // A vault match carries its own snippet, already centered on the hit —
-  // while a term is active it takes the note line's place.
-  const snippet = searchSnippets?.get(task.task_id);
-  if (snippet || note) {
-    const noteLine = document.createElement('span');
-    noteLine.className = 'row-note';
-    if (snippet) snippetInto(noteLine, snippet);
-    else noteLine.textContent = note.split('\n')[0];
-    main.appendChild(noteLine);
-  }
-
-  row.append(circle, main);
-
-  if (task.status === 'in-process') row.appendChild(chip('badge doing', 'in progress'));
-  if (task.priority >= 1) {
-    const level = task.priority <= 3 ? 'high' : task.priority <= 6 ? 'medium' : 'low';
-    row.appendChild(chip(`badge flag ${level}`, '⚑'));
-  }
-  if (task.effort_min) row.appendChild(chip('badge muted small', fmtEffort(task.effort_min)));
-  if (task.rrule) row.appendChild(chip('badge muted small', '↻'));
-  if (!closed && task.children?.length) {
-    row.appendChild(chip('badge muted small', `${task.done_children}/${task.children.length}`));
-  }
-
-  let dueBtn = null;
-  if (!closed) {
-    // Every open row can be rescheduled in place — dated rows show the date,
-    // undated ones a quiet "＋ date" that appears on hover (always on touch).
-    dueBtn = document.createElement('button');
-    dueBtn.type = 'button';
-    if (task.due_at) {
-      const overdue = String(task.due_at).slice(0, 10) < todayStr();
-      dueBtn.className = `due-btn${overdue ? ' overdue' : ''}`;
-      dueBtn.textContent = fmtDay(task.due_at);
-    } else {
-      dueBtn.className = 'due-btn due-add';
-      dueBtn.textContent = '＋ date';
-    }
-    dueBtn.title = 'Reschedule';
-    dueBtn.setAttribute('aria-label', `Reschedule “${task.title}”`);
-    dueBtn.addEventListener('click', () => openDuePopover(dueBtn, task));
-    row.appendChild(dueBtn);
-  } else {
-    if (task.due_at) row.appendChild(chip('row-due muted small', fmtDay(task.due_at)));
-    if (task.completed_at) row.appendChild(chip('row-due muted small', fmtDay(task.completed_at)));
-  }
-
-  if (!closed) {
-    row.appendChild(rowActions(task, subtask));
-    row.draggable = true;
-    row.addEventListener('dragstart', (e) => {
-      dragTaskId = task.task_id;
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', task.task_id);
-    });
-    row.addEventListener('dragend', () => {
-      dragTaskId = null;
-    });
-    row.addEventListener('pointerdown', () => setSelected(task.task_id, { scroll: false }));
-    boardRows.push({ task, row, text, dueBtn });
-  }
-
-  // Any attachments render as a strip beneath the row; the row and its strip
-  // travel together in a fragment so the board's append logic stays flat.
-  if (task.attachments?.length) {
-    const frag = document.createDocumentFragment();
-    frag.appendChild(row);
-    const strip = document.createElement('div');
-    strip.className = 'attach-strip row-attachments';
-    if (subtask) strip.classList.add('subtask');
-    renderAttachments(strip, task.attachments, closed ? () => {} : removeAttachment);
-    frag.appendChild(strip);
-    return frag;
-  }
-  return row;
-}
-
-function chip(className, textContent) {
-  const el = document.createElement('span');
-  el.className = className;
-  el.textContent = textContent;
-  return el;
+const NOTE_GLYPH_PATH = svg`<path d="M1.5 2.5h9M1.5 6h9M1.5 9.5h5.5"/>`;
+function noteGlyphSvg() {
+  return html`<svg
+    viewBox="0 0 12 12"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    aria-hidden="true"
+  >
+    ${NOTE_GLYPH_PATH}
+  </svg>`;
 }
 
 function fmtEffort(min) {
@@ -853,75 +643,203 @@ function fmtEffort(min) {
   return `${n}m`;
 }
 
-// Hover affordances: start/pause, add-subtask (top level only), details,
-// attach, cancel. Visible at reduced opacity on touch devices.
-function rowActions(task, subtask) {
-  const wrap = document.createElement('span');
-  wrap.className = 'row-actions';
-  const inProcess = task.status === 'in-process';
-  const start = document.createElement('button');
-  start.type = 'button';
-  start.className = 'ghost';
-  start.textContent = inProcess ? 'pause' : 'start';
-  start.title = inProcess ? 'Back to To Do' : 'Mark in progress';
-  start.addEventListener('click', () =>
-    write('set-status', {
-      task_id: task.task_id,
-      status: inProcess ? 'needs-action' : 'in-process',
-    }),
-  );
-  wrap.appendChild(start);
+/**
+ * One task row (+ its attachment strip, when it carries files) as a Lit
+ * template. Kept as a plain function — not a component — so `.row` elements
+ * stay DIRECT siblings inside `#board`/`#logbookList`: app.css leans on that
+ * flat adjacency (`.row:hover + .row`, `.row:last-child`), which a per-row
+ * custom element would break.
+ */
+function taskRowTpl(task, { subtask = false, closed = false } = {}) {
+  const isDone = !OPEN_STATUSES.has(task.status);
+  const note = String(task.description ?? '').trim();
+  const snippet = searchSnippets?.get(task.task_id);
+  const overdue = Boolean(task.due_at && String(task.due_at).slice(0, 10) < todayStr());
+  const level = task.priority <= 3 ? 'high' : task.priority <= 6 ? 'medium' : 'low';
 
-  if (!subtask) {
-    const sub = document.createElement('button');
-    sub.type = 'button';
-    sub.className = 'ghost';
-    sub.textContent = '+sub';
-    sub.title = 'Add a subtask';
-    sub.addEventListener('click', () => {
-      parentContext = { task_id: task.task_id, title: task.title };
-      $('parentChip').hidden = false;
-      $('parentChipText').textContent = `Subtask of “${task.title}”`;
-      $('titleInput').focus();
-    });
-    wrap.appendChild(sub);
-  }
+  return html`<div
+      class=${subtask ? 'row subtask' : 'row'}
+      data-status=${task.status}
+      data-done=${String(isDone)}
+      data-task-id=${task.task_id}
+      draggable=${closed ? nothing : 'true'}
+      @dragstart=${(e) => {
+        if (closed) return;
+        dragTaskId = task.task_id;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', task.task_id);
+      }}
+      @dragend=${() => {
+        if (closed) return;
+        dragTaskId = null;
+      }}
+      @pointerdown=${() => {
+        if (closed) return;
+        setSelected(task.task_id, { scroll: false });
+      }}
+    >
+      <button
+        type="button"
+        class="circle"
+        data-on=${String(task.status === 'completed')}
+        title=${isDone ? 'Reopen' : 'Complete'}
+        aria-label=${isDone ? 'Reopen' : 'Complete'}
+        @click=${(e) => {
+          if (isDone) {
+            write('set-status', { task_id: task.task_id, status: 'needs-action' });
+          } else {
+            completeTask(task, e.currentTarget.closest('.row'), e.currentTarget);
+          }
+        }}
+      >
+        ${task.status === 'completed' ? '✓' : task.status === 'cancelled' ? '✕' : nothing}
+      </button>
 
-  const info = document.createElement('button');
-  info.type = 'button';
-  info.className = 'ghost';
-  info.textContent = 'ⓘ';
-  info.title = 'Edit priority, effort and notes';
-  info.setAttribute('aria-label', 'Edit priority, effort and notes');
-  info.addEventListener('click', () => openEditPopover(info, task));
-  wrap.appendChild(info);
+      <span class="row-main">
+        <span class="row-title-line">
+          <span
+            class="row-text"
+            title=${closed ? nothing : 'Click to rename'}
+            @click=${(e) => {
+              if (closed) return;
+              beginRename(e.currentTarget.closest('.row'), e.currentTarget, task);
+            }}
+            >${task.title}</span
+          >${note
+            ? closed
+              ? html`<span class="note-glyph">${noteGlyphSvg()}</span>`
+              : html`<button
+                  type="button"
+                  class="note-glyph"
+                  title="Notes"
+                  aria-label="Notes for “${task.title}”"
+                  @click=${(e) => openEditPopover(e.currentTarget, task)}
+                >
+                  ${noteGlyphSvg()}
+                </button>`
+            : nothing}
+        </span>
+        ${snippet || note
+          ? html`<span
+              class="row-note"
+              ${ref((el) => {
+                if (!el) return;
+                el.replaceChildren();
+                if (snippet) snippetInto(el, snippet);
+                else el.textContent = note.split('\n')[0];
+              })}
+            ></span>`
+          : nothing}
+      </span>
 
-  const attach = document.createElement('button');
-  attach.type = 'button';
-  attach.className = 'ghost';
-  attach.textContent = '⎘';
-  attach.title = 'Attach a file';
-  attach.setAttribute('aria-label', 'Attach a file');
-  attach.addEventListener('click', () => {
-    attachTarget = task.task_id;
-    $('attachInput').click();
-  });
-  wrap.appendChild(attach);
-
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'ghost danger';
-  cancel.textContent = '✕';
-  cancel.title = 'Cancel this task';
-  cancel.addEventListener('click', () => {
-    // Destructive-feeling: first click arms, second confirms.
-    if (armConfirm(cancel, { armedLabel: 'Sure?' })) cancelTask(task);
-  });
-  wrap.appendChild(cancel);
-  return wrap;
+      ${task.status === 'in-process' ? html`<span class="badge doing">in progress</span>` : nothing}
+      ${task.priority >= 1 ? html`<span class="badge flag ${level}">⚑</span>` : nothing}
+      ${task.effort_min
+        ? html`<span class="badge muted small">${fmtEffort(task.effort_min)}</span>`
+        : nothing}
+      ${task.rrule ? html`<span class="badge muted small">↻</span>` : nothing}
+      ${!closed && task.children?.length
+        ? html`<span class="badge muted small">${task.done_children}/${task.children.length}</span>`
+        : nothing}
+      ${!closed
+        ? html`<button
+            type="button"
+            class=${task.due_at ? `due-btn${overdue ? ' overdue' : ''}` : 'due-btn due-add'}
+            title="Reschedule"
+            aria-label="Reschedule “${task.title}”"
+            @click=${(e) => openDuePopover(e.currentTarget, task)}
+          >
+            ${task.due_at ? fmtDay(task.due_at) : '＋ date'}
+          </button>`
+        : html`${task.due_at
+            ? html`<span class="row-due muted small">${fmtDay(task.due_at)}</span>`
+            : nothing}${task.completed_at
+            ? html`<span class="row-due muted small">${fmtDay(task.completed_at)}</span>`
+            : nothing}`}
+      ${!closed ? rowActionsTpl(task, subtask) : nothing}
+    </div>
+    ${task.attachments?.length
+      ? html`<div
+          class=${subtask
+            ? 'kit-attach-strip row-attachments subtask'
+            : 'kit-attach-strip row-attachments'}
+          ${ref((el) => {
+            if (el) renderAttachments(el, task.attachments, closed ? null : removeAttachment);
+          })}
+        ></div>`
+      : nothing}`;
 }
 
-// Inline rename: the title swaps for an input; Enter saves, Esc cancels.
+// Hover affordances: start/pause, add-subtask (top level only), details,
+// attach, cancel. Visible at reduced opacity on touch devices.
+function rowActionsTpl(task, subtask) {
+  const inProcess = task.status === 'in-process';
+  return html`<span class="row-actions">
+    <button
+      type="button"
+      class="kit-btn"
+      title=${inProcess ? 'Back to To Do' : 'Mark in progress'}
+      @click=${() =>
+        write('set-status', {
+          task_id: task.task_id,
+          status: inProcess ? 'needs-action' : 'in-process',
+        })}
+    >
+      ${inProcess ? 'pause' : 'start'}
+    </button>
+    ${!subtask
+      ? html`<button
+          type="button"
+          class="kit-btn"
+          title="Add a subtask"
+          @click=${() => {
+            parentContext = { task_id: task.task_id, title: task.title };
+            $('parentChip').hidden = false;
+            $('parentChipText').textContent = `Subtask of “${task.title}”`;
+            $('titleInput').focus();
+          }}
+        >
+          +sub
+        </button>`
+      : nothing}
+    <button
+      type="button"
+      class="kit-btn"
+      title="Edit priority, effort and notes"
+      aria-label="Edit priority, effort and notes"
+      @click=${(e) => openEditPopover(e.currentTarget, task)}
+    >
+      ⓘ
+    </button>
+    <button
+      type="button"
+      class="kit-btn"
+      title="Attach a file"
+      aria-label="Attach a file"
+      @click=${() => {
+        attachTarget = task.task_id;
+        $('attachInput').click();
+      }}
+    >
+      ⎘
+    </button>
+    <button
+      type="button"
+      class="kit-btn danger"
+      title="Cancel this task"
+      @click=${(e) => {
+        // Destructive-feeling: first click arms, second confirms.
+        if (armConfirm(e.currentTarget, { armedLabel: 'Sure?' })) cancelTask(task);
+      }}
+    >
+      ✕
+    </button>
+  </span>`;
+}
+
+// Inline rename: the title swaps for an input; Enter saves, Esc cancels. Kept
+// as a small imperative island (not Lit-templated): it mutates the row's live
+// DOM directly, same as the kit's own node-mutating helpers.
 function beginRename(row, text, task) {
   if (row.querySelector('input.rename')) return;
   const input = document.createElement('input');
@@ -1123,7 +1041,10 @@ document.addEventListener('keydown', (e) => {
     e.target instanceof HTMLTextAreaElement ||
     e.target instanceof HTMLSelectElement;
   if (e.key === 'Escape') {
-    if (popoverEl) {
+    // Escape pressed INSIDE the popover never reaches here (the kit box stops
+    // propagation and closes itself); this only catches a stray Escape while
+    // a popover is open but focus sits elsewhere on the page.
+    if (isPopoverOpen()) {
       closePopover();
       return;
     }
@@ -1175,7 +1096,7 @@ document.addEventListener('keydown', (e) => {
 
 // One hidden file input serves the whole board; the per-row attach button
 // sets attachTarget just before triggering it.
-wireAttachInput($('attachInput'), () => attachTarget);
+wireAttachInput($('attachInput'), () => attachTarget, { act, narrate, notice, refresh });
 
 window.addEventListener('focus', refresh);
 showSkeleton($('board'), 6);

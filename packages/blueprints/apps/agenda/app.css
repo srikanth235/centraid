@@ -132,42 +132,7 @@ main {
 
 /* ---------- Trust banners ------------------------------------------------ */
 
-.banner {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem 0.85rem 2.5rem;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--ink-soft);
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow-sm);
-}
-.banner::before {
-  content: '';
-  position: absolute;
-  left: 1rem;
-  top: 1rem;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  background: var(--app-color, var(--accent));
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.banner strong {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-  margin-bottom: 0.1rem;
-}
-.banner.notice {
-  color: var(--ink-soft);
-}
-.banner.notice::before {
-  background: var(--ink-faint);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
-}
+/* Trust/notice banner: kit.css .kit-banner (shared across all apps). */
 
 /* ---------- Propose event (compose card) -------------------------------- */
 
@@ -187,6 +152,10 @@ main {
   gap: 0.5rem;
   flex-wrap: wrap;
   align-items: center;
+}
+/* Sizing only — the submit shares a row with 2.75rem datetime inputs. */
+.propose-times .kit-btn {
+  min-height: 2.75rem;
 }
 
 input[type='text'],
@@ -241,14 +210,14 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 :focus-visible {
   outline: none;
 }
 button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 
 button {
@@ -256,31 +225,7 @@ button {
   cursor: pointer;
 }
 
-.primary {
-  min-height: 2.75rem;
-  padding: 0 1.15rem;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--accent-deep);
-  color: var(--on-accent);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    filter 0.15s var(--ease),
-    transform 0.08s var(--ease);
-}
-.primary:hover {
-  filter: brightness(1.08);
-}
-.primary:active {
-  transform: scale(0.98);
-}
-.primary:disabled {
-  background: var(--surface-2);
-  color: var(--ink-faint);
-  cursor: not-allowed;
-}
+/* Buttons: kit.css .kit-btn / .kit-btn.primary / .kit-btn.danger (shared). */
 
 /* ---------- List view rows ---------------------------------------------- */
 
@@ -370,16 +315,7 @@ button {
   background: var(--accent-soft);
 }
 
-.empty {
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-  text-align: center;
-  padding: 3rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
+/* Empty card: kit.css .kit-empty-card (shared across apps). */
 
 /* ---------- Agenda bar (view toggle + month nav) ------------------------- */
 
@@ -392,43 +328,7 @@ button {
   margin: 1rem 0 0.75rem;
 }
 
-.view-toggle {
-  display: inline-flex;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.2rem;
-  gap: 0.15rem;
-}
-.view-toggle button {
-  font: inherit;
-  font-size: 0.8rem;
-  font-weight: 500;
-  min-height: 2.1rem;
-  padding: 0.35rem 0.85rem;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 0.15s var(--ease),
-    background 0.15s var(--ease);
-}
-.view-toggle button:hover {
-  color: var(--ink);
-}
-.view-toggle button[aria-pressed='true'] {
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow:
-    var(--shadow-sm),
-    0 1px 2px rgba(15, 20, 32, 0.08);
-}
-:root[data-theme='dark'] .view-toggle button[aria-pressed='true'] {
-  box-shadow: 0 0 0 0.5px var(--line-strong);
-}
+/* View toggle: kit.css .kit-seg (shared segmented control). */
 
 .month-nav[hidden] {
   display: none;
@@ -818,54 +718,8 @@ button {
 
 /* ---------- Event detail / day panel overlay ---------------------------- */
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: color-mix(in oklab, var(--ink) 42%, transparent);
-  backdrop-filter: blur(2px);
-  animation: overlay-in 0.16s ease-out;
-}
-.overlay[hidden] {
-  display: none;
-}
-@keyframes overlay-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.panel {
-  width: 100%;
-  max-width: 27rem;
-  max-height: min(85vh, 40rem);
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 1.15rem;
-  box-shadow: var(--shadow-lg);
-  padding: 1.15rem 1.25rem 1.25rem;
-  animation: panel-in 0.18s var(--ease);
-}
-@keyframes panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.panel:focus {
-  outline: none;
-}
+/* Overlay shell: kit.css .kit-modal-back / .kit-modal (shared modal). */
+
 .panel-head {
   display: flex;
   align-items: flex-start;
@@ -962,29 +816,6 @@ button {
   flex-wrap: wrap;
   margin-top: 1rem;
 }
-.panel-btn {
-  font: inherit;
-  font-size: 0.85rem;
-  min-height: 2.5rem;
-  padding: 0.35rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    border-color 0.15s var(--ease),
-    color 0.15s var(--ease);
-}
-.panel-btn:hover {
-  border-color: var(--line-strong);
-}
-.panel-danger:hover,
-.panel-danger[data-kit-armed] {
-  border-color: var(--danger);
-  color: var(--danger);
-}
 .panel-notice {
   margin: 0.7rem 0 0;
   font-size: 0.82rem;
@@ -1026,71 +857,6 @@ button {
 .attach-block {
   margin-top: 1rem;
 }
-.attach-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.attach-strip:empty {
-  display: none;
-}
-.attach-tile {
-  position: relative;
-  width: 5rem;
-  height: 5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.attach-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.attach-file {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  padding: 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.3;
-  color: var(--accent-deep);
-  word-break: break-word;
-  text-decoration: none;
-}
-.attach-meta {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  font-family: var(--mono);
-  font-size: 0.58rem;
-  text-align: center;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 0.1rem 0;
-}
-.attach-remove {
-  position: absolute;
-  top: 0.2rem;
-  right: 0.2rem;
-  width: 1.3rem;
-  height: 1.3rem;
-  line-height: 1;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
 .attach-add {
   display: inline-block;
   margin-top: 0.5rem;
@@ -1100,9 +866,6 @@ button {
   width: 1px;
   height: 1px;
   opacity: 0;
-}
-.attach-add .ghost {
-  display: inline-block;
 }
 .attach-btn {
   flex-shrink: 0;

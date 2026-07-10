@@ -34,11 +34,15 @@ async function render(): Promise<HTMLElement> {
 }
 
 describe('AppFrame', () => {
-  it('renders a sandboxed, tagged iframe and loads the resolved live URL with theme', async () => {
+  it('renders an unsandboxed, tagged iframe and loads the resolved live URL with theme', async () => {
     appLiveUrl.mockResolvedValue({ url: 'https://gw.local/app/todos' });
     const el = await render();
     const frame = el.querySelector('iframe')!;
-    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
+    // Deliberately NO sandbox attribute: allow-scripts + allow-same-origin
+    // made it self-escapable (no isolation), and sandbox flags propagate to
+    // nested browsing contexts where Chromium's PDF viewer refuses to run —
+    // blanking docs quick-look. See the comment in AppFrame.tsx.
+    expect(frame.hasAttribute('sandbox')).toBe(false);
     expect(frame.dataset.centraidApp).toBe('1');
     expect(appLiveUrl).toHaveBeenCalledWith({ id: 'todos' });
     expect(frame.getAttribute('src')).toBe(

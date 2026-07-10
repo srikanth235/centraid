@@ -13,10 +13,13 @@
   /* Lines are already emitted by tokens (--line, --line-strong). */
   /* Accent — --accent / --accent-deep come from tokens; add the soft tint. */
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
-  /* Warn has no token; borrow the amber icon hue. */
+  /* Warn/danger/ok have no tokens; borrow the closest icon hues. */
   --warn: var(--c-amber);
+  --danger: var(--c-rose);
+  --ok: var(--c-forest);
   /* Radius + easing the kit derives from. */
   --radius: var(--r-lg);
+  --radius-sm: var(--r-md);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   /* Type families (brand fonts shipped in fonts/). */
   --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;

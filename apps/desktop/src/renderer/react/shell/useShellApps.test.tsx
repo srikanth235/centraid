@@ -93,6 +93,22 @@ describe('useShellApps', () => {
     expect(ctl.userApps[0]?.iconKey).toBe('Habit');
   });
 
+  it('overlays a renamed app.json name/description onto the cached pin', async () => {
+    // Reproduces the Home-tile-never-updates-after-rename bug: updateAppMeta
+    // only writes the new name to the gateway's app.json — the Home pin
+    // cached in the Store must pick it up via this reconciliation, since
+    // nothing else calls setUserApps() after a rename.
+    store.set('home.userApps', [
+      { id: 'agenda', name: 'Agenda', desc: 'Old desc', iconKey: 'Todo', color: '#old' },
+    ]);
+    listApps.mockResolvedValue([
+      { id: 'agenda', name: 'Agenda Renamed', description: 'New desc', kind: 'app' },
+    ]);
+    await mount();
+    expect(ctl.userApps[0]?.name).toBe('Agenda Renamed');
+    expect(ctl.userApps[0]?.desc).toBe('New desc');
+  });
+
   it('empties drafts when the listing fetch fails', async () => {
     listApps.mockRejectedValue(new Error('offline'));
     await mount();

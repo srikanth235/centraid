@@ -37,6 +37,11 @@ export type { TileVariant, TileFinish } from './tile';
 
 export { toCss } from './css';
 
+// Blueprint-app ("field notebook") token layer — a separate design
+// language for the sandboxed blueprint apps, not a variant of `toCss()`'s
+// desktop theme. See src/blueprint.ts for the rationale.
+export { toBlueprintCss } from './blueprint';
+
 export { icons } from './icons';
 export type { IconName, IconPath } from './icons';
 

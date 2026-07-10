@@ -2,7 +2,8 @@
 // own module so `scaffold.ts` stays focused on the scaffolding logic
 // rather than carrying long template literals inline.
 //
-// app.css is the per-app styling layer built on top of tokens.css. It
+// app.css is the per-app styling layer built on top of the shared
+// blueprint token layer (kit/tokens.css, served next to kit.css). It
 // ships utility classes (.head, .add-bar, .list, .row, .empty, etc.)
 // matching the "Component primitives" block in the agent prompt — so a
 // model that follows the prompt examples gets working UI immediately.
@@ -19,7 +20,16 @@
 //     the accent paints (primary button, focus rings, links, pressed
 //     circle) via `var(--app-color, var(--accent))`. Falls back to
 //     `--accent` when no knob value is set.
-export const DEFAULT_APP_CSS = `* { box-sizing: border-box; }
+export const DEFAULT_APP_CSS = `/* Design-system contract (see the shared tokens.css): --app-hue drives the
+   whole neutral ramp (ink, lines, surfaces, shadows); --accent is the app's
+   identity color — pick one of the palette vars (--c-amber, --c-forest,
+   --c-indigo, --c-ochre, --c-rose, --c-slate, --c-teal, --c-violet). */
+:root {
+  --app-hue: 222;
+  --accent: var(--c-indigo);
+}
+
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
@@ -63,7 +73,7 @@ main {
 .surface {
   background: var(--bg-elev);
   border: 1px solid var(--line);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-card);
   padding: 1rem 1.125rem;
 }
 
@@ -130,14 +140,14 @@ button { font: inherit; cursor: pointer; }
 }
 .row:last-child { border-bottom: none; }
 .row-text { flex: 1; min-width: 0; font-size: 0.95rem; line-height: 1.35; word-break: break-word; }
-.row[data-done='true'] .row-text { color: var(--ink-4); text-decoration: line-through; }
+.row[data-done='true'] .row-text { color: var(--ink-3); text-decoration: line-through; }
 
 /* --- Circle toggle (used inside list rows) --- */
 .circle {
   width: 1.75rem; height: 1.75rem;
   min-width: 1.75rem;
   border-radius: 50%;
-  border: 1.5px solid var(--ink-4);
+  border: 1.5px solid var(--ink-3);
   background: transparent;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
@@ -152,7 +162,7 @@ button { font: inherit; cursor: pointer; }
   background: transparent; border: none;
   width: 2.25rem; height: 2.25rem;
   border-radius: var(--r-sm);
-  color: var(--ink-4);
+  color: var(--ink-3);
   display: inline-flex; align-items: center; justify-content: center;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
@@ -245,7 +255,11 @@ bun install   # or: npm install
 
 ## Layout
 
-- \`index.html\`, \`app.css\`, \`app.js\` — static, served from \`/centraid/${id}/\`
+- \`index.html\`, \`app.css\`, \`app.jsx\` — static, served from \`/centraid/${id}/\`.
+  \`app.jsx\` is a React component; the gateway transpiles it per-request
+  (esbuild, \`jsx: 'automatic'\`) — no local build step. Import
+  \`createRoot\`/hooks from \`./react-core.min.js\`, the same shared
+  sibling-import mechanism as \`./kit.js\`.
 - \`queries/<name>.js\` — pure function bodies invoked via
   \`window.centraid.read({ query: '<name>', input })\` → dispatched
   against the \`queries[]\` entry in \`app.json\`.
@@ -274,10 +288,10 @@ gateway applies ext-table DDL on publish — never run DDL from code.
 ## Phone-readiness
 
 The mobile shell is a thin viewer — on the phone this blueprint IS the
-UI. Keep the kit references (\`kit.js\` / \`kit.css\` are served by the runtime
-from one shared canonical copy — reference them from \`index.html\` / \`app.js\`,
-never copy them into the app folder), and keep the scaffold's responsive
-conventions intact: \`viewport-fit=cover\` in the
+UI. Keep the kit reference (\`kit.css\` is served by the runtime from one
+shared canonical copy — reference it from \`index.html\`, never copy it
+into the app folder), and keep the scaffold's responsive conventions
+intact: \`viewport-fit=cover\` in the
 viewport meta, \`env(safe-area-inset-*)\` body padding, the single 720px
 breakpoint, ≥ 44px hit targets, and the \`prefers-reduced-motion\` guard.
 Build on these; never strip them.

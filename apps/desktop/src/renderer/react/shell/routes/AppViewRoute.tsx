@@ -3,7 +3,6 @@ import type { AppearancePrefs } from '../../../app-shell-context.js';
 import { deleteApp, updateAppMeta } from '../../../gateway-client.js';
 import { useShellActions } from '../actions.js';
 import { iconSvg } from '../iconSvg.js';
-import AppChatPanel from './appchat/AppChatPanel.js';
 import { openPrompt } from '../prompt.js';
 import type { ShellNav } from '../ShellApp.js';
 import ShellFrame from '../ShellFrame.js';
@@ -14,9 +13,16 @@ import chrome from '../chrome.module.css';
 
 // React-owned app view — the full-bleed running-app runtime. Replaces the
 // vanilla openApp (app-appview.ts): a brand-chip lead + Use/Build switch, the
-// sandboxed app iframe (AppFrame, native), the per-app agentic chat
-// (AppChatPanel — its own FAB + slide-out panel), and the gear popover
+// sandboxed app iframe (AppFrame, native), and the gear popover
 // (AppSettingsController — knobs, linked automations, the vault pane).
+//
+// The desktop shell's own "Ask <App>" FAB + slide-in chat panel (formerly
+// AppChatPanel/useAppChat) was removed: it was the only entry point to that
+// feature (no command-palette or keyboard-shortcut opener existed outside the
+// component itself), and it overlapped the in-app kit Ask panel every
+// blueprint app already ships — the shell FAB's hit area intercepted pointer
+// events meant for the kit panel's send button. The kit panel is the sole
+// Ask affordance now.
 export interface AppViewRouteProps {
   app: AppMetaResolvedType;
   appId: string;
@@ -143,7 +149,6 @@ export default function AppViewRoute({
             <AppFrame appId={appId} accentColor={app.color} theme={prefs.theme} bgL={prefs.bgL} />
           </div>
         </div>
-        {appId ? <AppChatPanel app={app} appId={appId} /> : null}
         {settingsOpen ? (
           <AppSettingsController
             app={app}

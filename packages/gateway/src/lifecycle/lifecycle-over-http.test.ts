@@ -149,6 +149,32 @@ test('POST /_apps/<id>/meta renames an app on main', async () => {
   expect(row?.name).toBe('Daily Journal');
 });
 
+test('POST /_apps/_clone with publish:true installs a bundled app template directly — no draft stage', async () => {
+  // Desktop's "Use template" for an app template (owner decision): the clone
+  // must land on `main` in one shot, exactly like a create with publish:true,
+  // so it's a real installed app the moment the request completes.
+  const res = await fetch(`${handle.url}/centraid/_apps/_clone`, {
+    method: 'POST',
+    headers: auth({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ templateId: 'tasks', publish: true }),
+  });
+  expect(res.status).toBe(201);
+  const body = (await res.json()) as {
+    app: { id: string; name: string; kind?: string };
+    staged: boolean;
+  };
+  expect(body.staged).toBe(false);
+  expect(body.app.kind).toBe('app');
+
+  // Listed on `main` immediately — the same listing GET /_apps drives for
+  // every other "staged: false" assertion in this file, so a staged-only
+  // clone (the old draft flow) would fail this the same way it fails the
+  // `stagedBody.staged === true` case above.
+  const row = (await listApps()).find((a) => a.id === body.app.id);
+  expect(row).toBeTruthy();
+  expect(row?.name).toBe(body.app.name);
+});
+
 test('POST /_automations mints a webhook secret and publishes the automation', async () => {
   const res = await fetch(`${handle.url}/centraid/_automations`, {
     method: 'POST',

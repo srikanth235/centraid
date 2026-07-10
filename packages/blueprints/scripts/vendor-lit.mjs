@@ -26,7 +26,21 @@ const litVersion = JSON.parse(
 // must live inside the repo tree for that resolution to work.
 const scratch = mkdtempSync(path.join(KIT_DIR, '.vendor-lit-'));
 const entry = path.join(scratch, 'entry.js');
-writeFileSync(entry, "export { LitElement, html, svg, css, nothing, noChange } from 'lit';\n");
+writeFileSync(
+  entry,
+  [
+    // Core + standalone `render` — apps render Lit templates into kit-owned
+    // containers (popover/modal build callbacks) as well as via components.
+    "export { LitElement, html, svg, css, nothing, noChange, render } from 'lit';",
+    // The directives the app layer needs: keyed lists, conditional classes,
+    // input values that must win over user edits, and element refs.
+    "export { repeat } from 'lit/directives/repeat.js';",
+    "export { classMap } from 'lit/directives/class-map.js';",
+    "export { live } from 'lit/directives/live.js';",
+    "export { ref, createRef } from 'lit/directives/ref.js';",
+    '',
+  ].join('\n'),
+);
 
 try {
   execFileSync(
@@ -40,7 +54,8 @@ try {
 
 const banner =
   `/*! Lit ${litVersion} — vendored runtime bundle for the Centraid blueprint kit (issue #327).\n` +
-  ` * Self-contained ESM (LitElement, html, svg, css, nothing, noChange), production build.\n` +
+  ` * Self-contained ESM (LitElement, html, svg, css, nothing, noChange, render,\n` +
+  ` * repeat, classMap, live, ref, createRef), production build.\n` +
   ` * Do NOT hand-edit: regenerate with \`node packages/blueprints/scripts/vendor-lit.mjs\`.\n` +
   ` * Upstream: lit@${litVersion} (BSD-3-Clause, Google LLC). */\n`;
 writeFileSync(OUT, banner + readFileSync(OUT, 'utf8'));

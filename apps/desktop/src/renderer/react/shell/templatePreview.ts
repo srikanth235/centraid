@@ -65,7 +65,7 @@ export function openTemplatePreview(tmpl: TemplateEntry, onUse: (t: TemplateEntr
   const note = document.createElement('div');
   note.className = styles.tmplPreviewNote ?? '';
   note.textContent =
-    'Clones into your apps as a draft. Rename, edit, and publish from there — the original template stays in the catalog.';
+    'Installs straight to your Apps, ready to use. The original template stays in the catalog.';
   card.append(note);
 
   const cancel = document.createElement('button');

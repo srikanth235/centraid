@@ -132,39 +132,7 @@ main {
 
 /* ---------- Trust banners ------------------------------------------------ */
 
-.banner {
-  position: relative;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 0.85rem 1rem 0.85rem 2.5rem;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  color: var(--ink-soft);
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow-sm);
-}
-.banner::before {
-  content: '';
-  position: absolute;
-  left: 1rem;
-  top: 1rem;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  background: var(--app-color, var(--accent));
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.banner strong {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-  margin-bottom: 0.1rem;
-}
-.banner.notice::before {
-  background: var(--ink-faint);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-faint) 16%, transparent);
-}
+/* Trust/notice banner: kit.css .kit-banner (shared across all apps). */
 
 /* ---------- Inputs & write affordances ----------------------------------- */
 
@@ -177,7 +145,7 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 
 input[type='text'],
@@ -203,7 +171,7 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 textarea {
   resize: vertical;
@@ -217,51 +185,7 @@ select {
   min-height: 2.4rem;
 }
 
-.primary {
-  border-radius: var(--radius-sm);
-  border: none;
-  background: var(--accent-deep);
-  color: var(--on-accent);
-  font-weight: 600;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    filter 0.15s var(--ease),
-    transform 0.08s var(--ease);
-}
-.primary:hover {
-  filter: brightness(1.08);
-}
-.primary:active {
-  transform: scale(0.98);
-}
-.small-btn {
-  font-size: 0.85rem;
-  padding: 0.45rem 0.95rem;
-  min-height: 2.6rem;
-}
-
-.ghost {
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 0.8125rem;
-  padding: 0.35rem 0.8rem;
-  min-height: 2.4rem;
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-.ghost:hover {
-  border-color: var(--line-strong);
-  color: var(--ink);
-}
-.ghost.danger:hover,
-.ghost.danger[data-kit-armed] {
-  border-color: var(--danger);
-  color: var(--danger);
-}
+/* Buttons: kit.css .kit-btn / .kit-btn.primary / .kit-btn.danger (shared). */
 
 /* ---------- Search ------------------------------------------------------- */
 
@@ -287,7 +211,7 @@ select {
 .search-wrap input[type='search']:focus {
   outline: none;
   border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
 }
 .search-hint {
   position: absolute;
@@ -377,26 +301,7 @@ mark {
 .chips:empty {
   display: none;
 }
-.chip {
-  font-size: 0.8rem;
-  padding: 0.3rem 0.85rem;
-  min-height: 2.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-  -webkit-tap-highlight-color: transparent;
-  transition:
-    color 0.15s var(--ease),
-    background 0.15s var(--ease),
-    border-color 0.15s var(--ease);
-}
-.chip[aria-pressed='true'] {
-  background: var(--accent-deep);
-  border-color: transparent;
-  color: var(--on-accent);
-  font-weight: 500;
-}
+/* Notebook filter pills: kit.css .kit-chip (shared); selected fills accent-deep. */
 .chip-tool {
   min-width: 2.4rem;
   min-height: 2.4rem;
@@ -461,7 +366,7 @@ input.chip-rename-input {
     align-items: center;
     gap: 0.15rem;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip {
+  :root:not([data-app-width='narrow']) .side-nav .kit-chip {
     display: flex;
     align-items: center;
     text-align: left;
@@ -471,11 +376,11 @@ input.chip-rename-input {
     border-radius: var(--radius-sm);
     padding: 0.45rem 0.6rem;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip-group .chip {
+  :root:not([data-app-width='narrow']) .side-nav .chip-group .kit-chip {
     flex: 1;
     min-width: 0;
   }
-  :root:not([data-app-width='narrow']) .side-nav .chip[aria-pressed='true'] {
+  :root:not([data-app-width='narrow']) .side-nav .kit-chip[aria-pressed='true'] {
     background: var(--accent-soft);
     color: var(--accent-deep);
     font-weight: 600;
@@ -530,7 +435,7 @@ input.chip-rename-input {
 }
 .note:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
   border-radius: var(--radius-sm);
 }
 .note-title {
@@ -679,7 +584,7 @@ input.chip-rename-input {
 }
 .note-body:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: var(--kit-focus-ring);
   border-radius: var(--radius-sm);
 }
 .note-body-input {
@@ -763,16 +668,7 @@ input.chip-rename-input {
   text-decoration: line-through;
 }
 
-.empty {
-  color: var(--ink-soft);
-  font-size: 0.92rem;
-  text-align: center;
-  padding: 3rem 1rem;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-}
+/* Empty card: kit.css .kit-empty-card (shared across apps). */
 .footnote {
   margin-top: 2rem;
   padding-top: 1rem;
@@ -792,77 +688,11 @@ input.chip-rename-input {
 }
 
 /* ---------- Attachments -------------------------------------------------- */
+/* The strip + tiles are the kit's .kit-attach-* primitive (kit.css); only the
+   app-chrome wrapper and add control live here. */
 
 .attach-block {
   margin-top: 1rem;
-}
-.attach-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.attach-strip:empty {
-  display: none;
-}
-.attach-tile {
-  position: relative;
-  width: 5rem;
-  height: 5rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  background: var(--surface-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.attach-tile img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.attach-tile img.attach-zoom {
-  cursor: zoom-in;
-}
-.attach-file {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  padding: 0.35rem;
-  font-size: 0.68rem;
-  line-height: 1.25;
-  color: var(--accent-deep);
-  word-break: break-word;
-  text-decoration: none;
-}
-.attach-meta {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  font-family: var(--mono);
-  font-size: 0.56rem;
-  text-align: center;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 0.05rem 0;
-}
-.attach-remove {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
-  width: 1.3rem;
-  height: 1.3rem;
-  line-height: 1;
-  border: none;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  font-size: 0.85rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 .attach-add {
   display: inline-block;
@@ -874,11 +704,6 @@ input.chip-rename-input {
   height: 1px;
   opacity: 0;
 }
-.attach-add .ghost {
-  display: inline-flex;
-  align-items: center;
-}
-
 /* ---------- Cross-references (issue #272) -------------------------------- */
 
 /* Layout wrapper around the strip stays app-owned; the strip itself and its
@@ -913,8 +738,7 @@ input.chip-rename-input {
 
 @media (prefers-reduced-motion: reduce) {
   .pin-btn,
-  .note,
-  .primary {
+  .note {
     transition: none;
   }
 }

@@ -14,7 +14,7 @@
  * step once native skill discovery is wired on both backends.
  */
 
-import { icons, toCss } from '@centraid/design-tokens';
+import { icons, toBlueprintCss } from '@centraid/design-tokens';
 
 /**
  * Returns the ordered list of prompt blocks to splice in below the
@@ -37,28 +37,31 @@ export function buildUiGroundingBlocks(): string[] {
  * `var(--accent)`, `var(--ink)`, etc. — never hardcode colors, radii,
  * font sizes, or spacing values.
  *
- * The starter `app.css` written by the scaffolder already links the same vars
- * from a local snapshot, so this block is for the *agent* (so it knows what's
- * available); the runtime contract comes from the scaffold and the theme bridge.
+ * The scaffolded `index.html` links the shared `tokens.css` (served from the
+ * kit dir next to `kit.css`), so this block is for the *agent* (so it knows
+ * what's available); the runtime contract comes from the shared sheet and the
+ * theme bridge.
  */
 function renderDesignTokensBlock(): string {
-  const css = toCss();
+  const css = toBlueprintCss();
   return [
     '### Design tokens (use these — do not invent colors or sizes)',
     '',
-    "Every centraid app inherits the shell's visual contract via CSS variables.",
-    'A snapshot of these tokens ships with the scaffold (`tokens.css`) and is',
-    'linked from `index.html` — your styles must reference them, never hardcode.',
+    'Every centraid app inherits the blueprint design system via CSS variables',
+    'from the shared `tokens.css` linked in `index.html` (served next to',
+    '`kit.css` — no local copy). Your styles must reference them, never hardcode.',
     '',
     '**Rules:**',
     '',
-    '- Colors: `var(--accent)`, `var(--ink)`, `var(--ink-2)`, `var(--ink-3)`, `var(--ink-4)`, `var(--bg)`, `var(--bg-elev)`, `var(--bg-sunken)`, `var(--line)`, `var(--line-strong)`, `var(--danger)`, `var(--success)`. **Never** write `#hexcodes` or `rgb()` literals for foreground/background/border.',
-    '- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-lg)`, `var(--r-xl)` — do not pick px values by feel.',
-    '- Spacing (regular density): `var(--d-1)` through `var(--d-12)` — favor these over raw rem/px where it fits.',
-    '- Theme: light/dark flips by `data-theme` on `<html>`. The runtime bakes the initial value into the served HTML; the inline live-settings bridge in the scaffolded `index.html` keeps it in sync with the shell while the iframe is mounted. Keep that inline `<script>` block — do not delete it or move it after the stylesheet.',
-    "- Fonts: inherit from `<body>` (the scaffold sets the system stack). Don't load web fonts or override `font-family`.",
+    '- App identity: set `--app-hue` (drives the whole neutral ramp — ink, lines, surfaces, shadows) and `--accent` (one of the palette vars `--c-amber`/`--c-forest`/`--c-indigo`/`--c-ochre`/`--c-rose`/`--c-slate`/`--c-teal`/`--c-violet`) in your app.css `:root`. Everything else derives.',
+    '- Colors: `var(--accent)`, `var(--accent-soft)`, `var(--accent-deep)`, `var(--ink)`, `var(--ink-2)`, `var(--ink-3)`, `var(--ink-inv)`, `var(--bg)`, `var(--surface)`, `var(--surface-2)`, `var(--line)`, `var(--line-strong)`, `var(--danger)`. **Never** write `#hexcodes` or `rgb()` literals for foreground/background/border.',
+    '- Accent indirection: paint with `var(--_accent)` (resolves the appColor knob over `--accent`) wherever the accent shows; `--sel`/`--selb` for selection tint/border.',
+    '- Radii: `var(--r-sm)`, `var(--r-md)`, `var(--r-card)`, `var(--r-pill)` — do not pick px values by feel.',
+    '- Type: `font: var(--t-title|--t-body|--t-body-strong|--t-small|--t-tiny|--t-mono)` shorthands; mono (`var(--mono)`) for counts, dates, metadata.',
+    '- Theme: light/dark flips by `data-theme` on `<html>` — `tokens.css` handles BOTH the explicit attribute and the `prefers-color-scheme` fallback; never write your own dark-theme token blocks. The inline live-settings bridge in the scaffolded `index.html` keeps theme in sync with the shell — do not delete it or move it after the stylesheets.',
+    "- Fonts: inherit from `<body>` (`var(--font-sans)` system stack). Don't load web fonts.",
     '',
-    'Verbatim token CSS (light + dark + density overrides) — this is what `tokens.css` resolves to at runtime:',
+    'Verbatim token CSS (light + dark) — this is what the shared `tokens.css` resolves to at runtime:',
     '',
     '```css',
     css.trimEnd(),
@@ -185,7 +188,7 @@ function renderComponentPrimitivesBlock(): string {
     '',
     '**Secondary / quiet button** — same shape as `.primary`, swap to `class="ghost"` (transparent bg, `var(--ink-2)` text).',
     '',
-    '**Card / surface** — wrap in `<div class="surface">` for an elevated panel; the scaffold styles it with `background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-lg);`.',
+    '**Card / surface** — wrap in `<div class="surface">` for an elevated panel; the scaffold styles it with `background: var(--bg-elev); border: 1px solid var(--line); border-radius: var(--r-card);`.',
   ].join('\n');
 }
 
@@ -257,12 +260,15 @@ function renderExemplarsBlock(): string {
   return [
     '### Reference exemplars',
     '',
-    'When unsure about a pattern, read the bundled templates — they are the',
-    'canonical references for what a well-grounded centraid app looks like:',
+    'When unsure about a pattern, read the bundled blueprint apps — they are the',
+    'canonical references for what a well-grounded centraid app looks like.',
+    'They are written in the **Lit dialect** (`app.js` + `./lit-core.min.js`):',
     '',
-    '- `@centraid/blueprints/apps/todos/` — the tightest single-list example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the `.head/.add-bar/.list/.row/.empty` class shapes, and how it never hardcodes a color.',
-    '- `@centraid/blueprints/apps/journal/` — a slightly richer surface (cards, editing, dated entries). Use for any app that has a "compose + browse" rhythm.',
+    '- `@centraid/blueprints/apps/tasks/` — the tightest list/board example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the kit.css primitives (`.kit-btn`, `.kit-chip`, `.kit-banner`), the `#consentBanner` denied-state pattern, and how it never hardcodes a color.',
+    '- `@centraid/blueprints/apps/notes/` — a richer "compose + browse" surface (editor, list, autosave). Use for any app with that rhythm.',
     '',
-    "You can read these directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/todos/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
+    'For a **React** app (`app.jsx`, the default for new apps), the scaffolded `app.jsx` you start from is the canonical shape: createRoot at the bottom, one App component owning the loading/error/denied triad, `window.centraid.onChange(refresh)` in an effect, kit.css classes via `className=`.',
+    '',
+    "You can read the blueprints directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/tasks/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
   ].join('\n');
 }

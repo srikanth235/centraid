@@ -1,8 +1,9 @@
 /* ============================================================================
-   Centraid blueprint kit — shared UX primitives, synced across all 14 apps.
-   Canonical copy: packages/blueprints/kit/kit.css; each template carries a copy
-   next to index.html (like wall.css). Run `node scripts/sync-kit.mjs` after
-   editing.
+   Centraid blueprint kit — shared UX primitives for every template app.
+   Canonical (and ONLY) copy: packages/blueprints/kit/kit.css. Apps don't carry
+   their own copies — the app-engine runtime serves kit.css from this dir
+   (sharedAssetsDir → KIT_DIR) when the app folder has no override. Edit here
+   and every app picks it up on next load.
 
    ── DESIGN LANGUAGE: "Field notebook" ──────────────────────────────────────
    Calm, instrument-grade, personal. Humanist system sans for content; system
@@ -27,6 +28,9 @@
 
 :root {
   --kit-ease: var(--ease, cubic-bezier(0.2, 0.7, 0.3, 1));
+  /* THE focus ring. Apps style their own inputs with
+     `box-shadow: var(--kit-focus-ring)` instead of re-deriving the recipe. */
+  --kit-focus-ring: 0 0 0 3px var(--kit-accent-soft);
   --kit-radius: var(--radius, 0.75rem);
   --kit-surface-2: var(
     --surface-2,
@@ -41,12 +45,29 @@
   --kit-mono: var(--mono, ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, monospace);
 }
 
+/* The `hidden` attribute must ALWAYS hide, even when a class on the same
+   element sets `display:` (an author display beats the UA's plain
+   `[hidden] { display: none }`, so `.kit-ask-ov { display: flex }` alone
+   made the Ask panel permanently visible in any app without its own global
+   guard — photos shipped that way; docs was masked by an identical rule in
+   its app.css). One kit-wide guard retires the per-element
+   `.kit-*[hidden]` whack-a-mole for every current and future app. */
+[hidden] {
+  display: none !important;
+}
+
 /* ---------- Native Web Component hosts (issue #327) ----------------------- */
 /* The kit's presentation primitives are custom elements (elements.js) that
    render the SAME `.kit-*` markup below into the LIGHT DOM. Their host element
    is `display: contents` so it contributes no box of its own — the emitted
    `.kit-*` tree lays out exactly as the former vanilla builders' output did,
-   and every rule in this file continues to style it unchanged. */
+   and every rule in this file continues to style it unchanged.
+
+   `[data-kit-host]` is stamped by the exported `KitElement` base on connect,
+   so APP-level components inherit the same contract without registering their
+   tag here. The kit's own tags stay listed explicitly: they cover the pre-
+   upgrade window before `connectedCallback` runs. An app component whose host
+   should BE a box overrides via `x-foo[data-kit-host] { display: block; }`. */
 kit-avatar,
 kit-meter,
 kit-line-chart,
@@ -54,7 +75,8 @@ kit-bar-chart,
 kit-skeleton,
 kit-toast,
 kit-mention-chip,
-kit-reference-strip {
+kit-reference-strip,
+[data-kit-host] {
   display: contents;
 }
 
@@ -70,7 +92,7 @@ kit-reference-strip {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  z-index: 60;
+  z-index: 80;
   width: min(27rem, calc(100vw - 2rem));
   pointer-events: none;
 }
@@ -414,11 +436,740 @@ kit-reference-strip {
 .kit-bar-fill[data-tone='warn'] {
   background: var(--warn, #d97706);
 }
+/* Healthy / passing reading (e.g. a strong password). */
+.kit-bar-fill[data-tone='ok'] {
+  background: var(--ok, #16a34a);
+}
+
+/* ---------- Trust / notice banner ------------------------------------------ */
+/* The consent + outcome banner every app renders above its content: accent
+   dot = trust framing, .notice tone = a quieter outcome/notice voice. */
+
+.kit-banner {
+  position: relative;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: var(--surface, #fff);
+  border-radius: var(--kit-radius);
+  padding: 0.85rem 1rem 0.85rem 2.5rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--muted, #667085);
+  margin-bottom: 1rem;
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong));
+}
+.kit-banner::before {
+  content: '';
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: var(--kit-accent);
+  box-shadow: 0 0 0 3px var(--kit-accent-soft);
+}
+.kit-banner strong {
+  display: block;
+  color: var(--text, #16181d);
+  font-weight: 600;
+  margin-bottom: 0.1rem;
+}
+.kit-banner.notice::before {
+  background: var(--kit-faint);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--kit-faint) 16%, transparent);
+}
+
+/* ---------- Buttons --------------------------------------------------------
+   ONE canonical button, pill-shaped (the kit's own chips/toasts/bars are
+   already pills): quiet hairline base, `.primary` accent fill, `.danger`
+   arm/hover tone. Chosen over the per-app radius/sizing drift the apps grew
+   (notes/tasks radius-sm primaries, docs 10px, locker/tally rounded rects) —
+   contextual size overrides stay in app.css where a layout truly needs them. */
+
+.kit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: var(--surface, #fff);
+  color: var(--muted, #667085);
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.9rem;
+  min-height: 2.4rem;
+  cursor: pointer;
+  text-decoration: none; /* anchors-as-buttons (e.g. a download link) */
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--kit-ease),
+    border-color 0.15s var(--kit-ease),
+    filter 0.15s var(--kit-ease);
+}
+.kit-btn:hover {
+  border-color: var(--kit-line-strong);
+  color: var(--text, #16181d);
+}
+.kit-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.kit-btn.primary {
+  border-color: transparent;
+  background: var(--kit-accent-deep);
+  color: var(--on-accent, #fff);
+  font-weight: 600;
+}
+.kit-btn.primary:hover {
+  border-color: transparent;
+  color: var(--on-accent, #fff);
+  filter: brightness(1.08);
+}
+.kit-btn.primary:active {
+  transform: scale(0.98);
+}
+.kit-btn.danger:hover,
+.kit-btn.danger[data-kit-armed] {
+  border-color: var(--danger, #f04452);
+  color: var(--danger, #f04452);
+}
+.kit-btn.primary.danger,
+.kit-btn.primary.danger[data-kit-armed] {
+  background: var(--danger, #f04452);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ---------- Icon buttons ----------------------------------------------------
+   Square, icon-only. Generalizes the six near-identical hand-rolled icon
+   buttons docs grew (theme toggle, sidebar close, tool row, kebab, details
+   close, quick-look controls) plus photos' equivalents. Size is a custom
+   prop so a dense row (e.g. a kebab at 30px) can dial it down per instance:
+     <button class="kit-icon-btn" style="--kit-icon-btn-size: 1.875rem">…</button>
+   Transparent base — this sits on app chrome, not a card. */
+
+.kit-icon-btn {
+  --kit-icon-btn-size: 2.1rem;
+  width: var(--kit-icon-btn-size);
+  height: var(--kit-icon-btn-size);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted, #667085);
+  border-radius: calc(var(--kit-radius) * 0.55);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background 0.15s var(--kit-ease),
+    color 0.15s var(--kit-ease);
+}
+.kit-icon-btn svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: none;
+}
+.kit-icon-btn:hover {
+  background: var(--kit-surface-2);
+  color: var(--text, #16181d);
+}
+.kit-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.kit-icon-btn.danger:hover {
+  color: var(--danger, #f04452);
+}
+
+/* ---------- Text input ------------------------------------------------------
+   THE text input primitive — apps had none and hand-rolled bare `input`
+   rules per family. `.bare` drops the border/fill for inline-editing
+   contexts (rename a row/folder/chip in place); it still earns a full
+   accent border + focus ring on focus, never a half-drawn underline. */
+
+.kit-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--text, #16181d);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: calc(var(--kit-radius) * 0.7);
+  padding: 0.5rem 0.7rem;
+  -webkit-appearance: none;
+  appearance: none;
+  transition:
+    border-color 0.15s var(--kit-ease),
+    box-shadow 0.15s var(--kit-ease);
+}
+.kit-input::placeholder {
+  color: var(--kit-faint);
+}
+.kit-input:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--kit-accent) 50%, var(--kit-line-strong));
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-input.bare {
+  border-color: transparent;
+  background: transparent;
+  padding: 0.3rem 0.4rem;
+}
+.kit-input.bare:focus {
+  border-color: var(--kit-accent);
+  background: var(--surface, #fff);
+}
+
+/* ---------- Search pill ------------------------------------------------------
+   Union of docs' `.d-search` and photos' `.search`: a leading icon, a plain
+   `<input>` child (no extra class needed — this selector owns its look),
+   an optional trailing `kbd` shortcut hint. App-specific width/placement
+   (max-width, flex basis, margin) stays in app.css.
+     <label class="kit-search">
+       <svg>…</svg>
+       <input type="search" placeholder="Search">
+       <kbd>/</kbd>
+     </label> */
+
+.kit-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  padding: 0 0.6rem 0 0.9rem;
+  transition:
+    border-color 0.15s var(--kit-ease),
+    box-shadow 0.15s var(--kit-ease);
+}
+.kit-search:focus-within {
+  border-color: color-mix(in oklab, var(--kit-accent) 50%, var(--kit-line-strong));
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-search svg {
+  flex: none;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--kit-faint);
+  pointer-events: none;
+}
+.kit-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0.55rem 0;
+  color: var(--text, #16181d);
+  font: inherit;
+}
+.kit-search input:focus {
+  outline: none;
+}
+.kit-search input::placeholder {
+  color: var(--kit-faint);
+}
+.kit-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.kit-search kbd {
+  flex: none;
+  font-family: var(--kit-mono);
+  font-size: 0.68rem;
+  color: var(--kit-faint);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
+/* ---------- Chips -----------------------------------------------------------
+   Filter/toggle pills. Selected speaks in two registers: the default fills
+   with the deep accent (notes/photos voice); `.quiet` selects with the soft
+   tint + accent ink (docs/people/tally voice) for dense chip rows. Both
+   `aria-pressed` and `data-active` mark selection. */
+
+.kit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.85rem;
+  min-height: 2.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  background: var(--surface, #fff);
+  color: var(--muted, #667085);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--kit-ease),
+    background 0.15s var(--kit-ease),
+    border-color 0.15s var(--kit-ease);
+}
+.kit-chip:hover {
+  border-color: var(--kit-line-strong);
+  color: var(--text, #16181d);
+}
+.kit-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-chip[aria-pressed='true'],
+.kit-chip[data-active='true'] {
+  background: var(--kit-accent-deep);
+  border-color: transparent;
+  color: var(--on-accent, #fff);
+  font-weight: 500;
+}
+.kit-chip.quiet[aria-pressed='true'],
+.kit-chip.quiet[data-active='true'] {
+  background: var(--kit-accent-soft);
+  border-color: color-mix(in oklab, var(--kit-accent) 34%, var(--kit-line-strong));
+  color: var(--text, #16181d);
+  font-weight: 600;
+}
+
+/* ---------- Segmented control -----------------------------------------------
+   Pill track on the recessed surface; the selected segment raises. Selection
+   marks with `aria-pressed` or `.on`. `.stretch` fills its row (equal-width
+   segments). */
+
+.kit-seg {
+  display: inline-flex;
+  background: var(--kit-surface-2);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.15rem;
+}
+.kit-seg.stretch {
+  display: flex;
+}
+.kit-seg.stretch > button {
+  flex: 1;
+}
+.kit-seg > button {
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted, #667085);
+  background: transparent;
+  border: none;
+  padding: 0.35rem 0.85rem;
+  min-height: 2.1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 0.15s var(--kit-ease),
+    background 0.15s var(--kit-ease);
+}
+.kit-seg > button:hover {
+  color: var(--text, #16181d);
+}
+.kit-seg > button[aria-pressed='true'],
+.kit-seg > button.on {
+  background: var(--surface, #fff);
+  color: var(--text, #16181d);
+  box-shadow:
+    var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong)),
+    0 1px 2px rgba(15, 20, 32, 0.08);
+}
+:root[data-theme='dark'] .kit-seg > button[aria-pressed='true'],
+:root[data-theme='dark'] .kit-seg > button.on {
+  box-shadow: 0 0 0 0.5px var(--kit-line-strong);
+}
+.kit-seg > button:focus-visible {
+  outline: none;
+  box-shadow: var(--kit-focus-ring);
+}
+
+/* ---------- Modal shell -----------------------------------------------------
+   Backdrop + centered card. The backdrop dims with the theme's own ink (never
+   a fixed tint); the card is the standard raised surface. Width is the one
+   knob apps keep — set it with an app class on the same element. Layering:
+   app chrome < modal 70 < popover 75 < toasts 80. */
+
+.kit-modal-back {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: color-mix(in oklab, var(--text, #16181d) 45%, transparent);
+  backdrop-filter: blur(2px);
+  animation: kit-fade-in 0.18s ease-out;
+}
+.kit-modal-back[hidden] {
+  display: none;
+}
+.kit-modal {
+  width: min(28rem, 100%);
+  max-height: min(88vh, 42rem);
+  overflow-y: auto;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 1.15rem;
+  box-shadow: var(--kit-shadow);
+  padding: 1.3rem 1.4rem;
+  animation: kit-rise-lg 0.18s var(--kit-ease);
+}
+.kit-modal:focus {
+  outline: none;
+}
+.kit-modal-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+@keyframes kit-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes kit-rise-lg {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-modal-back,
+  .kit-modal {
+    animation: none;
+  }
+}
+
+/* ---------- Anchored popover menu (openPopover / popItem) ------------------ */
+
+.kit-popover {
+  position: fixed;
+  z-index: 75;
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 12px;
+  box-shadow: var(--kit-shadow);
+  padding: 5px;
+  animation: kit-rise 0.14s var(--kit-ease);
+}
+.kit-popover-head {
+  font-family: var(--kit-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kit-faint);
+  padding: 8px 10px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-popover-scroll {
+  max-height: 240px;
+  overflow: auto;
+}
+.kit-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 11px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--text, #16181d);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+.kit-popover-item:hover:not(:disabled) {
+  background: var(--kit-surface-2);
+}
+.kit-popover-item:disabled {
+  color: var(--kit-faint);
+  cursor: default;
+}
+.kit-popover-item.danger {
+  color: var(--danger, #f04452);
+}
+.kit-popover-sep {
+  height: 1px;
+  background: var(--line, rgba(127, 127, 127, 0.25));
+  margin: 4px 8px;
+}
+/* Colour swatch dot inside a menu row (e.g. "move to circle"). */
+.kit-dotmini {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+@keyframes kit-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-popover {
+    animation: none;
+  }
+}
+
+/* ---------- Empty states ---------------------------------------------------- */
+
+/* The quiet one-line empty card ("Nothing to do — enjoy your day."). */
+.kit-empty-card {
+  color: var(--muted, #667085);
+  font-size: 0.92rem;
+  text-align: center;
+  padding: 3rem 1rem;
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: var(--kit-radius);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong));
+}
+
+/* The full icon/title/sub empty state (emptyState() helper). */
+.kit-empty {
+  text-align: center;
+  padding: 64px 20px;
+}
+.kit-empty-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--kit-radius);
+  background: var(--kit-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  color: var(--kit-faint);
+}
+.kit-empty-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 4px;
+}
+.kit-empty-sub {
+  font-size: 0.82rem;
+  color: var(--muted, #667085);
+  max-width: 38ch;
+  margin: 0 auto;
+}
+.kit-empty-sub button {
+  margin-top: 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--kit-accent-deep);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+/* ---------- Attachment tiles (renderAttachments) --------------------------- */
+
+.kit-attach-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.kit-attach-strip:empty {
+  display: none;
+}
+.kit-attach-tile {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: var(--radius-sm, 0.5rem);
+  overflow: hidden;
+  background: var(--kit-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.kit-attach-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.kit-attach-zoom {
+  cursor: zoom-in;
+}
+.kit-attach-file {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  padding: 0.35rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--kit-accent-deep);
+  word-break: break-word;
+  text-decoration: none;
+}
+.kit-attach-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-family: var(--kit-mono);
+  font-size: 0.58rem;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.1rem 0;
+}
+.kit-attach-remove {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .kit-bar-fill {
     transition: none;
   }
+}
+
+/* ---------- Viewer nav arrows ----------------------------------------------
+   Circular prev/next overlay for full-screen media viewers (docs' quick-look,
+   photos' lightbox — the two were near-byte-identical). Lives on a dark
+   viewer surface, so the on-dark whites below are hardcoded, not routed
+   through ink tokens. `.prev`/`.next` position it; the viewer sets the
+   containing box to `position: relative`. */
+
+.kit-viewer-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.75rem;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s var(--kit-ease);
+}
+.kit-viewer-nav:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+.kit-viewer-nav:disabled,
+.kit-viewer-nav[disabled] {
+  opacity: 0.25;
+  pointer-events: none;
+}
+.kit-viewer-nav.prev {
+  left: 0.75rem;
+}
+.kit-viewer-nav.next {
+  right: 0.75rem;
+}
+
+/* ---------- Drag-and-drop scrim --------------------------------------------
+   Full-viewport drop target: an accent-tinted scrim (`.kit-drop`) behind a
+   centered message card (`.kit-drop-card`). Union of docs' opaque, themed
+   card and photos' translucent white-on-black one — the themed surface card
+   wins (it stays legible in both themes); the accent tint splits the
+   difference between docs' 14% and photos' 20% mix. Scrim itself ignores
+   pointer events so the drop target underneath keeps receiving drag events;
+   toggle visibility with `[hidden]`. */
+
+.kit-drop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in oklab, var(--kit-accent) 16%, rgba(15, 18, 26, 0.45));
+  pointer-events: none;
+  animation: kit-fade 0.14s ease-out;
+}
+.kit-drop[hidden] {
+  display: none;
+}
+.kit-drop-card {
+  border: 2px dashed var(--kit-accent);
+  border-radius: var(--kit-radius);
+  background: var(--surface, #fff);
+  color: var(--text, #16181d);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 1.6rem 2.4rem;
+  box-shadow: var(--kit-shadow);
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-drop {
+    animation: none;
+  }
+}
+
+/* ---------- Bounded-browse footer ------------------------------------------
+   The quiet "showing N of M" line under a windowed list (docs' window foot,
+   photos' equivalent). Mono for the numbers, tiny, centered, wraps on narrow
+   widths. */
+
+.kit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  text-align: center;
+  padding: 1.25rem 0 0.5rem;
+  font-family: var(--kit-mono);
+  font-size: 0.72rem;
+  color: var(--kit-faint);
 }
 
 /* ---------- Ask / assistant (chat to your vault) -------------------------- */
@@ -1040,4 +1791,18 @@ kit-reference-strip {
   margin: 0;
   font-size: 0.78rem;
   color: var(--muted, #777);
+}
+
+/* ---------- Text utilities -------------------------------------------------- */
+/* Promoted from photos' `.muted`/`.small` verbatim, onto kit tokens. Small,
+   composable riders for a line that just needs quieter ink or smaller type
+   (a caption, a hint, a secondary label) — not a family of their own. */
+
+.kit-muted {
+  color: var(--kit-faint);
+  font-size: 0.85rem;
+  margin: 0;
+}
+.kit-small {
+  font-size: 0.8rem;
 }

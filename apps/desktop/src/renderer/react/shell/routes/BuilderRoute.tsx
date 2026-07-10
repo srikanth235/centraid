@@ -99,7 +99,15 @@ export default function BuilderRoute({
       {...(automation
         ? { initialAppId: route.automationId }
         : {
-            ...(route.appContext ? { appContext: route.appContext } : {}),
+            // Editing an installed/published app: thread its existing id
+            // through as initialAppId so useBuilder resolves isUpdateMode
+            // and BuilderPreview gets a real appId to build a draft preview
+            // src from. Without this, appId stays undefined and the preview
+            // pane is stuck on the "Building…" skeleton forever — appContext
+            // alone (name/color/icon) isn't enough.
+            ...(route.appContext
+              ? { appContext: route.appContext, initialAppId: route.appContext.id }
+              : {}),
             ...(route.initialPrompt ? { initialPrompt: route.initialPrompt } : {}),
           })}
     />

@@ -22,7 +22,7 @@
     "typecheck": "turbo run typecheck",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "lint": "oxlint .",
+    "lint": "oxlint . && turbo run lint",
     "lint:types": "bash scripts/lint-types.sh",
     "check": "bun run format:check && bun run lint",
     "fix": "ultracite fix",

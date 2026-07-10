@@ -12,21 +12,23 @@ import {
   appendWithChips,
   armConfirm,
   attachMentionField,
+  debounce,
   inlineLinkIds,
+  outcomeMessage,
   readFailed,
   relTime,
   removeReference,
+  renderAttachments,
   renderReferenceStrip,
   resolveInlineSpans,
   showSkeleton,
+  snippetInto,
   toast,
+  wireAttachInput,
 } from './kit.js';
+import { html, nothing, ref, render as litRender, repeat, svg } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
-// Small files stay one-call inline; larger files stream to the vault's blob
-// staging route (issue #296).
-const BLOB_ROUTE = '/centraid/_vault/blobs';
-const INLINE_ATTACH_BYTES = 256 * 1024;
 
 let notes = [];
 let notebooks = [];
@@ -49,8 +51,21 @@ let saveTimer = 0;
 let savePromise = null;
 let saveStateTimer = 0;
 
-const PIN_SVG =
-  '<svg viewBox="0 0 16 16" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A5.9 5.9 0 0 1 5 6.708V2.277a2.8 2.8 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"/></svg>';
+// A clean inline-SVG pin marker (former PIN_SVG string, trusted markup that
+// never touched note content) — inlined as a Lit `svg` literal so the row
+// template never needs `innerHTML`.
+const PIN_PATH = svg`<path d="M4.146.146A.5.5 0 0 1 4.5 0h7a.5.5 0 0 1 .5.5c0 .68-.342 1.174-.646 1.479-.126.125-.25.224-.354.298v4.431l.078.048c.203.127.476.314.751.555C12.36 7.775 13 8.527 13 9.5a.5.5 0 0 1-.5.5h-4v4.5c0 .276-.224 1.5-.5 1.5s-.5-1.224-.5-1.5V10h-4a.5.5 0 0 1-.5-.5c0-.973.64-1.725 1.17-2.189A5.9 5.9 0 0 1 5 6.708V2.277a2.8 2.8 0 0 1-.354-.298C4.342 1.674 4 1.179 4 .5a.5.5 0 0 1 .146-.354z"/>`;
+function pinSvg() {
+  return html`<svg
+    viewBox="0 0 16 16"
+    width="15"
+    height="15"
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    ${PIN_PATH}
+  </svg>`;
+}
 
 function notice(text) {
   const el = $('noticeBanner');
@@ -66,20 +81,16 @@ function narrate(outcome, onDenied, friendly) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
+  if (outcome?.status === 'failed' && friendly) {
     const predicate = String(outcome.predicate ?? '');
-    const known = friendly ? Object.keys(friendly).find((k) => predicate.includes(k)) : undefined;
-    notice(
-      known
-        ? friendly[known]
-        : `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
-    );
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-    if (onDenied) onDenied();
+    const known = Object.keys(friendly).find((k) => predicate.includes(k));
+    if (known) {
+      notice(friendly[known]);
+      return false;
+    }
   }
+  if (outcome?.status === 'denied' && onDenied) onDenied();
+  notice(outcomeMessage(outcome) ?? '');
   return false;
 }
 
@@ -94,108 +105,6 @@ async function act(action, input) {
 
 function currentNote() {
   return notes.find((n) => n.note_id === viewingId) ?? null;
-}
-
-// ---------- Attachments (shared pattern across apps) ----------
-// Read a File as a base64 data: URI — small attachments travel inline, so the
-// browser does the encoding before the data ever leaves the app.
-function fileToDataUri(file) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
-
-// Stage one file's bytes into the vault's CAS (issue #296): the file
-// streams to the blob route — no base64 through command JSON — and the
-// attach action claims the returned sha (that claim is the receipt).
-async function stageFileBytes(file) {
-  const q = new URLSearchParams();
-  if (file.name) q.set('filename', file.name);
-  if (file.type) q.set('media_type', file.type);
-  const res = await fetch(`${BLOB_ROUTE}?${q}`, {
-    method: 'POST',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-    body: file,
-  });
-  if (!res.ok) throw new Error(`upload refused (${res.status})`);
-  return res.json();
-}
-
-function fmtBytes(n) {
-  if (!n) return '';
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// Render an attachment strip: images as thumbnails that open the lightbox,
-// everything else as a download tile, each with a remove control wired to
-// the detach action.
-function renderAttachments(stripEl, list, onRemove) {
-  stripEl.innerHTML = '';
-  for (const a of list ?? []) {
-    const tile = document.createElement('div');
-    tile.className = 'attach-tile';
-    if (String(a.media_type).startsWith('image/')) {
-      const img = document.createElement('img');
-      img.src = a.content_uri;
-      img.alt = a.title ?? 'attachment';
-      img.className = 'attach-zoom';
-      img.addEventListener('click', () => openLightbox(a.content_uri, a.title ?? ''));
-      tile.appendChild(img);
-    } else {
-      const link = document.createElement('a');
-      link.className = 'attach-file';
-      link.href = a.content_uri;
-      link.download = a.title ?? 'file';
-      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
-      tile.appendChild(link);
-    }
-    const meta = document.createElement('span');
-    meta.className = 'attach-meta';
-    meta.textContent = fmtBytes(a.byte_size);
-    tile.appendChild(meta);
-    const rm = document.createElement('button');
-    rm.type = 'button';
-    rm.className = 'attach-remove';
-    rm.textContent = '×';
-    rm.title = 'Remove';
-    rm.addEventListener('click', () => onRemove(a.attachment_id));
-    tile.appendChild(rm);
-    stripEl.appendChild(tile);
-  }
-}
-
-// Wire a file <input> so each chosen file is attached to the current subject.
-function wireAttachInput(inputEl, getSubjectId) {
-  inputEl.addEventListener('change', async () => {
-    const subjectId = getSubjectId();
-    if (!subjectId) return;
-    for (const file of [...inputEl.files]) {
-      // Large files stage through the blob route and attach by sha; small
-      // ones keep the one-call inline data: URI path (issue #296).
-      let input;
-      try {
-        if (file.size > INLINE_ATTACH_BYTES) {
-          const staged = await stageFileBytes(file);
-          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
-        } else {
-          const dataUri = await fileToDataUri(file);
-          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
-        }
-      } catch {
-        notice('Could not read that file.');
-        continue;
-      }
-      const outcome = await act('attach', input);
-      if (!narrate(outcome, refresh)) break;
-    }
-    inputEl.value = '';
-    await refresh();
-  });
 }
 
 // ---------- Cross-references (issue #272) ----------
@@ -396,26 +305,25 @@ function renderBodyInto(container, body, format, inline = []) {
 
 // ---------- Search ----------
 
-// Append `text` to `el` with every occurrence of the search term wrapped in
-// <mark> — built from text nodes, so note content never parses as HTML.
-function highlightInto(el, text, term) {
+// `text` with every occurrence of the search term wrapped in <mark>, as a
+// list of strings/Lit templates ready to interpolate into a row template —
+// Lit renders each string as an escaped text node, so note content never
+// parses as HTML.
+function highlightSpans(text, term) {
   const str = String(text ?? '');
-  if (!term) {
-    el.textContent = str;
-    return;
-  }
+  if (!term) return str;
   const lower = str.toLowerCase();
+  const parts = [];
   let i = 0;
   let idx = lower.indexOf(term, i);
   while (idx !== -1) {
-    if (idx > i) el.appendChild(document.createTextNode(str.slice(i, idx)));
-    const mark = document.createElement('mark');
-    mark.textContent = str.slice(idx, idx + term.length);
-    el.appendChild(mark);
+    if (idx > i) parts.push(str.slice(i, idx));
+    parts.push(html`<mark>${str.slice(idx, idx + term.length)}</mark>`);
     i = idx + term.length;
     idx = lower.indexOf(term, i);
   }
-  if (i < str.length) el.appendChild(document.createTextNode(str.slice(i)));
+  if (i < str.length) parts.push(str.slice(i));
+  return parts;
 }
 
 // Flatten a body for the row preview: markdown syntax becomes glyphs, and
@@ -440,32 +348,15 @@ function previewText(body, term) {
   return flat.slice(0, 200);
 }
 
-// Render a vault search snippet from text nodes only — the ⟦…⟧ hit markers
-// the vault returns become <mark>, and note content never parses as HTML.
-function snippetInto(el, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      el.appendChild(mark);
-    } else {
-      el.appendChild(document.createTextNode(parts[i]));
-    }
-  }
-}
-
 // Searching asks the vault, not a local copy: the FTS5 index matches over
 // every note (title + body) inside SQLite and returns only the hits, so the
 // app never greps an unbounded table in memory. `searchSeq` drops stale
 // replies when the owner types faster than the vault answers.
 const searchInput = $('searchInput');
-let searchDebounce = 0;
 let searchSeq = 0;
-searchInput.addEventListener('input', () => {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(async () => {
+searchInput.addEventListener(
+  'input',
+  debounce(async () => {
     const raw = searchInput.value.trim();
     searchTerm = raw.toLowerCase();
     if (!raw) {
@@ -484,8 +375,8 @@ searchInput.addEventListener('input', () => {
     if (seq !== searchSeq) return;
     searchResults = rows;
     renderNotes();
-  }, 120);
-});
+  }, 120),
+);
 
 function clearSearch() {
   searchInput.value = '';
@@ -508,7 +399,7 @@ async function refresh() {
   } catch {
     if (firstLoad) {
       firstLoad = false;
-      $('noteList').innerHTML = '';
+      mountNoteList(nothing);
     }
     readFailed($('noticeBanner'));
     readErrorShown = true;
@@ -516,7 +407,7 @@ async function refresh() {
   }
   if (firstLoad) {
     firstLoad = false;
-    $('noteList').innerHTML = '';
+    mountNoteList(nothing);
   }
   if (readErrorShown) {
     readErrorShown = false;
@@ -529,8 +420,8 @@ async function refresh() {
   $('sideNav').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
-    $('notebookChips').innerHTML = '';
-    $('noteList').innerHTML = '';
+    litRender(nothing, $('notebookChips'));
+    mountNoteList(nothing);
     $('noteView').hidden = true;
     $('empty').hidden = true;
     return;
@@ -561,47 +452,57 @@ async function refresh() {
 }
 
 function renderChips() {
-  const row = $('notebookChips');
-  row.innerHTML = '';
+  litRender(chipsTpl(), $('notebookChips'));
+}
+
+// One notebook chip row: "All" + every notebook + the "+ Notebook" add
+// button, keyed by notebook_id so a rename-in-place swap or a background
+// refresh reuses the same DOM instead of tearing it down.
+function chipsTpl() {
   const all = [{ notebook_id: 'all', name: 'All' }, ...notebooks];
-  for (const nb of all) {
-    if (nb.notebook_id !== 'all' && nb.notebook_id === renamingNotebookId) {
-      row.appendChild(renameChipInput(nb));
-      continue;
-    }
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip';
-    chip.textContent = nb.name ?? 'Notebook';
-    chip.setAttribute('aria-pressed', String(nb.notebook_id === activeNotebook));
-    chip.addEventListener('click', async () => {
+  return html`${repeat(
+      all,
+      (nb) => nb.notebook_id,
+      (nb) => chipTpl(nb),
+    )}<button
+      type="button"
+      class="kit-chip chip-add"
+      @click=${() => {
+        $('notebookForm').hidden = false;
+        $('notebookNameInput').focus();
+      }}
+    >
+      + Notebook
+    </button>`;
+}
+
+function chipTpl(nb) {
+  if (nb.notebook_id !== 'all' && nb.notebook_id === renamingNotebookId) {
+    return renameChipTpl(nb);
+  }
+  const chip = html`<button
+    type="button"
+    class="kit-chip"
+    aria-pressed=${String(nb.notebook_id === activeNotebook)}
+    @click=${async () => {
       activeNotebook = nb.notebook_id;
       renamingNotebookId = null;
       if (viewingId) await goBack();
       renderChips();
       renderNotes();
-    });
-    // The selected notebook is manageable in place: rename and delete ride
-    // beside its chip — a typo'd notebook is no longer forever. The group
-    // wrapper keeps chip + tools on one sidebar row at wide widths.
-    if (nb.notebook_id !== 'all' && nb.notebook_id === activeNotebook) {
-      const group = document.createElement('div');
-      group.className = 'chip-group';
-      group.append(chip, renameChipButton(nb), deleteChipButton(nb));
-      row.appendChild(group);
-    } else {
-      row.appendChild(chip);
-    }
+    }}
+  >
+    ${nb.name ?? 'Notebook'}
+  </button>`;
+  // The selected notebook is manageable in place: rename and delete ride
+  // beside its chip — a typo'd notebook is no longer forever. The group
+  // wrapper keeps chip + tools on one sidebar row at wide widths.
+  if (nb.notebook_id !== 'all' && nb.notebook_id === activeNotebook) {
+    return html`<div class="chip-group">
+      ${chip}${renameChipButtonTpl(nb)}${deleteChipButtonTpl(nb)}
+    </div>`;
   }
-  const add = document.createElement('button');
-  add.type = 'button';
-  add.className = 'chip chip-add';
-  add.textContent = '+ Notebook';
-  add.addEventListener('click', () => {
-    $('notebookForm').hidden = false;
-    $('notebookNameInput').focus();
-  });
-  row.appendChild(add);
+  return chip;
 }
 
 // ---------- Notebook management (rename / delete beside the active chip) ----------
@@ -616,56 +517,53 @@ const DELETE_NOTEBOOK_FRIENDLY = {
     'This notebook still has notebooks inside it — delete or move those first.',
 };
 
-function renameChipButton(nb) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'chip-tool';
-  btn.textContent = '✎';
-  btn.title = 'Rename notebook';
-  btn.setAttribute('aria-label', `Rename notebook ${nb.name ?? ''}`);
-  btn.addEventListener('click', () => {
-    renamingNotebookId = nb.notebook_id;
-    renderChips();
-    const input = $('notebookChips').querySelector('.chip-rename-input');
-    if (input) {
-      input.focus();
-      input.select();
-    }
-  });
-  return btn;
+function renameChipButtonTpl(nb) {
+  return html`<button
+    type="button"
+    class="chip-tool"
+    title="Rename notebook"
+    aria-label="Rename notebook ${nb.name ?? ''}"
+    @click=${() => {
+      renamingNotebookId = nb.notebook_id;
+      renderChips();
+      const input = $('notebookChips').querySelector('.chip-rename-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }}
+  >
+    ✎
+  </button>`;
 }
 
-function deleteChipButton(nb) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'chip-tool danger';
-  btn.textContent = '×';
-  btn.title = 'Delete notebook';
-  btn.setAttribute('aria-label', `Delete notebook ${nb.name ?? ''}`);
-  btn.addEventListener('click', async () => {
-    if (!armConfirm(btn, { armedLabel: 'Delete?' })) return;
-    const outcome = await act('delete-notebook', { notebook_id: nb.notebook_id });
-    if (narrate(outcome, refresh, DELETE_NOTEBOOK_FRIENDLY)) {
-      // The notebook was pure structure: its notes survive as unfiled rows.
-      const unfiled = Number(outcome.output?.notes_unfiled ?? 0);
-      activeNotebook = 'all';
-      renamingNotebookId = null;
-      toast(`Notebook deleted — ${unfiled} ${unfiled === 1 ? 'note' : 'notes'} unfiled`);
-      await refresh();
-    }
-  });
-  return btn;
+function deleteChipButtonTpl(nb) {
+  return html`<button
+    type="button"
+    class="chip-tool danger"
+    title="Delete notebook"
+    aria-label="Delete notebook ${nb.name ?? ''}"
+    @click=${async (e) => {
+      if (!armConfirm(e.currentTarget, { armedLabel: 'Delete?' })) return;
+      const outcome = await act('delete-notebook', { notebook_id: nb.notebook_id });
+      if (narrate(outcome, refresh, DELETE_NOTEBOOK_FRIENDLY)) {
+        // The notebook was pure structure: its notes survive as unfiled rows.
+        const unfiled = Number(outcome.output?.notes_unfiled ?? 0);
+        activeNotebook = 'all';
+        renamingNotebookId = null;
+        toast(`Notebook deleted — ${unfiled} ${unfiled === 1 ? 'note' : 'notes'} unfiled`);
+        await refresh();
+      }
+    }}
+  >
+    ×
+  </button>`;
 }
 
 // The chip swapped for an inline rename input: Enter saves, Esc (or clicking
 // away) cancels. A refused rename keeps the input open with the banner
 // explaining why, so the user can fix the name in place.
-function renameChipInput(nb) {
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'chip-rename-input';
-  input.value = nb.name ?? '';
-  input.setAttribute('aria-label', `New name for notebook ${nb.name ?? ''}`);
+function renameChipTpl(nb) {
   let settled = false;
   const close = () => {
     if (settled) return;
@@ -673,32 +571,37 @@ function renameChipInput(nb) {
     renamingNotebookId = null;
     renderChips();
   };
-  input.addEventListener('keydown', async (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation(); // the document-level Escape must not double-handle
-      close();
-      return;
-    }
-    if (e.key !== 'Enter' || settled) return;
-    e.preventDefault();
-    const name = input.value.trim();
-    if (!name || name === nb.name) {
-      // Nothing to send — the vault treats a rename to its own name as a
-      // no-op anyway, so skip the round-trip entirely.
-      close();
-      return;
-    }
-    const outcome = await act('rename-notebook', { notebook_id: nb.notebook_id, name });
-    if (narrate(outcome, refresh, RENAME_NOTEBOOK_FRIENDLY)) {
-      settled = true;
-      renamingNotebookId = null;
-      await refresh();
-    } else if (!settled) {
-      input.focus();
-    }
-  });
-  input.addEventListener('blur', () => setTimeout(close, 120));
-  return input;
+  return html`<input
+    type="text"
+    class="chip-rename-input"
+    .value=${nb.name ?? ''}
+    aria-label="New name for notebook ${nb.name ?? ''}"
+    @keydown=${async (e) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation(); // the document-level Escape must not double-handle
+        close();
+        return;
+      }
+      if (e.key !== 'Enter' || settled) return;
+      e.preventDefault();
+      const name = e.currentTarget.value.trim();
+      if (!name || name === nb.name) {
+        // Nothing to send — the vault treats a rename to its own name as a
+        // no-op anyway, so skip the round-trip entirely.
+        close();
+        return;
+      }
+      const outcome = await act('rename-notebook', { notebook_id: nb.notebook_id, name });
+      if (narrate(outcome, refresh, RENAME_NOTEBOOK_FRIENDLY)) {
+        settled = true;
+        renamingNotebookId = null;
+        await refresh();
+      } else if (!settled) {
+        e.currentTarget.focus();
+      }
+    }}
+    @blur=${() => setTimeout(close, 120)}
+  />`;
 }
 
 function visibleNotes() {
@@ -711,9 +614,24 @@ function visibleNotes() {
   return rows;
 }
 
-function renderNotes() {
+// `#noteList` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, below). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first call into it — it only
+// appends past them — so the very first Lit commit into `#noteList` must
+// clear that skeleton itself; every commit after that goes through
+// `litRender` alone (a raw clear once Lit owns the container corrupts its
+// part cache).
+let noteListMounted = false;
+function mountNoteList(templateResult) {
   const list = $('noteList');
-  list.innerHTML = '';
+  if (!noteListMounted) {
+    list.replaceChildren();
+    noteListMounted = true;
+  }
+  litRender(templateResult, list);
+}
+
+function renderNotes() {
   const rows = visibleNotes();
   const empty = $('empty');
   empty.hidden = rows.length > 0 || viewingId != null || firstLoad;
@@ -722,92 +640,104 @@ function renderNotes() {
     : 'No notes yet. Write the first one above.';
   const pinned = rows.filter((n) => n.pinned === 1);
   const others = rows.filter((n) => n.pinned !== 1);
-  const grid = (group) => {
-    const el = document.createElement('div');
-    el.className = 'note-grid';
-    for (const note of group) el.appendChild(renderRow(note));
-    return el;
-  };
-  const head = (label) => {
-    const el = document.createElement('h2');
-    el.className = 'section-head';
-    el.textContent = label;
-    return el;
-  };
-  if (pinned.length > 0) {
-    list.append(head('Pinned'), grid(pinned));
-    if (others.length > 0) list.append(head('Others'), grid(others));
-  } else if (others.length > 0) {
-    list.append(grid(others));
-  }
   // The window is honest about its edge: browsing shows the latest slice,
   // "Show more" grows it, search reaches everything beyond it.
-  if (libraryTruncated && !searchTerm) {
-    const footer = document.createElement('div');
-    footer.className = 'window-footer';
-    const label = document.createElement('span');
-    label.textContent = `Showing your latest ${libraryWindow} notes — older ones are a search away. `;
-    const more = document.createElement('button');
-    more.type = 'button';
-    more.className = 'chip';
-    more.textContent = 'Show more';
-    more.addEventListener('click', async () => {
-      libraryWindow += 200;
-      more.disabled = true;
-      await refresh();
-    });
-    footer.append(label, more);
-    list.appendChild(footer);
-  }
+  const footer = libraryTruncated && !searchTerm ? { windowSize: libraryWindow } : null;
+  mountNoteList(html`
+    ${pinned.length > 0
+      ? html`<h2 class="section-head">Pinned</h2>
+          <div class="note-grid">
+            ${repeat(
+              pinned,
+              (n) => n.note_id,
+              (n) => noteRowTpl(n),
+            )}
+          </div>`
+      : nothing}
+    ${others.length > 0
+      ? html`${pinned.length > 0 ? html`<h2 class="section-head">Others</h2>` : nothing}
+          <div class="note-grid">
+            ${repeat(
+              others,
+              (n) => n.note_id,
+              (n) => noteRowTpl(n),
+            )}
+          </div>`
+      : nothing}
+    ${footer
+      ? html`<div class="window-footer">
+          <span
+            >Showing your latest ${footer.windowSize} notes — older ones are a search away.
+          </span>
+          <button
+            type="button"
+            class="kit-chip"
+            @click=${async (e) => {
+              e.target.disabled = true;
+              libraryWindow += 200;
+              await refresh();
+            }}
+          >
+            Show more
+          </button>
+        </div>`
+      : nothing}
+  `);
 }
 
-function renderRow(note) {
-  const row = document.createElement('article');
-  row.className = 'note';
-  row.tabIndex = 0;
-  row.setAttribute('role', 'button');
-  const title = document.createElement('span');
-  title.className = 'note-title';
-  highlightInto(title, note.title ?? '', searchTerm);
-  row.appendChild(title);
-  const text = document.createElement('span');
-  text.className = 'note-preview';
-  // A vault match carries its own snippet, already centered on the hit.
-  if (note.snippet) snippetInto(text, note.snippet);
-  else highlightInto(text, previewText(note.body, searchTerm), searchTerm);
-  row.appendChild(text);
-  const meta = document.createElement('span');
-  meta.className = 'note-meta-row';
-  const when = document.createElement('span');
-  when.textContent = relTime(note.updated_at);
-  meta.appendChild(when);
+/**
+ * One note row as a Lit template. Kept as a plain function — not a
+ * component — so `.note` elements stay DIRECT children of `.note-grid`:
+ * app.css leans on that (`.note-grid > .note:last-child`), which a
+ * `display: contents` wrapper around each row would break.
+ */
+function noteRowTpl(note) {
+  const pinned = note.pinned === 1;
   const names = note.notebook_names ?? [];
-  if (names.length > 0) {
-    const tag = document.createElement('span');
-    tag.className = 'tag';
-    tag.textContent = names.join(' · ');
-    meta.appendChild(tag);
-  }
-  row.appendChild(meta);
-  const pin = document.createElement('button');
-  pin.type = 'button';
-  pin.className = `pin-btn${note.pinned === 1 ? ' pinned' : ''}`;
-  pin.innerHTML = PIN_SVG; // static trusted markup, never note content
-  pin.setAttribute('aria-label', note.pinned === 1 ? 'Unpin note' : 'Pin note');
-  pin.setAttribute('aria-pressed', String(note.pinned === 1));
-  pin.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    await togglePin(note);
-  });
-  row.appendChild(pin);
-  row.addEventListener('click', () => openNote(note));
-  row.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      openNote(note);
-    }
-  });
-  return row;
+  return html`<article
+    class="note"
+    tabindex="0"
+    role="button"
+    @click=${() => openNote(note)}
+    @keydown=${(e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openNote(note);
+      }
+    }}
+  >
+    <span class="note-title">${highlightSpans(note.title ?? '', searchTerm)}</span>
+    ${note.snippet
+      ? // A vault match carries its own snippet, already centered on the hit
+        // — `snippetInto` needs a real element, so mount it via `ref()`.
+        html`<span
+          class="note-preview"
+          ${ref((el) => {
+            if (!el) return;
+            el.replaceChildren();
+            snippetInto(el, note.snippet);
+          })}
+        ></span>`
+      : html`<span class="note-preview"
+          >${highlightSpans(previewText(note.body, searchTerm), searchTerm)}</span
+        >`}
+    <span class="note-meta-row">
+      <span>${relTime(note.updated_at)}</span>
+      ${names.length > 0 ? html`<span class="tag">${names.join(' · ')}</span>` : nothing}
+    </span>
+    <button
+      type="button"
+      class=${pinned ? 'pin-btn pinned' : 'pin-btn'}
+      aria-label=${pinned ? 'Unpin note' : 'Pin note'}
+      aria-pressed=${String(pinned)}
+      @click=${(e) => {
+        e.stopPropagation();
+        togglePin(note);
+      }}
+    >
+      ${pinSvg()}
+    </button>
+  </article>`;
 }
 
 async function togglePin(note) {
@@ -853,7 +783,9 @@ function renderNoteView(note) {
   $('pinButton').textContent = note.pinned === 1 ? 'Unpin' : 'Pin';
   renderNoteBody(note);
   renderMoveSelect(note);
-  renderAttachments($('attachStrip'), note.attachments, removeAttachment);
+  renderAttachments($('attachStrip'), note.attachments, removeAttachment, {
+    onZoom: (a) => openLightbox(a.content_uri, a.title ?? ''),
+  });
   renderReferences($('refStrip'), note.references, inlineLinkIds(draft.body, note.references));
 }
 
@@ -878,16 +810,18 @@ function renderNoteBody(note) {
 }
 
 function renderMoveSelect(note) {
-  const select = $('moveSelect');
-  select.innerHTML = '';
   const current = (note.notebook_ids ?? [])[0] ?? '';
-  for (const option of [{ notebook_id: '', name: 'Unfiled' }, ...notebooks]) {
-    const el = document.createElement('option');
-    el.value = option.notebook_id;
-    el.textContent = option.name ?? 'Notebook';
-    el.selected = option.notebook_id === current;
-    select.appendChild(el);
-  }
+  litRender(
+    html`${repeat(
+      [{ notebook_id: '', name: 'Unfiled' }, ...notebooks],
+      (option) => option.notebook_id,
+      (option) =>
+        html`<option value=${option.notebook_id} ?selected=${option.notebook_id === current}>
+          ${option.name ?? 'Notebook'}
+        </option>`,
+    )}`,
+    $('moveSelect'),
+  );
 }
 
 function closeNoteView() {
@@ -1207,9 +1141,15 @@ $('cancelNotebook').addEventListener('click', () => {
 async function removeAttachment(attachmentId) {
   const outcome = await act('detach', { attachment_id: attachmentId });
   if (narrate(outcome, refresh)) await refresh();
+  return outcome;
 }
 
-wireAttachInput($('attachInput'), () => viewingId);
+wireAttachInput($('attachInput'), () => viewingId, {
+  act,
+  narrate: (o) => narrate(o, refresh),
+  notice,
+  refresh,
+});
 
 $('addRefButton').addEventListener('click', startMention);
 

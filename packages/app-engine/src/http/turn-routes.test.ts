@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, expect, test } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { promises as fs, mkdirSync, mkdtempSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from '../runtime.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
 import type { ConversationRunner } from '../conversation/runner.ts';
+import { ConversationHistoryStore } from '../conversation/history.ts';
+import { makeJournalDbProvider } from '../stores/gateway-db.ts';
+import type { WorkspaceProvider } from '../stores/vault-workspace.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -30,6 +33,49 @@ async function registerApp(appId: string): Promise<void> {
   // versions. The chat route surface doesn't read code, so we don't
   // need to commit an actual version for these tests.
   await runtime.registry.ensureUploaded(appId);
+}
+
+/**
+ * A real `ConversationHistoryStore` over a fresh temp vault dir — mirrors
+ * how the gateway wires `Runtime.conversationHistoryStore` in production
+ * (`packages/gateway/src/serve/build-gateway.ts`). Wiring one turns on the
+ * `_turn` route's "the conversationId must be a real session" 404 guard
+ * (`turn-routes.ts` line ~195) — off by default in the tests above, which
+ * bootstrap without a store.
+ */
+function newHistoryStore(): ConversationHistoryStore {
+  const dir = mkdtempSync(path.join(os.tmpdir(), `centraid-chat-history-${crypto.randomUUID()}-`));
+  mkdirSync(path.join(dir, 'apps'), { recursive: true });
+  // One cached journal provider for this dir (mirrors history.test.ts's
+  // `journalFor`) — a fresh `makeJournalDbProvider` per `workspace()` call
+  // opens a second handle onto the same sqlite file and the turn hangs.
+  const journal = makeJournalDbProvider(path.join(dir, 'journal.db'));
+  const workspace: WorkspaceProvider = () => ({
+    vaultId: 'vault-test',
+    ownerPartyId: 'test-user',
+    appsDir: path.join(dir, 'apps'),
+    journal,
+    journalDbFile: path.join(dir, 'journal.db'),
+    runnerSessionDir: path.join(dir, 'runner-sessions'),
+  });
+  return new ConversationHistoryStore(workspace);
+}
+
+async function bootstrapWithStore(opts: { runner?: ConversationRunner } = {}): Promise<{
+  store: ConversationHistoryStore;
+}> {
+  workspace = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
+  );
+  const store = newHistoryStore();
+  runtime = new Runtime({
+    appsDir: workspace,
+    conversationRunner: opts.runner,
+    conversationHistoryStore: store,
+  });
+  server = await startRuntimeHttpServer({ runtime });
+  await runtime.bootstrap();
+  return { store };
 }
 
 test('POST /_turn returns 503 when no runner is configured', async () => {
@@ -120,6 +166,49 @@ test('POST /_turn with invalid conversationId returns 400', async () => {
     body: JSON.stringify({ conversationId: '../escape', message: 'hello' }),
   });
   expect(res.status).toBe(400);
+});
+
+test(
+  'POST /_turn 404s on a client-guessed conversationId when a conversationHistoryStore is ' +
+    'wired (the kit Ask panel bug: it must not mint an id itself — see history.createSession)',
+  async () => {
+    const runner: ConversationRunner = { run: async () => undefined };
+    await bootstrapWithStore({ runner });
+    await registerApp('demo');
+    const res = await fetch(`${server.url}/centraid/demo/_turn`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+      // A client-minted id (crypto.randomUUID(), never provisioned via
+      // `/_centraid-conversations/apps/demo/sessions`) has no matching row.
+      body: JSON.stringify({ conversationId: crypto.randomUUID(), message: 'hi' }),
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe('not_found');
+  },
+);
+
+test('POST /_turn succeeds once the session is provisioned via createSession — the canonical flow', async () => {
+  const runner: ConversationRunner = {
+    async run(input) {
+      input.onEvent({ type: 'final', text: 'ok' });
+    },
+  };
+  const { store } = await bootstrapWithStore({ runner });
+  await registerApp('demo');
+  // Mirrors what the desktop's chat pane does (gateway-client-conversation.ts
+  // `createConversation`) and what the kit Ask panel's driver must now do
+  // too: mint the session server-side before ever POSTing a turn.
+  const session = store.createSession('demo', '');
+  const res = await fetch(`${server.url}/centraid/demo/_turn`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ conversationId: session.id, message: 'hi' }),
+  });
+  expect(res.status).toBe(200);
+  const text = await res.text();
+  expect(text).toMatch(/event: final/);
+  expect(text).toMatch(/"text":"ok"/);
 });
 
 test('GET /centraid/_turn/runner-status returns "none" when no runner configured', async () => {

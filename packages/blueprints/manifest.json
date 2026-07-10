@@ -432,14 +432,33 @@
         "actions/restore.js",
         "actions/update-asset.js",
         "actions/upload.js",
+        "albums-actions.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "assets-actions.js",
+        "components/AlbumTools.jsx",
+        "components/Chips.jsx",
+        "components/Grid.jsx",
+        "components/InlineInput.jsx",
+        "components/Lightbox.jsx",
+        "components/Picker.jsx",
+        "components/SelectionBar.jsx",
+        "constants.js",
+        "dom.js",
+        "faces.js",
+        "format.js",
         "index.html",
+        "media.js",
+        "outcomes.js",
         "package.json",
+        "picker-actions.js",
+        "picker.jsx",
         "queries/faces.js",
         "queries/library.js",
-        "wall.css"
+        "selection-actions.js",
+        "toolbar.jsx",
+        "upload.js"
       ],
       "appKnobs": [
         {
@@ -528,13 +547,26 @@
         "actions/unstar.js",
         "actions/upload.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/BulkBar.jsx",
+        "components/Details.jsx",
+        "components/Grid.jsx",
+        "components/List.jsx",
+        "components/NewMenu.jsx",
+        "components/QuickLook.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "components/Toolbar.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
+        "nav.js",
         "package.json",
         "queries/drive.js",
-        "queries/search.js",
-        "wall.css"
+        "queries/search.js"
       ],
       "appKnobs": [
         {
@@ -648,7 +680,8 @@
         "queries/items.js",
         "queries/search.js",
         "queries/trash.js",
-        "queries/watchtower.js"
+        "queries/watchtower.js",
+        "wall.css"
       ],
       "appKnobs": [
         {
@@ -726,7 +759,8 @@
         "queries/friend.js",
         "queries/group.js",
         "queries/search.js",
-        "seed.js"
+        "seed.js",
+        "wall.css"
       ],
       "appKnobs": [
         {

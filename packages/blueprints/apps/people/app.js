@@ -11,35 +11,36 @@
 // is real, so where the prototype seeded contacts a fresh vault starts empty
 // and the drawer grows small "+ add" affordances (tasks, gifts, dates,
 // relationships, debts) alongside the notes input the prototype shipped.
+//
+// Rendering is Lit (see kit/elements.js for the house style): read-only
+// regions (rows, lists, the profile drawer) are `html` templates committed
+// with Lit's standalone `render()`; the drawer's own "+ add" mini-forms stay
+// small imperative islands (kit's `h()` builder) because their plus-button
+// paints on every keystroke without a re-render — exactly the kind of
+// widget the conversion's conventions call out to leave alone.
 
-import { armConfirm, debounce, readFailed, showSkeleton, toast } from './kit.js';
+import {
+  armConfirm,
+  closePopover,
+  debounce,
+  el,
+  emptyState,
+  fmtMoney,
+  h,
+  isPopoverOpen,
+  openPopover,
+  outcomeMessage,
+  readFailed,
+  runBulk,
+  showSkeleton,
+  snippetInto,
+  toast,
+  wireThemeToggle,
+} from './kit.js';
+import { KitElement } from './elements.js';
+import { createRef, html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
-
-// ---------- Tiny DOM helpers (Docs' exact h()/el()) ----------
-
-function el(html) {
-  const t = document.createElement('template');
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild;
-}
-function h(tag, props = {}, ...kids) {
-  const e = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v == null || v === false) continue;
-    if (k === 'class') e.className = v;
-    else if (k === 'html') e.innerHTML = v;
-    else if (k === 'style') e.setAttribute('style', v);
-    else if (k.startsWith('on') && typeof v === 'function')
-      e.addEventListener(k.slice(2).toLowerCase(), v);
-    else e.setAttribute(k, v === true ? '' : String(v));
-  }
-  for (const kid of kids.flat()) {
-    if (kid == null || kid === false) continue;
-    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
-  }
-  return e;
-}
 
 // ---------- Icons (copied from the prototype) ----------
 
@@ -78,8 +79,6 @@ const I = {
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>',
   gift: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7S9 2 6.5 4 8 7 12 7zM12 7s3-5 5.5-3S16 7 12 7z"/></svg>',
   plus: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
-  sun: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>',
-  moon: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
 };
 
 // The per-contact palette (prototype). Avatar hues come from here or a name
@@ -125,6 +124,29 @@ let dashboardData = null;
 let detailPerson = null; // the freshly-read PERSON for the open drawer
 let detailAdders = {}; // which "+ add" affordances are revealed in the drawer
 
+// `#list` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, at boot). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first commit — it only appends
+// past them — so the first Lit commit into `#list` clears that skeleton
+// itself; every commit after goes through `litRender` alone (a raw clear
+// once Lit owns a container corrupts its part cache). `#grid` never holds
+// non-Lit markup, so it needs no such guard.
+let listMounted = false;
+function mountGrid(tpl) {
+  litRender(tpl, $('grid'));
+}
+function mountList(tpl) {
+  const list = $('list');
+  if (!listMounted) {
+    list.replaceChildren();
+    listMounted = true;
+  }
+  litRender(tpl, list);
+}
+function mountDetails(tpl) {
+  litRender(tpl, $('detailsRoot'));
+}
+
 // ---------- Notice / consent narration (Docs' exact shape) ----------
 
 function notice(text) {
@@ -140,13 +162,7 @@ function narrate(outcome) {
     notice('');
     return true;
   }
-  if (outcome?.status === 'parked') {
-    notice('Sent to the owner for confirmation — it lands once approved.');
-  } else if (outcome?.status === 'failed') {
-    notice(`The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`);
-  } else if (outcome?.status === 'denied') {
-    notice(`Denied by consent: ${outcome.reason ?? ''}`);
-  }
+  notice(outcomeMessage(outcome) ?? '');
   return false;
 }
 
@@ -265,14 +281,6 @@ function daysSinceIso(iso) {
 
 // ---------- Identity helpers ----------
 
-function initials(name) {
-  return String(name ?? '')
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase();
-}
 function hashInt(s) {
   let n = 0;
   const str = String(s ?? '');
@@ -304,21 +312,6 @@ function statusOf(p) {
   if (over) return { key: 'overdue', label: 'overdue', color: 'var(--danger)' };
   if (due) return { key: 'due', label: 'due soon', color: 'var(--c-family)' };
   return { key: 'ok', label: 'on track', color: 'var(--ok)' };
-}
-
-// Render a vault search snippet: ⟦…⟧ hit markers → <mark> (Docs' snippetInto).
-function snippetInto(elm, snippet) {
-  const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  for (let i = 0; i < parts.length; i += 1) {
-    if (!parts[i]) continue;
-    if (i % 2 === 1) {
-      const mark = document.createElement('mark');
-      mark.textContent = parts[i];
-      elm.appendChild(mark);
-    } else {
-      elm.appendChild(document.createTextNode(parts[i]));
-    }
-  }
 }
 
 // ---------- Row derivation (client-side, like the prototype's in-memory list) ----------
@@ -374,100 +367,68 @@ function toggleSelect(id) {
 
 // ---------- Popover (kebab + move-to-circle) ----------
 
-let popoverEl = null;
-let popoverCleanup = null;
-
-function closePopover() {
-  if (!popoverEl) return;
-  popoverCleanup?.();
-  popoverEl.remove();
-  popoverEl = null;
-  popoverCleanup = null;
-}
-function openPopover(anchor, build) {
-  closePopover();
-  const box = h('div', { class: 'd-popover', role: 'menu' });
-  build(box);
-  document.body.appendChild(box);
-  const rect = anchor.getBoundingClientRect();
-  const left = Math.max(
-    8,
-    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
-  );
-  let top = rect.bottom + 4;
-  if (top + box.offsetHeight > window.innerHeight - 8)
-    top = Math.max(8, rect.top - box.offsetHeight - 4);
-  box.style.left = `${left}px`;
-  box.style.top = `${top}px`;
-  const onDoc = (e) => {
-    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
-  };
-  const onScroll = (e) => {
-    if (!box.contains(e.target)) closePopover();
-  };
-  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
-  window.addEventListener('resize', closePopover);
-  window.addEventListener('scroll', onScroll, true);
-  popoverEl = box;
-  popoverCleanup = () => {
-    clearTimeout(timer);
-    document.removeEventListener('click', onDoc);
-    window.removeEventListener('resize', closePopover);
-    window.removeEventListener('scroll', onScroll, true);
-  };
-}
-function popItem(label, onClick, { disabled = false, dotColor = null } = {}) {
-  const btn = h('button', {
-    type: 'button',
-    class: 'd-popover-item',
-    role: 'menuitem',
-    disabled: disabled || undefined,
-    onclick: onClick,
-  });
-  if (dotColor)
-    btn.appendChild(h('span', { class: 'd-dotmini', style: `background:${dotColor};` }));
-  btn.appendChild(document.createTextNode(label));
-  return btn;
-}
-
 function openPersonMenu(anchor, p) {
   openPopover(anchor, (box) => {
-    box.appendChild(
-      popItem('Open profile', () => {
-        closePopover();
-        openDetails(p.party_id);
-      }),
-    );
-    box.appendChild(
-      popItem(p.starred ? 'Remove favorite' : 'Add to favorites', () => {
-        closePopover();
-        toggleStar(p);
-      }),
-    );
-    box.appendChild(h('div', { class: 'd-popover-sep' }));
-    box.appendChild(h('p', { class: 'd-popover-head' }, 'Move to circle'));
-    box.appendChild(
-      popItem(
-        'No circle',
-        () => {
-          closePopover();
-          movePerson(p, null, 'no circle');
-        },
-        { disabled: p.circle_id == null, dotColor: 'var(--ink-3)' },
-      ),
-    );
-    for (const c of data.circles) {
-      box.appendChild(
-        popItem(
-          c.name,
-          () => {
+    litRender(
+      html`
+        <button
+          type="button"
+          class="kit-popover-item"
+          role="menuitem"
+          @click=${() => {
             closePopover();
-            movePerson(p, c.circle_id, c.name);
-          },
-          { disabled: p.circle_id === c.circle_id, dotColor: circleColor(c.circle_id) },
-        ),
-      );
-    }
+            openDetails(p.party_id);
+          }}
+        >
+          Open profile
+        </button>
+        <button
+          type="button"
+          class="kit-popover-item"
+          role="menuitem"
+          @click=${() => {
+            closePopover();
+            toggleStar(p);
+          }}
+        >
+          ${p.starred ? 'Remove favorite' : 'Add to favorites'}
+        </button>
+        <div class="kit-popover-sep"></div>
+        <p class="kit-popover-head">Move to circle</p>
+        <button
+          type="button"
+          class="kit-popover-item"
+          role="menuitem"
+          ?disabled=${p.circle_id == null}
+          @click=${() => {
+            closePopover();
+            movePerson(p, null, 'no circle');
+          }}
+        >
+          <span class="kit-dotmini" style="background:var(--ink-3);"></span>No circle
+        </button>
+        ${repeat(
+          data.circles,
+          (c) => c.circle_id,
+          (c) => html`
+            <button
+              type="button"
+              class="kit-popover-item"
+              role="menuitem"
+              ?disabled=${p.circle_id === c.circle_id}
+              @click=${() => {
+                closePopover();
+                movePerson(p, c.circle_id, c.name);
+              }}
+            >
+              <span class="kit-dotmini" style="background:${circleColor(c.circle_id)};"></span
+              >${c.name}
+            </button>
+          `,
+        )}
+      `,
+      box,
+    );
   });
 }
 
@@ -495,29 +456,15 @@ async function logInteraction(p, kind, text) {
   await refresh();
 }
 
-// Loop an action over many rows: live progress, keep going past failures, one
-// summary toast (Docs' runBulk).
-async function runBulk(ids, run, { progress, done, suffix = '' }) {
-  const n = ids.length;
-  let ok = 0;
-  let parked = 0;
-  const failures = [];
-  for (let i = 0; i < n; i += 1) {
-    notice(`${progress} ${i + 1} of ${n}…`);
-    const outcome = await run(ids[i]);
-    if (outcome?.status === 'executed') ok += 1;
-    else if (outcome?.status === 'parked') parked += 1;
-    else failures.push(outcome?.reason ?? outcome?.predicate ?? 'The write failed.');
-  }
-  notice(
-    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
-  );
-  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
-  if (parked > 0) parts.push(`${parked} waiting for approval.`);
-  toast(parts.join(' '));
-  clearSelection();
-  await refresh();
-}
+// Bulk actions run through the kit's runBulk with the app's own voice.
+const bulkOpts = {
+  notice,
+  friendly: (outcome) => outcome?.reason ?? outcome?.predicate ?? null,
+  after: async () => {
+    clearSelection();
+    await refresh();
+  },
+};
 
 // ---------- Circle writes ----------
 
@@ -525,7 +472,7 @@ async function createCircle(name) {
   const outcome = await act('create-circle', { name });
   if (narrate(outcome)) {
     state.creatingCircle = false;
-    toast(`Circle “${name}” created · receipted.`);
+    toast(`Circle "${name}" created · receipted.`);
     await refresh();
   } else {
     render();
@@ -553,20 +500,20 @@ async function deleteCircle(circle) {
 
 // ---------- Sidebar render ----------
 
-function navItem({ icon, label, active, count, onClick }) {
-  const item = h('button', {
-    type: 'button',
-    class: 'd-nav-item',
-    'aria-current': String(!!active),
-    onclick: onClick,
-  });
-  item.appendChild(el(icon));
-  item.appendChild(h('span', { class: 'lbl' }, label));
-  if (count != null) item.appendChild(h('span', { class: 'd-nav-count' }, count));
-  return item;
+function navItemTpl({ icon, label, active, count, onClick }) {
+  return html`<button
+    type="button"
+    class="d-nav-item"
+    aria-current=${String(!!active)}
+    @click=${onClick}
+  >
+    ${el(icon)}
+    <span class="lbl">${label}</span>
+    ${count != null ? html`<span class="d-nav-count">${count}</span>` : nothing}
+  </button>`;
 }
 
-function renderSidebar() {
+function renderSmartNav() {
   const all = data.people;
   const counts = {
     all: all.length,
@@ -574,177 +521,205 @@ function renderSidebar() {
     upcoming: all.filter((p) => (p.reminders || []).length > 0).length,
     starred: all.filter((p) => p.starred).length,
   };
-
-  const nav = $('smartNav');
-  nav.replaceChildren(
-    navItem({
-      icon: I.people,
-      label: 'All people',
-      active: state.nav.kind === 'all',
-      count: counts.all,
-      onClick: () => selectNav({ kind: 'all' }),
-    }),
-    navItem({
-      icon: I.clock,
-      label: 'Reconnect',
-      active: state.nav.kind === 'reconnect',
-      count: counts.reconnect,
-      onClick: () => selectNav({ kind: 'reconnect' }),
-    }),
-    navItem({
-      icon: I.bell,
-      label: 'Upcoming',
-      active: state.nav.kind === 'upcoming',
-      count: counts.upcoming,
-      onClick: () => selectNav({ kind: 'upcoming' }),
-    }),
-    navItem({
-      icon: I.star,
-      label: 'Favorites',
-      active: state.nav.kind === 'starred',
-      count: counts.starred,
-      onClick: () => selectNav({ kind: 'starred' }),
-    }),
+  litRender(
+    html`
+      ${navItemTpl({
+        icon: I.people,
+        label: 'All people',
+        active: state.nav.kind === 'all',
+        count: counts.all,
+        onClick: () => selectNav({ kind: 'all' }),
+      })}
+      ${navItemTpl({
+        icon: I.clock,
+        label: 'Reconnect',
+        active: state.nav.kind === 'reconnect',
+        count: counts.reconnect,
+        onClick: () => selectNav({ kind: 'reconnect' }),
+      })}
+      ${navItemTpl({
+        icon: I.bell,
+        label: 'Upcoming',
+        active: state.nav.kind === 'upcoming',
+        count: counts.upcoming,
+        onClick: () => selectNav({ kind: 'upcoming' }),
+      })}
+      ${navItemTpl({
+        icon: I.star,
+        label: 'Favorites',
+        active: state.nav.kind === 'starred',
+        count: counts.starred,
+        onClick: () => selectNav({ kind: 'starred' }),
+      })}
+    `,
+    $('smartNav'),
   );
+}
 
-  const list = $('circleList');
-  list.replaceChildren();
-
-  for (const c of data.circles) {
-    if (state.renamingCircleId === c.circle_id) {
-      const input = h('input', {
-        type: 'text',
-        'aria-label': 'Circle name',
-        placeholder: 'Circle name…',
-      });
-      input.value = c.name;
-      const save = h('button', { type: 'button' }, 'Save');
-      const commit = () => {
-        const name = input.value.trim();
-        if (name && name !== c.name) renameCircle(c.circle_id, name);
-        else {
-          state.renamingCircleId = null;
-          render();
-        }
-      };
-      save.addEventListener('click', commit);
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          commit();
-        }
-        if (e.key === 'Escape') {
-          state.renamingCircleId = null;
-          render();
-        }
-      });
-      list.appendChild(h('div', { class: 'd-folder-edit' }, input, save));
-      setTimeout(() => {
-        input.focus();
-        input.select();
-      }, 0);
-      continue;
+// The circle rename/create rows are small imperative islands (kit's h()
+// builder): focus-on-open + Enter/Escape wiring, same idiom as the drawer's
+// "+ add" forms below.
+function circleEditRow(c) {
+  const input = h('input', {
+    type: 'text',
+    'aria-label': 'Circle name',
+    placeholder: 'Circle name…',
+  });
+  input.value = c.name;
+  const save = h('button', { type: 'button' }, 'Save');
+  const commit = () => {
+    const name = input.value.trim();
+    if (name && name !== c.name) renameCircle(c.circle_id, name);
+    else {
+      state.renamingCircleId = null;
+      render();
     }
-    const count = data.people.filter((p) => (p.circle_id ?? null) === c.circle_id).length;
-    const active = state.nav.kind === 'circle' && state.nav.circleId === c.circle_id;
-    const item = h('button', {
-      type: 'button',
-      class: 'd-nav-item',
-      'aria-current': String(active),
-      onclick: () => selectNav({ kind: 'circle', circleId: c.circle_id }),
-    });
-    item.appendChild(
-      h('span', { class: 'd-nav-dot', style: `background:${circleColor(c.circle_id)};` }),
-    );
-    item.appendChild(h('span', { class: 'lbl' }, c.name));
-    item.appendChild(h('span', { class: 'd-nav-count' }, count || ''));
+  };
+  save.addEventListener('click', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    }
+    if (e.key === 'Escape') {
+      state.renamingCircleId = null;
+      render();
+    }
+  });
+  const row = h('div', { class: 'd-folder-edit' }, input, save);
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 0);
+  return row;
+}
 
-    const rename = h('button', {
-      type: 'button',
-      class: 'd-tool-btn',
-      'aria-label': `Rename ${c.name}`,
-      html: I.rename,
-      onclick: (e) => {
-        e.stopPropagation();
-        state.renamingCircleId = c.circle_id;
-        render();
-      },
-    });
-    const del = h('button', {
-      type: 'button',
-      class: 'd-tool-btn danger',
-      'aria-label': `Delete ${c.name}`,
-      html: I.del,
-    });
-    del.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!armConfirm(del, { armedLabel: '×?' })) return;
-      deleteCircle(c);
-    });
-    const tools = h('span', { class: 'd-folder-tools' }, rename, del);
-    list.appendChild(h('div', { class: 'd-folder' }, item, tools));
-  }
+function circleCreateRow() {
+  const input = h('input', {
+    type: 'text',
+    placeholder: 'Circle name…',
+    'aria-label': 'New circle name',
+  });
+  const create = h('button', { type: 'button' }, 'Create');
+  const commit = () => {
+    const name = input.value.trim();
+    if (name) createCircle(name);
+    else {
+      state.creatingCircle = false;
+      render();
+    }
+  };
+  create.addEventListener('click', commit);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    }
+    if (e.key === 'Escape') {
+      state.creatingCircle = false;
+      render();
+    }
+  });
+  const row = h('div', { class: 'd-folder-edit' }, input, create);
+  setTimeout(() => input.focus(), 0);
+  return row;
+}
 
-  if (state.creatingCircle) {
-    const input = h('input', {
-      type: 'text',
-      placeholder: 'Circle name…',
-      'aria-label': 'New circle name',
-    });
-    const create = h('button', { type: 'button' }, 'Create');
-    const commit = () => {
-      const name = input.value.trim();
-      if (name) createCircle(name);
-      else {
-        state.creatingCircle = false;
-        render();
-      }
-    };
-    create.addEventListener('click', commit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commit();
-      }
-      if (e.key === 'Escape') {
-        state.creatingCircle = false;
-        render();
-      }
-    });
-    list.appendChild(h('div', { class: 'd-folder-edit' }, input, create));
-    setTimeout(() => input.focus(), 0);
-  }
+function circleRowTpl(c) {
+  if (state.renamingCircleId === c.circle_id) return circleEditRow(c);
+  const count = data.people.filter((p) => (p.circle_id ?? null) === c.circle_id).length;
+  const active = state.nav.kind === 'circle' && state.nav.circleId === c.circle_id;
+  return html`<div class="d-folder">
+    <button
+      type="button"
+      class="d-nav-item"
+      aria-current=${String(active)}
+      @click=${() => selectNav({ kind: 'circle', circleId: c.circle_id })}
+    >
+      <span class="d-nav-dot" style="background:${circleColor(c.circle_id)};"></span>
+      <span class="lbl">${c.name}</span>
+      <span class="d-nav-count">${count || ''}</span>
+    </button>
+    <span class="d-folder-tools">
+      <button
+        type="button"
+        class="d-tool-btn"
+        aria-label="Rename ${c.name}"
+        @click=${(e) => {
+          e.stopPropagation();
+          state.renamingCircleId = c.circle_id;
+          render();
+        }}
+      >
+        ${el(I.rename)}
+      </button>
+      <button
+        type="button"
+        class="d-tool-btn danger"
+        aria-label="Delete ${c.name}"
+        @click=${(e) => {
+          e.stopPropagation();
+          if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+          deleteCircle(c);
+        }}
+      >
+        ${el(I.del)}
+      </button>
+    </span>
+  </div>`;
+}
 
-  const jn = $('journalNav');
-  jn.replaceChildren(
-    navItem({
-      icon: I.journal,
-      label: 'Journal',
-      active: state.nav.kind === 'journal',
-      onClick: () => selectNav({ kind: 'journal' }),
-    }),
-    navItem({
-      icon: I.activity,
-      label: 'Activity',
-      active: state.nav.kind === 'activity',
-      onClick: () => selectNav({ kind: 'activity' }),
-    }),
+function renderCircleList() {
+  litRender(
+    html`${data.circles.map((c) => circleRowTpl(c))}${state.creatingCircle
+      ? circleCreateRow()
+      : nothing}`,
+    $('circleList'),
   );
+}
 
-  const store = $('storage');
-  store.replaceChildren(
-    h(
-      'div',
-      { class: 'd-storage-top' },
-      h('span', { class: 'lbl' }, 'People'),
-      h('span', { class: 'val' }, String(counts.all)),
-    ),
-    h(
-      'div',
-      { class: 'd-storage-label' },
-      `${counts.all} ${counts.all === 1 ? 'person' : 'people'} across ${data.circles.length} circle${data.circles.length === 1 ? '' : 's'}`,
-    ),
+function renderJournalNav() {
+  litRender(
+    html`
+      ${navItemTpl({
+        icon: I.journal,
+        label: 'Journal',
+        active: state.nav.kind === 'journal',
+        onClick: () => selectNav({ kind: 'journal' }),
+      })}
+      ${navItemTpl({
+        icon: I.activity,
+        label: 'Activity',
+        active: state.nav.kind === 'activity',
+        onClick: () => selectNav({ kind: 'activity' }),
+      })}
+    `,
+    $('journalNav'),
   );
+}
+
+function renderStorage() {
+  const count = data.people.length;
+  litRender(
+    html`
+      <div class="d-storage-top">
+        <span class="lbl">People</span>
+        <span class="val">${count}</span>
+      </div>
+      <div class="d-storage-label">
+        ${count} ${count === 1 ? 'person' : 'people'} across ${data.circles.length}
+        circle${data.circles.length === 1 ? '' : 's'}
+      </div>
+    `,
+    $('storage'),
+  );
+}
+
+function renderSidebar() {
+  renderSmartNav();
+  renderCircleList();
+  renderJournalNav();
+  renderStorage();
 }
 
 // ---------- Toolbar render ----------
@@ -762,7 +737,7 @@ function renderToolbar() {
     activity: 'Activity',
   };
   let title = nav.kind === 'circle' ? circleName(nav.circleId) : titles[nav.kind];
-  if (state.search.trim()) title = `Results for “${state.search.trim()}”`;
+  if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
   $('activeTitle').textContent = title;
 
   const n = rows.length;
@@ -784,23 +759,22 @@ function renderToolbar() {
       ['due', 'Due soon'],
       ['ok', 'On track'],
     ];
-    $('statusChips').replaceChildren(
-      ...chipDefs.map(([key, label]) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'd-chip',
-            'aria-pressed': String(state.chip === key),
-            onclick: () => {
-              state.chip = key;
-              clearSelection();
-              render();
-            },
-          },
-          label,
-        ),
-      ),
+    litRender(
+      html`${chipDefs.map(
+        ([key, label]) => html`<button
+          type="button"
+          class="kit-chip quiet"
+          aria-pressed=${String(state.chip === key)}
+          @click=${() => {
+            state.chip = key;
+            clearSelection();
+            render();
+          }}
+        >
+          ${label}
+        </button>`,
+      )}`,
+      $('statusChips'),
     );
     const sortNames = { last: 'Last spoke', name: 'Name', cadence: 'Cadence' };
     $('sortLabel').textContent = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
@@ -817,28 +791,35 @@ function renderBulk() {
   const n = state.selected.size;
   bar.hidden = n === 0;
   if (n === 0) return;
-  const fav = h('button', { type: 'button', class: 'd-bulk-btn' }, 'Favorite');
-  fav.addEventListener('click', () =>
-    runBulk([...state.selected], (id) => act('star-person', { party_id: id }), {
-      progress: 'Favoriting',
-      done: 'Favorited',
-    }),
-  );
-  const clear = h(
-    'button',
-    {
-      type: 'button',
-      class: 'd-bulk-btn',
-      onclick: () => {
-        clearSelection();
-        render();
-      },
-    },
-    'Clear',
-  );
-  bar.replaceChildren(
-    h('span', { class: 'd-bulk-count' }, `${n} selected`),
-    h('div', { class: 'd-bulk-actions' }, fav, clear),
+  litRender(
+    html`
+      <span class="d-bulk-count">${n} selected</span>
+      <div class="d-bulk-actions">
+        <button
+          type="button"
+          class="kit-btn"
+          @click=${() =>
+            runBulk([...state.selected], (id) => act('star-person', { party_id: id }), {
+              progress: 'Favoriting',
+              done: 'Favorited',
+              ...bulkOpts,
+            })}
+        >
+          Favorite
+        </button>
+        <button
+          type="button"
+          class="kit-btn"
+          @click=${() => {
+            clearSelection();
+            render();
+          }}
+        >
+          Clear
+        </button>
+      </div>
+    `,
+    bar,
   );
 }
 
@@ -848,185 +829,166 @@ function metaLine(p) {
   return `Last spoke ${shortFmt(daysSince(p))}`;
 }
 
-function gridCard(p) {
+function gridCardTpl(p) {
   const color = avatarColor(p);
   const st = statusOf(p);
   const selected = state.selected.has(p.party_id);
-  const card = h('div', { class: 'd-card', 'data-selected': String(selected) });
-
-  const top = h('div', {
-    class: 'd-card-top',
-    style: `background:color-mix(in oklab, ${color} 12%, transparent);`,
-    onclick: () => openDetails(p.party_id),
-  });
-  top.appendChild(
-    h(
-      'span',
-      { class: 'd-av', style: `width:58px;height:58px;font-size:21px;background:${color};` },
-      initials(p.name),
-    ),
-  );
-  card.appendChild(top);
-
-  const sel = h('button', {
-    type: 'button',
-    class: 'd-card-select',
-    'aria-pressed': String(selected),
-    'aria-label': `Select ${p.name}`,
-    onclick: (e) => {
-      e.stopPropagation();
-      toggleSelect(p.party_id);
-    },
-  });
-  if (selected) sel.appendChild(el(I.check));
-  card.appendChild(sel);
-
-  const star = h('button', {
-    type: 'button',
-    class: `d-card-star${p.starred ? ' on' : ''}`,
-    'aria-label': 'Favorite',
-    html: `<svg width="16" height="16" viewBox="0 0 24 24" fill="${p.starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/></svg>`,
-    onclick: (e) => {
-      e.stopPropagation();
-      toggleStar(p);
-    },
-  });
-  card.appendChild(star);
-
-  const body = h('div', { class: 'd-card-body', onclick: () => openDetails(p.party_id) });
-  body.appendChild(h('div', { class: 'd-card-title' }, p.name));
-  body.appendChild(h('div', { class: 'd-card-role' }, p.role || ''));
-  body.appendChild(
-    h(
-      'div',
-      { class: 'd-card-meta' },
-      h('span', { class: 'd-dotmini', style: `background:${st.color};` }),
-      metaLine(p),
-    ),
-  );
-  card.appendChild(body);
-  return card;
+  return html`<div class="d-card" data-selected=${String(selected)}>
+    <div
+      class="d-card-top"
+      style="background:color-mix(in oklab, ${color} 12%, transparent);"
+      @click=${() => openDetails(p.party_id)}
+    >
+      <kit-avatar .name=${p.name} size="58px" .color=${color}></kit-avatar>
+    </div>
+    <button
+      type="button"
+      class="d-card-select"
+      aria-pressed=${String(selected)}
+      aria-label="Select ${p.name}"
+      @click=${(e) => {
+        e.stopPropagation();
+        toggleSelect(p.party_id);
+      }}
+    >
+      ${selected ? el(I.check) : nothing}
+    </button>
+    <button
+      type="button"
+      class=${p.starred ? 'd-card-star on' : 'd-card-star'}
+      aria-label="Favorite"
+      @click=${(e) => {
+        e.stopPropagation();
+        toggleStar(p);
+      }}
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill=${p.starred ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>
+      </svg>
+    </button>
+    <div class="d-card-body" @click=${() => openDetails(p.party_id)}>
+      <div class="d-card-title">${p.name}</div>
+      <div class="d-card-role">${p.role || ''}</div>
+      <div class="d-card-meta">
+        <span class="kit-dotmini" style="background:${st.color};"></span>${metaLine(p)}
+      </div>
+    </div>
+  </div>`;
 }
 
-function listRow(p) {
+function listRowTpl(p) {
   const color = avatarColor(p);
   const st = statusOf(p);
   const selected = state.selected.has(p.party_id);
-  const row = h('div', { class: 'd-row', 'data-selected': String(selected) });
-
-  const check = h('button', {
-    type: 'button',
-    class: 'd-check',
-    'aria-pressed': String(selected),
-    'aria-label': `Select ${p.name}`,
-    onclick: (e) => {
-      e.stopPropagation();
-      toggleSelect(p.party_id);
-    },
-  });
-  if (selected) check.appendChild(el(I.check));
-  row.appendChild(check);
-
-  row.appendChild(
-    h(
-      'span',
-      {
-        class: 'd-av',
-        style: `width:34px;height:34px;font-size:12px;background:${color};`,
-        onclick: (e) => {
+  return html`<div class="d-row" data-selected=${String(selected)}>
+    <button
+      type="button"
+      class="d-check"
+      aria-pressed=${String(selected)}
+      aria-label="Select ${p.name}"
+      @click=${(e) => {
+        e.stopPropagation();
+        toggleSelect(p.party_id);
+      }}
+    >
+      ${selected ? el(I.check) : nothing}
+    </button>
+    <kit-avatar
+      style="cursor:pointer;"
+      .name=${p.name}
+      size="34px"
+      .color=${color}
+      @click=${(e) => {
+        e.stopPropagation();
+        openDetails(p.party_id);
+      }}
+    ></kit-avatar>
+    <div class="d-row-main" @click=${() => openDetails(p.party_id)}>
+      <div class="d-row-title">
+        ${p.name}${p.starred
+          ? html`<span class="d-star-ind" aria-label="Favorite">★</span>`
+          : nothing}
+      </div>
+      <div class="d-row-role">${p.role || ''}</div>
+      ${state.search.trim() && p.snippet
+        ? html`<div
+            class="d-row-role"
+            ${ref((elm) => {
+              if (!elm) return;
+              elm.replaceChildren();
+              snippetInto(elm, p.snippet);
+            })}
+          ></div>`
+        : nothing}
+    </div>
+    <span class="d-cell circle" @click=${() => openDetails(p.party_id)}
+      >${circleName(p.circle_id ?? null)}</span
+    >
+    <span class="d-cell last" @click=${() => openDetails(p.party_id)}
+      >${shortFmt(daysSince(p))}</span
+    >
+    <span class="d-cell status">
+      <span class="kit-dotmini" style="background:${st.color};"></span>${st.label}
+    </span>
+    <div class="d-row-end">
+      <button
+        type="button"
+        class="d-kebab"
+        aria-label="Actions for ${p.name}"
+        aria-haspopup="menu"
+        @click=${(e) => {
           e.stopPropagation();
-          openDetails(p.party_id);
-        },
-      },
-      initials(p.name),
-    ),
-  );
-
-  const main = h('div', { class: 'd-row-main', onclick: () => openDetails(p.party_id) });
-  const titleEl = h('div', { class: 'd-row-title' }, p.name);
-  if (p.starred)
-    titleEl.appendChild(h('span', { class: 'd-star-ind', 'aria-label': 'Favorite' }, '★'));
-  main.appendChild(titleEl);
-  main.appendChild(h('div', { class: 'd-row-role' }, p.role || ''));
-  if (state.search.trim() && p.snippet) {
-    const snip = h('div', { class: 'd-row-role' });
-    snippetInto(snip, p.snippet);
-    main.appendChild(snip);
-  }
-  row.appendChild(main);
-
-  row.appendChild(
-    h(
-      'span',
-      { class: 'd-cell circle', onclick: () => openDetails(p.party_id) },
-      circleName(p.circle_id ?? null),
-    ),
-  );
-  row.appendChild(
-    h(
-      'span',
-      { class: 'd-cell last', onclick: () => openDetails(p.party_id) },
-      shortFmt(daysSince(p)),
-    ),
-  );
-  row.appendChild(
-    h(
-      'span',
-      { class: 'd-cell status' },
-      h('span', { class: 'd-dotmini', style: `background:${st.color};` }),
-      st.label,
-    ),
-  );
-
-  const kebab = h('button', {
-    type: 'button',
-    class: 'd-kebab',
-    'aria-label': `Actions for ${p.name}`,
-    'aria-haspopup': 'menu',
-    html: I.dots,
-  });
-  kebab.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openPersonMenu(kebab, p);
-  });
-  row.appendChild(h('div', { class: 'd-row-end' }, kebab));
-  return row;
+          openPersonMenu(e.currentTarget, p);
+        }}
+      >
+        ${el(I.dots)}
+      </button>
+    </div>
+  </div>`;
 }
 
-function emptyState(icon, title, sub) {
-  const box = $('empty');
-  box.replaceChildren(
-    h('div', { class: 'd-empty-icon' }, el(icon)),
-    h('div', { class: 'd-empty-title' }, title),
-    h('div', { class: 'd-empty-sub' }, sub),
-  );
-  box.hidden = false;
-}
-
-function renderListHead(rows) {
-  const head = $('listHead');
+function listHeadTpl(rows) {
   const allSel = rows.length > 0 && rows.every((p) => state.selected.has(p.party_id));
-  const check = h('button', {
-    type: 'button',
-    class: 'd-check',
-    'aria-pressed': String(allSel),
-    'aria-label': allSel ? 'Deselect all' : 'Select all',
-    onclick: () => {
-      if (allSel) for (const p of rows) state.selected.delete(p.party_id);
-      else for (const p of rows) state.selected.add(p.party_id);
-      render();
-    },
-  });
-  if (allSel) check.appendChild(el(I.check));
-  head.replaceChildren(
-    check,
-    h('span', { style: 'width:34px;' }),
-    h('span', { class: 'd-col name' }, 'Name'),
-    h('span', { class: 'd-col circle' }, 'Circle'),
-    h('span', { class: 'd-col last' }, 'Last spoke'),
-    h('span', { class: 'd-col status' }, 'Status'),
-    h('span', { class: 'd-col end' }),
-  );
+  return html`
+    <button
+      type="button"
+      class="d-check"
+      aria-pressed=${String(allSel)}
+      aria-label=${allSel ? 'Deselect all' : 'Select all'}
+      @click=${() => {
+        if (allSel) for (const p of rows) state.selected.delete(p.party_id);
+        else for (const p of rows) state.selected.add(p.party_id);
+        render();
+      }}
+    >
+      ${allSel ? el(I.check) : nothing}
+    </button>
+    <span style="width:34px;"></span>
+    <span class="d-col name">Name</span>
+    <span class="d-col circle">Circle</span>
+    <span class="d-col last">Last spoke</span>
+    <span class="d-col status">Status</span>
+    <span class="d-col end"></span>
+  `;
+}
+function renderListHead(rows) {
+  litRender(listHeadTpl(rows), $('listHead'));
+}
+
+function gridTpl(rows) {
+  return html`${repeat(rows, (p) => p.party_id, gridCardTpl)}`;
+}
+function listTpl(rows) {
+  return html`${repeat(rows, (p) => p.party_id, listRowTpl)}`;
 }
 
 function renderRows() {
@@ -1034,7 +996,6 @@ function renderRows() {
   const grid = $('grid');
   const listWrap = $('listWrap');
   const listHead = $('listHead');
-  const list = $('list');
   const empty = $('empty');
   const foot = $('windowFoot');
   const journalView = $('journalView');
@@ -1045,8 +1006,8 @@ function renderRows() {
   foot.hidden = true;
   journalView.hidden = true;
   activityView.hidden = true;
-  grid.replaceChildren();
-  list.replaceChildren();
+  mountGrid(nothing);
+  mountList(nothing);
 
   if (nav.kind === 'journal') {
     renderJournal(journalView);
@@ -1072,37 +1033,37 @@ function renderRows() {
       : nav.kind === 'reconnect'
         ? 'Nobody is overdue right now — nice.'
         : 'Add someone from the New button to start keeping in touch.';
-    emptyState(I.people, title, sub);
+    emptyState($('empty'), { icon: I.people, title, sub });
     return;
   }
 
   if (state.view === 'grid') {
     grid.hidden = false;
-    rows.forEach((p) => grid.appendChild(gridCard(p)));
+    mountGrid(gridTpl(rows));
   } else {
     listWrap.hidden = false;
     listHead.hidden = state.narrow;
     if (!state.narrow) renderListHead(rows);
-    rows.forEach((p) => list.appendChild(listRow(p)));
+    mountList(listTpl(rows));
   }
 
   if (peopleTruncated && !state.search.trim()) {
     foot.hidden = false;
-    const more = h(
-      'button',
-      {
-        type: 'button',
-        onclick: async () => {
-          peopleWindow += 200;
-          more.disabled = true;
-          await refresh();
-        },
-      },
-      'Show more',
-    );
-    foot.replaceChildren(
-      h('span', {}, `Showing your first ${peopleWindow} people — the rest are a search away.`),
-      more,
+    litRender(
+      html`
+        <span>Showing your first ${peopleWindow} people — the rest are a search away.</span>
+        <button
+          type="button"
+          @click=${async (e) => {
+            e.target.disabled = true;
+            peopleWindow += 200;
+            await refresh();
+          }}
+        >
+          Show more
+        </button>
+      `,
+      foot,
     );
   }
 }
@@ -1112,184 +1073,146 @@ function renderRows() {
 let journalDraft = '';
 let journalMood = '🙂';
 
+function journalEntryTpl(j) {
+  if (j.kind === 'auto') {
+    const color = j.avatar_color || PALETTE[hashInt(j.name) % PALETTE.length];
+    return html`<div class="j-entry">
+      <kit-avatar
+        style="cursor:pointer;"
+        .name=${j.name}
+        size="40px"
+        .color=${color}
+        @click=${() => j.party_id && openDetails(j.party_id)}
+      ></kit-avatar>
+      <div style="flex:1;min-width:0;">
+        <div class="dt">${fmtJournalDate(j.date)} · ${j.touch}</div>
+        <p>${j.text}</p>
+      </div>
+    </div>`;
+  }
+  return html`<div class="j-entry">
+    <span class="em">${j.mood}</span>
+    <div style="flex:1;min-width:0;">
+      <div class="dt">${fmtJournalDate(j.date)}</div>
+      <p>${j.text}</p>
+    </div>
+  </div>`;
+}
+
+function journalTpl() {
+  const entries = journalData?.entries ?? [];
+  const addBtnRef = createRef();
+  return html`<div class="j-wrap">
+    <div class="j-compose">
+      <div style="font:var(--t-strong);font-size:14px;">How was today?</div>
+      <div class="j-moodrow">
+        ${['😔', '😐', '🙂', '😄'].map(
+          (emoji) => html`<button
+            type="button"
+            class="j-mood"
+            aria-pressed=${String(journalMood === emoji)}
+            @click=${() => {
+              journalMood = emoji;
+              renderRows();
+            }}
+          >
+            ${emoji}
+          </button>`,
+        )}
+      </div>
+      <textarea
+        class="j-text"
+        rows="2"
+        placeholder="Write a line…"
+        .value=${journalDraft}
+        @input=${(e) => {
+          journalDraft = e.target.value;
+          if (addBtnRef.value) addBtnRef.value.disabled = !journalDraft.trim();
+        }}
+      ></textarea>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+        <button
+          ${ref(addBtnRef)}
+          type="button"
+          class="kit-btn primary"
+          ?disabled=${!journalDraft.trim()}
+          @click=${async () => {
+            const text = journalDraft.trim();
+            if (!text) return;
+            const outcome = await act('add-journal-entry', { mood: journalMood, text });
+            if (!narrate(outcome)) return;
+            journalDraft = '';
+            toast('Entry added · receipted.');
+            await loadJournal();
+            renderRows();
+          }}
+        >
+          Add entry
+        </button>
+      </div>
+    </div>
+    <div style="margin-top:8px;">
+      ${entries.length === 0
+        ? html`<p style="font:var(--t-small);color:var(--ink-3);padding:16px 0;">
+            No entries yet — start with a line above.
+          </p>`
+        : entries.map((j) => journalEntryTpl(j))}
+    </div>
+  </div>`;
+}
+
 function renderJournal(root) {
   root.hidden = false;
-  const wrap = h('div', { class: 'j-wrap' });
-
-  const compose = h('div', { class: 'j-compose' });
-  compose.appendChild(
-    h('div', { style: 'font:var(--t-strong);font-size:14px;' }, 'How was today?'),
-  );
-  const moodRow = h('div', { class: 'j-moodrow' });
-  ['😔', '😐', '🙂', '😄'].forEach((emoji) => {
-    moodRow.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'j-mood',
-          'aria-pressed': String(journalMood === emoji),
-          onclick: () => {
-            journalMood = emoji;
-            renderRows();
-          },
-        },
-        emoji,
-      ),
-    );
-  });
-  compose.appendChild(moodRow);
-  const ta = h('textarea', { class: 'j-text', rows: '2', placeholder: 'Write a line…' });
-  ta.value = journalDraft;
-  ta.addEventListener('input', () => {
-    journalDraft = ta.value;
-    addBtn.disabled = !journalDraft.trim();
-  });
-  compose.appendChild(ta);
-  const addBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'd-btn-primary',
-      disabled: !journalDraft.trim() || undefined,
-      onclick: async () => {
-        const text = journalDraft.trim();
-        if (!text) return;
-        const outcome = await act('add-journal-entry', { mood: journalMood, text });
-        if (!narrate(outcome)) return;
-        journalDraft = '';
-        toast('Entry added · receipted.');
-        await loadJournal();
-        renderRows();
-      },
-    },
-    'Add entry',
-  );
-  compose.appendChild(
-    h('div', { style: 'display:flex;justify-content:flex-end;margin-top:8px;' }, addBtn),
-  );
-  wrap.appendChild(compose);
-
-  const entriesWrap = h('div', { style: 'margin-top:8px;' });
-  const entries = journalData?.entries ?? [];
-  for (const j of entries) {
-    if (j.kind === 'auto') {
-      const color = j.avatar_color || PALETTE[hashInt(j.name) % PALETTE.length];
-      entriesWrap.appendChild(
-        h(
-          'div',
-          { class: 'j-entry' },
-          h(
-            'span',
-            {
-              class: 'd-av',
-              style: `width:40px;height:40px;flex-shrink:0;font-size:14px;background:${color};cursor:pointer;`,
-              onclick: () => j.party_id && openDetails(j.party_id),
-            },
-            initials(j.name),
-          ),
-          h(
-            'div',
-            { style: 'flex:1;min-width:0;' },
-            h('div', { class: 'dt' }, `${fmtJournalDate(j.date)} · ${j.touch}`),
-            h('p', {}, j.text),
-          ),
-        ),
-      );
-    } else {
-      entriesWrap.appendChild(
-        h(
-          'div',
-          { class: 'j-entry' },
-          h('span', { class: 'em' }, j.mood),
-          h(
-            'div',
-            { style: 'flex:1;min-width:0;' },
-            h('div', { class: 'dt' }, fmtJournalDate(j.date)),
-            h('p', {}, j.text),
-          ),
-        ),
-      );
-    }
-  }
-  if (entries.length === 0)
-    entriesWrap.appendChild(
-      h(
-        'p',
-        { style: 'font:var(--t-small);color:var(--ink-3);padding:16px 0;' },
-        'No entries yet — start with a line above.',
-      ),
-    );
-  wrap.appendChild(entriesWrap);
-  root.replaceChildren(wrap);
+  litRender(journalTpl(), root);
 }
 
 // ---------- Activity view ----------
 
-function renderActivity(root) {
-  root.hidden = false;
-  const wrap = h('div', { class: 'j-wrap' });
+function activityItemTpl(a) {
+  const color = a.avatar_color || PALETTE[hashInt(a.name) % PALETTE.length];
+  return html`<div class="d-activity-item">
+    <div class="d-activity-rail">
+      <kit-avatar
+        style="cursor:pointer;"
+        .name=${a.name}
+        size="36px"
+        .color=${color}
+        @click=${() => a.party_id && openDetails(a.party_id)}
+      ></kit-avatar>
+      <span class="d-activity-line"></span>
+    </div>
+    <div style="flex:1;min-width:0;padding-top:2px;">
+      <div style="display:flex;align-items:baseline;gap:8px;">
+        <span style="font:var(--t-strong);font-size:14px;">${a.name}</span>
+        <span class="d-activity-kind" style="color:${color};">${a.kind}</span>
+        <span class="d-activity-date" style="margin-left:auto;"
+          >${fmt(daysSinceIso(a.occurred_at))}</span
+        >
+      </div>
+      <p style="margin:4px 0 14px;font:var(--t-body);color:var(--ink-2);line-height:1.5;">
+        ${a.text || ''}
+      </p>
+    </div>
+  </div>`;
+}
+
+function activityTpl() {
   const recent = dashboardData?.recent ?? [];
   if (recent.length === 0) {
-    root.replaceChildren(
-      h(
-        'div',
-        { class: 'd-empty' },
-        h('div', { class: 'd-empty-icon' }, el(I.activity)),
-        h('div', { class: 'd-empty-title' }, 'Nothing logged yet'),
-        h(
-          'div',
-          { class: 'd-empty-sub' },
-          'Log a message or call from anyone’s profile and it shows up here.',
-        ),
-      ),
-    );
-    return;
+    return html`<div class="kit-empty">
+      <div class="kit-empty-icon">${el(I.activity)}</div>
+      <div class="kit-empty-title">Nothing logged yet</div>
+      <div class="kit-empty-sub">
+        Log a message or call from anyone’s profile and it shows up here.
+      </div>
+    </div>`;
   }
-  recent.forEach((a) => {
-    const color = a.avatar_color || PALETTE[hashInt(a.name) % PALETTE.length];
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 'd-activity-item' },
-        h(
-          'div',
-          { class: 'd-activity-rail' },
-          h(
-            'span',
-            {
-              class: 'd-av',
-              style: `width:36px;height:36px;font-size:12px;background:${color};cursor:pointer;`,
-              onclick: () => a.party_id && openDetails(a.party_id),
-            },
-            initials(a.name),
-          ),
-          h('span', { class: 'd-activity-line' }),
-        ),
-        h(
-          'div',
-          { style: 'flex:1;min-width:0;padding-top:2px;' },
-          h(
-            'div',
-            { style: 'display:flex;align-items:baseline;gap:8px;' },
-            h('span', { style: 'font:var(--t-strong);font-size:14px;' }, a.name),
-            h('span', { class: 'd-activity-kind', style: `color:${color};` }, a.kind),
-            h(
-              'span',
-              { class: 'd-activity-date', style: 'margin-left:auto;' },
-              fmt(daysSinceIso(a.occurred_at)),
-            ),
-          ),
-          h(
-            'p',
-            { style: 'margin:4px 0 14px;font:var(--t-body);color:var(--ink-2);line-height:1.5;' },
-            a.text || '',
-          ),
-        ),
-      ),
-    );
-  });
-  root.replaceChildren(wrap);
+  return html`<div class="j-wrap">${recent.map((a) => activityItemTpl(a))}</div>`;
+}
+
+function renderActivity(root) {
+  root.hidden = false;
+  litRender(activityTpl(), root);
 }
 
 // ---------- New menu ----------
@@ -1299,34 +1222,39 @@ function renderNewMenu() {
   menu.hidden = !state.newMenuOpen;
   $('newBtn').setAttribute('aria-expanded', String(state.newMenuOpen));
   if (!state.newMenuOpen) {
-    menu.replaceChildren();
+    litRender(nothing, menu);
     return;
   }
-  const add = h('button', {
-    type: 'button',
-    class: 'd-menu-item',
-    role: 'menuitem',
-    onclick: () => {
-      state.newMenuOpen = false;
-      renderNewMenu();
-      openAddModal();
-    },
-  });
-  add.appendChild(el(I.addPerson));
-  add.appendChild(document.createTextNode('Add person'));
-  const circle = h('button', {
-    type: 'button',
-    class: 'd-menu-item',
-    role: 'menuitem',
-    onclick: () => {
-      state.newMenuOpen = false;
-      state.creatingCircle = true;
-      render();
-    },
-  });
-  circle.appendChild(el(I.circlePlus));
-  circle.appendChild(document.createTextNode('New circle'));
-  menu.replaceChildren(add, h('div', { class: 'd-menu-sep' }), circle);
+  litRender(
+    html`
+      <button
+        type="button"
+        class="d-menu-item"
+        role="menuitem"
+        @click=${() => {
+          state.newMenuOpen = false;
+          renderNewMenu();
+          openAddModal();
+        }}
+      >
+        ${el(I.addPerson)}Add person
+      </button>
+      <div class="d-menu-sep"></div>
+      <button
+        type="button"
+        class="d-menu-item"
+        role="menuitem"
+        @click=${() => {
+          state.newMenuOpen = false;
+          state.creatingCircle = true;
+          render();
+        }}
+      >
+        ${el(I.circlePlus)}New circle
+      </button>
+    `,
+    menu,
+  );
 }
 
 // ---------- Profile drawer ----------
@@ -1355,8 +1283,9 @@ async function loadDetail(id) {
   }
 }
 
-// A dashed "+ add" input row (the prototype's .d-noteadd idiom). Returns the
-// row element; `commit(values)` runs on the + button or Enter.
+// A dashed "+ add" input row (the prototype's .d-noteadd idiom) — a small
+// imperative island: the plus button repaints on every keystroke without a
+// re-render, and Enter/blur wiring lives directly on the real inputs.
 function addRow(children, onCommit, { canCommit } = {}) {
   const row = h('div', { class: 'd-noteadd' }, ...children);
   const btn = h('button', {
@@ -1383,26 +1312,134 @@ function addRow(children, onCommit, { canCommit } = {}) {
   return row;
 }
 
-// A section label + an optional "+ add" reveal toggle.
-function sectionLabel(text, key, extra) {
-  const label = h('div', { class: 'd-detail-label' }, text);
-  if (extra) label.appendChild(extra);
-  if (key) {
-    const toggle = h(
-      'button',
-      {
-        type: 'button',
-        class: 'd-addtoggle',
-        onclick: () => {
-          detailAdders[key] = !detailAdders[key];
-          renderDetails();
-        },
-      },
-      detailAdders[key] ? 'close' : '+ add',
-    );
-    label.appendChild(toggle);
-  }
-  return label;
+function relationshipAddRow(onSubmit) {
+  const nameI = h('input', { placeholder: 'Name', 'aria-label': 'Relationship name' });
+  const kindI = h('input', {
+    class: 'narrow',
+    placeholder: 'Kind',
+    'aria-label': 'Relationship kind',
+  });
+  const petI = h('input', {
+    class: 'narrow',
+    placeholder: 'Pet?',
+    'aria-label': 'Pet kind (optional)',
+  });
+  return addRow(
+    [nameI, kindI, petI],
+    () => {
+      const name = nameI.value.trim();
+      const kind = kindI.value.trim();
+      if (!name || !kind) return;
+      onSubmit({ name, kind, ...(petI.value.trim() ? { pet: petI.value.trim() } : {}) });
+    },
+    { canCommit: () => nameI.value.trim() && kindI.value.trim() },
+  );
+}
+
+function dateAddRow(onSubmit) {
+  const labelI = h('input', { placeholder: 'Label (Birthday…)', 'aria-label': 'Date label' });
+  const dateI = h('input', { type: 'date', class: 'narrow', 'aria-label': 'Date' });
+  return addRow(
+    [labelI, dateI],
+    () => {
+      const label = labelI.value.trim();
+      const md = dateInputToMonthDay(dateI.value);
+      if (!label || !md) return;
+      onSubmit({ label, month_day: md, reminder_on: true });
+    },
+    { canCommit: () => labelI.value.trim() && dateI.value },
+  );
+}
+
+function taskAddRow(onSubmit) {
+  const ti = h('input', { placeholder: 'Add a task…', 'aria-label': 'Task text' });
+  return addRow(
+    [ti],
+    () => {
+      const text = ti.value.trim();
+      if (!text) return;
+      onSubmit({ text });
+    },
+    { canCommit: () => ti.value.trim() },
+  );
+}
+
+function noteAddRow(onSubmit) {
+  const noteI = h('input', { placeholder: 'Add a note…', 'aria-label': 'Note text' });
+  return addRow(
+    [noteI],
+    () => {
+      const text = noteI.value.trim();
+      if (!text) return;
+      onSubmit({ text });
+    },
+    { canCommit: () => noteI.value.trim() },
+  );
+}
+
+function giftAddRow(onSubmit) {
+  const gi = h('input', { placeholder: 'A gift idea…', 'aria-label': 'Gift idea' });
+  return addRow(
+    [gi],
+    () => {
+      const text = gi.value.trim();
+      if (!text) return;
+      onSubmit({ text });
+    },
+    { canCommit: () => gi.value.trim() },
+  );
+}
+
+function debtAddRow(onSubmit) {
+  let dir = 'owe';
+  const seg = h('div', { class: 'kit-seg d-seg' });
+  const oweB = h('button', { type: 'button', 'aria-pressed': 'true' }, 'You owe');
+  const owedB = h('button', { type: 'button', 'aria-pressed': 'false' }, 'Owes you');
+  oweB.addEventListener('click', () => {
+    dir = 'owe';
+    oweB.setAttribute('aria-pressed', 'true');
+    owedB.setAttribute('aria-pressed', 'false');
+  });
+  owedB.addEventListener('click', () => {
+    dir = 'owed';
+    owedB.setAttribute('aria-pressed', 'true');
+    oweB.setAttribute('aria-pressed', 'false');
+  });
+  seg.append(oweB, owedB);
+  const amtI = h('input', {
+    class: 'narrow',
+    type: 'number',
+    min: '0',
+    step: '0.01',
+    placeholder: '$0.00',
+    'aria-label': 'Amount',
+  });
+  const reasonI = h('input', { placeholder: 'Reason', 'aria-label': 'Reason' });
+  return addRow(
+    [seg, amtI, reasonI],
+    () => {
+      const dollars = parseFloat(amtI.value);
+      if (!(dollars > 0)) return;
+      onSubmit({
+        direction: dir,
+        amount_minor: Math.round(dollars * 100),
+        ...(reasonI.value.trim() ? { reason: reasonI.value.trim() } : {}),
+      });
+    },
+    { canCommit: () => parseFloat(amtI.value) > 0 },
+  );
+}
+
+// A section label + an optional "+ add" reveal toggle (and, for Debts, a net
+// summary riding alongside the label).
+function sectionLabelTpl(text, key, open, onToggle, extra) {
+  return html`<div class="d-detail-label">
+    ${text}${extra ?? nothing}${key
+      ? html`<button type="button" class="d-addtoggle" @click=${onToggle}>
+          ${open ? 'close' : '+ add'}
+        </button>`
+      : nothing}
+  </div>`;
 }
 
 async function drawerAct(action, input, message) {
@@ -1413,352 +1450,307 @@ async function drawerAct(action, input, message) {
   if (state.detailsId) await loadDetail(state.detailsId);
 }
 
-function renderDetails() {
-  const root = $('detailsRoot');
-  if (!state.detailsId) {
-    root.replaceChildren();
-    return;
+/**
+ * `<people-details>` — the profile drawer (issue: People's Lit conversion).
+ * A dumb projection: `person` is the freshly-read PERSON (or null while the
+ * shell shows), `adders` is a snapshot of which "+ add" affordances are
+ * open. Every write flows out through the `on*` callback properties into
+ * `drawerAct`/`toggleStar`/`logInteraction` — the component never calls the
+ * vault itself. The "+ add" mini-forms stay small imperative islands (see
+ * `addRow` family above); everything else here is a plain `html` template.
+ */
+class PeopleDetails extends KitElement {
+  static properties = {
+    person: { attribute: false },
+    nameGuess: { type: String },
+    color: { type: String },
+    adders: { attribute: false },
+    onClose: { attribute: false },
+    onMove: { attribute: false },
+    onMessage: { attribute: false },
+    onCall: { attribute: false },
+    onToggleStar: { attribute: false },
+    onToggleAdder: { attribute: false },
+    onAddRelationship: { attribute: false },
+    onAddDate: { attribute: false },
+    onToggleReminder: { attribute: false },
+    onAddTask: { attribute: false },
+    onToggleTask: { attribute: false },
+    onAddNote: { attribute: false },
+    onAddGift: { attribute: false },
+    onToggleGift: { attribute: false },
+    onAddDebt: { attribute: false },
+    onSettleDebt: { attribute: false },
+  };
+
+  constructor() {
+    super();
+    this.person = null;
+    this.nameGuess = '';
+    this.color = '';
+    this.adders = {};
   }
-  const dp = detailPerson;
-  // While loading, show a light shell so the drawer opens instantly.
-  const nameGuess = dp?.name ?? data.people.find((p) => p.party_id === state.detailsId)?.name ?? '';
-  const color = dp ? avatarColor(dp) : PALETTE[hashInt(nameGuess) % PALETTE.length];
 
-  const body = h('div', { class: 'd-details-body' });
+  render() {
+    const dp = this.person;
+    // The host stays `display: contents` (no aria/role there — see the
+    // conversion's rule against hanging aria on a contents host); the real
+    // `<aside>` below is the positioned box and carries the dialog semantics.
+    return html`
+      <aside class="d-details" role="dialog" aria-modal="true" aria-label="Profile">
+        <div class="d-details-head">
+          <span class="lbl">Profile</span>
+          <button
+            type="button"
+            class="d-details-x"
+            aria-label="Close"
+            @click=${() => this.onClose?.()}
+          >
+            ${el(I.close)}
+          </button>
+        </div>
+        <div class="d-details-body">
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <span
+              style="display:inline-flex;border-radius:999px;box-shadow:0 8px 22px -6px color-mix(in oklab, ${this
+                .color} 60%, transparent);"
+            >
+              <kit-avatar .name=${this.nameGuess} size="72px" .color=${this.color}></kit-avatar>
+            </span>
+          </div>
+          <div class="d-detail-name">${this.nameGuess}</div>
+          <div class="d-detail-ext">${dp?.role || ''}</div>
+          ${dp ? this.#sections(dp) : nothing}
+        </div>
+        <div class="d-details-foot">
+          ${dp
+            ? html`<button
+                type="button"
+                class="kit-btn d-detail-btn"
+                @click=${(e) => this.onMove?.(e.currentTarget)}
+              >
+                Move to circle
+              </button>`
+            : nothing}
+        </div>
+      </aside>
+    `;
+  }
 
-  body.appendChild(
-    h(
-      'div',
-      { style: 'display:flex;flex-direction:column;align-items:center;' },
-      h(
-        'span',
-        {
-          class: 'd-av',
-          style: `width:72px;height:72px;font-size:26px;background:${color};box-shadow:0 8px 22px -6px color-mix(in oklab, ${color} 60%, transparent);`,
-        },
-        initials(nameGuess),
-      ),
-    ),
-  );
-  body.appendChild(h('div', { class: 'd-detail-name' }, nameGuess));
-  body.appendChild(h('div', { class: 'd-detail-ext' }, dp?.role || ''));
-
-  if (dp) {
+  #sections(dp) {
     const st = statusOf(dp);
     const days = daysSince(dp);
-
-    // Quick log + favorite
-    const msgBtn = h('button', {
-      type: 'button',
-      class: 'd-detail-btn primary',
-      html: `${I.message}Message`,
-      onclick: () => logInteraction(dp, 'Message', 'Sent a message'),
-    });
-    const callBtn = h('button', {
-      type: 'button',
-      class: 'd-detail-btn',
-      html: `${I.call}Call`,
-      onclick: () => logInteraction(dp, 'Call', 'Gave them a call'),
-    });
-    const starBtn = h(
-      'button',
-      { type: 'button', class: 'd-detail-btn', onclick: () => toggleStar(dp) },
-      dp.starred ? '★ Favorite' : '☆ Favorite',
-    );
-    body.appendChild(h('div', { class: 'd-detail-actions' }, msgBtn, callBtn, starBtn));
-
-    // Keep in touch status chip
-    body.appendChild(
-      h(
-        'div',
-        {
-          style:
-            'border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);padding:13px 15px;display:flex;align-items:center;justify-content:space-between;',
-        },
-        h(
-          'div',
-          {},
-          h('div', { style: 'font:var(--t-strong);font-size:13px;' }, 'Keep in touch'),
-          h(
-            'div',
-            { style: 'font:var(--t-small);font-size:12px;color:var(--ink-2);margin-top:2px;' },
-            `${cadence(dp.cadence_days ?? 30)} · last ${fmt(days)}`,
-          ),
-        ),
-        h(
-          'span',
-          { class: 'd-chip-sm', style: `border-color:${st.color};color:${st.color};` },
-          st.label,
-        ),
-      ),
-    );
-
-    // How you met
-    if (dp.met) {
-      body.appendChild(h('div', { class: 'd-detail-label' }, 'How you met'));
-      body.appendChild(
-        h(
-          'p',
-          { style: 'margin:0;font:var(--t-body);color:var(--ink-2);line-height:1.5;' },
-          dp.met,
-        ),
-      );
-    }
-
-    // Contact
+    const adders = this.adders ?? {};
     const contact = dp.contact ?? [];
-    if (contact.length > 0) {
-      body.appendChild(h('div', { class: 'd-detail-label' }, 'Contact'));
-      const kv = h('div', { class: 'd-kv' });
-      for (const c of contact) {
-        kv.appendChild(
-          h(
-            'div',
-            { class: 'd-kv-row' },
-            el(c.kind === 'phone' ? I.phone : I.mail),
-            h('span', { class: 'd-kv-v' }, c.value),
-            h('span', { class: 'd-kv-k' }, c.kind),
-          ),
-        );
-      }
-      body.appendChild(kv);
-    }
-
-    // Relationships — always show the label so the add control is available.
-    body.appendChild(sectionLabel('Relationships', 'rel'));
     const rels = dp.relationships ?? [];
-    if (rels.length > 0) {
-      const relWrap = h('div', {});
-      for (const r of rels) {
-        const badge = r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·';
-        relWrap.appendChild(
-          h(
-            'div',
-            { class: 'd-rel' },
-            h('span', { class: 'd-rel-badge' }, badge),
-            h('span', { style: 'flex:1;font:var(--t-body);font-weight:500;' }, r.name),
-            h(
-              'span',
-              { style: 'font:var(--t-small);font-size:11.5px;color:var(--ink-3);' },
-              r.kind,
-            ),
-          ),
-        );
-      }
-      body.appendChild(relWrap);
-    }
-    if (detailAdders.rel) {
-      const nameI = h('input', { placeholder: 'Name', 'aria-label': 'Relationship name' });
-      const kindI = h('input', {
-        class: 'narrow',
-        placeholder: 'Kind',
-        'aria-label': 'Relationship kind',
-      });
-      const petI = h('input', {
-        class: 'narrow',
-        placeholder: 'Pet?',
-        'aria-label': 'Pet kind (optional)',
-      });
-      body.appendChild(
-        addRow(
-          [nameI, kindI, petI],
-          () => {
-            const name = nameI.value.trim();
-            const kind = kindI.value.trim();
-            if (!name || !kind) return;
-            drawerAct(
-              'add-relationship',
-              {
-                party_id: dp.party_id,
-                name,
-                kind,
-                ...(petI.value.trim() ? { pet: petI.value.trim() } : {}),
-              },
-              'Relationship added',
-            );
-          },
-          { canCommit: () => nameI.value.trim() && kindI.value.trim() },
-        ),
-      );
-    }
-
-    // Important dates
-    body.appendChild(sectionLabel('Important dates', 'date'));
-    const dates = dp.dates ?? [];
-    if (dates.length > 0) {
-      const kv = h('div', { class: 'd-kv' });
-      for (const d of dates) {
-        const bell = h('button', {
-          type: 'button',
-          class: 'd-mini-btn',
-          'aria-label': 'Reminder',
-          style: `background:${d.reminder_on ? 'color-mix(in oklab, var(--_accent) 12%, transparent)' : 'color-mix(in oklab, var(--ink) 5%, transparent)'};color:${d.reminder_on ? 'var(--_accent)' : 'var(--ink-3)'};`,
-          html: I.bellSm,
-          onclick: () => drawerAct('toggle-reminder', { date_id: d.date_id }, 'Reminder updated'),
-        });
-        kv.appendChild(
-          h(
-            'div',
-            { class: 'd-kv-row' },
-            h(
-              'span',
-              { style: 'flex:1;' },
-              h('span', { style: 'display:block;font:var(--t-body);font-weight:500;' }, d.label),
-              h(
-                'span',
-                { style: 'display:block;font:var(--t-small);font-size:12px;color:var(--ink-3);' },
-                `${fmtMonthDay(d.month_day)} · ${inFmt(daysUntilAnnual(d.month_day))}`,
-              ),
-            ),
-            bell,
-          ),
-        );
-      }
-      body.appendChild(kv);
-    }
-    if (detailAdders.date) {
-      const labelI = h('input', { placeholder: 'Label (Birthday…)', 'aria-label': 'Date label' });
-      const dateI = h('input', { type: 'date', class: 'narrow', 'aria-label': 'Date' });
-      body.appendChild(
-        addRow(
-          [labelI, dateI],
-          () => {
-            const label = labelI.value.trim();
-            const md = dateInputToMonthDay(dateI.value);
-            if (!label || !md) return;
-            drawerAct(
-              'add-important-date',
-              { party_id: dp.party_id, label, month_day: md, reminder_on: true },
-              'Date added',
-            );
-          },
-          { canCommit: () => labelI.value.trim() && dateI.value },
-        ),
-      );
-    }
-
-    // Tasks
-    body.appendChild(sectionLabel('Tasks', 'task'));
     const tasks = dp.tasks ?? [];
-    if (tasks.length > 0) {
-      const tw = h('div', {});
-      for (const t of tasks) {
-        const box = h('button', {
-          type: 'button',
-          class: `d-taskbox${t.done ? ' on' : ''}`,
-          'aria-label': 'Toggle task',
-          onclick: () => drawerAct('toggle-task', { task_id: t.task_id }, 'Task updated'),
-        });
-        if (t.done) box.appendChild(el(I.checkTask));
-        tw.appendChild(
-          h(
-            'div',
-            { class: 'd-taskrow' },
-            box,
-            h(
-              'span',
-              {
-                style: `flex:1;font:var(--t-body);color:${t.done ? 'var(--ink-3)' : 'var(--ink)'};text-decoration:${t.done ? 'line-through' : 'none'};`,
-              },
-              t.text,
-            ),
-          ),
-        );
-      }
-      body.appendChild(tw);
-    }
-    if (detailAdders.task) {
-      const ti = h('input', { placeholder: 'Add a task…', 'aria-label': 'Task text' });
-      body.appendChild(
-        addRow(
-          [ti],
-          () => {
-            const text = ti.value.trim();
-            if (!text) return;
-            drawerAct('add-task', { party_id: dp.party_id, text }, 'Task added');
-          },
-          { canCommit: () => ti.value.trim() },
-        ),
-      );
-    }
-
-    // Notes (the prototype ships this add input always)
-    body.appendChild(h('div', { class: 'd-detail-label' }, 'Notes'));
-    const noteWrap = h('div', {});
-    for (const nn of dp.notes ?? []) {
-      noteWrap.appendChild(
-        h(
-          'div',
-          { class: 'd-note' },
-          h('p', {}, nn.text),
-          h('div', { class: 'when' }, fmt(daysSinceIso(nn.created_at))),
-        ),
-      );
-    }
-    const noteI = h('input', { placeholder: 'Add a note…', 'aria-label': 'Note text' });
-    noteWrap.appendChild(
-      addRow(
-        [noteI],
-        () => {
-          const text = noteI.value.trim();
-          if (!text) return;
-          drawerAct('add-note', { party_id: dp.party_id, text }, 'Note added');
-        },
-        { canCommit: () => noteI.value.trim() },
-      ),
-    );
-    body.appendChild(noteWrap);
-
-    // Gift ideas
-    body.appendChild(sectionLabel('Gift ideas', 'gift'));
     const gifts = dp.gifts ?? [];
-    if (gifts.length > 0) {
-      const gw = h('div', {});
-      for (const g of gifts) {
-        const given = g.state === 'given';
-        gw.appendChild(
-          h(
-            'div',
-            { class: 'd-taskrow' },
-            el(I.gift),
-            h(
-              'span',
-              {
-                style: `flex:1;font:var(--t-body);color:${given ? 'var(--ink-3)' : 'var(--ink)'};text-decoration:${given ? 'line-through' : 'none'};`,
-              },
-              g.text,
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                class: 'd-chip-sm',
-                style: `border-color:${given ? 'color-mix(in oklab, var(--ok) 30%, transparent)' : 'color-mix(in oklab, var(--c-family) 30%, transparent)'};background:${given ? 'color-mix(in oklab, var(--ok) 14%, transparent)' : 'color-mix(in oklab, var(--c-family) 14%, transparent)'};color:${given ? 'var(--ok)' : 'var(--c-family)'};`,
-                onclick: () => drawerAct('toggle-gift', { gift_id: g.gift_id }, 'Gift updated'),
-              },
-              g.state,
-            ),
-          ),
-        );
-      }
-      body.appendChild(gw);
-    }
-    if (detailAdders.gift) {
-      const gi = h('input', { placeholder: 'A gift idea…', 'aria-label': 'Gift idea' });
-      body.appendChild(
-        addRow(
-          [gi],
-          () => {
-            const text = gi.value.trim();
-            if (!text) return;
-            drawerAct('add-gift', { party_id: dp.party_id, text }, 'Gift idea added');
-          },
-          { canCommit: () => gi.value.trim() },
-        ),
-      );
-    }
+    const notes = dp.notes ?? [];
+    const interactions = dp.interactions ?? [];
+    return html`
+      <div class="d-detail-actions">
+        <button
+          type="button"
+          class="kit-btn primary d-detail-btn"
+          @click=${() => this.onMessage?.()}
+        >
+          ${el(I.message)}Message
+        </button>
+        <button type="button" class="kit-btn d-detail-btn" @click=${() => this.onCall?.()}>
+          ${el(I.call)}Call
+        </button>
+        <button type="button" class="kit-btn d-detail-btn" @click=${() => this.onToggleStar?.()}>
+          ${dp.starred ? '★ Favorite' : '☆ Favorite'}
+        </button>
+      </div>
 
-    // Debts — net summary in the label
+      <div
+        style="border:1px solid var(--line);border-radius:12px;background:var(--bg-elev);padding:13px 15px;display:flex;align-items:center;justify-content:space-between;"
+      >
+        <div>
+          <div style="font:var(--t-strong);font-size:13px;">Keep in touch</div>
+          <div style="font:var(--t-small);font-size:12px;color:var(--ink-2);margin-top:2px;">
+            ${cadence(dp.cadence_days ?? 30)} · last ${fmt(days)}
+          </div>
+        </div>
+        <span class="kit-chip quiet d-chip-sm" style="border-color:${st.color};color:${st.color};"
+          >${st.label}</span
+        >
+      </div>
+
+      ${dp.met
+        ? html`<div class="d-detail-label">How you met</div>
+            <p style="margin:0;font:var(--t-body);color:var(--ink-2);line-height:1.5;">
+              ${dp.met}
+            </p>`
+        : nothing}
+      ${contact.length > 0
+        ? html`<div class="d-detail-label">Contact</div>
+            <div class="d-kv">
+              ${contact.map(
+                (c) => html`<div class="d-kv-row">
+                  ${el(c.kind === 'phone' ? I.phone : I.mail)}
+                  <span class="d-kv-v">${c.value}</span>
+                  <span class="d-kv-k">${c.kind}</span>
+                </div>`,
+              )}
+            </div>`
+        : nothing}
+      ${sectionLabelTpl('Relationships', 'rel', !!adders.rel, () => this.onToggleAdder?.('rel'))}
+      ${rels.length > 0
+        ? html`<div>
+            ${rels.map(
+              (r) => html`<div class="d-rel">
+                <span class="d-rel-badge"
+                  >${r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·'}</span
+                >
+                <span style="flex:1;font:var(--t-body);font-weight:500;">${r.name}</span>
+                <span style="font:var(--t-small);font-size:11.5px;color:var(--ink-3);"
+                  >${r.kind}</span
+                >
+              </div>`,
+            )}
+          </div>`
+        : nothing}
+      ${adders.rel ? relationshipAddRow((fields) => this.onAddRelationship?.(fields)) : nothing}
+      ${sectionLabelTpl('Important dates', 'date', !!adders.date, () =>
+        this.onToggleAdder?.('date'),
+      )}
+      ${(dp.dates ?? []).length > 0
+        ? html`<div class="d-kv">
+            ${repeat(
+              dp.dates ?? [],
+              (d) => d.date_id,
+              (d) => html`<div class="d-kv-row">
+                <span style="flex:1;">
+                  <span style="display:block;font:var(--t-body);font-weight:500;">${d.label}</span>
+                  <span style="display:block;font:var(--t-small);font-size:12px;color:var(--ink-3);"
+                    >${fmtMonthDay(d.month_day)} · ${inFmt(daysUntilAnnual(d.month_day))}</span
+                  >
+                </span>
+                <button
+                  type="button"
+                  class="d-mini-btn"
+                  aria-label="Reminder"
+                  style="background:${d.reminder_on
+                    ? 'color-mix(in oklab, var(--_accent) 12%, transparent)'
+                    : 'color-mix(in oklab, var(--ink) 5%, transparent)'};color:${d.reminder_on
+                    ? 'var(--_accent)'
+                    : 'var(--ink-3)'};"
+                  @click=${() => this.onToggleReminder?.(d.date_id)}
+                >
+                  ${el(I.bellSm)}
+                </button>
+              </div>`,
+            )}
+          </div>`
+        : nothing}
+      ${adders.date ? dateAddRow((fields) => this.onAddDate?.(fields)) : nothing}
+      ${sectionLabelTpl('Tasks', 'task', !!adders.task, () => this.onToggleAdder?.('task'))}
+      ${tasks.length > 0
+        ? html`<div>
+            ${repeat(
+              tasks,
+              (t) => t.task_id,
+              (t) => html`<div class="d-taskrow">
+                <button
+                  type="button"
+                  class=${t.done ? 'd-taskbox on' : 'd-taskbox'}
+                  aria-label="Toggle task"
+                  @click=${() => this.onToggleTask?.(t.task_id)}
+                >
+                  ${t.done ? el(I.checkTask) : nothing}
+                </button>
+                <span
+                  style="flex:1;font:var(--t-body);color:${t.done
+                    ? 'var(--ink-3)'
+                    : 'var(--ink)'};text-decoration:${t.done ? 'line-through' : 'none'};"
+                  >${t.text}</span
+                >
+              </div>`,
+            )}
+          </div>`
+        : nothing}
+      ${adders.task ? taskAddRow((fields) => this.onAddTask?.(fields)) : nothing}
+
+      <div class="d-detail-label">Notes</div>
+      <div>
+        ${notes.map(
+          (nn) => html`<div class="d-note">
+            <p>${nn.text}</p>
+            <div class="when">${fmt(daysSinceIso(nn.created_at))}</div>
+          </div>`,
+        )}${noteAddRow((fields) => this.onAddNote?.(fields))}
+      </div>
+
+      ${sectionLabelTpl('Gift ideas', 'gift', !!adders.gift, () => this.onToggleAdder?.('gift'))}
+      ${gifts.length > 0
+        ? html`<div>
+            ${repeat(
+              gifts,
+              (g) => g.gift_id,
+              (g) => {
+                const given = g.state === 'given';
+                return html`<div class="d-taskrow">
+                  ${el(I.gift)}
+                  <span
+                    style="flex:1;font:var(--t-body);color:${given
+                      ? 'var(--ink-3)'
+                      : 'var(--ink)'};text-decoration:${given ? 'line-through' : 'none'};"
+                    >${g.text}</span
+                  >
+                  <button
+                    type="button"
+                    class="kit-chip quiet d-chip-sm"
+                    style="border-color:${given
+                      ? 'color-mix(in oklab, var(--ok) 30%, transparent)'
+                      : 'color-mix(in oklab, var(--c-family) 30%, transparent)'};background:${given
+                      ? 'color-mix(in oklab, var(--ok) 14%, transparent)'
+                      : 'color-mix(in oklab, var(--c-family) 14%, transparent)'};color:${given
+                      ? 'var(--ok)'
+                      : 'var(--c-family)'};"
+                    @click=${() => this.onToggleGift?.(g.gift_id)}
+                  >
+                    ${g.state}
+                  </button>
+                </div>`;
+              },
+            )}
+          </div>`
+        : nothing}
+      ${adders.gift ? giftAddRow((fields) => this.onAddGift?.(fields)) : nothing}
+      ${this.#debtsSection(dp)}
+      ${interactions.length > 0
+        ? html`<div class="d-detail-label">History</div>
+            <div>
+              ${interactions.map(
+                (t) => html`<div class="d-activity-item">
+                  <div class="d-activity-rail">
+                    <span class="d-activity-dot" style="background:${this.color};"></span>
+                    <span class="d-activity-line"></span>
+                  </div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <span class="d-activity-kind" style="color:var(--ink-2);">${t.kind}</span>
+                      <span class="d-activity-date" style="margin-left:auto;"
+                        >${fmt(daysSinceIso(t.occurred_at))}</span
+                      >
+                    </div>
+                    <div
+                      style="margin-top:2px;font:var(--t-body);font-size:13.5px;color:var(--ink-2);"
+                    >
+                      ${t.text || ''}
+                    </div>
+                  </div>
+                </div>`,
+              )}
+            </div>`
+        : nothing}
+    `;
+  }
+
+  #debtsSection(dp) {
+    const adders = this.adders ?? {};
     const debts = dp.debts ?? [];
     const net = debts.reduce(
       (a, b) => a + (b.direction === 'owed' ? b.amount_minor : -b.amount_minor),
@@ -1768,264 +1760,142 @@ function renderDetails() {
       net === 0
         ? 'settled'
         : net > 0
-          ? `net owes you $${(net / 100).toFixed(2)}`
-          : `net you owe $${(-net / 100).toFixed(2)}`;
-    const netEl = h(
-      'span',
-      {
-        style: `font-family:var(--mono);font-size:11px;text-transform:none;letter-spacing:0;color:${net >= 0 ? 'var(--ok)' : 'var(--ink-3)'};`,
-      },
-      netLabel,
-    );
-    body.appendChild(sectionLabel('Debts', 'debt', debts.length > 0 ? netEl : null));
-    if (debts.length > 0) {
-      const kv = h('div', { class: 'd-kv' });
-      for (const b of debts) {
-        const owe = b.direction === 'owe';
-        const amount = `$${(b.amount_minor / 100).toFixed(2)}`;
-        kv.appendChild(
-          h(
-            'div',
-            { class: 'd-kv-row' },
-            h(
-              'span',
-              { style: 'flex:1;' },
-              h(
-                'span',
-                {
-                  style: `display:block;font:var(--t-body);font-weight:500;color:${owe ? 'var(--ink)' : 'var(--ok)'};`,
-                },
-                (owe ? 'You owe ' : 'Owes you ') + amount,
-              ),
-              h(
-                'span',
-                { style: 'display:block;font:var(--t-small);font-size:12px;color:var(--ink-3);' },
-                b.reason || '',
-              ),
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                class: 'd-chip-sm',
-                style: 'border-color:var(--line);color:var(--ink-2);',
-                onclick: () => drawerAct('settle-debt', { debt_id: b.debt_id }, 'Debt settled'),
+          ? `net owes you ${fmtMoney(net, 'USD')}`
+          : `net you owe ${fmtMoney(-net, 'USD')}`;
+    const netEl =
+      debts.length > 0
+        ? html`<span
+            style="font-family:var(--mono);font-size:11px;text-transform:none;letter-spacing:0;color:${net >=
+            0
+              ? 'var(--ok)'
+              : 'var(--ink-3)'};"
+            >${netLabel}</span
+          >`
+        : nothing;
+    return html`
+      ${sectionLabelTpl('Debts', 'debt', !!adders.debt, () => this.onToggleAdder?.('debt'), netEl)}
+      ${debts.length > 0
+        ? html`<div class="d-kv">
+            ${repeat(
+              debts,
+              (b) => b.debt_id,
+              (b) => {
+                const owe = b.direction === 'owe';
+                const amount = fmtMoney(b.amount_minor, 'USD');
+                return html`<div class="d-kv-row">
+                  <span style="flex:1;">
+                    <span
+                      style="display:block;font:var(--t-body);font-weight:500;color:${owe
+                        ? 'var(--ink)'
+                        : 'var(--ok)'};"
+                      >${(owe ? 'You owe ' : 'Owes you ') + amount}</span
+                    >
+                    <span
+                      style="display:block;font:var(--t-small);font-size:12px;color:var(--ink-3);"
+                      >${b.reason || ''}</span
+                    >
+                  </span>
+                  <button
+                    type="button"
+                    class="kit-chip quiet d-chip-sm"
+                    style="border-color:var(--line);color:var(--ink-2);"
+                    @click=${() => this.onSettleDebt?.(b.debt_id)}
+                  >
+                    settle
+                  </button>
+                </div>`;
               },
-              'settle',
-            ),
-          ),
-        );
-      }
-      body.appendChild(kv);
-    }
-    if (detailAdders.debt) {
-      let dir = 'owe';
-      const seg = h('div', { class: 'd-seg' });
-      const oweB = h('button', { type: 'button', 'aria-pressed': 'true' }, 'You owe');
-      const owedB = h('button', { type: 'button', 'aria-pressed': 'false' }, 'Owes you');
-      oweB.addEventListener('click', () => {
-        dir = 'owe';
-        oweB.setAttribute('aria-pressed', 'true');
-        owedB.setAttribute('aria-pressed', 'false');
-      });
-      owedB.addEventListener('click', () => {
-        dir = 'owed';
-        owedB.setAttribute('aria-pressed', 'true');
-        oweB.setAttribute('aria-pressed', 'false');
-      });
-      seg.append(oweB, owedB);
-      const amtI = h('input', {
-        class: 'narrow',
-        type: 'number',
-        min: '0',
-        step: '0.01',
-        placeholder: '$0.00',
-        'aria-label': 'Amount',
-      });
-      const reasonI = h('input', { placeholder: 'Reason', 'aria-label': 'Reason' });
-      body.appendChild(
-        addRow(
-          [seg, amtI, reasonI],
-          () => {
-            const dollars = parseFloat(amtI.value);
-            if (!(dollars > 0)) return;
-            drawerAct(
-              'add-debt',
-              {
-                party_id: dp.party_id,
-                direction: dir,
-                amount_minor: Math.round(dollars * 100),
-                ...(reasonI.value.trim() ? { reason: reasonI.value.trim() } : {}),
-              },
-              'Debt added',
-            );
-          },
-          { canCommit: () => parseFloat(amtI.value) > 0 },
-        ),
-      );
-    }
-
-    // History timeline
-    const interactions = dp.interactions ?? [];
-    if (interactions.length > 0) {
-      body.appendChild(h('div', { class: 'd-detail-label' }, 'History'));
-      const tl = h('div', {});
-      interactions.forEach((t) => {
-        tl.appendChild(
-          h(
-            'div',
-            { class: 'd-activity-item' },
-            h(
-              'div',
-              { class: 'd-activity-rail' },
-              h('span', { class: 'd-activity-dot', style: `background:${color};` }),
-              h('span', { class: 'd-activity-line' }),
-            ),
-            h(
-              'div',
-              { style: 'flex:1;min-width:0;' },
-              h(
-                'div',
-                { style: 'display:flex;align-items:center;gap:6px;' },
-                h('span', { class: 'd-activity-kind', style: 'color:var(--ink-2);' }, t.kind),
-                h(
-                  'span',
-                  { class: 'd-activity-date', style: 'margin-left:auto;' },
-                  fmt(daysSinceIso(t.occurred_at)),
-                ),
-              ),
-              h(
-                'div',
-                { style: 'margin-top:2px;font:var(--t-body);font-size:13.5px;color:var(--ink-2);' },
-                t.text || '',
-              ),
-            ),
-          ),
-        );
-      });
-      body.appendChild(tl);
-    }
+            )}
+          </div>`
+        : nothing}
+      ${adders.debt ? debtAddRow((fields) => this.onAddDebt?.(fields)) : nothing}
+    `;
   }
+}
+customElements.define('people-details', PeopleDetails);
 
-  const foot = h('div', { class: 'd-details-foot' });
-  if (dp) {
-    const moveBtn = h('button', { type: 'button', class: 'd-detail-btn' }, 'Move to circle');
-    moveBtn.addEventListener('click', () => openPersonMenu(moveBtn, dp));
-    foot.appendChild(moveBtn);
+function renderDetails() {
+  if (!state.detailsId) {
+    mountDetails(nothing);
+    return;
   }
-
-  const drawer = h(
-    'aside',
-    { class: 'd-details', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Profile' },
-    h(
-      'div',
-      { class: 'd-details-head' },
-      h('span', { class: 'lbl' }, 'Profile'),
-      h('button', {
-        type: 'button',
-        class: 'd-details-x',
-        'aria-label': 'Close',
-        onclick: closeDetails,
-        html: I.close,
-      }),
-    ),
-    body,
-    foot,
-  );
-  root.replaceChildren(h('div', { class: 'd-details-backdrop', onclick: closeDetails }), drawer);
+  const dp = detailPerson;
+  const nameGuess = dp?.name ?? data.people.find((p) => p.party_id === state.detailsId)?.name ?? '';
+  const color = dp ? avatarColor(dp) : PALETTE[hashInt(nameGuess) % PALETTE.length];
+  mountDetails(html`
+    <div class="d-details-backdrop" @click=${closeDetails}></div>
+    <people-details
+      .person=${dp}
+      .nameGuess=${nameGuess}
+      .color=${color}
+      .adders=${{ ...detailAdders }}
+      .onClose=${closeDetails}
+      .onMove=${(anchor) => openPersonMenu(anchor, dp)}
+      .onMessage=${() => logInteraction(dp, 'Message', 'Sent a message')}
+      .onCall=${() => logInteraction(dp, 'Call', 'Gave them a call')}
+      .onToggleStar=${() => toggleStar(dp)}
+      .onToggleAdder=${(key) => {
+        detailAdders[key] = !detailAdders[key];
+        renderDetails();
+      }}
+      .onAddRelationship=${(fields) =>
+        drawerAct('add-relationship', { party_id: dp.party_id, ...fields }, 'Relationship added')}
+      .onAddDate=${(fields) =>
+        drawerAct('add-important-date', { party_id: dp.party_id, ...fields }, 'Date added')}
+      .onToggleReminder=${(dateId) =>
+        drawerAct('toggle-reminder', { date_id: dateId }, 'Reminder updated')}
+      .onAddTask=${(fields) =>
+        drawerAct('add-task', { party_id: dp.party_id, ...fields }, 'Task added')}
+      .onToggleTask=${(taskId) => drawerAct('toggle-task', { task_id: taskId }, 'Task updated')}
+      .onAddNote=${(fields) =>
+        drawerAct('add-note', { party_id: dp.party_id, ...fields }, 'Note added')}
+      .onAddGift=${(fields) =>
+        drawerAct('add-gift', { party_id: dp.party_id, ...fields }, 'Gift idea added')}
+      .onToggleGift=${(giftId) => drawerAct('toggle-gift', { gift_id: giftId }, 'Gift updated')}
+      .onAddDebt=${(fields) =>
+        drawerAct('add-debt', { party_id: dp.party_id, ...fields }, 'Debt added')}
+      .onSettleDebt=${(debtId) => drawerAct('settle-debt', { debt_id: debtId }, 'Debt settled')}
+    ></people-details>
+  `);
 }
 
 // ---------- Add-person modal ----------
 
 function openAddModal() {
   const root = $('modalRoot');
-  const model = { name: '', role: '', circleId: null, cadence: 30 };
+  const model = { circleId: null, cadence: 30 };
+  const nameRef = createRef();
+  const roleRef = createRef();
+  const submitRef = createRef();
 
-  const nameI = h('input', { class: 'd-input', placeholder: 'Name', 'aria-label': 'Name' });
-  const roleI = h('input', {
-    class: 'd-input',
-    placeholder: 'Role or where they are (optional)',
-    style: 'margin-top:8px;',
-    'aria-label': 'Role',
-  });
-
-  const circleWrap = h('div', { class: 'd-pick' });
-  const submit = h(
-    'button',
-    { type: 'button', class: 'd-btn-primary', disabled: true },
-    'Add person',
-  );
+  const close = () => litRender(nothing, root);
   const paintSubmit = () => {
-    submit.disabled = !nameI.value.trim();
+    if (submitRef.value) submitRef.value.disabled = !nameRef.value.value.trim();
   };
-  nameI.addEventListener('input', paintSubmit);
 
   const circleOpts = [{ circle_id: null, name: 'No circle' }, ...data.circles];
-  const paintCircles = () => {
-    circleWrap.replaceChildren(
-      ...circleOpts.map((c) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'd-pickbtn',
-            'aria-pressed': String(model.circleId === c.circle_id),
-            onclick: () => {
-              model.circleId = c.circle_id;
-              paintCircles();
-            },
-          },
-          c.name,
-        ),
-      ),
-    );
-  };
-  paintCircles();
-
-  const cadenceWrap = h('div', { class: 'd-pick' });
   const cadenceOpts = [
     { d: 7, l: 'Weekly' },
     { d: 14, l: 'Biweekly' },
     { d: 30, l: 'Monthly' },
     { d: 90, l: 'Quarterly' },
   ];
-  const paintCadence = () => {
-    cadenceWrap.replaceChildren(
-      ...cadenceOpts.map((o) =>
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'd-pickbtn',
-            'aria-pressed': String(model.cadence === o.d),
-            onclick: () => {
-              model.cadence = o.d;
-              paintCadence();
-            },
-          },
-          o.l,
-        ),
-      ),
-    );
-  };
-  paintCadence();
 
-  const close = () => root.replaceChildren();
-  submit.addEventListener('click', async () => {
-    const name = nameI.value.trim();
+  const submit = async () => {
+    const name = nameRef.value.value.trim();
     if (!name) return;
-    submit.disabled = true;
+    submitRef.value.disabled = true;
     const avatar_color = PALETTE[data.people.length % PALETTE.length];
     const input = {
       display_name: name,
       cadence_days: model.cadence,
       avatar_color,
-      ...(roleI.value.trim() ? { role: roleI.value.trim() } : {}),
+      ...(roleRef.value.value.trim() ? { role: roleRef.value.value.trim() } : {}),
       ...(model.circleId != null ? { circle_id: model.circleId } : {}),
     };
     const outcome = await act('add-person', input);
     if (!narrate(outcome)) {
-      submit.disabled = false;
+      submitRef.value.disabled = false;
       return;
     }
     close();
@@ -2033,28 +1903,80 @@ function openAddModal() {
     await refresh();
     const newId = outcome?.output?.party_id;
     if (newId) openDetails(newId);
-  });
+  };
 
-  const modal = h(
-    'div',
-    { class: 'd-modal', onclick: (e) => e.stopPropagation() },
-    h('h2', {}, 'Add someone'),
-    h('p', { class: 'hint' }, 'Who do you want to keep up with?'),
-    nameI,
-    roleI,
-    h('div', { class: 'd-modal-label' }, 'Circle'),
-    circleWrap,
-    h('div', { class: 'd-modal-label' }, 'Reach out'),
-    cadenceWrap,
-    h(
-      'div',
-      { class: 'd-modal-foot' },
-      h('button', { type: 'button', class: 'd-btn-ghost', onclick: close }, 'Cancel'),
-      submit,
-    ),
-  );
-  root.replaceChildren(h('div', { class: 'd-modal-back', onclick: close }, modal));
-  setTimeout(() => nameI.focus(), 0);
+  function paint() {
+    litRender(
+      html`<div class="kit-modal-back" @click=${close}>
+        <div class="kit-modal" @click=${(e) => e.stopPropagation()}>
+          <h2>Add someone</h2>
+          <p class="hint">Who do you want to keep up with?</p>
+          <input
+            ${ref(nameRef)}
+            class="d-input"
+            placeholder="Name"
+            aria-label="Name"
+            @input=${paintSubmit}
+          />
+          <input
+            ${ref(roleRef)}
+            class="d-input"
+            style="margin-top:8px;"
+            placeholder="Role or where they are (optional)"
+            aria-label="Role"
+          />
+          <div class="d-modal-label">Circle</div>
+          <div class="d-pick">
+            ${circleOpts.map(
+              (c) => html`<button
+                type="button"
+                class="kit-chip quiet"
+                aria-pressed=${String(model.circleId === c.circle_id)}
+                @click=${() => {
+                  model.circleId = c.circle_id;
+                  paint();
+                }}
+              >
+                ${c.name}
+              </button>`,
+            )}
+          </div>
+          <div class="d-modal-label">Reach out</div>
+          <div class="d-pick">
+            ${cadenceOpts.map(
+              (o) => html`<button
+                type="button"
+                class="kit-chip quiet"
+                aria-pressed=${String(model.cadence === o.d)}
+                @click=${() => {
+                  model.cadence = o.d;
+                  paint();
+                }}
+              >
+                ${o.l}
+              </button>`,
+            )}
+          </div>
+          <div class="kit-modal-foot d-modal-foot">
+            <button type="button" class="kit-btn" @click=${close}>Cancel</button>
+            <button
+              ${ref(submitRef)}
+              type="button"
+              class="kit-btn primary"
+              disabled
+              @click=${submit}
+            >
+              Add person
+            </button>
+          </div>
+        </div>
+      </div>`,
+      root,
+    );
+  }
+
+  paint();
+  setTimeout(() => nameRef.value?.focus(), 0);
 }
 
 // ---------- Navigation ----------
@@ -2179,23 +2101,6 @@ async function refresh() {
 
 // ---------- Chrome wiring ----------
 
-function isDarkNow() {
-  const t = document.documentElement.dataset.theme;
-  if (t === 'dark') return true;
-  if (t === 'light') return false;
-  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
-}
-function setThemeIcon() {
-  $('themeBtn').innerHTML = isDarkNow() ? I.sun : I.moon;
-}
-function toggleTheme() {
-  const dark = !isDarkNow();
-  const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
-  setThemeIcon();
-}
-
 $('newBtn').addEventListener('click', (e) => {
   e.stopPropagation();
   state.newMenuOpen = !state.newMenuOpen;
@@ -2215,7 +2120,7 @@ $('viewList').addEventListener('click', () => {
   state.view = 'list';
   render();
 });
-$('themeBtn').addEventListener('click', toggleTheme);
+wireThemeToggle($('themeBtn'));
 $('sortBtn').addEventListener('click', () => {
   const keys = ['last', 'name', 'cadence'];
   const i = keys.indexOf(state.sortKey);
@@ -2246,12 +2151,12 @@ window.addEventListener('focus', refresh);
 // Layered Escape.
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  if (popoverEl) {
+  if (isPopoverOpen()) {
     closePopover();
     return;
   }
   if ($('modalRoot').firstElementChild) {
-    $('modalRoot').replaceChildren();
+    litRender(nothing, $('modalRoot'));
     return;
   }
   if (state.detailsId) {
@@ -2282,7 +2187,6 @@ function measure() {
 
 // ---------- Boot ----------
 
-setThemeIcon();
 state.narrow = $('root').clientWidth < 860;
 $('root').classList.toggle('is-narrow', state.narrow);
 showSkeleton($('list'), 6);

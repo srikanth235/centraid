@@ -194,8 +194,8 @@ export default function DiscoverScreen({
             <div className={styles.eyebrow}>Discover</div>
             <h1>Templates</h1>
             <p>
-              Start from a blueprint — an app you open or an automation that runs for you. Clone it,
-              then describe your tweaks in the builder.
+              Start from a blueprint — an app you open or an automation that runs for you. Apps
+              install straight into your Apps; automations open in the builder to configure.
             </p>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cloneTemplateToDraft, loadAppTemplates, loadAutomationTemplates } from './templatesData.js';
+import { installAppTemplate, loadAppTemplates, loadAutomationTemplates } from './templatesData.js';
 
 // `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
 // close over them without a TDZ error, keeping the real imports first.
@@ -37,19 +37,27 @@ describe('templatesData', () => {
     expect(await loadAutomationTemplates()).toEqual([]);
   });
 
-  it('cloneTemplateToDraft clones and shapes a draft from the result', async () => {
+  it('installAppTemplate clones and shapes a Home pin from the result — no draft flag', async () => {
     gwCloneTemplate.mockResolvedValue({
       app: { id: 'todos-2', name: 'Todos 2', description: 'cloned' },
       template: { name: 'Todos' },
     });
-    const draft = await cloneTemplateToDraft(app as never);
+    const pin = await installAppTemplate(app as never);
     expect(gwCloneTemplate).toHaveBeenCalledWith({ templateId: 'todos' });
-    expect(draft).toMatchObject({ __draft: true, id: 'todos-2', name: 'Todos 2', desc: 'cloned' });
+    expect(pin).toMatchObject({
+      centraidAppId: 'todos-2',
+      id: 'todos-2',
+      name: 'Todos 2',
+      desc: 'cloned',
+    });
+    expect((pin as unknown as { __draft?: boolean }).__draft).toBeUndefined();
+    expect(pin.createdAt).toBeTruthy();
+    expect(pin.updatedAt).toBeTruthy();
   });
 
   it('falls back to the template name when the clone omits app.name', async () => {
     gwCloneTemplate.mockResolvedValue({ app: { id: 'x' }, template: { name: 'Fallback' } });
-    const draft = await cloneTemplateToDraft(app as never);
-    expect(draft.name).toBe('Fallback');
+    const pin = await installAppTemplate(app as never);
+    expect(pin.name).toBe('Fallback');
   });
 });

@@ -12,9 +12,11 @@ describe('scaffoldAppFiles', () => {
     expect(files.has('package.json')).toBeTruthy();
     expect(files.has('app.json')).toBeTruthy();
     expect(files.has('index.html')).toBeTruthy();
-    expect(files.has('tokens.css')).toBeTruthy();
+    // The design system (wall/tokens/kit css) is served shared, never copied
+    // into the app — a local tokens.css would shadow the live shared layer.
+    expect(files.has('tokens.css')).toBeFalsy();
     expect(files.has('app.css')).toBeTruthy();
-    expect(files.has('app.js')).toBeTruthy();
+    expect(files.has('app.jsx')).toBeTruthy();
     expect(files.has('automations/README.md')).toBeTruthy();
     expect(files.has('README.md')).toBeTruthy();
     // No empty dirs in a file map.

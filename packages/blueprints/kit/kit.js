@@ -25,6 +25,37 @@ import { entityKindLabel } from './elements.js';
 // where the mention-chip and reference-strip components also need it).
 export { entityKindLabel };
 
+// ---------- Tiny DOM builders (the h()/el() every app copied from Docs) -----
+
+/** Parse an HTML string and return its first element. */
+export function el(html) {
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstElementChild;
+}
+
+/**
+ * Hyperscript element builder: `h('div', { class, html, style, on* }, ...kids)`.
+ * Null/false props and kids are skipped; string kids become text nodes.
+ */
+export function h(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style') e.setAttribute('style', v);
+    else if (k.startsWith('on') && typeof v === 'function')
+      e.addEventListener(k.slice(2).toLowerCase(), v);
+    else e.setAttribute(k, v === true ? '' : String(v));
+  }
+  for (const kid of kids.flat()) {
+    if (kid == null || kid === false) continue;
+    e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  }
+  return e;
+}
+
 // ---------- Native haptics (feature-detected, best-effort) ----------
 
 // The mobile shell exposes `window.centraid.haptic.*` on its native bridge;
@@ -187,11 +218,19 @@ export function debounce(fn, ms = 200) {
 
 // ---------- Letter avatars ----------
 
-/** A letter avatar element with a deterministic hashed hue (see `<kit-avatar>`). */
-export function letterAvatar(name, { size = '2.25rem' } = {}) {
+/**
+ * A letter avatar element (see `<kit-avatar>`). Hue hashes from the name
+ * unless `color` pins one; `initials` pins the letters; `src` swaps in a
+ * photo; `shape: 'rounded'` squares the corners for file/doc tiles.
+ */
+export function letterAvatar(name, { size = '2.25rem', color, initials, src, shape } = {}) {
   const el = document.createElement('kit-avatar');
   el.name = String(name ?? '?');
   el.size = size;
+  if (color) el.color = color;
+  if (initials) el.initials = initials;
+  if (src) el.src = src;
+  if (shape) el.shape = shape;
   return el;
 }
 
@@ -214,9 +253,10 @@ export function lineChart(points, { width = 640, height = 160, label = 'Trend' }
 }
 
 /** Horizontal proportion bar element (e.g. cost share behind a row's amount). */
-export function barSpan(ratio) {
+export function barSpan(ratio, { tone } = {}) {
   const el = document.createElement('kit-meter');
   el.ratio = ratio;
+  if (tone) el.tone = tone;
   return el;
 }
 
@@ -228,6 +268,331 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
   el.height = height;
   el.label = label;
   return el;
+}
+
+// ---------- Attachments (the "shared pattern across apps", now actually shared) ----------
+// Small files travel inline as data: URIs through the command JSON; larger
+// ones stream to the vault's blob staging route and attach by sha (issue #296).
+
+export const BLOB_ROUTE = '/centraid/_vault/blobs';
+export const INLINE_ATTACH_BYTES = 256 * 1024;
+
+/** Read a File into a data: URI (the inline path for small attachments). */
+export function fileToDataUri(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+/**
+ * Stream a File to the blob staging route; resolves the staging receipt
+ * ({sha256, …}). `extra` appends pre-encoded query params (e.g. `&kind=…`).
+ */
+export async function stageFileBytes(file, extra = '') {
+  const q = new URLSearchParams();
+  if (file.name) q.set('filename', file.name);
+  if (file.type) q.set('media_type', file.type);
+  const res = await fetch(`${BLOB_ROUTE}?${q}${extra}`, {
+    method: 'POST',
+    headers: { 'content-type': file.type || 'application/octet-stream' },
+    body: file,
+  });
+  if (!res.ok) throw new Error(`upload refused (${res.status})`);
+  return res.json();
+}
+
+/** "812 B" / "24 KB" / "1.3 MB" — `empty` is returned for 0/absent sizes. */
+export function fmtBytes(n, empty = '') {
+  if (!n || !Number.isFinite(Number(n))) return empty;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Fill `stripEl` with attachment tiles (image thumb or file link + size
+ * badge). The remove control arms on first click (kit armConfirm) and calls
+ * `onRemove(attachment_id)`; when that resolves to an executed outcome the
+ * tile drops immediately. Pass `onRemove: null` for a read-only strip (no
+ * remove control at all). `onZoom(attachment)`, when given, makes image
+ * thumbs zoomable.
+ */
+export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
+  stripEl.innerHTML = '';
+  for (const a of list ?? []) {
+    const tile = document.createElement('div');
+    tile.className = 'kit-attach-tile';
+    if (String(a.media_type).startsWith('image/')) {
+      const img = document.createElement('img');
+      img.src = a.content_uri;
+      img.alt = a.title ?? 'attachment';
+      if (onZoom) {
+        img.className = 'kit-attach-zoom';
+        img.addEventListener('click', () => onZoom(a));
+      }
+      tile.appendChild(img);
+    } else {
+      const link = document.createElement('a');
+      link.className = 'kit-attach-file';
+      link.href = a.content_uri;
+      link.download = a.title ?? 'file';
+      link.textContent = (a.title ?? a.media_type ?? 'file').slice(0, 24);
+      tile.appendChild(link);
+    }
+    const meta = document.createElement('span');
+    meta.className = 'kit-attach-meta';
+    meta.textContent = fmtBytes(a.byte_size);
+    tile.appendChild(meta);
+    if (onRemove) {
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'kit-attach-remove';
+      rm.textContent = '×';
+      rm.title = 'Remove';
+      rm.setAttribute('aria-label', 'Remove attachment');
+      rm.addEventListener('click', async () => {
+        if (!armConfirm(rm, { armedLabel: 'Sure?' })) return;
+        const outcome = await onRemove(a.attachment_id);
+        if (outcome?.status === 'executed') tile.remove();
+      });
+      tile.appendChild(rm);
+    }
+    stripEl.appendChild(tile);
+  }
+}
+
+/**
+ * Wire a hidden `<input type=file>` to the attach flow: stage-or-inline each
+ * picked file, run the app's `attach` action, narrate each outcome. The app
+ * supplies its own consent voice: `act(action, input) → outcome`,
+ * `narrate(outcome) → bool` (false stops the batch), `notice(text)` for read
+ * errors, `refresh()` after the batch.
+ */
+export function wireAttachInput(inputEl, getSubjectId, { act, narrate, notice, refresh }) {
+  inputEl.addEventListener('change', async () => {
+    const subjectId = getSubjectId();
+    if (!subjectId) return;
+    for (const file of [...inputEl.files]) {
+      let input;
+      try {
+        if (file.size > INLINE_ATTACH_BYTES) {
+          const staged = await stageFileBytes(file);
+          input = { subject_id: subjectId, staged_sha: staged.sha256, title: file.name };
+        } else {
+          const dataUri = await fileToDataUri(file);
+          input = { subject_id: subjectId, data_uri: dataUri, title: file.name };
+        }
+      } catch {
+        notice?.('Could not read that file.');
+        continue;
+      }
+      const outcome = await act('attach', input);
+      if (!narrate(outcome)) break;
+    }
+    inputEl.value = '';
+    await refresh?.();
+  });
+}
+
+// ---------- Anchored popover menu (Docs' openPopover, shared) ----------
+
+let popoverEl = null;
+let popoverCleanup = null;
+
+/** Whether a kit popover is open — layered Escape handlers ask before closing. */
+export function isPopoverOpen() {
+  return popoverEl != null;
+}
+
+/** Close the open kit popover (no-op when none is open). */
+export function closePopover() {
+  if (!popoverEl) return;
+  popoverCleanup?.();
+  popoverEl.remove();
+  popoverEl = null;
+  popoverCleanup = null;
+}
+
+/**
+ * Open a popover anchored to `anchor`: right-aligned, flips above when the
+ * viewport runs out, closes on outside click / scroll / resize / Escape.
+ * `build` receives the popover box and appends its content (see `popItem`).
+ * Options: `focus` moves focus to the first field/button inside (form
+ * popovers); `className` adds an app class for width/spacing overrides;
+ * `role` overrides the default `menu` (use `dialog` for form popovers);
+ * `onClose` runs once when the popover closes by any path (Escape, outside
+ * click, scroll, resize, programmatic) — the teardown point for popovers
+ * that attach document-level helpers.
+ */
+export function openPopover(
+  anchor,
+  build,
+  { focus = false, className, role = 'menu', onClose } = {},
+) {
+  closePopover();
+  const box = h('div', { class: className ? `kit-popover ${className}` : 'kit-popover', role });
+  build(box);
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      closePopover();
+    }
+  });
+  document.body.appendChild(box);
+  const rect = anchor.getBoundingClientRect();
+  const left = Math.max(
+    8,
+    Math.min(rect.right - box.offsetWidth, window.innerWidth - box.offsetWidth - 8),
+  );
+  let top = rect.bottom + 4;
+  if (top + box.offsetHeight > window.innerHeight - 8)
+    top = Math.max(8, rect.top - box.offsetHeight - 4);
+  box.style.left = `${left}px`;
+  box.style.top = `${top}px`;
+  const onDoc = (e) => {
+    if (!box.contains(e.target) && !anchor.contains(e.target)) closePopover();
+  };
+  const onScroll = (e) => {
+    // Scrolling inside the popover — or inside the kit's own body-level
+    // @-mention list — must not close the popover hosting it.
+    if (box.contains(e.target)) return;
+    if (e.target instanceof Element && e.target.closest?.('.kit-mention-pop')) return;
+    closePopover();
+  };
+  const timer = setTimeout(() => document.addEventListener('click', onDoc), 0);
+  window.addEventListener('resize', closePopover);
+  window.addEventListener('scroll', onScroll, true);
+  popoverEl = box;
+  popoverCleanup = () => {
+    clearTimeout(timer);
+    document.removeEventListener('click', onDoc);
+    window.removeEventListener('resize', closePopover);
+    window.removeEventListener('scroll', onScroll, true);
+    onClose?.();
+  };
+  if (focus) box.querySelector('input, select, textarea, button')?.focus();
+}
+
+/** One menu row for `openPopover`: label + optional icon, dot, danger tone. */
+export function popItem(
+  label,
+  onClick,
+  { danger = false, disabled = false, iconHtml = null, dotColor = null } = {},
+) {
+  const btn = h('button', {
+    type: 'button',
+    class: `kit-popover-item${danger ? ' danger' : ''}`,
+    role: 'menuitem',
+    disabled: disabled || undefined,
+    onclick: onClick,
+  });
+  if (iconHtml) btn.appendChild(el(iconHtml));
+  if (dotColor)
+    btn.appendChild(h('span', { class: 'kit-dotmini', style: `background:${dotColor};` }));
+  btn.appendChild(document.createTextNode(label));
+  return btn;
+}
+
+// ---------- Empty state ----------
+
+/**
+ * Fill `container` with the canonical empty state (icon tile, title, sub,
+ * optional action element) and unhide it.
+ */
+export function emptyState(container, { icon, title, sub, action } = {}) {
+  const subEl = h('div', { class: 'kit-empty-sub' }, sub ?? '');
+  if (action) subEl.appendChild(action);
+  const kids = [];
+  if (icon) {
+    kids.push(h('div', { class: 'kit-empty-icon' }, typeof icon === 'string' ? el(icon) : icon));
+  }
+  kids.push(h('div', { class: 'kit-empty-title' }, title ?? ''), subEl);
+  container.replaceChildren(...kids);
+  container.hidden = false;
+}
+
+// ---------- Search-hit snippets ----------
+
+/** Render a `⟦hit⟧` search snippet into `target`, marking the hits. */
+export function snippetInto(target, snippet) {
+  const parts = String(snippet ?? '').split(/[⟦⟧]/);
+  for (let i = 0; i < parts.length; i += 1) {
+    if (!parts[i]) continue;
+    if (i % 2 === 1) {
+      const mark = document.createElement('mark');
+      mark.textContent = parts[i];
+      target.appendChild(mark);
+    } else {
+      target.appendChild(document.createTextNode(parts[i]));
+    }
+  }
+}
+
+// ---------- Bulk runner (selection-bar actions) ----------
+
+/**
+ * Run `run(id)` over `ids` sequentially, narrating progress and the final
+ * tally. The app supplies its voice + cleanup: `notice(text)`,
+ * `friendly(outcome) → string|null` for failure copy, `after()` once done.
+ */
+export async function runBulk(ids, run, { progress, done, suffix = '', notice, friendly, after }) {
+  const n = ids.length;
+  let ok = 0;
+  let parked = 0;
+  const failures = [];
+  for (let i = 0; i < n; i += 1) {
+    notice(`${progress} ${i + 1} of ${n}…`);
+    const outcome = await run(ids[i]);
+    if (outcome?.status === 'executed') ok += 1;
+    else if (outcome?.status === 'parked') parked += 1;
+    else failures.push(friendly?.(outcome) ?? 'The write failed.');
+  }
+  notice(
+    failures.length > 0 ? `${failures.length} of ${n} didn’t go through — ${failures[0]}` : '',
+  );
+  const parts = [`${done} ${ok} of ${n}${suffix} · receipted.`];
+  if (parked > 0) parts.push(`${parked} waiting for approval.`);
+  toast(parts.join(' '));
+  await after?.();
+}
+
+// ---------- Theme toggle ----------
+
+const SUN_SVG =
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/></svg>';
+const MOON_SVG =
+  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
+
+/** Effective theme right now: the explicit data-theme, else the OS scheme. */
+export function isDarkNow() {
+  const t = document.documentElement.dataset.theme;
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+}
+
+/**
+ * Wire a header button as the app's light/dark toggle: sets `data-theme`,
+ * seeds `--bg-l` on first dark flip (the wall gradient's knob), and keeps a
+ * sun/moon icon in the button. `onChange(dark)` runs after each flip.
+ */
+export function wireThemeToggle(btn, { onChange } = {}) {
+  const setIcon = () => {
+    btn.innerHTML = isDarkNow() ? SUN_SVG : MOON_SVG;
+  };
+  btn.addEventListener('click', () => {
+    const dark = !isDarkNow();
+    const root = document.documentElement;
+    root.dataset.theme = dark ? 'dark' : 'light';
+    if (dark && !root.style.getPropertyValue('--bg-l')) root.style.setProperty('--bg-l', '10%');
+    setIcon();
+    onChange?.(dark);
+  });
+  setIcon();
+  return setIcon;
 }
 
 // ============================================================================
@@ -570,7 +935,12 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
     if (!chip || !appId()) return;
     fetchJson('/centraid/_vault/status')
       .then(function (s) {
-        if (!s.ok || !s.body || s.body.active !== true) {
+        // The status route answers { vaultId, name, ownerPartyId, fresh } —
+        // there is no `active` field (a resolvable vault always 200s, an
+        // unresolvable one errors before this shape). Keying on a truthy
+        // vaultId is the real "connected" signal; the old `active === true`
+        // check misreported "no vault connected" against a working vault.
+        if (!s.ok || !s.body || !s.body.vaultId) {
           chip.textContent = 'no vault connected';
           return;
         }
@@ -616,25 +986,67 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
    * `/centraid/_vault/parked/<invocationId>`. Nothing is fabricated: every
    * bubble is agent text, every card a real parked invocation, and every
    * failure is surfaced as the error it was.
+   *
+   * `_turn` keys a turn on a real conversation-history row and 404s on any
+   * id it doesn't own (same contract the vault assistant's shell-level
+   * `_turn` enforces) — so the panel provisions its session the same way the
+   * desktop's own chat pane does, via the `/_centraid-conversations` create
+   * route, rather than guessing an id client-side.
    */
   function makeVaultDriver(api) {
     var convKey = 'kitask:conversation:' + (appId() || location.pathname);
     var convId = null;
-    function conversationId() {
-      if (convId) return convId;
-      try {
-        convId = sessionStorage.getItem(convKey);
-      } catch (_) {}
-      if (!convId) {
-        convId =
-          window.crypto && crypto.randomUUID
-            ? crypto.randomUUID()
-            : 'kitask-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+
+    /**
+     * The `_turn` route keys a turn on a real `conversations` row (the
+     * conversation-history ledger, issue #286) and 404s on any id it doesn't
+     * own — a client can't mint one client-side. Mint it the same way the
+     * desktop's own chat pane does: `POST /_centraid-conversations/apps/<id>/sessions`.
+     */
+    function createConversation() {
+      return fetchJson(
+        '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/sessions',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      ).then(function (r) {
+        if (!r.ok || !r.body || !r.body.id) {
+          throw new Error('could not start a conversation (' + r.status + ')');
+        }
+        convId = r.body.id;
         try {
           sessionStorage.setItem(convKey, convId);
         } catch (_) {}
+        return convId;
+      });
+    }
+
+    /** Forget the persisted id (a stale/unowned one — a fresh vault, a restart). */
+    function forgetConversation() {
+      convId = null;
+      try {
+        sessionStorage.removeItem(convKey);
+      } catch (_) {}
+    }
+
+    /**
+     * Resolve this panel's conversation id, reusing the persisted one when
+     * present and minting a fresh session on first use otherwise. Returns a
+     * promise — the id is never guessed client-side.
+     */
+    function ensureConversationId() {
+      if (convId) return Promise.resolve(convId);
+      var stored = null;
+      try {
+        stored = sessionStorage.getItem(convKey);
+      } catch (_) {}
+      if (stored) {
+        convId = stored;
+        return Promise.resolve(convId);
       }
-      return convId;
+      return createConversation();
     }
 
     /** Post the owner's decision on one parked invocation; returns the InvokeOutcome. */
@@ -761,18 +1173,31 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
         } catch (_) {}
         handleEvent(type, ev);
       }
-      fetch(appBase() + '_turn', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: conversationId(), message: text }),
-      })
-        .then(function (res) {
+      /**
+       * Drive the turn against a resolved conversation id. A 404 means the
+       * id this panel was holding onto isn't a session the store knows about
+       * (a gateway restart against a fresh vault, journal recreated, …) — mint
+       * a real one and retry exactly once rather than surfacing a session
+       * error the owner can't act on.
+       */
+      function runTurn(id, isRetry) {
+        return fetch(appBase() + '_turn', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ conversationId: id, message: text }),
+        }).then(function (res) {
           if (!res.ok) {
             return res.text().then(function (t) {
               var j = null;
               try {
                 j = t ? JSON.parse(t) : null;
               } catch (_) {}
+              if (res.status === 404 && j && j.error === 'not_found' && !isRetry) {
+                forgetConversation();
+                return createConversation().then(function (freshId) {
+                  return runTurn(freshId, true);
+                });
+              }
               if (res.status === 503 && j && j.error === 'no_conversation_runner') {
                 say(
                   'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
@@ -804,6 +1229,11 @@ export function barChart(items, { width = 640, height = 160, label = 'Totals' } 
             });
           }
           return pump();
+        });
+      }
+      ensureConversationId()
+        .then(function (id) {
+          return runTurn(id, false);
         })
         .catch(function (err) {
           say("Couldn't reach the vault gateway — " + String((err && err.message) || err));

@@ -22,7 +22,6 @@
   --on-accent: #fff;
   --accs: color-mix(in oklab, var(--_accent) 13%, transparent);
   --accd: color-mix(in oklab, var(--_accent) 90%, #04150f);
-  --sel: color-mix(in oklab, var(--_accent) 11%, transparent);
   --selb: color-mix(in oklab, var(--_accent) 34%, var(--line-strong));
 
   --pos: #0fa678;
@@ -38,7 +37,6 @@
   --danger: #d23b32;
 
   --r-card: 14px;
-  --r-btn: 6px;
   --r-md: 10px;
   --r-pill: 999px;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
@@ -53,6 +51,17 @@
   --t-small: 400 0.8rem/1.45 var(--font-sans);
   --t-tiny: 600 0.6rem/1.4 var(--mono);
   --t-mono: 500 0.72rem/1.4 var(--mono);
+
+  /* ---- Kit contract bridge (buttons / chips / seg / modal / toast / ask
+     render on-brand) — kit.css reads these, they follow the theme vars. ---- */
+  --surface: var(--bg-elev);
+  --surface-2: var(--bg-sunken);
+  --text: var(--ink);
+  --muted: var(--ink-2);
+  --ink-faint: var(--ink-3);
+  --radius: 0.75rem;
+  --accent-soft: var(--accs);
+  --accent-deep: var(--accd);
 }
 
 :root[data-theme='dark'] {
@@ -289,19 +298,10 @@ select {
   justify-content: center;
   font-size: 15px;
 }
-.s-av {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font: var(--t-tiny);
-  font-size: 11px;
+/* Avatars are <kit-avatar> (kit.css .kit-avatar); the title face is the one
+   Tally-specific touch kept on top of the kit's styling. */
+.kit-avatar {
   font-family: var(--font-title);
-  font-weight: 600;
 }
 .s-li-main {
   flex: 1;
@@ -457,28 +457,7 @@ select {
 }
 .s-search input:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
-}
-.s-btn {
-  padding: 8px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--bg-elev);
-  color: var(--ink);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.s-btn:hover {
-  background: var(--bg-sunken);
-}
-.s-btn.primary {
-  background: var(--accd);
-  border-color: var(--accd);
-  color: #fff;
-}
-.s-btn.primary:hover {
-  filter: brightness(1.06);
-  background: var(--accd);
+  box-shadow: var(--kit-focus-ring);
 }
 .s-iconbtn {
   width: 38px;
@@ -860,30 +839,12 @@ select {
   margin-top: 2px;
 }
 
-/* Modal */
-.s-modal-back {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  background: rgba(14, 30, 26, 0.42);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: s-fade 0.2s ease;
-}
-.s-modal {
+/* Modal — shell is the kit's (.kit-modal-back/.kit-modal/.kit-modal-foot);
+   Tally keeps only its width knob + the field internals below. */
+.s-wide {
   width: min(500px, 100%);
-  max-height: 92vh;
-  overflow: auto;
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: var(--shadow-lg);
-  padding: 22px;
-  animation: s-rise 0.18s var(--ease);
 }
-.s-modal h2 {
+.kit-modal h2 {
   margin: 0 0 16px;
   font: var(--t-title);
   font-size: 20px;
@@ -909,7 +870,7 @@ select {
 }
 .s-in:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .s-amtwrap {
   position: relative;
@@ -936,7 +897,7 @@ select {
 }
 .s-amt:focus {
   border-color: var(--selb);
-  box-shadow: 0 0 0 3px var(--accs);
+  box-shadow: var(--kit-focus-ring);
 }
 .s-row2 {
   display: flex;
@@ -946,48 +907,6 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.s-catchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12px;
-}
-.s-catchip[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--ink);
-  font-weight: 600;
-}
-.s-seg {
-  display: flex;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-sunken);
-  gap: 2px;
-}
-.s-segbtn {
-  flex: 1;
-  padding: 7px;
-  border: none;
-  border-radius: var(--r-btn);
-  background: none;
-  color: var(--ink-3);
-  font: var(--t-small);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-.s-segbtn[aria-pressed='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-  box-shadow: var(--shadow-sm);
 }
 .s-splitrow {
   display: flex;
@@ -1050,75 +969,14 @@ select {
 .s-splitsum.bad {
   color: var(--neg);
 }
-.s-modal-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 20px;
-}
+/* Delete sits left of the kit footer's Cancel/Save pair. */
 .s-del {
   margin-right: auto;
-  padding: 9px 14px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: none;
-  color: var(--danger);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.s-del:hover {
-  background: color-mix(in oklab, var(--danger) 8%, transparent);
-}
-.s-btn-ghost {
-  padding: 9px 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.s-btn-primary {
-  padding: 9px 18px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accd);
-  color: #fff;
-  font: var(--t-strong);
-  font-size: 13px;
-}
-.s-btn-primary:disabled {
-  background: color-mix(in oklab, var(--ink) 8%, transparent);
-  color: var(--ink-3);
-  cursor: not-allowed;
 }
 .s-memtoggle {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-.s-memchip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 11px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  font-size: 12.5px;
-}
-.s-memchip[aria-pressed='true'] {
-  border-color: var(--selb);
-  background: var(--sel);
-  color: var(--ink);
-  font-weight: 600;
-}
-.s-memchip .d {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
 }
 .s-select {
   width: 100%;
@@ -1130,25 +988,6 @@ select {
   font: var(--t-body);
   -webkit-appearance: none;
   appearance: none;
-}
-
-@keyframes s-rise {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes s-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
 }
 
 /* ---------- Narrow (phone) — driven by JS .is-narrow on #root ---------- */

@@ -226,7 +226,9 @@ export default function App(): JSX.Element {
         case 'run-view':
           return <RunViewRoute automationId={nav.route.automationId} runId={nav.route.runId} />;
         case 'discover':
-          return <DiscoverRoute />;
+          return (
+            <DiscoverRoute userApps={userApps} setUserApps={setUserApps} refreshApps={refresh} />
+          );
         case 'templates':
           return <TemplatesRoute />;
         case 'settings':

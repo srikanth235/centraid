@@ -12,18 +12,28 @@ import { openTemplatePreview } from '../templatePreview.js';
 import { useAsyncData } from '../useAsyncData.js';
 import {
   cloneAutomationTemplate,
-  cloneTemplateToDraft,
+  installAppTemplate,
   loadAppTemplates,
   loadAutomationTemplates,
 } from './templatesData.js';
+
+export interface DiscoverRouteProps {
+  userApps: readonly UserAppMeta[];
+  setUserApps: (next: UserAppMeta[]) => void;
+  refreshApps: () => Promise<void>;
+}
 
 // React-owned Discover — the unified template gallery. Replaces the vanilla
 // renderDiscover (app-discover.ts). Loads both template slices, then wires the
 // preview modals + context menu + clone actions through the ported overlays +
 // ShellActions. tileVariant reads the Store appearance cache (kept current by
 // setPrefs), so the route needn't thread prefs.
-export default function DiscoverRoute(): JSX.Element {
-  const { navigate, enterBuilder, showToast } = useShellActions();
+export default function DiscoverRoute({
+  userApps,
+  setUserApps,
+  refreshApps,
+}: DiscoverRouteProps): JSX.Element {
+  const { navigate, showToast } = useShellActions();
   const state = useAsyncData(async () => {
     const [appTemplates, automationTemplates] = await Promise.all([
       loadAppTemplates(),
@@ -34,10 +44,19 @@ export default function DiscoverRoute(): JSX.Element {
   const tileVariant =
     Store.get<Partial<AppearancePrefs>>('appearance', {}).tileVariant ?? 'gradient';
 
-  // Clone an app template → open the builder on the fresh draft.
+  // Clone an app template → install it directly as a published app (owner
+  // decision: no draft stage, no builder detour) → pin it to Home so the
+  // user lands where they can see it, then reconcile the shelf against the
+  // gateway's listing (the freshly published clone) the same way other
+  // mutating flows do (see HomeRoute's renameAppFlow/deleteAppFlow).
   const applyAppTemplate = (t: TemplateEntry): void => {
-    void cloneTemplateToDraft(t)
-      .then((draft) => enterBuilder({ appContext: draft }))
+    void installAppTemplate(t)
+      .then((pin) => {
+        setUserApps([pin, ...userApps]);
+        void refreshApps();
+        showToast(`Installed "${pin.name}"`);
+        navigate({ kind: 'home' });
+      })
       .catch((err: unknown) =>
         showToast(`Clone failed: ${err instanceof Error ? err.message : String(err)}`),
       );
@@ -70,19 +89,27 @@ export default function DiscoverRoute(): JSX.Element {
           tileVariant={tileVariant}
           onOpenTemplate={(t) => openTemplatePreview(asEntry(t), applyAppTemplate)}
           onOpenAutomationTemplate={(t) => openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)}
-          onTemplateContext={(t, anchor) =>
+          onTemplateContext={(t, anchor) => {
+            const auto = t.kind === 'automation';
             openMenu(
               [
                 { id: 'use', label: 'Use this template', icon: 'Sparkle' },
                 { id: 'preview', label: 'Preview', icon: 'Eye' },
               ],
               anchor,
-              (id) =>
-                id === 'use'
-                  ? applyAppTemplate(asEntry(t))
-                  : openTemplatePreview(asEntry(t), applyAppTemplate),
-            )
-          }
+              (id) => {
+                if (auto) {
+                  id === 'use'
+                    ? applyAutoTemplate(asEntry(t))
+                    : openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
+                } else {
+                  id === 'use'
+                    ? applyAppTemplate(asEntry(t))
+                    : openTemplatePreview(asEntry(t), applyAppTemplate);
+                }
+              },
+            );
+          }}
         />
       )}
     </PageScroll>
