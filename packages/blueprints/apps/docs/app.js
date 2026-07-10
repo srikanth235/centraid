@@ -33,6 +33,12 @@ import {
   toast,
   wireThemeToggle,
 } from './kit.js';
+// `h`/`el` stay imported: `h` builds the two action buttons handed to kit's
+// `emptyState()` (a real-DOM-node contract, not a template context) and `el`
+// parses this file's trusted static icon-SVG strings into nodes interpolated
+// straight into Lit templates — both are the "imperative island" / "one
+// literal" carve-outs the refactor brief sanctions, not reimplementations.
+import { html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -67,6 +73,13 @@ const I = {
   download:
     '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 21h14"/></svg>',
 };
+
+// The folder row's hover-revealed rename/delete tool icons (14px — distinct
+// from the 18px sidebar/toolbar set above).
+const RENAME_ICON =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"/></svg>';
+const DELETE_ICON =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>';
 
 // ---------- State ----------
 
@@ -305,80 +318,78 @@ function toggleSelect(id, index, shift) {
 
 // ---------- Popover (kebab + move) ----------
 
+// One "Move to…" target row. `popItem` (kit.js) builds the real button node;
+// Lit templates below interpolate it as-is — the target list mixes a fixed
+// depth-0 root with depth-1 folders, exactly as the vanilla builder did.
+function moveTargetBtn(folderId, name, depth, ids, single) {
+  const btn = popItem(name, async () => {
+    closePopover();
+    await moveDocs(ids, folderId, name);
+  });
+  btn.style.paddingLeft = `${0.7 + depth * 0.85}rem`;
+  if (single && (single.folder_id ?? null) === folderId) btn.disabled = true;
+  return btn;
+}
+
 // One shared "Move to…" tree for the kebab and the bulk toolbar.
 function openMovePopover(anchor, docs) {
   const ids = docs.map((d) => d.content_id);
   const single = docs.length === 1 ? docs[0] : null;
   openPopover(anchor, (box) => {
-    box.appendChild(
-      h(
-        'p',
-        { class: 'kit-popover-head' },
-        single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
-      ),
+    litRender(
+      html`
+        <p class="kit-popover-head">
+          ${single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`}
+        </p>
+        <div class="kit-popover-scroll">
+          ${moveTargetBtn(null, 'Documents', 0, ids, single)}
+          ${data.folders.map((f) => moveTargetBtn(f.folder_id, f.name, 1, ids, single))}
+        </div>
+      `,
+      box,
     );
-    const scroll = h('div', { class: 'kit-popover-scroll' });
-    const target = (folderId, name, depth) => {
-      const btn = popItem(name, async () => {
-        closePopover();
-        await moveDocs(ids, folderId, name);
-      });
-      btn.style.paddingLeft = `${0.7 + depth * 0.85}rem`;
-      if (single && (single.folder_id ?? null) === folderId) btn.disabled = true;
-      scroll.appendChild(btn);
-    };
-    target(null, 'Documents', 0);
-    for (const f of data.folders) target(f.folder_id, f.name, 1);
-    box.appendChild(scroll);
   });
 }
 
 function openDocMenu(anchor, doc) {
   closePopover();
   openPopover(anchor, (box) => {
-    box.appendChild(
-      popItem('Open', () => {
-        closePopover();
-        openQuick(doc.content_id);
-      }),
-    );
-    const dl = h(
-      'a',
-      {
-        class: 'kit-popover-item',
-        role: 'menuitem',
-        href: doc.content_uri,
-        download: doc.title ?? 'file',
-        onclick: closePopover,
-      },
-      'Download',
-    );
-    box.appendChild(dl);
-    box.appendChild(
-      popItem('Rename', () => {
-        closePopover();
-        startRenameDoc(doc);
-      }),
-    );
-    box.appendChild(
-      popItem(doc.starred ? 'Remove star' : 'Star', () => {
-        closePopover();
-        toggleStar(doc);
-      }),
-    );
-    box.appendChild(popItem('Move to…', () => openMovePopover(anchor, [doc])));
-    box.appendChild(h('div', { class: 'kit-popover-sep' }));
-    box.appendChild(
-      popItem(
-        'Trash',
-        async (e) => {
-          const btn = e.currentTarget;
-          if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
+    litRender(
+      html`
+        ${popItem('Open', () => {
           closePopover();
-          await trashDoc(doc);
-        },
-        { danger: true },
-      ),
+          openQuick(doc.content_id);
+        })}
+        <a
+          class="kit-popover-item"
+          role="menuitem"
+          href=${doc.content_uri}
+          download=${doc.title ?? 'file'}
+          @click=${closePopover}
+          >Download</a
+        >
+        ${popItem('Rename', () => {
+          closePopover();
+          startRenameDoc(doc);
+        })}
+        ${popItem(doc.starred ? 'Remove star' : 'Star', () => {
+          closePopover();
+          toggleStar(doc);
+        })}
+        ${popItem('Move to…', () => openMovePopover(anchor, [doc]))}
+        <div class="kit-popover-sep"></div>
+        ${popItem(
+          'Trash',
+          async (e) => {
+            const btn = e.currentTarget;
+            if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
+            closePopover();
+            await trashDoc(doc);
+          },
+          { danger: true },
+        )}
+      `,
+      box,
     );
   });
 }
@@ -545,98 +556,104 @@ async function uploadFiles(fileList) {
 
 // ---------- Sidebar render ----------
 
-function navItem({ icon, label, active, count, onClick }) {
-  const item = h('button', {
-    type: 'button',
-    class: 'd-nav-item',
-    'aria-current': String(!!active),
-    onclick: onClick,
-  });
-  item.appendChild(el(icon));
-  item.appendChild(h('span', {}, label));
-  if (count != null) item.appendChild(h('span', { class: 'd-nav-count' }, count));
-  return item;
+function navItemTpl({ icon, label, active, count, onClick }) {
+  return html`<button
+    type="button"
+    class="d-nav-item"
+    aria-current=${String(!!active)}
+    @click=${onClick}
+  >
+    ${el(icon)}
+    <span>${label}</span>
+    ${count != null ? html`<span class="d-nav-count">${count}</span>` : nothing}
+  </button>`;
 }
 
-function renderSidebar() {
-  const counts = {
-    all: activeFiles().length,
-    starred: activeFiles().filter((f) => f.starred).length,
-    trash: trashedFiles().length,
-  };
-
-  const nav = $('smartNav');
-  nav.replaceChildren(
-    navItem({
+function smartNavTpl(counts) {
+  return html`
+    ${navItemTpl({
       icon: I.allDocs,
       label: 'All documents',
       active: state.nav.kind === 'all',
       count: counts.all,
       onClick: () => selectNav({ kind: 'all' }),
-    }),
-    navItem({
+    })}
+    ${navItemTpl({
       icon: I.clock,
       label: 'Recent',
       active: state.nav.kind === 'recent',
       onClick: () => selectNav({ kind: 'recent' }),
-    }),
-    navItem({
+    })}
+    ${navItemTpl({
       icon: I.star,
       label: 'Starred',
       active: state.nav.kind === 'starred',
       count: counts.starred,
       onClick: () => selectNav({ kind: 'starred' }),
-    }),
-  );
+    })}
+  `;
+}
 
-  const list = $('folderList');
-  list.replaceChildren();
-
-  if (state.creatingFolder) {
-    const input = h('input', {
-      type: 'text',
-      placeholder: 'Folder name…',
-      'aria-label': 'New folder name',
-    });
-    const create = h('button', { type: 'button' }, 'Create');
-    const commit = () => {
-      const name = input.value.trim();
-      if (name) createFolder(name);
-      else {
-        state.creatingFolder = false;
-        render();
-      }
-    };
-    create.addEventListener('click', commit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        commit();
-      }
-      if (e.key === 'Escape') {
-        state.creatingFolder = false;
-        render();
-      }
-    });
-    list.appendChild(h('div', { class: 'd-folder-edit' }, input, create));
-    setTimeout(() => input.focus(), 0);
-  }
-
-  for (const f of data.folders) {
-    if (state.renamingFolderId === f.folder_id) {
-      const input = h('input', { type: 'text', 'aria-label': 'Folder name' });
-      input.value = f.name;
-      const save = h('button', { type: 'button' }, 'Save');
-      const commit = () => {
-        const name = input.value.trim();
-        if (name && name !== f.name) renameFolder(f.folder_id, name);
-        else {
-          state.renamingFolderId = null;
+// The new-folder editor row: a plain closure var (not createRef) captures the
+// input node from the `ref()` callback, which runs synchronously during
+// commit — well before `commit()` can be invoked by a later click/keydown.
+function folderCreateEditTpl() {
+  let inputEl;
+  const commit = () => {
+    const name = inputEl.value.trim();
+    if (name) createFolder(name);
+    else {
+      state.creatingFolder = false;
+      render();
+    }
+  };
+  return html`<div class="d-folder-edit">
+    <input
+      type="text"
+      placeholder="Folder name…"
+      aria-label="New folder name"
+      ${ref((node) => {
+        inputEl = node;
+        node?.focus();
+      })}
+      @keydown=${(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+        if (e.key === 'Escape') {
+          state.creatingFolder = false;
           render();
         }
-      };
-      save.addEventListener('click', commit);
-      input.addEventListener('keydown', (e) => {
+      }}
+    />
+    <button type="button" @click=${commit}>Create</button>
+  </div>`;
+}
+
+function folderRenameEditTpl(f) {
+  let inputEl;
+  const commit = () => {
+    const name = inputEl.value.trim();
+    if (name && name !== f.name) renameFolder(f.folder_id, name);
+    else {
+      state.renamingFolderId = null;
+      render();
+    }
+  };
+  return html`<div class="d-folder-edit">
+    <input
+      type="text"
+      aria-label="Folder name"
+      .value=${f.name}
+      ${ref((node) => {
+        inputEl = node;
+        if (node) {
+          node.focus();
+          node.select();
+        }
+      })}
+      @keydown=${(e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           commit();
@@ -645,81 +662,126 @@ function renderSidebar() {
           state.renamingFolderId = null;
           render();
         }
-      });
-      list.appendChild(h('div', { class: 'd-folder-edit' }, input, save));
-      setTimeout(() => {
-        input.focus();
-        input.select();
-      }, 0);
-      continue;
-    }
-    const count = activeFiles().filter((d) => (d.folder_id ?? null) === f.folder_id).length;
-    const active = state.nav.kind === 'folder' && state.nav.folderId === f.folder_id;
-    const item = navItem({
+      }}
+    />
+    <button type="button" @click=${commit}>Save</button>
+  </div>`;
+}
+
+function folderRowTpl(f) {
+  if (state.renamingFolderId === f.folder_id) return folderRenameEditTpl(f);
+  const count = activeFiles().filter((d) => (d.folder_id ?? null) === f.folder_id).length;
+  const active = state.nav.kind === 'folder' && state.nav.folderId === f.folder_id;
+  return html`<div class="d-folder">
+    ${navItemTpl({
       icon: I.folder,
       label: f.name,
       active,
       count: count || '',
       onClick: () => selectNav({ kind: 'folder', folderId: f.folder_id }),
-    });
-    const rename = h('button', {
-      type: 'button',
-      class: 'd-tool-btn',
-      'aria-label': `Rename ${f.name}`,
-      onclick: (e) => {
-        e.stopPropagation();
-        state.renamingFolderId = f.folder_id;
-        render();
-      },
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"/></svg>',
-    });
-    const del = h('button', {
-      type: 'button',
-      class: 'd-tool-btn danger',
-      'aria-label': `Delete ${f.name}`,
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>',
-    });
-    del.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (!armConfirm(del, { armedLabel: '×?' })) return;
-      deleteFolder(f);
-    });
-    const tools = h('span', { class: 'd-folder-tools' }, rename, del);
-    list.appendChild(h('div', { class: 'd-folder' }, item, tools));
-  }
+    })}
+    <span class="d-folder-tools">
+      <button
+        type="button"
+        class="d-tool-btn"
+        aria-label="Rename ${f.name}"
+        @click=${(e) => {
+          e.stopPropagation();
+          state.renamingFolderId = f.folder_id;
+          render();
+        }}
+      >
+        ${el(RENAME_ICON)}
+      </button>
+      <button
+        type="button"
+        class="d-tool-btn danger"
+        aria-label="Delete ${f.name}"
+        @click=${(e) => {
+          e.stopPropagation();
+          if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+          deleteFolder(f);
+        }}
+      >
+        ${el(DELETE_ICON)}
+      </button>
+    </span>
+  </div>`;
+}
 
-  list.appendChild(
-    navItem({
+function folderListTpl(counts) {
+  return html`
+    ${state.creatingFolder ? folderCreateEditTpl() : nothing}
+    ${repeat(
+      data.folders,
+      (f) => f.folder_id,
+      (f) => folderRowTpl(f),
+    )}
+    ${navItemTpl({
       icon: I.trash,
       label: 'Trash',
       active: state.nav.kind === 'trash',
       count: counts.trash || '',
       onClick: () => selectNav({ kind: 'trash' }),
-    }),
-  );
+    })}
+  `;
+}
 
-  // Storage → an honest footprint of what the drive is holding right now.
-  // The vault gives no account-wide total, so we report real bytes + count
-  // over the loaded window instead of a fabricated "used / total".
+// Storage → an honest footprint of what the drive is holding right now. The
+// vault gives no account-wide total, so we report real bytes + count over the
+// loaded window instead of a fabricated "used / total".
+function storageTpl() {
   const files = activeFiles();
   const bytes = files.reduce((s, f) => s + (f.byte_size ?? 0), 0);
-  const store = $('storage');
-  store.replaceChildren(
-    h(
-      'div',
-      { class: 'd-storage-top' },
-      h('span', { class: 'lbl' }, 'Footprint'),
-      h('span', { class: 'val' }, String(files.length)),
-    ),
-    h(
-      'div',
-      { class: 'd-storage-label' },
-      `${fmtBytes(bytes)} across ${files.length} document${files.length === 1 ? '' : 's'}${driveTruncated ? ' — newest in view' : ''}`,
-    ),
-  );
+  return html`
+    <div class="d-storage-top">
+      <span class="lbl">Footprint</span>
+      <span class="val">${files.length}</span>
+    </div>
+    <div class="d-storage-label">
+      ${fmtBytes(bytes)} across ${files.length}
+      document${files.length === 1 ? '' : 's'}${driveTruncated ? ' — newest in view' : ''}
+    </div>
+  `;
+}
+
+function renderSidebar() {
+  const counts = {
+    all: activeFiles().length,
+    starred: activeFiles().filter((f) => f.starred).length,
+    trash: trashedFiles().length,
+  };
+  litRender(smartNavTpl(counts), $('smartNav'));
+  litRender(folderListTpl(counts), $('folderList'));
+  litRender(storageTpl(), $('storage'));
 }
 
 // ---------- Toolbar render ----------
+
+const TYPE_CHIPS = [
+  ['all', 'All'],
+  ['pdf', 'PDFs'],
+  ['image', 'Images'],
+  ['doc', 'Docs'],
+  ['sheet', 'Sheets'],
+];
+
+function typeChipsTpl() {
+  return html`${TYPE_CHIPS.map(
+    ([key, label]) => html`<button
+      type="button"
+      class="kit-chip quiet"
+      aria-pressed=${String(state.type === key)}
+      @click=${() => {
+        state.type = key;
+        clearSelection();
+        render();
+      }}
+    >
+      ${label}
+    </button>`,
+  )}`;
+}
 
 function renderToolbar() {
   const rows = visibleRows;
@@ -738,31 +800,7 @@ function renderToolbar() {
   else sub = `${n} document${n === 1 ? '' : 's'}`;
   $('activeSub').textContent = sub;
 
-  const chips = [
-    ['all', 'All'],
-    ['pdf', 'PDFs'],
-    ['image', 'Images'],
-    ['doc', 'Docs'],
-    ['sheet', 'Sheets'],
-  ];
-  $('typeChips').replaceChildren(
-    ...chips.map(([key, label]) =>
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-chip quiet',
-          'aria-pressed': String(state.type === key),
-          onclick: () => {
-            state.type = key;
-            clearSelection();
-            render();
-          },
-        },
-        label,
-      ),
-    ),
-  );
+  litRender(typeChipsTpl(), $('typeChips'));
 
   const sortNames = { added: 'Date', name: 'Name', size: 'Size' };
   $('sortLabel').textContent = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
@@ -773,102 +811,111 @@ function renderToolbar() {
 
 // ---------- Bulk bar ----------
 
+function bulkBarTpl(n) {
+  const inTrash = state.nav.kind === 'trash' && !state.search.trim();
+  return html`
+    <span class="d-bulk-count">${n} selected</span>
+    <div class="d-bulk-actions">
+      ${inTrash
+        ? html`<button
+            type="button"
+            class="kit-btn"
+            @click=${() =>
+              runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
+                progress: 'Restoring',
+                done: 'Restored',
+              })}
+          >
+            Restore
+          </button>`
+        : html`<button
+              type="button"
+              class="kit-btn"
+              @click=${(e) => openMovePopover(e.currentTarget, selectedDocs())}
+            >
+              Move to…
+            </button>
+            <button
+              type="button"
+              class="kit-btn danger"
+              @click=${(e) => {
+                if (!armConfirm(e.currentTarget, { armedLabel: `Trash ${n} — sure?` })) return;
+                runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
+                  progress: 'Trashing',
+                  done: 'Trashed',
+                });
+              }}
+            >
+              Trash
+            </button>`}
+      <button
+        type="button"
+        class="kit-btn"
+        @click=${() => {
+          clearSelection();
+          render();
+        }}
+      >
+        Clear
+      </button>
+    </div>
+  `;
+}
+
+// The bar's stale content is left in place (hidden) when the selection drops
+// to zero, matching the old builder's behavior of never clearing it — only
+// the next non-empty selection re-populates it.
 function renderBulk() {
   const bar = $('bulkBar');
   const n = state.selected.size;
   bar.hidden = n === 0;
   if (n === 0) return;
-  const inTrash = state.nav.kind === 'trash' && !state.search.trim();
-  const actions = h('div', { class: 'd-bulk-actions' });
-  if (inTrash) {
-    actions.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-btn',
-          onclick: () =>
-            runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
-              progress: 'Restoring',
-              done: 'Restored',
-            }),
-        },
-        'Restore',
-      ),
-    );
-  } else {
-    const move = h('button', { type: 'button', class: 'kit-btn' }, 'Move to…');
-    move.addEventListener('click', () => openMovePopover(move, selectedDocs()));
-    actions.appendChild(move);
-    const trash = h('button', { type: 'button', class: 'kit-btn danger' }, 'Trash');
-    trash.addEventListener('click', () => {
-      if (!armConfirm(trash, { armedLabel: `Trash ${n} — sure?` })) return;
-      runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
-        progress: 'Trashing',
-        done: 'Trashed',
-      });
-    });
-    actions.appendChild(trash);
-  }
-  actions.appendChild(
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'kit-btn',
-        onclick: () => {
-          clearSelection();
-          render();
-        },
-      },
-      'Clear',
-    ),
-  );
-  bar.replaceChildren(h('span', { class: 'd-bulk-count' }, `${n} selected`), actions);
+  litRender(bulkBarTpl(n), bar);
 }
 
 // ---------- Rows: grid + list ----------
 
-function checkbox(cls, selected, onClick, label) {
-  const btn = h('button', {
-    type: 'button',
-    class: cls,
-    'aria-pressed': String(selected),
-    'aria-label': label,
-    onclick: onClick,
-  });
-  if (selected) btn.appendChild(el(I.check));
-  return btn;
+function checkboxTpl(cls, selected, onClick, label) {
+  return html`<button
+    type="button"
+    class=${cls}
+    aria-pressed=${String(selected)}
+    aria-label=${label}
+    @click=${onClick}
+  >
+    ${selected ? el(I.check) : nothing}
+  </button>`;
 }
 
-function gridCard(doc, index) {
+function gridCardTpl(doc, index) {
   const m = typeMeta(doc.media_type);
   const selected = state.selected.has(doc.content_id);
-  const card = h('div', { class: 'd-card', 'data-selected': String(selected) });
-
-  const thumb = h('div', { class: 'd-thumb', style: `background:${tintBg(m.cv, 15)};` });
-  if (isImage(doc)) {
-    thumb.appendChild(h('img', { src: doc.content_uri, alt: '', loading: 'lazy' }));
-  } else {
-    thumb.appendChild(h('span', { class: 'd-thumb-label', style: `color:var(${m.cv});` }, m.label));
-    thumb.appendChild(
-      h(
-        'div',
-        { class: 'd-thumb-lines' },
-        h('i', { style: `width:70%;background:var(${m.cv});opacity:.18;` }),
-        h('i', { style: `width:90%;background:var(${m.cv});opacity:.14;` }),
-        h('i', { style: `width:55%;background:var(${m.cv});opacity:.14;` }),
-      ),
-    );
-  }
-  thumb.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openQuick(doc.content_id);
-  });
-  card.appendChild(thumb);
-
-  card.appendChild(
-    checkbox(
+  return html`<div
+    class="d-card"
+    data-selected=${String(selected)}
+    @click=${(e) => {
+      if (e.target.closest('button, a')) return;
+      openDetails(doc.content_id);
+    }}
+  >
+    <div
+      class="d-thumb"
+      style="background:${tintBg(m.cv, 15)};"
+      @click=${(e) => {
+        e.stopPropagation();
+        openQuick(doc.content_id);
+      }}
+    >
+      ${isImage(doc)
+        ? html`<img src=${doc.content_uri} alt="" loading="lazy" />`
+        : html`<span class="d-thumb-label" style="color:var(${m.cv});">${m.label}</span>
+            <div class="d-thumb-lines">
+              <i style="width:70%;background:var(${m.cv});opacity:.18;"></i>
+              <i style="width:90%;background:var(${m.cv});opacity:.14;"></i>
+              <i style="width:55%;background:var(${m.cv});opacity:.14;"></i>
+            </div>`}
+    </div>
+    ${checkboxTpl(
       'd-card-select',
       selected,
       (e) => {
@@ -876,36 +923,31 @@ function gridCard(doc, index) {
         toggleSelect(doc.content_id, index, e.shiftKey);
       },
       `Select ${doc.title ?? 'document'}`,
-    ),
-  );
-
-  const cardTitle = h('div', { class: 'd-card-title' }, doc.title ?? 'Untitled');
-  if (doc.starred)
-    cardTitle.appendChild(h('span', { class: 'd-star-ind', 'aria-label': 'Starred' }, '★'));
-  card.appendChild(
-    h(
-      'div',
-      { class: 'd-card-body' },
-      cardTitle,
-      h('div', { class: 'd-card-meta' }, `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`),
-    ),
-  );
-
-  card.addEventListener('click', (e) => {
-    if (e.target.closest('button, a')) return;
-    openDetails(doc.content_id);
-  });
-  return card;
+    )}
+    <div class="d-card-body">
+      <div class="d-card-title">
+        ${doc.title ?? 'Untitled'}${doc.starred
+          ? html`<span class="d-star-ind" aria-label="Starred">★</span>`
+          : nothing}
+      </div>
+      <div class="d-card-meta">${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}</div>
+    </div>
+  </div>`;
 }
 
-function listRow(doc, index) {
+function listRowTpl(doc, index) {
   const m = typeMeta(doc.media_type);
   const selected = state.selected.has(doc.content_id);
   const trashed = state.nav.kind === 'trash' && !state.search.trim();
-  const row = h('div', { class: 'd-row', 'data-selected': String(selected) });
-
-  row.appendChild(
-    checkbox(
+  return html`<div
+    class="d-row"
+    data-selected=${String(selected)}
+    @click=${(e) => {
+      if (e.target.closest('button, a, input')) return;
+      openDetails(doc.content_id);
+    }}
+  >
+    ${checkboxTpl(
       'd-check',
       selected,
       (e) => {
@@ -913,108 +955,152 @@ function listRow(doc, index) {
         toggleSelect(doc.content_id, index, e.shiftKey);
       },
       `Select ${doc.title ?? 'document'}`,
-    ),
-  );
-
-  const badge = h('button', {
-    type: 'button',
-    class: 'd-badge',
-    style: `background:${tintBg(m.cv, 16)};`,
-    'aria-label': `Preview ${doc.title ?? 'document'}`,
-    onclick: (e) => {
-      e.stopPropagation();
-      openQuick(doc.content_id);
-    },
-  });
-  if (isImage(doc)) badge.appendChild(h('img', { src: doc.content_uri, alt: '', loading: 'lazy' }));
-  else badge.appendChild(h('span', { style: `color:var(${m.cv});` }, m.label));
-  row.appendChild(badge);
-
-  const main = h('div', { class: 'd-row-main' });
-  const title = h(
-    'button',
-    {
-      type: 'button',
-      class: 'd-row-title',
-      onclick: (e) => {
+    )}
+    <button
+      type="button"
+      class="d-badge"
+      style="background:${tintBg(m.cv, 16)};"
+      aria-label="Preview ${doc.title ?? 'document'}"
+      @click=${(e) => {
         e.stopPropagation();
         openQuick(doc.content_id);
+      }}
+    >
+      ${isImage(doc)
+        ? html`<img src=${doc.content_uri} alt="" loading="lazy" />`
+        : html`<span style="color:var(${m.cv});">${m.label}</span>`}
+    </button>
+    <div class="d-row-main">
+      <button
+        type="button"
+        class="d-row-title"
+        @click=${(e) => {
+          e.stopPropagation();
+          openQuick(doc.content_id);
+        }}
+      >
+        ${doc.title ?? 'Untitled'}${doc.starred
+          ? html`<span class="d-star-ind" aria-label="Starred">★</span>`
+          : nothing}
+      </button>
+      ${state.search.trim() && doc.snippet
+        ? html`<div
+            class="d-snippet"
+            ${ref((node) => {
+              if (!node) return;
+              node.replaceChildren();
+              snippetInto(node, doc.snippet);
+            })}
+          ></div>`
+        : nothing}
+      ${state.narrow
+        ? html`<div class="d-row-meta">
+            ${trashed
+              ? `from ${folderName(doc.folder_id)} · ${purgeCountdown(doc.purge_at)}`
+              : state.search.trim()
+                ? `in ${folderName(doc.folder_id)}`
+                : `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`}
+          </div>`
+        : nothing}
+    </div>
+    <span class="d-cell where"
+      >${trashed ? `from ${folderName(doc.folder_id)}` : folderName(doc.folder_id)}</span
+    >
+    <span class="d-cell size">${fmtBytes(doc.byte_size)}</span>
+    <span class="d-cell added${trashed ? ' purge' : ''}"
+      >${trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at)}</span
+    >
+    <div class="d-row-end">
+      ${trashed
+        ? html`<button
+            type="button"
+            class="kit-btn"
+            @click=${(e) => {
+              e.stopPropagation();
+              restoreDoc(doc);
+            }}
+          >
+            Restore
+          </button>`
+        : html`<button
+            type="button"
+            class="d-kebab"
+            aria-label="Actions for ${doc.title ?? 'document'}"
+            aria-haspopup="menu"
+            @click=${(e) => {
+              e.stopPropagation();
+              openDocMenu(e.currentTarget, doc);
+            }}
+          >
+            ${el(I.dots)}
+          </button>`}
+    </div>
+  </div>`;
+}
+
+// `#grid`/`#list` are Lit-owned containers: `#list` starts holding the boot
+// `showSkeleton()` markup, so its very first commit must clear that non-Lit
+// content itself (`mounted` guard below); every commit after goes through
+// `litRender` alone. `#grid` never carries pre-Lit content but shares the same
+// guard for symmetry. Clearing between views goes through `render(nothing, …)`
+// — never a raw `replaceChildren()` — per the kit's Lit conventions.
+let gridMounted = false;
+function mountGrid(tpl) {
+  const grid = $('grid');
+  if (!gridMounted) {
+    grid.replaceChildren();
+    gridMounted = true;
+  }
+  litRender(tpl, grid);
+}
+let listMounted = false;
+function mountList(tpl) {
+  const list = $('list');
+  if (!listMounted) {
+    list.replaceChildren();
+    listMounted = true;
+  }
+  litRender(tpl, list);
+}
+
+function listHeadTpl(rows) {
+  const allSel = rows.length > 0 && rows.every((d) => state.selected.has(d.content_id));
+  return html`
+    ${checkboxTpl(
+      'd-check',
+      allSel,
+      () => {
+        if (allSel) for (const d of rows) state.selected.delete(d.content_id);
+        else for (const d of rows) state.selected.add(d.content_id);
+        state.anchorIndex = null;
+        render();
       },
-    },
-    doc.title ?? 'Untitled',
-  );
-  if (doc.starred)
-    title.appendChild(h('span', { class: 'd-star-ind', 'aria-label': 'Starred' }, '★'));
-  main.appendChild(title);
-  if (state.search.trim() && doc.snippet) {
-    const snip = h('div', { class: 'd-snippet' });
-    snippetInto(snip, doc.snippet);
-    main.appendChild(snip);
-  }
-  // On narrow the wide columns are hidden, so the meta rides under the name.
-  if (state.narrow) {
-    let metaText;
-    if (trashed) metaText = `from ${folderName(doc.folder_id)} · ${purgeCountdown(doc.purge_at)}`;
-    else if (state.search.trim()) metaText = `in ${folderName(doc.folder_id)}`;
-    else metaText = `${fmtBytes(doc.byte_size)} · ${fmtDate(doc.created_at)}`;
-    main.appendChild(h('div', { class: 'd-row-meta' }, metaText));
-  }
-  row.appendChild(main);
+      allSel ? 'Deselect all' : 'Select all',
+    )}
+    <span style="width:34px;"></span>
+    <span class="d-col name">Name</span>
+    <span class="d-col where">Where</span>
+    <span class="d-col size">Size</span>
+    <span class="d-col added">Added</span>
+    <span class="d-col end"></span>
+  `;
+}
 
-  // Wide-only columns
-  row.appendChild(
-    h(
-      'span',
-      { class: 'd-cell where' },
-      trashed ? `from ${folderName(doc.folder_id)}` : folderName(doc.folder_id),
-    ),
-  );
-  row.appendChild(h('span', { class: 'd-cell size' }, fmtBytes(doc.byte_size)));
-  row.appendChild(
-    h(
-      'span',
-      { class: `d-cell added${trashed ? ' purge' : ''}` },
-      trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at),
-    ),
-  );
-
-  const end = h('div', { class: 'd-row-end' });
-  if (trashed) {
-    end.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-btn',
-          onclick: (e) => {
-            e.stopPropagation();
-            restoreDoc(doc);
-          },
-        },
-        'Restore',
-      ),
-    );
-  } else {
-    const kebab = h('button', {
-      type: 'button',
-      class: 'd-kebab',
-      'aria-label': `Actions for ${doc.title ?? 'document'}`,
-      'aria-haspopup': 'menu',
-      html: I.dots,
-    });
-    kebab.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openDocMenu(kebab, doc);
-    });
-    end.appendChild(kebab);
-  }
-  row.appendChild(end);
-
-  row.addEventListener('click', (e) => {
-    if (e.target.closest('button, a, input')) return;
-    openDetails(doc.content_id);
-  });
-  return row;
+function windowFootTpl() {
+  return html`<span
+      >Showing your latest ${driveWindow} documents — older ones are a search away.</span
+    >
+    <button
+      type="button"
+      class="kit-btn"
+      @click=${async (e) => {
+        driveWindow += 200;
+        e.currentTarget.disabled = true;
+        await refresh();
+      }}
+    >
+      Show more
+    </button>`;
 }
 
 function renderRows() {
@@ -1022,15 +1108,14 @@ function renderRows() {
   const grid = $('grid');
   const listWrap = $('listWrap');
   const listHead = $('listHead');
-  const list = $('list');
   const empty = $('empty');
   const foot = $('windowFoot');
   grid.hidden = true;
   listWrap.hidden = true;
   empty.hidden = true;
   foot.hidden = true;
-  grid.replaceChildren();
-  list.replaceChildren();
+  mountGrid(nothing);
+  mountList(nothing);
 
   if (rows.length === 0) {
     if (state.nav.kind === 'starred' && state.type === 'all') {
@@ -1093,59 +1178,30 @@ function renderRows() {
 
   if (state.view === 'grid') {
     grid.hidden = false;
-    rows.forEach((doc, i) => grid.appendChild(gridCard(doc, i)));
+    mountGrid(
+      html`${repeat(
+        rows,
+        (d) => d.content_id,
+        (d, i) => gridCardTpl(d, i),
+      )}`,
+    );
   } else {
     listWrap.hidden = false;
     listHead.hidden = state.narrow;
-    if (!state.narrow) renderListHead(rows);
-    rows.forEach((doc, i) => list.appendChild(listRow(doc, i)));
+    if (!state.narrow) litRender(listHeadTpl(rows), listHead);
+    mountList(
+      html`${repeat(
+        rows,
+        (d) => d.content_id,
+        (d, i) => listRowTpl(d, i),
+      )}`,
+    );
   }
 
   if (driveTruncated && !state.search.trim() && state.nav.kind !== 'starred') {
     foot.hidden = false;
-    const more = h(
-      'button',
-      {
-        type: 'button',
-        class: 'kit-btn',
-        onclick: async () => {
-          driveWindow += 200;
-          more.disabled = true;
-          await refresh();
-        },
-      },
-      'Show more',
-    );
-    foot.replaceChildren(
-      h('span', {}, `Showing your latest ${driveWindow} documents — older ones are a search away.`),
-      more,
-    );
+    litRender(windowFootTpl(), foot);
   }
-}
-
-function renderListHead(rows) {
-  const head = $('listHead');
-  const allSel = rows.length > 0 && rows.every((d) => state.selected.has(d.content_id));
-  const check = checkbox(
-    'd-check',
-    allSel,
-    () => {
-      if (allSel) for (const d of rows) state.selected.delete(d.content_id);
-      else for (const d of rows) state.selected.add(d.content_id);
-      state.anchorIndex = null;
-      render();
-    },
-    allSel ? 'Deselect all' : 'Select all',
-  );
-  head.replaceChildren(
-    check,
-    h('span', { style: 'width:34px;' }),
-    h('span', { class: 'd-col name' }, 'Name'),
-    h('span', { class: 'd-col where' }, 'Where'),
-    h('span', { class: 'd-col size' }, 'Size'),
-    h('span', { class: 'd-col added' }, 'Added'),
-    h('span', { class: 'd-col end' }),
-  );
 }
 
 // ---------- Details drawer ----------
@@ -1161,55 +1217,9 @@ function closeDetails() {
   renderDetails();
 }
 
-function renderDetails() {
-  const root = $('detailsRoot');
-  const doc = state.detailsId ? data.documents.find((d) => d.content_id === state.detailsId) : null;
-  if (!doc) {
-    root.replaceChildren();
-    return;
-  }
+function detailsTpl(doc) {
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
-
-  const hero = h('div', { class: 'd-hero', style: `background:${tintBg(m.cv, 16)};` });
-  if (isImage(doc)) hero.appendChild(h('img', { src: doc.content_uri, alt: '' }));
-  else hero.appendChild(h('span', { style: `color:var(${m.cv});` }, m.label));
-
-  const actions = h(
-    'div',
-    { class: 'd-detail-actions' },
-    h(
-      'button',
-      { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => openQuick(doc.content_id) },
-      'Open',
-    ),
-    h(
-      'a',
-      { class: 'kit-btn d-detail-btn', href: doc.content_uri, download: doc.title ?? 'file' },
-      'Download',
-    ),
-    // A trashed document refuses star changes (the star survives restore).
-    trashed
-      ? null
-      : h(
-          'button',
-          { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => toggleStar(doc) },
-          doc.starred ? '★ Starred' : '☆ Star',
-        ),
-  );
-
-  const grid = h(
-    'dl',
-    { class: 'd-detail-grid' },
-    h('dt', {}, 'Type'),
-    h('dd', {}, m.name),
-    h('dt', {}, 'Size'),
-    h('dd', {}, fmtBytes(doc.byte_size)),
-    h('dt', {}, trashed ? 'Was in' : 'Folder'),
-    h('dd', {}, folderName(doc.folder_id)),
-    h('dt', {}, trashed ? 'Purges' : 'Added'),
-    h('dd', {}, trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)),
-  );
 
   // Activity — only what the projection can honestly derive: this document was
   // uploaded (created_at) and filed into its folder. Each is a real receipted
@@ -1218,85 +1228,106 @@ function renderDetails() {
   if (doc.folder_id != null)
     events.push({ text: `Filed in ${folderName(doc.folder_id)}`, date: fmtFull(doc.created_at) });
   events.push({ text: 'Uploaded to your vault', date: fmtFull(doc.created_at) });
-  const activity = h('div', {});
-  events.forEach((ev, i) => {
-    activity.appendChild(
-      h(
-        'div',
-        { class: 'd-activity-item' },
-        h(
-          'div',
-          { class: 'd-activity-rail' },
-          h('span', { class: 'd-activity-dot' }),
-          i < events.length - 1 ? h('span', { class: 'd-activity-line' }) : null,
-        ),
-        h(
-          'div',
-          {},
-          h('div', { class: 'd-activity-text' }, ev.text),
-          h(
-            'div',
-            { class: 'd-activity-meta' },
-            h('span', { class: 'd-activity-date' }, ev.date),
-            h('span', { class: 'd-receipt-chip' }, 'receipt'),
-          ),
-        ),
-      ),
-    );
-  });
 
-  const foot = h('div', { class: 'd-details-foot' });
-  if (trashed) {
-    foot.appendChild(
-      h(
-        'button',
-        { type: 'button', class: 'kit-btn d-detail-btn', onclick: () => restoreDoc(doc) },
-        'Restore',
-      ),
-    );
-  } else {
-    const move = h('button', { type: 'button', class: 'kit-btn d-detail-btn' }, 'Move');
-    move.addEventListener('click', () => openMovePopover(move, [doc]));
-    foot.appendChild(move);
-    const trash = h('button', { type: 'button', class: 'kit-btn d-detail-btn danger' }, 'Trash');
-    trash.addEventListener('click', () => {
-      if (!armConfirm(trash, { armedLabel: 'Trash — sure?' })) return;
-      trashDoc(doc);
-    });
-    foot.appendChild(trash);
-  }
+  return html`
+    <div class="d-details-backdrop" @click=${closeDetails}></div>
+    <aside class="d-details" role="dialog" aria-modal="true" aria-label="Document details">
+      <div class="d-details-head">
+        <span class="lbl">Details</span>
+        <button type="button" class="d-details-x" aria-label="Close" @click=${closeDetails}>
+          ${el(I.close)}
+        </button>
+      </div>
+      <div class="d-details-body">
+        <div class="d-hero" style="background:${tintBg(m.cv, 16)};">
+          ${isImage(doc)
+            ? html`<img src=${doc.content_uri} alt="" />`
+            : html`<span style="color:var(${m.cv});">${m.label}</span>`}
+        </div>
+        <div class="d-detail-name">${doc.title ?? 'Untitled'}</div>
+        <div class="d-detail-ext">${extOf(doc)} · ${fmtBytes(doc.byte_size)}</div>
+        <div class="d-detail-actions">
+          <button
+            type="button"
+            class="kit-btn d-detail-btn"
+            @click=${() => openQuick(doc.content_id)}
+          >
+            Open
+          </button>
+          <a class="kit-btn d-detail-btn" href=${doc.content_uri} download=${doc.title ?? 'file'}
+            >Download</a
+          >
+          ${trashed
+            ? nothing
+            : html`<button
+                type="button"
+                class="kit-btn d-detail-btn"
+                @click=${() => toggleStar(doc)}
+              >
+                ${doc.starred ? '★ Starred' : '☆ Star'}
+              </button>`}
+        </div>
+        <div class="d-detail-label">Details</div>
+        <dl class="d-detail-grid">
+          <dt>Type</dt>
+          <dd>${m.name}</dd>
+          <dt>Size</dt>
+          <dd>${fmtBytes(doc.byte_size)}</dd>
+          <dt>${trashed ? 'Was in' : 'Folder'}</dt>
+          <dd>${folderName(doc.folder_id)}</dd>
+          <dt>${trashed ? 'Purges' : 'Added'}</dt>
+          <dd>${trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
+        </dl>
+        <div class="d-detail-label">Activity</div>
+        <div>
+          ${events.map(
+            (ev, i) => html`<div class="d-activity-item">
+              <div class="d-activity-rail">
+                <span class="d-activity-dot"></span>
+                ${i < events.length - 1 ? html`<span class="d-activity-line"></span>` : nothing}
+              </div>
+              <div>
+                <div class="d-activity-text">${ev.text}</div>
+                <div class="d-activity-meta">
+                  <span class="d-activity-date">${ev.date}</span>
+                  <span class="d-receipt-chip">receipt</span>
+                </div>
+              </div>
+            </div>`,
+          )}
+        </div>
+      </div>
+      <div class="d-details-foot">
+        ${trashed
+          ? html`<button type="button" class="kit-btn d-detail-btn" @click=${() => restoreDoc(doc)}>
+              Restore
+            </button>`
+          : html`<button
+                type="button"
+                class="kit-btn d-detail-btn"
+                @click=${(e) => openMovePopover(e.currentTarget, [doc])}
+              >
+                Move
+              </button>
+              <button
+                type="button"
+                class="kit-btn d-detail-btn danger"
+                @click=${(e) => {
+                  if (!armConfirm(e.currentTarget, { armedLabel: 'Trash — sure?' })) return;
+                  trashDoc(doc);
+                }}
+              >
+                Trash
+              </button>`}
+      </div>
+    </aside>
+  `;
+}
 
-  const drawer = h(
-    'aside',
-    { class: 'd-details', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Document details' },
-    h(
-      'div',
-      { class: 'd-details-head' },
-      h('span', { class: 'lbl' }, 'Details'),
-      h('button', {
-        type: 'button',
-        class: 'd-details-x',
-        'aria-label': 'Close',
-        onclick: closeDetails,
-        html: I.close,
-      }),
-    ),
-    h(
-      'div',
-      { class: 'd-details-body' },
-      hero,
-      h('div', { class: 'd-detail-name' }, doc.title ?? 'Untitled'),
-      h('div', { class: 'd-detail-ext' }, `${extOf(doc)} · ${fmtBytes(doc.byte_size)}`),
-      actions,
-      h('div', { class: 'd-detail-label' }, 'Details'),
-      grid,
-      h('div', { class: 'd-detail-label' }, 'Activity'),
-      activity,
-    ),
-    foot,
-  );
-
-  root.replaceChildren(h('div', { class: 'd-details-backdrop', onclick: closeDetails }), drawer);
+function renderDetails() {
+  const root = $('detailsRoot');
+  const doc = state.detailsId ? data.documents.find((d) => d.content_id === state.detailsId) : null;
+  litRender(doc ? detailsTpl(doc) : nothing, root);
 }
 
 function extOf(doc) {
@@ -1324,140 +1355,136 @@ function quickStep(delta) {
   if (next) openQuick(next.content_id);
 }
 
+// The iframe (PDF) / img stage is load-bearing: content_uri is a same-origin
+// vault blob URL or data: URI (CSP `default-src 'self'` — issue #296), and
+// re-setting `src` reloads/rescrolls it. The `lastQuickId` short-circuit below
+// keeps the exact old semantics (skip the render call entirely for an
+// unrelated re-render of the SAME open doc) rather than leaning on Lit's
+// value-diffing to avoid the reload, since that's the one guarantee this
+// overlay cannot regress on.
+function quickTpl(doc) {
+  const m = typeMeta(doc.media_type);
+  const idx = visibleRows.findIndex((d) => d.content_id === doc.content_id);
+
+  let stage;
+  if (isImage(doc)) {
+    stage = html`<img class="d-quick-image" src=${doc.content_uri} alt=${doc.title ?? 'Image'} />`;
+  } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
+    stage = html`<iframe
+      class="d-quick-frame"
+      src=${doc.content_uri}
+      title=${doc.title ?? 'PDF'}
+    ></iframe>`;
+  } else {
+    // A document-page mock for docs / sheets / slides / other.
+    const widths = [96, 88, 93, 70, 90, 82, 60];
+    stage = html`<div class="d-quick-page">
+      <i style="height:11px;width:44%;background:var(${m.cv});opacity:.85;margin-bottom:22px;"></i>
+      ${widths.map(
+        (w, i) =>
+          html`<i
+            style="height:7px;width:${w}%;background:${i < 4
+              ? '#e6e7ea'
+              : '#eceef1'};margin-bottom:${i === 3 ? 26 : 11}px;"
+          ></i>`,
+      )}
+    </div>`;
+  }
+
+  return html`<div class="d-quick" role="dialog" aria-modal="true" aria-label="Quick look">
+    <div class="d-quick-top">
+      <span class="d-quick-badge" style="background:${tintBg(m.cv, 20)};color:var(${m.cv});"
+        >${m.label}</span
+      >
+      <span class="d-quick-title">${doc.title ?? 'Untitled'}</span>
+      <a class="d-quick-btn" href=${doc.content_uri} download=${doc.title ?? 'file'}
+        >${el(I.download)}Download</a
+      >
+      <button type="button" class="d-quick-btn icon" aria-label="Close" @click=${closeQuick}>
+        ${el(I.close)}
+      </button>
+    </div>
+    <div class="d-quick-stage">
+      <button
+        type="button"
+        class="d-quick-nav prev"
+        aria-label="Previous"
+        ?disabled=${idx <= 0}
+        @click=${() => quickStep(-1)}
+      >
+        ${el(I.chevL)}
+      </button>
+      ${stage}
+      <button
+        type="button"
+        class="d-quick-nav next"
+        aria-label="Next"
+        ?disabled=${idx < 0 || idx >= visibleRows.length - 1}
+        @click=${() => quickStep(1)}
+      >
+        ${el(I.chevR)}
+      </button>
+    </div>
+    <div class="d-quick-foot">
+      ${folderName(doc.folder_id)} · ${fmtBytes(doc.byte_size)} · added ${fmtFull(doc.created_at)}
+    </div>
+  </div>`;
+}
+
 function renderQuick() {
   const root = $('quickRoot');
   const doc = state.quickId ? data.documents.find((d) => d.content_id === state.quickId) : null;
   if (!doc) {
-    root.replaceChildren();
+    litRender(nothing, root);
     lastQuickId = null;
     return;
   }
   if (doc.content_id === lastQuickId && root.firstElementChild) return; // avoid reloading an open iframe on unrelated renders
   lastQuickId = doc.content_id;
-
-  const m = typeMeta(doc.media_type);
-  const idx = visibleRows.findIndex((d) => d.content_id === doc.content_id);
-
-  let stageInner;
-  if (isImage(doc)) {
-    stageInner = h('img', {
-      class: 'd-quick-image',
-      src: doc.content_uri,
-      alt: doc.title ?? 'Image',
-    });
-  } else if (String(doc.media_type ?? '') === 'application/pdf' && loadable(doc.content_uri)) {
-    stageInner = h('iframe', {
-      class: 'd-quick-frame',
-      src: doc.content_uri,
-      title: doc.title ?? 'PDF',
-    });
-  } else {
-    // A document-page mock for docs / sheets / slides / other.
-    const page = h('div', { class: 'd-quick-page' });
-    page.appendChild(
-      h('i', {
-        style: `height:11px;width:44%;background:var(${m.cv});opacity:.85;margin-bottom:22px;`,
-      }),
-    );
-    const widths = [96, 88, 93, 70, 90, 82, 60];
-    widths.forEach((w, i) =>
-      page.appendChild(
-        h('i', {
-          style: `height:7px;width:${w}%;background:${i < 4 ? '#e6e7ea' : '#eceef1'};margin-bottom:${i === 3 ? 26 : 11}px;`,
-        }),
-      ),
-    );
-    stageInner = page;
-  }
-
-  const prev = h('button', {
-    type: 'button',
-    class: 'd-quick-nav prev',
-    'aria-label': 'Previous',
-    disabled: idx <= 0 || undefined,
-    onclick: () => quickStep(-1),
-    html: I.chevL,
-  });
-  const next = h('button', {
-    type: 'button',
-    class: 'd-quick-nav next',
-    'aria-label': 'Next',
-    disabled: idx < 0 || idx >= visibleRows.length - 1 || undefined,
-    onclick: () => quickStep(1),
-    html: I.chevR,
-  });
-
-  const overlay = h(
-    'div',
-    { class: 'd-quick', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Quick look' },
-    h(
-      'div',
-      { class: 'd-quick-top' },
-      h(
-        'span',
-        { class: 'd-quick-badge', style: `background:${tintBg(m.cv, 20)};color:var(${m.cv});` },
-        m.label,
-      ),
-      h('span', { class: 'd-quick-title' }, doc.title ?? 'Untitled'),
-      h(
-        'a',
-        { class: 'd-quick-btn', href: doc.content_uri, download: doc.title ?? 'file' },
-        el(I.download),
-        'Download',
-      ),
-      h('button', {
-        type: 'button',
-        class: 'd-quick-btn icon',
-        'aria-label': 'Close',
-        onclick: closeQuick,
-        html: I.close,
-      }),
-    ),
-    h('div', { class: 'd-quick-stage' }, prev, stageInner, next),
-    h(
-      'div',
-      { class: 'd-quick-foot' },
-      `${folderName(doc.folder_id)} · ${fmtBytes(doc.byte_size)} · added ${fmtFull(doc.created_at)}`,
-    ),
-  );
-  root.replaceChildren(overlay);
+  litRender(quickTpl(doc), root);
 }
 
 // ---------- New menu ----------
+
+function newMenuTpl() {
+  return html`
+    <button
+      type="button"
+      class="d-menu-item"
+      role="menuitem"
+      @click=${() => {
+        state.newMenuOpen = false;
+        renderNewMenu();
+        $('uploadInput').click();
+      }}
+    >
+      ${el(I.upload)}Upload files
+    </button>
+    <div class="d-menu-sep"></div>
+    <button
+      type="button"
+      class="d-menu-item"
+      role="menuitem"
+      @click=${() => {
+        state.newMenuOpen = false;
+        state.creatingFolder = true;
+        render();
+      }}
+    >
+      ${el(I.folderPlus)}New folder
+    </button>
+  `;
+}
 
 function renderNewMenu() {
   const menu = $('newMenu');
   menu.hidden = !state.newMenuOpen;
   $('newBtn').setAttribute('aria-expanded', String(state.newMenuOpen));
   if (!state.newMenuOpen) {
-    menu.replaceChildren();
+    litRender(nothing, menu);
     return;
   }
-  const upload = h('button', {
-    type: 'button',
-    class: 'd-menu-item',
-    role: 'menuitem',
-    onclick: () => {
-      state.newMenuOpen = false;
-      renderNewMenu();
-      $('uploadInput').click();
-    },
-  });
-  upload.appendChild(el(I.upload));
-  upload.appendChild(document.createTextNode('Upload files'));
-  const folder = h('button', {
-    type: 'button',
-    class: 'd-menu-item',
-    role: 'menuitem',
-    onclick: () => {
-      state.newMenuOpen = false;
-      state.creatingFolder = true;
-      render();
-    },
-  });
-  folder.appendChild(el(I.folderPlus));
-  folder.appendChild(document.createTextNode('New folder'));
-  menu.replaceChildren(upload, h('div', { class: 'd-menu-sep' }), folder);
+  litRender(newMenuTpl(), menu);
 }
 
 // ---------- Navigation ----------
