@@ -437,8 +437,15 @@ const PURGE_ITEM: CommandDefinition = {
   preconditions: [{ name: 'item_exists', sql: ITEM_EXISTS_SQL, column: 'n', op: 'eq', value: 1 }],
   postconditions: [{ name: 'item_gone', sql: ITEM_EXISTS_SQL, column: 'n', op: 'eq', value: 0 }],
   idempotency: 'once',
-  // Destructive and irreversible — elevated so it rides the app's confirmation.
   risk: 'medium',
+  // Destructive and irreversible (issue #306 decision 2) — parks for owner
+  // confirmation on every non-owner-device invocation, matching the
+  // "confirmation": "required" the app manifest already advertises. Without
+  // this the manifest's claim was cosmetic: the app's own two-click "Delete
+  // forever" UI was the only gate, and any caller with the install-time
+  // grant (the app itself, or a misbehaving automation sharing the scope)
+  // could purge immediately with no server-side review.
+  confirm: true,
   handler: (ctx) => {
     const itemId = String((ctx.input as { item_id: string }).item_id);
     setStarred(ctx, LOCKER_ITEM_TYPE, itemId, false);
