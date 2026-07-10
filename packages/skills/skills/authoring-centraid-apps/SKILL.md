@@ -46,6 +46,23 @@ Lit-specific traps (React apps have neither):
 1. Lit's standalone `render()` does **not** clear a container's pre-existing children on first commit — containers pre-filled with skeleton markup need a one-shot `replaceChildren()` mount guard before the first render.
 2. Once Lit owns a container, never raw-clear it (`innerHTML = ''` corrupts Lit's part cache and the next render throws) — clear with `render(nothing, container)`.
 
+### Design system — shared tokens + kit primitives
+
+Styling is layered; `index.html` links the sheets in this exact order:
+
+```html
+<link rel="stylesheet" href="wall.css" />    <!-- page-background gradient (shared) -->
+<link rel="stylesheet" href="tokens.css" />  <!-- design-token layer (shared, generated) -->
+<link rel="stylesheet" href="app.css" />     <!-- YOUR app-local styles -->
+<link rel="stylesheet" href="kit.css" />     <!-- shared component primitives -->
+```
+
+`wall.css`, `tokens.css`, and `kit.css` are **served from the shared kit dir** — never create local copies (a local copy shadows the live shared file and the app stops tracking design-system updates).
+
+The token contract: your `app.css` `:root` sets **`--app-hue`** (one number that drives the entire neutral ramp — ink, lines, surfaces, shadows) and **`--accent`** (pick a palette var: `--c-amber`, `--c-forest`, `--c-indigo`, `--c-ochre`, `--c-rose`, `--c-slate`, `--c-teal`, `--c-violet`). Everything else derives in tokens.css; override an individual token only for a deliberate app-specific look (your `:root` loads after tokens.css, so equal-specificity overrides win). Dark theme is fully handled by tokens.css (both `data-theme` and the `prefers-color-scheme` fallback) — **never write your own dark-theme token blocks**. Paint accents through `var(--_accent)` (resolves the user's appColor knob over `--accent`).
+
+Prefer kit primitives over hand-rolled equivalents: `.kit-btn`, `.kit-chip(.quiet)`, `.kit-seg`, `.kit-modal*`, `.kit-popover*`, `.kit-banner`, `.kit-empty*`, `.kit-toasts`, `.kit-skeleton`, `.kit-input(.bare)`, `.kit-search`, `.kit-icon-btn`, `.kit-viewer-nav`, `.kit-drop`/`.kit-drop-card`, `.kit-foot`, `.kit-muted`/`.kit-small`, and `box-shadow: var(--kit-focus-ring)` for focus. One cascade trap: kit.css loads **after** app.css, so an app rule overriding a kit class at equal specificity loses — bump specificity with a compound selector (`.kit-input.my-variant`), the pattern the bundled apps use throughout.
+
 ### App manifest — `app.json` (source of truth)
 
 Every app ships an `app.json` manifest. Every handler invocation is dispatched through it — the page calls `window.centraid.read({ query })` / `window.centraid.write({ action })` and the runtime validates the call against the matching manifest entry before running the file. A handler file with no matching manifest entry is unreachable; a manifest entry whose file is missing is rejected at publish time. The manifest also carries the app's **whole data declaration** — the `vault` block and/or the `ext` block (see "Data: the two-lane rule" below).

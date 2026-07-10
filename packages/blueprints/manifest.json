@@ -458,8 +458,7 @@
         "queries/library.js",
         "selection-actions.js",
         "toolbar.jsx",
-        "upload.js",
-        "wall.css"
+        "upload.js"
       ],
       "appKnobs": [
         {
@@ -567,8 +566,7 @@
         "nav.js",
         "package.json",
         "queries/drive.js",
-        "queries/search.js",
-        "wall.css"
+        "queries/search.js"
       ],
       "appKnobs": [
         {
