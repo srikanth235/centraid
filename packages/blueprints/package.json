@@ -18,6 +18,7 @@
   "scripts": {
     "build:manifest": "node scripts/build-manifest.mjs",
     "build": "bun run build:manifest && tsc -p tsconfig.json",
+    "lint": "node scripts/lint-apps.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"

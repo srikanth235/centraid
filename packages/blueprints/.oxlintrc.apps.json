@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["kit/lit-core.min.js"],
+  "rules": {
+    "no-undef": "error"
+  }
+}
