@@ -416,6 +416,30 @@
           "label": "Ochre"
         }
       ]
+    },
+    {
+      "key": "appDefaultView",
+      "label": "Default view",
+      "type": "segmented",
+      "default": "today",
+      "options": [
+        {
+          "value": "today",
+          "label": "Today"
+        },
+        {
+          "value": "upcoming",
+          "label": "Upcoming"
+        },
+        {
+          "value": "anytime",
+          "label": "Anytime"
+        },
+        {
+          "value": "all",
+          "label": "All"
+        }
+      ]
     }
   ]
 }

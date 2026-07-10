@@ -107,9 +107,19 @@
         "actions/edit.js",
         "actions/set-status.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/Board.jsx",
+        "components/Capture.jsx",
+        "components/Detail.jsx",
+        "components/Row.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/board.js",
         "queries/search.js",
@@ -178,6 +188,30 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "today",
+          "options": [
+            {
+              "value": "today",
+              "label": "Today"
+            },
+            {
+              "value": "upcoming",
+              "label": "Upcoming"
+            },
+            {
+              "value": "anytime",
+              "label": "Anytime"
+            },
+            {
+              "value": "all",
+              "label": "All"
             }
           ]
         }

@@ -41,6 +41,24 @@
   function blobUri(id) {
     return BLOB_ROUTE + '/' + encodeURIComponent(id);
   }
+  // Local YYYY-MM-DD day key (not a full ISO timestamp) — the shape tasks'
+  // queries/board.js and app.jsx's format.js (localDayKey) both use for
+  // due_at/completed_at.
+  function dayKey(offsetDays) {
+    var d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    var p = function (n) {
+      return String(n).padStart(2, '0');
+    };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+  // The tasks fixture's parked-write trigger (see buildTasksStore below): any
+  // add/edit/set-status/attach/detach touching a task whose title carries
+  // "(park)" returns a parked outcome instead of executing, so the harness
+  // can show the accent-rail/pending-chip treatment without a real vault.
+  function isParkTrigger(text) {
+    return typeof text === 'string' && /\(park\)/i.test(text);
+  }
 
   // ---------------------------------------------------------------------
   // Change feed — mirrors window.centraid.onChange(cb) from the real bridge
@@ -666,6 +684,250 @@
   }
 
   // ---------------------------------------------------------------------
+  // Tasks fixtures — see packages/blueprints/apps/tasks/queries/board.js for
+  // the row shape (task_id/title/description/due_at/priority/effort_min/
+  // status/completed_at/rrule/children/done_children/attachments) and
+  // queries/search.js for the FTS-hit shape (adds `snippet`). Priority is
+  // RFC 5545 (0 none, 1-3 high, 4-6 medium, 7-9 low). Covers every bucket the
+  // board groups into (overdue/today/week/later/anytime), an in-process task,
+  // a recurring task, a task with subtasks (1/3 done), one with an
+  // attachment, the logbook (completed + cancelled), and the "(park)" title
+  // trigger for the parked-write path — see isParkTrigger above.
+  // ---------------------------------------------------------------------
+  function buildTasksStore() {
+    if (EMPTY_MODE) return { tasks: [] };
+
+    function task(id, title, opts) {
+      opts = opts || {};
+      return {
+        task_id: id,
+        title: title,
+        description: opts.description || '',
+        due_at: opts.due !== undefined ? (opts.due == null ? null : dayKey(opts.due)) : null,
+        priority: opts.priority || 0,
+        effort_min: opts.effort_min || null,
+        status: opts.status || 'needs-action',
+        completed_at:
+          opts.completedAt !== undefined ? (opts.completedAt == null ? null : dayKey(opts.completedAt)) : null,
+        parent_task_id: opts.parent || null,
+        rrule: opts.rrule || null,
+        attachments: opts.attachments || [],
+      };
+    }
+
+    var tasks = [
+      task('task-overdue-1', 'Reply to the studio contract email', { due: -2, priority: 1 }),
+      task('task-overdue-2', 'Book the dentist', { due: -1 }),
+      task('task-today-1', 'Finish Tasks reinvention writeup', {
+        due: 0,
+        priority: 2,
+        effort_min: 45,
+        status: 'in-process',
+        description: 'Ship the build prompt with the live URL.',
+        attachments: [
+          {
+            attachment_id: 'att-1',
+            content_id: 'content-task-today-1-1',
+            role: 'other',
+            is_primary: 1,
+            media_type: 'application/pdf',
+            title: 'writeup-draft.pdf',
+            content_uri: blobUri('content-task-today-1-1'),
+            byte_size: 182_000,
+          },
+        ],
+      }),
+      task('task-today-2', 'Water the plants', { due: 0, effort_min: 5, rrule: 'FREQ=DAILY' }),
+      task('task-week-1', 'Sign the lease renewal (park)', { due: 1, priority: 1 }),
+      task('task-week-2', 'Review Q3 budget', {
+        due: 3,
+        priority: 4,
+        effort_min: 60,
+        description: 'Cross-check against the vault ledger.',
+      }),
+      task('task-week-3', 'Draft the Tasks v2 prompt', { due: 5, priority: 5 }),
+      task('task-later-1', 'Renew the domain', { due: 10 }),
+      task('task-later-2', 'Plan the coast weekend', {
+        due: 9,
+        effort_min: 30,
+        description: 'Cabin + one big hike.',
+      }),
+      task('task-later-2-sub-1', 'Reserve the cabin', { status: 'completed', parent: 'task-later-2' }),
+      task('task-later-2-sub-2', 'Map the trail', { parent: 'task-later-2' }),
+      task('task-later-2-sub-3', 'Pack list', { parent: 'task-later-2' }),
+      task('task-anytime-1', 'Read “Thinking in Systems”', {
+        priority: 8,
+        description: 'Chapter on stocks and flows.',
+      }),
+      task('task-anytime-2', 'Clean up the downloads folder', { effort_min: 20 }),
+      task('task-anytime-3', 'Sketch the Vitals dashboard', { priority: 5 }),
+      task('task-done-1', 'Ship Tasks reinvention', {
+        priority: 1,
+        status: 'completed',
+        completedAt: 0,
+      }),
+      task('task-done-2', 'Send the weekly review', { status: 'completed', completedAt: -2 }),
+      task('task-cancel-1', 'Cancel the old newsletter', { status: 'cancelled', completedAt: -3 }),
+    ];
+    return { tasks: tasks };
+  }
+
+  var tasksStore = appId === 'tasks' ? buildTasksStore() : null;
+
+  function tasksRead(query, input) {
+    if (query === 'board') {
+      var limit = Math.min(Math.max(Number(input.limit) || 500, 20), 2000);
+      var OPEN = { 'needs-action': true, 'in-process': true };
+      function withAttachments(t) {
+        return Object.assign({}, t, { attachments: t.attachments || [], references: [] });
+      }
+      function withChildren(t) {
+        var children = tasksStore.tasks
+          .filter(function (c) {
+            return c.parent_task_id === t.task_id;
+          })
+          .map(withAttachments);
+        return Object.assign({}, withAttachments(t), {
+          children: children,
+          done_children: children.filter(function (c) {
+            return !OPEN[c.status];
+          }).length,
+        });
+      }
+      var openTop = tasksStore.tasks.filter(function (t) {
+        return !t.parent_task_id && OPEN[t.status];
+      });
+      var closedTop = tasksStore.tasks
+        .filter(function (t) {
+          return !t.parent_task_id && !OPEN[t.status];
+        })
+        .slice()
+        .sort(function (a, b) {
+          return String(b.completed_at || '').localeCompare(String(a.completed_at || ''));
+        });
+      return {
+        open: openTop.slice(0, limit).map(withChildren),
+        logbook: closedTop.slice(0, 50).map(withChildren),
+        counts: { open: openTop.length, closed: closedTop.length },
+        truncated: openTop.length > limit,
+        window: limit,
+      };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { tasks: [] };
+      var hits = tasksStore.tasks.filter(function (t) {
+        return (t.title + ' ' + (t.description || '')).toLowerCase().indexOf(term) !== -1;
+      });
+      return {
+        tasks: hits.map(function (t) {
+          var snippet = t.description && t.description.toLowerCase().indexOf(term) !== -1 ? '…⟦' + t.description + '⟧…' : '';
+          return Object.assign({}, t, { attachments: t.attachments || [], snippet: snippet });
+        }),
+      };
+    }
+    console.warn('[mock-centraid] tasks: unmapped query', query);
+    return {};
+  }
+
+  function tasksWrite(action, input) {
+    function findTask(id) {
+      return tasksStore.tasks.find(function (t) {
+        return t.task_id === id;
+      });
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(reason) {
+      return { status: 'failed', reason: reason, predicate: reason };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+
+    switch (action) {
+      case 'add': {
+        var title = String(input.title || '').trim();
+        if (isParkTrigger(title)) return parked();
+        var id = uid('task');
+        var t0 = {
+          task_id: id,
+          title: title,
+          description: input.description || '',
+          due_at: input.due_at || null,
+          priority: input.priority || 0,
+          effort_min: input.effort_min || null,
+          status: 'needs-action',
+          completed_at: null,
+          parent_task_id: input.parent_task_id || null,
+          rrule: null,
+          attachments: [],
+        };
+        tasksStore.tasks.unshift(t0);
+        return ok({ task_id: id });
+      }
+      case 'set-status': {
+        var t1 = findTask(input.task_id);
+        if (!t1) return refuse('not_found');
+        if (isParkTrigger(t1.title)) return parked();
+        t1.status = input.status;
+        t1.completed_at = input.status === 'completed' || input.status === 'cancelled' ? dayKey(0) : null;
+        return ok({ task_id: t1.task_id });
+      }
+      case 'edit': {
+        var t2 = findTask(input.task_id);
+        if (!t2) return refuse('not_found');
+        if (isParkTrigger(t2.title)) return parked();
+        if (input.title) t2.title = String(input.title);
+        if (input.description) t2.description = String(input.description);
+        if (input.clear_description) t2.description = '';
+        if (input.due_at) t2.due_at = String(input.due_at);
+        if (input.clear_due) t2.due_at = null;
+        if (input.priority !== undefined) t2.priority = Number(input.priority);
+        if (input.effort_min) t2.effort_min = Number(input.effort_min);
+        return ok({ task_id: t2.task_id });
+      }
+      case 'attach': {
+        var t3 = findTask(input.subject_id);
+        if (!t3) return refuse('not_found');
+        if (isParkTrigger(t3.title)) return parked();
+        var contentId = uid('content');
+        var attachment = {
+          attachment_id: uid('att'),
+          content_id: contentId,
+          role: input.role || 'other',
+          is_primary: 0,
+          media_type: 'application/octet-stream',
+          title: input.title || 'file',
+          content_uri: blobUri(contentId),
+          byte_size: 40_000,
+        };
+        t3.attachments = (t3.attachments || []).concat([attachment]);
+        return ok({ attachment_id: attachment.attachment_id });
+      }
+      case 'detach': {
+        var owner = null;
+        tasksStore.tasks.forEach(function (t) {
+          var idx = (t.attachments || []).findIndex(function (a) {
+            return a.attachment_id === input.attachment_id;
+          });
+          if (idx !== -1) {
+            owner = t;
+            t.attachments.splice(idx, 1);
+          }
+        });
+        if (!owner) return refuse('not_found');
+        return ok({});
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // window.centraid — fully replaces the real change-bridge's version
   // (static-server.ts's injectChangeBridge, which ran just before this
   // script and already opened an EventSource against our harness's
@@ -678,6 +940,7 @@
       if (DENIED_MODE) return { vaultDenied: { message: 'Grant revoked.' } };
       if (appId === 'docs') return docsRead(opts.query, opts.input || {});
       if (appId === 'photos') return photosRead(opts.query, opts.input || {});
+      if (appId === 'tasks') return tasksRead(opts.query, opts.input || {});
       console.warn('[mock-centraid] unknown appId for read()', appId);
       return {};
     },
@@ -687,12 +950,18 @@
       var result = null;
       if (appId === 'docs') result = docsWrite(opts.action, opts.input || {});
       else if (appId === 'photos') result = photosWrite(opts.action, opts.input || {});
+      else if (appId === 'tasks') result = tasksWrite(opts.action, opts.input || {});
       else console.warn('[mock-centraid] unknown appId for write()', appId);
       if (result == null) {
         console.warn('[mock-centraid] unmapped action, returning {}', opts.action, opts.input);
         return {};
       }
-      fireChange([appId]);
+      // A parked write hasn't landed — nothing in the store actually
+      // changed, so firing the change bus here would immediately trigger
+      // the app's onChange→refresh handler and clear the pending state it
+      // just set (tasks treats any change event as "an outstanding parked
+      // write may have resolved" — see app.jsx).
+      if (result.status !== 'parked') fireChange([appId]);
       return result;
     },
     async describe() {
@@ -714,11 +983,12 @@
     emptyMode: EMPTY_MODE,
     deniedMode: DENIED_MODE,
     get state() {
-      return appId === 'docs' ? docsStore : appId === 'photos' ? photosStore : null;
+      return appId === 'docs' ? docsStore : appId === 'photos' ? photosStore : appId === 'tasks' ? tasksStore : null;
     },
     reset() {
       if (appId === 'docs') docsStore = buildDocsStore();
       else if (appId === 'photos') photosStore = buildPhotosStore();
+      else if (appId === 'tasks') tasksStore = buildTasksStore();
       fireChange([appId]);
     },
     fireChange: fireChange,
