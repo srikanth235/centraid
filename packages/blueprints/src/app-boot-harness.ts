@@ -34,7 +34,16 @@
 // insert). Those Lit container-ownership invariants are pinned directly in
 // kit-smoke.test.ts. Giving each app a populated fixture would strengthen this
 // considerably; it needs one hand-written shape per app's query.
-import { cpSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -43,7 +52,21 @@ const PKG = process.cwd();
 // Apps import these as siblings (`./kit.js`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
-const SHARED = ['kit.js', 'elements.js', 'lit-core.min.js'];
+const SHARED = ['kit.js', 'elements.js', 'lit-core.min.js', 'react-core.min.js', 'jsx-runtime.js'];
+
+// React-dialect apps ship app.jsx; the gateway transpiles it per-request. The
+// harness mirrors that with the same transform options + specifier rewrite as
+// transformJsx() in app-engine/src/http/static-server.ts — via the esbuild
+// CLI, because esbuild's JS API refuses to load under the jsdom environment
+// (realm-split Uint8Array trips its TextEncoder startup invariant).
+function transformJsxLikeTheGateway(source: string): string {
+  const bin = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
+  const code = execFileSync(bin, ['--loader=jsx', '--jsx=automatic', '--jsx-import-source=.'], {
+    input: source,
+    encoding: 'utf8',
+  });
+  return code.replace(/(["'])\.\/jsx-runtime\1/g, '$1./jsx-runtime.js$1');
+}
 
 const DENIED = { vaultDenied: { message: 'Grant revoked.' } };
 
@@ -75,7 +98,15 @@ export function describeAppBoot(app: string) {
       dir = path.join(PKG, '.app-boot', app);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
-      cpSync(path.join(PKG, 'apps', app, 'app.js'), path.join(dir, 'app.js'));
+      const jsx = path.join(PKG, 'apps', app, 'app.jsx');
+      if (existsSync(jsx)) {
+        writeFileSync(
+          path.join(dir, 'app.js'),
+          transformJsxLikeTheGateway(readFileSync(jsx, 'utf8')),
+        );
+      } else {
+        cpSync(path.join(PKG, 'apps', app, 'app.js'), path.join(dir, 'app.js'));
+      }
       for (const f of SHARED) symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
 
       process.on('unhandledRejection', push);

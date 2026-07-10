@@ -12,7 +12,7 @@
 // else. Everything else stays off, so this never becomes a style gate that
 // tempts anyone to re-ignore the directory.
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -20,9 +20,15 @@ const PKG = path.resolve(fileURLToPath(import.meta.url), '../..');
 // oxlint is hoisted to the workspace root, never to this package's own .bin.
 const OXLINT = path.resolve(PKG, '../../node_modules/.bin/oxlint');
 
+// An app's entry is app.jsx (React dialect) or app.js (Lit dialect) — same
+// gate either way; oxlint parses JSX natively.
 const apps = readdirSync(path.join(PKG, 'apps'), { withFileTypes: true })
   .filter((e) => e.isDirectory())
-  .map((e) => `apps/${e.name}/app.js`);
+  .map((e) =>
+    existsSync(path.join(PKG, 'apps', e.name, 'app.jsx'))
+      ? `apps/${e.name}/app.jsx`
+      : `apps/${e.name}/app.js`,
+  );
 const targets = [...apps, 'kit/kit.js', 'kit/elements.js', 'kit/jsx-runtime.js'];
 
 try {
