@@ -37,21 +37,28 @@ export async function cloneAutomationTemplate(
   return { automationId: result.app.id, webhooks: result.webhooks ?? [] };
 }
 
-/** Clone a template into a fresh draft app on the gateway, returning the draft
- *  meta for the caller to open in the builder (vanilla cloneTemplate, minus the
- *  enterBuilder side-effect — the route owns navigation). Throws on failure. */
-export async function cloneTemplateToDraft(tmpl: TemplateEntry): Promise<DraftAppMeta> {
+/** Clone an app template on the gateway and pin it straight to Home as an
+ *  installed app — owner decision: "Use template" for an app installs it
+ *  directly (the gateway's `_clone` already runs with `publish: true`, so the
+ *  clone lands on `main` as a real app); no draft stage, no builder detour.
+ *  Ported from the old cloneTemplateToDraft, reshaped from a `DraftAppMeta`
+ *  (builder appContext) to a `UserAppMeta` pin — the install path only needs
+ *  the fields the Home grid renders. Throws on failure. */
+export async function installAppTemplate(tmpl: TemplateEntry): Promise<UserAppMeta> {
   const pal = palette as unknown as Record<string, string>;
-  const color = (pal[tmpl.colorKey] ?? '#5847e0') as DraftAppMeta['color'];
+  const color = (pal[tmpl.colorKey] ?? '#5847e0') as UserAppMeta['color'];
   const result = await gwCloneTemplate({ templateId: tmpl.id });
+  const now = new Date().toISOString();
+  const id = result.app.id;
   return {
-    __draft: true,
+    centraidAppId: id,
     color,
-    colorKey: tmpl.colorKey as DraftAppMeta['colorKey'],
+    colorKey: tmpl.colorKey as UserAppMeta['colorKey'],
+    createdAt: now,
     desc: result.app.description || tmpl.desc,
-    hasIndex: true,
-    iconKey: tmpl.iconKey as DraftAppMeta['iconKey'],
-    id: result.app.id,
+    iconKey: tmpl.iconKey as UserAppMeta['iconKey'],
+    id,
     name: result.app.name ?? result.template.name,
-  } as DraftAppMeta;
+    updatedAt: now,
+  } as UserAppMeta;
 }
