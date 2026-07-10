@@ -336,6 +336,30 @@ describe('serveStatic — serve-time JSX transform', () => {
     expect(body).not.toMatch(/<div/);
     expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
   });
+
+  // Multi-file React apps: `app.jsx` imports `./components/X.jsx`, so nested
+  // .jsx files must transform too, and their emitted `./jsx-runtime.js`
+  // import — relative to components/ — must resolve through the shared-asset
+  // fallback, which keys on the BASENAME of the missing file. Both behaviors
+  // are load-bearing for the componentized docs/photos apps.
+  it('transforms a nested components/*.jsx file', async () => {
+    const dir = newAppDir({ 'components/Widget.jsx': VALID_JSX });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'components/Widget.jsx', {});
+    expect(data.statusCode).toBe(200);
+    const body = data.body.toString('utf8');
+    expect(body).not.toMatch(/<div/);
+    expect(body).toMatch(/from\s+["']\.\/jsx-runtime\.js["']/);
+  });
+
+  it('serves a nested jsx-runtime.js request from the shared dir (basename fallback)', async () => {
+    const dir = newAppDir({ 'components/Widget.jsx': VALID_JSX }); // no jsx-runtime.js anywhere
+    const sharedAssetsDir = newAppDir({ 'jsx-runtime.js': 'export const RT = 1;' });
+    const { res, data } = mockRes();
+    await serveStatic(res, dir, 'components/jsx-runtime.js', { sharedAssetsDir });
+    expect(data.statusCode).toBe(200);
+    expect(data.body.toString('utf8')).toBe('export const RT = 1;');
+  });
 });
 
 describe('resolveStaticPath — .jsx allowlist', () => {

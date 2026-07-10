@@ -21,13 +21,30 @@ const PKG = path.resolve(fileURLToPath(import.meta.url), '../..');
 const OXLINT = path.resolve(PKG, '../../node_modules/.bin/oxlint');
 
 // An app's entry is app.jsx (React dialect) or app.js (Lit dialect) — same
-// gate either way; oxlint parses JSX natively.
+// gate either way; oxlint parses JSX natively. React apps may split into
+// further browser modules (components/*.jsx, helpers .js) which are just as
+// unexecuted by CI as the entry, so the gate walks the whole app dir —
+// skipping the handler dirs (queries/actions/automations), which are
+// node-side modules the gateway dispatches, not page code.
+const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
+function uiSources(dir, rel) {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const r = `${rel}/${e.name}`;
+    if (e.isDirectory()) {
+      if (!NON_UI_DIRS.has(e.name)) out.push(...uiSources(path.join(dir, e.name), r));
+    } else if (e.name.endsWith('.jsx') || e.name.endsWith('.js')) {
+      out.push(r);
+    }
+  }
+  return out;
+}
 const apps = readdirSync(path.join(PKG, 'apps'), { withFileTypes: true })
   .filter((e) => e.isDirectory())
-  .map((e) =>
+  .flatMap((e) =>
     existsSync(path.join(PKG, 'apps', e.name, 'app.jsx'))
-      ? `apps/${e.name}/app.jsx`
-      : `apps/${e.name}/app.js`,
+      ? uiSources(path.join(PKG, 'apps', e.name), `apps/${e.name}`)
+      : [`apps/${e.name}/app.js`],
   );
 const targets = [...apps, 'kit/kit.js', 'kit/elements.js', 'kit/jsx-runtime.js'];
 

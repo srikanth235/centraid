@@ -39,6 +39,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -70,6 +71,24 @@ function transformJsxLikeTheGateway(source: string): string {
 
 const DENIED = { vaultDenied: { message: 'Grant revoked.' } };
 
+// Handler dirs are node-side modules dispatched by the gateway, never
+// imported by the page — don't copy them into the boot scratch tree.
+const NON_UI_DIRS = new Set(['queries', 'actions', 'automations']);
+
+/** All browser-source files (.js/.jsx) of an app, as relative posix paths. */
+function collectSources(root: string, rel = ''): string[] {
+  const out: string[] = [];
+  for (const e of readdirSync(path.join(root, rel), { withFileTypes: true })) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      if (!NON_UI_DIRS.has(e.name)) out.push(...collectSources(root, r));
+    } else if (r.endsWith('.js') || r.endsWith('.jsx')) {
+      out.push(r);
+    }
+  }
+  return out;
+}
+
 function bodyOf(app: string) {
   const html = readFileSync(path.join(PKG, 'apps', app, 'index.html'), 'utf8');
   const body = /<body[^>]*>([\s\S]*)<\/body>/.exec(html);
@@ -83,6 +102,7 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 80));
 export function describeAppBoot(app: string) {
   describe(`${app} boots`, () => {
     let dir: string;
+    let entry: string;
     const errors: unknown[] = [];
     const intervals: unknown[] = [];
     const push = (e: unknown) => errors.push(e);
@@ -98,16 +118,45 @@ export function describeAppBoot(app: string) {
       dir = path.join(PKG, '.app-boot', app);
       rmSync(dir, { recursive: true, force: true });
       mkdirSync(dir, { recursive: true });
-      const jsx = path.join(PKG, 'apps', app, 'app.jsx');
-      if (existsSync(jsx)) {
-        writeFileSync(
-          path.join(dir, 'app.js'),
-          transformJsxLikeTheGateway(readFileSync(jsx, 'utf8')),
-        );
+      const appDir = path.join(PKG, 'apps', app);
+      // React-dialect apps may span multiple source files (app.jsx entry +
+      // components/*.jsx). Mirror the whole source tree into the scratch dir,
+      // transforming each .jsx exactly like the gateway would per-request and
+      // copying plain .js helpers verbatim. Filenames keep their .jsx
+      // extension — that's what the browser requests and what inter-file
+      // imports name; vite loads the (already-transformed) content fine.
+      if (existsSync(path.join(appDir, 'app.jsx'))) {
+        entry = 'app.jsx';
+        const jsxDirs = new Set<string>();
+        for (const rel of collectSources(appDir)) {
+          const out = path.join(dir, rel);
+          mkdirSync(path.dirname(out), { recursive: true });
+          if (rel.endsWith('.jsx')) {
+            writeFileSync(
+              out,
+              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8')),
+            );
+            jsxDirs.add(path.dirname(out));
+          } else {
+            cpSync(path.join(appDir, rel), out);
+          }
+        }
+        // The gateway resolves a missing nested `components/jsx-runtime.js`
+        // (or react-core, kit.js…) via the SHARED_ASSET_FILES *basename*
+        // fallback. Symlinking the shared set into every dir that holds a
+        // transformed .jsx reproduces that resolution on disk.
+        jsxDirs.add(dir);
+        for (const d of jsxDirs) {
+          for (const f of SHARED) {
+            if (!existsSync(path.join(d, f)))
+              symlinkSync(path.join(PKG, 'kit', f), path.join(d, f));
+          }
+        }
       } else {
-        cpSync(path.join(PKG, 'apps', app, 'app.js'), path.join(dir, 'app.js'));
+        entry = 'app.js';
+        cpSync(path.join(appDir, 'app.js'), path.join(dir, 'app.js'));
+        for (const f of SHARED) symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
       }
-      for (const f of SHARED) symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
 
       process.on('unhandledRejection', push);
       process.on('uncaughtException', push);
@@ -145,7 +194,7 @@ export function describeAppBoot(app: string) {
         write: async () => ({}),
       };
 
-      await import(pathToFileURL(path.join(dir, 'app.js')).href);
+      await import(pathToFileURL(path.join(dir, entry)).href);
       await settle();
       expectNoErrors('rendering an empty granted vault');
 
