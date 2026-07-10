@@ -935,7 +935,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     if (!chip || !appId()) return;
     fetchJson('/centraid/_vault/status')
       .then(function (s) {
-        if (!s.ok || !s.body || s.body.active !== true) {
+        // The status route answers { vaultId, name, ownerPartyId, fresh } —
+        // there is no `active` field (a resolvable vault always 200s, an
+        // unresolvable one errors before this shape). Keying on a truthy
+        // vaultId is the real "connected" signal; the old `active === true`
+        // check misreported "no vault connected" against a working vault.
+        if (!s.ok || !s.body || !s.body.vaultId) {
           chip.textContent = 'no vault connected';
           return;
         }
