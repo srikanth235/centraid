@@ -808,15 +808,11 @@ function itemPane() {
   const footer = h('div', { style: 'display:flex;gap:8px;margin-top:20px;' });
   if (sel.trashed) {
     footer.appendChild(
-      h(
-        'button',
-        { type: 'button', class: 'v-btn-ghost', onclick: () => restoreItem(sel) },
-        'Restore',
-      ),
+      h('button', { type: 'button', class: 'kit-btn', onclick: () => restoreItem(sel) }, 'Restore'),
     );
     const del = h(
       'button',
-      { type: 'button', class: 'v-del', style: 'margin-right:0;' },
+      { type: 'button', class: 'kit-btn danger v-del', style: 'margin-right:0;' },
       'Delete forever',
     );
     del.addEventListener('click', (ev) => {
@@ -828,7 +824,12 @@ function itemPane() {
     footer.appendChild(
       h(
         'button',
-        { type: 'button', class: 'v-del', style: 'margin-right:0;', onclick: () => trashItem(sel) },
+        {
+          type: 'button',
+          class: 'kit-btn danger v-del',
+          style: 'margin-right:0;',
+          onclick: () => trashItem(sel),
+        },
         'Move to trash',
       ),
     );
@@ -1039,9 +1040,9 @@ function unlock() {
 
 function renderGenerator(root) {
   if (!state.gen) return;
-  const back = h('div', { class: 'v-modal-back', onclick: () => closeGen() });
+  const back = h('div', { class: 'kit-modal-back', onclick: () => closeGen() });
   const modal = h('div', {
-    class: 'v-modal',
+    class: 'kit-modal',
     style: 'max-width:420px;',
     onclick: (ev) => ev.stopPropagation(),
   });
@@ -1115,11 +1116,11 @@ function renderGenerator(root) {
     ),
   );
 
-  const foot = h('div', { class: 'v-modal-foot' });
+  const foot = h('div', { class: 'kit-modal-foot' });
   foot.appendChild(
-    h('button', { type: 'button', class: 'v-btn-ghost', onclick: () => closeGen() }, 'Close'),
+    h('button', { type: 'button', class: 'kit-btn', onclick: () => closeGen() }, 'Close'),
   );
-  const useBtn = h('button', { type: 'button', class: 'v-btn-primary' }, 'Copy');
+  const useBtn = h('button', { type: 'button', class: 'kit-btn primary' }, 'Copy');
   useBtn.addEventListener('click', () => {
     // If a password field is waiting for it, drop the value there; always copy.
     if (state.genTarget && state.edit) {
@@ -1144,8 +1145,8 @@ function closeGen() {
 function renderEdit(root) {
   const e = state.edit;
   if (!e) return;
-  const back = h('div', { class: 'v-modal-back', onclick: () => closeEdit() });
-  const modal = h('div', { class: 'v-modal', onclick: (ev) => ev.stopPropagation() });
+  const back = h('div', { class: 'kit-modal-back', onclick: () => closeEdit() });
+  const modal = h('div', { class: 'kit-modal', onclick: (ev) => ev.stopPropagation() });
   modal.appendChild(h('h2', {}, e.mode === 'edit' ? 'Edit item' : 'New item'));
 
   if (e.mode === 'new') {
@@ -1158,7 +1159,7 @@ function renderEdit(root) {
           'button',
           {
             type: 'button',
-            class: 'v-typechip',
+            class: 'kit-chip quiet',
             'aria-pressed': String(e.type === t),
             onclick: () => {
               e.type = t;
@@ -1211,11 +1212,11 @@ function renderEdit(root) {
   aliasWrap.appendChild(aliasInput);
   modal.appendChild(aliasWrap);
 
-  const foot = h('div', { class: 'v-modal-foot' });
+  const foot = h('div', { class: 'kit-modal-foot' });
   foot.appendChild(
-    h('button', { type: 'button', class: 'v-btn-ghost', onclick: () => closeEdit() }, 'Cancel'),
+    h('button', { type: 'button', class: 'kit-btn', onclick: () => closeEdit() }, 'Cancel'),
   );
-  const saveBtn = h('button', { type: 'button', class: 'v-btn-primary' }, 'Save');
+  const saveBtn = h('button', { type: 'button', class: 'kit-btn primary' }, 'Save');
   saveBtn.disabled = !e.title.trim();
   saveBtn.addEventListener('click', () => saveEdit());
   foot.appendChild(saveBtn);

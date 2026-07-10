@@ -472,10 +472,14 @@ function renderDashboard(wrap) {
           { class: 'row' },
           h(
             'button',
-            { type: 'button', class: 's-btn primary', onclick: openAddFriend },
+            { type: 'button', class: 'kit-btn primary', onclick: openAddFriend },
             'Add a friend',
           ),
-          h('button', { type: 'button', class: 's-btn', onclick: openNewGroup }, 'Create a group'),
+          h(
+            'button',
+            { type: 'button', class: 'kit-btn', onclick: openNewGroup },
+            'Create a group',
+          ),
         ),
       ),
     );
@@ -795,7 +799,7 @@ function renderModals() {
 }
 
 function modalBack(onClose, inner) {
-  const back = h('div', { class: 's-modal-back', onclick: onClose });
+  const back = h('div', { class: 'kit-modal-back', onclick: onClose });
   inner.addEventListener('click', (e) => e.stopPropagation());
   back.appendChild(inner);
   return back;
@@ -848,7 +852,7 @@ function buildDetail() {
 
   const inner = h(
     'div',
-    { class: 's-modal', style: 'max-width:440px;' },
+    { class: 'kit-modal', style: 'max-width:440px;' },
     h(
       'div',
       { style: 'display:flex;align-items:center;gap:13px;' },
@@ -877,12 +881,12 @@ function buildDetail() {
     splitRows,
     h(
       'div',
-      { class: 's-modal-foot' },
+      { class: 'kit-modal-foot' },
       h(
         'button',
         {
           type: 'button',
-          class: 's-del',
+          class: 'kit-btn danger s-del',
           onclick: (e) => {
             if (!armConfirm(e.currentTarget, { armedLabel: 'Delete — sure?' })) return;
             deleteExpense(row.expense_id);
@@ -890,10 +894,10 @@ function buildDetail() {
         },
         'Delete',
       ),
-      h('button', { type: 'button', class: 's-btn-ghost', onclick: closeDetail }, 'Close'),
+      h('button', { type: 'button', class: 'kit-btn', onclick: closeDetail }, 'Close'),
       h(
         'button',
-        { type: 'button', class: 's-btn-primary', onclick: () => openEditExpense(row) },
+        { type: 'button', class: 'kit-btn primary', onclick: () => openEditExpense(row) },
         'Edit',
       ),
     ),
@@ -1051,7 +1055,6 @@ function buildExpenseModal() {
       'button',
       {
         type: 'button',
-        class: 's-segbtn',
         'aria-pressed': String(exp.method === method),
         onclick: () => setE({ method }),
       },
@@ -1065,7 +1068,7 @@ function buildExpenseModal() {
         'button',
         {
           type: 'button',
-          class: 's-catchip',
+          class: 'kit-chip quiet',
           'aria-pressed': String(exp.category === c),
           onclick: () => setE({ category: c }),
         },
@@ -1127,18 +1130,18 @@ function buildExpenseModal() {
 
   const saveBtn = h(
     'button',
-    { type: 'button', class: 's-btn-primary', onclick: saveExpense },
+    { type: 'button', class: 'kit-btn primary', onclick: saveExpense },
     'Save',
   );
 
-  const foot = h('div', { class: 's-modal-foot' });
+  const foot = h('div', { class: 'kit-modal-foot' });
   if (exp.mode === 'edit') {
     foot.appendChild(
       h(
         'button',
         {
           type: 'button',
-          class: 's-del',
+          class: 'kit-btn danger s-del',
           onclick: (e) => {
             if (!armConfirm(e.currentTarget, { armedLabel: 'Delete — sure?' })) return;
             deleteExpense(exp.expense_id);
@@ -1149,13 +1152,13 @@ function buildExpenseModal() {
     );
   }
   foot.appendChild(
-    h('button', { type: 'button', class: 's-btn-ghost', onclick: closeExpense }, 'Cancel'),
+    h('button', { type: 'button', class: 'kit-btn', onclick: closeExpense }, 'Cancel'),
   );
   foot.appendChild(saveBtn);
 
   const inner = h(
     'div',
-    { class: 's-modal' },
+    { class: 'kit-modal s-wide' },
     h('h2', {}, exp.mode === 'edit' ? 'Edit expense' : 'Add an expense'),
     descInput,
     h(
@@ -1186,7 +1189,7 @@ function buildExpenseModal() {
       h('div', { class: 's-flabel' }, 'Split'),
       h(
         'div',
-        { class: 's-seg' },
+        { class: 'kit-seg stretch' },
         segBtn('Equally', 'equal'),
         segBtn('Exact', 'exact'),
         segBtn('Percent', 'percent'),
@@ -1331,7 +1334,7 @@ function buildSettleModal() {
     'button',
     {
       type: 'button',
-      class: 's-btn-primary',
+      class: 'kit-btn primary',
       disabled: !(cents > 0 && st.from !== st.to) || undefined,
       onclick: saveSettle,
     },
@@ -1339,7 +1342,7 @@ function buildSettleModal() {
   );
   const inner = h(
     'div',
-    { class: 's-modal', style: 'max-width:420px;' },
+    { class: 'kit-modal', style: 'max-width:420px;' },
     h('h2', {}, 'Settle up'),
     h(
       'div',
@@ -1380,8 +1383,8 @@ function buildSettleModal() {
     h('div', { class: 's-sub', style: 'margin-top:10px;' }, hint),
     h(
       'div',
-      { class: 's-modal-foot' },
-      h('button', { type: 'button', class: 's-btn-ghost', onclick: closeSettle }, 'Cancel'),
+      { class: 'kit-modal-foot' },
+      h('button', { type: 'button', class: 'kit-btn', onclick: closeSettle }, 'Cancel'),
       saveBtn,
     ),
   );
@@ -1427,7 +1430,7 @@ function buildNewGroupModal() {
         'button',
         {
           type: 'button',
-          class: 's-catchip',
+          class: 'kit-chip quiet',
           'aria-pressed': String(ng.icon === ic),
           onclick: () => {
             ng.icon = ic;
@@ -1446,7 +1449,7 @@ function buildNewGroupModal() {
         'button',
         {
           type: 'button',
-          class: 's-memchip',
+          class: 'kit-chip quiet',
           'aria-pressed': String(on),
           onclick: () => {
             if (on) ng.members.delete(f.party_id);
@@ -1454,7 +1457,9 @@ function buildNewGroupModal() {
             renderModals();
           },
         },
-        h('span', { class: 'd', style: `background:${f.color};` }),
+        h('span', {
+          style: `width:9px;height:9px;border-radius:999px;background:${f.color};`,
+        }),
         first(f.name),
       ),
     );
@@ -1463,7 +1468,7 @@ function buildNewGroupModal() {
     'button',
     {
       type: 'button',
-      class: 's-btn-primary',
+      class: 'kit-btn primary',
       disabled: !(ng.name.trim() && ng.members.size >= 1) || undefined,
       onclick: saveNewGroup,
     },
@@ -1471,7 +1476,7 @@ function buildNewGroupModal() {
   );
   const inner = h(
     'div',
-    { class: 's-modal', style: 'max-width:420px;' },
+    { class: 'kit-modal', style: 'max-width:420px;' },
     h('h2', {}, 'New group'),
     h('input', {
       class: 's-in',
@@ -1487,8 +1492,8 @@ function buildNewGroupModal() {
     h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Members'), memRow),
     h(
       'div',
-      { class: 's-modal-foot' },
-      h('button', { type: 'button', class: 's-btn-ghost', onclick: closeNewGroup }, 'Cancel'),
+      { class: 'kit-modal-foot' },
+      h('button', { type: 'button', class: 'kit-btn', onclick: closeNewGroup }, 'Cancel'),
       saveBtn,
     ),
   );
@@ -1531,9 +1536,8 @@ function buildAddFriendModal() {
     swatches.appendChild(
       h('button', {
         type: 'button',
-        class: 's-catchip',
+        class: 'kit-chip quiet',
         'aria-pressed': String(af.color === c),
-        style: 'padding:6px;',
         'aria-label': 'Colour',
         onclick: () => {
           af.color = c;
@@ -1547,7 +1551,7 @@ function buildAddFriendModal() {
     'button',
     {
       type: 'button',
-      class: 's-btn-primary',
+      class: 'kit-btn primary',
       disabled: !af.name.trim() || undefined,
       onclick: saveAddFriend,
     },
@@ -1555,7 +1559,7 @@ function buildAddFriendModal() {
   );
   const inner = h(
     'div',
-    { class: 's-modal', style: 'max-width:400px;' },
+    { class: 'kit-modal', style: 'max-width:400px;' },
     h('h2', {}, 'Add a friend'),
     h('input', {
       class: 's-in',
@@ -1570,8 +1574,8 @@ function buildAddFriendModal() {
     h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Colour'), swatches),
     h(
       'div',
-      { class: 's-modal-foot' },
-      h('button', { type: 'button', class: 's-btn-ghost', onclick: closeAddFriend }, 'Cancel'),
+      { class: 'kit-modal-foot' },
+      h('button', { type: 'button', class: 'kit-btn', onclick: closeAddFriend }, 'Cancel'),
       saveBtn,
     ),
   );
