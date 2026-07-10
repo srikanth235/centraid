@@ -20,7 +20,6 @@
 // widget the conversion's conventions call out to leave alone.
 
 import {
-  armConfirm,
   closePopover,
   debounce,
   el,
@@ -434,11 +433,21 @@ function openPersonMenu(anchor, p) {
 
 // ---------- Person writes ----------
 
+// refresh() re-renders the open drawer, but from the stale `detailPerson`
+// snapshot — so any write that can land while the drawer is open on the same
+// person must also reload the detail read (the same refresh-then-loadDetail
+// pair drawerAct uses), or the drawer keeps showing the pre-write state
+// (star glyph, circle, history) until it's closed and reopened.
+async function reloadOpenDetail(partyId) {
+  if (state.detailsId === partyId) await loadDetail(partyId);
+}
+
 async function toggleStar(p) {
   const outcome = await act(p.starred ? 'unstar-person' : 'star-person', { party_id: p.party_id });
   if (!narrate(outcome)) return;
   toast(p.starred ? 'Favorite removed · receipted.' : 'Favorited · receipted.');
   await refresh();
+  await reloadOpenDetail(p.party_id);
 }
 
 async function movePerson(p, circleId, name) {
@@ -447,6 +456,7 @@ async function movePerson(p, circleId, name) {
   if (!narrate(outcome)) return;
   toast(`Moved to ${name} · receipted.`);
   await refresh();
+  await reloadOpenDetail(p.party_id);
 }
 
 async function logInteraction(p, kind, text) {
@@ -454,6 +464,7 @@ async function logInteraction(p, kind, text) {
   if (!narrate(outcome)) return;
   toast(`Logged · receipted.`);
   await refresh();
+  await reloadOpenDetail(p.party_id);
 }
 
 // Bulk actions run through the kit's runBulk with the app's own voice.
@@ -625,10 +636,22 @@ function circleCreateRow() {
   return row;
 }
 
+// Two-step delete confirm, held in app state instead of kit's armConfirm:
+// armConfirm() swaps the button's textContent in place, which destroys the
+// Lit ChildPart marker comments inside it (this button's content is the
+// `${el(I.del)}` binding) — the next litRender of the circle list then dies
+// with "Cannot read properties of null (reading 'nextSibling')". Keeping the
+// armed flag in state and rendering '×?' through the same binding keeps
+// every DOM mutation inside Lit's world. armConfirm stays fine for buttons
+// whose labels are static template text (no bindings), like Tally/Locker's.
+let armedCircleDeleteId = null;
+let armedCircleDeleteTimer = 0;
+
 function circleRowTpl(c) {
   if (state.renamingCircleId === c.circle_id) return circleEditRow(c);
   const count = data.people.filter((p) => (p.circle_id ?? null) === c.circle_id).length;
   const active = state.nav.kind === 'circle' && state.nav.circleId === c.circle_id;
+  const armed = armedCircleDeleteId === c.circle_id;
   return html`<div class="d-folder">
     <button
       type="button"
@@ -659,11 +682,24 @@ function circleRowTpl(c) {
         aria-label="Delete ${c.name}"
         @click=${(e) => {
           e.stopPropagation();
-          if (!armConfirm(e.currentTarget, { armedLabel: '×?' })) return;
+          if (!armed) {
+            armedCircleDeleteId = c.circle_id;
+            clearTimeout(armedCircleDeleteTimer);
+            armedCircleDeleteTimer = setTimeout(() => {
+              if (armedCircleDeleteId === c.circle_id) {
+                armedCircleDeleteId = null;
+                renderCircleList();
+              }
+            }, 3000);
+            renderCircleList();
+            return;
+          }
+          clearTimeout(armedCircleDeleteTimer);
+          armedCircleDeleteId = null;
           deleteCircle(c);
         }}
       >
-        ${el(I.del)}
+        ${armed ? '×?' : el(I.del)}
       </button>
     </span>
   </div>`;

@@ -106,7 +106,20 @@ export function toast(text, { undoLabel, onUndo, duration = 5000 } = {}) {
     });
   }
   el.addEventListener('kit-dismiss', dismiss);
+  if (duration === 0) el.dataset.sticky = '1';
   host.appendChild(el);
+  // A quick-capture burst (bulk add, demo seed) stacks a toast per receipt
+  // and can cover half the app for seconds — keep only the newest few.
+  // Sticky toasts (duration 0, e.g. errors awaiting dismissal) are evicted
+  // last. An evicted toast's timer later fires dismiss() on a detached
+  // node, which is a no-op.
+  const MAX_TOASTS = 3;
+  while (host.children.length > MAX_TOASTS) {
+    const victim =
+      [...host.children].find((c) => c.dataset.sticky !== '1') ?? host.firstElementChild;
+    if (!victim) break;
+    victim.remove();
+  }
   if (duration > 0) timer = setTimeout(dismiss, duration);
   return dismiss;
 }
@@ -117,7 +130,12 @@ export function outcomeMessage(outcome) {
     return 'Waiting for your approval — it lands once you confirm it in vault settings.';
   }
   if (outcome?.status === 'failed') {
-    return `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`;
+    const detail = outcome.predicate ?? outcome.reason ?? 'a precondition failed';
+    // A command-authored friendly message (see ConditionSpec.message) is
+    // already a full sentence with its own punctuation — don't double it up
+    // ("...on your calendar..") the way the raw `name: column op value`
+    // fallback needs its trailing period added.
+    return `The vault refused: ${detail}${/[.!?]$/.test(detail) ? '' : '.'}`;
   }
   if (outcome?.status === 'denied') {
     return `Denied by consent${outcome.reason ? `: ${outcome.reason}` : '.'}`;
@@ -321,6 +339,16 @@ export function fmtBytes(n, empty = '') {
  * thumbs zoomable.
  */
 export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
+  // An imperative rebuild (any refresh — e.g. the window-focus one) would
+  // otherwise wipe an armed remove button mid-confirm: the owner's second
+  // click lands on a fresh, disarmed button and merely re-arms it. Carry
+  // the armed state across the rebuild (the old node's disarm timer fires
+  // on the detached button — a no-op).
+  const armed = new Set(
+    [...stripEl.querySelectorAll('.kit-attach-remove[data-kit-armed="true"]')].map(
+      (b) => b.dataset.kitAttachmentId,
+    ),
+  );
   stripEl.innerHTML = '';
   for (const a of list ?? []) {
     const tile = document.createElement('div');
@@ -353,11 +381,13 @@ export function renderAttachments(stripEl, list, onRemove, { onZoom } = {}) {
       rm.textContent = '×';
       rm.title = 'Remove';
       rm.setAttribute('aria-label', 'Remove attachment');
+      rm.dataset.kitAttachmentId = String(a.attachment_id);
       rm.addEventListener('click', async () => {
         if (!armConfirm(rm, { armedLabel: 'Sure?' })) return;
         const outcome = await onRemove(a.attachment_id);
         if (outcome?.status === 'executed') tile.remove();
       });
+      if (armed.has(String(a.attachment_id))) armConfirm(rm, { armedLabel: 'Sure?' });
       tile.appendChild(rm);
     }
     stripEl.appendChild(tile);

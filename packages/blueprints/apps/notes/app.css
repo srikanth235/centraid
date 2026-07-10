@@ -566,6 +566,11 @@ mark {
   font: var(--t-body-strong);
   font-size: 15px;
   line-height: 1.3;
+  /* min-width:0 alone only lets the flex child shrink — a title with no
+     whitespace (one very long word/URL/paste) still has nothing to break
+     on and overflows the card, blowing out the masonry column and forcing
+     a page-wide horizontal scrollbar. Break it instead. */
+  overflow-wrap: anywhere;
 }
 .nt-pin-btn {
   flex-shrink: 0;
@@ -596,6 +601,10 @@ mark {
   white-space: pre-wrap;
   overflow: hidden;
   max-height: 7.5em;
+  /* Same unbroken-long-word overflow as .nt-card-title — a body line with
+     no spaces (a long URL, a wall of the same character) needs somewhere
+     to break too. */
+  overflow-wrap: anywhere;
 }
 .nt-card-progress {
   display: flex;

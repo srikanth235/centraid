@@ -28,7 +28,13 @@ const $ = (id) => document.getElementById(id);
 // command JSON — so big documents fit; the route itself caps at 512 MB.
 const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
-// The vault speaks in predicates; the drive speaks in plain language.
+// The vault speaks in predicates; the drive speaks in plain language. The
+// gateway's contract checker (packages/vault/src/gateway/contract.ts) always
+// stringifies a failed precondition as `"${name}: ${column} ${op} ${value}"`
+// (e.g. "folder_is_empty: n eq 0"), never the bare name — so the lookup below
+// keys off the substring before the first ": " rather than the whole string,
+// or every entry here would be permanently dead and every failure would show
+// the raw predicate/SQL detail instead of this app's own copy.
 const FRIENDLY_PREDICATES = {
   not_rented_elsewhere:
     'This file is in use elsewhere in your vault (an attachment, a note, an avatar…) — remove it there first.',
@@ -36,6 +42,12 @@ const FRIENDLY_PREDICATES = {
     'Empty the folder first — move or trash its documents (including trashed ones) and delete its subfolders.',
   name_unused_among_siblings: 'A folder with that name already exists here.',
 };
+
+function predicateName(predicate) {
+  const s = String(predicate ?? '');
+  const i = s.indexOf(':');
+  return i === -1 ? s : s.slice(0, i);
+}
 
 export function createLogic({ state, data, render, refresh, openQuick }) {
   function notice(text) {
@@ -45,7 +57,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
   }
 
   function friendlyOutcome(outcome) {
-    return FRIENDLY_PREDICATES[outcome?.predicate] ?? outcomeMessage(outcome);
+    return FRIENDLY_PREDICATES[predicateName(outcome?.predicate)] ?? outcomeMessage(outcome);
   }
 
   // Returns true when the write executed; otherwise narrates parked / failed
@@ -59,7 +71,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
       notice('Sent to the owner for confirmation — it lands once approved.');
     } else if (outcome?.status === 'failed') {
       notice(
-        FRIENDLY_PREDICATES[outcome.predicate] ??
+        FRIENDLY_PREDICATES[predicateName(outcome.predicate)] ??
           `The vault refused: ${outcome.predicate ?? outcome.reason ?? 'a precondition failed'}.`,
       );
     } else if (outcome?.status === 'denied') {
