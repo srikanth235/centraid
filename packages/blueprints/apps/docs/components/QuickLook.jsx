@@ -82,14 +82,19 @@ export function QuickLook({ doc, rows, folderName, onClose, onStep }) {
           <Icon svg={I.download} />
           Download
         </a>
-        <button type="button" className="d-quick-btn icon" aria-label="Close" onClick={onClose}>
+        <button
+          type="button"
+          className="kit-icon-btn d-quick-icon"
+          aria-label="Close"
+          onClick={onClose}
+        >
           <Icon svg={I.close} />
         </button>
       </div>
       <div className="d-quick-stage">
         <button
           type="button"
-          className="d-quick-nav prev"
+          className="kit-viewer-nav prev"
           aria-label="Previous"
           disabled={idx <= 0}
           onClick={() => onStep(-1)}
@@ -99,7 +104,7 @@ export function QuickLook({ doc, rows, folderName, onClose, onStep }) {
         {stage}
         <button
           type="button"
-          className="d-quick-nav next"
+          className="kit-viewer-nav next"
           aria-label="Next"
           disabled={idx < 0 || idx >= rows.length - 1}
           onClick={() => onStep(1)}

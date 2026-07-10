@@ -103,7 +103,8 @@ export function ListRow({
         ) : (
           <button
             type="button"
-            className="d-kebab"
+            className="kit-icon-btn"
+            style={{ '--kit-icon-btn-size': '1.875rem' }}
             aria-label={`Actions for ${doc.title ?? 'document'}`}
             aria-haspopup="menu"
             onClick={(e) => {

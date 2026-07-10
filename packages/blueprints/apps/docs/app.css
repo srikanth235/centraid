@@ -10,116 +10,49 @@
 :root {
   color-scheme: light dark;
 
-  /* Faces — Geist/Space Grotesk/JetBrains Mono aren't loadable inside a
-     sandboxed app iframe, so we map them to the system stack the whole app
-     family already uses: humanist sans for body/UI, mono for chrome. */
-  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  --font-title: var(--font-sans);
-  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* app-hue drives tokens.css's whole neutral ramp; 222 is already the
+     generator's default — spelled out here so docs' hue commitment is
+     self-documenting rather than implicit. */
+  --app-hue: 222;
+  /* Docs identity accent — slate, the palette's own --c-slate hex. Swappable
+     via the runtime's --app-color (tokens.css derives --_accent from it). */
+  --accent: var(--c-slate);
 
-  /* Docs identity accent — slate. Swappable via the runtime's --app-color. */
-  --accent: #5c677d;
-  --_accent: var(--app-color, var(--accent));
-  --on-accent: #ffffff;
-  --accs: color-mix(in oklab, var(--_accent) 13%, transparent);
-  --accd: color-mix(in oklab, var(--_accent) 80%, #0a0e18);
-  --sel: color-mix(in oklab, var(--_accent) 13%, transparent);
-  --selb: color-mix(in oklab, var(--_accent) 34%, var(--line-strong));
-
-  /* File-type tints (used only inside thumbnails / badges). */
+  /* File-type tints (used only inside thumbnails / badges — app-specific,
+     tokens.css knows nothing about them). */
   --c-pdf: #c2410c;
   --c-image: #0e7490;
   --c-doc: #4058cf;
   --c-sheet: #4e7a40;
   --c-slide: #9a6528;
-  --c-indigo: #4058cf;
-  --c-forest: #4e7a40;
 
-  /* Ink */
-  --ink: hsl(222 24% 13%);
-  --ink-2: hsl(222 10% 40%);
-  --ink-3: hsl(222 9% 56%);
-  --ink-inv: #ffffff;
-
-  /* Surfaces — warm paper base, elevated card, recessed track. */
+  /* Warm-paper surfaces — deliberately independent of --app-hue's neutral
+     ramp: tokens.css's --bg/--bg-sunken are hue-parameterized, but docs
+     keeps its own warm hue-43 paper here. */
   --bg: hsl(43 28% 97%);
-  --bg-elev: #ffffff;
   --bg-sunken: hsl(43 16% 94.5%);
 
-  --line: rgba(26, 28, 38, 0.1);
-  --line-strong: rgba(26, 28, 38, 0.17);
-
-  --danger: #c8382f;
-
-  /* Radii — hard-edged cards 14; buttons/chips are kit pills (kit.css). */
-  --r-card: 14px;
-  --r-md: 10px;
-  --r-pill: 999px;
-
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --shadow-md: 0 10px 26px -14px rgba(16, 20, 30, 0.26), 0 2px 6px -3px rgba(16, 20, 30, 0.1);
-  --shadow-lg: 0 26px 60px -24px rgba(16, 20, 30, 0.38);
-
-  --tracking-body: 0;
-  --tracking-h: -0.01em;
-  --tracking-eyebrow: 0.09em;
-
-  /* Type shorthands (font: style weight size/line family). */
-  --t-title: 600 1.15rem/1.2 var(--font-title);
-  --t-body: 400 0.855rem/1.5 var(--font-sans);
-  --t-body-strong: 600 0.855rem/1.4 var(--font-sans);
-  --t-small: 400 0.8rem/1.45 var(--font-sans);
-  --t-tiny: 600 0.6rem/1.4 var(--mono);
-  --t-mono: 500 0.72rem/1.4 var(--mono);
-
-  /* ---- Kit contract bridge (toast / skeleton / ask render on-brand) ---- */
-  --surface: var(--bg-elev);
-  --surface-2: var(--bg-sunken);
-  --text: var(--ink);
-  --muted: var(--ink-2);
-  --ink-faint: var(--ink-3);
-  --radius: 0.75rem;
-  --accent-soft: var(--accs);
-  --accent-deep: var(--accd);
+  /* Everything else (ink ramp, --line*, --danger, radii, --ease, tracking,
+     the --t-* type scale, --font-*/--mono, --sel/--selb, --_accent and its
+     accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
+     --ink-faint/--radius aliases) now comes from tokens.css. */
 }
 
 :root[data-theme='dark'] {
-  --bg-l: 10%;
-  --ink: hsl(220 16% 94%);
-  --ink-2: hsl(220 9% 66%);
-  --ink-3: hsl(220 9% 50%);
-  --ink-inv: hsl(222 12% calc(var(--bg-l) + 4%));
-  --bg: var(--bg-wall);
-  --bg-elev: hsl(222 12% calc(var(--bg-l) + 5%));
-  --bg-sunken: hsl(222 11% calc(var(--bg-l) + 9%));
-  --line: hsla(220 26% 74% / 0.11);
-  --line-strong: hsla(220 26% 76% / 0.2);
-  --danger: #f0645b;
-  --accd: color-mix(in oklab, var(--_accent) 82%, #eef2fa);
+  /* Only the file-type tints are docs-specific in dark mode — everything
+     else (ink/surface/line/danger/shadows) comes from tokens.css's single
+     hue-parameterized dark generator now (this used to be hand-duplicated
+     here with stale hue literals — the drift tokens.css was built to kill). */
   --c-pdf: #ea9a52;
   --c-image: #4fc3d6;
   --c-doc: #8aa0ff;
   --c-sheet: #93c17f;
   --c-slide: #d9ab6d;
-  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-l: 10%;
-    --ink: hsl(220 16% 94%);
-    --ink-2: hsl(220 9% 66%);
-    --ink-3: hsl(220 9% 50%);
-    --ink-inv: hsl(222 12% 14%);
-    --bg: var(--bg-wall);
-    --bg-elev: hsl(222 12% 15%);
-    --bg-sunken: hsl(222 11% 19%);
-    --line: hsla(220 26% 74% / 0.11);
-    --line-strong: hsla(220 26% 76% / 0.2);
-    --danger: #f0645b;
-    --accd: color-mix(in oklab, var(--_accent) 82%, #eef2fa);
+    /* Same file-type-tint residual as the [data-theme='dark'] block above. */
     --c-pdf: #ea9a52;
     --c-image: #4fc3d6;
     --c-doc: #8aa0ff;
@@ -211,7 +144,7 @@ button {
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: var(--accd);
+  background: var(--accent-deep);
   color: #fff;
   display: flex;
   align-items: center;
@@ -230,21 +163,12 @@ button {
   font-size: 10px;
   color: var(--ink-3);
 }
-.d-side-close {
+/* kit.css's .kit-icon-btn owns the look; the two-class selector bumps
+   specificity above .kit-icon-btn's own base rule so this hidden-by-default
+   (mobile-only) toggle wins regardless of kit.css loading after app.css. */
+.d-side-close.kit-icon-btn {
   margin-left: auto;
   display: none;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink-3);
-}
-.d-side-close:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
 }
 
 .d-new-wrap {
@@ -259,7 +183,7 @@ button {
   padding: 11px 14px;
   border: none;
   border-radius: var(--r-md);
-  background: var(--accd);
+  background: var(--accent-deep);
   color: #fff;
   font: var(--t-body-strong);
   box-shadow: var(--shadow-sm);
@@ -289,7 +213,7 @@ button {
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   padding: 5px;
-  animation: d-rise 0.16s var(--ease);
+  animation: kit-rise 0.16s var(--ease);
 }
 .d-menu-item {
   display: flex;
@@ -342,8 +266,8 @@ button {
   color: var(--ink);
 }
 .d-nav-item[aria-current='true'] {
-  background: var(--accs);
-  color: var(--accd);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
   font-weight: 600;
 }
 .d-nav-count {
@@ -387,40 +311,14 @@ button {
 .d-folder:hover .d-nav-count {
   opacity: 0;
 }
-.d-tool-btn {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  color: var(--ink-3);
-}
-.d-tool-btn:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
-.d-tool-btn.danger:hover {
-  color: var(--danger);
-}
+/* Rename/delete tool buttons: kit.css's .kit-icon-btn (+ .danger variant). */
 .d-folder-edit {
   display: flex;
   gap: 6px;
   width: 100%;
   padding: 4px 2px;
 }
-.d-folder-edit input {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body);
-  color: var(--ink);
-  background: var(--bg-elev);
-  border: 1px solid var(--selb);
-  border-radius: 7px;
-  padding: 6px 8px;
-}
+/* The input itself is kit.css's .kit-input.bare (transparent until focus). */
 .d-folder-edit button {
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -470,7 +368,7 @@ button {
   color: var(--ink-3);
 }
 .d-consent-line svg {
-  color: var(--accd);
+  color: var(--accent-deep);
   flex-shrink: 0;
 }
 .d-consent-line span {
@@ -532,37 +430,11 @@ button {
   color: var(--ink-2);
   flex-shrink: 0;
 }
+/* kit.css's .kit-search owns the pill/icon/input look; docs keeps only the
+   layout placement (max-width, flex basis) in the topbar row. */
 .d-search {
-  position: relative;
   flex: 1;
   max-width: 460px;
-}
-.d-search-icon {
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--ink-3);
-  pointer-events: none;
-}
-.d-search input {
-  width: 100%;
-  font: var(--t-body);
-  color: var(--ink);
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  padding: 10px 16px 10px 38px;
-  outline: none;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.d-search input::placeholder {
-  color: var(--ink-3);
-}
-.d-search input:focus {
-  border-color: var(--selb);
-  box-shadow: var(--kit-focus-ring);
 }
 .d-topbar-tools {
   margin-left: auto;
@@ -576,21 +448,7 @@ button {
   width: 32px;
   padding: 0;
 }
-.d-themebtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--bg-elev);
-  color: var(--ink-2);
-}
-.d-themebtn:hover {
-  color: var(--ink);
-  border-color: var(--line-strong);
-}
+/* Theme toggle: kit.css's .kit-icon-btn. */
 .d-ask-mount {
   display: flex;
   align-items: center;
@@ -655,7 +513,7 @@ button {
   border: 1px solid var(--selb);
   border-radius: var(--r-pill);
   background: var(--sel);
-  animation: d-rise 0.18s var(--ease);
+  animation: kit-rise 0.18s var(--ease);
 }
 .d-bulk-count {
   font-family: var(--mono);
@@ -756,8 +614,8 @@ button {
   opacity: 1;
 }
 .d-card-select[aria-pressed='true'] {
-  background: var(--accd);
-  border-color: var(--accd);
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   opacity: 1;
 }
 .d-card-body {
@@ -839,8 +697,8 @@ button {
   padding: 0;
 }
 .d-check[aria-pressed='true'] {
-  border-color: var(--accd);
-  background: var(--accd);
+  border-color: var(--accent-deep);
+  background: var(--accent-deep);
 }
 
 .d-row {
@@ -915,35 +773,10 @@ button {
   white-space: nowrap;
 }
 .d-snippet mark {
-  background: var(--accs);
-  color: var(--accd);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
   border-radius: 3px;
   padding: 0 1px;
-}
-.d-row-edit {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-}
-.d-row-edit input {
-  flex: 1;
-  min-width: 0;
-  font: var(--t-body);
-  font-size: 14px;
-  color: var(--ink);
-  background: var(--bg-elev);
-  border: 1px solid var(--selb);
-  border-radius: 7px;
-  padding: 5px 8px;
-}
-.d-row-edit button {
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--bg-elev);
-  color: var(--ink-2);
-  font: var(--t-small);
-  padding: 0 10px;
 }
 .d-cell {
   color: var(--ink-3);
@@ -977,34 +810,10 @@ button {
   display: flex;
   justify-content: flex-end;
 }
-.d-kebab {
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 7px;
-  color: var(--ink-3);
-}
-.d-kebab:hover {
-  background: var(--bg);
-  color: var(--ink);
-}
-/* Window footer (bounded browse) */
-.d-window-foot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 20px 0 4px;
-  font: var(--t-small);
-  color: var(--ink-3);
-  flex-wrap: wrap;
-  text-align: center;
-}
-/* Empty states + the kebab/move popover live in kit.css (.kit-empty*, .kit-popover*). */
+/* Kebab: kit.css's .kit-icon-btn, dialed down via --kit-icon-btn-size inline
+   for this dense row. Window footer: kit.css's .kit-foot.
+   Empty states + the kebab/move popover also live in kit.css (.kit-empty*,
+   .kit-popover*). */
 
 /* ---------- Details drawer ---------- */
 
@@ -1013,7 +822,7 @@ button {
   inset: 0;
   z-index: 44;
   background: rgba(15, 18, 26, 0.28);
-  animation: d-fade 0.2s ease;
+  animation: kit-fade 0.2s ease;
 }
 .d-details {
   position: fixed;
@@ -1043,22 +852,7 @@ button {
   letter-spacing: var(--tracking-eyebrow);
   color: var(--ink-3);
 }
-.d-details-x {
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  border-radius: 8px;
-  color: var(--ink-3);
-}
-.d-details-x:hover {
-  background: var(--bg-sunken);
-  color: var(--ink);
-}
+/* Close button: kit.css's .kit-icon-btn. */
 .d-details-body {
   flex: 1;
   overflow: auto;
@@ -1148,7 +942,7 @@ button {
   width: 8px;
   height: 8px;
   border-radius: var(--r-pill);
-  background: var(--accd);
+  background: var(--accent-deep);
   margin-top: 5px;
 }
 .d-activity-line {
@@ -1175,8 +969,8 @@ button {
 .d-receipt-chip {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--accd);
-  border: 1px solid var(--accs);
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 4px;
 }
@@ -1197,7 +991,7 @@ button {
   display: flex;
   flex-direction: column;
   background: color-mix(in oklab, #0b0d12 92%, #000);
-  animation: d-fade 0.2s ease;
+  animation: kit-fade 0.2s ease;
 }
 .d-quick-top {
   display: flex;
@@ -1239,14 +1033,17 @@ button {
   border-radius: var(--r-pill);
   text-decoration: none;
 }
-.d-quick-btn.icon {
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  justify-content: center;
-}
 .d-quick-btn:hover {
   background: rgba(255, 255, 255, 0.18);
+}
+/* Close button: kit.css's .kit-icon-btn, on the quick-look's dark surface —
+   the two-class selector bumps specificity above .kit-icon-btn's own
+   color/hover rules so these on-dark colors win regardless of load order. */
+.d-quick-icon.kit-icon-btn {
+  color: #fff;
+}
+.d-quick-icon.kit-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
 }
 .d-quick-stage {
   flex: 1;
@@ -1257,30 +1054,8 @@ button {
   padding: 0 60px 28px;
   position: relative;
 }
-.d-quick-nav {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-.d-quick-nav.prev {
-  left: 8px;
-}
-.d-quick-nav.next {
-  right: 8px;
-}
-.d-quick-nav:disabled {
-  opacity: 0.25;
-  pointer-events: none;
-}
+/* Prev/next: kit.css's .kit-viewer-nav (+.prev/.next); .d-quick-stage above
+   is already the required `position: relative` ancestor. */
 .d-quick-image {
   max-width: min(760px, 90%);
   max-height: 100%;
@@ -1332,48 +1107,12 @@ button {
   padding-bottom: 16px;
 }
 
-/* ---------- Drag-and-drop overlay ---------- */
-
-.d-drop {
-  position: fixed;
-  inset: 0;
-  z-index: 65;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(in oklab, var(--_accent) 14%, rgba(15, 18, 26, 0.4));
-  animation: d-fade 0.14s ease;
-}
-.d-drop-card {
-  border: 2px dashed var(--_accent);
-  border-radius: var(--r-card);
-  background: var(--bg-elev);
-  color: var(--ink);
-  font: var(--t-body-strong);
-  padding: 26px 40px;
-  box-shadow: var(--shadow-lg);
-}
+/* Drag-and-drop overlay: kit.css's .kit-drop / .kit-drop-card. */
 
 /* ---------- Keyframes ---------- */
+/* d-rise/d-fade retired in favor of kit.css's kit-rise/kit-fade (equivalent
+   timing/effect). d-slide-r stays — kit.css has no slide keyframe. */
 
-@keyframes d-rise {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes d-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
 @keyframes d-slide-r {
   from {
     transform: translateX(24px);
@@ -1413,7 +1152,7 @@ button {
   inset: 0;
   z-index: 45;
   background: rgba(15, 18, 26, 0.4);
-  animation: d-fade 0.2s ease;
+  animation: kit-fade 0.2s ease;
 }
 .docs.is-narrow .d-topbar,
 .docs.is-narrow .d-toolbar {

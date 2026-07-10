@@ -65,6 +65,7 @@ function FolderCreateEdit({ onCommit, onCancel }) {
     <div className="d-folder-edit">
       <input
         type="text"
+        className="kit-input bare"
         placeholder="Folder name…"
         aria-label="New folder name"
         ref={inputRef}
@@ -101,6 +102,7 @@ function FolderRenameEdit({ f, onCommit, onCancel }) {
     <div className="d-folder-edit">
       <input
         type="text"
+        className="kit-input bare"
         aria-label="Folder name"
         defaultValue={f.name}
         ref={inputRef}
@@ -147,7 +149,7 @@ function FolderRow({
       <span className="d-folder-tools">
         <button
           type="button"
-          className="d-tool-btn"
+          className="kit-icon-btn"
           aria-label={`Rename ${f.name}`}
           onClick={(e) => {
             e.stopPropagation();
@@ -158,7 +160,7 @@ function FolderRow({
         </button>
         <button
           type="button"
-          className="d-tool-btn danger"
+          className="kit-icon-btn danger"
           aria-label={`Delete ${f.name}`}
           onClick={(e) => {
             e.stopPropagation();

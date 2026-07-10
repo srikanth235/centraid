@@ -31,7 +31,7 @@ export function Details({
       <aside className="d-details" role="dialog" aria-modal="true" aria-label="Document details">
         <div className="d-details-head">
           <span className="lbl">Details</span>
-          <button type="button" className="d-details-x" aria-label="Close" onClick={onClose}>
+          <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
             <Icon svg={I.close} />
           </button>
         </div>
