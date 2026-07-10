@@ -125,6 +125,18 @@ export async function runCodexTurn(
   let finalText = '';
   let processExited = false;
   let exitError: Error | undefined;
+  // Token accounting: codex reports usage via `thread/tokenUsage/updated`
+  // notifications (thread-cumulative `total` + per-call `last`), NOT on the
+  // `turn/completed` payload. Snapshot the cumulative total before our turn
+  // starts (nonzero on `thread/resume`) and diff against the last snapshot
+  // seen during the turn — that difference is this turn's usage.
+  let turnActive = false;
+  let usageBaseline: CodexTokenTotals | undefined;
+  let usageLatest: CodexTokenTotals | undefined;
+  // The active model, for the ledger's per-model rollup + cost estimate:
+  // explicit per-turn override wins, else whatever `thread/start`/`thread/resume`
+  // report as the session default.
+  let resolvedModel: string | undefined = input.model;
 
   const emit = (event: TurnStreamEvent): void => {
     if (input.abortSignal.aborted) return;
@@ -225,7 +237,17 @@ export async function runCodexTurn(
     }
 
     if (method === 'turn/started') {
+      turnActive = true;
       emit({ type: 'phase', phase: 'turn.started' });
+      return;
+    }
+
+    if (method === 'thread/tokenUsage/updated') {
+      const totals = readTokenTotals(p.tokenUsage);
+      if (totals) {
+        if (turnActive) usageLatest = totals;
+        else usageBaseline = totals;
+      }
       return;
     }
 
@@ -301,12 +323,15 @@ export async function runCodexTurn(
       } else if (!sawFinal) {
         emit({ type: 'final', text: finalText });
       }
-      const usage = readCodexUsage(turn);
+      // Prefer the tokenUsage-notification diff (the only channel current
+      // codex versions report on); fall back to usage embedded in the turn
+      // payload for older/other builds.
+      const usage = usageFromTotalsDiff(usageLatest, usageBaseline) ?? readCodexUsage(turn);
       if (usage) {
         emit({
           type: 'usage',
           provider: 'codex',
-          ...(input.model ? { model: input.model } : {}),
+          ...(resolvedModel ? { model: resolvedModel } : {}),
           ...usage,
         });
       }
@@ -377,11 +402,14 @@ export async function runCodexTurn(
     notify('initialized', {});
 
     if (input.prevThreadId) {
-      await request('thread/resume', {
+      const resumeResult = (await request('thread/resume', {
         threadId: input.prevThreadId,
         ...(input.model ? { model: input.model } : {}),
         cwd: input.cwd,
-      });
+      })) as { model?: unknown } | undefined;
+      if (!resolvedModel && typeof resumeResult?.model === 'string') {
+        resolvedModel = resumeResult.model;
+      }
     } else {
       const startResult = (await request('thread/start', {
         ...(input.model ? { model: input.model } : {}),
@@ -390,8 +418,11 @@ export async function runCodexTurn(
         sandbox: 'workspace-write',
         ...(input.extraSystemPrompt ? { developerInstructions: input.extraSystemPrompt } : {}),
         ...(input.toolContext ? { dynamicTools: centraidDynamicToolSpecs(input.toolContext) } : {}),
-      })) as { thread?: { id?: string } } | undefined;
+      })) as { thread?: { id?: string }; model?: unknown } | undefined;
       if (startResult?.thread?.id) threadId = startResult.thread.id;
+      if (!resolvedModel && typeof startResult?.model === 'string') {
+        resolvedModel = startResult.model;
+      }
     }
 
     if (!threadId) {
@@ -464,6 +495,62 @@ export async function runCodexTurn(
  * codex versions, so every field is read defensively under several
  * candidate names. Returns `undefined` when no usage is present.
  */
+/** Thread-cumulative token totals from a `thread/tokenUsage/updated`
+ *  notification's `tokenUsage.total` block. */
+interface CodexTokenTotals {
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+}
+
+function readTokenTotals(raw: unknown): CodexTokenTotals | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const total = (raw as Record<string, unknown>).total;
+  if (!total || typeof total !== 'object') return undefined;
+  const t = total as Record<string, unknown>;
+  const num = (k: string): number | undefined => {
+    const v = t[k];
+    return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  };
+  const out: CodexTokenTotals = {};
+  const input = num('inputTokens');
+  const cached = num('cachedInputTokens');
+  const output = num('outputTokens');
+  if (input !== undefined) out.inputTokens = input;
+  if (cached !== undefined) out.cachedInputTokens = cached;
+  if (output !== undefined) out.outputTokens = output;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * This turn's usage = cumulative totals at turn end minus the pre-turn
+ * baseline (nonzero after `thread/resume`). Codex counts cached prompt
+ * tokens INSIDE `inputTokens` (OpenAI semantics) while the ledger sums
+ * input + cacheRead as disjoint buckets — so cached is split back out.
+ */
+function usageFromTotalsDiff(
+  end: CodexTokenTotals | undefined,
+  start: CodexTokenTotals | undefined,
+):
+  | {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadTokens?: number;
+    }
+  | undefined {
+  if (!end) return undefined;
+  const diff = (a?: number, b?: number): number | undefined =>
+    a === undefined ? undefined : Math.max(0, a - (b ?? 0));
+  const input = diff(end.inputTokens, start?.inputTokens);
+  const cached = diff(end.cachedInputTokens, start?.cachedInputTokens);
+  const output = diff(end.outputTokens, start?.outputTokens);
+  const out: { inputTokens?: number; outputTokens?: number; cacheReadTokens?: number } = {};
+  if (input !== undefined) out.inputTokens = Math.max(0, input - (cached ?? 0));
+  if (cached !== undefined) out.cacheReadTokens = cached;
+  if (output !== undefined) out.outputTokens = output;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function readCodexUsage(turn: Record<string, unknown>):
   | {
       inputTokens?: number;
