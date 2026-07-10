@@ -366,9 +366,20 @@
         "actions/move-note.js",
         "actions/rename-notebook.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/Card.jsx",
+        "components/Editor.jsx",
+        "components/QuickAdd.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "components/Toolbar.jsx",
+        "components/Wall.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/library.js",
         "queries/search.js",
@@ -441,6 +452,22 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "masonry",
+          "options": [
+            {
+              "value": "masonry",
+              "label": "Masonry"
+            },
+            {
+              "value": "list",
+              "label": "List"
             }
           ]
         }

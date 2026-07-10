@@ -928,6 +928,342 @@
   }
 
   // ---------------------------------------------------------------------
+  // Notes fixtures — see packages/blueprints/apps/notes/queries/library.js
+  // for the row shape (note_id/title/format/pinned/created_at/updated_at/
+  // body/notebook_ids/notebook_names/attachments/references) and
+  // queries/search.js for the FTS-hit shape (adds `snippet`). Covers several
+  // notebooks, pinned notes, checklist notes with partial progress,
+  // markdown-ish bodies (headings/bullets/checklists), a long
+  // masonry-worthy spread, one note with an attachment, and the "(park)"
+  // marker convention for both a note and a notebook — see isParkTrigger
+  // above.
+  // ---------------------------------------------------------------------
+  function buildNotesStore() {
+    if (EMPTY_MODE) return { notes: [], notebooks: [] };
+
+    var notebooks = [
+      { notebook_id: 'nb-personal', name: 'Personal', sort_order: 0 },
+      { notebook_id: 'nb-work', name: 'Work', sort_order: 1 },
+      { notebook_id: 'nb-recipes', name: 'Recipes', sort_order: 2 },
+      { notebook_id: 'nb-travel', name: 'Travel', sort_order: 3 },
+      { notebook_id: 'nb-archive', name: 'Archive (park)', sort_order: 4 },
+    ];
+
+    function note(id, title, body, opts) {
+      opts = opts || {};
+      return {
+        note_id: id,
+        title: title,
+        format: 'markdown',
+        pinned: opts.pinned ? 1 : 0,
+        created_at: isoDaysAgo(opts.age != null ? opts.age : 1),
+        updated_at: isoDaysAgo(opts.age != null ? opts.age : 1, opts.hour),
+        body: body,
+        notebook_ids: opts.notebook ? [opts.notebook] : [],
+        attachments: opts.attachments || [],
+        references: [],
+      };
+    }
+
+    var notes = [
+      note(
+        'note-weekly',
+        'Weekly review ritual',
+        '## Every Friday, 25 min\n- [x] Clear the inbox to zero\n- [x] Skim last week’s notes\n- [ ] Pick 3 outcomes for next week\n- [ ] Park anything that can wait\n\nThe point is momentum, not perfection.',
+        { pinned: true, notebook: 'nb-work', age: 0, hour: 8 },
+      ),
+      note(
+        'note-reading',
+        'Reading list',
+        '- [ ] The Beginning of Infinity\n- [x] Thinking in Systems\n- [ ] A Pattern Language\n- [ ] The Timeless Way of Building',
+        { pinned: true, notebook: 'nb-personal', age: 3 },
+      ),
+      note(
+        'note-sourdough',
+        'Sourdough — the loaf that works (park)',
+        '## Levain\n50g starter, 50g water, 50g flour. 4–6h.\n\n## Dough\n500g flour, 350g water, 100g levain, 10g salt.\n\n- [ ] Autolyse 1h\n- [ ] 4 stretch-and-folds, 30 min apart\n- [ ] Bulk until +50%\n- [ ] Shape, cold proof overnight\n- [ ] Bake 500°F, lid on 20 min, off 20 min',
+        { notebook: 'nb-recipes', age: 5 },
+      ),
+      note(
+        'note-parking-lot',
+        'Ideas parking lot',
+        'A tiny app that only tells you the *next* thing.\n\nA calendar that hides everything except today.\n\nNotes that decay unless you touch them.',
+        { age: 1 },
+      ),
+      note(
+        'note-lisbon',
+        'Trip to Lisbon',
+        '## Must do\n- [x] Book the Alfama place\n- [ ] Day trip to Sintra\n- [ ] Pastel de nata crawl\n- [ ] Sunset at Miradouro\n\nGetting around: buy the Viva Viagem card at the airport.',
+        { notebook: 'nb-travel', age: 12 },
+      ),
+      note(
+        'note-standup',
+        'Standup notes',
+        'Yesterday: shipped the vault receipt viewer.\nToday: notes reinvention, card wall + editor.\nBlockers: none.',
+        { notebook: 'nb-work', age: 0, hour: 9 },
+      ),
+      note(
+        'note-gifts',
+        'Gift ideas',
+        '- [ ] Dad — the good headphones\n- [ ] Maya — pottery class\n- [x] Sam — that cookbook',
+        { notebook: 'nb-personal', age: 20 },
+      ),
+      note(
+        'note-writing',
+        'On writing',
+        'Write the **boring** first draft fast.\n\nCut every sentence that is trying too hard.\n\nRead it aloud. If you stumble, so will they.',
+        { age: 30 },
+      ),
+      note(
+        'note-pasta',
+        'Weeknight pasta',
+        'Garlic in cold oil, low heat. Anchovy melts in. Chili. Pasta water does the rest.\n\n- [ ] Buy good parmesan\n- [ ] More lemon than you think',
+        { notebook: 'nb-recipes', age: 25 },
+      ),
+      note(
+        'note-wifi',
+        'Home wifi + accounts',
+        'Router lives behind the books.\n\n- [ ] Rename the guest network\n- [ ] Rotate the long password',
+        { notebook: 'nb-personal', age: 45 },
+      ),
+      note(
+        'note-goals',
+        'Q3 goals',
+        '# Three bets\n1. Reinvent three vault apps end to end.\n2. Ship the receipt timeline everywhere.\n3. One doc a week, no exceptions.',
+        { notebook: 'nb-work', age: 60 },
+      ),
+      note(
+        'note-plants',
+        'Plant care',
+        '- [ ] Monstera — water Sundays\n- [ ] Snake plant — every 3 weeks\n- [x] Repot the fiddle-leaf',
+        { age: 80 },
+      ),
+      note(
+        'note-onboarding',
+        'Onboarding packet',
+        'The signed PDF is attached below.\n\n- [x] Send the packet\n- [ ] Collect the signed copy',
+        {
+          notebook: 'nb-work',
+          age: 2,
+          attachments: [
+            {
+              attachment_id: 'att-onboard-1',
+              content_id: 'content-onboard-1',
+              role: 'other',
+              is_primary: 1,
+              media_type: 'application/pdf',
+              title: 'onboarding-packet.pdf',
+              content_uri: blobUri('content-onboard-1'),
+              byte_size: 240_000,
+            },
+          ],
+        },
+      ),
+    ];
+    return { notes: notes, notebooks: notebooks };
+  }
+
+  var notesStore = appId === 'notes' ? buildNotesStore() : null;
+
+  function notebookNamesFor(n) {
+    return n.notebook_ids.map(function (id) {
+      var nb = notesStore.notebooks.find(function (x) {
+        return x.notebook_id === id;
+      });
+      return nb ? nb.name : 'Notebook';
+    });
+  }
+
+  function notesRead(query, input) {
+    if (query === 'library') {
+      var limit = Math.min(Math.max(Number(input.limit) || 200, 20), 2000);
+      var sorted = notesStore.notes.slice().sort(function (a, b) {
+        return b.pinned - a.pinned || String(b.updated_at).localeCompare(String(a.updated_at));
+      });
+      var windowed = sorted.slice(0, limit);
+      // Pinned notes ride beside the window even when older than its edge —
+      // mirrors library.js's own pinned-notes side read.
+      var pinnedOutside = sorted.slice(limit).filter(function (n) {
+        return n.pinned === 1;
+      });
+      var rows = windowed.concat(pinnedOutside).map(function (n) {
+        return Object.assign({}, n, { notebook_names: notebookNamesFor(n) });
+      });
+      return {
+        notes: rows,
+        notebooks: notesStore.notebooks,
+        truncated: sorted.length > limit,
+        window: limit,
+      };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { notes: [] };
+      var hits = notesStore.notes.filter(function (n) {
+        return (n.title + ' ' + n.body).toLowerCase().indexOf(term) !== -1;
+      });
+      return {
+        notes: hits.map(function (n) {
+          var snippet = n.body.toLowerCase().indexOf(term) !== -1 ? '…⟦' + n.body.slice(0, 80) + '⟧…' : '';
+          return Object.assign({}, n, { notebook_names: notebookNamesFor(n), snippet: snippet });
+        }),
+      };
+    }
+    console.warn('[mock-centraid] notes: unmapped query', query);
+    return {};
+  }
+
+  function notesWrite(action, input) {
+    function findNote(id) {
+      return notesStore.notes.find(function (n) {
+        return n.note_id === id;
+      });
+    }
+    function findNotebook(id) {
+      return notesStore.notebooks.find(function (nb) {
+        return nb.notebook_id === id;
+      });
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(predicate) {
+      return { status: 'failed', reason: predicate, predicate: predicate };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+
+    switch (action) {
+      case 'create-note': {
+        var title = String(input.title || '').trim();
+        var body = String(input.body_text || '');
+        if (isParkTrigger(title) || isParkTrigger(body)) return parked();
+        var id = uid('note');
+        var n0 = {
+          note_id: id,
+          title: title,
+          format: input.format || 'markdown',
+          pinned: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          body: body,
+          notebook_ids: input.notebook_id ? [input.notebook_id] : [],
+          attachments: [],
+          references: [],
+        };
+        notesStore.notes.unshift(n0);
+        return ok({ note_id: id });
+      }
+      case 'edit-note': {
+        var n1 = findNote(input.note_id);
+        if (!n1) return refuse('not_found');
+        if (isParkTrigger(n1.title)) return parked();
+        if (input.title != null) n1.title = String(input.title);
+        if (input.body_text != null) n1.body = String(input.body_text);
+        if (input.format != null) n1.format = String(input.format);
+        if (input.pinned != null) n1.pinned = Number(input.pinned);
+        n1.updated_at = new Date().toISOString();
+        return ok({ note_id: n1.note_id });
+      }
+      case 'move-note': {
+        var n2 = findNote(input.note_id);
+        if (!n2) return refuse('not_found');
+        if (isParkTrigger(n2.title)) return parked();
+        n2.notebook_ids = input.notebook_id ? [input.notebook_id] : [];
+        n2.updated_at = new Date().toISOString();
+        return ok({ note_id: n2.note_id });
+      }
+      case 'create-notebook': {
+        var name = String(input.name || '').trim();
+        if (isParkTrigger(name)) return parked();
+        var already = notesStore.notebooks.some(function (nb) {
+          return nb.name === name;
+        });
+        if (already) return refuse('name_unused_by_owner');
+        var nbId = uid('nb');
+        notesStore.notebooks.push({ notebook_id: nbId, name: name, sort_order: notesStore.notebooks.length });
+        return ok({ notebook_id: nbId });
+      }
+      case 'rename-notebook': {
+        var nb1 = findNotebook(input.notebook_id);
+        if (!nb1) return refuse('not_found');
+        var newName = String(input.name || '').trim();
+        if (isParkTrigger(nb1.name) || isParkTrigger(newName)) return parked();
+        if (newName === nb1.name) return ok({ notebook_id: nb1.notebook_id });
+        var dupe = notesStore.notebooks.some(function (nb) {
+          return nb.notebook_id !== nb1.notebook_id && nb.name === newName;
+        });
+        if (dupe) return refuse('name_unused_by_owner');
+        nb1.name = newName;
+        return ok({ notebook_id: nb1.notebook_id });
+      }
+      case 'delete-notebook': {
+        var nb2 = findNotebook(input.notebook_id);
+        if (!nb2) return refuse('not_found');
+        if (isParkTrigger(nb2.name)) return parked();
+        var unfiled = 0;
+        notesStore.notes.forEach(function (n) {
+          var idx = n.notebook_ids.indexOf(nb2.notebook_id);
+          if (idx !== -1) {
+            n.notebook_ids.splice(idx, 1);
+            unfiled += 1;
+          }
+        });
+        notesStore.notebooks = notesStore.notebooks.filter(function (nb) {
+          return nb.notebook_id !== nb2.notebook_id;
+        });
+        return ok({ notes_unfiled: unfiled });
+      }
+      case 'delete-note': {
+        var n3 = findNote(input.note_id);
+        if (!n3) return refuse('not_found');
+        if (isParkTrigger(n3.title)) return parked();
+        notesStore.notes = notesStore.notes.filter(function (n) {
+          return n.note_id !== n3.note_id;
+        });
+        return ok({});
+      }
+      case 'attach': {
+        var n4 = findNote(input.subject_id);
+        if (!n4) return refuse('not_found');
+        if (isParkTrigger(n4.title)) return parked();
+        var contentId = uid('content');
+        var attachment = {
+          attachment_id: uid('att'),
+          content_id: contentId,
+          role: input.role || 'other',
+          is_primary: 0,
+          media_type: 'application/octet-stream',
+          title: input.title || 'file',
+          content_uri: blobUri(contentId),
+          byte_size: 40_000,
+        };
+        n4.attachments = (n4.attachments || []).concat([attachment]);
+        return ok({ attachment_id: attachment.attachment_id });
+      }
+      case 'detach': {
+        var owner = null;
+        notesStore.notes.forEach(function (n) {
+          var idx = (n.attachments || []).findIndex(function (a) {
+            return a.attachment_id === input.attachment_id;
+          });
+          if (idx !== -1) {
+            owner = n;
+            n.attachments.splice(idx, 1);
+          }
+        });
+        if (!owner) return refuse('not_found');
+        return ok({});
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // window.centraid — fully replaces the real change-bridge's version
   // (static-server.ts's injectChangeBridge, which ran just before this
   // script and already opened an EventSource against our harness's
@@ -941,6 +1277,7 @@
       if (appId === 'docs') return docsRead(opts.query, opts.input || {});
       if (appId === 'photos') return photosRead(opts.query, opts.input || {});
       if (appId === 'tasks') return tasksRead(opts.query, opts.input || {});
+      if (appId === 'notes') return notesRead(opts.query, opts.input || {});
       console.warn('[mock-centraid] unknown appId for read()', appId);
       return {};
     },
@@ -951,6 +1288,7 @@
       if (appId === 'docs') result = docsWrite(opts.action, opts.input || {});
       else if (appId === 'photos') result = photosWrite(opts.action, opts.input || {});
       else if (appId === 'tasks') result = tasksWrite(opts.action, opts.input || {});
+      else if (appId === 'notes') result = notesWrite(opts.action, opts.input || {});
       else console.warn('[mock-centraid] unknown appId for write()', appId);
       if (result == null) {
         console.warn('[mock-centraid] unmapped action, returning {}', opts.action, opts.input);
@@ -983,12 +1321,21 @@
     emptyMode: EMPTY_MODE,
     deniedMode: DENIED_MODE,
     get state() {
-      return appId === 'docs' ? docsStore : appId === 'photos' ? photosStore : appId === 'tasks' ? tasksStore : null;
+      return appId === 'docs'
+        ? docsStore
+        : appId === 'photos'
+          ? photosStore
+          : appId === 'tasks'
+            ? tasksStore
+            : appId === 'notes'
+              ? notesStore
+              : null;
     },
     reset() {
       if (appId === 'docs') docsStore = buildDocsStore();
       else if (appId === 'photos') photosStore = buildPhotosStore();
       else if (appId === 'tasks') tasksStore = buildTasksStore();
+      else if (appId === 'notes') notesStore = buildNotesStore();
       fireChange([appId]);
     },
     fireChange: fireChange,

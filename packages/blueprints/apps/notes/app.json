@@ -559,6 +559,22 @@
           "label": "Ochre"
         }
       ]
+    },
+    {
+      "key": "appDefaultView",
+      "label": "Default view",
+      "type": "segmented",
+      "default": "masonry",
+      "options": [
+        {
+          "value": "masonry",
+          "label": "Masonry"
+        },
+        {
+          "value": "list",
+          "label": "List"
+        }
+      ]
     }
   ]
 }
