@@ -3,8 +3,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getInsightsSummary = vi.fn();
+const listAutomations = vi.fn();
 vi.mock('../../../gateway-client.js', () => ({
   getInsightsSummary: () => getInsightsSummary(),
+  listAutomations: () => listAutomations(),
 }));
 
 let InsightsRoute: typeof import('./InsightsRoute.js').default;
@@ -14,6 +16,8 @@ let host: HTMLElement | null = null;
 beforeEach(async () => {
   ({ default: InsightsRoute } = await import('./InsightsRoute.js'));
   getInsightsSummary.mockReset();
+  listAutomations.mockReset();
+  listAutomations.mockResolvedValue([]);
 });
 
 async function render(): Promise<HTMLElement> {
@@ -68,5 +72,41 @@ describe('InsightsRoute', () => {
     getInsightsSummary.mockRejectedValue(new Error('offline'));
     const el = await render();
     expect(el.querySelector('.pageEmpty')?.textContent).toContain('offline');
+  });
+
+  it('resolves automation display names for the by-source + recent rows', async () => {
+    listAutomations.mockResolvedValue([
+      { ref: 'system-health-check/system-health-check', name: 'System health check' },
+    ]);
+    getInsightsSummary.mockResolvedValue({
+      ...(summary as object),
+      byAutomation: [
+        {
+          key: 'system-health-check/system-health-check',
+          label: 'Automation',
+          kind: 'automation',
+          runs: 1,
+          tokens: 0,
+          costUsd: 0,
+        },
+      ],
+      recent: [
+        {
+          runId: 'r1',
+          kind: 'automation',
+          label: 'ok',
+          automationRef: 'system-health-check/system-health-check',
+          ok: true,
+          startedAt: 1750000000000,
+          tokens: 0,
+          costUsd: 0,
+        },
+      ],
+    });
+    const el = await render();
+    // Both the "By source" row and the "Recent activity" row show the real
+    // name, not the generic bucket label / raw handler summary.
+    const hits = el.textContent?.match(/System health check/g) ?? [];
+    expect(hits.length).toBeGreaterThanOrEqual(2);
   });
 });

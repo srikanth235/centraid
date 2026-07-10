@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import { getInsightsSummary } from '../../../gateway-client.js';
+import { getInsightsSummary, listAutomations } from '../../../gateway-client.js';
 import InsightsScreen from '../../screens/InsightsScreen.js';
 import PageScroll from '../PageScroll.js';
 import { PageEmpty, PageLoading } from '../status.js';
@@ -9,8 +9,32 @@ import { useAsyncData } from '../useAsyncData.js';
 // replacing the vanilla `renderInsights` (app-insights.ts). Gateway I/O moves
 // into the effect; the InsightsScreen owns the dashboard exactly as before.
 // Insights paints its own header, so PageScroll carries no title.
+//
+// The store's summary carries automation REFS but no display names (the
+// manifests live on disk, not in journal.db — see InsightsStore) — this route
+// resolves them from the automation list, falling back to the store's generic
+// labels for automations that have since been deleted.
 export default function InsightsRoute(): JSX.Element {
-  const state = useAsyncData(() => getInsightsSummary());
+  const state = useAsyncData(async () => {
+    const [summary, automations] = await Promise.all([
+      getInsightsSummary(),
+      listAutomations().catch(() => [] as CentraidAutomationRow[]),
+    ]);
+    const nameByRef = new Map(automations.map((a) => [a.ref, a.name]));
+    return {
+      ...summary,
+      byAutomation: summary.byAutomation.map((row) =>
+        row.kind === 'automation' && nameByRef.has(row.key)
+          ? { ...row, label: nameByRef.get(row.key) as string }
+          : row,
+      ),
+      recent: summary.recent.map((row) =>
+        row.automationRef && nameByRef.has(row.automationRef)
+          ? { ...row, label: nameByRef.get(row.automationRef) as string }
+          : row,
+      ),
+    };
+  });
   return (
     <PageScroll>
       {state.status === 'loading' ? (

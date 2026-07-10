@@ -565,6 +565,9 @@ export interface CentraidInsightsActivityRow {
   runId: string;
   kind: 'automation' | 'chat' | 'build' | string;
   label: string;
+  /** `<appId>/<id>` handle for automation runs — the desktop resolves the
+   *  display name from the automation list. */
+  automationRef?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
@@ -928,6 +931,7 @@ declare global {
     runId: string;
     kind: string;
     label: string;
+    automationRef?: string;
     ok: boolean;
     startedAt: number;
     tokens: number;

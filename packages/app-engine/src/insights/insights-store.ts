@@ -74,6 +74,9 @@ export interface InsightsActivityRow {
   runId: string;
   kind: string;
   label: string;
+  /** `<appId>/<id>` handle — set for automation runs so the desktop can
+   *  resolve the display name from the manifest (same deal as `name`). */
+  automationRef?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
@@ -173,6 +176,7 @@ export class InsightsStore {
         SELECT
           run_id AS id, kind AS kind, ok AS ok, started_at AS started_at,
           summary AS summary, note AS note, NULL AS name,
+          automation_ref AS automation_ref,
           ${TOKEN_SUM} AS tokens, COALESCE(total_cost_usd, 0) AS cost
         FROM run_summary
         WHERE started_at >= ?
@@ -264,6 +268,7 @@ export class InsightsStore {
         summary: string | null;
         note: string | null;
         name: string | null;
+        automation_ref: string | null;
         tokens: number | null;
         cost: number | null;
       }>
@@ -271,6 +276,7 @@ export class InsightsStore {
       runId: r.id,
       kind: r.kind,
       label: r.summary ?? r.note ?? r.name ?? bucketLabel(r.kind),
+      ...(r.automation_ref ? { automationRef: r.automation_ref } : {}),
       ok: r.ok !== 0,
       startedAt: r.started_at,
       tokens: r.tokens ?? 0,
