@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent); Locker is a finished password manager — sidebar, list, detail, watchtower, trash, generator and lock — and splitting it would break that "one file" contract.
+// governance: allow-repo-hygiene file-size-limit Locker is a finished password manager — sidebar, list, detail, watchtower, trash, generator and lock — and splitting it would break that "one file" contract.
 // Locker — everything, locked up. A personal password manager as a projection
 // over the personal vault. Every row is a locker.item; the list payload is
 // secret-free (only the single-item query returns passwords, card numbers,
@@ -15,55 +15,95 @@ import {
   armConfirm,
   barSpan,
   debounce,
-  el,
-  h,
   outcomeMessage,
   readFailed,
   showSkeleton,
   toast,
 } from './kit.js';
+import { KitElement } from './elements.js';
+// Aliased: the app already has a module-level `render()` orchestrator (assigns
+// properties on the mounted chrome components + redraws the overlay layer);
+// `litRender` is Lit's standalone DOM-commit function used for the overlay
+// layer (lock screen / generator / edit modal — kit-owned containers, per the
+// app's Lit conventions).
+import {
+  createRef,
+  html,
+  live,
+  nothing,
+  ref,
+  render as litRender,
+  repeat,
+  svg as svgFrag,
+} from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 
 // ---------- Icons ----------
+// Static, trusted SVG path data (issue #327 house style): each shape is a Lit
+// `svg` fragment built once; `iconSvg`/`catIconSvg` wrap it in the `<svg>`
+// element with the size/stroke/fill a given call site needs.
 
-const svg = (inner, sw = 1.7) =>
-  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
-
-const I = {
-  lock: '<path d="M8 11V8a4 4 0 018 0v3"></path><rect x="5" y="11" width="14" height="10" rx="2"></rect>',
-  plus: '<path d="M12 5v14M5 12h14"></path>',
-  close: '<path d="M6 6l12 12M18 6 6 18"></path>',
-  menu: '<path d="M4 7h16M4 12h16M4 17h16"></path>',
-  search: '<circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path>',
-  back: '<path d="m15 6-6 6 6 6"></path>',
-  edit: '<path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"></path>',
-  copy: '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path>',
-  eye: '<circle cx="12" cy="12" r="3"></circle><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>',
-  eyeOff:
-    '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><path d="m4 4 16 16"></path>',
-  regen:
-    '<path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path>',
-  trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"></path>',
-  tag: '<path d="M4 4h7l9 9-7 7-9-9z"></path><circle cx="8.5" cy="8.5" r="1.3"></circle>',
-  starFill: '<path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>',
-  sun: '<circle cx="12" cy="12" r="4.5"></circle><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path>',
-  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path>',
-  all: '<path d="M4 6h16M4 12h16M4 18h16"></path>',
-  shield:
-    '<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"></path><path d="m9.5 12 2 2 3.5-3.5"></path>',
+const ICON_PATHS = {
+  lock: svgFrag`<path d="M8 11V8a4 4 0 018 0v3"></path><rect x="5" y="11" width="14" height="10" rx="2"></rect>`,
+  plus: svgFrag`<path d="M12 5v14M5 12h14"></path>`,
+  close: svgFrag`<path d="M6 6l12 12M18 6 6 18"></path>`,
+  menu: svgFrag`<path d="M4 7h16M4 12h16M4 17h16"></path>`,
+  search: svgFrag`<circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path>`,
+  back: svgFrag`<path d="m15 6-6 6 6 6"></path>`,
+  edit: svgFrag`<path d="M4 20h4L18.5 9.5a2 2 0 0 0-2.8-2.8L5 17z"></path>`,
+  copy: svgFrag`<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path>`,
+  eye: svgFrag`<circle cx="12" cy="12" r="3"></circle><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>`,
+  eyeOff: svgFrag`<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path><path d="m4 4 16 16"></path>`,
+  regen: svgFrag`<path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path>`,
+  trash: svgFrag`<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"></path>`,
+  tag: svgFrag`<path d="M4 4h7l9 9-7 7-9-9z"></path><circle cx="8.5" cy="8.5" r="1.3"></circle>`,
+  starFill: svgFrag`<path d="m12 3 2.6 5.6 6 .7-4.5 4.2 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"></path>`,
+  sun: svgFrag`<circle cx="12" cy="12" r="4.5"></circle><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"></path>`,
+  moon: svgFrag`<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"></path>`,
+  all: svgFrag`<path d="M4 6h16M4 12h16M4 18h16"></path>`,
+  shield: svgFrag`<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"></path><path d="m9.5 12 2 2 3.5-3.5"></path>`,
 };
 
-const CAT_ICON = {
-  login:
-    '<path d="M15 7a5 5 0 1 0-4.5 5H12l2 2 2-2 1.5-1.5"></path><path d="M11.5 11.5 8 15l-1 3 3-1 3.5-3.5"></path>',
-  card: '<path d="M3 7h18v11H3z"></path><path d="M3 11h18"></path>',
-  note: '<path d="M6 3h9l4 4v14H6z"></path><path d="M9 12h7M9 16h5M14 3v4h4"></path>',
-  identity:
-    '<path d="M4 5h16v14H4z"></path><path d="M8 10a2 2 0 1 0 0-.1"></path><path d="M6 16a3 3 0 0 1 6 0"></path><path d="M14 9h4M14 13h4"></path>',
-  password: '<path d="M7 12h.01M12 12h.01M17 12h.01"></path><path d="M4 7h16v10H4z"></path>',
-  wifi: '<path d="M5 12.5a10 10 0 0 1 14 0"></path><path d="M8.5 15.5a5 5 0 0 1 7 0"></path><path d="M12 18.5h.01"></path>',
+const CAT_ICON_PATHS = {
+  login: svgFrag`<path d="M15 7a5 5 0 1 0-4.5 5H12l2 2 2-2 1.5-1.5"></path><path d="M11.5 11.5 8 15l-1 3 3-1 3.5-3.5"></path>`,
+  card: svgFrag`<path d="M3 7h18v11H3z"></path><path d="M3 11h18"></path>`,
+  note: svgFrag`<path d="M6 3h9l4 4v14H6z"></path><path d="M9 12h7M9 16h5M14 3v4h4"></path>`,
+  identity: svgFrag`<path d="M4 5h16v14H4z"></path><path d="M8 10a2 2 0 1 0 0-.1"></path><path d="M6 16a3 3 0 0 1 6 0"></path><path d="M14 9h4M14 13h4"></path>`,
+  password: svgFrag`<path d="M7 12h.01M12 12h.01M17 12h.01"></path><path d="M4 7h16v10H4z"></path>`,
+  wifi: svgFrag`<path d="M5 12.5a10 10 0 0 1 14 0"></path><path d="M8.5 15.5a5 5 0 0 1 7 0"></path><path d="M12 18.5h.01"></path>`,
 };
+
+/** `<svg width height viewBox="0 0 24 24">` wrapping a stroked icon path. */
+function iconSvg(key, { sw = 1.7, size = 16, stroke = 'currentColor', fill = 'none' } = {}) {
+  return html`<svg
+    width=${size}
+    height=${size}
+    viewBox="0 0 24 24"
+    fill=${fill}
+    stroke=${stroke}
+    stroke-width=${sw}
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    ${ICON_PATHS[key]}
+  </svg>`;
+}
+
+function catIconSvg(type, opts) {
+  return html`<svg
+    width=${opts?.size ?? 16}
+    height=${opts?.size ?? 16}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width=${opts?.sw ?? 1.7}
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    ${CAT_ICON_PATHS[type]}
+  </svg>`;
+}
 
 const CATS = {
   login: { label: 'Logins', color: '#2F63E6' },
@@ -127,6 +167,18 @@ let readFailedShowing = false;
 let searchSeq = 0;
 let searchRows = null;
 
+// The mounted chrome: three persistent regions + the overlay layer, mounted
+// once into #stage and thereafter driven by property assignment (dumb
+// projections — refresh()/render() never rebuild them). This is what lets the
+// once-a-second OTP tick (below) update only the detail pane's `tick` property
+// directly instead of re-rendering regions the owner might be interacting with
+// (typing in search, mid-edit in a modal).
+let chromeMounted = false;
+let sidebarComp = null;
+let listComp = null;
+let detailComp = null;
+let overlaysEl = null;
+
 // ---------- Notice / consent narration ----------
 
 function notice(text) {
@@ -157,9 +209,6 @@ async function act(action, input) {
 
 // ---------- Formatting ----------
 
-function pad(n) {
-  return (n < 10 ? '0' : '') + n;
-}
 function fmtDate(iso) {
   if (!iso) return '';
   try {
@@ -266,7 +315,8 @@ async function computeTotp(seed, step) {
 }
 
 // Kick off (or read a cached) TOTP for the seed at the current step; re-render
-// when it resolves. Returns the cached string if we already have it.
+// the detail pane when it resolves (never the sidebar/list — see `chromeMounted`
+// above). Returns the cached string if we already have it.
 function totpFor(seed) {
   if (!seed) return null;
   const step = Math.floor(Date.now() / 30000);
@@ -279,7 +329,7 @@ function totpFor(seed) {
     }
     OTP_CACHE.set(key, code);
     if (OTP_CACHE.size > 40) OTP_CACHE.delete(OTP_CACHE.keys().next().value);
-    render();
+    if (detailComp) detailComp.tick = ++state.tick;
   });
   return null;
 }
@@ -372,478 +422,331 @@ function byTitle(a, b) {
 
 // ---------- Sidebar ----------
 
-function navItem({ iconHtml, label, count, active, onClick }) {
-  const item = h('button', {
-    type: 'button',
-    class: 'v-nav-item',
-    'aria-current': String(!!active),
-    onclick: onClick,
-  });
-  item.appendChild(el(`<span class="ic">${iconHtml}</span>`));
-  item.appendChild(h('span', { class: 'lbl' }, label));
-  item.appendChild(h('span', { class: 'ct' }, count == null || count === 0 ? '' : String(count)));
-  return item;
-}
-
-function renderSidebar(root) {
-  const items = data.items;
-  const counts = {
-    all: items.length,
-    fav: items.filter((i) => i.favorite).length,
-    watch: state.watch.compromised + state.watch.weak,
+/** `<locker-sidebar>` — nav rail: top shortcuts, categories, tags, trash, lock
+ * + theme. A dumb projection: `render()` assigns fresh counts/nav/dark on every
+ * pass; clicks call straight back into the module-level nav/write helpers. */
+class LockerSidebar extends KitElement {
+  static properties = {
+    counts: { attribute: false },
+    catCounts: { attribute: false },
+    tags: { attribute: false },
+    trashCount: { type: Number },
+    nav: { attribute: false },
+    dark: { type: Boolean },
   };
-  const catCounts = {};
-  for (const t of CAT_ORDER) catCounts[t] = items.filter((i) => i.type === t).length;
-  const allTags = [...new Set(items.flatMap((i) => i.tags || []))].sort();
 
-  const side = h('aside', { class: 'v-side' });
-
-  const brand = h('div', { class: 'v-brand' });
-  brand.appendChild(el(`<span class="v-brand-mark">${svg(I.lock, 1.9)}</span>`));
-  brand.appendChild(
-    el(
-      `<div style="min-width:0;"><div class="v-brand-name">Locker</div><div class="v-brand-tag">everything, locked up</div></div>`,
-    ),
-  );
-  brand.appendChild(
-    h('button', {
-      type: 'button',
-      class: 'v-side-close',
-      'aria-label': 'Close',
-      html: svg(I.close, 1.75),
-      onclick: () => {
-        state.sideOpen = false;
-        render();
-      },
-    }),
-  );
-  side.appendChild(brand);
-
-  side.appendChild(
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'v-newbtn',
-        onclick: () => openNew(),
-      },
-      el(svg(I.plus, 2)),
-      'New item',
-    ),
-  );
-
-  const top = h('nav', { class: 'v-nav' });
-  top.appendChild(
-    navItem({
-      iconHtml: svg(I.all),
-      label: 'All items',
-      count: counts.all,
-      active: state.nav.kind === 'all',
-      onClick: () => setNav({ kind: 'all' }),
-    }),
-  );
-  top.appendChild(
-    navItem({
-      iconHtml: svg(I.starFill, 1.6),
-      label: 'Favorites',
-      count: counts.fav,
-      active: state.nav.kind === 'fav',
-      onClick: () => setNav({ kind: 'fav' }),
-    }),
-  );
-  top.appendChild(
-    navItem({
-      iconHtml: svg(I.shield),
-      label: 'Watchtower',
-      count: counts.watch,
-      active: state.nav.kind === 'watch',
-      onClick: () => setNav({ kind: 'watch' }),
-    }),
-  );
-  side.appendChild(top);
-
-  side.appendChild(h('div', { class: 'v-seclabel' }, 'Categories'));
-  const cats = h('nav', { class: 'v-nav' });
-  for (const t of CAT_ORDER) {
-    cats.appendChild(
-      navItem({
-        iconHtml: svg(CAT_ICON[t]),
-        label: CATS[t].label,
-        count: catCounts[t],
-        active: state.nav.kind === 'cat' && state.nav.type === t,
-        onClick: () => setNav({ kind: 'cat', type: t }),
-      }),
-    );
+  constructor() {
+    super();
+    this.counts = { all: 0, fav: 0, watch: 0 };
+    this.catCounts = {};
+    this.tags = [];
+    this.trashCount = 0;
+    this.nav = { kind: 'all' };
+    this.dark = false;
   }
-  side.appendChild(cats);
 
-  side.appendChild(h('div', { class: 'v-seclabel' }, 'Tags'));
-  const tags = h('nav', { class: 'v-nav' });
-  for (const tag of allTags) {
-    tags.appendChild(
-      navItem({
-        iconHtml: svg(I.tag),
-        label: tag,
-        count: items.filter((i) => (i.tags || []).includes(tag)).length,
-        active: state.nav.kind === 'tag' && state.nav.tag === tag,
-        onClick: () => setNav({ kind: 'tag', tag }),
-      }),
-    );
+  #navItem({ icon, label, count, active, onClick }) {
+    return html`<button
+      type="button"
+      class="v-nav-item"
+      aria-current=${String(!!active)}
+      @click=${onClick}
+    >
+      <span class="ic">${icon}</span>
+      <span class="lbl">${label}</span>
+      <span class="ct">${count == null || count === 0 ? '' : String(count)}</span>
+    </button>`;
   }
-  tags.appendChild(
-    navItem({
-      iconHtml: svg(I.trash, 1.6),
-      label: 'Trash',
-      count: state.trashRows.length,
-      active: state.nav.kind === 'trash',
-      onClick: () => setNav({ kind: 'trash' }),
-    }),
-  );
-  side.appendChild(tags);
 
-  const foot = h('div', { class: 'v-side-foot' });
-  foot.appendChild(
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'v-lock',
-        onclick: () => {
-          state.locked = true;
-          state.passInput = '';
-          render();
-        },
-      },
-      el(svg(I.lock, 1.75)),
-      'Lock',
-    ),
-  );
-  foot.appendChild(
-    h('button', {
-      type: 'button',
-      class: 'v-iconbtn',
-      'aria-label': 'Theme',
-      html: svg(state.dark ? I.sun : I.moon, 1.75),
-      onclick: () => toggleTheme(),
-    }),
-  );
-  side.appendChild(foot);
+  render() {
+    return html`<aside class="v-side">
+      <div class="v-brand">
+        <span class="v-brand-mark">${iconSvg('lock', { sw: 1.9 })}</span>
+        <div style="min-width:0;">
+          <div class="v-brand-name">Locker</div>
+          <div class="v-brand-tag">everything, locked up</div>
+        </div>
+        <button
+          type="button"
+          class="v-side-close"
+          aria-label="Close"
+          @click=${() => {
+            state.sideOpen = false;
+            render();
+          }}
+        >
+          ${iconSvg('close', { sw: 1.75 })}
+        </button>
+      </div>
 
-  root.appendChild(side);
+      <button type="button" class="v-newbtn" @click=${() => openNew()}>
+        ${iconSvg('plus', { sw: 2 })} New item
+      </button>
+
+      <nav class="v-nav">
+        ${this.#navItem({
+          icon: iconSvg('all'),
+          label: 'All items',
+          count: this.counts.all,
+          active: this.nav.kind === 'all',
+          onClick: () => setNav({ kind: 'all' }),
+        })}
+        ${this.#navItem({
+          icon: iconSvg('starFill', { sw: 1.6 }),
+          label: 'Favorites',
+          count: this.counts.fav,
+          active: this.nav.kind === 'fav',
+          onClick: () => setNav({ kind: 'fav' }),
+        })}
+        ${this.#navItem({
+          icon: iconSvg('shield'),
+          label: 'Watchtower',
+          count: this.counts.watch,
+          active: this.nav.kind === 'watch',
+          onClick: () => setNav({ kind: 'watch' }),
+        })}
+      </nav>
+
+      <div class="v-seclabel">Categories</div>
+      <nav class="v-nav">
+        ${CAT_ORDER.map((t) =>
+          this.#navItem({
+            icon: catIconSvg(t),
+            label: CATS[t].label,
+            count: this.catCounts[t],
+            active: this.nav.kind === 'cat' && this.nav.type === t,
+            onClick: () => setNav({ kind: 'cat', type: t }),
+          }),
+        )}
+      </nav>
+
+      <div class="v-seclabel">Tags</div>
+      <nav class="v-nav">
+        ${this.tags.map(({ tag, count }) =>
+          this.#navItem({
+            icon: iconSvg('tag'),
+            label: tag,
+            count,
+            active: this.nav.kind === 'tag' && this.nav.tag === tag,
+            onClick: () => setNav({ kind: 'tag', tag }),
+          }),
+        )}
+        ${this.#navItem({
+          icon: iconSvg('trash', { sw: 1.6 }),
+          label: 'Trash',
+          count: this.trashCount,
+          active: this.nav.kind === 'trash',
+          onClick: () => setNav({ kind: 'trash' }),
+        })}
+      </nav>
+
+      <div class="v-side-foot">
+        <button
+          type="button"
+          class="v-lock"
+          @click=${() => {
+            state.locked = true;
+            state.passInput = '';
+            render();
+          }}
+        >
+          ${iconSvg('lock', { sw: 1.75 })} Lock
+        </button>
+        <button type="button" class="v-iconbtn" aria-label="Theme" @click=${() => toggleTheme()}>
+          ${iconSvg(this.dark ? 'sun' : 'moon', { sw: 1.75 })}
+        </button>
+      </div>
+    </aside>`;
+  }
 }
+customElements.define('locker-sidebar', LockerSidebar);
 
 // ---------- List pane ----------
 
-function renderList(root) {
-  const pool = currentPool();
-  const navTitles = { all: 'All items', fav: 'Favorites', watch: 'Watchtower', trash: 'Trash' };
-  let listTitle =
-    state.nav.kind === 'cat'
-      ? catOf(state.nav.type).label
-      : state.nav.kind === 'tag'
-        ? '#' + state.nav.tag
-        : navTitles[state.nav.kind] || 'All items';
-
-  const section = h('section', { class: 'v-list' });
-
-  const top = h('div', { class: 'v-list-top' });
-  const head = h('div', { class: 'v-list-head' });
-  head.appendChild(
-    h('button', {
-      type: 'button',
-      class: 'v-hamburger',
-      'aria-label': 'Menu',
-      html: svg(I.menu, 1.75),
-      onclick: () => {
-        state.sideOpen = true;
-        render();
-      },
-    }),
-  );
-  head.appendChild(h('span', { class: 'v-list-title' }, listTitle));
-  head.appendChild(h('span', { class: 'v-list-count' }, String(pool.length)));
-  top.appendChild(head);
-
-  const searchBox = h('div', { class: 'v-search' });
-  searchBox.appendChild(
-    el(svg(I.search, 1.75).replace('width="16" height="16"', 'width="15" height="15"')),
-  );
-  const input = h('input', {
-    type: 'search',
-    placeholder: `Search ${data.items.length} items`,
-    value: state.search,
-    autocomplete: 'off',
-  });
-  input.addEventListener('input', (ev) => {
-    state.search = ev.target.value;
-    applySearch();
-  });
-  input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape' && state.search) {
-      ev.preventDefault();
-      state.search = '';
-      searchRows = null;
-      searchSeq += 1;
-      render();
-    }
-  });
-  searchBox.appendChild(input);
-  top.appendChild(searchBox);
-  section.appendChild(top);
-
-  const listEl = h('div', { class: 'v-items' });
-  if (pool.length === 0) {
-    listEl.appendChild(
-      h('div', { class: 'v-list-empty' }, state.search.trim() ? 'No matches.' : 'Nothing here.'),
-    );
-  } else {
-    for (const i of pool) listEl.appendChild(listRow(i));
-  }
-  section.appendChild(listEl);
-  root.appendChild(section);
-}
-
-function listRow(i) {
+function listRowTpl(i, selectedId) {
   const wc = warnColor(i);
-  const btn = h('button', {
-    type: 'button',
-    class: 'v-item',
-    'aria-current': String(state.selectedId === i.item_id),
-    onclick: () => selectItem(i.item_id),
-  });
-  btn.appendChild(
-    h('span', { class: 'v-itile', style: `background:${catOf(i.type).color};` }, monoOf(i)),
-  );
-  const main = h('span', { class: 'v-imain' });
-  const title = h('span', { class: 'v-ititle' }, i.title);
-  if (i.favorite)
-    title.appendChild(
-      el(
-        `<span class="v-star"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">${I.starFill}</svg></span>`,
-      ),
-    );
-  if (wc) title.appendChild(h('span', { class: 'v-warn-dot', style: `background:${wc};` }));
-  main.appendChild(title);
-  main.appendChild(h('span', { class: 'v-isub' }, subOf(i) || '—'));
-  btn.appendChild(main);
-  return btn;
+  return html`<button
+    type="button"
+    class="v-item"
+    aria-current=${String(selectedId === i.item_id)}
+    @click=${() => selectItem(i.item_id)}
+  >
+    <span class="v-itile" style="background:${catOf(i.type).color};">${monoOf(i)}</span>
+    <span class="v-imain">
+      <span class="v-ititle"
+        >${i.title}${i.favorite
+          ? html`<span class="v-star"
+              >${iconSvg('starFill', { size: 12, fill: 'currentColor', stroke: 'none' })}</span
+            >`
+          : nothing}${wc
+          ? html`<span class="v-warn-dot" style="background:${wc};"></span>`
+          : nothing}</span
+      >
+      <span class="v-isub">${subOf(i) || '—'}</span>
+    </span>
+  </button>`;
 }
+
+/** `<locker-list>` — the search box + filtered/sorted row list for the current
+ * nav. `search` binds with `live()` since the box may re-render while the
+ * owner is mid-keystroke (a debounced search commit, an unrelated nav flip). */
+class LockerList extends KitElement {
+  static properties = {
+    pool: { attribute: false },
+    listTitle: { type: String },
+    allCount: { type: Number },
+    search: { type: String },
+    selectedId: { type: String },
+  };
+
+  constructor() {
+    super();
+    this.pool = [];
+    this.listTitle = 'All items';
+    this.allCount = 0;
+    this.search = '';
+    this.selectedId = null;
+  }
+
+  render() {
+    const pool = this.pool ?? [];
+    return html`<section class="v-list">
+      <div class="v-list-top">
+        <div class="v-list-head">
+          <button
+            type="button"
+            class="v-hamburger"
+            aria-label="Menu"
+            @click=${() => {
+              state.sideOpen = true;
+              render();
+            }}
+          >
+            ${iconSvg('menu', { sw: 1.75 })}
+          </button>
+          <span class="v-list-title">${this.listTitle}</span>
+          <span class="v-list-count">${pool.length}</span>
+        </div>
+        <div class="v-search">
+          ${iconSvg('search', { sw: 1.75, size: 15 })}
+          <input
+            type="search"
+            placeholder="Search ${this.allCount} items"
+            autocomplete="off"
+            .value=${live(this.search)}
+            @input=${(e) => {
+              state.search = e.target.value;
+              applySearch();
+            }}
+            @keydown=${(e) => {
+              if (e.key === 'Escape' && state.search) {
+                e.preventDefault();
+                state.search = '';
+                searchRows = null;
+                searchSeq += 1;
+                render();
+              }
+            }}
+          />
+        </div>
+      </div>
+      <div class="v-items">
+        ${pool.length === 0
+          ? html`<div class="v-list-empty">
+              ${this.search.trim() ? 'No matches.' : 'Nothing here.'}
+            </div>`
+          : repeat(
+              pool,
+              (i) => i.item_id,
+              (i) => listRowTpl(i, this.selectedId),
+            )}
+      </div>
+    </section>`;
+  }
+}
+customElements.define('locker-list', LockerList);
 
 // ---------- Detail pane ----------
 
-function renderDetail(root) {
-  const section = h('section', { class: 'v-detail' });
-  section.appendChild(
-    h(
-      'button',
-      {
-        type: 'button',
-        class: 'v-back',
-        onclick: () => {
-          state.showList = true;
-          state.selectedId = null;
-          state.detail = null;
-          render();
-        },
-      },
-      el(svg(I.back, 1.9).replace('width="16" height="16"', 'width="18" height="18"')),
-      'Back',
-    ),
-  );
-
-  if (state.nav.kind === 'watch') {
-    section.appendChild(watchtowerPane());
-  } else if (state.selectedId && (state.detail || state.detailLoading)) {
-    section.appendChild(itemPane());
-  } else {
-    section.appendChild(emptyPane());
-  }
-  root.appendChild(section);
+function emptyPaneTpl() {
+  return html`<div class="v-empty-detail">
+    <div class="ic">${iconSvg('lock', { sw: 1.6, size: 28 })}</div>
+    <div style="font:var(--t-strong);color:var(--ink-2);">Select an item</div>
+    <div style="font:var(--t-small);margin-top:4px;">
+      Pick something from the list to see its details.
+    </div>
+  </div>`;
 }
 
-function emptyPane() {
-  return el(
-    `<div class="v-empty-detail"><div class="ic">${svg(I.lock, 1.6).replace('width="16" height="16"', 'width="28" height="28"')}</div><div style="font:var(--t-strong);color:var(--ink-2);">Select an item</div><div style="font:var(--t-small);margin-top:4px;">Pick something from the list to see its details.</div></div>`,
-  );
+function watchItemRowTpl(i) {
+  const badge = i.compromised
+    ? {
+        t: 'Compromised',
+        bg: 'color-mix(in oklab, var(--danger) 14%, transparent)',
+        c: 'var(--danger)',
+      }
+    : i.weak
+      ? { t: 'Weak', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' }
+      : { t: 'Reused', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' };
+  return html`<button type="button" class="v-wt-item" @click=${() => selectItem(i.item_id)}>
+    <span
+      class="v-itile"
+      style="width:32px;height:32px;font-size:13px;background:${catOf(i.type).color};"
+      >${monoOf(i)}</span
+    >
+    <span class="v-imain">
+      <span class="v-ititle">${i.title}</span>
+      <span class="v-isub">${subOf(i) || '—'}</span>
+    </span>
+    <span class="v-wt-badge" style="background:${badge.bg};color:${badge.c};">${badge.t}</span>
+  </button>`;
 }
 
-function watchtowerPane() {
-  const inner = h('div', { class: 'v-detail-inner' });
-  const head = h('div', { class: 'v-dhead' });
-  head.appendChild(
-    el(
-      `<span class="v-dtile" style="background:var(--accd);">${svg(I.shield, 1.8).replace('width="16" height="16"', 'width="26" height="26"').replace('stroke="currentColor"', 'stroke="#fff"')}</span>`,
-    ),
-  );
-  head.appendChild(
-    el(
-      `<div><div class="v-dtitle">Watchtower</div><div class="v-dsub">Security review of your locker</div></div>`,
-    ),
-  );
-  inner.appendChild(head);
+function watchtowerPaneTpl(watch) {
+  return html`<div class="v-detail-inner">
+    <div class="v-dhead">
+      <span class="v-dtile" style="background:var(--accd);"
+        >${iconSvg('shield', { sw: 1.8, size: 26, stroke: '#fff' })}</span
+      >
+      <div>
+        <div class="v-dtitle">Watchtower</div>
+        <div class="v-dsub">Security review of your locker</div>
+      </div>
+    </div>
 
-  const stats = h('div', { class: 'v-wt-stats' });
-  const stat = (n, label, color) =>
-    el(
-      `<div class="v-wt-stat"><div class="n" style="color:${color};">${n}</div><div class="k">${label}</div></div>`,
-    );
-  stats.appendChild(stat(state.watch.compromised, 'Compromised', 'var(--danger)'));
-  stats.appendChild(stat(state.watch.weak, 'Weak passwords', 'var(--warn)'));
-  stats.appendChild(stat(state.watch.reused, 'Reused passwords', 'var(--warn)'));
-  inner.appendChild(stats);
+    <div class="v-wt-stats">
+      <div class="v-wt-stat">
+        <div class="n" style="color:var(--danger);">${watch.compromised}</div>
+        <div class="k">Compromised</div>
+      </div>
+      <div class="v-wt-stat">
+        <div class="n" style="color:var(--warn);">${watch.weak}</div>
+        <div class="k">Weak passwords</div>
+      </div>
+      <div class="v-wt-stat">
+        <div class="n" style="color:var(--warn);">${watch.reused}</div>
+        <div class="k">Reused passwords</div>
+      </div>
+    </div>
 
-  inner.appendChild(h('div', { class: 'v-dlabel' }, 'Needs attention'));
-  const fields = h('div', { class: 'v-fields' });
-  if (state.watch.items.length === 0) {
-    fields.appendChild(
-      h('div', { class: 'v-list-empty', style: 'padding:26px;' }, 'Your locker looks healthy.'),
-    );
-  } else {
-    for (const i of state.watch.items) {
-      const badge = i.compromised
-        ? {
-            t: 'Compromised',
-            bg: 'color-mix(in oklab, var(--danger) 14%, transparent)',
-            c: 'var(--danger)',
-          }
-        : i.weak
-          ? { t: 'Weak', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' }
-          : {
-              t: 'Reused',
-              bg: 'color-mix(in oklab, var(--warn) 16%, transparent)',
-              c: 'var(--warn)',
-            };
-      const row = h('button', {
-        type: 'button',
-        class: 'v-wt-item',
-        onclick: () => selectItem(i.item_id),
-      });
-      row.appendChild(
-        h(
-          'span',
-          {
-            class: 'v-itile',
-            style: `width:32px;height:32px;font-size:13px;background:${catOf(i.type).color};`,
-          },
-          monoOf(i),
-        ),
-      );
-      row.appendChild(
-        el(
-          `<span class="v-imain"><span class="v-ititle"></span><span class="v-isub"></span></span>`,
-        ),
-      );
-      row.querySelector('.v-ititle').textContent = i.title;
-      row.querySelector('.v-isub').textContent = subOf(i) || '—';
-      row.appendChild(
-        h(
-          'span',
-          { class: 'v-wt-badge', style: `background:${badge.bg};color:${badge.c};` },
-          badge.t,
-        ),
-      );
-      fields.appendChild(row);
-    }
-  }
-  inner.appendChild(fields);
-  return inner;
+    <div class="v-dlabel">Needs attention</div>
+    <div class="v-fields">
+      ${watch.items.length === 0
+        ? html`<div class="v-list-empty" style="padding:26px;">Your locker looks healthy.</div>`
+        : repeat(
+            watch.items,
+            (i) => i.item_id,
+            (i) => watchItemRowTpl(i),
+          )}
+    </div>
+  </div>`;
 }
 
-function itemPane() {
-  const inner = h('div', { class: 'v-detail-inner' });
-  const sel = state.detail;
-  if (!sel) {
-    inner.appendChild(h('div', { class: 'v-list-empty', style: 'padding:40px;' }, 'Opening…'));
-    return inner;
-  }
-
-  const head = h('div', { class: 'v-dhead' });
-  head.appendChild(
-    h('span', { class: 'v-dtile', style: `background:${catOf(sel.type).color};` }, monoOf(sel)),
-  );
-  const titleBox = h('div', { style: 'min-width:0;' });
-  titleBox.appendChild(h('div', { class: 'v-dtitle' }, sel.title));
-  titleBox.appendChild(h('div', { class: 'v-dsub' }, subOf(sel) || catOf(sel.type).label));
-  head.appendChild(titleBox);
-  const tools = h('div', { class: 'v-dhead-tools' });
-  if (!sel.trashed) {
-    tools.appendChild(
-      h('button', {
-        type: 'button',
-        class: `v-dtool${sel.favorite ? ' on' : ''}`,
-        'aria-label': 'Favorite',
-        html: `<svg width="17" height="17" viewBox="0 0 24 24" fill="${sel.favorite ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${I.starFill}</svg>`,
-        onclick: () => toggleFav(sel),
-      }),
-    );
-    tools.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'v-dtool',
-        'aria-label': 'Edit',
-        html: svg(I.edit),
-        onclick: () => openEdit(sel),
-      }),
-    );
-  }
-  head.appendChild(tools);
-  inner.appendChild(head);
-
-  inner.appendChild(fieldsFor(sel));
-
-  const noteText = sel.type === 'note' ? sel.content : sel.notes;
-  if (noteText) {
-    inner.appendChild(h('div', { class: 'v-dlabel' }, 'Note'));
-    inner.appendChild(h('div', { class: 'v-note' }, noteText));
-  }
-
-  if ((sel.tags || []).length > 0) {
-    const tagWrap = h('div', { class: 'v-tags' });
-    for (const t of sel.tags) tagWrap.appendChild(h('span', { class: 'v-tag' }, t));
-    inner.appendChild(tagWrap);
-  }
-
-  inner.appendChild(h('div', { class: 'v-meta' }, 'Updated ' + fmtDate(sel.updated_at)));
-
-  const footer = h('div', { style: 'display:flex;gap:8px;margin-top:20px;' });
-  if (sel.trashed) {
-    footer.appendChild(
-      h('button', { type: 'button', class: 'kit-btn', onclick: () => restoreItem(sel) }, 'Restore'),
-    );
-    const del = h(
-      'button',
-      { type: 'button', class: 'kit-btn danger v-del', style: 'margin-right:0;' },
-      'Delete forever',
-    );
-    del.addEventListener('click', (ev) => {
-      if (!armConfirm(ev.currentTarget, { armedLabel: 'Delete forever — sure?' })) return;
-      purgeItem(sel);
-    });
-    footer.appendChild(del);
-  } else {
-    footer.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-btn danger v-del',
-          style: 'margin-right:0;',
-          onclick: () => trashItem(sel),
-        },
-        'Move to trash',
-      ),
-    );
-  }
-  inner.appendChild(footer);
-  return inner;
-}
-
-// Build the per-type fields. `secret` fields hide behind a reveal toggle and
-// carry copy; the password field grows a strength meter on reveal.
-function fieldsFor(sel) {
-  const wrap = h('div', { class: 'v-fields' });
+// Field descriptors for the read view, keyed by the vault's field names — the
+// per-type shape the detail pane renders. `secret` fields hide behind a reveal
+// toggle and carry copy; the password field grows a strength meter on reveal.
+function fieldDescriptors(sel) {
   const fields = [];
-
   const plain = (k, val, opts = {}) => ({
     kind: 'plain',
     k,
@@ -883,153 +786,294 @@ function fieldsFor(sel) {
   } else if (sel.type === 'password') {
     fields.push(secret('pw-' + sel.item_id, 'Password', sel.password, { strength: true }));
   }
-
-  for (const f of fields) wrap.appendChild(fieldRow(f));
-  // If a type produced no fields at all, keep the card from collapsing weirdly.
-  if (fields.length === 0)
-    wrap.appendChild(h('div', { class: 'v-list-empty', style: 'padding:20px;' }, 'No fields.'));
-  return wrap;
+  return fields;
 }
 
-function fieldRow(f) {
-  const row = h('div', { class: 'v-field' });
-  const main = h('div', { class: 'v-field-main' });
+/** Toggle a secret field's mask; a fresh `state.reveal` object each time so the
+ * unmasked value never lingers once the field/item that owned it is gone. */
+function toggleReveal(fid) {
+  state.reveal = { ...state.reveal, [fid]: !state.reveal[fid] };
+  render();
+}
 
+function fieldRowTpl(f, reveal) {
   if (f.kind === 'otp') {
-    main.appendChild(h('div', { class: 'v-field-k' }, 'One-time password'));
     const code = totpFor(f.seed);
-    const otpWrap = h('div', { class: 'v-otp' });
-    otpWrap.appendChild(h('span', { class: 'v-otp-code' }, code || '••• •••'));
-    otpWrap.appendChild(
-      el(
-        `<svg class="v-ring" viewBox="0 0 36 36"><circle cx="18" cy="18" r="15" fill="none" stroke="var(--line-strong)" stroke-width="3"></circle><circle cx="18" cy="18" r="15" fill="none" stroke="var(--_accent)" stroke-width="3" stroke-linecap="round" stroke-dasharray="94.2" stroke-dashoffset="${totpOffset()}" transform="rotate(-90 18 18)"></circle></svg>`,
-      ),
-    );
-    main.appendChild(otpWrap);
-    row.appendChild(main);
-    if (code)
-      row.appendChild(
-        h('button', {
-          type: 'button',
-          class: 'v-fbtn',
-          'aria-label': 'Copy',
-          html: svg(I.copy, 1.6),
-          onclick: () => copy(code.replace(' ', ''), 'Code', true),
-        }),
-      );
-    return row;
+    return html`<div class="v-field">
+      <div class="v-field-main">
+        <div class="v-field-k">One-time password</div>
+        <div class="v-otp">
+          <span class="v-otp-code">${code || '••• •••'}</span>
+          <svg class="v-ring" viewBox="0 0 36 36">
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke="var(--line-strong)"
+              stroke-width="3"
+            ></circle>
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke="var(--_accent)"
+              stroke-width="3"
+              stroke-linecap="round"
+              stroke-dasharray="94.2"
+              stroke-dashoffset=${totpOffset()}
+              transform="rotate(-90 18 18)"
+            ></circle>
+          </svg>
+        </div>
+      </div>
+      ${code
+        ? html`<button
+            type="button"
+            class="v-fbtn"
+            aria-label="Copy"
+            @click=${() => copy(code.replace(' ', ''), 'Code', true)}
+          >
+            ${iconSvg('copy', { sw: 1.6 })}
+          </button>`
+        : nothing}
+    </div>`;
   }
 
-  main.appendChild(h('div', { class: 'v-field-k' }, f.k));
-
   if (f.kind === 'link') {
-    const vd = h('div', { class: 'v-field-v' });
-    vd.appendChild(h('a', { href: f.val, target: '_blank', rel: 'noreferrer' }, f.val));
-    main.appendChild(vd);
-    row.appendChild(main);
-    row.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'v-fbtn',
-        'aria-label': 'Copy',
-        html: svg(I.copy, 1.6),
-        onclick: () => copy(f.val, f.k),
-      }),
-    );
-    return row;
+    return html`<div class="v-field">
+      <div class="v-field-main">
+        <div class="v-field-k">${f.k}</div>
+        <div class="v-field-v"><a href=${f.val} target="_blank" rel="noreferrer">${f.val}</a></div>
+      </div>
+      <button type="button" class="v-fbtn" aria-label="Copy" @click=${() => copy(f.val, f.k)}>
+        ${iconSvg('copy', { sw: 1.6 })}
+      </button>
+    </div>`;
   }
 
   if (f.kind === 'plain') {
-    main.appendChild(h('div', { class: `v-field-v${f.mono ? ' mono' : ''}` }, f.val));
-    row.appendChild(main);
-    if (f.canCopy)
-      row.appendChild(
-        h('button', {
-          type: 'button',
-          class: 'v-fbtn',
-          'aria-label': 'Copy',
-          html: svg(I.copy, 1.6),
-          onclick: () => copy(f.val, f.k),
-        }),
-      );
-    return row;
+    return html`<div class="v-field">
+      <div class="v-field-main">
+        <div class="v-field-k">${f.k}</div>
+        <div class=${f.mono ? 'v-field-v mono' : 'v-field-v'}>${f.val}</div>
+      </div>
+      ${f.canCopy
+        ? html`<button
+            type="button"
+            class="v-fbtn"
+            aria-label="Copy"
+            @click=${() => copy(f.val, f.k)}
+          >
+            ${iconSvg('copy', { sw: 1.6 })}
+          </button>`
+        : nothing}
+    </div>`;
   }
 
   // secret
-  const revealed = !!state.reveal[f.fid];
-  main.appendChild(
-    h('div', { class: 'v-field-v mono' }, f.val ? (revealed ? f.val : '••••••••••••') : '—'),
-  );
-  if (f.strength && revealed && f.val) {
-    const st = strength(f.val);
-    const meter = h('div', { class: 'v-strength' });
-    meter.appendChild(barSpan(st.ratio, { tone: st.tone }));
-    meter.appendChild(
-      h('span', { style: `font:var(--t-mono);font-size:10px;color:${st.color};` }, st.label),
-    );
-    main.appendChild(meter);
-  }
-  row.appendChild(main);
-  if (f.val) {
-    row.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'v-fbtn',
-        'aria-label': 'Reveal',
-        html: svg(revealed ? I.eyeOff : I.eye, 1.6),
-        onclick: () => {
-          state.reveal = { ...state.reveal, [f.fid]: !state.reveal[f.fid] };
-          render();
-        },
-      }),
-    );
-    row.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'v-fbtn',
-        'aria-label': 'Copy',
-        html: svg(I.copy, 1.6),
-        // A secret field: copy arms the timed clipboard clear (issue #298).
-        onclick: () => copy(f.val, f.k, true),
-      }),
-    );
-  }
-  return row;
+  const revealed = !!reveal[f.fid];
+  const st = f.strength && revealed && f.val ? strength(f.val) : null;
+  return html`<div class="v-field">
+    <div class="v-field-main">
+      <div class="v-field-k">${f.k}</div>
+      <div class="v-field-v mono">${f.val ? (revealed ? f.val : '••••••••••••') : '—'}</div>
+      ${st
+        ? html`<div class="v-strength">
+            ${barSpan(st.ratio, { tone: st.tone })}
+            <span style="font:var(--t-mono);font-size:10px;color:${st.color};">${st.label}</span>
+          </div>`
+        : nothing}
+    </div>
+    ${f.val
+      ? html`<button
+            type="button"
+            class="v-fbtn"
+            aria-label="Reveal"
+            @click=${() => toggleReveal(f.fid)}
+          >
+            ${iconSvg(revealed ? 'eyeOff' : 'eye', { sw: 1.6 })}
+          </button>
+          <button
+            type="button"
+            class="v-fbtn"
+            aria-label="Copy"
+            @click=${() => copy(f.val, f.k, true)}
+          >
+            ${iconSvg('copy', { sw: 1.6 })}
+          </button>`
+      : nothing}
+  </div>`;
 }
 
-// ---------- Overlays: toast is via kit; lock / generator / edit built here ----------
+function fieldsForTpl(sel, reveal) {
+  const fields = fieldDescriptors(sel);
+  return html`<div class="v-fields">
+    ${fields.length === 0
+      ? html`<div class="v-list-empty" style="padding:20px;">No fields.</div>`
+      : repeat(
+          fields,
+          (f) => f.fid ?? f.k,
+          (f) => fieldRowTpl(f, reveal),
+        )}
+  </div>`;
+}
 
-function renderLock(root) {
-  if (!state.locked) return;
-  const screen = h('div', { class: 'v-lockscreen' });
-  screen.appendChild(
-    el(
-      `<span class="v-lock-mark">${svg(I.lock, 1.7).replace('stroke="currentColor"', 'stroke="#fff"').replace('width="16" height="16"', 'width="30" height="30"')}</span>`,
-    ),
-  );
-  screen.appendChild(
-    el(
-      `<div style="text-align:center;"><div class="v-lock-title">Locker is locked</div><div class="v-lock-sub">Enter your passphrase to unlock</div></div>`,
-    ),
-  );
-  const input = h('input', {
-    class: 'v-lock-in',
-    type: 'password',
-    placeholder: '••••••••',
-    value: state.passInput,
-  });
-  input.addEventListener('input', (ev) => {
-    state.passInput = ev.target.value;
-  });
-  input.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') unlock();
-  });
-  screen.appendChild(input);
-  screen.appendChild(
-    h('button', { type: 'button', class: 'v-lock-btn', onclick: () => unlock() }, 'Unlock'),
-  );
-  root.appendChild(screen);
-  setTimeout(() => input.focus(), 0);
+function itemPaneTpl(sel, reveal) {
+  if (!sel) {
+    return html`<div class="v-detail-inner">
+      <div class="v-list-empty" style="padding:40px;">Opening…</div>
+    </div>`;
+  }
+  const noteText = sel.type === 'note' ? sel.content : sel.notes;
+  return html`<div class="v-detail-inner">
+    <div class="v-dhead">
+      <span class="v-dtile" style="background:${catOf(sel.type).color};">${monoOf(sel)}</span>
+      <div style="min-width:0;">
+        <div class="v-dtitle">${sel.title}</div>
+        <div class="v-dsub">${subOf(sel) || catOf(sel.type).label}</div>
+      </div>
+      <div class="v-dhead-tools">
+        ${sel.trashed
+          ? nothing
+          : html`<button
+                type="button"
+                class=${sel.favorite ? 'v-dtool on' : 'v-dtool'}
+                aria-label="Favorite"
+                @click=${() => toggleFav(sel)}
+              >
+                ${iconSvg('starFill', {
+                  size: 17,
+                  sw: 1.6,
+                  fill: sel.favorite ? 'currentColor' : 'none',
+                })}
+              </button>
+              <button type="button" class="v-dtool" aria-label="Edit" @click=${() => openEdit(sel)}>
+                ${iconSvg('edit')}
+              </button>`}
+      </div>
+    </div>
+
+    ${fieldsForTpl(sel, reveal)}
+    ${noteText
+      ? html`<div class="v-dlabel">Note</div>
+          <div class="v-note">${noteText}</div>`
+      : nothing}
+    ${(sel.tags || []).length > 0
+      ? html`<div class="v-tags">
+          ${sel.tags.map((t) => html`<span class="v-tag">${t}</span>`)}
+        </div>`
+      : nothing}
+
+    <div class="v-meta">Updated ${fmtDate(sel.updated_at)}</div>
+
+    <div style="display:flex;gap:8px;margin-top:20px;">
+      ${sel.trashed
+        ? html`<button type="button" class="kit-btn" @click=${() => restoreItem(sel)}>
+              Restore
+            </button>
+            <button
+              type="button"
+              class="kit-btn danger v-del"
+              style="margin-right:0;"
+              @click=${(e) => {
+                if (!armConfirm(e.currentTarget, { armedLabel: 'Delete forever — sure?' })) return;
+                purgeItem(sel);
+              }}
+            >
+              Delete forever
+            </button>`
+        : html`<button
+            type="button"
+            class="kit-btn danger v-del"
+            style="margin-right:0;"
+            @click=${() => trashItem(sel)}
+          >
+            Move to trash
+          </button>`}
+    </div>
+  </div>`;
+}
+
+/** `<locker-detail>` — back button + (watchtower | item | empty) content.
+ * `tick` is bumped straight from the OTP interval and from `totpFor`'s async
+ * resolution (see above) so the one-second countdown only touches this one
+ * component, never the sidebar/list the owner might be mid-interaction with. */
+class LockerDetail extends KitElement {
+  static properties = {
+    mode: { type: String },
+    watch: { attribute: false },
+    detail: { attribute: false },
+    detailLoading: { type: Boolean },
+    reveal: { attribute: false },
+    tick: { type: Number },
+  };
+
+  constructor() {
+    super();
+    this.mode = 'empty';
+    this.watch = { compromised: 0, weak: 0, reused: 0, items: [] };
+    this.detail = null;
+    this.detailLoading = false;
+    this.reveal = {};
+    this.tick = 0;
+  }
+
+  render() {
+    return html`<section class="v-detail">
+      <button
+        type="button"
+        class="v-back"
+        @click=${() => {
+          state.showList = true;
+          state.selectedId = null;
+          state.detail = null;
+          render();
+        }}
+      >
+        ${iconSvg('back', { sw: 1.9, size: 18 })} Back
+      </button>
+      ${this.mode === 'watch'
+        ? watchtowerPaneTpl(this.watch)
+        : this.mode === 'item'
+          ? itemPaneTpl(this.detail, this.reveal)
+          : emptyPaneTpl()}
+    </section>`;
+  }
+}
+customElements.define('locker-detail', LockerDetail);
+
+// ---------- Overlays: lock screen / generator / edit modal ----------
+// Standalone `litRender` into a persistent `[data-kit-host]` container (the
+// kit's own display:contents attribute hook) — the sanctioned form for
+// kit-owned modal surfaces. Order matters: the generator can be opened from
+// inside the edit modal, and (matching the original DOM order) the edit modal
+// paints after it, so re-opening the generator while editing still stacks the
+// same way it always did.
+
+function lockScreenTpl() {
+  if (!state.locked) return nothing;
+  return html`<div class="v-lockscreen">
+    <span class="v-lock-mark">${iconSvg('lock', { sw: 1.7, size: 30, stroke: '#fff' })}</span>
+    <div style="text-align:center;">
+      <div class="v-lock-title">Locker is locked</div>
+      <div class="v-lock-sub">Enter your passphrase to unlock</div>
+    </div>
+    <input
+      class="v-lock-in"
+      type="password"
+      placeholder="••••••••"
+      .value=${live(state.passInput)}
+      @input=${(e) => {
+        state.passInput = e.target.value;
+      }}
+      @keydown=${(e) => {
+        if (e.key === 'Enter') unlock();
+      }}
+    />
+    <button type="button" class="v-lock-btn" @click=${() => unlock()}>Unlock</button>
+  </div>`;
 }
 
 function unlock() {
@@ -1038,192 +1082,86 @@ function unlock() {
   render();
 }
 
-function renderGenerator(root) {
-  if (!state.gen) return;
-  const back = h('div', { class: 'kit-modal-back', onclick: () => closeGen() });
-  const modal = h('div', {
-    class: 'kit-modal',
-    style: 'max-width:420px;',
-    onclick: (ev) => ev.stopPropagation(),
-  });
-  modal.appendChild(h('h2', {}, 'Password generator'));
+function genToggleRowTpl(label, on, onClick, last = false) {
+  return html`<div class="v-toggle-row" style=${last ? 'border-bottom:none;' : ''}>
+    <span style="font:var(--t-body);font-size:13.5px;">${label}</span>
+    <button type="button" class=${on ? 'v-switch on' : 'v-switch'} @click=${onClick}>
+      <i></i>
+    </button>
+  </div>`;
+}
 
-  const genrow = h('div', { class: 'v-genrow' });
-  genrow.appendChild(h('div', { class: 'v-genout' }, state.genValue));
-  genrow.appendChild(
-    h('button', {
-      type: 'button',
-      class: 'v-iconbtn',
-      'aria-label': 'Regenerate',
-      html: svg(I.regen),
-      onclick: () => regen(),
-    }),
-  );
-  modal.appendChild(genrow);
-
+function generatorTpl() {
+  if (!state.gen) return nothing;
   const st = strength(state.genValue);
-  const meter = h('div', { class: 'v-strength' });
-  meter.appendChild(barSpan(st.ratio, { tone: st.tone }));
-  meter.appendChild(
-    h('span', { style: `font:var(--t-mono);font-size:10px;color:${st.color};` }, st.label),
-  );
-  modal.appendChild(meter);
+  return html`<div class="kit-modal-back" @click=${() => closeGen()}>
+    <div class="kit-modal" style="max-width:420px;" @click=${(ev) => ev.stopPropagation()}>
+      <h2>Password generator</h2>
 
-  const lenWrap = h('div', { class: 'v-field-lg' });
-  lenWrap.appendChild(h('div', { class: 'v-flabel' }, `Length · ${state.genLen}`));
-  const slider = h('input', {
-    type: 'range',
-    class: 'v-slider',
-    min: '8',
-    max: '40',
-    value: String(state.genLen),
-  });
-  slider.addEventListener('input', (ev) => {
-    state.genLen = parseInt(ev.target.value, 10);
-    regen();
-  });
-  lenWrap.appendChild(slider);
-  modal.appendChild(lenWrap);
+      <div class="v-genrow">
+        <div class="v-genout">${state.genValue}</div>
+        <button type="button" class="v-iconbtn" aria-label="Regenerate" @click=${() => regen()}>
+          ${iconSvg('regen')}
+        </button>
+      </div>
 
-  const toggle = (label, on, onClick, last) => {
-    const rowStyle = last ? 'border-bottom:none;' : '';
-    const t = h('div', { class: 'v-toggle-row', style: rowStyle });
-    t.appendChild(h('span', { style: 'font:var(--t-body);font-size:13.5px;' }, label));
-    t.appendChild(
-      h(
-        'button',
-        { type: 'button', class: `v-switch${on ? ' on' : ''}`, onclick: onClick },
-        h('i', {}),
-      ),
-    );
-    return t;
-  };
-  modal.appendChild(
-    toggle('Numbers', state.genNum, () => {
-      state.genNum = !state.genNum;
-      regen();
-    }),
-  );
-  modal.appendChild(
-    toggle(
-      'Symbols',
-      state.genSym,
-      () => {
-        state.genSym = !state.genSym;
+      <div class="v-strength">
+        ${barSpan(st.ratio, { tone: st.tone })}
+        <span style="font:var(--t-mono);font-size:10px;color:${st.color};">${st.label}</span>
+      </div>
+
+      <div class="v-field-lg">
+        <div class="v-flabel">Length · ${state.genLen}</div>
+        <input
+          type="range"
+          class="v-slider"
+          min="8"
+          max="40"
+          .value=${live(String(state.genLen))}
+          @input=${(e) => {
+            state.genLen = parseInt(e.target.value, 10);
+            regen();
+          }}
+        />
+      </div>
+
+      ${genToggleRowTpl('Numbers', state.genNum, () => {
+        state.genNum = !state.genNum;
         regen();
-      },
-      true,
-    ),
-  );
+      })}
+      ${genToggleRowTpl(
+        'Symbols',
+        state.genSym,
+        () => {
+          state.genSym = !state.genSym;
+          regen();
+        },
+        true,
+      )}
 
-  const foot = h('div', { class: 'kit-modal-foot' });
-  foot.appendChild(
-    h('button', { type: 'button', class: 'kit-btn', onclick: () => closeGen() }, 'Close'),
-  );
-  const useBtn = h('button', { type: 'button', class: 'kit-btn primary' }, 'Copy');
-  useBtn.addEventListener('click', () => {
-    // If a password field is waiting for it, drop the value there; always copy.
-    if (state.genTarget && state.edit) {
-      setEditField(state.genTarget, state.genValue);
-    }
-    copy(state.genValue, 'Password', true);
-    closeGen();
-  });
-  foot.appendChild(useBtn);
-  modal.appendChild(foot);
-
-  back.appendChild(modal);
-  root.appendChild(back);
+      <div class="kit-modal-foot">
+        <button type="button" class="kit-btn" @click=${() => closeGen()}>Close</button>
+        <button
+          type="button"
+          class="kit-btn primary"
+          @click=${() => {
+            // If a password field is waiting for it, drop the value there; always copy.
+            if (state.genTarget && state.edit) setEditField(state.genTarget, state.genValue);
+            copy(state.genValue, 'Password', true);
+            closeGen();
+          }}
+        >
+          Copy
+        </button>
+      </div>
+    </div>
+  </div>`;
 }
 
 function closeGen() {
   state.gen = false;
   state.genTarget = null;
   render();
-}
-
-function renderEdit(root) {
-  const e = state.edit;
-  if (!e) return;
-  const back = h('div', { class: 'kit-modal-back', onclick: () => closeEdit() });
-  const modal = h('div', { class: 'kit-modal', onclick: (ev) => ev.stopPropagation() });
-  modal.appendChild(h('h2', {}, e.mode === 'edit' ? 'Edit item' : 'New item'));
-
-  if (e.mode === 'new') {
-    const typeWrap = h('div', { class: 'v-field-lg' });
-    typeWrap.appendChild(h('div', { class: 'v-flabel' }, 'Type'));
-    const chips = h('div', { class: 'v-typerow' });
-    for (const t of CAT_ORDER) {
-      chips.appendChild(
-        h(
-          'button',
-          {
-            type: 'button',
-            class: 'kit-chip quiet',
-            'aria-pressed': String(e.type === t),
-            onclick: () => {
-              e.type = t;
-              e.fields = {};
-              render();
-            },
-          },
-          TYPE_LABEL[t],
-        ),
-      );
-    }
-    typeWrap.appendChild(chips);
-    modal.appendChild(typeWrap);
-  }
-
-  const titleWrap = h('div', { class: 'v-field-lg' });
-  titleWrap.appendChild(h('div', { class: 'v-flabel' }, 'Title'));
-  const titleInput = h('input', { class: 'v-in', placeholder: 'Item name', value: e.title });
-  titleInput.addEventListener('input', (ev) => {
-    e.title = ev.target.value;
-    // Live-enable Save without a full re-render (keeps focus).
-    saveBtn.disabled = !e.title.trim();
-  });
-  titleWrap.appendChild(titleInput);
-  modal.appendChild(titleWrap);
-
-  for (const f of editFieldsFor(e)) modal.appendChild(editFieldRow(e, f));
-
-  const tagsWrap = h('div', { class: 'v-field-lg' });
-  tagsWrap.appendChild(h('div', { class: 'v-flabel' }, 'Tags (comma-separated)'));
-  const tagsInput = h('input', { class: 'v-in', placeholder: 'personal, finance', value: e.tags });
-  tagsInput.addEventListener('input', (ev) => {
-    e.tags = ev.target.value;
-  });
-  tagsWrap.appendChild(tagsInput);
-  modal.appendChild(tagsWrap);
-
-  // Connector alias (issue #298 item 4): a stable name an automation binds to,
-  // so replacing this item later re-heals the binding without a manifest edit.
-  const aliasWrap = h('div', { class: 'v-field-lg' });
-  aliasWrap.appendChild(h('div', { class: 'v-flabel' }, 'Connector alias (optional)'));
-  const aliasInput = h('input', {
-    class: 'v-in mono',
-    placeholder: 'e.g. github-token',
-    value: e.alias || '',
-  });
-  aliasInput.addEventListener('input', (ev) => {
-    e.alias = ev.target.value.trim();
-  });
-  aliasWrap.appendChild(aliasInput);
-  modal.appendChild(aliasWrap);
-
-  const foot = h('div', { class: 'kit-modal-foot' });
-  foot.appendChild(
-    h('button', { type: 'button', class: 'kit-btn', onclick: () => closeEdit() }, 'Cancel'),
-  );
-  const saveBtn = h('button', { type: 'button', class: 'kit-btn primary' }, 'Save');
-  saveBtn.disabled = !e.title.trim();
-  saveBtn.addEventListener('click', () => saveEdit());
-  foot.appendChild(saveBtn);
-  modal.appendChild(foot);
-
-  back.appendChild(modal);
-  root.appendChild(back);
 }
 
 // Field descriptors for the edit modal, keyed by the ACTION's input keys
@@ -1264,38 +1202,132 @@ function editFieldsFor(e) {
   }
 }
 
-function editFieldRow(e, f) {
-  const wrap = h('div', { class: 'v-field-lg' });
-  wrap.appendChild(h('div', { class: 'v-flabel' }, f.label));
-  const input = h('input', {
-    class: `v-in${f.mono ? ' mono' : ''}`,
-    placeholder: f.ph || '',
-    value: e.fields[f.key] || '',
-  });
-  input.addEventListener('input', (ev) => {
-    e.fields[f.key] = ev.target.value;
-  });
-  if (f.gen) {
-    const rowEl = h('div', { class: 'v-genrow' });
-    rowEl.appendChild(input);
-    rowEl.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'v-iconbtn',
-        'aria-label': 'Generate',
-        html: svg(I.regen),
-        onclick: () => {
-          state.gen = true;
-          state.genTarget = f.key;
-          regen();
-        },
-      }),
-    );
-    wrap.appendChild(rowEl);
-  } else {
-    wrap.appendChild(input);
-  }
-  return wrap;
+function editFieldRowTpl(e, f) {
+  const input = html`<input
+    class=${f.mono ? 'v-in mono' : 'v-in'}
+    placeholder=${f.ph || ''}
+    .value=${e.fields[f.key] || ''}
+    @input=${(ev) => {
+      e.fields[f.key] = ev.target.value;
+    }}
+  />`;
+  return html`<div class="v-field-lg">
+    <div class="v-flabel">${f.label}</div>
+    ${f.gen
+      ? html`<div class="v-genrow">
+          ${input}
+          <button
+            type="button"
+            class="v-iconbtn"
+            aria-label="Generate"
+            @click=${() => {
+              state.gen = true;
+              state.genTarget = f.key;
+              regen();
+            }}
+          >
+            ${iconSvg('regen')}
+          </button>
+        </div>`
+      : input}
+  </div>`;
+}
+
+function editTpl() {
+  const e = state.edit;
+  if (!e) return nothing;
+
+  // The save button's disabled state is toggled straight off the title input's
+  // keystrokes (not a full re-render — same imperative shortcut the vanilla
+  // code used) so typing a title never has to wait for an unrelated render.
+  const saveRef = createRef();
+
+  return html`<div class="kit-modal-back" @click=${() => closeEdit()}>
+    <div class="kit-modal" @click=${(ev) => ev.stopPropagation()}>
+      <h2>${e.mode === 'edit' ? 'Edit item' : 'New item'}</h2>
+
+      ${e.mode === 'new'
+        ? html`<div class="v-field-lg">
+            <div class="v-flabel">Type</div>
+            <div class="v-typerow">
+              ${CAT_ORDER.map(
+                (t) => html`<button
+                  type="button"
+                  class="kit-chip quiet"
+                  aria-pressed=${String(e.type === t)}
+                  @click=${() => {
+                    e.type = t;
+                    e.fields = {};
+                    render();
+                  }}
+                >
+                  ${TYPE_LABEL[t]}
+                </button>`,
+              )}
+            </div>
+          </div>`
+        : nothing}
+
+      <div class="v-field-lg">
+        <div class="v-flabel">Title</div>
+        <input
+          class="v-in"
+          placeholder="Item name"
+          .value=${e.title}
+          @input=${(ev) => {
+            e.title = ev.target.value;
+            if (saveRef.value) saveRef.value.disabled = !e.title.trim();
+          }}
+        />
+      </div>
+
+      ${repeat(
+        editFieldsFor(e),
+        (f) => f.key,
+        (f) => editFieldRowTpl(e, f),
+      )}
+
+      <div class="v-field-lg">
+        <div class="v-flabel">Tags (comma-separated)</div>
+        <input
+          class="v-in"
+          placeholder="personal, finance"
+          .value=${e.tags}
+          @input=${(ev) => {
+            e.tags = ev.target.value;
+          }}
+        />
+      </div>
+
+      <!-- Connector alias (issue #298 item 4): a stable name an automation
+      binds to, so replacing this item later re-heals the binding without a
+      manifest edit. -->
+      <div class="v-field-lg">
+        <div class="v-flabel">Connector alias (optional)</div>
+        <input
+          class="v-in mono"
+          placeholder="e.g. github-token"
+          .value=${e.alias || ''}
+          @input=${(ev) => {
+            e.alias = ev.target.value.trim();
+          }}
+        />
+      </div>
+
+      <div class="kit-modal-foot">
+        <button type="button" class="kit-btn" @click=${() => closeEdit()}>Cancel</button>
+        <button
+          type="button"
+          class="kit-btn primary"
+          ?disabled=${!e.title.trim()}
+          ${ref(saveRef)}
+          @click=${() => saveEdit()}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ---------- Edit / new plumbing ----------
@@ -1514,18 +1546,45 @@ function applyDenied(d) {
   $('consentBanner').hidden = false;
   $('consentDetail').textContent = d?.message ?? '';
   $('root').classList.add('denied');
+  clearChrome();
+}
+
+/** Drop the mounted chrome so a later successful refresh remounts it fresh. */
+function clearChrome() {
   $('stage').replaceChildren();
+  chromeMounted = false;
+  sidebarComp = null;
+  listComp = null;
+  detailComp = null;
+  overlaysEl = null;
 }
 
 // ---------- Master render ----------
 
+// `#stage` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, below). The chrome is mounted ONCE — three persistent
+// region components plus the overlay layer — and every subsequent render()
+// call only assigns properties on them (or, for the overlay layer, redraws
+// via `litRender`); nothing here rebuilds region DOM from scratch.
+function mountChrome(stage) {
+  if (chromeMounted) return;
+  sidebarComp = document.createElement('locker-sidebar');
+  listComp = document.createElement('locker-list');
+  detailComp = document.createElement('locker-detail');
+  overlaysEl = document.createElement('div');
+  overlaysEl.setAttribute('data-kit-host', '');
+  stage.replaceChildren(sidebarComp, listComp, detailComp, overlaysEl);
+  chromeMounted = true;
+}
+
 function render() {
-  const root = $('stage');
+  const stage = $('stage');
   if (denied) {
-    root.replaceChildren();
+    clearChrome();
     return;
   }
-  root.replaceChildren();
+
+  mountChrome(stage);
 
   // Root classes for the responsive master-detail flow.
   const rootEl = $('root');
@@ -1533,12 +1592,54 @@ function render() {
   rootEl.classList.toggle('side-open', state.narrow && state.sideOpen);
   rootEl.classList.toggle('show-list', state.showList);
 
-  renderSidebar(root);
-  renderList(root);
-  renderDetail(root);
-  renderLock(root);
-  renderGenerator(root);
-  renderEdit(root);
+  const items = data.items;
+  const catCounts = {};
+  for (const t of CAT_ORDER) catCounts[t] = items.filter((i) => i.type === t).length;
+  const allTags = [...new Set(items.flatMap((i) => i.tags || []))].sort();
+
+  sidebarComp.counts = {
+    all: items.length,
+    fav: items.filter((i) => i.favorite).length,
+    watch: state.watch.compromised + state.watch.weak,
+  };
+  sidebarComp.catCounts = catCounts;
+  sidebarComp.tags = allTags.map((tag) => ({
+    tag,
+    count: items.filter((i) => (i.tags || []).includes(tag)).length,
+  }));
+  sidebarComp.trashCount = state.trashRows.length;
+  sidebarComp.nav = state.nav;
+  sidebarComp.dark = state.dark;
+
+  const navTitles = { all: 'All items', fav: 'Favorites', watch: 'Watchtower', trash: 'Trash' };
+  listComp.pool = currentPool();
+  listComp.listTitle =
+    state.nav.kind === 'cat'
+      ? catOf(state.nav.type).label
+      : state.nav.kind === 'tag'
+        ? '#' + state.nav.tag
+        : navTitles[state.nav.kind] || 'All items';
+  listComp.allCount = data.items.length;
+  listComp.search = state.search;
+  listComp.selectedId = state.selectedId;
+
+  detailComp.mode =
+    state.nav.kind === 'watch'
+      ? 'watch'
+      : state.selectedId && (state.detail || state.detailLoading)
+        ? 'item'
+        : 'empty';
+  detailComp.watch = state.watch;
+  detailComp.detail = state.detail;
+  detailComp.detailLoading = state.detailLoading;
+  detailComp.reveal = state.reveal;
+  detailComp.tick = state.tick;
+
+  litRender(html`${lockScreenTpl()}${generatorTpl()}${editTpl()}`, overlaysEl);
+  if (state.locked) {
+    const input = overlaysEl.querySelector('.v-lock-in');
+    if (input) setTimeout(() => input.focus(), 0);
+  }
 }
 
 // ---------- Refresh ----------
@@ -1644,11 +1745,12 @@ showSkeleton($('stage'), 6);
 regen();
 measure();
 setInterval(measure, 250);
-// Real-TOTP second hand: cheap re-render so the ring + code refresh each second.
+// Real-TOTP second hand: bump only the detail component's tick so the ring +
+// code refresh each second without disturbing the sidebar/list/overlays.
 setInterval(() => {
   if (state.selectedId && state.detail && state.detail.otp_seed) {
     state.tick += 1;
-    render();
+    if (detailComp) detailComp.tick = state.tick;
   }
 }, 1000);
 refresh();
