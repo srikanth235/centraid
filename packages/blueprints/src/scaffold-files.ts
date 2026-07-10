@@ -10,7 +10,7 @@
  * CLI / local paths.
  */
 
-import { toCss, type ColorKey, type IconName } from '@centraid/design-tokens';
+import type { ColorKey, IconName } from '@centraid/design-tokens';
 import { rewriteTitleInHtml, applyManifestName } from './app-rewrites.js';
 import { AUTOMATIONS_README, DEFAULT_APP_CSS, README_TEMPLATE } from './scaffold-defaults.js';
 import { AppScaffoldError } from './scaffold-types.js';
@@ -48,12 +48,15 @@ export interface ScaffoldAppOpts {
 
 /**
  * Build the file map for a fresh app (issue #141): package.json,
- * app.json (the manifest), index.html, tokens.css (a frozen
- * design-tokens snapshot), app.css, app.jsx (a React starter — the
- * gateway transpiles `.jsx` per-request via esbuild, no local build
- * step), README.md, and the automations/ brief. The git store tracks
- * files, so empty canonical subdirs (queries/actions) are not emitted —
- * they appear once the agent writes the first handler.
+ * app.json (the manifest), index.html, app.css, app.jsx (a React
+ * starter — the gateway transpiles `.jsx` per-request via esbuild, no
+ * local build step), README.md, and the automations/ brief. The design
+ * system (wall.css, tokens.css, kit.css) is NOT copied into the app:
+ * those resolve via the runtime's shared-asset fallback to the live kit
+ * dir, so every app tracks token/primitive updates without re-scaffold.
+ * The git store tracks files, so empty canonical subdirs
+ * (queries/actions) are not emitted — they appear once the agent writes
+ * the first handler.
  */
 export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): ScaffoldFile[] {
   validateAppId(id);
@@ -77,7 +80,6 @@ export function scaffoldAppFiles(id: string, opts: ScaffoldAppOpts = {}): Scaffo
     { path: 'package.json', content: appPackageJson(id) },
     { path: 'app.json', content: JSON.stringify(appJson, null, 2) + '\n' },
     { path: 'index.html', content: DEFAULT_INDEX_HTML(name) },
-    { path: 'tokens.css', content: toCss() },
     { path: 'app.css', content: DEFAULT_APP_CSS },
     { path: 'app.jsx', content: DEFAULT_APP_JSX },
     { path: 'automations/README.md', content: AUTOMATIONS_README },
@@ -174,8 +176,10 @@ export function appPackageJson(id: string): string {
 }
 
 // The scaffold's index.html wires the visual contract: an inline live-
-// settings bridge runs synchronously before paint, then tokens.css (the
-// design-tokens snapshot), then app.css (per-app styles built on top).
+// settings bridge runs synchronously before paint, then the shared
+// design-system sheets (wall.css page background, tokens.css blueprint
+// token layer — both served from the kit dir, no local copies), then
+// app.css (per-app styles built on top), then kit.css primitives.
 const DEFAULT_INDEX_HTML = (name: string): string => `<!doctype html>
 <html lang="en">
   <head>
@@ -183,6 +187,7 @@ const DEFAULT_INDEX_HTML = (name: string): string => `<!doctype html>
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>${escapeHtml(name)}</title>
     <script>${INLINE_SETTINGS_BRIDGE}</script>
+    <link rel="stylesheet" href="wall.css" />
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="./kit.css" />
