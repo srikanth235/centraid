@@ -5,6 +5,7 @@ export type {
   TunnelClientOptions,
   TunnelResponse,
 } from './client.js';
+export type { Connection, PathSnapshot } from './iroh.js';
 export { startDesktopTunnel } from './desktop-tunnel.js';
 export type {
   ActivePairing,
