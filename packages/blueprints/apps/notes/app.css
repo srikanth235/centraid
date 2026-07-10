@@ -1,69 +1,42 @@
+/* ============================================================================
+   Notes — the Keep/Apple-Notes reinvention. A projection of the vault:
+   sidebar (smart sections + notebooks + library summary) + a scrolling
+   search/quick-add/card-wall main pane, an immersive editor overlay. Every
+   colour flows from the token layer below so light/dark and the per-app
+   knobs (font/width/accent/default-view) all retune the whole surface at
+   once. Chrome is graphite + paper with a single per-app accent (moss by
+   default). JetBrains-class monospace (var(--mono)) carries every metadata
+   voice — counts, eyebrows, receipt chips, progress labels; content stays
+   sans, editor titles the display face.
+   ========================================================================== */
+
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
-  /* Notes identity accent — forest green. Swappable via --app-color. */
-  --accent: #5c8a4e;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 78%, #06180e);
-  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 13%, transparent);
-  --on-accent: #ffffff;
+  /* app-hue drives tokens.css's whole neutral ramp. */
+  --app-hue: 222;
+  /* Notes identity accent — moss, the palette's own --c-forest hex.
+     Swappable via the runtime's --app-color (tokens.css derives --_accent
+     from it). */
+  --accent: var(--c-forest);
 
-  --ink: hsl(150 12% 12%);
-  --ink-soft: hsl(150 5% 40%);
-  --ink-faint: hsl(150 6% 58%);
-
-  --bg: hsl(140 16% 98%);
-  --surface: #ffffff;
-  --surface-2: hsl(140 18% 95.5%);
-
-  --line: rgba(20, 30, 24, 0.09);
-  --line-strong: rgba(20, 30, 24, 0.16);
-
-  --danger: #d0342c;
-
-  --text: var(--ink);
-  --muted: var(--ink-soft);
-
-  --radius: 0.75rem;
-  --radius-sm: 0.5rem;
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --shadow-md: 0 10px 26px -14px rgba(16, 26, 20, 0.28), 0 2px 6px -3px rgba(16, 26, 20, 0.12);
-  --shadow-lg: 0 26px 60px -24px rgba(16, 26, 20, 0.4);
-
-  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Everything else (ink ramp, --line*, --danger, radii, --ease, tracking,
+     the --t-* type scale, --font-*/--mono, --sel/--selb, --_accent and its
+     accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
+     --ink-faint/--radius aliases) comes from tokens.css. */
 }
 
-:root[data-theme='dark'] {
-  --bg-l: 10%;
-  --ink: hsl(140 12% 94%);
-  --ink-soft: hsl(140 7% 64%);
-  --ink-faint: hsl(140 7% 46%);
-  --bg: var(--bg-wall);
-  --surface: hsl(150 10% calc(var(--bg-l) + 5%));
-  --surface-2: hsl(150 9% calc(var(--bg-l) + 8.5%));
-  --line: hsla(140 24% 74% / 0.1);
-  --line-strong: hsla(140 24% 76% / 0.2);
-  --danger: #f0645b;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #eefaef);
-  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
+/* Knobs — appFont swaps the sans face; appWidth is read in chrome.js (forces
+   the narrow/phone layout regardless of measured width); appDefaultView
+   (masonry/list) is read once at boot in app.jsx. */
+:root[data-app-font='sans'] {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme]) {
-    --bg-l: 10%;
-    --ink: hsl(140 12% 94%);
-    --ink-soft: hsl(140 7% 64%);
-    --ink-faint: hsl(140 7% 46%);
-    --bg: var(--bg-wall);
-    --surface: hsl(150 10% 15%);
-    --surface-2: hsl(150 9% 18.5%);
-    --line: hsla(140 24% 74% / 0.1);
-    --line-strong: hsla(140 24% 76% / 0.2);
-    --danger: #f0645b;
-    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 80%, #eefaef);
-  }
+:root[data-app-font='serif'] {
+  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  --font-sans: var(--mono);
 }
 
 * {
@@ -72,693 +45,937 @@
 [hidden] {
   display: none !important;
 }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
 
+html,
+body {
+  height: 100%;
+}
 body {
   margin: 0;
-  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
+  font: var(--t-body);
+  letter-spacing: var(--tracking-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  min-height: 100vh;
-  line-height: 1.5;
 }
-
-main {
-  max-width: 36rem;
-  margin: 0 auto;
-  padding: 0.75rem 0 4rem;
-}
-
-@media (min-width: 720px) {
-  body {
-    padding: 1.75rem 2rem;
-  }
-  main {
-    max-width: 58rem;
-    padding-top: 1.25rem;
-  }
-}
-
-.head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.1rem;
-}
-.head h1 {
-  font-size: 1.65rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  margin: 0 0 0.2rem;
-}
-@media (min-width: 720px) {
-  .head h1 {
-    font-size: 1.9rem;
-  }
-}
-.muted {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  margin: 0;
-}
-.small {
-  font-size: 0.8rem;
-}
-
-/* ---------- Trust banners ------------------------------------------------ */
-
-/* Trust/notice banner: kit.css .kit-banner (shared across all apps). */
-
-/* ---------- Inputs & write affordances ----------------------------------- */
-
 button {
   font: inherit;
   cursor: pointer;
 }
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-}
-
-input[type='text'],
-textarea,
-select {
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0.55rem 0.75rem;
-  width: 100%;
-  min-height: 2.6rem;
-  -webkit-appearance: none;
-  appearance: none;
-}
-input::placeholder,
-textarea::placeholder {
-  color: var(--ink-faint);
-}
-input[type='text']:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-textarea {
-  resize: vertical;
-  line-height: 1.5;
-}
-select {
-  width: auto;
-  font-size: 0.82rem;
-  color: var(--ink-soft);
-  padding: 0.3rem 0.5rem;
-  min-height: 2.4rem;
-}
-
-/* Buttons: kit.css .kit-btn / .kit-btn.primary / .kit-btn.danger (shared). */
-
-/* ---------- Search ------------------------------------------------------- */
-
-.search-wrap {
-  position: relative;
-  margin-bottom: 1rem;
-}
-.search-wrap input[type='search'] {
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.6rem 2.6rem 0.6rem 0.95rem;
-  width: 100%;
-  min-height: 2.6rem;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.search-wrap input[type='search']::placeholder {
-  color: var(--ink-faint);
-}
-.search-wrap input[type='search']:focus {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 50%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-.search-hint {
-  position: absolute;
-  top: 50%;
-  right: 0.75rem;
-  transform: translateY(-50%);
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--ink-faint);
-  border: 1px solid var(--line);
-  border-radius: 0.3rem;
-  padding: 0.05rem 0.4rem;
-  pointer-events: none;
+:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 2px;
 }
 mark {
   background: var(--accent-soft);
-  color: inherit;
-  border-radius: 0.2em;
-  padding: 0 0.05em;
+  color: var(--accent-deep);
+  border-radius: 3px;
+  padding: 0 1px;
 }
 
-/* ---------- Quick add ---------------------------------------------------- */
+/* ---------- Shell ---------- */
 
-#quickAdd {
+.nt-shell {
+  display: flex;
+  height: 100vh;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Sidebar ---------- */
+
+.nt-side {
+  width: 250px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  padding: 18px 14px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  height: 100vh;
+  overflow: auto;
 }
-#quickAddMore {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-#quickAddMore[hidden] {
-  display: none;
-}
-.quick-add-actions {
+.nt-brand {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 10px;
+  padding: 2px 6px 14px;
 }
-.quick-add-actions span {
-  margin-right: auto;
-}
-.inline-form {
+.nt-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-deep);
+  color: #fff;
   display: flex;
-  gap: 0.5rem;
   align-items: center;
-  margin-bottom: 1rem;
+  justify-content: center;
+  flex-shrink: 0;
 }
-.inline-form[hidden] {
-  display: none;
-}
-.inline-form input {
-  flex: 1;
+.nt-brand-text {
   min-width: 0;
+  flex: 1;
 }
-.chip-add {
-  border-style: dashed;
-  color: var(--ink-faint);
+.nt-brand-name {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
+}
+.nt-brand-tag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.nt-side-close.kit-icon-btn {
+  margin-left: auto;
+  display: none;
 }
 
-.note-view-bar {
+.nt-new {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
+}
+.nt-new:hover {
+  filter: brightness(1.07);
+}
+.nt-new:active {
+  transform: scale(0.99);
+}
+
+.nt-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nt-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  font-size: 13.5px;
+  background: none;
+  color: var(--ink-2);
+}
+.nt-nav-label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-nav-item:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.nt-nav-item[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.nt-nav-count {
+  flex: none !important;
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.6;
+}
+.nt-nb-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.nt-nb-name {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-nav-item.kit-pending {
+  padding-left: 11px;
+}
+
+.nt-nb-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  padding: 16px 10px 8px;
 }
-.note-view-actions {
-  display: inline-flex;
-  gap: 0.4rem;
-  align-items: center;
-  flex-wrap: wrap;
+.nt-eyebrow-label {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
 }
-
-/* ---------- Notebook chips ---------------------------------------------- */
-
-.chips {
+.nt-nb-add {
+  width: 22px;
+  height: 22px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 1rem;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: var(--ink-3);
 }
-.chips:empty {
-  display: none;
-}
-/* Notebook filter pills: kit.css .kit-chip (shared); selected fills accent-deep. */
-.chip-tool {
-  min-width: 2.4rem;
-  min-height: 2.4rem;
-  padding: 0.3rem 0.55rem;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink-soft);
-  font-size: 0.8rem;
-  -webkit-tap-highlight-color: transparent;
-}
-.chip-tool:hover {
-  border-color: var(--line-strong);
+.nt-nb-add:hover {
+  background: var(--bg-sunken);
   color: var(--ink);
 }
-.chip-tool.danger:hover,
-.chip-tool.danger[data-kit-armed] {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-input.chip-rename-input {
-  width: 11rem;
-  min-height: 2.4rem;
-  padding: 0.3rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-}
-
-.chip-group {
-  display: contents;
-}
-
-/* ---------- Wide layout: notebook sidebar ------------------------------- */
-
-@media (min-width: 720px) {
-  :root:not([data-app-width='narrow']) .split {
-    display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr);
-    gap: 1.75rem;
-    align-items: start;
-  }
-  :root:not([data-app-width='narrow']) .split:has(.side-nav[hidden]) {
-    grid-template-columns: 1fr;
-  }
-  :root:not([data-app-width='narrow']) .side-nav {
-    position: sticky;
-    top: 0.75rem;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    border-radius: var(--radius);
-    padding: 0.5rem;
-    box-shadow: var(--shadow-sm);
-  }
-  :root:not([data-app-width='narrow']) .side-nav .chips {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.15rem;
-    margin-bottom: 0;
-  }
-  :root:not([data-app-width='narrow']) .side-nav .chip-group {
-    display: flex;
-    align-items: center;
-    gap: 0.15rem;
-  }
-  :root:not([data-app-width='narrow']) .side-nav .kit-chip {
-    display: flex;
-    align-items: center;
-    text-align: left;
-    font-size: 0.875rem;
-    border: none;
-    background: none;
-    border-radius: var(--radius-sm);
-    padding: 0.45rem 0.6rem;
-  }
-  :root:not([data-app-width='narrow']) .side-nav .chip-group .kit-chip {
-    flex: 1;
-    min-width: 0;
-  }
-  :root:not([data-app-width='narrow']) .side-nav .kit-chip[aria-pressed='true'] {
-    background: var(--accent-soft);
-    color: var(--accent-deep);
-    font-weight: 600;
-  }
-  :root:not([data-app-width='narrow']) .side-nav .chip-tool {
-    flex-shrink: 0;
-    border: none;
-    background: none;
-    border-radius: var(--radius-sm);
-  }
-  :root:not([data-app-width='narrow']) .side-nav .chip-add {
-    border: 1px dashed var(--line);
-  }
-  :root:not([data-app-width='narrow']) .side-nav input.chip-rename-input {
-    width: 100%;
-    border-radius: var(--radius-sm);
-  }
-  :root:not([data-app-width='narrow']) .side-nav .inline-form {
-    flex-wrap: wrap;
-    margin: 0.5rem 0 0.25rem;
-  }
-}
-
-/* ---------- Note list ---------------------------------------------------- */
-
-.section-head {
-  font-family: var(--mono);
-  font-size: 0.66rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-faint);
-  margin: 1.25rem 0 0.4rem;
-}
-
-.note {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0.7rem 2.75rem 0.7rem 0.125rem;
-  border: none;
-  border-bottom: 1px solid var(--line);
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  break-inside: avoid;
-  -webkit-tap-highlight-color: transparent;
-}
-.note-grid > .note:last-child {
-  border-bottom: none;
-}
-.note:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-  border-radius: var(--radius-sm);
-}
-.note-title {
-  display: block;
-  font-size: 0.95rem;
-  font-weight: 600;
-  line-height: 1.35;
-  word-break: break-word;
-}
-.note-preview {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  color: var(--ink-soft);
-  font-size: 0.82rem;
-  line-height: 1.5;
-  margin-top: 0.15rem;
-  word-break: break-word;
-}
-.note-meta-row {
+.nt-nb-form {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.4rem;
-  font-family: var(--mono);
-  font-size: 0.68rem;
-  color: var(--ink-faint);
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 2px 2px;
 }
-.tag {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 0.64rem;
-  color: var(--ink-faint);
+.nt-nb-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.nt-side-foot {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.nt-summary {
   border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.12rem 0.5rem;
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--bg-elev);
 }
-.pin-btn {
-  position: absolute;
-  top: 0.35rem;
-  right: 0;
-  width: 2.5rem;
-  height: 2.5rem;
+.nt-summary-line {
+  font: var(--t-body-strong);
+  font-size: 15px;
+  margin-top: 6px;
+}
+.nt-summary-sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 2px;
+}
+.nt-consent-line {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  color: var(--ink-faint);
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
-  -webkit-tap-highlight-color: transparent;
+  gap: 7px;
+  padding: 11px 4px 2px;
+  color: var(--ink-3);
 }
-.note:hover .pin-btn,
-.note:focus-within .pin-btn,
-.pin-btn.pinned {
-  opacity: 1;
-}
-.pin-btn.pinned {
+.nt-consent-line svg {
   color: var(--accent-deep);
+  flex-shrink: 0;
 }
-.pin-btn:hover {
-  color: var(--accent-deep);
-  background: var(--surface-2);
-}
-@media (hover: none) {
-  .pin-btn {
-    opacity: 1;
-  }
+.nt-consent-line span {
+  font: var(--t-small);
+  font-size: 11.5px;
 }
 
-@media (min-width: 720px) {
-  .note-grid {
-    columns: 2;
-    column-gap: 0.85rem;
-  }
-  .note,
-  .note-grid > .note:last-child {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
-    padding: 0.85rem 2.75rem 0.85rem 0.95rem;
-    margin-bottom: 0.85rem;
-    box-shadow: var(--shadow-sm);
-    transition: box-shadow 0.14s var(--ease);
-  }
-  .note:hover {
-    box-shadow: var(--shadow-md);
-  }
-  .pin-btn {
-    top: 0.5rem;
-    right: 0.4rem;
-  }
-}
-
-/* ---------- Note view: edit-in-place ------------------------------------ */
-
-.back {
-  border: none;
-  background: none;
-  padding: 0.25rem 0;
-  margin-bottom: 0.75rem;
-  min-height: 2.5rem;
-  color: var(--accent-deep);
-  font-size: 0.85rem;
-  font-weight: 500;
-  -webkit-tap-highlight-color: transparent;
-}
-.note-title-input,
-.note-title-input:focus {
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  padding: 0.25rem 0;
-  font-size: 1.4rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  width: 100%;
-  box-shadow: none;
-}
-.note-meta-line {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin: 0.1rem 0 0;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-}
-.save-state {
-  color: var(--ink-faint);
-  font-family: var(--mono);
-  font-size: 0.72rem;
-}
-.save-state:empty {
+.nt-scrim {
   display: none;
 }
-.note-body {
-  line-height: 1.65;
-  font-size: 0.95rem;
-  margin-top: 0.85rem;
-  min-height: 8rem;
-  word-break: break-word;
-  cursor: text;
-}
-.note-body:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-  border-radius: var(--radius-sm);
-}
-.note-body-input {
-  margin-top: 0.85rem;
-  min-height: 10rem;
-  line-height: 1.65;
-  font-size: 0.95rem;
-  overflow: hidden;
-  resize: none;
-}
-.note-body .md-p {
-  margin: 0 0 0.1rem;
-  white-space: pre-wrap;
-  min-height: 1.2em;
-}
-.note-body .md-gap {
-  margin: 0;
-  height: 0.9em;
-}
-.note-body .md-h1 {
-  font-size: 1.15rem;
-  font-weight: 600;
-  margin: 0.7em 0 0.25em;
-}
-.note-body .md-h2 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0.6em 0 0.2em;
-}
-.note-body .md-h3 {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 0.5em 0 0.15em;
-}
-.note-body .md-list {
-  margin: 0.15em 0;
-  padding-left: 1.4em;
-}
-.note-body .md-list li {
-  margin: 0.1em 0;
-}
-.note-body code {
-  font-family: var(--mono);
-  font-size: 0.85em;
-  background: var(--surface-2);
-  border-radius: 0.3em;
-  padding: 0.08em 0.35em;
-}
-.note-body a {
-  color: var(--accent-deep);
-}
-.check-line {
+
+/* ---------- Main ---------- */
+
+.nt-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  gap: 0.15rem;
-  margin-left: -0.55rem;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
-.check-box {
+.nt-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.nt-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.nt-search {
+  flex: 1;
+  max-width: 480px;
+  position: relative;
+}
+.nt-search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  min-height: 2.25rem;
-  flex: none;
-  cursor: pointer;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  color: var(--ink-3);
 }
-.check-box input {
-  width: 1.1rem;
-  height: 1.1rem;
+.nt-search-clear:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
+}
+.nt-topbar-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.nt-view-toggle {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-elev);
+}
+.nt-view-toggle button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 30px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink-3);
+}
+.nt-view-toggle button[aria-pressed='true'] {
+  background: var(--accent-deep);
+  color: #fff;
+}
+.nt-ask-mount {
+  display: flex;
+  align-items: center;
+}
+
+.nt-banner {
+  margin: 14px 22px 0;
+}
+
+/* ---------- Toolbar ---------- */
+
+.nt-toolbar {
+  padding: 16px 22px 4px;
+  flex-shrink: 0;
+}
+.nt-toolbar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.nt-title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.nt-title-input {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--selb);
+  outline: none;
+  min-width: 8ch;
+}
+.nt-toolbar-tools {
+  display: flex;
+  gap: 5px;
+}
+.nt-sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+.nt-armed-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 0 2px;
+  white-space: nowrap;
+}
+
+/* ---------- Scroll region / wall ---------- */
+
+.nt-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 22px 48px;
+}
+.nt-scroll-inner {
+  max-width: 1400px;
+}
+
+.nt-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+  margin: 2px 2px 10px;
+}
+.nt-eyebrow-others {
+  margin: 22px 2px 10px;
+}
+.nt-pending-strip {
+  margin-bottom: 22px;
+}
+
+.nt-wall {
+  column-width: 250px;
+  column-gap: 14px;
+}
+.nt-wall.list {
+  column-width: unset;
+  column-count: 1;
+  max-width: 640px;
+}
+
+/* ---------- Quick add ---------- */
+
+.nt-quickadd {
+  max-width: 620px;
+  margin: 0 auto 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color 0.15s var(--ease);
+}
+.nt-quickadd:focus-within {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+}
+.nt-qa-title {
+  width: 100%;
+  font: var(--t-body-strong);
+  font-size: 15px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 14px 16px 6px;
+  outline: none;
+}
+.nt-qa-title::placeholder {
+  color: var(--ink-3);
+}
+.nt-qa-more {
+  animation: nt-fade 0.16s ease;
+}
+.nt-qa-body {
+  width: 100%;
+  min-height: 64px;
+  font: var(--t-body);
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  padding: 0 16px 10px;
+  outline: none;
+  resize: none;
+  font-family: var(--font-sans);
+}
+.nt-qa-body::placeholder {
+  color: var(--ink-3);
+}
+.nt-qa-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+.nt-qa-target {
+  font: var(--t-small);
+  color: var(--ink-3);
+}
+.nt-qa-actions .kit-btn:last-child {
+  margin-left: auto;
+}
+
+/* ---------- Cards (masonry / list) ---------- */
+
+.nt-card {
+  break-inside: avoid;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  padding: 16px 16px 13px;
+  cursor: pointer;
+  transition:
+    border-color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+.nt-card:hover,
+.nt-card:focus-visible {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-md);
+}
+.nt-card:hover .nt-pin-btn,
+.nt-card:focus-within .nt-pin-btn {
+  opacity: 1;
+}
+.nt-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.nt-card-title {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body-strong);
+  font-size: 15px;
+  line-height: 1.3;
+}
+.nt-pin-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  color: var(--ink-3);
+  opacity: 0;
+  transition:
+    opacity 0.15s var(--ease),
+    color 0.15s var(--ease);
+}
+.nt-pin-btn.pinned {
+  color: var(--accent-deep);
+  opacity: 1;
+}
+.nt-card-preview {
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-top: 7px;
+  white-space: pre-wrap;
+  overflow: hidden;
+  max-height: 7.5em;
+}
+.nt-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+}
+.nt-progress-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.nt-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  transition: width 0.3s var(--ease);
+}
+.nt-progress-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.nt-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+}
+.nt-card-notebook {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.nt-card-when {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.nt-card.kit-pending {
+  padding-left: 15px;
+}
+
+/* ---------- Empty state ---------- */
+/* kit.css's .kit-empty* owns icon/title/sub — no local overrides needed. */
+
+/* ---------- Editor overlay ---------- */
+
+.nt-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  backdrop-filter: blur(2px);
+  animation: nt-fade 0.18s ease;
+}
+.nt-editor {
+  margin: auto;
+  width: min(760px, 94vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: nt-pop 0.2s var(--ease);
+}
+.nt-editor-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.nt-save-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  min-width: 92px;
+}
+.nt-editor-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.nt-editor-tools .kit-icon-btn {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+}
+.nt-editor-tools .kit-icon-btn:hover {
+  border-color: var(--line-strong);
+}
+.nt-editor-tools .kit-icon-btn.on {
+  color: var(--accent-deep);
+  border-color: var(--selb);
+  background: var(--sel);
+}
+.nt-nb-select {
+  font: var(--t-small);
+  color: var(--ink-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  outline: none;
+}
+.nt-nb-select:hover {
+  border-color: var(--line-strong);
+}
+
+.nt-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 8px;
+}
+.nt-editor-title {
+  display: block;
+  width: 100%;
+  font-family: var(--font-title);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-h);
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+  margin-bottom: 12px;
+}
+.nt-editor-title::placeholder {
+  color: var(--ink-3);
+}
+.nt-editor-textarea {
+  width: 100%;
+  min-height: 320px;
+  font: var(--t-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: var(--font-sans);
+}
+.nt-body-render {
+  min-height: 320px;
+  font-size: 15px;
+  line-height: 1.65;
+  cursor: text;
+}
+.nt-md-h1,
+.nt-md-h2,
+.nt-md-h3 {
+  margin: 14px 0 4px;
+  font-family: var(--font-title);
+  font-weight: 600;
+  color: var(--ink);
+}
+.nt-md-h1 {
+  font-size: 20px;
+}
+.nt-md-h2 {
+  font-size: 17px;
+}
+.nt-md-h3 {
+  font-size: 15px;
+}
+.nt-md-p {
+  padding: 3px 0;
   margin: 0;
-  accent-color: var(--accent-deep);
-  cursor: pointer;
-  min-height: auto;
+  color: var(--ink);
+  white-space: pre-wrap;
 }
-.check-text {
-  padding-top: 0.35rem;
-  min-height: 1.6em;
+.nt-md-gap {
+  height: 10px;
+  margin: 0;
 }
-.check-line.done .check-text {
-  color: var(--ink-faint);
+.nt-md-li {
+  display: flex;
+  gap: 9px;
+  padding: 2px 0;
+  color: var(--ink);
+}
+.nt-md-bullet {
+  color: var(--accent-deep);
+  flex-shrink: 0;
+}
+.nt-check-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 3px 0;
+}
+.nt-check-box {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--line-strong);
+  background: transparent;
+  padding: 0;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.nt-check-line.done .nt-check-box {
+  border-color: var(--accent-deep);
+  background: var(--accent-deep);
+}
+.nt-check-text {
+  flex: 1;
+  color: var(--ink);
+}
+.nt-check-line.done .nt-check-text {
+  color: var(--ink-3);
   text-decoration: line-through;
 }
 
-/* Empty card: kit.css .kit-empty-card (shared across apps). */
-.footnote {
-  margin-top: 2rem;
-  padding-top: 1rem;
+.nt-editor-attach {
+  margin: 8px 0 10px;
+}
+.nt-attach-btn {
+  margin-bottom: 4px;
+}
+
+.nt-editor-foot {
+  flex-shrink: 0;
   border-top: 1px solid var(--line);
-  text-align: center;
-  color: var(--ink-faint);
-  font-size: 0.78rem;
-}
-.window-footer {
+  padding: 12px 24px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 1.25rem 0 0.5rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
+  gap: 10px;
+  background: var(--bg-elev);
+}
+.nt-receipt-chip {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.nt-activity-line {
+  font: var(--t-small);
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-editor.kit-pending {
+  border-left-width: 3px;
 }
 
-/* ---------- Attachments -------------------------------------------------- */
-/* The strip + tiles are the kit's .kit-attach-* primitive (kit.css); only the
-   app-chrome wrapper and add control live here. */
-
-.attach-block {
-  margin-top: 1rem;
+@keyframes nt-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.attach-add {
-  display: inline-block;
-  margin-top: 0.5rem;
-}
-.attach-add input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-/* ---------- Cross-references (issue #272) -------------------------------- */
-
-/* Layout wrapper around the strip stays app-owned; the strip itself and its
-   tiles are the kit's canonical .kit-ref-* primitive (issues #272 + #282). */
-.ref-block {
-  margin-top: 0.75rem;
-}
-#refStrip {
-  margin-bottom: 0.5rem;
-}
-
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.78);
-  cursor: zoom-out;
-  padding: 1.5rem;
-}
-.lightbox[hidden] {
-  display: none;
-}
-.lightbox img {
-  max-width: 100%;
-  max-height: 100%;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pin-btn,
-  .note {
-    transition: none;
+@keyframes nt-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
-/* ---------- App-level knobs ---------------------------------------------- */
+/* ---------- Narrow (phone) — driven by chrome.js's .is-narrow on #shell ---------- */
 
-:root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+.nt-shell.is-narrow .nt-side {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 270px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
 }
-:root[data-app-font='serif'] {
-  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+.nt-shell.is-narrow.side-open .nt-side {
+  transform: translateX(0);
 }
-:root[data-app-font='mono'] {
-  font-family: var(--mono);
+.nt-shell.is-narrow .nt-side-close {
+  display: flex;
 }
-:root[data-app-width='narrow'] main {
-  max-width: 36rem;
+.nt-shell.is-narrow .nt-hamburger {
+  display: flex;
 }
-@media (min-width: 720px) {
-  :root[data-app-width='narrow'] main {
-    max-width: 42rem;
+.nt-shell.is-narrow.side-open .nt-scrim {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(15, 18, 26, 0.4);
+  animation: nt-fade 0.2s ease;
+}
+.nt-shell.is-narrow .nt-topbar,
+.nt-shell.is-narrow .nt-toolbar,
+.nt-shell.is-narrow .nt-scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.nt-shell.is-narrow .nt-banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+.nt-shell.is-narrow .nt-wall {
+  column-width: unset;
+  column-count: 1;
+}
+.nt-shell.is-narrow .nt-editor-backdrop {
+  align-items: stretch;
+}
+.nt-shell.is-narrow .nt-editor {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
+  animation: none;
+}
+/* The full top bar (back + save label + notebook select + 3 icon buttons)
+   is too wide for a phone at its desktop sizing — the delete button was
+   clipping off the right edge at 390px. Let the save label truncate instead
+   of reserving a fixed 92px, cap the select, and tighten the gaps/padding. */
+.nt-shell.is-narrow .nt-editor-top {
+  gap: 6px;
+  padding: 10px;
+}
+.nt-shell.is-narrow .nt-save-label {
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nt-shell.is-narrow .nt-editor-tools {
+  gap: 4px;
+}
+.nt-shell.is-narrow .nt-nb-select {
+  max-width: 25vw;
+  padding: 7px 6px;
+}
+
+@media (max-width: 519px) {
+  .nt-topbar {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .nt-topbar-tools {
+    flex: 1 0 100%;
+    margin-left: 0;
+  }
+  .nt-search {
+    max-width: none;
   }
 }

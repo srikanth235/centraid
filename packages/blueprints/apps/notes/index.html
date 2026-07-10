@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <title>Notes</title>
     <script>
-      // Centraid live settings bridge — see the todos blueprint for the
-      // full story: runtime bakes theme server-side; this handles the
+      // Centraid live settings bridge — see the docs blueprint for the full
+      // story: runtime bakes theme/knobs server-side; this handles the
       // no-bake preview path and live pref flips over postMessage.
       (function () {
         var h = document.documentElement;
@@ -35,171 +35,195 @@
       })();
     </script>
     <link rel="stylesheet" href="wall.css" />
+    <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="app.css" />
     <link rel="stylesheet" href="kit.css" />
   </head>
   <body>
-    <main>
-      <header class="head" data-ask-mount>
-        <div>
-          <h1>Notes</h1>
-          <p id="subtitle" class="muted">All your notes, saved in your vault.</p>
+    <div class="nt-shell" id="shell">
+      <!-- ░░ SIDEBAR ░░ -->
+      <aside class="nt-side" id="sidebar" aria-label="Notes navigation">
+        <div class="nt-brand">
+          <span class="nt-brand-mark" aria-hidden="true">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 3h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+              <path d="M14 3v5h5M8 13h8M8 17h5" />
+            </svg>
+          </span>
+          <div class="nt-brand-text">
+            <div class="nt-brand-name">Notes</div>
+            <div class="nt-brand-tag">a projection of your vault</div>
+          </div>
+          <button type="button" class="kit-icon-btn nt-side-close" id="sideClose" aria-label="Close menu">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+            >
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
-      </header>
 
-      <div id="consentBanner" class="kit-banner" hidden>
-        <strong>No vault access yet.</strong>
-        <span id="consentDetail"
-          >Ask the owner to approve this app's requested scopes in vault settings.</span
-        >
-      </div>
-      <div
-        id="noticeBanner"
-        class="kit-banner notice"
-        role="status"
-        aria-live="polite"
-        hidden
-      ></div>
+        <button type="button" class="nt-new" id="newNoteBtn">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span>New note</span>
+        </button>
 
-      <div id="searchWrap" class="search-wrap" role="search">
-        <input
-          id="searchInput"
-          type="search"
-          placeholder="Search notes…"
-          aria-label="Search notes"
-          autocomplete="off"
-        />
-        <kbd class="search-hint" aria-hidden="true">/</kbd>
-      </div>
+        <div id="sidebarNav" aria-label="Sections and notebooks"></div>
 
-      <div class="split">
-        <nav id="sideNav" class="side-nav" aria-label="Notebooks" hidden>
-          <div id="notebookChips" class="chips" role="group" aria-label="Filter by notebook"></div>
+        <div id="sidebarFoot" class="nt-side-foot"></div>
+      </aside>
 
-          <form id="notebookForm" class="inline-form" autocomplete="off" hidden>
+      <div class="nt-scrim" id="scrim"></div>
+
+      <!-- ░░ MAIN ░░ -->
+      <main class="nt-main">
+        <div class="nt-topbar">
+          <button type="button" class="nt-hamburger" id="hamburger" aria-label="Open menu">
+            <svg
+              width="19"
+              height="19"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+            >
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+          </button>
+          <label class="kit-search nt-search">
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             <input
-              id="notebookNameInput"
-              type="text"
-              placeholder="Notebook name…"
-              aria-label="Notebook name"
+              id="searchInput"
+              type="search"
+              placeholder="Search notes — title and contents"
+              aria-label="Search notes"
+              autocomplete="off"
             />
-            <button type="submit" class="kit-btn primary">Create</button>
-            <button type="button" id="cancelNotebook" class="kit-btn">Cancel</button>
-          </form>
-        </nav>
-
-        <div class="pane">
-          <form id="quickAdd" autocomplete="off">
-            <input
-              id="titleInput"
-              type="text"
-              placeholder="New note title…"
-              aria-label="Note title"
-            />
-            <div id="quickAddMore" hidden>
-              <textarea
-                id="bodyInput"
-                rows="4"
-                placeholder="Write your note…"
-                aria-label="Note body"
-              ></textarea>
-              <div class="quick-add-actions">
-                <span id="quickAddTarget" class="muted small"></span>
-                <button type="button" id="cancelAdd" class="kit-btn">Cancel</button>
-                <button type="submit" class="kit-btn primary">Add note</button>
-              </div>
-            </div>
-          </form>
-
-          <section id="noteList" aria-label="Notes"></section>
-
-          <section id="noteView" aria-label="Note" hidden>
-            <div class="note-view-bar">
-              <button id="backButton" type="button" class="back">← All notes</button>
-              <span class="note-view-actions">
-                <button id="pinButton" type="button" class="kit-btn"></button>
-                <select id="moveSelect" aria-label="Notebook"></select>
-                <button
-                  id="checklistButton"
-                  type="button"
-                  class="kit-btn"
-                  title="Insert checklist item"
-                >
-                  ☑ Checklist
-                </button>
-                <button id="deleteButton" type="button" class="kit-btn danger">Delete</button>
-              </span>
-            </div>
-            <input
-              id="noteTitleInput"
-              class="note-title-input"
-              type="text"
-              placeholder="Title"
-              aria-label="Note title"
-            />
-            <p class="muted small note-meta-line">
-              <span id="noteMeta"></span>
-              <span id="saveState" class="save-state" role="status" aria-live="polite"></span>
-            </p>
-            <div
-              id="noteBodyRender"
-              class="note-body"
-              tabindex="0"
-              aria-label="Note body — press Enter to edit"
-            ></div>
-            <textarea
-              id="noteBodyInput"
-              class="note-body-input"
-              rows="8"
-              placeholder="Write your note…"
-              aria-label="Note body"
-              hidden
-            ></textarea>
-            <div id="attachBlock" class="attach-block">
-              <div id="attachStrip" class="kit-attach-strip"></div>
-              <label class="attach-add">
-                <input id="attachInput" type="file" multiple hidden />
-                <span class="kit-btn">＋ Attach file</span>
-              </label>
-            </div>
-            <div id="refBlock" class="ref-block">
-              <div id="refStrip" class="kit-ref-strip"></div>
-              <button
-                id="addRefButton"
-                type="button"
-                class="kit-btn"
-                title="Or type @ anywhere in the note to mention a person, place, file — anything in your vault"
+            <button type="button" id="searchClear" class="nt-search-clear" aria-label="Clear search" hidden>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
               >
-                ＋ Mention
+                <path d="M6 6l12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </label>
+          <div class="nt-topbar-tools">
+            <div class="nt-view-toggle">
+              <button type="button" id="viewMasonryBtn" aria-label="Card view" aria-pressed="true">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <rect x="3" y="3" width="7" height="9" rx="1" />
+                  <rect x="14" y="3" width="7" height="5" rx="1" />
+                  <rect x="3" y="16" width="7" height="5" rx="1" />
+                  <rect x="14" y="12" width="7" height="9" rx="1" />
+                </svg>
+              </button>
+              <button type="button" id="viewListBtn" aria-label="List view" aria-pressed="false">
+                <svg
+                  width="17"
+                  height="17"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
               </button>
             </div>
-          </section>
-
-          <p id="empty" class="kit-empty-card" hidden>No notes yet. Write the first one above.</p>
+            <button type="button" class="kit-icon-btn" id="themeBtn" aria-label="Toggle light/dark"></button>
+            <div class="nt-ask-mount" data-ask-mount></div>
+          </div>
         </div>
-      </div>
 
-      <div id="lightbox" class="lightbox" role="dialog" aria-label="Attachment preview" hidden>
-        <img id="lightboxImg" alt="" />
-      </div>
+        <div id="consentBanner" class="kit-banner nt-banner" hidden>
+          <strong>No vault access yet.</strong>
+          <span id="consentDetail">Ask the owner to approve this app's requested scopes in vault settings.</span>
+        </div>
+        <div id="noticeBanner" class="kit-banner notice nt-banner" role="status" aria-live="polite" hidden></div>
 
-      <p class="muted small footnote">
-        Every write is a typed vault command — consent-checked and receipted.
-      </p>
-    </main>
+        <div id="toolbar" aria-label="Active scope"></div>
+
+        <div class="nt-scroll" id="scroll">
+          <div id="wall" aria-label="Notes"></div>
+        </div>
+      </main>
+
+      <div id="editorRoot"></div>
+    </div>
+
+    <!-- One shared file input for the whole app; the editor's "Attach a
+         file" button sets the target note, then triggers this. -->
+    <input id="attachInput" type="file" multiple hidden aria-label="Attach a file to a note" />
+
     <script>
+      // "Ask your vault" config — kit.js injects the button + panel and, by
+      // default, drives the conversation through this app's _turn agent;
+      // writes park at the vault plane for the owner's approval.
       window.KIT_ASK = {
         scope: 'notes',
         placeholder: 'Ask your notes…',
         intro:
-          'Ask me to write, find, summarise or tag a note. New notes show for your approval before they touch the vault.',
-        suggest: [
-          'Summarise my Q3 roadmap note',
-          'New note from this',
-          'What did I note about the offline story?',
-        ],
+          'Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.',
+        suggest: ['Summarise my Q3 roadmap note', 'New note from this', 'What did I note about the offline story?'],
       };
     </script>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="./app.jsx"></script>
   </body>
 </html>

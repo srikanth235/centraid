@@ -1,867 +1,887 @@
 /* ============================================================================
-   Tasks — LIST archetype (quick-capture) for the Centraid blueprint family.
-   Redesign notes ("Field notebook" language):
-     · Humanist system sans for content, system mono for metadata — dates,
-       counts, priority flags, section counts, the "capture" affordances.
-     · One structural accent (teal by default, user-swappable via --app-color).
-       Deepened to --accent-deep wherever it sits under white text (AA).
-     · Rows are airy and quiet; hover lifts to --surface-2 with a soft radius.
-       Section headers are ledger-style mono eyebrows with a hairline rule + a
-       count. Overdue reads in --danger; today in the accent.
-     · Trust states are first-class, calm surfaces — see .kit-banner / .kit-pending.
-   Mobile-first (~375px, single column); ≥720px widens the measure and lets the
-   capture bar breathe. Verified in light + dark. Keeps every id/class app.js
-   binds and the inline theme bootstrap in index.html.
+   Tasks — the Things-style manager, reinvented. A projection of the vault:
+   sidebar (focus views + today progress) + a scrolling capture/board column,
+   a right slide-over detail drawer. Every colour flows from the token layer
+   below so light/dark and the per-app knobs (font/width/accent/default-view)
+   all retune the whole surface at once. Chrome is graphite + paper with a
+   single per-app accent (teal by default); priority flags are the only other
+   hue. JetBrains-class monospace (var(--mono)) carries every metadata voice —
+   dates, flags, counts, effort, eyebrows, receipt chips; content stays sans.
    ========================================================================== */
 
 :root {
   color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
-  /* Per-app accent (user swatch overrides via --app-color). */
-  --accent: #2ea098;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 76%, #06110f);
-  --accent-soft: color-mix(in oklab, var(--app-color, var(--accent)) 12%, transparent);
-  --on-accent: #ffffff;
+  /* app-hue drives tokens.css's whole neutral ramp. */
+  --app-hue: 222;
+  /* Tasks identity accent — teal, the palette's own --c-teal hex. Swappable
+     via the runtime's --app-color (tokens.css derives --_accent from it). */
+  --accent: var(--c-teal);
 
-  /* Ink ramp. */
-  --ink: hsl(228 22% 12%);
-  --ink-soft: hsl(228 9% 40%);
-  --ink-faint: hsl(228 10% 58%);
-
-  /* Surfaces. */
-  --bg: hsl(240 16% 97%);
-  --surface: #ffffff;
-  --surface-2: hsl(240 17% 95%);
-
-  /* Lines. */
-  --line: rgba(20, 24, 44, 0.09);
-  --line-strong: rgba(20, 24, 44, 0.16);
-
-  --danger: #d0342c;
+  /* Everything else (ink ramp, --line*, --danger, radii, --ease, tracking,
+     the --t-* type scale, --font-*/--mono, --sel/--selb, --_accent and its
+     accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
+     --ink-faint/--radius aliases) comes from tokens.css. */
   --warn: #b06a12;
-
-  /* Kit contract aliases. */
-  --text: var(--ink);
-  --muted: var(--ink-soft);
-
-  /* Shared primitives the kit + app read. */
-  --radius: 0.75rem;
-  --radius-sm: 0.5rem;
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-  --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --shadow-md: 0 10px 26px -14px rgba(15, 20, 32, 0.28), 0 2px 6px -3px rgba(15, 20, 32, 0.12);
-  --shadow-lg: 0 26px 60px -24px rgba(15, 20, 32, 0.4);
-
-  /* Mono metadata face — the signature. */
-  --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
 }
-
 :root[data-theme='dark'] {
-  --bg-l: 10%;
-  --ink: hsl(220 18% 94%);
-  --ink-soft: hsl(220 10% 64%);
-  --ink-faint: hsl(220 9% 46%);
-  --bg: var(--bg-wall);
-  --surface: hsl(225 13% calc(var(--bg-l) + 5%));
-  --surface-2: hsl(225 12% calc(var(--bg-l) + 8.5%));
-  --line: hsla(220 30% 72% / 0.1);
-  --line-strong: hsla(220 30% 74% / 0.2);
-  --danger: #f0645b;
   --warn: #e0a13c;
-  --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f4fbfa);
-  --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
-
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg-l: 10%;
-    --ink: hsl(220 18% 94%);
-    --ink-soft: hsl(220 10% 64%);
-    --ink-faint: hsl(220 9% 46%);
-    --bg: var(--bg-wall);
-    --surface: hsl(225 13% 15%);
-    --surface-2: hsl(225 12% 18.5%);
-    --line: hsla(220 30% 72% / 0.1);
-    --line-strong: hsla(220 30% 74% / 0.2);
-    --danger: #f0645b;
     --warn: #e0a13c;
-    --accent-deep: color-mix(in oklab, var(--app-color, var(--accent)) 82%, #f4fbfa);
   }
+}
+
+/* Knobs — appFont swaps the sans face; appWidth is read in chrome.js (forces
+   the narrow/phone layout regardless of measured width). */
+:root[data-app-font='sans'] {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+:root[data-app-font='serif'] {
+  --font-sans: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
+}
+:root[data-app-font='mono'] {
+  --font-sans: var(--mono);
 }
 
 * {
   box-sizing: border-box;
 }
-
 [hidden] {
   display: none !important;
 }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
 
+html,
+body {
+  height: 100%;
+}
 body {
   margin: 0;
-  padding: max(0.75rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    env(safe-area-inset-bottom) max(1rem, env(safe-area-inset-left));
   background: var(--bg);
   color: var(--ink);
+  font: var(--t-body);
+  letter-spacing: var(--tracking-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+button {
+  font: inherit;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--_accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Shell ---------- */
+
+.tk-shell {
+  display: flex;
+  height: 100vh;
   min-height: 100vh;
-  line-height: 1.5;
+  overflow: hidden;
 }
 
-main {
-  max-width: 36rem;
-  margin: 0 auto;
-  padding: 0.75rem 0 4rem;
-}
+/* ---------- Sidebar ---------- */
 
-@media (min-width: 720px) {
-  body {
-    padding: 1.75rem 2rem;
-  }
-  main {
-    max-width: 52rem;
-    padding-top: 1.25rem;
-  }
-}
-
-/* ---------- Header ------------------------------------------------------- */
-
-.head {
+.tk-side {
+  width: 250px;
+  flex-shrink: 0;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem 0.75rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.25rem;
+  flex-direction: column;
+  padding: 18px 14px;
+  background: var(--bg-elev);
+  border-right: 1px solid var(--line);
+  height: 100vh;
+  overflow: auto;
 }
-
-.head h1 {
-  font-size: 1.65rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
-  margin: 0 0 0.2rem;
-}
-
-@media (min-width: 720px) {
-  .head h1 {
-    font-size: 1.9rem;
-  }
-}
-
-.muted {
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-  margin: 0;
-}
-
-.small {
-  font-size: 0.8rem;
-}
-
-code {
-  font-family: var(--mono);
-  font-size: 0.9em;
-}
-
-.head-tools {
+.tk-brand {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 6px 14px;
 }
-
-#searchInput {
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.5rem 0.85rem;
-  width: 11rem;
-  min-height: 2.5rem;
-  transition:
-    border-color 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
-}
-#searchInput::placeholder {
-  color: var(--ink-faint);
-}
-#searchInput:focus-visible {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 55%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-
-/* Segmented focus switcher (All / Today / Upcoming): kit.css .kit-seg. */
-
-/* ---------- Trust banners (consent + notice) ----------------------------- */
-
-/* Trust/notice banner: kit.css .kit-banner (shared across all apps). */
-
-/* ---------- Quick add (the capture bar) ---------------------------------- */
-
-#quickAdd {
-  margin-bottom: 1.5rem;
-}
-
-.quick-add-row {
+.tk-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--accent-deep);
+  color: #fff;
   display: flex;
-  gap: 0.5rem;
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.4rem 0.4rem 0.4rem 0.5rem;
-  box-shadow: var(--shadow-sm);
-  transition:
-    border-color 0.15s var(--ease),
-    box-shadow 0.15s var(--ease);
+  justify-content: center;
+  flex-shrink: 0;
 }
-.quick-add-row:focus-within {
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 40%, var(--line-strong));
-  box-shadow: var(--shadow-sm), var(--kit-focus-ring);
-}
-
-.quick-add-row input[type='text'] {
-  flex: 1;
+.tk-brand-text {
   min-width: 0;
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  padding: 0.5rem 0.4rem;
-  font-size: 0.95rem;
+  flex: 1;
 }
-.quick-add-row input[type='text']:focus-visible {
-  outline: none;
+.tk-brand-name {
+  font: var(--t-body-strong);
+  letter-spacing: -0.01em;
 }
-.quick-add-row input[type='text']::placeholder {
-  color: var(--ink-faint);
+.tk-brand-tag {
+  font: var(--t-mono);
+  font-size: 10px;
+  color: var(--ink-3);
 }
-
-/* Meta controls read as compact mono tokens. */
-.quick-add-row input[type='date'],
-.quick-add-row input[type='number'],
-.quick-add-row select,
-.rename {
-  font: inherit;
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 0.4rem 0.5rem;
-  min-height: 2.4rem;
-}
-.quick-add-row input[type='date'],
-.quick-add-row input[type='number'],
-.quick-add-row select {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  color: var(--ink-soft);
-}
-.quick-add-row input:focus-visible,
-.quick-add-row select:focus-visible,
-.rename:focus-visible {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-#effortInput {
-  width: 5.5rem;
-}
-
-.nl-preview {
-  margin: 0.5rem 0 0;
-  padding-left: 0.6rem;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--accent-deep);
-}
-
-/* The Add button is kit-btn primary; only its slot in the capture row is ours. */
-#addBtn {
-  flex: none;
-}
-
-/* Subtask parent chip. */
-.parent-chip[hidden] {
+.tk-side-close.kit-icon-btn {
+  margin-left: auto;
   display: none;
 }
-.parent-chip {
-  display: inline-flex;
+
+.tk-new {
+  display: flex;
   align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8rem;
-  color: var(--ink-soft);
-  background: var(--accent-soft);
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 0.25rem 0.35rem 0.25rem 0.7rem;
-  margin-bottom: 0.6rem;
-  max-width: 100%;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  margin-bottom: 16px;
+  border: none;
+  border-radius: var(--r-md);
+  background: var(--accent-deep);
+  color: #fff;
+  font: var(--t-body-strong);
+  box-shadow: var(--shadow-sm);
+  transition: filter 0.14s var(--ease);
 }
-.parent-chip span {
+.tk-new:hover {
+  filter: brightness(1.07);
+}
+.tk-new:active {
+  transform: scale(0.99);
+}
+
+.tk-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tk-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 11px;
+  border: none;
+  border-radius: 9px;
+  font: var(--t-body);
+  background: none;
+  color: var(--ink-2);
+}
+.tk-nav-item span:first-of-type {
+  flex: 1;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.parent-chip button {
-  font: inherit;
-  font-size: 0.75rem;
-  color: var(--ink-soft);
-  background: color-mix(in oklab, var(--ink-faint) 18%, transparent);
-  border: none;
-  border-radius: 999px;
-  width: 1.4rem;
-  height: 1.4rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+.tk-nav-item:hover {
+  background: var(--bg-sunken);
+  color: var(--ink);
 }
-.parent-chip button:hover {
-  color: var(--danger);
+.tk-nav-item[aria-current='true'] {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+.tk-nav-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  opacity: 0.6;
 }
 
-/* On phones the meta controls wrap under the title on their own line. */
-@media (max-width: 519px) {
-  .quick-add-row {
-    flex-wrap: wrap;
-  }
-  .quick-add-row input[type='text'] {
-    flex: 1 0 100%;
-    order: -1;
-  }
-  #addBtn {
-    margin-left: auto;
-  }
-
-  /* Head tools span the full width on phones — search + segmented control
-     each get their own comfortable line rather than a cramped 11rem box. */
-  .head-tools {
-    width: 100%;
-  }
-  #searchInput {
-    flex: 1;
-    width: auto;
-  }
-  #viewSwitch {
-    width: 100%;
-  }
-  #viewSwitch > button {
-    flex: 1;
-  }
+.tk-side-foot {
+  margin-top: auto;
+  padding-top: 16px;
 }
-
-/* ---------- Section headers (ledger eyebrows) ---------------------------- */
-
-.section-label {
+.tk-progress {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--bg-elev);
+}
+.tk-progress-top {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  margin: 1.5rem 0 0.35rem;
-  font-family: var(--mono);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 0.68rem;
-  color: var(--ink-faint);
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
-.section-label::after {
-  content: '';
+.tk-progress-pct {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.tk-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.tk-progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  transition: width 0.3s var(--ease);
+}
+.tk-progress-label {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 8px;
+}
+.tk-consent-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 4px 2px;
+  color: var(--ink-3);
+}
+.tk-consent-line svg {
+  color: var(--accent-deep);
+  flex-shrink: 0;
+}
+.tk-consent-line span {
+  font: var(--t-small);
+  font-size: 11.5px;
+}
+
+.tk-scrim {
+  display: none;
+}
+
+/* ---------- Main ---------- */
+
+.tk-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+.tk-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.tk-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  flex-shrink: 0;
+}
+.tk-heading {
+  min-width: 0;
+}
+.tk-title {
+  font: var(--t-title);
+  letter-spacing: var(--tracking-h);
+}
+.tk-sub {
+  font: var(--t-small);
+  color: var(--ink-2);
+  margin-top: 1px;
+}
+.tk-topbar-tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+/* kit.css's .kit-search owns the pill/icon/input look; this is only width. */
+.tk-search {
+  width: 180px;
+}
+.tk-ask-mount {
+  display: flex;
+  align-items: center;
+}
+
+/* Trust banners: kit.css .kit-banner owns the shape; this is only the
+   layout hook aligning it with the padded topbar/toolbar. */
+.tk-banner {
+  margin: 14px 26px 0;
+}
+
+.tk-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 26px 48px;
+}
+.tk-column {
+  max-width: 760px;
+}
+
+/* ---------- Capture bar ---------- */
+
+.tk-capture {
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 26px;
+  transition: border-color 0.15s var(--ease);
+}
+.tk-capture:focus-within {
+  border-color: color-mix(in oklab, var(--_accent) 40%, var(--line-strong));
+}
+.tk-capture-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+.tk-capture-dot {
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  flex-shrink: 0;
+}
+.tk-capture-input {
+  flex: 1;
+  min-width: 0;
+  font: var(--t-body-strong);
+  font-size: 15px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+.tk-capture-input::placeholder {
+  color: var(--ink-3);
+}
+.tk-capture-add {
+  flex-shrink: 0;
+}
+.tk-capture-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 13px 47px;
+  flex-wrap: wrap;
+}
+.tk-eyebrow-label {
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+}
+/* The When/Flag capture chips and detail chips read in the metadata voice —
+   mono, a notch smaller than kit-seg's default sans buttons. */
+.tk-capture-seg > button,
+.tk-detail-seg > button {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  min-height: 1.9rem;
+  padding: 0.25rem 0.6rem;
+}
+.tk-capture-div {
+  width: 1px;
+  height: 16px;
+  background: var(--line);
+  margin: 0 2px;
+}
+.tk-nl-hint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent-deep);
+}
+
+/* ---------- Section headers (ledger eyebrows) ---------- */
+
+.tk-section {
+  margin-bottom: 26px;
+}
+.tk-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tk-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-2);
+}
+.tk-eyebrow.tone-danger {
+  color: var(--danger);
+}
+.tk-eyebrow.tone-accent {
+  color: var(--accent-deep);
+}
+.tk-eyebrow-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.tk-hairline {
   flex: 1;
   height: 1px;
   background: var(--line);
 }
-.section-label[data-bucket='overdue'] {
-  color: var(--danger);
-}
-.section-label[data-bucket='today'] {
-  color: var(--accent-deep);
-}
-.section-label.drop {
-  color: var(--accent-deep);
-}
-.section-label.drop::after {
-  background: repeating-linear-gradient(to right, currentColor 0 6px, transparent 6px 12px);
-  opacity: 0.7;
-}
-
-/* ---------- Task rows ---------------------------------------------------- */
-
-.row {
+.tk-rows {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.6rem;
-  margin: 0 -0.6rem;
-  border-radius: var(--radius);
-  border-bottom: 1px solid var(--line);
-  transition: background 0.15s var(--ease);
-}
-.row:last-child {
-  border-bottom: none;
-}
-.row:hover {
-  background: var(--surface-2);
-  border-bottom-color: transparent;
-}
-.row:hover + .row {
-  border-top-color: transparent;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.row.subtask {
-  padding-left: 2.5rem;
+/* ---------- Task rows ---------- */
+
+.tk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 9px 10px;
+  margin: 0 -10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.12s var(--ease);
 }
-.row.subtask .circle {
-  width: 1.15rem;
-  height: 1.15rem;
-  font-size: 0.6rem;
+.tk-row:hover {
+  background: var(--bg-elev);
 }
 
-.row.selected {
-  background: var(--surface-2);
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-  border-bottom-color: transparent;
-}
-
-/* Completion beat: circle fills, title strikes + fades, then re-sorts. */
-.row.completing .circle {
-  background: var(--app-color, var(--accent));
-  border-color: var(--app-color, var(--accent));
-}
-.row.completing .row-text {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-  opacity: 0.4;
-  transition:
-    opacity 0.45s var(--ease),
-    color 0.45s var(--ease);
-}
-
-/* The check control. */
-.circle {
+.tk-circle {
   position: relative;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  border: 1.5px solid var(--ink-faint);
-  background: transparent;
-  display: inline-flex;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  flex-shrink: 0;
-  color: var(--on-accent);
-  font-size: 0.72rem;
-  cursor: pointer;
-  transition:
-    background 0.14s var(--ease),
-    border-color 0.14s var(--ease),
-    transform 0.08s var(--ease);
-}
-.circle::after {
-  content: '';
-  position: absolute;
-  inset: -0.6rem;
-  border-radius: 50%;
-}
-.circle:hover {
-  border-color: var(--app-color, var(--accent));
-}
-.circle:active {
-  transform: scale(0.92);
-}
-.circle:focus-visible {
-  outline: none;
-  box-shadow: var(--kit-focus-ring);
-}
-.circle[data-on='true'] {
-  background: var(--app-color, var(--accent));
-  border-color: var(--app-color, var(--accent));
-}
-.row[data-status='cancelled'] .circle {
-  background: var(--ink-faint);
-  border-color: var(--ink-faint);
-}
-
-/* Title column. */
-.row-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.row-title-line {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-}
-.row-text {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.95rem;
-  line-height: 1.35;
-  word-break: break-word;
-  cursor: text;
-}
-
-.note-glyph {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  color: var(--ink-faint);
-  background: transparent;
-  border: none;
-  border-radius: 0.3rem;
-  padding: 0.1rem;
-  cursor: pointer;
-}
-span.note-glyph {
-  cursor: default;
-}
-.note-glyph svg {
-  width: 0.8rem;
-  height: 0.8rem;
-}
-.note-glyph:hover,
-.note-glyph:focus-visible {
-  color: var(--accent-deep);
-  outline: none;
-}
-
-.row-note {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.78rem;
-  color: var(--ink-faint);
-}
-.row[data-done='true'] .row-note {
-  text-decoration: line-through;
-}
-.row[data-done='true'] .row-text {
-  color: var(--ink-faint);
-  text-decoration: line-through;
-  cursor: default;
-}
-
-.rename {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.95rem;
-  padding: 0.3rem 0.5rem;
-  background: var(--surface);
-  border-color: var(--line-strong);
-}
-
-/* ---------- Badges & chips ---------------------------------------------- */
-
-.badge {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 0.7rem;
-  font-variant-numeric: tabular-nums;
-}
-.badge.doing {
-  color: var(--accent-deep);
-  background: var(--accent-soft);
-  border-radius: 999px;
-  padding: 0.1rem 0.5rem;
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.flag {
-  font-size: 0.85rem;
-  line-height: 1;
-}
-.flag.high {
-  color: var(--danger);
-}
-.flag.medium {
-  color: var(--warn);
-}
-.flag.low {
-  color: var(--ink-faint);
-}
-
-.row-due {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
-}
-.overdue {
-  color: var(--danger);
-}
-
-/* Reschedule affordance. */
-.due-btn {
-  flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 0.73rem;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink-soft);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  padding: 0.2rem 0.55rem;
-  min-height: 1.9rem;
   cursor: pointer;
   transition:
     background 0.15s var(--ease),
-    color 0.15s var(--ease);
+    border-color 0.15s var(--ease),
+    transform 0.08s var(--ease);
 }
-.due-btn:hover,
-.due-btn:focus-visible {
-  background: var(--surface-2);
+.tk-circle::after {
+  content: '';
+  position: absolute;
+  inset: -0.55rem;
+  border-radius: 999px;
+}
+.tk-circle:hover {
+  border-color: var(--_accent);
+}
+.tk-circle:active {
+  transform: scale(0.92);
+}
+.tk-circle[data-on='true'] {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+}
+.tk-circle[data-cancelled='true'] {
+  background: var(--bg-sunken);
+  border-color: var(--line-strong);
+  color: var(--ink-3);
+}
+.tk-circle.lg {
+  width: 26px;
+  height: 26px;
+}
+.tk-circle.sm {
+  width: 17px;
+  height: 17px;
+}
+
+.tk-row-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 0;
+}
+.tk-row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.tk-row-title {
+  font: var(--t-body);
+  font-size: 14px;
   color: var(--ink);
-  outline: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.due-btn.overdue {
+.tk-row-title.done {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.tk-row-title mark,
+.tk-row-note mark {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.tk-row-note {
+  font: var(--t-small);
+  font-size: 12px;
+  color: var(--ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 1px;
+}
+
+.tk-badge.doing {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.tk-recur {
+  flex-shrink: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.tk-meta {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  align-self: center;
+}
+.tk-flag {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 12px;
+}
+.tk-flag.high {
   color: var(--danger);
 }
-.due-btn.due-add {
-  color: var(--ink-faint);
-  opacity: 0;
-  transition: opacity 0.15s var(--ease);
+.tk-flag.medium {
+  color: var(--warn);
 }
-.row:hover .due-add,
-.row:focus-within .due-add {
-  opacity: 1;
+.tk-flag.low {
+  color: var(--ink-3);
 }
-
-/* ---------- Popovers ----------------------------------------------------- */
-
-/* Surface, positioning, border, shadow and rise all come from kit.css
-   .kit-popover; `.t-pop` carries only tasks' deltas — form-stack layout, a
-   wider footprint (the notes textarea outgrows the 260px menu cap) and the
-   roomier padding these little forms want. */
-.kit-popover.t-pop {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  min-width: 13.5rem;
-  max-width: none;
-  padding: 0.75rem;
-}
-
-.pop-row {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-.pop-label {
+.tk-due {
+  flex-shrink: 0;
+  align-self: center;
   font-family: var(--mono);
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ink-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
 }
-.t-pop input,
-.t-pop select,
-.t-pop textarea {
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 0.45rem 0.55rem;
-  min-height: 2.4rem;
-}
-.t-pop input:focus-visible,
-.t-pop select:focus-visible,
-.t-pop textarea:focus-visible {
-  outline: none;
-  border-color: color-mix(in oklab, var(--app-color, var(--accent)) 45%, var(--line-strong));
-  box-shadow: var(--kit-focus-ring);
-}
-.t-pop textarea {
-  display: block;
-  width: 16rem;
-  max-width: 72vw;
-  min-height: 4.5rem;
-  resize: vertical;
-  line-height: 1.5;
-  margin-top: 0.25rem;
-  text-transform: none;
-  letter-spacing: normal;
-}
-/* The "When" presets sit inside a dense row — keep them a notch shorter than
-   the kit's default button height (Save keeps the kit size). */
-.t-pop .pop-row .kit-btn {
-  min-height: 2.1rem;
-  padding: 0.3rem 0.65rem;
+.tk-due.overdue {
+  color: var(--danger);
 }
 
-/* ---------- Hover actions ------------------------------------------------ */
-
-/* Hidden by default so they don't reserve width and crush the title on
-   narrow phones; revealed on hover/focus (and always shown on touch below). */
-.row-actions {
-  display: none;
-  gap: 0.3rem;
+/* Parked writes: the calm, always-full-ink treatment — kit.css's
+   .kit-pending / .kit-pending-chip do the work; this is only row-shape
+   integration (rounded corners to match .tk-row, spacing for the chip). */
+.tk-row.kit-pending {
+  padding-left: 10px;
+}
+.kit-pending-chip {
   flex-shrink: 0;
 }
-.row:hover .row-actions,
-.row:focus-within .row-actions {
-  display: inline-flex;
+
+/* ---------- Empty state ---------- */
+/* kit.css's .kit-empty* owns icon/title/sub — no local overrides needed. */
+
+/* ---------- Detail drawer ---------- */
+
+.tk-detail-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  backdrop-filter: blur(2px);
+  animation: kit-fade 0.18s ease;
 }
-
-/* Quiet action pills are kit.css .kit-btn (with `.danger` for cancel). */
-
-/* Touch: no hover — keep tools present and comfortably sized. */
-@media (hover: none) {
-  .row-actions {
-    display: inline-flex;
-    opacity: 0.75;
+.tk-detail {
+  width: min(440px, 94vw);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-lg);
+  animation: tk-slide-r 0.24s var(--ease);
+  overflow: auto;
+}
+@keyframes tk-slide-r {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
   }
-  .due-btn.due-add {
-    opacity: 0.6;
-  }
-  .due-btn {
-    min-height: 2.75rem;
-    min-width: 2.75rem;
-    padding: 0.4rem 0.65rem;
-  }
-  .row:hover {
-    background: transparent;
+  to {
+    transform: none;
+    opacity: 1;
   }
 }
-
-@media (prefers-reduced-motion: reduce) {
-  .row-actions,
-  .due-btn.due-add,
-  .circle,
-  .row,
-  .row.completing .row-text {
-    transition: none;
-  }
-}
-
-/* ---------- Logbook ------------------------------------------------------ */
-
-#logbook {
-  margin-top: 2rem;
-  border-top: 1px solid var(--line);
-  padding-top: 0.5rem;
-}
-#logbook summary {
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-soft);
-  padding: 0.5rem 0;
-  list-style: none;
+.tk-detail-head {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
-#logbook summary::-webkit-details-marker {
-  display: none;
+.tk-detail-close {
+  margin-left: auto;
 }
-#logbook summary::before {
-  content: '›';
-  font-family: -apple-system, system-ui, sans-serif;
-  font-size: 1rem;
-  transition: transform 0.15s var(--ease);
+.tk-detail-body {
+  flex: 1;
+  min-height: 0;
+  padding: 18px;
 }
-#logbook[open] summary::before {
-  transform: rotate(90deg);
-}
-
-/* Empty card: kit.css .kit-empty-card (shared across apps). */
-
-.window-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  margin: 1.25rem 0 0.5rem;
-  color: var(--ink-soft);
-  font-size: 0.85rem;
-}
-
-.footnote {
-  margin-top: 2.5rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
-  color: var(--ink-faint);
-  font-size: 0.78rem;
-  line-height: 1.55;
-}
-
-/* ---------- Attachments -------------------------------------------------- */
-/* Strip/tile visuals live in kit.css (.kit-attach-*); only app chrome here. */
-
-.attach-block {
-  margin-top: 1rem;
-}
-.attach-add {
-  display: inline-block;
-  margin-top: 0.5rem;
-}
-.attach-add input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-.row-attachments {
-  padding: 0 0 0.55rem 2.5rem;
-}
-.row-attachments.subtask {
-  padding-left: 4.5rem;
-}
-
-/* ---------- App-level knobs ---------------------------------------------- */
-
-:root[data-app-font='sans'] {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-}
-:root[data-app-font='serif'] {
-  font-family: 'New York', 'Iowan Old Style', Georgia, Cambria, serif;
-}
-:root[data-app-font='mono'] {
-  font-family: var(--mono);
-}
-
-:root[data-app-width='narrow'] main {
-  max-width: 36rem;
-}
-@media (min-width: 720px) {
-  :root[data-app-width='narrow'] main {
-    max-width: 42rem;
-  }
-}
-
-/* @-mention affordance inside the notes popover (issues #272 + #282). */
-.pop-refs {
-  margin-top: 0.1rem;
-}
-.pop-mention {
-  align-self: flex-start;
-  padding: 0.2rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 999px;
+.tk-detail-title {
+  display: block;
+  width: 100%;
+  font: var(--t-display, 600 20px/1.3 var(--font-title));
+  font-family: var(--font-title);
+  letter-spacing: var(--tracking-h);
+  color: var(--ink);
   background: none;
-  color: var(--muted);
-  font-size: 0.75rem;
-  cursor: pointer;
+  border: none;
+  outline: none;
+  margin-bottom: 6px;
 }
-.pop-mention:hover {
-  background: var(--surface-2);
+.tk-detail-notes {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  font: var(--t-body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  background: none;
+  border: none;
+  outline: none;
+  resize: none;
+  margin-bottom: 14px;
+}
+.tk-detail-seg {
+  margin-bottom: 8px;
+}
+.tk-detail-date {
+  margin-bottom: 16px;
+}
+.tk-detail-cols {
+  display: flex;
+  gap: 22px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.tk-subtasks {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0;
+}
+.tk-subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 4px;
+}
+.tk-subtask-title {
+  flex: 1;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink);
+}
+.tk-subtask-title.done {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+.tk-subtask-add {
+  padding: 2px 4px;
+}
+.tk-subtask-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1.5px dashed var(--line-strong);
+  flex-shrink: 0;
+}
+.tk-subtask-add input {
+  flex: 1;
+  font: var(--t-body);
+  font-size: 13px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
+}
+.tk-subtask-add input::placeholder {
+  color: var(--ink-3);
+}
+
+.tk-activity {
+  margin: 10px 0 20px;
+}
+.tk-activity-empty {
+  margin: 0;
+}
+.tk-activity-item {
+  display: flex;
+  gap: 11px;
+  padding-bottom: 12px;
+}
+.tk-activity-rail {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent-deep);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.tk-activity-text {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.tk-activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.tk-activity-date {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.tk-receipt-chip {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+.tk-detail-attach {
+  margin: 8px 0 10px;
+}
+.tk-attach-btn {
+  margin-bottom: 4px;
+}
+
+.tk-detail-foot {
+  display: flex;
+  gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  flex-shrink: 0;
+}
+.tk-flex {
+  flex: 1;
+}
+
+.tk-detail.kit-pending {
+  border-left-width: 3px;
+}
+
+/* ---------- Narrow (phone) — driven by chrome.js's .is-narrow on #shell ---------- */
+
+.tk-shell.is-narrow .tk-side {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 270px;
+  z-index: 46;
+  box-shadow: var(--shadow-lg);
+  transform: translateX(-110%);
+  transition: transform 0.26s var(--ease);
+}
+.tk-shell.is-narrow.side-open .tk-side {
+  transform: translateX(0);
+}
+.tk-shell.is-narrow .tk-side-close {
+  display: flex;
+}
+.tk-shell.is-narrow .tk-hamburger {
+  display: flex;
+}
+.tk-shell.is-narrow.side-open .tk-scrim {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(15, 18, 26, 0.4);
+  animation: kit-fade 0.2s ease;
+}
+.tk-shell.is-narrow .tk-topbar,
+.tk-shell.is-narrow .tk-scroll {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.tk-shell.is-narrow .tk-banner {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+/* Heading (hamburger + title) stays row one; search/theme/ask wrap to their
+   own full-width row below rather than getting crushed beside it. */
+.tk-shell.is-narrow .tk-topbar {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.tk-shell.is-narrow .tk-topbar-tools {
+  flex: 1 0 100%;
+  margin-left: 0;
+}
+.tk-shell.is-narrow .tk-search {
+  width: auto;
+  flex: 1;
+}
+.tk-shell.is-narrow .tk-detail {
+  width: 100vw;
+}
+
+@media (max-width: 519px) {
+  .tk-capture-row {
+    flex-wrap: wrap;
+  }
+  .tk-capture-input {
+    flex: 1 0 100%;
+    order: -1;
+  }
+  .tk-capture-add {
+    margin-left: auto;
+  }
+  .tk-detail-cols {
+    gap: 14px;
+  }
 }

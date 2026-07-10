@@ -379,6 +379,26 @@
           "label": "Ochre"
         }
       ]
+    },
+    {
+      "key": "appDefaultView",
+      "label": "Default view",
+      "type": "segmented",
+      "default": "month",
+      "options": [
+        {
+          "value": "month",
+          "label": "Month"
+        },
+        {
+          "value": "week",
+          "label": "Week"
+        },
+        {
+          "value": "schedule",
+          "label": "Schedule"
+        }
+      ]
     }
   ]
 }

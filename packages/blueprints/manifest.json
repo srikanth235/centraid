@@ -17,9 +17,21 @@
         "actions/reschedule.js",
         "actions/rsvp.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/CreateModal.jsx",
+        "components/EventDrawer.jsx",
+        "components/HeaderBar.jsx",
+        "components/MonthView.jsx",
+        "components/ScheduleView.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "components/WeekView.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/search.js",
         "queries/upcoming.js",
@@ -89,6 +101,26 @@
               "label": "Ochre"
             }
           ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "month",
+          "options": [
+            {
+              "value": "month",
+              "label": "Month"
+            },
+            {
+              "value": "week",
+              "label": "Week"
+            },
+            {
+              "value": "schedule",
+              "label": "Schedule"
+            }
+          ]
         }
       ]
     },
@@ -107,9 +139,19 @@
         "actions/edit.js",
         "actions/set-status.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/Board.jsx",
+        "components/Capture.jsx",
+        "components/Detail.jsx",
+        "components/Row.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/board.js",
         "queries/search.js",
@@ -178,6 +220,30 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "today",
+          "options": [
+            {
+              "value": "today",
+              "label": "Today"
+            },
+            {
+              "value": "upcoming",
+              "label": "Upcoming"
+            },
+            {
+              "value": "anytime",
+              "label": "Anytime"
+            },
+            {
+              "value": "all",
+              "label": "All"
             }
           ]
         }
@@ -332,9 +398,20 @@
         "actions/move-note.js",
         "actions/rename-notebook.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/Card.jsx",
+        "components/Editor.jsx",
+        "components/QuickAdd.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "components/Toolbar.jsx",
+        "components/Wall.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/library.js",
         "queries/search.js",
@@ -407,6 +484,22 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "masonry",
+          "options": [
+            {
+              "value": "masonry",
+              "label": "Masonry"
+            },
+            {
+              "value": "list",
+              "label": "List"
             }
           ]
         }
