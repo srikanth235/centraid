@@ -51,7 +51,20 @@ export function createPicker({ pickerRoot, getAlbums, getAssets, getSelectedAlbu
     $('picker').hidden = false;
   }
 
-  $('picker').addEventListener('click', closePicker);
+  // A plain native listener directly on `#picker` (which doubles as this
+  // region's React root container, `pickerRoot` above) — a nested tile's
+  // `onClick` can't reliably shield itself from this via `stopPropagation()`:
+  // React's own delegated listener lives on this SAME node and is registered
+  // *before* this one (`createRoot()` runs ahead of `createPicker()` in
+  // app.jsx's Boot section), so this raw listener always fires, in full,
+  // before — or regardless of — anything a descendant's synthetic handler
+  // does. That closed the picker on every tile pick instead of just backdrop
+  // clicks. Gating on `e.target === e.currentTarget` sidesteps the whole
+  // ordering question: only a click landing on the backdrop itself (never a
+  // descendant) closes it, same fix as the lightbox's identical setup.
+  $('picker').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closePicker();
+  });
 
   return { openPicker, closePicker };
 }

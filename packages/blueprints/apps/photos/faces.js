@@ -28,8 +28,12 @@ export async function renderFaces(host, assetId, note) {
     return; // face queries never break the lightbox
   }
   const regions = data?.regions ?? [];
-  if (regions.length === 0 || data?.denied) return;
+  // Clear before the empty bail-out too: a re-render call (confirm/reject
+  // just resolved the LAST region) must erase the stale "People" section it
+  // left behind, not just skip repopulating it. Only a genuinely failed read
+  // (caught above) leaves whatever was already there alone.
   host.replaceChildren();
+  if (regions.length === 0 || data?.denied) return;
   const heading = document.createElement('p');
   heading.className = 'lightbox-faces-title';
   heading.textContent = 'People';

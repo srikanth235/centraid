@@ -367,7 +367,20 @@ function renderLightbox() {
   box.hidden = false;
 }
 
-$('lightbox').addEventListener('click', closeLightbox);
+// A plain native listener directly on `#lightbox` (which doubles as this
+// region's React root container) — `e.stopPropagation()` inside a nested
+// component's onClick handler cannot save us here: React's own delegated
+// listener lives on this SAME node and is registered *after* this one (at
+// `createRoot()` time, in Boot below), so a raw `addEventListener` here
+// would otherwise always fire first and close the box before React's
+// synthetic dispatch (and its stopPropagation calls) ever run — breaking
+// every click inside the lightbox (nav arrows, favorite, caption, chips…),
+// not just genuine backdrop clicks. Gating on `e.target === e.currentTarget`
+// sidesteps the race entirely: only a click that lands on the backdrop
+// itself (never on a descendant) closes it, regardless of listener order.
+$('lightbox').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeLightbox();
+});
 
 // ---------- Keyboard ----------
 
