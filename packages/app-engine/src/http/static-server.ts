@@ -24,6 +24,13 @@ import { sendError } from './http-utils.js';
  * `jsx-runtime.js` (the `automatic` JSX runtime esbuild's transform imports,
  * see {@link transformJsx}) round out the set for builder-generated `.jsx`
  * apps that don't ship their own copies.
+ *
+ * `tokens.css` (the generated blueprint-app token layer, see
+ * packages/blueprints/scripts/vendor-tokens.mjs) and `wall.css` (the shared
+ * "wall" surface gradient, copied verbatim from packages/design-tokens) are
+ * shared the same way — an app with its own `wall.css` (e.g. people, for its
+ * warm-blush light-mode override) still wins via the per-app-copy precedence
+ * above.
  */
 const SHARED_ASSET_FILES = new Set([
   'kit.js',
@@ -32,6 +39,8 @@ const SHARED_ASSET_FILES = new Set([
   'lit-core.min.js',
   'react-core.min.js',
   'jsx-runtime.js',
+  'tokens.css',
+  'wall.css',
 ]);
 
 /**
