@@ -8,27 +8,28 @@ if (!app) {
   throw new Error('design-tokens must ship at least one built-in app');
 }
 
+// Vitest's `classNameStrategy: 'non-scoped'` returns the module-local names
+// (`styles.card` → 'card'), so these assertions match the authored classes.
+
 describe('AppCard', () => {
-  it('emits the vanilla cd-app-card structure and the app name/blurb', () => {
+  it('emits the tile structure and the app name/blurb', () => {
     const html = renderToStaticMarkup(<AppCard app={app} stamp="2h ago" />);
-    expect(html).toContain('class="cd-app-card"');
+    expect(html).toContain('class="card"');
     expect(html).toContain('data-testid="app-tile"');
     expect(html).toContain(app.name);
-    expect(html).toContain('cd-app-card-icon');
+    expect(html).toContain('class="icon"');
     expect(html).toContain('2h ago');
   });
 
   it('marks the small modifier', () => {
-    expect(renderToStaticMarkup(<AppCard app={app} small />)).toContain(
-      'cd-app-card cd-app-card--small',
-    );
+    expect(renderToStaticMarkup(<AppCard app={app} small />)).toContain('card small');
   });
 
   it('renders a status pill + icon dot for a tone', () => {
     const html = renderToStaticMarkup(<AppCard app={app} tone="draft" />);
-    expect(html).toContain('cd-app-card-icon-dot');
+    expect(html).toContain('iconDot');
     expect(html).toContain('data-tone="draft"');
-    expect(html).toContain('cd-status');
+    expect(html).toContain('class="status');
   });
 
   it('falls back to a placeholder blurb when desc is empty', () => {

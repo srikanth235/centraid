@@ -29,7 +29,7 @@
 .chatFab:hover {
   transform: translateY(-1px);
 }
-.chatFab:global(.hidden) {
+.chatFab[data-hidden='true'] {
   opacity: 0;
   pointer-events: none;
   transform: translateY(6px);
@@ -92,7 +92,7 @@
     0 16px 40px -12px rgba(0, 0, 0, 0.45),
     0 4px 12px -2px rgba(0, 0, 0, 0.18);
 }
-.chatPanel:global(.open) {
+.chatPanel[data-open='true'] {
   transform: translateX(0);
   opacity: 1;
 }
@@ -278,6 +278,18 @@
   background: color-mix(in oklab, #d6403a 12%, transparent);
   color: #b3261e;
 }
+/* Local copy of the shared chat-message pulse: `chatMessage.module.css` only
+   styles the dot inside its own `.status` pill, so the loading row carries a
+   panel-local dot (Vite scopes @keyframes names per module). */
+@keyframes pulse-fade {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 .chatLoading {
   display: inline-flex;
   align-items: center;
@@ -286,20 +298,27 @@
   font-size: 12.5px;
   padding: 18px 4px;
 }
-.chatPanel :global(.chat-scroll) {
+.chatLoadingPulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-fade 1s infinite;
+  flex: none;
+}
+/* Panel-density overrides for the shared chat-message / tool-group modules.
+   The shared classes are scoped, so the panel can't reach them by name;
+   instead the render passes these extra locals to the same elements. */
+.chatPanel .panelScroll {
   padding: 18px 16px 6px;
 }
-.chatPanel :global(.msg-ai),
-.chatPanel :global(.msg-user) {
+.chatPanel .panelMsg {
   margin: 8px 0;
 }
-.chatPanel :global(.msg-ai-text) p {
+.chatPanel .panelMsgText p {
   font-size: 12.5px;
 }
-.chatPanel :global(.tool-group) {
-  margin: 8px 0;
-}
-.chatPanel :global(.tool-group-pill) {
+.chatPanel .panelToolPill {
   padding: 7px 12px;
   font-size: 12px;
 }
@@ -311,7 +330,27 @@
   justify-content: flex-start;
   margin: 8px 0;
 }
-.aiError :global(.msg-ai-text) p {
+.msgAuthor {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.msgAuthorDot {
+  /* Painted with the app's accent via an inline `background`. */
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  box-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.1) inset;
+  flex-shrink: 0;
+}
+.msgAuthorName {
+  letter-spacing: 0.01em;
+}
+.aiError .panelMsgText p {
   color: #b3261e;
 }
 .chatEmpty {

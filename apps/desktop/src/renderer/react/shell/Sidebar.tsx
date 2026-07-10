@@ -1,6 +1,8 @@
 import type { JSX, ReactNode } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from '../ui/Icon.js';
+import StatusPill from '../ui/StatusPill.js';
+import chrome from './chrome.module.css';
 import {
   HomeGlyph,
   PlusGlyph,
@@ -18,11 +20,11 @@ export type ShellMenuAnchor =
   | { kind: 'point'; x: number; y: number }
   | { kind: 'rect'; rect: DOMRect };
 
-// React port of the vanilla `buildSidebar` (chrome.ts). Same `.cd-sb-*`
-// global classes and section layout — Build new / Search, a Pages section,
-// the live Apps list (folding drafts in), a disabled Chats placeholder, and
-// Settings pinned to the bottom with a `live` pill. Classes stay global
-// strings (co-emitted by the vanilla chrome during the migration).
+// The shell sidebar — Build new / Search, a Pages section, the live Apps
+// list (folding drafts in), a disabled Chats placeholder, and Settings
+// pinned to the bottom with a `live` pill. Styled by the shared
+// chrome.module.css (one module for the whole window-chrome family,
+// co-imported by ShellFrame).
 
 export type SidebarPage =
   | 'home'
@@ -74,7 +76,7 @@ function SbItem(props: {
 }): JSX.Element {
   return (
     <button
-      className="cd-sb-item"
+      className={chrome.sbItem}
       type="button"
       data-active={props.active ? 'true' : undefined}
       data-disabled={props.disabled ? 'true' : undefined}
@@ -83,8 +85,8 @@ function SbItem(props: {
       onClick={props.onClick}
     >
       {props.icon}
-      <span className="cd-sb-label">{props.label}</span>
-      {props.meta ? <span className="cd-sb-meta">{props.meta}</span> : null}
+      <span className={chrome.sbLabel}>{props.label}</span>
+      {props.meta ? <span className={chrome.sbMeta}>{props.meta}</span> : null}
       {props.trailing}
     </button>
   );
@@ -92,12 +94,12 @@ function SbItem(props: {
 
 function SbSection({ label, onAction }: { label: string; onAction?: () => void }): JSX.Element {
   return (
-    <div className="cd-sb-section">
+    <div className={chrome.sbSection}>
       <span>{label}</span>
       {onAction ? (
-        <span className="cd-sb-section-actions">
+        <span className={chrome.sbSectionActions}>
           <button
-            className="cd-sb-section-btn"
+            className={chrome.sbSectionBtn}
             type="button"
             aria-label="Add"
             onClick={onAction}
@@ -112,7 +114,7 @@ function SbSection({ label, onAction }: { label: string; onAction?: () => void }
 
 function AppIcon({ app }: { app: SidebarApp }): JSX.Element {
   return (
-    <span className="cd-sb-app-icon" style={{ background: app.color }}>
+    <span className={chrome.sbAppIcon} style={{ background: app.color }}>
       <Icon name={app.iconKey} size={11} strokeWidth={1.85} />
     </span>
   );
@@ -135,7 +137,7 @@ function AppRow({
   if (!onAppContext) return item;
   return (
     <div
-      className="cd-sb-app-row"
+      className={chrome.sbAppRow}
       onContextMenu={(e) => {
         e.preventDefault();
         onAppContext(app.id, { kind: 'point', x: e.clientX, y: e.clientY });
@@ -143,7 +145,7 @@ function AppRow({
     >
       {item}
       <button
-        className="cd-card-more cd-sb-more"
+        className={chrome.rowMore}
         type="button"
         aria-label="App actions"
         aria-haspopup="menu"
@@ -165,12 +167,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
   const appList = [...props.apps, ...props.drafts];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {props.headSlot ? (
-        <>
-          {props.headSlot}
-          <div className="cd-sb-divider" aria-hidden="true" />
-        </>
-      ) : null}
+      {props.headSlot}
 
       <SbItem icon={<PlusGlyph />} label="Build new" meta="⌘N" accent onClick={props.onNewApp} />
       <SbItem
@@ -248,12 +245,7 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         label="Settings"
         active={props.activePage === 'settings'}
         onClick={props.onSettings}
-        trailing={
-          <span className="cd-status" data-tone="live">
-            <span className="cd-status-dot" />
-            live
-          </span>
-        }
+        trailing={<StatusPill tone="live">live</StatusPill>}
       />
     </div>
   );

@@ -164,7 +164,7 @@
   flex-direction: column;
   gap: 8px;
 }
-.tool :global(.cd-asst-pre) {
+.tool pre {
   margin: 0;
 }
 .toolMeta {

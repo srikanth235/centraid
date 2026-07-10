@@ -31,7 +31,7 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
       <span className={au.auStatusIc} data-spin={m.spin ? 'true' : undefined} aria-hidden="true">
         <Icon name={m.icon} size={12} />
       </span>
-      <span className="cd-au-status-tx">{label}</span>
+      <span>{label}</span>
     </span>
   );
 }
@@ -77,7 +77,7 @@ function AutomationRow({
           <span className={au.auTrigbadgeIc} aria-hidden="true">
             <Icon name={row.triggerIcon as IconName} size={12} />
           </span>
-          <span className="cd-au-trigbadge-tx">{row.triggerLabel}</span>
+          <span>{row.triggerLabel}</span>
         </span>
       </span>
       <IntegrationDots names={row.integrations} />

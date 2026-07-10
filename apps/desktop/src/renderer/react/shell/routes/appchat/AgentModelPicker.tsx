@@ -351,7 +351,8 @@ export default function AgentModelPicker({
         </span>
       </button>
       <div
-        className={amOpen.current ? cx(styles.chatAmPop, "open") : styles.chatAmPop}
+        className={styles.chatAmPop}
+        data-open={amOpen.current ? 'true' : undefined}
         role="menu"
         aria-label="Agent and model"
         style={accentStyle}
@@ -414,7 +415,7 @@ export default function AgentModelPicker({
                   {staleDefault && (
                     <button
                       type="button"
-                      className={cx(styles.chatAmStaleBtn, "primary")}
+                      className={cx(styles.chatAmStaleBtn, styles.chatAmStalePrimary)}
                       onClick={() => void amSelectModel(staleDefault.id)}
                     >
                       {`Use ${amModelName(staleDefault)}`}

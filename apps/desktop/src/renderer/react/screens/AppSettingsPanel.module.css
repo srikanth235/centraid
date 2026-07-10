@@ -220,7 +220,9 @@
 .settingsConfirmPill[hidden] {
   display: none;
 }
-.settingsPane :global(.cd-app-settings-section) {
+/* Local re-skin of the shared appSettings-module section inside this pane —
+   the pane passes .paneSection alongside appSettingsCss.appSettingsSection. */
+.settingsPane .paneSection {
   padding: 0;
   border-bottom: none;
   gap: 12px;
@@ -239,12 +241,12 @@
   font-size: 13px;
   color: var(--ink-2);
 }
-.settingsPane .settingsRow:has(:global(.cd-swatches)) {
+.settingsPane .settingsRow:has(.paneSwatches) {
   margin-top: 4px;
   padding-top: 14px;
   border-top: 0.5px solid var(--line);
 }
-.settingsPane .seg {
+.settingsPane .paneSeg {
   display: inline-flex;
   justify-self: end;
   padding: 2px;
@@ -253,21 +255,21 @@
   border-radius: 7px;
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
-.settingsPane .seg button {
+.settingsPane .paneSeg button {
   padding: 5px 10px;
   border-radius: 5px;
   font-size: 12px;
 }
-.settingsPane .seg button[data-active='true'] {
+.settingsPane .paneSeg button[data-active='true'] {
   background: var(--bg-elev);
   box-shadow: 0 0 0 0.5px var(--line);
 }
-.settingsPane :global(.cd-swatches) {
+.settingsPane .paneSwatches {
   justify-self: end;
   display: inline-flex;
   gap: 6px;
 }
-.settingsPane :global(.cd-swatch) {
+.settingsPane .paneSwatch {
   width: 22px;
   height: 30px;
   border-radius: 999px;

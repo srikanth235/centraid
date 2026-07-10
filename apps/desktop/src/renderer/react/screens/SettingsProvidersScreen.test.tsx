@@ -133,7 +133,7 @@ describe('SettingsProvidersScreen', () => {
   it('fires the two refreshes', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const [models, tools] = [...el.querySelectorAll('.sheet-actions .btn')] as HTMLButtonElement[];
+    const [models, tools] = [...el.querySelectorAll('.actionsRow .btn')] as HTMLButtonElement[];
     await act(async () => models?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => tools?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.refreshModels).toHaveBeenCalledTimes(1);

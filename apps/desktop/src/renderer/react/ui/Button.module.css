@@ -1,0 +1,101 @@
+/* Button — the one button system for the shell.
+   Two roots: `.btn` (standard page-scale button, solid-ink by default) and
+   `.chrome` (the compact 26px titlebar/chrome scale). Variant classes
+   (`.primary` / `.soft` / `.ghost`) compose with either root; `.sm` shrinks
+   a standard button; `.icon` is the standalone 36px icon-only square.
+   Source order matters: variants are declared after the roots so a
+   `cx(styles.btn, styles.ghost)` element resolves to the variant. */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  background: var(--ink);
+  color: var(--ink-inv);
+  transition:
+    opacity 0.15s,
+    transform 0.1s;
+}
+.btn:hover {
+  opacity: 0.92;
+}
+.btn:active {
+  transform: scale(0.98);
+}
+
+/* Chrome scale — small ghost/primary buttons in the window titlebar. */
+.chrome {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+.chrome[disabled] {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.primary {
+  background: var(--accent);
+  color: white;
+}
+.primary:hover {
+  background: color-mix(in oklab, var(--accent) 88%, black);
+}
+.soft {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.soft:hover {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+}
+.ghost {
+  background: transparent;
+  color: var(--ink-2);
+}
+.ghost:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+.btn.ghost {
+  padding: 8px 12px;
+}
+
+/* Small standard button (was `.tiny-btn`). */
+.sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Standalone 36px icon-only square (was `.btn-icon`). */
+.icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--ink-2);
+}
+.icon:hover {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

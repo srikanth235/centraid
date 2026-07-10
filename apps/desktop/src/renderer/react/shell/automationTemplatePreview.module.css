@@ -1,3 +1,17 @@
+.auDrawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: color-mix(in srgb, #000 38%, transparent);
+  display: flex;
+  justify-content: flex-end;
+  animation: cd-au-fade 0.16s ease;
+}
+@keyframes cd-au-fade {
+  from {
+    opacity: 0;
+  }
+}
 @keyframes cd-au-slide-in {
   from {
     transform: translateX(24px);
@@ -88,7 +102,8 @@
   padding: 16px 20px;
   border-top: 0.5px solid var(--line);
 }
-.auDrawerFoot :global(.cd-au-btn) {
+/* The "Use template" CTA stretches to the drawer width. */
+.auDrawerUse {
   width: 100%;
   justify-content: center;
 }

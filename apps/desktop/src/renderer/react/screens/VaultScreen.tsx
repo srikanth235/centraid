@@ -21,13 +21,13 @@ function Note({ children }: { children: React.ReactNode }): JSX.Element {
 // WHAT the app asked for — why line + requested scopes as chips.
 function RequestSection({ block }: { block: VaultBridgeProps['block'] }): JSX.Element {
   return (
-    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-request")}>
+    <div className={appSettingsCss.appSettingsSection}>
       <div className={vault.label}>Requested access</div>
       {block.why ? <div className={vault.why}>{block.why}</div> : null}
       <div className={vault.scopes}>
         {block.scopes.map((scope) => (
           <span key={scopeLabel(scope)} className={vault.scope} data-verbs={scope.verbs}>
-            <span className="cd-vault-scope-name">{scopeLabel(scope)}</span>
+            <span>{scopeLabel(scope)}</span>
             <span className={vault.scopeVerbs}>{scope.verbs}</span>
           </span>
         ))}
@@ -154,7 +154,7 @@ function DemoSection({
 }): JSX.Element {
   const [busy, setBusy] = useState(false);
   return (
-    <div className={cx(appSettingsCss.appSettingsSection, "cd-vault-demo")}>
+    <div className={appSettingsCss.appSettingsSection}>
       <div className={vault.label}>Demo data</div>
       <Note>
         {demo.rows > 0

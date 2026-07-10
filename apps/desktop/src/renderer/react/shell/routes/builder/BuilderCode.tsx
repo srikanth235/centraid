@@ -3,6 +3,7 @@ import { readAppFiles, writeAppFile } from '../../../../gateway-client.js';
 import {
   type CodeLang,
   LANG_DISPLAY,
+  type TokenClasses,
   formatBytes,
   languageHint,
   tokenize,
@@ -11,6 +12,8 @@ import { lineDiff } from '../../../../diff.js';
 import { iconSvg } from '../../iconSvg.js';
 import { showToast } from '../../toast.js';
 import { cx } from '../../../ui/cx.js';
+import buttonCss from '../../../ui/Button.module.css';
+import atomsCss from '../../../styles/atoms.module.css';
 import styles from './BuilderCode.module.css';
 
 // File-tree glyphs copied verbatim from the vanilla builder (builder.ts
@@ -20,6 +23,16 @@ const ChevronIcon = (size = 12): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
 const FolderIcon = (size = 14): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`;
+
+// Module-scoped span classes for the syntax highlighter — keeps tokenize()'s
+// emitted HTML inside this module's scope instead of global `tok-*` names.
+const TOKEN_CLASSES: TokenClasses = {
+  attr: styles.tokAttr ?? '',
+  com: styles.tokCom ?? '',
+  key: styles.tokKey ?? '',
+  str: styles.tokStr ?? '',
+  tag: styles.tokTag ?? '',
+};
 
 export interface BuilderCodeProps {
   appId: string;
@@ -345,13 +358,13 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   // ---- Empty / error states (workspace only; tree stays empty) ----
   let workspaceBody: JSX.Element;
   if (!appId) {
-    workspaceBody = <div className="empty">No app yet.</div>;
+    workspaceBody = <div className={atomsCss.empty}>No app yet.</div>;
   } else if (loadError) {
-    workspaceBody = <div className="empty">Could not read files: {loadError}</div>;
+    workspaceBody = <div className={atomsCss.empty}>Could not read files: {loadError}</div>;
   } else if (loaded && files.length === 0) {
-    workspaceBody = <div className="empty">Empty app.</div>;
+    workspaceBody = <div className={atomsCss.empty}>Empty app.</div>;
   } else if (!activeBuf) {
-    workspaceBody = <div className="empty">No file open.</div>;
+    workspaceBody = <div className={atomsCss.empty}>No file open.</div>;
   } else {
     workspaceBody = renderWorkspace();
   }
@@ -476,7 +489,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           {backend.length > 0 ? (showHeaders ? groupHead('Backend', backend.length) : null) : null}
           {backend.length > 0 ? walk(backend, 0) : null}
           {visible.length === 0 ? (
-            <div className={cx("empty", styles.treeEmpty)}>No matches</div>
+            <div className={cx(atomsCss.empty, styles.treeEmpty)}>No matches</div>
           ) : null}
         </div>
       </>
@@ -551,7 +564,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
       <div className={styles.tabActions}>
         <button
           type="button"
-          className="btn btn-ghost tiny-btn"
+          className={cx(buttonCss.btn, buttonCss.ghost, buttonCss.sm, styles.tabActionBtn)}
           data-active={String(diffMode)}
           disabled={!dirty}
           title={dirty ? 'Toggle diff against last save' : 'No changes to diff'}
@@ -561,7 +574,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         </button>
         <button
           type="button"
-          className="btn btn-primary tiny-btn"
+          className={cx(buttonCss.btn, buttonCss.primary, buttonCss.sm)}
           disabled={!dirty}
           onClick={() => void saveFile(p)}
         >
@@ -571,7 +584,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <button
             type="button"
             aria-label="More code actions"
-            className={cx("btn", "btn-ghost", "tiny-btn", styles.overflowBtn)}
+            className={cx(buttonCss.btn, buttonCss.ghost, buttonCss.sm, styles.overflowBtn)}
             onClick={(e) => {
               e.stopPropagation();
               setMenuOpen((v) => !v);
@@ -627,7 +640,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
   function renderEditor(): JSX.Element {
     const p = activePath;
     const buf = activeBuf;
-    if (!p || !buf) return <div className="empty">No file open.</div>;
+    if (!p || !buf) return <div className={atomsCss.empty}>No file open.</div>;
     const lang = buf.language;
     const lineCount = buf.current.split('\n').length;
     const lineNums: JSX.Element[] = [];
@@ -644,7 +657,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             <pre
               className={styles.editPre}
               ref={preRef}
-              dangerouslySetInnerHTML={{ __html: tokenize(buf.current, lang) + '\n' }}
+              dangerouslySetInnerHTML={{ __html: tokenize(buf.current, lang, TOKEN_CLASSES) + '\n' }}
             />
           </div>
           <textarea

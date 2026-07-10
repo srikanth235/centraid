@@ -324,3 +324,13 @@
   font-style: italic;
   padding: 8px 0;
 }
+
+/* Action row under the provider cards — Refresh models / tools. Values
+   restored from the historical global `.sheet-actions` rule. */
+.actionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}

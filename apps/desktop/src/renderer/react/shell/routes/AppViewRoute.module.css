@@ -1,3 +1,12 @@
+/* The app-view frame — fills the main pane and anchors the bottom-right
+   chat FAB + slide-out panel (position: relative). */
+.view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
 .body {
   flex: 1;
   overflow-y: auto;
@@ -7,13 +16,13 @@
   max-width: 760px;
   margin: 0 auto;
 }
-.body:has(> .bodyInner:global(.app-view-fullbleed)) {
+.body:has(> .bodyInner[data-fullbleed]) {
   padding: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.bodyInner:global(.app-view-fullbleed) {
+.bodyInner[data-fullbleed] {
   max-width: none;
   margin: 0;
   flex: 1 1 auto;

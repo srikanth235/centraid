@@ -3,6 +3,7 @@ import { themes } from '@centraid/design-tokens';
 import { appLiveUrl } from '../../../gateway-client.js';
 import type { AppearancePrefs } from '../../../app-shell-context.js';
 import styles from './AppFrame.module.css';
+import atomsCss from '../../styles/atoms.module.css';
 
 // The sandboxed user-app iframe host — ports the vanilla mountUserApp
 // (app-appview.ts). Every Centraid app (published or draft) is served by the
@@ -59,8 +60,7 @@ export default function AppFrame({
       })
       .catch(() => {
         if (alive && wrapRef.current) {
-          wrapRef.current.innerHTML =
-            '<div class="empty">Could not reach the gateway. Check Settings.</div>';
+          wrapRef.current.innerHTML = `<div class="${atomsCss.empty ?? ''}">Could not reach the gateway. Check Settings.</div>`;
         }
       });
     return () => {

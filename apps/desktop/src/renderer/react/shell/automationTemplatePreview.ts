@@ -8,7 +8,7 @@ import { cx } from '../ui/cx.js';
 // Automation-template preview — the richer drawer for an automation template
 // (emoji, trigger, what-it-does steps, integration chips, "Use template").
 // Ported from app-automations-templates.ts openAutomationTemplatePreview; a
-// body-portal overlay (same cd-au-drawer-* classes). The adopt/build action is
+// body-portal overlay (scoped module classes). The adopt/build action is
 // the caller's (onUse), keeping this pure presentation.
 export function openAutomationTemplatePreview(
   template: TemplateEntry,
@@ -18,7 +18,7 @@ export function openAutomationTemplatePreview(
   const trigIcon = iconSvg(template.triggerKind === 'webhook' ? 'Webhook' : 'Clock', 14);
 
   const backdrop = document.createElement('div');
-  backdrop.className = 'cd-au-drawer-backdrop';
+  backdrop.className = styles.auDrawerBackdrop ?? '';
   const panel = document.createElement('div');
   panel.className = styles.auDrawer ?? '';
   panel.setAttribute('role', 'dialog');
@@ -93,7 +93,11 @@ export function openAutomationTemplatePreview(
   }
 
   // Foot
-  const useBtn = html('button', cx(au.auBtn, au.auBtnPrimary), `<span>Use template</span>${iconSvg('ArrowRight', 14)}`);
+  const useBtn = html(
+    'button',
+    cx(au.auBtn, au.auBtnPrimary, styles.auDrawerUse),
+    `<span>Use template</span>${iconSvg('ArrowRight', 14)}`,
+  );
   useBtn.setAttribute('type', 'button');
   useBtn.addEventListener('click', () => {
     close();

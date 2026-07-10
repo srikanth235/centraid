@@ -136,7 +136,7 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
         </div>
         {SECTIONS.map((section) => (
           <div key={section} className={styles.settingsNavSection}>
-            <div className="cd-settings-nav-section-label">{section}</div>
+            <div>{section}</div>
             {PAGES.filter((p) => p.section === section).map((p) => (
               <button
                 key={p.id}

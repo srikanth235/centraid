@@ -55,7 +55,7 @@ describe('Sidebar', () => {
   it('fires onAppClick with the app id', () => {
     const onAppClick = vi.fn();
     const el = render(<Sidebar {...base} onAppClick={onAppClick} />);
-    const todos = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const todos = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Todos'),
     ) as HTMLButtonElement;
     act(() => todos.click());
@@ -65,23 +65,22 @@ describe('Sidebar', () => {
   it('routes a row `•••` click through onAppContext with a rect anchor', () => {
     const onAppContext = vi.fn();
     const el = render(<Sidebar {...base} onAppContext={onAppContext} />);
-    const more = el.querySelector('.cd-sb-more') as HTMLButtonElement;
+    const more = el.querySelector('.rowMore') as HTMLButtonElement;
     act(() => more.click());
     expect(onAppContext).toHaveBeenCalledWith('todos', expect.objectContaining({ kind: 'rect' }));
   });
 
   it('disables Search when no handler is provided', () => {
     const el = render(<Sidebar {...base} />);
-    const search = [...el.querySelectorAll('.cd-sb-item')].find((b) =>
+    const search = [...el.querySelectorAll('.sbItem')].find((b) =>
       b.textContent?.includes('Search'),
     ) as HTMLButtonElement;
     expect(search.disabled).toBe(true);
   });
 
-  it('renders a head slot with a divider when provided', () => {
+  it('renders a head slot when provided', () => {
     const el = render(<Sidebar {...base} headSlot={<div data-testid="head">P</div>} />);
     expect(el.querySelector('[data-testid="head"]')).not.toBeNull();
-    expect(el.querySelector('.cd-sb-divider')).not.toBeNull();
   });
 
   it('shows the empty state when there are no apps or drafts', () => {

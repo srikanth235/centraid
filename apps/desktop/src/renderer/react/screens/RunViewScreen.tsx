@@ -31,7 +31,7 @@ function StatusPill({ kind, label }: { kind: AuStatusKind; label: string }): JSX
       >
         <Icon name={STATUS_ICON[kind]} size={12} />
       </span>
-      <span className="cd-au-status-tx">{label}</span>
+      <span>{label}</span>
     </span>
   );
 }

@@ -36,7 +36,7 @@ export function DrawerRow({
 }): JSX.Element {
   return (
     <div className={full ? cx(styles.row, styles.rowFull) : cx(styles.row, styles.rowGrid)}>
-      <div className="drawer-row-head">
+      <div className={styles.rowHead}>
         <span className={styles.rowLabel}>{label}</span>
         <span className={styles.rowHint}>{hint}</span>
       </div>

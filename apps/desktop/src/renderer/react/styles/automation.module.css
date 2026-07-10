@@ -4,6 +4,37 @@
   }
 }
 
+/* Per-automation identity hue → --au-hue. Identity is DECORATIVE ONLY:
+   it tints the glyph tile, the trigger-hero rail, and status dots. CTAs,
+   focus rings, toggles and active states keep the single --accent action
+   colour and never read --au-hue. Attribute selectors pass through CSS
+   Modules unscoped, so every automation surface importing this module
+   shares the same mapping. */
+:global([data-hue='indigo']) {
+  --au-hue: var(--c-indigo);
+}
+:global([data-hue='rose']) {
+  --au-hue: var(--c-rose);
+}
+:global([data-hue='violet']) {
+  --au-hue: var(--c-violet);
+}
+:global([data-hue='teal']) {
+  --au-hue: var(--c-teal);
+}
+:global([data-hue='forest']) {
+  --au-hue: var(--c-forest);
+}
+:global([data-hue='amber']) {
+  --au-hue: var(--c-amber);
+}
+:global([data-hue='ochre']) {
+  --au-hue: var(--c-ochre);
+}
+:global([data-hue='slate']) {
+  --au-hue: var(--c-slate);
+}
+
 .auChips {
   display: flex;
   flex-wrap: wrap;
