@@ -17,15 +17,17 @@ import {
   localDayKey,
   outcomeMessage,
   readFailed,
-  showSkeleton,
   stageFileBytes,
   toast,
 } from './kit.js';
-// Aliased to `litRender` so every call site reads unambiguously against this
-// app's own `renderGrid`/`renderChips`/`renderSelectionBar`/… orchestrators —
-// those rebuild app state and re-render; `litRender` is Lit's standalone
-// DOM-commit function that actually paints a container.
-import { createRef, html, nothing, ref, render as litRender, repeat } from './lit-core.min.js';
+// React owns six containers — one root per dynamic region of the static
+// index.html body (chips, album tools, grid, selection bar, lightbox,
+// picker). Each region's render orchestrator (renderGrid, renderLightbox, …)
+// calls that root's `.render()` with the current external state on every
+// change — the same "re-render the whole region from scratch" shape the Lit
+// port used, just with React's reconciler doing the DOM diffing instead of
+// lit-html's.
+import { createRoot, Fragment, useEffect, useRef } from './react-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -314,11 +316,14 @@ function visibleAssets() {
 
 // ---------- Small builders ----------
 
-// Joins truthy class fragments — the Lit-template analogue of the old
-// `classList.add()` chains, so a tile's class string composes exactly as
-// before (e.g. "tile-wrap selected faved").
+// Joins truthy class fragments — the same `.tile-wrap selected faved`-style
+// composition the Lit port used, unchanged by the move to JSX (`className=`
+// still just wants a string).
 const cls = (...parts) => parts.filter(Boolean).join(' ');
 
+// Used only by `renderFaces` below, which stays a fully-imperative DOM
+// builder (see that function's comment) — it constructs its own `<button>`s
+// the same way the pre-Lit app always did.
 function kitBtn(label, onClick) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -328,41 +333,65 @@ function kitBtn(label, onClick) {
   return btn;
 }
 
-// An input that submits on Enter and folds away on Escape or blur.
-function inlineInput({ value = '', placeholder, label, onSubmit, onCancel }) {
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = value;
-  if (placeholder) input.placeholder = placeholder;
-  input.setAttribute('aria-label', label);
-  let submitting = false;
-  input.addEventListener('keydown', async (e) => {
-    if (e.key === 'Escape') {
-      onCancel();
-      return;
-    }
-    if (e.key !== 'Enter') return;
-    const title = input.value.trim();
-    if (!title) {
-      onCancel();
-      return;
-    }
-    submitting = true;
-    input.disabled = true;
-    await onSubmit(title);
-  });
-  input.addEventListener('blur', () => {
-    if (!submitting) onCancel();
-  });
-  return input;
+// A shared "type a name, Enter to submit, Escape/blur to cancel" input used
+// by both the new-album chip and the album rename control. Uncontrolled
+// (`defaultValue`, not `value`) — like the vanilla/Lit versions before it, it
+// never re-renders on keystroke; only Enter/Escape/blur touch app state. The
+// ref-based focus/select guard mirrors `mountMedia`'s once-only pattern.
+function InlineInput({
+  value = '',
+  placeholder,
+  label,
+  className,
+  autoSelect = false,
+  onSubmit,
+  onCancel,
+}) {
+  return (
+    <input
+      type="text"
+      className={className}
+      defaultValue={value}
+      placeholder={placeholder}
+      aria-label={label}
+      ref={(el) => {
+        if (!el || el.dataset.wired) return;
+        el.dataset.wired = '1';
+        el.focus();
+        if (autoSelect) el.select();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          onCancel();
+          return;
+        }
+        if (e.key !== 'Enter') return;
+        const title = e.currentTarget.value.trim();
+        if (!title) {
+          onCancel();
+          return;
+        }
+        e.currentTarget.disabled = true;
+        onSubmit(title);
+      }}
+      onBlur={(e) => {
+        if (e.currentTarget.disabled) return; // mid-submit — disabling already fired this blur
+        onCancel();
+      }}
+    />
+  );
 }
 
 // A tile's media fill (fillTileMedia, below) is imperative — image decode,
 // video setup, placeholder text — and must run exactly once per mounted
-// element. `mountMedia` is that guard: keyed `repeat()` reuses a tile's DOM
-// node across refreshes (same asset_id, same node), and the dataset check
-// stops a re-render from reassigning `img.src` and flickering/refetching an
-// image that's already showing.
+// element. `mountMedia` is that guard, now wired through a React callback
+// ref instead of a Lit `ref()` directive: React calls it once when a tile's
+// `<button class="tile">` mounts and again (with `null`) on unmount, and the
+// dataset check makes every call besides the first a no-op. Pairing this
+// with a stable `key={asset.asset_id}` on the tile (see TileWrap) is what
+// keeps the underlying `<img>`/`<video>` node — and therefore its already
+// loaded bytes — alive across refreshes, the same guarantee the Lit port got
+// from keyed `repeat()`.
 function mountMedia(el, asset) {
   if (!el || el.dataset.mediaFor === asset.asset_id) return;
   el.dataset.mediaFor = asset.asset_id;
@@ -385,131 +414,177 @@ function selectAlbum(albumId) {
   renderGrid();
 }
 
-function chipTpl(label, active, onClick, extraClass) {
-  return html`<button
-    type="button"
-    class=${extraClass ? `kit-chip ${extraClass}` : 'kit-chip'}
-    data-active=${active ? 'true' : 'false'}
-    @click=${onClick}
-  >
-    ${label}
-  </button>`;
+function Chip({ label, active, onClick, extraClass }) {
+  return (
+    <button
+      type="button"
+      className={extraClass ? `kit-chip ${extraClass}` : 'kit-chip'}
+      data-active={active ? 'true' : 'false'}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
 }
 
-// The raw <input> node while "＋ New album" is being typed, else null — a
-// singleton, not per-album state (unlike the rename input below).
-let newAlbumInput = null;
+// The "＋ New album" chip while typing, else null — a singleton flag, not
+// per-album state (unlike the rename guard below).
+let newAlbumOpen = false;
 
 function startNewAlbum() {
-  newAlbumInput = inlineInput({
-    placeholder: 'Album name',
-    label: 'New album name',
-    onSubmit: async (title) => {
-      const outcome = await act('create-album', { title });
-      newAlbumInput = null;
-      if (narrate(outcome)) {
-        if (outcome.output?.album_id) selectedAlbum = outcome.output.album_id;
-        await refresh();
-      } else {
-        renderToolbar();
-      }
-    },
-    onCancel: () => {
-      newAlbumInput = null;
-      renderToolbar();
-    },
-  });
-  newAlbumInput.className = 'chip-input';
+  newAlbumOpen = true;
   renderToolbar();
-  newAlbumInput.focus();
 }
 
-function chipsTemplate() {
-  return html`${chipTpl('All', selectedAlbum === null, () => selectAlbum(null))}${chipTpl(
-    '♥ Favorites',
-    selectedAlbum === FAVORITES,
-    () => selectAlbum(FAVORITES),
-  )}${repeat(
-    albums,
-    (a) => a.album_id,
-    (album) =>
-      chipTpl(album.title ?? 'Album', selectedAlbum === album.album_id, () =>
-        selectAlbum(album.album_id),
-      ),
-  )}${newAlbumInput
-    ? newAlbumInput
-    : html`<button type="button" class="kit-chip chip-new" @click=${startNewAlbum}>
-        ＋ New album
-      </button>`}${trash.length > 0
-    ? chipTpl(
-        `Trash (${trash.length})`,
-        selectedAlbum === TRASH,
-        () => selectAlbum(TRASH),
-        'chip-trash',
-      )
-    : nothing}`;
+async function submitNewAlbum(title) {
+  const outcome = await act('create-album', { title });
+  newAlbumOpen = false;
+  if (narrate(outcome)) {
+    if (outcome.output?.album_id) selectedAlbum = outcome.output.album_id;
+    await refresh();
+  } else {
+    renderToolbar();
+  }
+}
+
+function cancelNewAlbum() {
+  newAlbumOpen = false;
+  renderToolbar();
+}
+
+function ChipsView({
+  albums: albumList,
+  selectedAlbum: selected,
+  trashCount,
+  newAlbumOpen: editing,
+  onSelect,
+}) {
+  return (
+    <>
+      <Chip label="All" active={selected === null} onClick={() => onSelect(null)} />
+      <Chip
+        label="♥ Favorites"
+        active={selected === FAVORITES}
+        onClick={() => onSelect(FAVORITES)}
+      />
+      {albumList.map((album) => (
+        <Chip
+          key={album.album_id}
+          label={album.title ?? 'Album'}
+          active={selected === album.album_id}
+          onClick={() => onSelect(album.album_id)}
+        />
+      ))}
+      {editing ? (
+        <InlineInput
+          key="new-album"
+          className="chip-input"
+          placeholder="Album name"
+          label="New album name"
+          onSubmit={submitNewAlbum}
+          onCancel={cancelNewAlbum}
+        />
+      ) : (
+        <button type="button" className="kit-chip chip-new" onClick={startNewAlbum}>
+          ＋ New album
+        </button>
+      )}
+      {trashCount > 0 ? (
+        <Chip
+          label={`Trash (${trashCount})`}
+          active={selected === TRASH}
+          onClick={() => onSelect(TRASH)}
+          extraClass="chip-trash"
+        />
+      ) : null}
+    </>
+  );
 }
 
 function renderChips() {
   const nav = $('albumChips');
   nav.hidden = false;
-  litRender(chipsTemplate(), nav);
+  chipsRoot.render(
+    <ChipsView
+      albums={albums}
+      selectedAlbum={selectedAlbum}
+      trashCount={trash.length}
+      newAlbumOpen={newAlbumOpen}
+      onSelect={selectAlbum}
+    />,
+  );
 }
 
-// The raw <input> node while an album rename is in progress, else null, plus
-// which album it belongs to — `renderAlbumTools` discards it the moment the
-// selected album no longer matches (switching albums must never show album
-// X's half-typed rename inside album Y's tools).
-let renamingAlbumInput = null;
+// Which album is mid-rename, else null — `renderAlbumTools` discards it the
+// moment the selected album no longer matches (switching albums must never
+// show album X's half-typed rename inside album Y's tools). The rename
+// `<input>` is also keyed by album id (see AlbumToolsView), so React mints a
+// fresh DOM node on top of the JS guard rather than relying on either alone.
 let renamingAlbumForId = null;
 
 function startRenameAlbum(album) {
   renamingAlbumForId = album.album_id;
-  renamingAlbumInput = inlineInput({
-    value: album.title ?? '',
-    placeholder: 'Album name',
-    label: 'Rename album',
-    onSubmit: async (title) => {
-      const outcome = await act('rename-album', { album_id: album.album_id, title });
-      renamingAlbumInput = null;
-      renamingAlbumForId = null;
-      if (narrate(outcome)) await refresh();
-      else renderToolbar();
-    },
-    onCancel: () => {
-      renamingAlbumInput = null;
-      renamingAlbumForId = null;
-      renderToolbar();
-    },
-  });
   renderToolbar();
-  renamingAlbumInput.focus();
-  renamingAlbumInput.select();
 }
 
-function albumToolsTemplate(album) {
-  if (renamingAlbumInput && renamingAlbumForId === album.album_id) return renamingAlbumInput;
-  const count = albumAssets().length;
-  return html`<span class="album-tools-label"
-      >${count} ${count === 1 ? 'photo' : 'photos'} in this album</span
-    >
-    <button type="button" class="kit-btn" @click=${openPicker}>Add photos</button>
-    <button type="button" class="kit-btn" @click=${() => startRenameAlbum(album)}>Rename</button>
-    <button
-      type="button"
-      class="kit-btn danger"
-      @click=${async (e) => {
-        if (!armConfirm(e.currentTarget, { armedLabel: 'Delete album?' })) return;
-        const outcome = await act('delete-album', { album_id: album.album_id });
-        if (narrate(outcome)) {
-          selectedAlbum = null;
-          toast('Album deleted — its photos stay in your library.');
-          await refresh();
-        }
-      }}
-    >
-      Delete album
-    </button>`;
+async function submitRenameAlbum(album, title) {
+  const outcome = await act('rename-album', { album_id: album.album_id, title });
+  renamingAlbumForId = null;
+  if (narrate(outcome)) await refresh();
+  else renderToolbar();
+}
+
+function cancelRenameAlbum() {
+  renamingAlbumForId = null;
+  renderToolbar();
+}
+
+async function deleteAlbumConfirmed(album) {
+  const outcome = await act('delete-album', { album_id: album.album_id });
+  if (narrate(outcome)) {
+    selectedAlbum = null;
+    toast('Album deleted — its photos stay in your library.');
+    await refresh();
+  }
+}
+
+function AlbumToolsView({ album, count, renaming, onAdd, onDelete }) {
+  if (renaming) {
+    return (
+      <InlineInput
+        key={album.album_id}
+        value={album.title ?? ''}
+        placeholder="Album name"
+        label="Rename album"
+        autoSelect
+        onSubmit={(title) => submitRenameAlbum(album, title)}
+        onCancel={cancelRenameAlbum}
+      />
+    );
+  }
+  return (
+    <>
+      <span className="album-tools-label">
+        {count} {count === 1 ? 'photo' : 'photos'} in this album
+      </span>
+      <button type="button" className="kit-btn" onClick={onAdd}>
+        Add photos
+      </button>
+      <button type="button" className="kit-btn" onClick={() => startRenameAlbum(album)}>
+        Rename
+      </button>
+      <button
+        type="button"
+        className="kit-btn danger"
+        onClick={(e) => {
+          if (!armConfirm(e.currentTarget, { armedLabel: 'Delete album?' })) return;
+          onDelete(album);
+        }}
+      >
+        Delete album
+      </button>
+    </>
+  );
 }
 
 function renderAlbumTools() {
@@ -517,85 +592,75 @@ function renderAlbumTools() {
   const album = albums.find((a) => a.album_id === selectedAlbum);
   tools.hidden = !album;
   if (!album) {
-    renamingAlbumInput = null;
     renamingAlbumForId = null;
-    litRender(nothing, tools);
+    albumToolsRoot.render(null);
     return;
   }
-  if (renamingAlbumForId !== album.album_id) {
-    renamingAlbumInput = null;
-    renamingAlbumForId = null;
-  }
-  litRender(albumToolsTemplate(album), tools);
+  if (renamingAlbumForId !== album.album_id) renamingAlbumForId = null;
+  albumToolsRoot.render(
+    <AlbumToolsView
+      album={album}
+      count={albumAssets().length}
+      renaming={renamingAlbumForId === album.album_id}
+      onAdd={openPicker}
+      onDelete={deleteAlbumConfirmed}
+    />,
+  );
 }
 
 // ---------- Grid ----------
 
-// `#grid` starts out holding the kit's raw (non-Lit) skeleton markup
-// (`showSkeleton`, at boot). Lit's standalone `render()` never clears a
-// container's pre-existing children on its first call — it only appends past
-// them — so the very first Lit commit must clear that skeleton itself; every
-// commit after that goes through `litRender` alone (a raw clear once Lit owns
-// the container corrupts its part cache).
-let gridMounted = false;
-function mountGrid(templateResult) {
-  const grid = $('grid');
-  if (!gridMounted) {
-    grid.replaceChildren();
-    gridMounted = true;
-  }
-  litRender(templateResult, grid);
-}
-
 // One grid tile: the media button, the always-present select dot, the
-// hover-reveal favorite heart, and (inside an album) the leave-album control.
-// Kept as a plain function — not a component — so `.tile-wrap` elements stay
-// DIRECT children of `#grid`: the timeline leans on `.grid`'s CSS Grid track
-// flow plus `grid-column: 1 / -1` sticky month/day labels between tiles.
-function tileTpl(asset, inAlbum) {
-  const selected = selectedIds.has(asset.asset_id);
-  return html`<div
-    class=${cls('tile-wrap', selected && 'selected', asset.favorite && 'faved')}
-    data-asset-id=${asset.asset_id}
-  >
-    <button
-      type="button"
-      class="tile"
-      ${ref((el) => mountMedia(el, asset))}
-      @click=${(e) => {
-        if (selectMode) toggleSelect(asset.asset_id, e.shiftKey);
-        else openLightbox(asset.asset_id);
-      }}
-    ></button>
-    <button
-      type="button"
-      class="tile-check"
-      aria-label=${selected ? 'Deselect' : 'Select'}
-      @click=${(e) => {
-        e.stopPropagation();
-        if (!selectMode) enterSelectMode();
-        toggleSelect(asset.asset_id, e.shiftKey);
-      }}
-    ></button>
-    <button
-      type="button"
-      class="tile-heart"
-      aria-pressed=${asset.favorite ? 'true' : 'false'}
-      aria-label=${asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
-      @click=${(e) => {
-        e.stopPropagation();
-        toggleFavorite(asset);
-      }}
+// hover-reveal favorite heart, and (inside an album) the leave-album
+// control. `.tile-wrap` elements must stay DIRECT children of `#grid`: the
+// timeline leans on `.grid`'s CSS Grid track flow plus `grid-column: 1 / -1`
+// sticky month/day labels between tiles, so this never wraps its siblings in
+// an intermediate element (see GridBody, which uses transparent `Fragment`s
+// for the month/day grouping instead of real wrapper nodes).
+function TileWrap({ asset, inAlbum, selected }) {
+  return (
+    <div
+      className={cls('tile-wrap', selected && 'selected', asset.favorite && 'faved')}
+      data-asset-id={asset.asset_id}
     >
-      <span aria-hidden="true">${asset.favorite ? '♥' : '♡'}</span>
-    </button>
-    ${inAlbum
-      ? html`<button
+      <button
+        type="button"
+        className="tile"
+        ref={(el) => mountMedia(el, asset)}
+        onClick={(e) => {
+          if (selectMode) toggleSelect(asset.asset_id, e.shiftKey);
+          else openLightbox(asset.asset_id);
+        }}
+      ></button>
+      <button
+        type="button"
+        className="tile-check"
+        aria-label={selected ? 'Deselect' : 'Select'}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!selectMode) enterSelectMode();
+          toggleSelect(asset.asset_id, e.shiftKey);
+        }}
+      ></button>
+      <button
+        type="button"
+        className="tile-heart"
+        aria-pressed={asset.favorite ? 'true' : 'false'}
+        aria-label={asset.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFavorite(asset);
+        }}
+      >
+        <span aria-hidden="true">{asset.favorite ? '♥' : '♡'}</span>
+      </button>
+      {inAlbum ? (
+        <button
           type="button"
-          class="tile-remove"
+          className="tile-remove"
           title="Remove from album"
           aria-label="Remove from album"
-          @click=${async () => {
+          onClick={async () => {
             const outcome = await act('remove-from-album', {
               album_id: selectedAlbum,
               asset_id: asset.asset_id,
@@ -604,35 +669,38 @@ function tileTpl(asset, inAlbum) {
           }}
         >
           <span aria-hidden="true">×</span>
-        </button>`
-      : nothing}
-  </div>`;
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 // A trash tile: the photo, a purge countdown when one is derivable, and
 // Restore — nothing else. No lightbox, no selection, no albums, no hearts.
-function trashTileTpl(asset) {
-  return html`<div class="tile-wrap trash" data-asset-id=${asset.asset_id}>
-    <div class="tile" ${ref((el) => mountMedia(el, asset))}></div>
-    ${asset.purge_in_days != null
-      ? html`<span class="tile-purge"
-          >${asset.purge_in_days === 0
+function TrashTile({ asset }) {
+  return (
+    <div className="tile-wrap trash" data-asset-id={asset.asset_id}>
+      <div className="tile" ref={(el) => mountMedia(el, asset)}></div>
+      {asset.purge_in_days != null ? (
+        <span className="tile-purge">
+          {asset.purge_in_days === 0
             ? 'purges today'
-            : `purges in ${asset.purge_in_days} ${asset.purge_in_days === 1 ? 'day' : 'days'}`}</span
-        >`
-      : nothing}
-    <button
-      type="button"
-      class="tile-restore"
-      aria-label="Restore ${asset.title ?? 'photo'}"
-      @click=${async (e) => {
-        e.currentTarget.disabled = true;
-        if (!(await restoreAsset(asset.asset_id))) e.currentTarget.disabled = false;
-      }}
-    >
-      Restore
-    </button>
-  </div>`;
+            : `purges in ${asset.purge_in_days} ${asset.purge_in_days === 1 ? 'day' : 'days'}`}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className="tile-restore"
+        aria-label={`Restore ${asset.title ?? 'photo'}`}
+        onClick={async (e) => {
+          e.currentTarget.disabled = true;
+          if (!(await restoreAsset(asset.asset_id))) e.currentTarget.disabled = false;
+        }}
+      >
+        Restore
+      </button>
+    </div>
+  );
 }
 
 // The visual guts of a tile — shared by the grid, the trash shelf and the
@@ -671,41 +739,56 @@ function fillTileMedia(tile, asset) {
 }
 
 // Bucket header + its tiles (open library only — the trash shelf forgoes the
-// timeline). Months/days regroup via plain (unkeyed) `.map()` on every render
-// — same as the grouping `Map`s themselves, rebuilt fresh each time — while
-// each day's tiles ride a keyed `repeat()` on `asset_id`, so a tile (and its
-// `<img>`) persists across refreshes instead of reloading.
-function gridTemplate(months, inAlbum) {
-  return html`${[...months].map(
-    ([mk, days]) => html`<h2 class="month-label">${fmtMonth(mk)}</h2>
-      ${[...days].map(
-        ([dk, dayAssets]) => html`<p class="day-label muted small">${fmtDay(dk)}</p>
-          ${repeat(
-            dayAssets,
-            (a) => a.asset_id,
-            (asset) => tileTpl(asset, inAlbum),
-          )}`,
-      )}`,
-  )}${libraryTruncated
-    ? html`<div class="window-footer">
-        <span
-          >${selectedAlbum || searchQuery
-            ? `This view covers your latest ${libraryWindow} photos — older ones may be missing. `
-            : `Showing your latest ${libraryWindow} photos. `}</span
-        >
-        <button
-          type="button"
-          class="kit-btn"
-          @click=${async (e) => {
-            e.target.disabled = true;
-            libraryWindow += 500;
-            await refresh();
-          }}
-        >
-          Show more
-        </button>
-      </div>`
-    : nothing}`;
+// timeline). Months/days regroup fresh on every call (rebuilt `Map`s, same as
+// before) via `Fragment`s keyed on the month/day key — a `Fragment` renders no
+// DOM node of its own, so `.month-label`/`.day-label`/`.tile-wrap` still land
+// as flat, direct children of `#grid`. Each day's tiles carry
+// `key={asset.asset_id}`, so a tile (and its `<img>`) persists across
+// refreshes instead of reloading — the React analogue of the Lit port's keyed
+// `repeat()`.
+function GridBody({
+  months,
+  inAlbum,
+  libraryTruncated: truncated,
+  selectedAlbum: selected,
+  searchQuery: query,
+  libraryWindow: windowSize,
+  onShowMore,
+}) {
+  return (
+    <>
+      {[...months].map(([mk, days]) => (
+        <Fragment key={mk}>
+          <h2 className="month-label">{fmtMonth(mk)}</h2>
+          {[...days].map(([dk, dayAssets]) => (
+            <Fragment key={dk}>
+              <p className="day-label muted small">{fmtDay(dk)}</p>
+              {dayAssets.map((asset) => (
+                <TileWrap
+                  key={asset.asset_id}
+                  asset={asset}
+                  inAlbum={inAlbum}
+                  selected={selectedIds.has(asset.asset_id)}
+                />
+              ))}
+            </Fragment>
+          ))}
+        </Fragment>
+      ))}
+      {truncated ? (
+        <div className="window-footer">
+          <span>
+            {selected || query
+              ? `This view covers your latest ${windowSize} photos — older ones may be missing. `
+              : `Showing your latest ${windowSize} photos. `}
+          </span>
+          <button type="button" className="kit-btn" onClick={onShowMore}>
+            Show more
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
 }
 
 function renderGrid() {
@@ -729,7 +812,13 @@ function renderGrid() {
   }
   // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
   if (selectedAlbum === TRASH) {
-    mountGrid(html`${repeat(shown, (a) => a.asset_id, trashTileTpl)}`);
+    gridRoot.render(
+      <>
+        {shown.map((asset) => (
+          <TrashTile key={asset.asset_id} asset={asset} />
+        ))}
+      </>,
+    );
     return;
   }
   // Google-Photos-style timeline: sticky month headers, day labels inside.
@@ -747,7 +836,21 @@ function renderGrid() {
   // client-side search all filter the same loaded slice, so any of them can
   // silently miss photos older than the window. "Show more" grows it — with
   // no search plane, that is the only road back in time.
-  mountGrid(gridTemplate(months, inAlbum));
+  gridRoot.render(
+    <GridBody
+      months={months}
+      inAlbum={inAlbum}
+      libraryTruncated={libraryTruncated}
+      selectedAlbum={selectedAlbum}
+      searchQuery={searchQuery}
+      libraryWindow={libraryWindow}
+      onShowMore={async (e) => {
+        e.target.disabled = true;
+        libraryWindow += 500;
+        await refresh();
+      }}
+    />,
+  );
 }
 
 async function toggleFavorite(asset, noteEl) {
@@ -820,15 +923,15 @@ function toggleSelect(assetId, shiftKey) {
 // ---------- Selection bar ----------
 
 // The "Add to album ▾" menu is a small, transient popover that only this app
-// owns (it isn't a kit popover) — a raw DOM node while open, else null, kept
-// deliberately imperative like the old code: an away-click listener is
-// added/removed in lockstep with it, which is more fragile to reason about
-// as reactive state than as a plain open/close pair.
-let albumMenuNode = null;
+// owns (it isn't a kit popover) — a plain open/closed flag, kept deliberately
+// imperative like the old code: an away-click listener is added/removed in
+// lockstep with it, which is more fragile to reason about as reactive state
+// than as a plain boolean.
+let albumMenuOpen = false;
 
 function closeAlbumMenu() {
-  if (!albumMenuNode) return;
-  albumMenuNode = null;
+  if (!albumMenuOpen) return;
+  albumMenuOpen = false;
   document.removeEventListener('click', onAlbumMenuAway, true);
 }
 
@@ -840,82 +943,90 @@ function onAlbumMenuAway(e) {
   }
 }
 
-function toggleAlbumMenu(countEl) {
-  if (albumMenuNode) {
+function toggleAlbumMenu() {
+  if (albumMenuOpen) {
     closeAlbumMenu();
     renderSelectionBar();
     return;
   }
-  const menu = document.createElement('div');
-  menu.className = 'album-menu';
-  menu.setAttribute('role', 'menu');
-  if (albums.length === 0) {
-    const none = document.createElement('p');
-    none.className = 'album-menu-empty';
-    none.textContent = 'No albums yet — make one from the chips above.';
-    menu.appendChild(none);
-  }
-  for (const album of albums) {
-    const item = document.createElement('button');
-    item.type = 'button';
-    item.className = 'album-menu-item';
-    item.setAttribute('role', 'menuitem');
-    item.textContent = album.title ?? 'Album';
-    item.addEventListener('click', () => {
-      closeAlbumMenu();
-      renderSelectionBar();
-      batchAddToAlbum([...selectedIds], album, countEl);
-    });
-    menu.appendChild(item);
-  }
-  albumMenuNode = menu;
+  albumMenuOpen = true;
   renderSelectionBar();
   document.addEventListener('click', onAlbumMenuAway, true);
 }
 
-function selectionBarTemplate() {
-  const n = selectedIds.size;
-  const countRef = createRef();
-  return html`<span class="bar-count" ${ref(countRef)}
-      >${n === 0 ? 'Select photos' : `${n} selected`}</span
-    >
-    <div class="bar-menu-wrap">
+function SelectionBarView({ count, albums: albumList }) {
+  const countRef = useRef(null);
+  return (
+    <>
+      <span className="bar-count" ref={countRef}>
+        {count === 0 ? 'Select photos' : `${count} selected`}
+      </span>
+      <div className="bar-menu-wrap">
+        <button
+          type="button"
+          className="kit-btn bar-btn"
+          aria-haspopup="true"
+          disabled={count === 0}
+          onClick={() => toggleAlbumMenu()}
+        >
+          Add to album ▾
+        </button>
+        {albumMenuOpen ? (
+          <div className="album-menu" role="menu">
+            {albumList.length === 0 ? (
+              <p className="album-menu-empty">No albums yet — make one from the chips above.</p>
+            ) : (
+              albumList.map((album) => (
+                <button
+                  key={album.album_id}
+                  type="button"
+                  className="album-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    closeAlbumMenu();
+                    renderSelectionBar();
+                    batchAddToAlbum([...selectedIds], album, countRef.current);
+                  }}
+                >
+                  {album.title ?? 'Album'}
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
+      </div>
       <button
         type="button"
-        class="kit-btn bar-btn"
-        aria-haspopup="true"
-        ?disabled=${n === 0}
-        @click=${() => toggleAlbumMenu(countRef.value)}
+        className="kit-btn bar-btn danger"
+        disabled={count === 0}
+        onClick={(e) => {
+          if (batchBusy || selectedIds.size === 0) return;
+          if (!armConfirm(e.currentTarget, { armedLabel: `Delete ${selectedIds.size}?` })) return;
+          batchDelete([...selectedIds], countRef.current);
+        }}
       >
-        Add to album ▾
+        Delete
       </button>
-      ${albumMenuNode ?? nothing}
-    </div>
-    <button
-      type="button"
-      class="kit-btn bar-btn danger"
-      ?disabled=${n === 0}
-      @click=${(e) => {
-        if (batchBusy || selectedIds.size === 0) return;
-        if (!armConfirm(e.currentTarget, { armedLabel: `Delete ${selectedIds.size}?` })) return;
-        batchDelete([...selectedIds], countRef.value);
-      }}
-    >
-      Delete
-    </button>
-    <button type="button" class="bar-close" aria-label="Exit selection" @click=${exitSelectMode}>
-      ×
-    </button>`;
+      <button
+        type="button"
+        className="bar-close"
+        aria-label="Exit selection"
+        onClick={exitSelectMode}
+      >
+        ×
+      </button>
+    </>
+  );
 }
 
 function renderSelectionBar() {
   const bar = $('selectionBar');
   bar.hidden = !selectMode;
   if (!selectMode) {
-    litRender(nothing, bar);
+    selectionBarRoot.render(null);
     return;
   }
-  litRender(selectionBarTemplate(), bar);
+  selectionBarRoot.render(<SelectionBarView count={selectedIds.size} albums={albums} />);
 }
 
 function setBarBusy(on) {
@@ -1006,7 +1117,7 @@ function closeLightbox() {
   lightboxAssetId = null;
   const box = $('lightbox');
   box.hidden = true;
-  litRender(nothing, box);
+  lightboxRoot.render(null);
 }
 
 function step(delta) {
@@ -1061,122 +1172,179 @@ function wireZoom(img) {
   img.addEventListener('click', (e) => e.stopPropagation());
 }
 
-// The stage's media (image/video/placeholder), keyed by `asset_id` in
-// `lightboxTpl` below: stepping to a different photo always mints a fresh
-// element (so zoom state never bleeds from one photo to the next), while a
-// background refresh landing on the SAME photo reuses the node (so the image
-// doesn't reload/flicker). `wireZoom` is guarded per-element so that reuse
-// never double-attaches its pointer/dblclick listeners.
-function stageTpl(asset, setInfo) {
+// The stage's media (image/video/placeholder), keyed by `asset_id` where it's
+// mounted (LightboxShell, below): stepping to a different photo always mints
+// a fresh element (so zoom state never bleeds from one photo to the next),
+// while a background refresh landing on the SAME photo reuses the node (so
+// the image doesn't reload/flicker) — the same guarantee the Lit port's
+// keyed single-item `repeat()` gave the stage. `wireZoom` is guarded per
+// element (via the ref's dataset check) so reuse never double-attaches its
+// pointer/dblclick listeners; this stays the one genuinely imperative island
+// in the lightbox, same as the Lit port.
+function Stage({ asset, onDims }) {
   if (isRenderableUri(asset.content_uri) && isVideoAsset(asset)) {
-    return html`<video
-      .src=${asset.content_uri}
-      .muted=${true}
-      .playsInline=${true}
-      .controls=${true}
-      preload="metadata"
-      aria-label=${asset.title ?? 'Video'}
-    ></video>`;
+    return (
+      <video
+        src={asset.content_uri}
+        muted
+        playsInline
+        controls
+        preload="metadata"
+        aria-label={asset.title ?? 'Video'}
+      ></video>
+    );
   }
   if (isRenderableUri(asset.content_uri)) {
     const needsProbe = asset.width == null || asset.height == null;
-    return html`<img
-      .src=${asset.content_uri}
-      alt=${asset.title ?? asset.kind ?? 'Photo'}
-      ${ref((el) => {
-        if (!el || el.dataset.zoomWired) return;
-        el.dataset.zoomWired = '1';
-        wireZoom(el);
-      })}
-      @load=${(e) => {
-        if (needsProbe) setInfo(e.target.naturalWidth, e.target.naturalHeight);
-      }}
-    />`;
+    return (
+      <img
+        src={asset.content_uri}
+        alt={asset.title ?? asset.kind ?? 'Photo'}
+        ref={(el) => {
+          if (!el || el.dataset.zoomWired) return;
+          el.dataset.zoomWired = '1';
+          wireZoom(el);
+        }}
+        onLoad={(e) => {
+          if (needsProbe) onDims(e.target.naturalWidth, e.target.naturalHeight);
+        }}
+      />
+    );
   }
-  return html`<div class="lightbox-placeholder">${asset.media_type ?? asset.kind ?? 'media'}</div>`;
+  return <div className="lightbox-placeholder">{asset.media_type ?? asset.kind ?? 'media'}</div>;
 }
 
-function lightboxTpl(asset, metaNode, infoNode, facesHostNode, noteNode, setInfo) {
-  const list = visibleAssets();
-  const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
-  return html`<div class="lightbox-stage" @click=${(e) => e.stopPropagation()}>
-      ${repeat(
-        [asset],
-        (a) => a.asset_id,
-        (a) => stageTpl(a, setInfo),
-      )}
-    </div>
-    ${[
-      ['prev', -1, '‹', 'Previous photo'],
-      ['next', 1, '›', 'Next photo'],
-    ].map(
-      ([variant, delta, glyph, name]) => html`<button
-        type="button"
-        class="lightbox-nav ${variant}"
-        aria-label=${name}
-        ?disabled=${idx < 0 || !list[idx + delta]}
-        @click=${(e) => {
-          e.stopPropagation();
-          step(delta);
-        }}
-      >
-        ${glyph}
-      </button>`,
-    )}
-    <div class="lightbox-panel" @click=${(e) => e.stopPropagation()}>
-      ${metaNode} ${infoNode}
-      ${albums.length > 0
-        ? html`<div class="lightbox-albums">
-            ${repeat(
-              albums,
-              (a) => a.album_id,
-              (album) => {
-                const member = asset.album_ids?.includes(album.album_id) ?? false;
-                return html`<button
-                  type="button"
-                  class="kit-chip"
-                  data-active=${member ? 'true' : 'false'}
-                  @click=${async () => {
-                    const outcome = await act(member ? 'remove-from-album' : 'add-to-album', {
-                      album_id: album.album_id,
-                      asset_id: asset.asset_id,
-                    });
-                    if (narrate(outcome, noteNode)) await refresh();
-                  }}
-                >
-                  ${member ? `✓ ${album.title ?? 'Album'}` : (album.title ?? 'Album')}
-                </button>`;
-              },
-            )}
-          </div>`
-        : nothing}
-      ${facesHostNode}
-      <div class="lightbox-actions">
+// The lightbox's caption/capture-time form, info line and faces host, keyed
+// by `renderSeq` (so every call to `renderLightbox` mints a wholly fresh copy
+// of this subtree) — exactly mirroring the Lit port's choice to rebuild these
+// as plain nodes on every call, because they're written into by scattered
+// async handlers (save, faces confirm/reject, the stage's load-driven
+// dimension probe) whose closures are simplest when they close over a
+// stable, already-existing element. `setInfoRef` is how the sibling `Stage`
+// (which does NOT remount on a same-photo refresh) reaches whichever
+// `PanelBody` is currently mounted — its effect refreshes that ref's target
+// on every mount, the same way the old code's `setInfo` closure got replaced
+// by each `renderLightbox` call even though the stage element itself
+// persisted underneath it.
+function PanelBody({ asset, albums: albumList, setInfoRef }) {
+  const noteRef = useRef(null);
+  const infoRef = useRef(null);
+  const facesHostRef = useRef(null);
+
+  useEffect(() => {
+    setInfoRef.current = (w, h) => {
+      const parts = [asset.kind ?? 'photo'];
+      const width = asset.width ?? w;
+      const height = asset.height ?? h;
+      if (width && height) parts.push(`${width}×${height}`);
+      const size = fmtBytes(assetBytes(asset));
+      if (size) parts.push(size);
+      const t = asset.taken_at ? new Date(asset.taken_at) : null;
+      if (t && !Number.isNaN(t.getTime())) {
+        parts.push(t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
+      }
+      if (infoRef.current) infoRef.current.textContent = parts.join(' · ');
+    };
+    setInfoRef.current();
+    // People (issue #299): the enricher's face proposals with the owner's
+    // confirm/reject loop. Loaded async so an empty vault costs nothing; the
+    // section only appears when regions exist.
+    renderFaces(facesHostRef.current, asset.asset_id, noteRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- this component
+    // remounts fresh on every renderLightbox() call (keyed by renderSeq), so
+    // "run once per mount" already means "run once per asset+refresh pass".
+  }, []);
+
+  return (
+    <>
+      <div className="lightbox-meta">
+        <input
+          type="text"
+          className="lightbox-title"
+          defaultValue={asset.title ?? ''}
+          placeholder="Add a caption"
+          aria-label="Caption"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+          onChange={async (e) => {
+            const title = e.currentTarget.value.trim();
+            if (title === (asset.title ?? '')) return;
+            const outcome = await act('update-asset', { asset_id: asset.asset_id, title });
+            if (narrate(outcome, noteRef.current)) await refresh();
+          }}
+        />
+        <input
+          type="datetime-local"
+          className="lightbox-when"
+          defaultValue={toLocalInputValue(asset.captured_at ?? asset.taken_at)}
+          aria-label="Capture time"
+          onChange={async (e) => {
+            if (!e.currentTarget.value) return;
+            const d = new Date(e.currentTarget.value);
+            if (Number.isNaN(d.getTime())) return;
+            const outcome = await act('update-asset', {
+              asset_id: asset.asset_id,
+              captured_at: d.toISOString(),
+            });
+            if (narrate(outcome, noteRef.current)) await refresh();
+          }}
+        />
+      </div>
+      <p className="lightbox-info" ref={infoRef}></p>
+      {albumList.length > 0 ? (
+        <div className="lightbox-albums">
+          {albumList.map((album) => {
+            const member = asset.album_ids?.includes(album.album_id) ?? false;
+            return (
+              <button
+                key={album.album_id}
+                type="button"
+                className="kit-chip"
+                data-active={member ? 'true' : 'false'}
+                onClick={async () => {
+                  const outcome = await act(member ? 'remove-from-album' : 'add-to-album', {
+                    album_id: album.album_id,
+                    asset_id: asset.asset_id,
+                  });
+                  if (narrate(outcome, noteRef.current)) await refresh();
+                }}
+              >
+                {member ? `✓ ${album.title ?? 'Album'}` : (album.title ?? 'Album')}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      <div className="lightbox-faces" ref={facesHostRef}></div>
+      <div className="lightbox-actions">
         <button
           type="button"
-          class=${cls('kit-btn', 'lightbox-fav', asset.favorite && 'faved')}
-          aria-pressed=${asset.favorite ? 'true' : 'false'}
-          @click=${async () => {
-            await toggleFavorite(asset, noteNode); // refresh re-renders this lightbox
+          className={cls('kit-btn', 'lightbox-fav', asset.favorite && 'faved')}
+          aria-pressed={asset.favorite ? 'true' : 'false'}
+          onClick={async () => {
+            await toggleFavorite(asset, noteRef.current); // refresh re-renders this lightbox
           }}
         >
-          ${asset.favorite ? '♥ Favorited' : '♡ Favorite'}
+          {asset.favorite ? '♥ Favorited' : '♡ Favorite'}
         </button>
-        ${isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:')
-          ? html`<a
-              class="kit-btn lightbox-download"
-              href=${asset.content_uri}
-              download=${(asset.title ?? '').trim() || `photo-${asset.asset_id}`}
-              >Download</a
-            >`
-          : nothing}
+        {isRenderableUri(asset.content_uri) ||
+        String(asset.content_uri ?? '').startsWith('data:') ? (
+          <a
+            className="kit-btn lightbox-download"
+            href={asset.content_uri}
+            download={(asset.title ?? '').trim() || `photo-${asset.asset_id}`}
+          >
+            Download
+          </a>
+        ) : null}
         <button
           type="button"
-          class="kit-btn danger"
-          @click=${async (e) => {
+          className="kit-btn danger"
+          onClick={async (e) => {
             if (!armConfirm(e.currentTarget, { armedLabel: 'Delete photo?' })) return;
             const outcome = await act('delete-asset', { asset_id: asset.asset_id });
-            if (narrate(outcome, noteNode)) {
+            if (narrate(outcome, noteRef.current)) {
               closeLightbox();
               toast('Moved to trash — it leaves every album it was in.', {
                 undoLabel: 'Undo',
@@ -1189,17 +1357,49 @@ function lightboxTpl(asset, metaNode, infoNode, facesHostNode, noteNode, setInfo
           Delete photo
         </button>
       </div>
-      ${noteNode}
-    </div>`;
+      <p className="lightbox-note" ref={noteRef}></p>
+    </>
+  );
 }
 
-// The lightbox rebuilds its meta form (caption + capture time), info line
-// and faces host as plain imperative nodes on every call — exactly as the
-// pre-Lit version did — because they're written into by scattered async
-// handlers (save, faces confirm/reject, load-driven dimension probe) whose
-// closures are simplest when they close over a real, already-existing
-// element rather than a Lit part whose commit order isn't guaranteed to
-// precede theirs.
+// The lightbox shell itself never remounts while open — only its two
+// independently keyed children do (Stage by asset_id, PanelBody by
+// renderSeq) — so `setInfoRef` (a plain ref holding "whatever PanelBody's
+// current setInfo function is") survives across both stepping and refreshing.
+function LightboxShell({ asset, idx, list, albums: albumList, renderSeq }) {
+  const setInfoRef = useRef(() => {});
+  return (
+    <>
+      <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
+        <Stage key={asset.asset_id} asset={asset} onDims={(w, h) => setInfoRef.current(w, h)} />
+      </div>
+      {[
+        ['prev', -1, '‹', 'Previous photo'],
+        ['next', 1, '›', 'Next photo'],
+      ].map(([variant, delta, glyph, name]) => (
+        <button
+          key={variant}
+          type="button"
+          className={`lightbox-nav ${variant}`}
+          aria-label={name}
+          disabled={idx < 0 || !list[idx + delta]}
+          onClick={(e) => {
+            e.stopPropagation();
+            step(delta);
+          }}
+        >
+          {glyph}
+        </button>
+      ))}
+      <div className="lightbox-panel" onClick={(e) => e.stopPropagation()}>
+        <PanelBody key={renderSeq} asset={asset} albums={albumList} setInfoRef={setInfoRef} />
+      </div>
+    </>
+  );
+}
+
+let lightboxRenderSeq = 0;
+
 function renderLightbox() {
   const box = $('lightbox');
   const asset = assets.find((a) => a.asset_id === lightboxAssetId);
@@ -1207,71 +1407,18 @@ function renderLightbox() {
     closeLightbox();
     return;
   }
-
-  const note = document.createElement('p');
-  note.className = 'lightbox-note';
-
-  // Caption + capture time, both saved on commit (Enter or focus leaving).
-  const meta = document.createElement('div');
-  meta.className = 'lightbox-meta';
-  const cap = document.createElement('input');
-  cap.type = 'text';
-  cap.className = 'lightbox-title';
-  cap.value = asset.title ?? '';
-  cap.placeholder = 'Add a caption';
-  cap.setAttribute('aria-label', 'Caption');
-  cap.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') cap.blur();
-  });
-  cap.addEventListener('change', async () => {
-    const title = cap.value.trim();
-    if (title === (asset.title ?? '')) return;
-    const outcome = await act('update-asset', { asset_id: asset.asset_id, title });
-    if (narrate(outcome, note)) await refresh();
-  });
-  const when = document.createElement('input');
-  when.type = 'datetime-local';
-  when.className = 'lightbox-when';
-  when.value = toLocalInputValue(asset.captured_at ?? asset.taken_at);
-  when.setAttribute('aria-label', 'Capture time');
-  when.addEventListener('change', async () => {
-    if (!when.value) return;
-    const d = new Date(when.value);
-    if (Number.isNaN(d.getTime())) return;
-    const outcome = await act('update-asset', {
-      asset_id: asset.asset_id,
-      captured_at: d.toISOString(),
-    });
-    if (narrate(outcome, note)) await refresh();
-  });
-  meta.append(cap, when);
-
-  // Info line: kind · dimensions · size · when.
-  const info = document.createElement('p');
-  info.className = 'lightbox-info';
-  const setInfo = (w, h) => {
-    const parts = [asset.kind ?? 'photo'];
-    const width = asset.width ?? w;
-    const height = asset.height ?? h;
-    if (width && height) parts.push(`${width}×${height}`);
-    const size = fmtBytes(assetBytes(asset));
-    if (size) parts.push(size);
-    const t = asset.taken_at ? new Date(asset.taken_at) : null;
-    if (t && !Number.isNaN(t.getTime())) {
-      parts.push(t.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }));
-    }
-    info.textContent = parts.join(' · ');
-  };
-  setInfo();
-
-  // People (issue #299): the enricher's face proposals with the owner's
-  // confirm/reject loop. Loaded async so an empty vault costs nothing; the
-  // section only appears when regions exist.
-  const facesHost = document.createElement('div');
-  facesHost.className = 'lightbox-faces';
-  renderFaces(facesHost, asset.asset_id, note);
-
-  litRender(lightboxTpl(asset, meta, info, facesHost, note, setInfo), box);
+  lightboxRenderSeq += 1;
+  const list = visibleAssets();
+  const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
+  lightboxRoot.render(
+    <LightboxShell
+      asset={asset}
+      idx={idx}
+      list={list}
+      albums={albums}
+      renderSeq={lightboxRenderSeq}
+    />,
+  );
   box.hidden = false;
 }
 
@@ -1285,25 +1432,22 @@ const pickerPicked = new Set();
 function closePicker() {
   const p = $('picker');
   p.hidden = true;
-  litRender(nothing, p);
+  pickerRoot.render(null);
   pickerAlbum = null;
   pickerPicked.clear();
 }
 
-function pickerTileTpl(asset) {
-  const picked = pickerPicked.has(asset.asset_id);
-  return html`<button
-    type="button"
-    class="picker-tile"
-    aria-pressed=${picked ? 'true' : 'false'}
-    aria-label=${asset.title ?? 'Photo'}
-    ${ref((el) => mountMedia(el, asset))}
-    @click=${() => {
-      if (pickerPicked.has(asset.asset_id)) pickerPicked.delete(asset.asset_id);
-      else pickerPicked.add(asset.asset_id);
-      renderPicker();
-    }}
-  ></button>`;
+function PickerTile({ asset, picked, onToggle }) {
+  return (
+    <button
+      type="button"
+      className="picker-tile"
+      aria-pressed={picked ? 'true' : 'false'}
+      aria-label={asset.title ?? 'Photo'}
+      ref={(el) => mountMedia(el, asset)}
+      onClick={onToggle}
+    ></button>
+  );
 }
 
 async function submitPicker(e) {
@@ -1333,31 +1477,53 @@ async function submitPicker(e) {
 // The picker's own `.kit-modal` rides the shared modal shell as a compound
 // class (`kit-modal picker-panel`) — app.css keys its photo-grid shape off
 // that pair, so both classes must stay on the one panel element.
-function pickerTpl(album) {
-  const candidates = assets.filter((a) => !(a.album_ids ?? []).includes(album.album_id));
-  const n = pickerPicked.size;
-  return html`<div class="kit-modal picker-panel" @click=${(e) => e.stopPropagation()}>
-    <h2 class="picker-head">Add to “${album.title ?? 'Album'}”</h2>
-    <div class="picker-grid">
-      ${candidates.length === 0
-        ? html`<p class="picker-empty muted">
-            Everything in your library is already in this album.
-          </p>`
-        : repeat(candidates, (a) => a.asset_id, pickerTileTpl)}
+function PickerView({ album, candidates, picked, onToggle }) {
+  const n = picked.size;
+  return (
+    <div className="kit-modal picker-panel" onClick={(e) => e.stopPropagation()}>
+      <h2 className="picker-head">Add to “{album.title ?? 'Album'}”</h2>
+      <div className="picker-grid">
+        {candidates.length === 0 ? (
+          <p className="picker-empty muted">Everything in your library is already in this album.</p>
+        ) : (
+          candidates.map((asset) => (
+            <PickerTile
+              key={asset.asset_id}
+              asset={asset}
+              picked={picked.has(asset.asset_id)}
+              onToggle={() => onToggle(asset.asset_id)}
+            />
+          ))
+        )}
+      </div>
+      <div className="picker-foot">
+        <span className="picker-count">{n === 0 ? 'Pick photos to add' : `${n} selected`}</span>
+        <button type="button" className="kit-btn" onClick={closePicker}>
+          Cancel
+        </button>
+        <button type="button" className="kit-btn primary" disabled={n === 0} onClick={submitPicker}>
+          {n === 0 ? 'Add' : `Add ${n}`}
+        </button>
+      </div>
     </div>
-    <div class="picker-foot">
-      <span class="picker-count">${n === 0 ? 'Pick photos to add' : `${n} selected`}</span>
-      <button type="button" class="kit-btn" @click=${closePicker}>Cancel</button>
-      <button type="button" class="kit-btn primary" ?disabled=${n === 0} @click=${submitPicker}>
-        ${n === 0 ? 'Add' : `Add ${n}`}
-      </button>
-    </div>
-  </div>`;
+  );
 }
 
 function renderPicker() {
   if (!pickerAlbum) return;
-  litRender(pickerTpl(pickerAlbum), $('picker'));
+  const candidates = assets.filter((a) => !(a.album_ids ?? []).includes(pickerAlbum.album_id));
+  pickerRoot.render(
+    <PickerView
+      album={pickerAlbum}
+      candidates={candidates}
+      picked={pickerPicked}
+      onToggle={(id) => {
+        if (pickerPicked.has(id)) pickerPicked.delete(id);
+        else pickerPicked.add(id);
+        renderPicker();
+      }}
+    />,
+  );
 }
 
 function openPicker() {
@@ -1429,6 +1595,12 @@ $('searchClear').addEventListener('click', () => {
 // proposals show a person picker + Confirm/Reject; confirmed ones read as
 // facts. Everything here is derived data — rejecting is disposal, and a
 // re-run of the enricher can always propose again.
+//
+// Stays a fully-imperative DOM builder, same as the Lit port: it targets an
+// empty `<div ref={facesHostRef}>` that PanelBody always renders with no JSX
+// children, so React never has anything of its own to reconcile there — the
+// same "React-owned but foreign-filled" contract the boot skeleton relies on
+// (see the Boot section below).
 async function renderFaces(host, assetId, note) {
   let data;
   try {
@@ -1694,11 +1866,29 @@ window.addEventListener('paste', (e) => {
 
 // ---------- Boot ----------
 
+// One React root per dynamic container, created once at module scope (Form
+// 1: external mutable state above + a render orchestrator per region, same
+// shape the Lit port used with `litRender`). Unlike Lit's standalone
+// `render()`, `createRoot(...).render()` fully owns its container from the
+// first call, so no manual "clear the pre-existing skeleton" step is needed
+// the way the Lit port's `mountGrid` guard was.
+const chipsRoot = createRoot($('albumChips'));
+const albumToolsRoot = createRoot($('albumTools'));
+const gridRoot = createRoot($('grid'));
+const selectionBarRoot = createRoot($('selectionBar'));
+const lightboxRoot = createRoot($('lightbox'));
+const pickerRoot = createRoot($('picker'));
+
 $('selectBtn').addEventListener('click', () => {
   if (selectMode) exitSelectMode();
   else enterSelectMode();
 });
 
 window.addEventListener('focus', refresh);
-showSkeleton($('grid'), 6);
+// Shimmer rows while the first read is in flight — the genuine
+// `<kit-skeleton>` custom element, rendered as ordinary JSX (not the
+// `showSkeleton()` DOM-mutating helper, which must never target a
+// React-owned node); `renderGrid` replaces it with real content once
+// `refresh()` resolves.
+gridRoot.render(<kit-skeleton rows={6}></kit-skeleton>);
 refresh();
