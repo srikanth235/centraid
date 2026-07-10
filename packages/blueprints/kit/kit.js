@@ -986,25 +986,67 @@ export function wireThemeToggle(btn, { onChange } = {}) {
    * `/centraid/_vault/parked/<invocationId>`. Nothing is fabricated: every
    * bubble is agent text, every card a real parked invocation, and every
    * failure is surfaced as the error it was.
+   *
+   * `_turn` keys a turn on a real conversation-history row and 404s on any
+   * id it doesn't own (same contract the vault assistant's shell-level
+   * `_turn` enforces) — so the panel provisions its session the same way the
+   * desktop's own chat pane does, via the `/_centraid-conversations` create
+   * route, rather than guessing an id client-side.
    */
   function makeVaultDriver(api) {
     var convKey = 'kitask:conversation:' + (appId() || location.pathname);
     var convId = null;
-    function conversationId() {
-      if (convId) return convId;
-      try {
-        convId = sessionStorage.getItem(convKey);
-      } catch (_) {}
-      if (!convId) {
-        convId =
-          window.crypto && crypto.randomUUID
-            ? crypto.randomUUID()
-            : 'kitask-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+
+    /**
+     * The `_turn` route keys a turn on a real `conversations` row (the
+     * conversation-history ledger, issue #286) and 404s on any id it doesn't
+     * own — a client can't mint one client-side. Mint it the same way the
+     * desktop's own chat pane does: `POST /_centraid-conversations/apps/<id>/sessions`.
+     */
+    function createConversation() {
+      return fetchJson(
+        '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/sessions',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      ).then(function (r) {
+        if (!r.ok || !r.body || !r.body.id) {
+          throw new Error('could not start a conversation (' + r.status + ')');
+        }
+        convId = r.body.id;
         try {
           sessionStorage.setItem(convKey, convId);
         } catch (_) {}
+        return convId;
+      });
+    }
+
+    /** Forget the persisted id (a stale/unowned one — a fresh vault, a restart). */
+    function forgetConversation() {
+      convId = null;
+      try {
+        sessionStorage.removeItem(convKey);
+      } catch (_) {}
+    }
+
+    /**
+     * Resolve this panel's conversation id, reusing the persisted one when
+     * present and minting a fresh session on first use otherwise. Returns a
+     * promise — the id is never guessed client-side.
+     */
+    function ensureConversationId() {
+      if (convId) return Promise.resolve(convId);
+      var stored = null;
+      try {
+        stored = sessionStorage.getItem(convKey);
+      } catch (_) {}
+      if (stored) {
+        convId = stored;
+        return Promise.resolve(convId);
       }
-      return convId;
+      return createConversation();
     }
 
     /** Post the owner's decision on one parked invocation; returns the InvokeOutcome. */
@@ -1131,18 +1173,31 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         } catch (_) {}
         handleEvent(type, ev);
       }
-      fetch(appBase() + '_turn', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ conversationId: conversationId(), message: text }),
-      })
-        .then(function (res) {
+      /**
+       * Drive the turn against a resolved conversation id. A 404 means the
+       * id this panel was holding onto isn't a session the store knows about
+       * (a gateway restart against a fresh vault, journal recreated, …) — mint
+       * a real one and retry exactly once rather than surfacing a session
+       * error the owner can't act on.
+       */
+      function runTurn(id, isRetry) {
+        return fetch(appBase() + '_turn', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ conversationId: id, message: text }),
+        }).then(function (res) {
           if (!res.ok) {
             return res.text().then(function (t) {
               var j = null;
               try {
                 j = t ? JSON.parse(t) : null;
               } catch (_) {}
+              if (res.status === 404 && j && j.error === 'not_found' && !isRetry) {
+                forgetConversation();
+                return createConversation().then(function (freshId) {
+                  return runTurn(freshId, true);
+                });
+              }
               if (res.status === 503 && j && j.error === 'no_conversation_runner') {
                 say(
                   'No coding agent is configured to answer yet — open Settings → Agents, pick one, and ask again.',
@@ -1174,6 +1229,11 @@ export function wireThemeToggle(btn, { onChange } = {}) {
             });
           }
           return pump();
+        });
+      }
+      ensureConversationId()
+        .then(function (id) {
+          return runTurn(id, false);
         })
         .catch(function (err) {
           say("Couldn't reach the vault gateway — " + String((err && err.message) || err));
