@@ -20,8 +20,17 @@ export type { DensityScale, DensityName } from './density';
 export { radii } from './radii';
 export type { RadiusKey } from './radii';
 
-export { fonts, type } from './typography';
-export type { FontFamily, TypeKey, TypeStyle } from './typography';
+export { fonts, fontStacks, marketingType, type, typeShorthand } from './typography';
+export type {
+  FontFamily,
+  MarketingTypeKey,
+  MarketingTypeStyle,
+  TypeKey,
+  TypeStyle,
+} from './typography';
+
+export { library } from './library';
+export type { LibraryTokenKey } from './library';
 
 export { tileFinish, TILE_VARIANTS } from './tile';
 export type { TileVariant, TileFinish } from './tile';
