@@ -1264,6 +1264,452 @@
   }
 
   // ---------------------------------------------------------------------
+  // Agenda fixtures — see packages/blueprints/apps/agenda/queries/upcoming.js
+  // for the real row shape (event_id/summary/description/dtstart/dtend/
+  // status/calendar_id/attachments) and search.js for the FTS-hit shape
+  // (adds `snippet`). `attendees` is a MOCK-ONLY addition (see EventDrawer.jsx's
+  // header comment): upcoming.js/search.js are kept untouched per the
+  // integration brief, so the real query never returns guests today — this
+  // fixture still carries them so the harness can show the Guests/RSVP UI.
+  // Covers: 4 calendars with colors, timed events with a same-slot overlap
+  // (week-view columns), an all-day event, a multi-day event spanning
+  // "today" (exercises the from-boundary "still running" rule), guests with
+  // varied PARTSTAT including a "You" row, a tentative event, an event whose
+  // title carries the "(park)" marker (every write against it parks — see
+  // isParkTrigger), an attachment, and a day with 5 events for month view's
+  // "+N more".
+  // ---------------------------------------------------------------------
+  function buildAgendaStore() {
+    if (EMPTY_MODE) return { calendars: [], events: [] };
+
+    var calendars = [
+      { calendar_id: 'cal-personal', name: 'Personal', color: '#4E68DD' },
+      { calendar_id: 'cal-work', name: 'Work', color: '#2EA098' },
+      { calendar_id: 'cal-family', name: 'Family', color: '#E55772' },
+      { calendar_id: 'cal-focus', name: 'Focus', color: '#7C5BD9' },
+    ];
+
+    var base = new Date();
+    base.setHours(0, 0, 0, 0);
+    function at(offsetDays, h, m) {
+      var d = new Date(base.getTime());
+      d.setDate(d.getDate() + offsetDays);
+      d.setHours(h, m, 0, 0);
+      return d.toISOString();
+    }
+    function atMid(offsetDays) {
+      var d = new Date(base.getTime());
+      d.setDate(d.getDate() + offsetDays);
+      return d.toISOString();
+    }
+    var you = { party_id: 'party-you', name: 'You', partstat: 'accepted', is_you: true };
+    function guest(id, name, partstat) {
+      return { party_id: id, name: name, partstat: partstat, is_you: false };
+    }
+
+    var events = [
+      {
+        event_id: 'ev-standup',
+        summary: 'Team standup',
+        description: 'Quick round — yesterday, today, blockers.',
+        dtstart: at(0, 9, 30),
+        dtend: at(0, 9, 45),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted'), guest('p-dana', 'Dana Ruiz', 'declined')],
+      },
+      {
+        event_id: 'ev-review',
+        summary: 'Design review — Agenda',
+        description: 'Walk through the reinvented calendar canvas.',
+        dtstart: at(0, 11, 0),
+        dtend: at(0, 12, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [you, guest('p-priya', 'Priya Nair', 'tentative')],
+      },
+      {
+        event_id: 'ev-lunch',
+        summary: 'Lunch with Dana',
+        description: '',
+        dtstart: at(0, 12, 0),
+        dtend: at(0, 13, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        // Overlaps ev-lunch same day/slot — exercises the week view's
+        // side-by-side overlap-column layout.
+        event_id: 'ev-vendor-call',
+        summary: 'Vendor call',
+        description: '',
+        dtstart: at(0, 12, 15),
+        dtend: at(0, 13, 15),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-1on1',
+        summary: '1:1 with Sam',
+        description: '',
+        dtstart: at(0, 15, 0),
+        dtend: at(0, 15, 30),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted')],
+      },
+      {
+        event_id: 'ev-deepwork',
+        summary: 'Deep work — inbox to zero',
+        description: '',
+        dtstart: at(0, 16, 0),
+        dtend: at(0, 17, 30),
+        status: 'confirmed',
+        calendar_id: 'cal-focus',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        // Every write against this event parks (isParkTrigger on the title)
+        // — the reliable way to exercise reschedule/rsvp/attach/cancel's
+        // parked treatment from the harness.
+        event_id: 'ev-dentist',
+        summary: 'Dentist (park)',
+        description: 'Cleaning. Bring the insurance card.',
+        dtstart: at(1, 8, 0),
+        dtend: at(1, 9, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-sprint',
+        summary: 'Sprint planning',
+        description: '',
+        dtstart: at(1, 10, 0),
+        dtend: at(1, 11, 30),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted'), guest('p-priya', 'Priya Nair', 'declined')],
+      },
+      {
+        event_id: 'ev-yoga',
+        summary: 'Yoga',
+        description: '',
+        dtstart: at(1, 18, 0),
+        dtend: at(1, 19, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-family-dinner',
+        summary: 'Family dinner',
+        description: 'At mum’s. Bring dessert.',
+        dtstart: at(2, 19, 0),
+        dtend: at(2, 21, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-family',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-coffee',
+        summary: 'Coffee with Alex',
+        description: '',
+        dtstart: at(2, 14, 0),
+        dtend: at(2, 14, 45),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-product-sync',
+        summary: 'Product sync',
+        description: '',
+        dtstart: at(3, 13, 30),
+        dtend: at(3, 14, 30),
+        status: 'tentative',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [you, guest('p-priya', 'Priya Nair', 'accepted')],
+      },
+      {
+        // Multi-day, spans "today" — the still-running-at-`from` rule
+        // (queries/upcoming.js's SPAN_BUFFER_MS) keeps it visible even
+        // though it started before the visible window.
+        event_id: 'ev-offsite',
+        summary: 'Offsite retreat',
+        description: 'Coast cabin, team offsite.',
+        dtstart: atMid(-3),
+        dtend: atMid(2),
+        status: 'confirmed',
+        calendar_id: 'cal-family',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-retro',
+        summary: 'Retro',
+        description: '',
+        dtstart: at(-1, 16, 0),
+        dtend: at(-1, 17, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-museum',
+        summary: 'Museum with the kids',
+        description: '',
+        dtstart: at(-2, 10, 0),
+        dtend: at(-2, 12, 30),
+        status: 'confirmed',
+        calendar_id: 'cal-family',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-taxes',
+        summary: 'Pay quarterly taxes',
+        description: '',
+        dtstart: atMid(9),
+        dtend: atMid(10),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-bookclub',
+        summary: 'Book club',
+        description: '',
+        dtstart: at(11, 19, 0),
+        dtend: at(11, 20, 30),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+      {
+        event_id: 'ev-workshop',
+        summary: 'Client workshop',
+        description: 'Signed agenda is attached below.',
+        dtstart: at(-5, 13, 0),
+        dtend: at(-5, 16, 0),
+        status: 'confirmed',
+        calendar_id: 'cal-work',
+        attendees: [],
+        attachments: [
+          {
+            attachment_id: 'att-workshop-1',
+            content_id: 'content-workshop-1',
+            role: 'other',
+            is_primary: 1,
+            media_type: 'application/pdf',
+            title: 'workshop-agenda.pdf',
+            content_uri: blobUri('content-workshop-1'),
+            byte_size: 180_000,
+          },
+        ],
+      },
+      {
+        event_id: 'ev-physio',
+        summary: 'Physio',
+        description: '',
+        dtstart: at(15, 11, 0),
+        dtend: at(15, 11, 45),
+        status: 'confirmed',
+        calendar_id: 'cal-personal',
+        attachments: [],
+        attendees: [],
+      },
+    ];
+
+    // A dense day (+4) for month view's "+N more".
+    ['Standup', 'Design sync', 'Investor call', 'Onboarding', 'Wrap-up'].forEach(function (title, i) {
+      events.push({
+        event_id: 'ev-dense-' + i,
+        summary: title + ' (day+4)',
+        description: '',
+        dtstart: at(4, 9 + i, 0),
+        dtend: at(4, 9 + i, 30),
+        status: 'confirmed',
+        calendar_id: i % 2 === 0 ? 'cal-work' : 'cal-personal',
+        attachments: [],
+        attendees: [],
+      });
+    });
+
+    return { calendars: calendars, events: events };
+  }
+
+  var agendaStore = appId === 'agenda' ? buildAgendaStore() : null;
+
+  /** Mirrors queries/upcoming.js's window semantics: keep an event that is
+   *  still running at `from` even though it started earlier; `to` is an
+   *  exclusive upper bound on dtstart. */
+  function agendaInRange(ev, from, to) {
+    var endMs = new Date(ev.dtend || ev.dtstart).getTime();
+    var startMs = new Date(ev.dtstart).getTime();
+    if (from) {
+      var fromMs = new Date(from).getTime();
+      if (endMs < fromMs) return false;
+    }
+    if (to) {
+      var toMs = new Date(to).getTime();
+      if (startMs >= toMs) return false;
+    }
+    return true;
+  }
+
+  function agendaTodayStartIso() {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }
+
+  function agendaRead(query, input) {
+    if (query === 'upcoming') {
+      var from = input.from || agendaTodayStartIso();
+      var to = input.to || null;
+      var events = agendaStore.events.filter(function (e) {
+        return e.status !== 'cancelled' && agendaInRange(e, from, to);
+      });
+      return { events: events, calendars: agendaStore.calendars };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { events: [] };
+      var hits = agendaStore.events.filter(function (e) {
+        return e.status !== 'cancelled' && (e.summary + ' ' + (e.description || '')).toLowerCase().indexOf(term) !== -1;
+      });
+      return {
+        events: hits.map(function (e) {
+          var hay = e.description && e.description.toLowerCase().indexOf(term) !== -1 ? e.description : e.summary;
+          var idx = hay.toLowerCase().indexOf(term);
+          var snippet = idx === -1 ? '' : '…' + hay.slice(0, idx) + '⟦' + hay.slice(idx, idx + term.length) + '⟧' + hay.slice(idx + term.length) + '…';
+          return Object.assign({}, e, { snippet: snippet });
+        }),
+      };
+    }
+    console.warn('[mock-centraid] agenda: unmapped query', query);
+    return {};
+  }
+
+  function agendaWrite(action, input) {
+    function findEvent(id) {
+      return agendaStore.events.find(function (e) {
+        return e.event_id === id;
+      });
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(reason) {
+      return { status: 'failed', reason: reason, predicate: reason };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+
+    switch (action) {
+      case 'propose': {
+        var summary = String(input.summary || '').trim();
+        if (isParkTrigger(summary)) return parked();
+        if (/\(conflict\)/i.test(summary)) return refuse('busy_conflict');
+        var id = uid('event');
+        agendaStore.events.unshift({
+          event_id: id,
+          summary: summary,
+          description: input.description || '',
+          dtstart: input.dtstart,
+          dtend: input.dtend,
+          status: 'tentative',
+          calendar_id: input.calendar_id,
+          attachments: [],
+          attendees: [],
+        });
+        return ok({ event_id: id });
+      }
+      case 'reschedule': {
+        var e1 = findEvent(input.event_id);
+        if (!e1) return refuse('not_found');
+        if (isParkTrigger(e1.summary)) return parked();
+        e1.dtstart = input.dtstart;
+        e1.dtend = input.dtend;
+        return ok({ event_id: e1.event_id });
+      }
+      case 'rsvp': {
+        var e2 = findEvent(input.event_id);
+        if (!e2) return refuse('not_found');
+        if (isParkTrigger(e2.summary)) return parked();
+        var att = (e2.attendees || []).find(function (a) {
+          return a.party_id === input.party_id;
+        });
+        if (!att) return refuse('attendee_not_invited');
+        att.partstat = input.partstat;
+        return ok({ attendee_id: att.party_id, partstat: input.partstat });
+      }
+      case 'cancel-event': {
+        var e3 = findEvent(input.event_id);
+        if (!e3) return refuse('not_found');
+        // Cancelling is medium-risk in the real vault — it ALWAYS parks for
+        // the owner, regardless of the (park) marker (see cancel-event.js).
+        return parked();
+      }
+      case 'attach': {
+        var e4 = findEvent(input.subject_id);
+        if (!e4) return refuse('not_found');
+        if (isParkTrigger(e4.summary)) return parked();
+        var contentId = uid('content');
+        var attachment = {
+          attachment_id: uid('att'),
+          content_id: contentId,
+          role: input.role || 'other',
+          is_primary: 0,
+          media_type: 'application/octet-stream',
+          title: input.title || 'file',
+          content_uri: blobUri(contentId),
+          byte_size: 40_000,
+        };
+        e4.attachments = (e4.attachments || []).concat([attachment]);
+        return ok({ attachment_id: attachment.attachment_id });
+      }
+      case 'detach': {
+        var owner = null;
+        agendaStore.events.forEach(function (e) {
+          var idx = (e.attachments || []).findIndex(function (a) {
+            return a.attachment_id === input.attachment_id;
+          });
+          if (idx !== -1) {
+            owner = e;
+            e.attachments.splice(idx, 1);
+          }
+        });
+        if (!owner) return refuse('not_found');
+        return ok({});
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // window.centraid — fully replaces the real change-bridge's version
   // (static-server.ts's injectChangeBridge, which ran just before this
   // script and already opened an EventSource against our harness's
@@ -1278,6 +1724,7 @@
       if (appId === 'photos') return photosRead(opts.query, opts.input || {});
       if (appId === 'tasks') return tasksRead(opts.query, opts.input || {});
       if (appId === 'notes') return notesRead(opts.query, opts.input || {});
+      if (appId === 'agenda') return agendaRead(opts.query, opts.input || {});
       console.warn('[mock-centraid] unknown appId for read()', appId);
       return {};
     },
@@ -1289,6 +1736,7 @@
       else if (appId === 'photos') result = photosWrite(opts.action, opts.input || {});
       else if (appId === 'tasks') result = tasksWrite(opts.action, opts.input || {});
       else if (appId === 'notes') result = notesWrite(opts.action, opts.input || {});
+      else if (appId === 'agenda') result = agendaWrite(opts.action, opts.input || {});
       else console.warn('[mock-centraid] unknown appId for write()', appId);
       if (result == null) {
         console.warn('[mock-centraid] unmapped action, returning {}', opts.action, opts.input);
@@ -1329,13 +1777,16 @@
             ? tasksStore
             : appId === 'notes'
               ? notesStore
-              : null;
+              : appId === 'agenda'
+                ? agendaStore
+                : null;
     },
     reset() {
       if (appId === 'docs') docsStore = buildDocsStore();
       else if (appId === 'photos') photosStore = buildPhotosStore();
       else if (appId === 'tasks') tasksStore = buildTasksStore();
       else if (appId === 'notes') notesStore = buildNotesStore();
+      else if (appId === 'agenda') agendaStore = buildAgendaStore();
       fireChange([appId]);
     },
     fireChange: fireChange,

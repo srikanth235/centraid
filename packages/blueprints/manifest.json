@@ -17,9 +17,21 @@
         "actions/reschedule.js",
         "actions/rsvp.js",
         "app.css",
-        "app.js",
         "app.json",
+        "app.jsx",
+        "chrome.js",
+        "components/CreateModal.jsx",
+        "components/EventDrawer.jsx",
+        "components/HeaderBar.jsx",
+        "components/MonthView.jsx",
+        "components/ScheduleView.jsx",
+        "components/Shared.jsx",
+        "components/Sidebar.jsx",
+        "components/WeekView.jsx",
+        "format.js",
+        "icons.js",
         "index.html",
+        "logic.js",
         "package.json",
         "queries/search.js",
         "queries/upcoming.js",
@@ -87,6 +99,26 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "appDefaultView",
+          "label": "Default view",
+          "type": "segmented",
+          "default": "month",
+          "options": [
+            {
+              "value": "month",
+              "label": "Month"
+            },
+            {
+              "value": "week",
+              "label": "Week"
+            },
+            {
+              "value": "schedule",
+              "label": "Schedule"
             }
           ]
         }

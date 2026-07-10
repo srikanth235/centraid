@@ -31,7 +31,7 @@ const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
 const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
 
 const PORT = 4173;
-const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes']);
+const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes', 'agenda']);
 const BLOB_PREFIX = '/centraid/_vault/blobs';
 
 // ---------------------------------------------------------------------
@@ -221,6 +221,7 @@ const server = http.createServer(async (req, res) => {
           '<li><a href="/centraid/photos/">/centraid/photos/</a></li>' +
           '<li><a href="/centraid/tasks/">/centraid/tasks/</a></li>' +
           '<li><a href="/centraid/notes/">/centraid/notes/</a></li>' +
+          '<li><a href="/centraid/agenda/">/centraid/agenda/</a></li>' +
           '</ul>' +
           '<p>Knobs: <code>?empty=1</code>, <code>?denied=1</code>, <code>#theme=dark&amp;bgL=10</code></p>' +
           '</body></html>',
@@ -269,5 +270,6 @@ server.listen(PORT, () => {
   console.log(`  photos: http://localhost:${PORT}/centraid/photos/`);
   console.log(`  tasks:  http://localhost:${PORT}/centraid/tasks/`);
   console.log(`  notes:  http://localhost:${PORT}/centraid/notes/`);
+  console.log(`  agenda: http://localhost:${PORT}/centraid/agenda/`);
   console.log('  knobs:  ?empty=1  ?denied=1  #theme=dark&bgL=10');
 });
