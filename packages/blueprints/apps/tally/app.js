@@ -21,6 +21,12 @@ import {
   toast,
   wireThemeToggle,
 } from './kit.js';
+// Aliased: the app already has a module-level `render()` orchestrator (paints
+// sidebar + topbar + the active view into `#wrap`); `litRender` is Lit's
+// standalone DOM-commit function used to drive the sidebar lists, `#wrap` and
+// the modal-root (all kit-owned/static containers, per the app's Lit
+// conventions — see apps/tasks/app.js for the reference pattern).
+import { html, live, nothing, render as litRender, repeat } from './lit-core.min.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,9 +68,6 @@ const FRIEND_COLORS = [
   '#57A55A',
   '#D9536F',
 ];
-
-const CHECK_SVG =
-  '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 6"/></svg>';
 
 function cat(c) {
   return CATS[c] || CATS.general;
@@ -266,16 +269,47 @@ async function loadView() {
 
 // ---------- Sidebar render ----------
 
-function navItem({ icon, label, active, onClick }) {
-  const item = h('button', {
-    type: 'button',
-    class: 's-nav-item',
-    'aria-current': String(!!active),
-    onclick: onClick,
-  });
-  item.appendChild(el(icon));
-  item.appendChild(h('span', { class: 'lbl' }, label));
-  return item;
+function dashboardIconTpl() {
+  return html`<svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <rect x="3" y="3" width="8" height="8" rx="1.5" />
+    <rect x="13" y="3" width="8" height="5" rx="1.5" />
+    <rect x="13" y="10" width="8" height="11" rx="1.5" />
+    <rect x="3" y="13" width="8" height="8" rx="1.5" />
+  </svg>`;
+}
+function activityIconTpl() {
+  return html`<svg
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.75"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M3 12h4l2 6 4-14 2 8h6" />
+  </svg>`;
+}
+
+function navItemTpl(iconTpl, label, active, onClick) {
+  return html`<button
+    type="button"
+    class="s-nav-item"
+    aria-current=${String(!!active)}
+    @click=${onClick}
+  >
+    ${iconTpl}<span class="lbl">${label}</span>
+  </button>`;
 }
 
 function balLabelFriend(v) {
@@ -292,67 +326,60 @@ function balLabelGroup(v) {
 }
 
 function renderSidebar() {
-  const nav = $('smartNav');
-  nav.replaceChildren(
-    navItem({
-      icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/></svg>',
-      label: 'Dashboard',
-      active: state.view === 'dashboard',
-      onClick: () => setNav({ view: 'dashboard', search: '' }),
-    }),
-    navItem({
-      icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg>',
-      label: 'Activity',
-      active: state.view === 'activity',
-      onClick: () => setNav({ view: 'activity', search: '' }),
-    }),
+  litRender(
+    html`${navItemTpl(dashboardIconTpl(), 'Dashboard', state.view === 'dashboard', () =>
+      setNav({ view: 'dashboard', search: '' }),
+    )}${navItemTpl(activityIconTpl(), 'Activity', state.view === 'activity', () =>
+      setNav({ view: 'activity', search: '' }),
+    )}`,
+    $('smartNav'),
   );
 
-  const groupsNav = $('groupsNav');
-  groupsNav.replaceChildren();
-  for (const g of dash.groups) {
-    const { cls, label } = balLabelGroup(g.owner_net_minor);
-    const item = h(
-      'button',
-      {
-        type: 'button',
-        class: 's-listitem',
-        'aria-current': String(state.view === 'group' && state.groupId === g.group_id),
-        onclick: () => setNav({ view: 'group', groupId: g.group_id, search: '' }),
+  litRender(
+    html`${repeat(
+      dash.groups,
+      (g) => g.group_id,
+      (g) => {
+        const { cls, label } = balLabelGroup(g.owner_net_minor);
+        return html`<button
+          type="button"
+          class="s-listitem"
+          aria-current=${String(state.view === 'group' && state.groupId === g.group_id)}
+          @click=${() => setNav({ view: 'group', groupId: g.group_id, search: '' })}
+        >
+          <span class="s-gicon" style="background:${tint(g.color)};">${g.icon || '👥'}</span>
+          <span class="s-li-main">
+            <span class="s-li-name">${g.name}</span>
+            <span class="s-li-sub ${cls}">${label}</span>
+          </span>
+        </button>`;
       },
-      h('span', { class: 's-gicon', style: `background:${tint(g.color)};` }, g.icon || '👥'),
-      h(
-        'span',
-        { class: 's-li-main' },
-        h('span', { class: 's-li-name' }, g.name),
-        h('span', { class: `s-li-sub ${cls}` }, label),
-      ),
-    );
-    groupsNav.appendChild(item);
-  }
+    )}`,
+    $('groupsNav'),
+  );
 
-  const friendsNav = $('friendsNav');
-  friendsNav.replaceChildren();
-  for (const f of dash.friends) {
-    const { cls, label } = balLabelFriend(f.net_minor);
-    const item = h(
-      'button',
-      {
-        type: 'button',
-        class: 's-listitem',
-        'aria-current': String(state.view === 'friend' && state.friendId === f.party_id),
-        onclick: () => setNav({ view: 'friend', friendId: f.party_id, search: '' }),
+  litRender(
+    html`${repeat(
+      dash.friends,
+      (f) => f.party_id,
+      (f) => {
+        const { cls, label } = balLabelFriend(f.net_minor);
+        return html`<button
+          type="button"
+          class="s-listitem"
+          aria-current=${String(state.view === 'friend' && state.friendId === f.party_id)}
+          @click=${() => setNav({ view: 'friend', friendId: f.party_id, search: '' })}
+        >
+          ${letterAvatar(f.name, { size: '28px', color: f.color, initials: f.initials })}
+          <span class="s-li-main">
+            <span class="s-li-name">${f.name}</span>
+            <span class="s-li-sub ${cls}">${label}</span>
+          </span>
+        </button>`;
       },
-      letterAvatar(f.name, { size: '28px', color: f.color, initials: f.initials }),
-      h(
-        'span',
-        { class: 's-li-main' },
-        h('span', { class: 's-li-name' }, f.name),
-        h('span', { class: `s-li-sub ${cls}` }, label),
-      ),
-    );
-    friendsNav.appendChild(item);
-  }
+    )}`,
+    $('friendsNav'),
+  );
 }
 
 // ---------- Topbar render ----------
@@ -409,192 +436,169 @@ function renderTopbar() {
 
 // ---------- Main content render ----------
 
+// `#wrap` starts out holding the kit's raw (non-Lit) skeleton markup
+// (`showSkeleton`, at boot). Lit's standalone `render()` never clears a
+// container's pre-existing children on its first call into it — it only
+// appends past them — so the very first Lit commit into `#wrap` must clear
+// that skeleton itself; every commit after that must go through `litRender`
+// alone (a raw clear once Lit owns the container corrupts its part cache).
+let wrapMounted = false;
+function mountWrap(templateResult) {
+  const wrap = $('wrap');
+  if (!wrapMounted) {
+    wrap.replaceChildren();
+    wrapMounted = true;
+  }
+  litRender(templateResult, wrap);
+}
+
 function render() {
   renderSidebar();
   renderTopbar();
   setThemeIcon();
-  const wrap = $('wrap');
-  wrap.replaceChildren();
-
-  if (state.search.trim()) return renderSearch(wrap);
-  if (state.view === 'dashboard') return renderDashboard(wrap);
-  if (state.view === 'activity') return renderActivity(wrap);
-  if (state.view === 'group' || state.view === 'friend') return renderLedger(wrap);
+  if (state.search.trim()) return mountWrap(searchTpl());
+  if (state.view === 'dashboard') return mountWrap(dashboardTpl());
+  if (state.view === 'activity') return mountWrap(activityTpl());
+  if (state.view === 'group' || state.view === 'friend') return mountWrap(ledgerTpl());
 }
 
-function skeletonList(wrap) {
-  const box = h('div', { class: 's-explist' });
-  showSkeleton(box, 5);
-  wrap.appendChild(box);
+// A view is still loading: route the skeleton through the template itself
+// (never raw-clear a Lit-owned container after the first commit).
+function skeletonTpl(rows) {
+  return html`<div class="s-explist"><kit-skeleton rows=${rows}></kit-skeleton></div>`;
 }
 
 // ---------- Dashboard ----------
 
-function balRow(p, kind) {
+function balRowTpl(p, kind) {
   const amtCls = kind === 'owe' ? 'neg' : 'pos';
-  return h(
-    'button',
-    {
-      type: 'button',
-      class: 's-bal-row',
-      onclick: () => setNav({ view: 'friend', friendId: p.party_id, search: '' }),
-    },
-    letterAvatar(p.name, { size: '34px', color: p.color, initials: p.initials }),
-    h(
-      'span',
-      { class: 's-bal-main' },
-      h('span', { class: 's-bal-name' }, p.name),
-      h('span', { class: 's-bal-sub' }, kind === 'owe' ? 'you owe' : 'owes you'),
-    ),
-    h('span', { class: `s-bal-amt ${amtCls}` }, money(p.net_minor)),
-  );
+  return html`<button
+    type="button"
+    class="s-bal-row"
+    @click=${() => setNav({ view: 'friend', friendId: p.party_id, search: '' })}
+  >
+    ${letterAvatar(p.name, { size: '34px', color: p.color, initials: p.initials })}
+    <span class="s-bal-main">
+      <span class="s-bal-name">${p.name}</span>
+      <span class="s-bal-sub">${kind === 'owe' ? 'you owe' : 'owes you'}</span>
+    </span>
+    <span class="s-bal-amt ${amtCls}">${money(p.net_minor)}</span>
+  </button>`;
 }
 
-function renderDashboard(wrap) {
+function groupCardTpl(g) {
+  const { cls, label } = balLabelGroup(g.owner_net_minor);
+  return html`<button
+    type="button"
+    class="s-gcard"
+    @click=${() => setNav({ view: 'group', groupId: g.group_id, search: '' })}
+  >
+    <div class="s-gcard-top">
+      <span
+        class="s-gicon"
+        style="width:38px;height:38px;font-size:19px;background:${tint(g.color)};"
+        >${g.icon || '👥'}</span
+      >
+      <div>
+        <div class="s-gcard-name">${g.name}</div>
+        <div class="s-gcard-mem">${g.member_count} member${g.member_count === 1 ? '' : 's'}</div>
+      </div>
+    </div>
+    <div class="s-gcard-bal ${cls}">${label}</div>
+  </button>`;
+}
+
+function dashboardTpl() {
+  // A fresh vault: no friends and no groups — invite the first steps.
+  if (dash.friends.length === 0 && dash.groups.length === 0) {
+    return html`<div class="s-dash-empty">
+      <div class="t">Welcome to Tally</div>
+      <div class="d">
+        Add a friend, then create a group and start splitting shared costs. Balances update the
+        moment you record an expense or a payment.
+      </div>
+      <div class="row">
+        <button type="button" class="kit-btn primary" @click=${openAddFriend}>Add a friend</button>
+        <button type="button" class="kit-btn" @click=${openNewGroup}>Create a group</button>
+      </div>
+    </div>`;
+  }
+
   const owed = dash.owed_total_minor;
   const owe = dash.owe_total_minor;
   const net = owed - owe;
-
-  // A fresh vault: no friends and no groups — invite the first steps.
-  if (dash.friends.length === 0 && dash.groups.length === 0) {
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-dash-empty' },
-        h('div', { class: 't' }, 'Welcome to Tally'),
-        h(
-          'div',
-          { class: 'd' },
-          'Add a friend, then create a group and start splitting shared costs. Balances update the moment you record an expense or a payment.',
-        ),
-        h(
-          'div',
-          { class: 'row' },
-          h(
-            'button',
-            { type: 'button', class: 'kit-btn primary', onclick: openAddFriend },
-            'Add a friend',
-          ),
-          h(
-            'button',
-            { type: 'button', class: 'kit-btn', onclick: openNewGroup },
-            'Create a group',
-          ),
-        ),
-      ),
-    );
-    return;
-  }
-
   const netCls = Math.abs(net) < 1 ? '' : net > 0 ? 'pos' : 'neg';
   const netLabel = (net >= 0 ? '+' : '−') + money(net);
-  wrap.appendChild(
-    h(
-      'div',
-      { class: 's-summary' },
-      h(
-        'div',
-        { class: 's-stat' },
-        h('div', { class: 'k' }, 'Total balance'),
-        h('div', { class: `v ${netCls}` }, netLabel),
-      ),
-      h(
-        'div',
-        { class: 's-stat' },
-        h('div', { class: 'k' }, 'You owe'),
-        h('div', { class: 'v neg' }, money(owe)),
-      ),
-      h(
-        'div',
-        { class: 's-stat' },
-        h('div', { class: 'k' }, 'You are owed'),
-        h('div', { class: 'v pos' }, money(owed)),
-      ),
-    ),
-  );
 
   const oweList = dash.friends.filter((f) => f.net_minor < -1);
   const owedList = dash.friends.filter((f) => f.net_minor > 1);
-  const cardOwe = h('div', { class: 's-card' }, h('div', { class: 's-card-h' }, 'You owe'));
-  if (oweList.length === 0)
-    cardOwe.appendChild(h('div', { class: 's-empty-row' }, "You're all settled up."));
-  else for (const p of oweList) cardOwe.appendChild(balRow(p, 'owe'));
-  const cardOwed = h('div', { class: 's-card' }, h('div', { class: 's-card-h' }, 'You are owed'));
-  if (owedList.length === 0)
-    cardOwed.appendChild(h('div', { class: 's-empty-row' }, 'Nobody owes you right now.'));
-  else for (const p of owedList) cardOwed.appendChild(balRow(p, 'owed'));
-  wrap.appendChild(h('div', { class: 's-cols' }, cardOwe, cardOwed));
 
-  wrap.appendChild(h('div', { class: 's-section-title' }, 'Your groups'));
-  if (dash.groups.length === 0) {
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-card' },
-        h(
-          'div',
-          { class: 's-empty-row', style: 'padding:28px 16px;' },
-          'No groups yet. ',
-          h(
-            'button',
-            {
-              type: 'button',
-              style:
-                'border:none;background:none;color:var(--accd);font-weight:600;cursor:pointer;',
-              onclick: openNewGroup,
-            },
-            'Create one',
-          ),
-          ' to start splitting.',
-        ),
-      ),
-    );
-    return;
-  }
-  const grid = h('div', { class: 's-groupgrid' });
-  for (const g of dash.groups) {
-    const { cls, label } = balLabelGroup(g.owner_net_minor);
-    grid.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 's-gcard',
-          onclick: () => setNav({ view: 'group', groupId: g.group_id, search: '' }),
-        },
-        h(
-          'div',
-          { class: 's-gcard-top' },
-          h(
-            'span',
-            {
-              class: 's-gicon',
-              style: `width:38px;height:38px;font-size:19px;background:${tint(g.color)};`,
-            },
-            g.icon || '👥',
-          ),
-          h(
-            'div',
-            {},
-            h('div', { class: 's-gcard-name' }, g.name),
-            h(
-              'div',
-              { class: 's-gcard-mem' },
-              `${g.member_count} member${g.member_count === 1 ? '' : 's'}`,
-            ),
-          ),
-        ),
-        h('div', { class: `s-gcard-bal ${cls}` }, label),
-      ),
-    );
-  }
-  wrap.appendChild(grid);
+  return html`
+    <div class="s-summary">
+      <div class="s-stat">
+        <div class="k">Total balance</div>
+        <div class="v ${netCls}">${netLabel}</div>
+      </div>
+      <div class="s-stat">
+        <div class="k">You owe</div>
+        <div class="v neg">${money(owe)}</div>
+      </div>
+      <div class="s-stat">
+        <div class="k">You are owed</div>
+        <div class="v pos">${money(owed)}</div>
+      </div>
+    </div>
+    <div class="s-cols">
+      <div class="s-card">
+        <div class="s-card-h">You owe</div>
+        ${oweList.length === 0
+          ? html`<div class="s-empty-row">You're all settled up.</div>`
+          : repeat(
+              oweList,
+              (p) => p.party_id,
+              (p) => balRowTpl(p, 'owe'),
+            )}
+      </div>
+      <div class="s-card">
+        <div class="s-card-h">You are owed</div>
+        ${owedList.length === 0
+          ? html`<div class="s-empty-row">Nobody owes you right now.</div>`
+          : repeat(
+              owedList,
+              (p) => p.party_id,
+              (p) => balRowTpl(p, 'owed'),
+            )}
+      </div>
+    </div>
+    <div class="s-section-title">Your groups</div>
+    ${dash.groups.length === 0
+      ? html`<div class="s-card">
+          <div class="s-empty-row" style="padding:28px 16px;">
+            No groups yet.
+            <button
+              type="button"
+              style="border:none;background:none;color:var(--accd);font-weight:600;cursor:pointer;"
+              @click=${openNewGroup}
+            >
+              Create one
+            </button>
+            to start splitting.
+          </div>
+        </div>`
+      : html`<div class="s-groupgrid">
+          ${repeat(
+            dash.groups,
+            (g) => g.group_id,
+            (g) => groupCardTpl(g),
+          )}
+        </div>`}
+  `;
 }
 
 // ---------- Ledger (group / friend) ----------
 
 // One expense row from a decorated ledger row (already carries splits).
-function ledgerRow(row) {
+function ledgerRowTpl(row, { groupSuffix = false } = {}) {
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + 'T12:00:00');
   let rLabel, amt, cls, sub;
@@ -614,195 +618,177 @@ function ledgerRow(row) {
     cls = 'muted';
     sub = first(row.paid_by_name) + ' paid';
   }
-  return h(
-    'button',
-    { type: 'button', class: 's-exrow', onclick: () => openDetail(row) },
-    h(
-      'span',
-      { class: 's-exdate' },
-      h('span', { class: 'mo' }, MS[d.getMonth()]),
-      h('span', { class: 'dy' }, String(d.getDate())),
-    ),
-    h('span', { class: 's-excat', style: `background:${tint(c.color)};` }, c.icon),
-    h(
-      'span',
-      { class: 's-exmain' },
-      h('span', { class: 's-exdesc' }, row.description),
-      h('span', { class: 's-exsub' }, sub),
-    ),
-    h(
-      'span',
-      { class: 's-exright' },
-      h('span', { class: 's-exlabel' }, rLabel),
-      h('span', { class: `s-examt ${cls}` }, amt),
-    ),
-  );
+  // Search folds the group name into the sub line, like the prototype does.
+  if (groupSuffix && row.group_name) sub = `${sub} · ${row.group_name}`;
+  return html`<button type="button" class="s-exrow" @click=${() => openDetail(row)}>
+    <span class="s-exdate">
+      <span class="mo">${MS[d.getMonth()]}</span>
+      <span class="dy">${String(d.getDate())}</span>
+    </span>
+    <span class="s-excat" style="background:${tint(c.color)};">${c.icon}</span>
+    <span class="s-exmain">
+      <span class="s-exdesc">${row.description}</span>
+      <span class="s-exsub">${sub}</span>
+    </span>
+    <span class="s-exright">
+      <span class="s-exlabel">${rLabel}</span>
+      <span class="s-examt ${cls}">${amt}</span>
+    </span>
+  </button>`;
 }
 
-function renderLedger(wrap) {
-  if (!state.viewData) return skeletonList(wrap);
+function groupBalChipTpl(m) {
+  const v = m.net_minor;
+  const who = m.is_me ? 'You' : first(m.name);
+  const verb = m.is_me ? { g: 'get back', o: 'owe' } : { g: 'gets back', o: 'owes' };
+  const text =
+    Math.abs(v) < 1
+      ? `${who} — settled`
+      : v > 0
+        ? `${who} ${verb.g} ${money(v)}`
+        : `${who} ${verb.o} ${money(v)}`;
+  return html`<span class="s-balchip">
+    ${letterAvatar(m.name, { size: '22px', color: m.color, initials: m.initials })}
+    <span>${text}</span>
+  </span>`;
+}
 
+function ledgerTpl() {
+  if (!state.viewData) return skeletonTpl(5);
+
+  const parts = [];
   if (state.view === 'group') {
     const members = state.viewData.members ?? [];
     if (members.length) {
-      const panel = h('div', { class: 's-balpanel' });
-      for (const m of members) {
-        const v = m.net_minor;
-        const who = m.is_me ? 'You' : first(m.name);
-        const verb = m.is_me ? { g: 'get back', o: 'owe' } : { g: 'gets back', o: 'owes' };
-        const text =
-          Math.abs(v) < 1
-            ? `${who} — settled`
-            : v > 0
-              ? `${who} ${verb.g} ${money(v)}`
-              : `${who} ${verb.o} ${money(v)}`;
-        panel.appendChild(
-          h(
-            'span',
-            { class: 's-balchip' },
-            letterAvatar(m.name, { size: '22px', color: m.color, initials: m.initials }),
-            h('span', {}, text),
-          ),
-        );
-      }
-      wrap.appendChild(panel);
+      parts.push(
+        html`<div class="s-balpanel">
+          ${repeat(
+            members,
+            (m) => m.party_id,
+            (m) => groupBalChipTpl(m),
+          )}
+        </div>`,
+      );
     }
   }
 
   const ledger = state.viewData.ledger ?? [];
   if (ledger.length === 0) {
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-explist' },
-        h(
-          'div',
-          { class: 's-empty-row', style: 'padding:40px 16px;' },
-          'No expenses yet. Add one to get started.',
-        ),
-      ),
+    parts.push(
+      html`<div class="s-explist">
+        <div class="s-empty-row" style="padding:40px 16px;">
+          No expenses yet. Add one to get started.
+        </div>
+      </div>`,
     );
-    return;
+  } else {
+    parts.push(
+      html`<div class="s-explist">
+        ${repeat(
+          ledger,
+          (row) => row.expense_id,
+          (row) => ledgerRowTpl(row),
+        )}
+      </div>`,
+    );
   }
-  const list = h('div', { class: 's-explist' });
-  for (const row of ledger) list.appendChild(ledgerRow(row));
-  wrap.appendChild(list);
+  return html`${parts}`;
 }
 
 // ---------- Search ----------
 
-function renderSearch(wrap) {
-  if (!state.viewData) return skeletonList(wrap);
+function searchTpl() {
+  if (!state.viewData) return skeletonTpl(5);
   const results = state.viewData.results ?? [];
   if (results.length === 0) {
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-explist' },
-        h(
-          'div',
-          { class: 's-empty-row', style: 'padding:40px 16px;' },
-          `No expenses match “${state.search.trim()}”.`,
-        ),
-      ),
-    );
-    return;
+    return html`<div class="s-explist">
+      <div class="s-empty-row" style="padding:40px 16px;">
+        No expenses match “${state.search.trim()}”.
+      </div>
+    </div>`;
   }
-  const list = h('div', { class: 's-explist' });
-  for (const row of results) {
-    const item = ledgerRow(row);
-    // Fold in the group name as the row sub, like the prototype does for search.
-    const subEl = item.querySelector('.s-exsub');
-    if (subEl && row.group_name) subEl.textContent = `${subEl.textContent} · ${row.group_name}`;
-    list.appendChild(item);
-  }
-  wrap.appendChild(list);
+  return html`<div class="s-explist">
+    ${repeat(
+      results,
+      (row) => row.expense_id,
+      (row) => ledgerRowTpl(row, { groupSuffix: true }),
+    )}
+  </div>`;
 }
 
 // ---------- Activity ----------
 
-function renderActivity(wrap) {
+function activityItemTpl(a) {
+  const d = new Date((a.date || todayKey()) + 'T12:00:00');
+  const when = `${MS[d.getMonth()]} ${d.getDate()}`;
+  let icon,
+    text,
+    suffix = '',
+    cls = 'muted';
+  if (a.kind === 'expense') {
+    icon = cat(a.category).icon;
+    const who = a.paid_by === me ? 'You' : first(a.paid_by_name);
+    text = `${who} added “${a.description}”${a.group_name ? ' in ' + a.group_name : ''}`;
+    if (a.your_role === 'lent') {
+      suffix = '  ·  you get back ' + money(a.your_amount_minor);
+      cls = 'pos';
+    } else if (a.your_role === 'borrowed') {
+      suffix = '  ·  you owe ' + money(a.your_amount_minor);
+      cls = 'neg';
+    }
+  } else {
+    icon = '💸';
+    const toWho = a.to_party === me ? 'you' : first(a.to_name);
+    text =
+      a.from_party === me
+        ? `You paid ${first(a.to_name)} ${money(a.amount_minor)}`
+        : `${first(a.from_name)} paid ${toWho} ${money(a.amount_minor)}`;
+  }
+  return html`<div class="s-act">
+    <span class="s-act-ic">${icon}</span>
+    <div style="flex:1;min-width:0;">
+      <div class="s-act-t">${text}</div>
+      <div class="s-act-d">
+        ${when}${suffix ? html`<span class="${cls}">${suffix}</span>` : nothing}
+      </div>
+    </div>
+  </div>`;
+}
+
+function activityTpl() {
   if (!state.viewData) {
-    const box = h('div', {});
-    showSkeleton(box, 6);
-    wrap.appendChild(box);
-    return;
+    return html`<div><kit-skeleton rows="6"></kit-skeleton></div>`;
   }
   const items = state.viewData.activity ?? [];
   if (items.length === 0) {
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-explist' },
-        h(
-          'div',
-          { class: 's-empty-row', style: 'padding:40px 16px;' },
-          'Nothing has happened yet.',
-        ),
-      ),
-    );
-    return;
+    return html`<div class="s-explist">
+      <div class="s-empty-row" style="padding:40px 16px;">Nothing has happened yet.</div>
+    </div>`;
   }
-  for (const a of items) {
-    const d = new Date((a.date || todayKey()) + 'T12:00:00');
-    const when = `${MS[d.getMonth()]} ${d.getDate()}`;
-    let icon,
-      text,
-      suffix = '',
-      cls = 'muted';
-    if (a.kind === 'expense') {
-      icon = cat(a.category).icon;
-      const who = a.paid_by === me ? 'You' : first(a.paid_by_name);
-      text = `${who} added “${a.description}”${a.group_name ? ' in ' + a.group_name : ''}`;
-      if (a.your_role === 'lent') {
-        suffix = '  ·  you get back ' + money(a.your_amount_minor);
-        cls = 'pos';
-      } else if (a.your_role === 'borrowed') {
-        suffix = '  ·  you owe ' + money(a.your_amount_minor);
-        cls = 'neg';
-      }
-    } else {
-      icon = '💸';
-      const fromWho = a.from_party === me ? 'You' : first(a.from_name);
-      const toWho = a.to_party === me ? 'you' : first(a.to_name);
-      text =
-        a.from_party === me
-          ? `You paid ${first(a.to_name)} ${money(a.amount_minor)}`
-          : `${first(a.from_name)} paid ${toWho} ${money(a.amount_minor)}`;
-    }
-    wrap.appendChild(
-      h(
-        'div',
-        { class: 's-act' },
-        h('span', { class: 's-act-ic' }, icon),
-        h(
-          'div',
-          { style: 'flex:1;min-width:0;' },
-          h('div', { class: 's-act-t' }, text),
-          h('div', { class: 's-act-d' }, when, suffix ? h('span', { class: cls }, suffix) : null),
-        ),
-      ),
-    );
-  }
+  return html`${repeat(
+    items,
+    (a, i) => a.expense_id ?? a.settlement_id ?? i,
+    (a) => activityItemTpl(a),
+  )}`;
 }
 
 // ---------- Modal shell ----------
 
 function renderModals() {
-  const root = $('modalRoot');
-  root.replaceChildren();
-  if (state.detail) root.appendChild(buildDetail());
-  if (state.expense) root.appendChild(buildExpenseModal());
-  if (state.settle) root.appendChild(buildSettleModal());
-  if (state.newGroup) root.appendChild(buildNewGroupModal());
-  if (state.addFriend) root.appendChild(buildAddFriendModal());
+  let tpl = nothing;
+  if (state.detail) tpl = detailModalTpl(state.detail);
+  else if (state.expense) tpl = expenseModalTpl();
+  else if (state.settle) tpl = settleModalTpl();
+  else if (state.newGroup) tpl = newGroupModalTpl();
+  else if (state.addFriend) tpl = addFriendModalTpl();
+  litRender(tpl, $('modalRoot'));
 }
 
-function modalBack(onClose, inner) {
-  const back = h('div', { class: 'kit-modal-back', onclick: onClose });
-  inner.addEventListener('click', (e) => e.stopPropagation());
-  back.appendChild(inner);
-  return back;
+// The backdrop closes on its own click; the card itself stops that click from
+// bubbling back to the backdrop (each modal's own root element carries the
+// stopPropagation handler, matching the old imperative wiring 1:1).
+function modalBackTpl(onClose, inner) {
+  return html`<div class="kit-modal-back" @click=${onClose}>${inner}</div>`;
 }
 
 // ---------- Expense detail popover ----------
@@ -816,93 +802,68 @@ function closeDetail() {
   renderModals();
 }
 
-function buildDetail() {
-  const row = state.detail;
+function detailModalTpl(row) {
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + 'T12:00:00');
   const when = `${MS[d.getMonth()]} ${d.getDate()}`;
   const paidLine =
     row.paid_by === me ? `You paid · ${when}` : `${first(row.paid_by_name)} paid · ${when}`;
-
-  const splitRows = h('div', {});
-  for (const s of row.splits ?? []) {
-    splitRows.appendChild(
-      h(
-        'div',
-        {
-          style:
-            'display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line);',
-        },
-        letterAvatar(s.name, { size: '28px', color: s.color, initials: s.initials }),
-        h(
-          'span',
-          { style: 'flex:1;font:var(--t-body);font-size:13.5px;' },
-          s.party_id === me ? 'You' : s.name,
-        ),
-        h(
-          'span',
-          { style: 'font:var(--t-mono);font-size:12px;color:var(--ink-2);' },
-          money(s.share_minor),
-        ),
-      ),
-    );
-  }
-
   const groupName = dash.groups.find((g) => g.group_id === row.group_id)?.name || '';
 
-  const inner = h(
-    'div',
-    { class: 'kit-modal', style: 'max-width:440px;' },
-    h(
-      'div',
-      { style: 'display:flex;align-items:center;gap:13px;' },
-      h(
-        'span',
-        {
-          class: 's-excat',
-          style: `width:46px;height:46px;font-size:22px;background:${tint(c.color)};`,
-        },
-        c.icon,
-      ),
-      h(
-        'div',
-        { style: 'flex:1;min-width:0;' },
-        h('h2', { style: 'margin:0;' }, row.description),
-        h('div', { class: 's-sub' }, groupName),
-      ),
-    ),
-    h(
-      'div',
-      { style: 'font:var(--font-title);font-size:30px;font-weight:600;margin:16px 0 4px;' },
-      money(row.amount_minor),
-    ),
-    h('div', { class: 's-sub', style: 'margin-bottom:14px;' }, paidLine),
-    h('div', { class: 's-flabel' }, 'Split'),
-    splitRows,
-    h(
-      'div',
-      { class: 'kit-modal-foot' },
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-btn danger s-del',
-          onclick: (e) => {
+  return modalBackTpl(
+    closeDetail,
+    html`<div class="kit-modal" style="max-width:440px;" @click=${(e) => e.stopPropagation()}>
+      <div style="display:flex;align-items:center;gap:13px;">
+        <span
+          class="s-excat"
+          style="width:46px;height:46px;font-size:22px;background:${tint(c.color)};"
+          >${c.icon}</span
+        >
+        <div style="flex:1;min-width:0;">
+          <h2 style="margin:0;">${row.description}</h2>
+          <div class="s-sub">${groupName}</div>
+        </div>
+      </div>
+      <div style="font:var(--font-title);font-size:30px;font-weight:600;margin:16px 0 4px;">
+        ${money(row.amount_minor)}
+      </div>
+      <div class="s-sub" style="margin-bottom:14px;">${paidLine}</div>
+      <div class="s-flabel">Split</div>
+      <div>
+        ${repeat(
+          row.splits ?? [],
+          (s) => s.party_id,
+          (s) => html`<div
+            style="display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line);"
+          >
+            ${letterAvatar(s.name, { size: '28px', color: s.color, initials: s.initials })}
+            <span style="flex:1;font:var(--t-body);font-size:13.5px;"
+              >${s.party_id === me ? 'You' : s.name}</span
+            >
+            <span style="font:var(--t-mono);font-size:12px;color:var(--ink-2);"
+              >${money(s.share_minor)}</span
+            >
+          </div>`,
+        )}
+      </div>
+      <div class="kit-modal-foot">
+        <button
+          type="button"
+          class="kit-btn danger s-del"
+          @click=${(e) => {
             if (!armConfirm(e.currentTarget, { armedLabel: 'Delete — sure?' })) return;
             deleteExpense(row.expense_id);
-          },
-        },
-        'Delete',
-      ),
-      h('button', { type: 'button', class: 'kit-btn', onclick: closeDetail }, 'Close'),
-      h(
-        'button',
-        { type: 'button', class: 'kit-btn primary', onclick: () => openEditExpense(row) },
-        'Edit',
-      ),
-    ),
+          }}
+        >
+          Delete
+        </button>
+        <button type="button" class="kit-btn" @click=${closeDetail}>Close</button>
+        <button type="button" class="kit-btn primary" @click=${() => openEditExpense(row)}>
+          Edit
+        </button>
+      </div>
+    </div>`,
   );
-  return modalBack(closeDetail, inner);
 }
 
 // ---------- Add / edit expense modal ----------
@@ -978,263 +939,242 @@ function setE(patch) {
   renderModals();
 }
 
-function buildExpenseModal() {
+// A clean inline-SVG checkmark for an included split row — no emoji, matches
+// the prototype's solid-fill toggle box.
+function checkIconTpl() {
+  return html`<svg
+    width="12"
+    height="12"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="#fff"
+    stroke-width="3"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="m5 12 5 5L20 6" />
+  </svg>`;
+}
+
+// The live sum/validity line under the split rows — computed fresh on every
+// render (Lit's diffing keeps the focused input in place, so there's no need
+// for the old code's separate "update just the sum, skip the full rebuild"
+// path; every keystroke can safely recompute this).
+function splitSumInfo(exp, members) {
+  const cents = toCents(exp.amount) || 0;
+  const parts = members.filter((m) => exp.include.has(m.party_id));
+  if (exp.method === 'exact') {
+    const sum = parts.reduce((a, m) => a + (toCents(exp.exact[m.party_id]) || 0), 0);
+    const diff = cents - sum;
+    const bad = Math.abs(diff) > 1;
+    return {
+      bad,
+      text:
+        money(sum) +
+        ' of ' +
+        money(cents) +
+        (bad ? ' · ' + money(Math.abs(diff)) + (diff > 0 ? ' left' : ' over') : ' ✓'),
+    };
+  }
+  if (exp.method === 'percent') {
+    const sum = parts.reduce((a, m) => a + (parseFloat(exp.percent[m.party_id]) || 0), 0);
+    const bad = Math.abs(sum - 100) > 0.1;
+    return { bad, text: sum.toFixed(0) + '% of 100%' + (!bad ? ' ✓' : '') };
+  }
+  const per = parts.length && cents > 0 ? cents / parts.length : 0;
+  return {
+    bad: false,
+    text: parts.length ? money(per) + ' each · ' + parts.length + ' people' : 'Select who splits',
+  };
+}
+
+function splitRowTpl(m, exp, eqShare) {
+  const inc = exp.include.has(m.party_id);
+  const name = m.is_me || m.party_id === me ? 'You' : m.name;
+  let right;
+  if (exp.method === 'equal') {
+    right = html`<span class="s-splitshare">${inc ? money(eqShare) : '—'}</span>`;
+  } else if (exp.method === 'exact') {
+    right = inc
+      ? html`<input
+          class="s-splitin"
+          .value=${live(exp.exact[m.party_id] || '')}
+          inputmode="decimal"
+          placeholder="0.00"
+          @input=${(e) => setE({ exact: { ...exp.exact, [m.party_id]: e.target.value } })}
+        />`
+      : html`<span class="s-splitshare">—</span>`;
+  } else {
+    right = inc
+      ? html`<input
+          class="s-splitin"
+          .value=${live(exp.percent[m.party_id] || '')}
+          inputmode="decimal"
+          placeholder="0%"
+          @input=${(e) => setE({ percent: { ...exp.percent, [m.party_id]: e.target.value } })}
+        />`
+      : html`<span class="s-splitshare">—</span>`;
+  }
+  return html`<div class="s-splitrow">
+    <button
+      type="button"
+      class="s-splitbox ${inc ? 'on' : ''}"
+      aria-label="Include"
+      @click=${() => {
+        const next = new Set(exp.include);
+        if (inc) next.delete(m.party_id);
+        else next.add(m.party_id);
+        setE({ include: next });
+      }}
+    >
+      ${inc ? checkIconTpl() : nothing}
+    </button>
+    ${letterAvatar(m.name, { size: '26px', color: m.color, initials: m.initials })}
+    <span class="s-splitname">${name}</span>
+    ${right}
+  </div>`;
+}
+
+function expenseModalTpl() {
   const exp = state.expense;
   const amountCents = toCents(exp.amount);
   const members = state.modalMembers;
   const parts = members.filter((m) => exp.include.has(m.party_id));
-
-  // Split rows.
-  const rows = h('div', { style: 'margin-top:10px;' });
   const eqShare = parts.length && amountCents > 0 ? amountCents / parts.length : 0;
-  for (const m of members) {
-    const inc = exp.include.has(m.party_id);
-    const box = h(
-      'button',
-      {
-        type: 'button',
-        class: `s-splitbox ${inc ? 'on' : ''}`,
-        'aria-label': 'Include',
-        onclick: () => {
-          const next = new Set(exp.include);
-          if (inc) next.delete(m.party_id);
-          else next.add(m.party_id);
-          setE({ include: next });
-        },
-      },
-      inc ? el(CHECK_SVG) : null,
-    );
-    const row = h(
-      'div',
-      { class: 's-splitrow' },
-      box,
-      letterAvatar(m.name, { size: '26px', color: m.color, initials: m.initials }),
-      h('span', { class: 's-splitname' }, m.is_me || m.party_id === me ? 'You' : m.name),
-    );
-    if (exp.method === 'equal') {
-      row.appendChild(h('span', { class: 's-splitshare' }, inc ? money(eqShare) : '—'));
-    } else if (exp.method === 'exact') {
-      if (inc) {
-        row.appendChild(
-          h('input', {
-            class: 's-splitin',
-            value: exp.exact[m.party_id] || '',
-            inputmode: 'decimal',
-            placeholder: '0.00',
-            oninput: (e) => {
-              exp.exact = { ...exp.exact, [m.party_id]: e.target.value };
-              updateSplitSum();
-            },
-          }),
-        );
-      } else row.appendChild(h('span', { class: 's-splitshare' }, '—'));
-    } else {
-      if (inc) {
-        row.appendChild(
-          h('input', {
-            class: 's-splitin',
-            value: exp.percent[m.party_id] || '',
-            inputmode: 'decimal',
-            placeholder: '0%',
-            oninput: (e) => {
-              exp.percent = { ...exp.percent, [m.party_id]: e.target.value };
-              updateSplitSum();
-            },
-          }),
-        );
-      } else row.appendChild(h('span', { class: 's-splitshare' }, '—'));
-    }
-    rows.appendChild(row);
-  }
+  const sumInfo = splitSumInfo(exp, members);
+  const valid = Boolean(exp.desc.trim() && amountCents > 0 && resolveSplits(exp, amountCents));
 
-  const sumEl = h('div', { class: 's-splitsum' });
-  rows.appendChild(sumEl);
-
-  const segBtn = (label, method) =>
-    h(
-      'button',
-      {
-        type: 'button',
-        'aria-pressed': String(exp.method === method),
-        onclick: () => setE({ method }),
-      },
-      label,
-    );
-
-  const catRow = h('div', { class: 's-catrow' });
-  for (const c of CAT_LIST) {
-    catRow.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-chip quiet',
-          'aria-pressed': String(exp.category === c),
-          onclick: () => setE({ category: c }),
-        },
-        `${cat(c).icon} ${c.charAt(0).toUpperCase() + c.slice(1)}`,
-      ),
-    );
-  }
-
-  const groupSelect = h(
-    'select',
-    {
-      class: 's-select',
-      onchange: async (e) => {
-        exp.groupId = e.target.value;
-        await loadModalMembers(exp.groupId);
-        exp.include = new Set(state.modalMembers.map((m) => m.party_id));
-        if (!state.modalMembers.some((m) => m.party_id === exp.paidBy)) exp.paidBy = me;
-        renderModals();
-      },
-    },
-    ...dash.groups.map((g) =>
-      h('option', { value: g.group_id, selected: g.group_id === exp.groupId || undefined }, g.name),
-    ),
+  return modalBackTpl(
+    closeExpense,
+    html`<div class="kit-modal s-wide" @click=${(e) => e.stopPropagation()}>
+      <h2>${exp.mode === 'edit' ? 'Edit expense' : 'Add an expense'}</h2>
+      <input
+        class="s-in"
+        style="font-size:15px;"
+        .value=${live(exp.desc)}
+        placeholder="What was it for?"
+        @input=${(e) => setE({ desc: e.target.value })}
+      />
+      <div class="s-field">
+        <div class="s-amtwrap">
+          <span class="cur">$</span>
+          <input
+            class="s-amt"
+            .value=${live(exp.amount)}
+            inputmode="decimal"
+            placeholder="0.00"
+            @input=${(e) => setE({ amount: e.target.value })}
+          />
+        </div>
+      </div>
+      <div class="s-field">
+        <div class="s-flabel">Category</div>
+        <div class="s-catrow">
+          ${repeat(
+            CAT_LIST,
+            (c) => c,
+            (c) => html`<button
+              type="button"
+              class="kit-chip quiet"
+              aria-pressed=${String(exp.category === c)}
+              @click=${() => setE({ category: c })}
+            >
+              ${cat(c).icon} ${c.charAt(0).toUpperCase() + c.slice(1)}
+            </button>`,
+          )}
+        </div>
+      </div>
+      <div class="s-row2">
+        <div class="s-field" style="flex:1;">
+          <div class="s-flabel">Group</div>
+          <select
+            class="s-select"
+            @change=${async (e) => {
+              exp.groupId = e.target.value;
+              await loadModalMembers(exp.groupId);
+              exp.include = new Set(state.modalMembers.map((m) => m.party_id));
+              if (!state.modalMembers.some((m) => m.party_id === exp.paidBy)) exp.paidBy = me;
+              renderModals();
+            }}
+          >
+            ${repeat(
+              dash.groups,
+              (g) => g.group_id,
+              (g) =>
+                html`<option value=${g.group_id} .selected=${g.group_id === exp.groupId}>
+                  ${g.name}
+                </option>`,
+            )}
+          </select>
+        </div>
+        <div class="s-field" style="flex:1;">
+          <div class="s-flabel">Paid by</div>
+          <select class="s-select" @change=${(e) => setE({ paidBy: e.target.value })}>
+            ${repeat(
+              members,
+              (m) => m.party_id,
+              (m) =>
+                html`<option value=${m.party_id} .selected=${m.party_id === exp.paidBy}>
+                  ${m.is_me || m.party_id === me ? 'You' : m.name}
+                </option>`,
+            )}
+          </select>
+        </div>
+      </div>
+      <div class="s-field">
+        <div class="s-flabel">Split</div>
+        <div class="kit-seg stretch">
+          <button
+            type="button"
+            aria-pressed=${String(exp.method === 'equal')}
+            @click=${() => setE({ method: 'equal' })}
+          >
+            Equally
+          </button>
+          <button
+            type="button"
+            aria-pressed=${String(exp.method === 'exact')}
+            @click=${() => setE({ method: 'exact' })}
+          >
+            Exact
+          </button>
+          <button
+            type="button"
+            aria-pressed=${String(exp.method === 'percent')}
+            @click=${() => setE({ method: 'percent' })}
+          >
+            Percent
+          </button>
+        </div>
+        <div style="margin-top:10px;">
+          ${repeat(
+            members,
+            (m) => m.party_id,
+            (m) => splitRowTpl(m, exp, eqShare),
+          )}
+          <div class="s-splitsum${sumInfo.bad ? ' bad' : ''}">${sumInfo.text}</div>
+        </div>
+      </div>
+      <div class="kit-modal-foot">
+        ${exp.mode === 'edit'
+          ? html`<button
+              type="button"
+              class="kit-btn danger s-del"
+              @click=${(e) => {
+                if (!armConfirm(e.currentTarget, { armedLabel: 'Delete — sure?' })) return;
+                deleteExpense(exp.expense_id);
+              }}
+            >
+              Delete
+            </button>`
+          : nothing}
+        <button type="button" class="kit-btn" @click=${closeExpense}>Cancel</button>
+        <button type="button" class="kit-btn primary" ?disabled=${!valid} @click=${saveExpense}>
+          Save
+        </button>
+      </div>
+    </div>`,
   );
-
-  const paidSelect = h(
-    'select',
-    { class: 's-select', onchange: (e) => setE({ paidBy: e.target.value }) },
-    ...members.map((m) =>
-      h(
-        'option',
-        { value: m.party_id, selected: m.party_id === exp.paidBy || undefined },
-        m.is_me || m.party_id === me ? 'You' : m.name,
-      ),
-    ),
-  );
-
-  const descInput = h('input', {
-    class: 's-in',
-    value: exp.desc,
-    placeholder: 'What was it for?',
-    style: 'font-size:15px;',
-    oninput: (e) => {
-      exp.desc = e.target.value;
-      updateSaveState();
-    },
-  });
-  const amtInput = h('input', {
-    class: 's-amt',
-    value: exp.amount,
-    inputmode: 'decimal',
-    placeholder: '0.00',
-    oninput: (e) => {
-      exp.amount = e.target.value;
-      // amount changes ripple through the share preview + validity
-      renderModals();
-    },
-  });
-
-  const saveBtn = h(
-    'button',
-    { type: 'button', class: 'kit-btn primary', onclick: saveExpense },
-    'Save',
-  );
-
-  const foot = h('div', { class: 'kit-modal-foot' });
-  if (exp.mode === 'edit') {
-    foot.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-btn danger s-del',
-          onclick: (e) => {
-            if (!armConfirm(e.currentTarget, { armedLabel: 'Delete — sure?' })) return;
-            deleteExpense(exp.expense_id);
-          },
-        },
-        'Delete',
-      ),
-    );
-  }
-  foot.appendChild(
-    h('button', { type: 'button', class: 'kit-btn', onclick: closeExpense }, 'Cancel'),
-  );
-  foot.appendChild(saveBtn);
-
-  const inner = h(
-    'div',
-    { class: 'kit-modal s-wide' },
-    h('h2', {}, exp.mode === 'edit' ? 'Edit expense' : 'Add an expense'),
-    descInput,
-    h(
-      'div',
-      { class: 's-field' },
-      h('div', { class: 's-amtwrap' }, h('span', { class: 'cur' }, '$'), amtInput),
-    ),
-    h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Category'), catRow),
-    h(
-      'div',
-      { class: 's-row2' },
-      h(
-        'div',
-        { class: 's-field', style: 'flex:1;' },
-        h('div', { class: 's-flabel' }, 'Group'),
-        groupSelect,
-      ),
-      h(
-        'div',
-        { class: 's-field', style: 'flex:1;' },
-        h('div', { class: 's-flabel' }, 'Paid by'),
-        paidSelect,
-      ),
-    ),
-    h(
-      'div',
-      { class: 's-field' },
-      h('div', { class: 's-flabel' }, 'Split'),
-      h(
-        'div',
-        { class: 'kit-seg stretch' },
-        segBtn('Equally', 'equal'),
-        segBtn('Exact', 'exact'),
-        segBtn('Percent', 'percent'),
-      ),
-      rows,
-    ),
-    foot,
-  );
-
-  // Compute the live sum label + save validity once mounted.
-  function updateSplitSum() {
-    const cents = toCents(exp.amount) || 0;
-    const p = members.filter((m) => exp.include.has(m.party_id));
-    if (exp.method === 'exact') {
-      const sum = p.reduce((a, m) => a + (toCents(exp.exact[m.party_id]) || 0), 0);
-      const diff = cents - sum;
-      sumEl.textContent =
-        money(sum) +
-        ' of ' +
-        money(cents) +
-        (Math.abs(diff) > 1
-          ? ' · ' + money(Math.abs(diff)) + (diff > 0 ? ' left' : ' over')
-          : ' ✓');
-      sumEl.className = 's-splitsum' + (Math.abs(diff) > 1 ? ' bad' : '');
-    } else if (exp.method === 'percent') {
-      const sum = p.reduce((a, m) => a + (parseFloat(exp.percent[m.party_id]) || 0), 0);
-      sumEl.textContent = sum.toFixed(0) + '% of 100%' + (Math.abs(sum - 100) < 0.1 ? ' ✓' : '');
-      sumEl.className = 's-splitsum' + (Math.abs(sum - 100) > 0.1 ? ' bad' : '');
-    } else {
-      const per = p.length && cents > 0 ? cents / p.length : 0;
-      sumEl.textContent = p.length
-        ? money(per) + ' each · ' + p.length + ' people'
-        : 'Select who splits';
-      sumEl.className = 's-splitsum';
-    }
-    updateSaveState();
-  }
-  function updateSaveState() {
-    const cents = toCents(exp.amount);
-    const ok = exp.desc.trim() && cents > 0 && resolveSplits(exp, cents);
-    saveBtn.disabled = !ok;
-  }
-  updateSplitSum();
-
-  return modalBack(closeExpense, inner);
 }
 
 async function saveExpense() {
@@ -1305,90 +1245,77 @@ function closeSettle() {
   renderModals();
 }
 
-function buildSettleModal() {
-  const st = state.settle;
+function settleSelectTpl(st, which) {
   const nameFor = (p) => (p.party_id === me ? 'You' : p.name);
-  const sel = (which) =>
-    h(
-      'select',
-      {
-        class: 's-select',
-        onchange: (e) => {
-          st[which] = e.target.value;
-          renderModals();
-        },
-      },
-      ...st.people.map((p) =>
-        h(
-          'option',
-          { value: p.party_id, selected: p.party_id === st[which] || undefined },
-          nameFor(p),
-        ),
-      ),
-    );
+  return html`<select
+    class="s-select"
+    @change=${(e) => {
+      st[which] = e.target.value;
+      renderModals();
+    }}
+  >
+    ${repeat(
+      st.people,
+      (p) => p.party_id,
+      (p) =>
+        html`<option value=${p.party_id} .selected=${p.party_id === st[which]}>
+          ${nameFor(p)}
+        </option>`,
+    )}
+  </select>`;
+}
+
+function settleModalTpl() {
+  const st = state.settle;
   const cents = toCents(st.amount);
   const hint =
     `${st.from === me ? 'You' : first(personOf(st.from).name)} pays ${st.to === me ? 'you' : first(personOf(st.to).name)}` +
     (cents > 0 ? ' ' + money(cents) : '');
-  const saveBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'kit-btn primary',
-      disabled: !(cents > 0 && st.from !== st.to) || undefined,
-      onclick: saveSettle,
-    },
-    'Record payment',
+
+  return modalBackTpl(
+    closeSettle,
+    html`<div class="kit-modal" style="max-width:420px;" @click=${(e) => e.stopPropagation()}>
+      <h2>Settle up</h2>
+      <div class="s-row2">
+        <div class="s-field" style="flex:1;">
+          <div class="s-flabel">From</div>
+          ${settleSelectTpl(st, 'from')}
+        </div>
+        <div class="s-field" style="flex:1;">
+          <div class="s-flabel">To</div>
+          ${settleSelectTpl(st, 'to')}
+        </div>
+      </div>
+      <div class="s-field">
+        <div class="s-flabel">Amount</div>
+        <div class="s-amtwrap">
+          <span class="cur">$</span>
+          <input
+            class="s-amt"
+            .value=${live(st.amount)}
+            inputmode="decimal"
+            placeholder="0.00"
+            @input=${(e) => {
+              st.amount = e.target.value;
+              renderModals();
+            }}
+          />
+        </div>
+      </div>
+      <div class="s-sub" style="margin-top:10px;">${hint}</div>
+      <div class="kit-modal-foot">
+        <button type="button" class="kit-btn" @click=${closeSettle}>Cancel</button>
+        <button
+          type="button"
+          class="kit-btn primary"
+          ?disabled=${!(cents > 0 && st.from !== st.to)}
+          @click=${saveSettle}
+        >
+          Record payment
+        </button>
+      </div>
+    </div>`,
   );
-  const inner = h(
-    'div',
-    { class: 'kit-modal', style: 'max-width:420px;' },
-    h('h2', {}, 'Settle up'),
-    h(
-      'div',
-      { class: 's-row2' },
-      h(
-        'div',
-        { class: 's-field', style: 'flex:1;' },
-        h('div', { class: 's-flabel' }, 'From'),
-        sel('from'),
-      ),
-      h(
-        'div',
-        { class: 's-field', style: 'flex:1;' },
-        h('div', { class: 's-flabel' }, 'To'),
-        sel('to'),
-      ),
-    ),
-    h(
-      'div',
-      { class: 's-field' },
-      h('div', { class: 's-flabel' }, 'Amount'),
-      h(
-        'div',
-        { class: 's-amtwrap' },
-        h('span', { class: 'cur' }, '$'),
-        h('input', {
-          class: 's-amt',
-          value: st.amount,
-          inputmode: 'decimal',
-          placeholder: '0.00',
-          oninput: (e) => {
-            st.amount = e.target.value;
-            renderModals();
-          },
-        }),
-      ),
-    ),
-    h('div', { class: 's-sub', style: 'margin-top:10px;' }, hint),
-    h(
-      'div',
-      { class: 'kit-modal-foot' },
-      h('button', { type: 'button', class: 'kit-btn', onclick: closeSettle }, 'Cancel'),
-      saveBtn,
-    ),
-  );
-  return modalBack(closeSettle, inner);
 }
 
 async function saveSettle() {
@@ -1421,83 +1348,79 @@ function closeNewGroup() {
   renderModals();
 }
 
-function buildNewGroupModal() {
+function newGroupModalTpl() {
   const ng = state.newGroup;
-  const iconRow = h('div', { class: 's-catrow' });
-  for (const ic of GROUP_ICONS) {
-    iconRow.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-chip quiet',
-          'aria-pressed': String(ng.icon === ic),
-          onclick: () => {
-            ng.icon = ic;
-            renderModals();
-          },
-        },
-        ic,
-      ),
-    );
-  }
-  const memRow = h('div', { class: 's-memtoggle' });
-  for (const f of dash.friends) {
-    const on = ng.members.has(f.party_id);
-    memRow.appendChild(
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'kit-chip quiet',
-          'aria-pressed': String(on),
-          onclick: () => {
-            if (on) ng.members.delete(f.party_id);
-            else ng.members.add(f.party_id);
-            renderModals();
-          },
-        },
-        h('span', {
-          style: `width:9px;height:9px;border-radius:999px;background:${f.color};`,
-        }),
-        first(f.name),
-      ),
-    );
-  }
-  const saveBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'kit-btn primary',
-      disabled: !(ng.name.trim() && ng.members.size >= 1) || undefined,
-      onclick: saveNewGroup,
-    },
-    'Create group',
+  const valid = Boolean(ng.name.trim() && ng.members.size >= 1);
+
+  return modalBackTpl(
+    closeNewGroup,
+    html`<div class="kit-modal" style="max-width:420px;" @click=${(e) => e.stopPropagation()}>
+      <h2>New group</h2>
+      <input
+        class="s-in"
+        style="font-size:15px;"
+        .value=${live(ng.name)}
+        placeholder="Group name"
+        @input=${(e) => {
+          ng.name = e.target.value;
+          renderModals();
+        }}
+      />
+      <div class="s-field">
+        <div class="s-flabel">Icon</div>
+        <div class="s-catrow">
+          ${repeat(
+            GROUP_ICONS,
+            (ic) => ic,
+            (ic) => html`<button
+              type="button"
+              class="kit-chip quiet"
+              aria-pressed=${String(ng.icon === ic)}
+              @click=${() => {
+                ng.icon = ic;
+                renderModals();
+              }}
+            >
+              ${ic}
+            </button>`,
+          )}
+        </div>
+      </div>
+      <div class="s-field">
+        <div class="s-flabel">Members</div>
+        <div class="s-memtoggle">
+          ${repeat(
+            dash.friends,
+            (f) => f.party_id,
+            (f) => {
+              const on = ng.members.has(f.party_id);
+              return html`<button
+                type="button"
+                class="kit-chip quiet"
+                aria-pressed=${String(on)}
+                @click=${() => {
+                  if (on) ng.members.delete(f.party_id);
+                  else ng.members.add(f.party_id);
+                  renderModals();
+                }}
+              >
+                <span
+                  style="width:9px;height:9px;border-radius:999px;background:${f.color};"
+                ></span>
+                ${first(f.name)}
+              </button>`;
+            },
+          )}
+        </div>
+      </div>
+      <div class="kit-modal-foot">
+        <button type="button" class="kit-btn" @click=${closeNewGroup}>Cancel</button>
+        <button type="button" class="kit-btn primary" ?disabled=${!valid} @click=${saveNewGroup}>
+          Create group
+        </button>
+      </div>
+    </div>`,
   );
-  const inner = h(
-    'div',
-    { class: 'kit-modal', style: 'max-width:420px;' },
-    h('h2', {}, 'New group'),
-    h('input', {
-      class: 's-in',
-      value: ng.name,
-      placeholder: 'Group name',
-      style: 'font-size:15px;',
-      oninput: (e) => {
-        ng.name = e.target.value;
-        saveBtn.disabled = !(ng.name.trim() && ng.members.size >= 1);
-      },
-    }),
-    h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Icon'), iconRow),
-    h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Members'), memRow),
-    h(
-      'div',
-      { class: 'kit-modal-foot' },
-      h('button', { type: 'button', class: 'kit-btn', onclick: closeNewGroup }, 'Cancel'),
-      saveBtn,
-    ),
-  );
-  return modalBack(closeNewGroup, inner);
 }
 
 async function saveNewGroup() {
@@ -1529,57 +1452,59 @@ function closeAddFriend() {
   renderModals();
 }
 
-function buildAddFriendModal() {
+function addFriendModalTpl() {
   const af = state.addFriend;
-  const swatches = h('div', { class: 's-catrow' });
-  for (const c of FRIEND_COLORS) {
-    swatches.appendChild(
-      h('button', {
-        type: 'button',
-        class: 'kit-chip quiet',
-        'aria-pressed': String(af.color === c),
-        'aria-label': 'Colour',
-        onclick: () => {
-          af.color = c;
+
+  return modalBackTpl(
+    closeAddFriend,
+    html`<div class="kit-modal" style="max-width:400px;" @click=${(e) => e.stopPropagation()}>
+      <h2>Add a friend</h2>
+      <input
+        class="s-in"
+        style="font-size:15px;"
+        .value=${live(af.name)}
+        placeholder="Name"
+        @input=${(e) => {
+          af.name = e.target.value;
           renderModals();
-        },
-        html: `<span style="display:block;width:18px;height:18px;border-radius:999px;background:${c};"></span>`,
-      }),
-    );
-  }
-  const saveBtn = h(
-    'button',
-    {
-      type: 'button',
-      class: 'kit-btn primary',
-      disabled: !af.name.trim() || undefined,
-      onclick: saveAddFriend,
-    },
-    'Add friend',
+        }}
+      />
+      <div class="s-field">
+        <div class="s-flabel">Colour</div>
+        <div class="s-catrow">
+          ${repeat(
+            FRIEND_COLORS,
+            (c) => c,
+            (c) => html`<button
+              type="button"
+              class="kit-chip quiet"
+              aria-pressed=${String(af.color === c)}
+              aria-label="Colour"
+              @click=${() => {
+                af.color = c;
+                renderModals();
+              }}
+            >
+              <span
+                style="display:block;width:18px;height:18px;border-radius:999px;background:${c};"
+              ></span>
+            </button>`,
+          )}
+        </div>
+      </div>
+      <div class="kit-modal-foot">
+        <button type="button" class="kit-btn" @click=${closeAddFriend}>Cancel</button>
+        <button
+          type="button"
+          class="kit-btn primary"
+          ?disabled=${!af.name.trim()}
+          @click=${saveAddFriend}
+        >
+          Add friend
+        </button>
+      </div>
+    </div>`,
   );
-  const inner = h(
-    'div',
-    { class: 'kit-modal', style: 'max-width:400px;' },
-    h('h2', {}, 'Add a friend'),
-    h('input', {
-      class: 's-in',
-      value: af.name,
-      placeholder: 'Name',
-      style: 'font-size:15px;',
-      oninput: (e) => {
-        af.name = e.target.value;
-        saveBtn.disabled = !af.name.trim();
-      },
-    }),
-    h('div', { class: 's-field' }, h('div', { class: 's-flabel' }, 'Colour'), swatches),
-    h(
-      'div',
-      { class: 'kit-modal-foot' },
-      h('button', { type: 'button', class: 'kit-btn', onclick: closeAddFriend }, 'Cancel'),
-      saveBtn,
-    ),
-  );
-  return modalBack(closeAddFriend, inner);
 }
 
 async function saveAddFriend() {
