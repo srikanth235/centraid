@@ -762,6 +762,34 @@ export interface CentraidRunnerStatus {
   modelsStatus?: CentraidSurfaceStatus;
 }
 
+/** One subsystem's health in `GET /centraid/_gateway/health`. */
+export interface CentraidHealthComponent {
+  component: string;
+  status: 'ok' | 'degraded' | 'error';
+  detail?: string;
+  lastOkAt?: string;
+  lastErrorAt?: string;
+  lastError?: string;
+  errorCount: number;
+}
+
+/** One structured warn/error event from the gateway's recent-events tail. */
+export interface CentraidHealthEvent {
+  at: string;
+  component: string;
+  level: 'warn' | 'error';
+  message: string;
+}
+
+/** Aggregate payload of `GET /centraid/_gateway/health`. */
+export interface CentraidGatewayHealth {
+  status: 'ok' | 'degraded' | 'error';
+  startedAt: string;
+  uptimeMs: number;
+  components: CentraidHealthComponent[];
+  recentEvents: CentraidHealthEvent[];
+}
+
 declare global {
   interface Window {
     CentraidApi: CentraidApi;
@@ -953,5 +981,27 @@ declare global {
     byAutomation: CentraidInsightsAutomationRow[];
     byModel: CentraidInsightsModelRow[];
     recent: CentraidInsightsActivityRow[];
+  }
+  interface CentraidHealthComponent {
+    component: string;
+    status: 'ok' | 'degraded' | 'error';
+    detail?: string;
+    lastOkAt?: string;
+    lastErrorAt?: string;
+    lastError?: string;
+    errorCount: number;
+  }
+  interface CentraidHealthEvent {
+    at: string;
+    component: string;
+    level: 'warn' | 'error';
+    message: string;
+  }
+  interface CentraidGatewayHealth {
+    status: 'ok' | 'degraded' | 'error';
+    startedAt: string;
+    uptimeMs: number;
+    components: CentraidHealthComponent[];
+    recentEvents: CentraidHealthEvent[];
   }
 }

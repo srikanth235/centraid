@@ -4,6 +4,7 @@ import { gatewayModelCatalogFile, gatewayPrefsFile, gatewayVaultDir } from './ga
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
+import { phoneLinkStatus } from './phone-link.js';
 
 /**
  * Electron-flavored wrapper around `@centraid/gateway`'s `serve()`.
@@ -98,6 +99,20 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
       // scheduler, no `centraid run-automation` subprocess. Nothing to
       // inject here.
       logTag: `local-gateway:${gatewayId}`,
+    });
+    // The iroh phone tunnel lives in the Electron main process, outside
+    // `buildGateway()` — report it through the gateway's health registry
+    // so Settings → Diagnostics shows it beside the in-gateway components.
+    // `phoneLinkStatus` is cheap after startup: it only retries the bind
+    // when neither a handle nor a recorded start error exists.
+    handle.health.registerProbe('tunnel', async () => {
+      const status = await phoneLinkStatus();
+      if (status.error) return { status: 'error', detail: status.error };
+      if (!status.running) return { status: 'degraded', detail: 'phone link not running' };
+      return {
+        status: 'ok',
+        detail: `${status.devices.length} paired device${status.devices.length === 1 ? '' : 's'}`,
+      };
     });
     handles.set(gatewayId, handle);
     return handle;

@@ -6,6 +6,7 @@ import ImportScreen from '../../screens/ImportScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
+import SettingsDiagnosticsScreen from '../../screens/SettingsDiagnosticsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
@@ -29,6 +30,7 @@ import SpaceModal, {
   type SpaceModalInitial,
 } from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
+import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
 import styles from './SettingsRoute.module.css';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -45,7 +47,8 @@ type SettingsPageId =
   | 'phone'
   | 'import'
   | 'connections'
-  | 'providers';
+  | 'providers'
+  | 'diagnostics';
 
 interface PageDef {
   id: SettingsPageId;
@@ -64,10 +67,11 @@ const PAGES: readonly PageDef[] = [
   { id: 'import', label: 'Import', section: 'Account', icon: 'Save', subtitle: 'Bring your existing data into the vault — everything stages for review before it lands.' },
   { id: 'connections', label: 'Connections', section: 'Account', icon: 'Plug', subtitle: 'Data sources the vault pulls from — Gmail, Calendar, GitHub, and anything else you connect yourself.' },
   { id: 'providers', label: 'Agents', section: 'Models', icon: 'Sparkle', subtitle: 'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.' },
+  { id: 'diagnostics', label: 'Diagnostics', section: 'Gateway', icon: 'Activity', subtitle: 'Component-level health of the gateway — vaults, schedulers, outbox, connections — with each subsystem’s last error and the recent warning log.' },
 ];
 
 const AUTO_SAVE = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
-const SECTIONS = ['Workspace', 'Account', 'Models'];
+const SECTIONS = ['Workspace', 'Account', 'Models', 'Gateway'];
 
 export interface SettingsRouteProps {
   prefs: AppearancePrefs;
@@ -223,6 +227,8 @@ export default function SettingsRoute({ prefs, setPrefs, initialPage }: Settings
               activateRunner={activateRunner}
               setAgentModel={setAgentModel}
             />
+          ) : page === 'diagnostics' ? (
+            <SettingsDiagnosticsScreen loadHealth={loadDiagnosticsData} />
           ) : page === 'phone' ? (
             <PhoneScreen {...phoneProps} />
           ) : page === 'import' ? (
