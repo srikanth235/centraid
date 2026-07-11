@@ -1,10 +1,12 @@
 // The create-event composer: title, start/end (end tracks start, preserving
-// duration), a calendar chip picker, a description → Propose event (lands
-// tentative; the vault refuses conflicts). Opening from a day/slot click
+// duration), a calendar chip picker, a guest picker, a description → Propose
+// event (lands tentative; the vault refuses conflicts). Invited guests ride
+// as `attendee_party_ids`, which the propose command turns into
+// needs-action schedule_attendee rows. Opening from a day/slot click
 // prefills the time via `prefill`.
 import { useEffect, useRef, useState } from '../react-core.min.js';
 import { outcomeMessage } from '../kit.js';
-import { colorForCalendar, nextHalfHour, toIsoUtc, toLocalInput } from '../format.js';
+import { colorForCalendar, initials, nextHalfHour, toIsoUtc, toLocalInput } from '../format.js';
 import { I } from '../icons.js';
 import { CalDot, Icon } from './Shared.jsx';
 
@@ -16,6 +18,9 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
   const [endVal, setEndVal] = useState(toLocalInput(end0));
   const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? '');
   const [description, setDescription] = useState('');
+  // The invite directory (parties query), and the party ids currently invited.
+  const [people, setPeople] = useState([]);
+  const [invited, setInvited] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
   const [formNotice, setFormNotice] = useState('');
   const titleRef = useRef(null);
@@ -23,6 +28,30 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
   useEffect(() => {
     titleRef.current?.focus();
   }, []);
+
+  // Load pickable guests once — you are the organizer, not a guest, so the
+  // directory drops your own party. A denial just leaves the picker empty.
+  useEffect(() => {
+    let live = true;
+    window.centraid
+      .read({ query: 'parties' })
+      .then((res) => {
+        if (live) setPeople((res?.parties ?? []).filter((p) => !p.is_you));
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const toggleGuest = (partyId) => {
+    setInvited((prev) => {
+      const next = new Set(prev);
+      if (next.has(partyId)) next.delete(partyId);
+      else next.add(partyId);
+      return next;
+    });
+  };
 
   const handleStartChange = (e) => {
     const nextStr = e.target.value;
@@ -66,6 +95,7 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
       dtend,
       calendar_id: calendarId,
       ...(description.trim() ? { description: description.trim() } : {}),
+      ...(invited.size ? { attendee_party_ids: [...invited] } : {}),
     });
     setBusy(false);
     if (outcome?.status === 'executed' || outcome?.status === 'denied') {
@@ -137,6 +167,25 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
               </p>
             )}
           </div>
+          {people.length ? (
+            <div>
+              <div className="ag-eyebrow-label">Guests</div>
+              <div className="ag-cal-chips ag-guest-chips">
+                {people.map((p) => (
+                  <button
+                    key={p.party_id}
+                    type="button"
+                    className="ag-cal-chip"
+                    aria-pressed={String(invited.has(p.party_id))}
+                    onClick={() => toggleGuest(p.party_id)}
+                  >
+                    <span className="ag-guest-chip-avatar">{initials(p.name)}</span>
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <textarea
             className="ag-create-desc"
             placeholder="Add a description"

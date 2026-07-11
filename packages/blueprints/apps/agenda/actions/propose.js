@@ -17,6 +17,9 @@ export default async ({ body, ctx }) => {
         dtend: String(input.dtend ?? ''),
         calendar_id: String(input.calendar_id ?? ''),
         ...(input.description ? { description: String(input.description) } : {}),
+        ...(Array.isArray(input.attendee_party_ids) && input.attendee_party_ids.length
+          ? { attendee_party_ids: input.attendee_party_ids.map(String) }
+          : {}),
       },
       purpose: 'dpv:ServiceProvision',
     });

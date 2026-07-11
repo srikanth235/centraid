@@ -33,6 +33,7 @@
         "index.html",
         "logic.js",
         "package.json",
+        "queries/parties.js",
         "queries/search.js",
         "queries/upcoming.js",
         "wall.css"

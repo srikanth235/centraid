@@ -21,6 +21,11 @@
       },
       {
         "schema": "core",
+        "table": "vault",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
         "table": "event",
         "verbs": "read"
       },
@@ -54,7 +59,7 @@
   "actions": [
     {
       "name": "propose",
-      "description": "Propose a new event on a calendar (lands tentative; conflicts are refused by the vault's preconditions).",
+      "description": "Propose a new event on a calendar (lands tentative; conflicts are refused by the vault's preconditions). Optional `attendee_party_ids` invite those parties — the command creates needs-action schedule_attendee rows.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -77,6 +82,13 @@
           "calendar_id": {
             "type": "string",
             "minLength": 1
+          },
+          "attendee_party_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "required": ["summary", "dtstart", "dtend", "calendar_id"],
@@ -261,7 +273,7 @@
   "queries": [
     {
       "name": "upcoming",
-      "description": "Non-cancelled events, soonest first, with the calendars they could land on and each event's calendar_id. Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`.",
+      "description": "Non-cancelled events, soonest first, with the calendars they could land on, each event's calendar_id, its attachments, and its guest list (attendees joined from schedule_attendee → core_party, each `{party_id, name, partstat, is_you}`). Defaults to today forward; pass ISO `from`/`to` instants to read any visible range (month and week views do), including still-running multi-day events that began before `from`.",
       "input": {
         "type": "object",
         "properties": {
@@ -291,7 +303,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text event search through the vault's FTS5 index (summary + description) — returns only the ranked non-cancelled matches in the upcoming row shape plus a hit snippet, never a whole-table pull.",
+      "description": "Full-text event search through the vault's FTS5 index (summary + description) — returns only the ranked non-cancelled matches in the upcoming row shape (calendar_id, attachments, and the `attendees` guest list included) plus a hit snippet, never a whole-table pull.",
       "input": {
         "type": "object",
         "properties": {
@@ -307,6 +319,29 @@
         "properties": {
           "events": {
             "type": "array"
+          },
+          "vaultDenied": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "name": "parties",
+      "description": "Pickable people from core.party (kind='person') for the invite picker — each `{party_id, name, is_you}`, you sorted first. `me` is the owner's party id. No event data; just the directory the create-event attendee multi-select draws from.",
+      "input": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "parties": {
+            "type": "array"
+          },
+          "me": {
+            "type": "string"
           },
           "vaultDenied": {
             "type": "object"
