@@ -25,7 +25,7 @@ export interface DiscoverTemplate {
   kind?: 'app' | 'automation';
   emoji?: string;
   category?: string;
-  triggerKind?: 'cron' | 'webhook';
+  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
   triggerLabel?: string;
   integrations?: readonly string[];
 }
@@ -159,6 +159,8 @@ export interface VaultBridgeProps {
 // ── Automation templates gallery ────────────────────────────────────────────
 export interface AutomationTemplatesBridgeProps {
   templates: readonly DiscoverTemplate[];
+  /** Subtitle under the self-painted "Templates" header (issue: automations UX pass). */
+  subtitle?: string;
   /** Open the vanilla preview drawer (kept vanilla — a body-level modal). */
   onPreview: (t: DiscoverTemplate) => void;
   /** "Start from scratch" → the conversational automation builder. */
@@ -334,6 +336,21 @@ export interface AuViewRunDTO {
   metaLabel: string;
   filterKey: 'cron' | 'webhook' | 'manual' | 'other';
 }
+/** A `data` trigger's hero detail — the entities it watches, and an optional
+ *  polling cadence. */
+export interface AuViewDataDetailDTO {
+  entities: string[];
+  everyLabel: string | null;
+}
+/** A `condition` trigger's hero detail — the entity it watches plus the
+ *  actual `where` clause, pre-rendered readably (pretty-printed JSON for a
+ *  structured value, plain text otherwise) so a user can see WHAT it checks
+ *  without opening raw JSON. */
+export interface AuViewConditionDetailDTO {
+  entity: string;
+  whereText: string;
+  everyLabel: string | null;
+}
 export interface AutomationViewData {
   name: string;
   description: string | null;
@@ -345,6 +362,8 @@ export interface AutomationViewData {
   cronExprs: string[];
   nextRuns: string[];
   webhook: { pending: boolean; url: string | null } | null;
+  dataDetail: AuViewDataDetailDTO | null;
+  conditionDetail: AuViewConditionDetailDTO | null;
   enabled: boolean;
   statusKind: AuStatusKind;
   statusLabel: string;
@@ -352,6 +371,12 @@ export interface AutomationViewData {
   kpis: { total: string; successPct: string; avg: string; cost: string };
   behavior: { model: string; historyLabel: string; onFailure: string };
   tools: string[];
+}
+/** A freshly-minted or rotated webhook secret — plaintext, shown exactly
+ *  once via the one-time reveal modal. */
+export interface AuViewWebhookSecretDTO {
+  url: string;
+  secret: string;
 }
 export interface AutomationViewBridgeProps {
   /** Load the automation + its runs. `null` = not found. */
@@ -366,6 +391,9 @@ export interface AutomationViewBridgeProps {
   onToggleEnabled: (next: boolean) => Promise<boolean>;
   onCopyWebhook: (url: string) => void;
   onOpenRun: (automationId: string, runId: string) => void;
+  /** Confirm + rotate the webhook secret (URL stays the same); the route
+   *  drives the one-time reveal + toast, resolving true on success. */
+  onRegenerateWebhookSecret: () => Promise<boolean>;
 }
 
 // ── Settings: appearance + layout pages ─────────────────────────────────────
@@ -560,6 +588,11 @@ export interface RunViewSnapshot {
   statusKind: AuStatusKind;
   statusLabel: string;
   inFlight: boolean;
+  /** True when the run's parent automation no longer exists (deleted after
+   * the run happened). The Automations overview keeps orphaned runs visible
+   * with a raw-ref fallback name, so the run viewer must be able to render
+   * them too instead of stranding on a bare loading state. */
+  deleted: boolean;
   triggerLabel: string;
   triggersSummary: string;
   triggerHeroIcon: string;
@@ -758,4 +791,3 @@ export interface BuilderChatBridgeProps {
   /** Fill the version-history host — vanilla owns the async renderer. */
   onMountHistory: (host: HTMLElement) => void;
 }
-
