@@ -1,11 +1,15 @@
-/* Gateway runtime page — co-located styles for GatewayScreen.tsx.
+/* The Gateway page — co-located styles for GatewayScreen.tsx (Overview /
+   Components / Logs / Alerts).
 
    Aesthetic: cockpit instrument panel in the shell's field-notebook
    language. One breathing status orb carries the page's mood (the whole
-   page re-tints through --pulse via data-status), figures are set in the
-   mono/display pairing the Insights KPIs established, and the heartbeat
-   strip reads like a seismograph tail. Calm when green; unmistakable when
-   red. */
+   page re-tints through --pulse via data-status — up/degraded/down/
+   unknown, the heartbeat and component-health probes reconciled into one
+   read), figures are set in the mono/display pairing the Insights KPIs
+   established, and the heartbeat strip reads like a seismograph tail.
+   Calm when green; unmistakable when red. Components and Logs mount their
+   own screens (SettingsDiagnosticsScreen / LogsScreen) inside .tabPane —
+   this file only owns the tab strip and the Overview/Alerts content. */
 
 .page {
   max-width: 1120px;
@@ -14,6 +18,9 @@
   flex-direction: column;
   gap: 18px;
   --pulse: var(--success);
+}
+.page[data-status='degraded'] {
+  --pulse: var(--icon-amber);
 }
 .page[data-status='down'] {
   --pulse: var(--danger);
@@ -60,6 +67,56 @@
   color: var(--ink-4);
 }
 
+/* Tab strip — Overview / Components / Logs / Alerts. Plain underline
+   tabs, not pill chips: this is page-level navigation, not a filter. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 0.5px solid var(--line);
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 10px 4px 9px;
+  margin: 0 8px;
+  color: var(--ink-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition:
+    color 0.15s var(--ease, ease),
+    border-color 0.15s var(--ease, ease);
+}
+.tab:first-child {
+  margin-left: 0;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tabActive {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+.tabBadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: var(--icon-amber);
+  background: color-mix(in srgb, var(--icon-amber) 16%, transparent);
+}
+.tabPane {
+  min-width: 0;
+}
+
 /* Hero — the gauge cluster. A faint status-tinted wash bleeds from the
    top edge so the panel itself reads up/down at a glance. */
 .hero {
@@ -67,11 +124,7 @@
   border-radius: 14px;
   border: 0.5px solid var(--line);
   background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--pulse) 7%, transparent),
-      transparent 42%
-    ),
+    linear-gradient(180deg, color-mix(in srgb, var(--pulse) 7%, transparent), transparent 42%),
     var(--bg-elev);
   padding: 22px 22px 14px;
   overflow: hidden;
@@ -172,6 +225,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.statusDegraded {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--icon-amber);
+}
 
 /* Gauge figures — mono numerals, hairline dividers between them. */
 .figures {
@@ -254,12 +313,6 @@
   grid-template-columns: 1.5fr 1fr;
   gap: 16px;
   align-items: start;
-}
-.col {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
 }
 
 /* Panel — shared card shell (Insights family). */
@@ -385,7 +438,9 @@
   background: var(--bg-sunken);
   cursor: pointer;
   padding: 0;
-  transition: background 0.18s var(--ease, ease), border-color 0.18s var(--ease, ease);
+  transition:
+    background 0.18s var(--ease, ease),
+    border-color 0.18s var(--ease, ease);
 }
 .switch[data-on] {
   background: var(--accent);
@@ -441,7 +496,9 @@
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  transition: border-color 0.15s var(--ease, ease), background 0.15s var(--ease, ease);
+  transition:
+    border-color 0.15s var(--ease, ease),
+    background 0.15s var(--ease, ease);
 }
 .preset:hover:not(:disabled) {
   border-color: var(--accent);

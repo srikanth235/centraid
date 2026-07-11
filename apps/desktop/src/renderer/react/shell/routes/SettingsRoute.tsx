@@ -3,11 +3,9 @@ import type { IconName } from '@centraid/design-tokens';
 import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
 import Icon from '../../ui/Icon.js';
 import ImportScreen from '../../screens/ImportScreen.js';
-import LogsScreen from '../../screens/LogsScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
-import SettingsDiagnosticsScreen from '../../screens/SettingsDiagnosticsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
@@ -31,15 +29,16 @@ import SpaceModal, {
   type SpaceModalInitial,
 } from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
-import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
-import { streamGatewayLogs } from '../../../gateway-client.js';
 import styles from './SettingsRoute.module.css';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
 // renderSettings (app-settings.ts): a grouped category nav beside a content
 // pane that shows one page at a time (page head + the page's controls). The
 // Workspace + Models pages (Appearance/Layout/Providers) are native here; the
-// Account pages (Spaces/Phone/Import) land in a follow-up.
+// Account pages (Spaces/Phone/Import) land in a follow-up. Component health
+// and logs used to live here as a "Gateway" section — they now live on the
+// sidebar's Gateway page itself, as tabs (GatewayScreen.tsx), so the two
+// "Gateway" surfaces stop being unrelated pages that share a name.
 
 type SettingsPageId =
   | 'appearance'
@@ -49,9 +48,7 @@ type SettingsPageId =
   | 'phone'
   | 'import'
   | 'connections'
-  | 'providers'
-  | 'diagnostics'
-  | 'logs';
+  | 'providers';
 
 interface PageDef {
   id: SettingsPageId;
@@ -122,26 +119,10 @@ const PAGES: readonly PageDef[] = [
     subtitle:
       'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
   },
-  {
-    id: 'diagnostics',
-    label: 'Diagnostics',
-    section: 'Gateway',
-    icon: 'Sliders',
-    subtitle:
-      'Component-level health of the gateway — vaults, schedulers, outbox, connections — with each subsystem’s last error and the recent warning log.',
-  },
-  {
-    id: 'logs',
-    label: 'Logs',
-    section: 'Gateway',
-    icon: 'Activity',
-    subtitle:
-      'What the gateway is doing, live — vault mounts, scheduled fires, sync and outbox activity. When something misbehaves, the reason usually shows up here first.',
-  },
 ];
 
 const AUTO_SAVE = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
-const SECTIONS = ['Workspace', 'Account', 'Models', 'Gateway'];
+const SECTIONS = ['Workspace', 'Account', 'Models'];
 
 export interface SettingsRouteProps {
   prefs: AppearancePrefs;
@@ -304,10 +285,6 @@ export default function SettingsRoute({
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
               />
-            ) : page === 'diagnostics' ? (
-              <SettingsDiagnosticsScreen loadHealth={loadDiagnosticsData} />
-            ) : page === 'logs' ? (
-              <LogsScreen streamLogs={streamGatewayLogs} />
             ) : page === 'phone' ? (
               <PhoneScreen {...phoneProps} />
             ) : page === 'import' ? (

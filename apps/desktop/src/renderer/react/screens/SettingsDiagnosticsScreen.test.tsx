@@ -13,7 +13,12 @@ function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
     uptimeMs: 3 * 60 * 60 * 1000,
     components: [
       { component: 'vaults', status: 'ok', detail: '1 vault mounted', errorCount: 0 },
-      { component: 'automations', status: 'ok', detail: 'scheduler running for 1 vault', errorCount: 0 },
+      {
+        component: 'automations',
+        status: 'ok',
+        detail: 'scheduler running for 1 vault',
+        errorCount: 0,
+      },
       { component: 'outbox', status: 'ok', errorCount: 0 },
     ],
     recentEvents: [],
@@ -103,5 +108,33 @@ describe('SettingsDiagnosticsScreen', () => {
   it('shows the load error when the gateway is unreachable', async () => {
     const el = await mount({ loadHealth: vi.fn().mockRejectedValue(new Error('fetch failed')) });
     expect(el.textContent).toContain('Couldn’t reach the gateway: fetch failed');
+  });
+
+  it('offers a "View in logs" jump on failing components, not healthy ones', async () => {
+    const onJumpToLogs = vi.fn();
+    const health = makeHealth({
+      components: [
+        { component: 'vaults', status: 'ok', errorCount: 0 },
+        { component: 'outbox', status: 'error', errorCount: 2, lastError: 'ECONNREFUSED' },
+      ],
+    });
+    const el = await mount({ loadHealth: vi.fn().mockResolvedValue(health), onJumpToLogs });
+    const jumpButtons = [...el.querySelectorAll('button')].filter(
+      (b) => b.textContent === 'View in logs',
+    );
+    expect(jumpButtons.length).toBe(1); // only the failing row offers it
+    const jumpButton = jumpButtons[0]!;
+    await act(async () => jumpButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(onJumpToLogs).toHaveBeenCalledWith('outbox');
+  });
+
+  it('omits the jump link when no onJumpToLogs is wired (unchanged Settings-era behavior)', async () => {
+    const health = makeHealth({
+      components: [{ component: 'outbox', status: 'error', errorCount: 1 }],
+    });
+    const el = await mount({ loadHealth: vi.fn().mockResolvedValue(health) });
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent === 'View in logs')).toBe(
+      false,
+    );
   });
 });

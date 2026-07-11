@@ -5,10 +5,11 @@
 // (prereq: `bun run build --filter=@centraid/desktop` from repo root)
 //
 // Path: launch → sidebar shows the live heartbeat pill → Gateway page renders
-// Operational with server uptime + heartbeat strip → change the down-alert
-// threshold (persists to centraid-settings.json) → toggle alerts off/on →
-// switch to a dead remote gateway → page flips to Unreachable and opens an
-// ongoing outage → switch back to local → recovers to Operational.
+// Operational with server uptime + heartbeat strip → the Alerts tab: change
+// the down-alert threshold (persists to centraid-settings.json) → toggle
+// alerts off/on → switch to a dead remote gateway → Overview flips to
+// Unreachable and opens an ongoing outage → switch back to local → recovers
+// to Operational.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,7 +54,11 @@ async function main() {
     await page.screenshot({ path: path.join(OUT_DIR, 'gw01-1-operational.png') });
     console.log(`[gw01] Operational hero + ${beats} heartbeat ticks`);
 
-    // 3 — the down-alert default is 2m; move it to 5m and confirm it persists.
+    // 3 — the down-alert card lives under its own Alerts tab now.
+    await page.getByRole('tab', { name: 'Alerts', exact: true }).click();
+    await page.getByText('Down alert', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+
+    // the down-alert default is 2m; move it to 5m and confirm it persists.
     const twoMin = page.getByRole('button', { name: '2m', exact: true });
     assert(
       (await twoMin.getAttribute('class')).includes('presetActive'),

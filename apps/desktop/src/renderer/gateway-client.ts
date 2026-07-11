@@ -476,7 +476,8 @@ export async function getInsightsSummary(input?: {
  * Component-level gateway health (`GET /centraid/_gateway/health`):
  * per-subsystem status (vaults, schedulers, outbox, connections, …), each
  * component's last error, and the gateway's recent structured warn/error
- * tail. Backs Settings → Diagnostics.
+ * tail. Backs the Gateway page's Components tab (and its Overview orb's
+ * reconciled status, via useGatewayHealth's poll).
  */
 export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
   const { baseUrl, token } = await auth();
