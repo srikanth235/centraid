@@ -160,7 +160,13 @@ Request:
 ```jsonc
 {
   "idempotencyKey": "…",             // provider MUST replay the prior result on retry
-  "manifestKey": "manifests/…",      // MUST fall under the target's prefix
+  "manifestKey": "vaults/{id}/manifests/…", // MUST fall under the target's
+                                      // prefix (the same "vaults/{id}/" the
+                                      // credential grant's own `prefix`
+                                      // uses) — not a bare "manifests/…"
+                                      // key relative to that prefix. A live
+                                      // Clawgnition gateway 400s
+                                      // `invalid_manifest_key` on a bare key.
   "manifestHash": "sha256-hex",
   "totalBytes": 123, "objectCount": 45,
   "generation": 3,                   // fencing token, ≥ 1 (see below)

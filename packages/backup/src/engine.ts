@@ -249,7 +249,20 @@ export async function createSnapshot(opts: CreateSnapshotOptions): Promise<Snaps
     entries: sealedEntries,
   });
   const hash8 = manifestHash.slice(0, 8);
-  const manifestKey = `manifests/${Date.now()}-${hash8}.json`;
+  // PROTOCOL.md "Snapshot registration": manifestKey MUST fall under the
+  // target's prefix (`vaults/{id}/`, matching the credential grant's own
+  // `prefix` — see `S3Grant`). The key is used unchanged both as the object
+  // store's address (relative to the target's already-scoped ObjectStore —
+  // for the local provider this just nests one harmless extra directory
+  // level, for the remote provider it lands under the grant's own
+  // `vaults/{id}/` prefix too, so the object ends up at
+  // `vaults/{id}/vaults/{id}/manifests/…` in the bucket — a longer key than
+  // strictly necessary, but a single unambiguous key with no second
+  // "relative vs. wire" representation to keep in sync) and as the
+  // registered `manifestKey` field a real provider validates
+  // (`isWithinVaultPrefix`, confirmed against a live Clawgnition gateway —
+  // a bare `manifests/…` key it 400s with `invalid_manifest_key`).
+  const manifestKey = `vaults/${opts.targetId}/manifests/${Date.now()}-${hash8}.json`;
   await store.put(manifestKey, bytes);
 
   const row = await opts.provider.registerSnapshot(opts.targetId, {
