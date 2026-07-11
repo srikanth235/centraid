@@ -163,10 +163,18 @@ export function buildVaultProps(
         vaultParked(),
         vaultDemoStatus().catch(() => [] as VaultDemoApp[]),
       ]);
+      // `vaultApps()` rows key on `.name` (the enrollment slug, == `appId`
+      // here); `.appId` is the vault's internal row id, which is what a
+      // parked entry's `callerId` matches on (`caller`, the display name,
+      // no longer necessarily equals the slug — issue: parked-invocation
+      // trust legibility).
+      const enrolledAppId = apps.find((a) => a.name === appId)?.appId;
       return {
         demo: demoApps.find((d) => d.appId === appId),
         grants: apps.find((a) => a.name === appId)?.grants ?? [],
-        parked: allParked.filter((p) => p.callerKind === 'app' && p.caller === appId),
+        parked: allParked.filter(
+          (p) => p.callerKind === 'app' && p.callerId === enrolledAppId,
+        ),
         vaultName: s.name,
       };
     },

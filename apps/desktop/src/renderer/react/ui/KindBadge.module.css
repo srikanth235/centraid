@@ -19,6 +19,9 @@
 .badge[data-kind='automation'] {
   color: var(--accent);
 }
+.badge[data-kind='assistant'] {
+  color: var(--ink-2);
+}
 /* Rows layout — the badge takes a fixed slot (shared `--lib-row-badge-w`
    token) so APP / AUTOMATION align into a column across Home and Discover
    row strips. */

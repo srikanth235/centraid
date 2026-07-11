@@ -7,6 +7,12 @@ export const AGENT_DDL = `
 CREATE TABLE agent_agent (
   agent_id    TEXT PRIMARY KEY,
   party_id    TEXT NOT NULL UNIQUE REFERENCES core_party(party_id),
+  -- The host-side enrollment key (Centraid app id, or '_assistant') — the
+  -- lookup identity lookupAgentByName() matches on. Decoupled from
+  -- core_party.display_name, which is the pretty name an approval
+  -- surface renders (issue: parked-invocation trust legibility) and may
+  -- be updated in place without minting a new agent identity.
+  host_key    TEXT NOT NULL UNIQUE,
   model_ref   TEXT NOT NULL,
   version     TEXT NOT NULL,
   enrolled_at TEXT NOT NULL,

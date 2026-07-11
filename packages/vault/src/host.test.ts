@@ -65,6 +65,14 @@ test('ensureAppEnrolled is idempotent per host-side name', () => {
   expect(again.signingKey).toBe(first.signingKey);
   expect(lookupAppByName(db, 'expense-tracker')?.appId).toBe(first.appId);
   expect(lookupAppByName(db, 'never-registered')).toBeUndefined();
+  // `name` stays the enrollment slug — a wide swath of the desktop renderer
+  // key-equates it to the app id — but the raw slug still self-heals onto
+  // `consent_app.display_name` (surfaced via a parked invocation's
+  // `caller`, never through `.name`).
+  expect(first.name).toBe('expense-tracker');
+  expect(
+    db.vault.prepare('SELECT display_name FROM consent_app WHERE app_id = ?').get(first.appId),
+  ).toEqual({ display_name: 'Expense Tracker' });
 });
 
 test('listActiveGrants surfaces purpose notation and scopes', () => {
@@ -147,4 +155,38 @@ test('ensureAgentEnrolled is idempotent per host-side name; grants match on the 
     /unknown caller/,
   );
   expect(listEnrolledAgents(db).find((a) => a.agentId === first.agentId)).toBeUndefined();
+});
+
+test('ensureAgentEnrolled humanizes a raw enrollment key into a readable display name, and self-heals a stale one (issue: parked-invocation trust legibility)', () => {
+  const db = openVaultDb();
+  cleanups.push(() => db.close());
+  ensureVaultBootstrapped(db, { ownerName: 'Priya' });
+
+  // No caller has the automation's real manifest name yet — the fallback
+  // beats a raw id slug (the exact complaint: Approvals showed
+  // "e2e-agent-purge-demo" with no indication of who was asking).
+  const first = ensureAgentEnrolled(db, 'e2e-agent-purge-demo');
+  expect(first.created).toBe(true);
+  expect(first.name).toBe('E2e Agent Purge Demo');
+  expect(lookupAgentByName(db, 'e2e-agent-purge-demo')?.name).toBe('E2e Agent Purge Demo');
+
+  // A caller with the real pretty name upserts it in place — same agent
+  // identity (every grant/receipt against its party survives), not a
+  // second enrollment.
+  const named = ensureAgentEnrolled(db, 'e2e-agent-purge-demo', { displayName: 'Purge Demo' });
+  expect(named.created).toBe(false);
+  expect(named.agentId).toBe(first.agentId);
+  expect(named.partyId).toBe(first.partyId);
+  expect(named.name).toBe('Purge Demo');
+  expect(lookupAgentByName(db, 'e2e-agent-purge-demo')?.name).toBe('Purge Demo');
+
+  // A dev vault enrolled before this fix stored the raw slug as the
+  // display name outright — the very next enrollment touch heals it,
+  // with no re-enrollment ceremony.
+  db.vault
+    .prepare(`UPDATE core_party SET display_name = ? WHERE party_id = ?`)
+    .run('e2e-agent-purge-demo', first.partyId);
+  const healed = ensureAgentEnrolled(db, 'e2e-agent-purge-demo');
+  expect(healed.agentId).toBe(first.agentId);
+  expect(healed.name).toBe('E2e Agent Purge Demo');
 });

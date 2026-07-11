@@ -235,7 +235,7 @@ test('install-time scopes: enrolling grants the declared block, idempotently (is
     scopes: [{ schema: 'outbox', verbs: 'act' }],
   });
   const agents = plane.listAgents();
-  expect(agents.find((a) => a.name === 'gmail-send')?.grants).toHaveLength(1);
+  expect(agents.find((a) => a.name === 'Gmail Send')?.grants).toHaveLength(1);
 
   // The consent surface renders what was granted, salience included.
   const surface = plane.scopeSurface('planner');
@@ -313,7 +313,7 @@ test('the agent plane mirrors the widening park (issue #308 A3)', async () => {
   plane.ensureAgentInstallGrant('gmail-send', {
     scopes: [{ schema: 'outbox', verbs: 'act' }],
   });
-  expect(plane.listAgents().find((a) => a.name === 'gmail-send')?.grants).toHaveLength(1);
+  expect(plane.listAgents().find((a) => a.name === 'Gmail Send')?.grants).toHaveLength(1);
   plane.ensureAgentInstallGrant('gmail-send', {
     scopes: [
       { schema: 'outbox', verbs: 'act' },
@@ -326,7 +326,7 @@ test('the agent plane mirrors the widening park (issue #308 A3)', async () => {
   plane.decideScopeRequest(requests[0]!.requestId, true);
   const scopes = plane
     .listAgents()
-    .find((a) => a.name === 'gmail-send')
+    .find((a) => a.name === 'Gmail Send')
     ?.grants.flatMap((g) => g.scopes);
   expect(scopes).toHaveLength(2);
 });
@@ -439,12 +439,14 @@ test('owner routes: status, apps, grant, parked confirm, revoke', async () => {
   const parkedList = (await (await fetch(`${base}/parked`)).json()) as { parked: unknown[] };
   expect(parkedList.parked).toHaveLength(1);
   // The wire carries WHO and WHAT so the desktop confirmation UI can
-  // render "planner wants schedule.propose_event: …" (issue: consent UX).
+  // render "Planner wants schedule.propose_event: …" (issue: consent UX,
+  // parked-invocation trust legibility — the display name, not the raw
+  // enrollment slug).
   expect(parkedList.parked[0]).toMatchObject({
     invocationId,
     command: 'schedule.propose_event',
     callerKind: 'app',
-    caller: 'planner',
+    caller: 'Planner',
     input: { summary: 'Owner check-in' },
   });
   const confirm = await fetch(`${base}/parked/${invocationId}`, {
@@ -576,7 +578,7 @@ test('agent plane: deny-by-default → agent grant → allowed; high risk parks;
   plane.enrollAutomationAgent('briefing');
   // Idempotent — the reconcile loop calls this on every settle.
   plane.enrollAutomationAgent('briefing');
-  expect(plane.listAgents().filter((a) => a.name === 'briefing')).toHaveLength(1);
+  expect(plane.listAgents().filter((a) => a.name === 'Briefing')).toHaveLength(1);
 
   const bridge = plane.agentBridgeFor('briefing');
 
@@ -596,7 +598,7 @@ test('agent plane: deny-by-default → agent grant → allowed; high risk parks;
       { schema: 'core', table: 'party', verbs: 'read' },
     ],
   });
-  expect(plane.listAgents().find((a) => a.name === 'briefing')?.grants).toHaveLength(1);
+  expect(plane.listAgents().find((a) => a.name === 'Briefing')?.grants).toHaveLength(1);
 
   const read = await bridge({
     op: 'read',
@@ -655,7 +657,7 @@ test('agent plane: deny-by-default → agent grant → allowed; high risk parks;
   expect(send.result).toMatchObject({ status: 'parked' });
   const parked = await bridge({ op: 'parked', payload: {} });
   expect(parked.ok).toBe(true);
-  expect(parked.result).toMatchObject([{ command: 'social.send_message', caller: 'briefing' }]);
+  expect(parked.result).toMatchObject([{ command: 'social.send_message', caller: 'Briefing' }]);
 
   // Uninstall cascade covers the agent plane too.
   const revoked = plane.revokeApp('briefing');
@@ -724,7 +726,7 @@ test('agent changes feed + app parked surface ride the bridges', async () => {
   // The parked op shows the app ITS pending approval (issue #260 seam).
   const parked = await appBridge({ op: 'parked', payload: {} });
   expect(parked.ok).toBe(true);
-  expect(parked.result).toMatchObject([{ command: 'schedule.propose_event', caller: 'bookings' }]);
+  expect(parked.result).toMatchObject([{ command: 'schedule.propose_event', caller: 'Bookings' }]);
 
   // Owner confirms → the write lands → the agent's next pull sees it.
   const invocationId = (parked.result as Array<{ invocationId: string }>)[0]!.invocationId;
@@ -981,7 +983,7 @@ test('the assistant self-heal respects owner narrowing — a revoked schema stay
     purpose: 'dpv:ServiceProvision',
   });
   expect(created.status).toBe('executed');
-  const assistant = plane.listAgents().find((a) => a.name === '_assistant');
+  const assistant = plane.listAgents().find((a) => a.name === 'Assistant');
   expect(assistant?.grants.length).toBeGreaterThan(0);
   for (const grant of assistant!.grants) plane.revokeGrant(grant.grantId);
 

@@ -341,8 +341,8 @@ export class VaultRegistry {
   }
 
   /** Enroll an automation's acting identity in the current request's vault. */
-  enrollAutomationAgent(appId: string): void {
-    this.current().enrollAutomationAgent(appId);
+  enrollAutomationAgent(appId: string, displayName?: string): void {
+    this.current().enrollAutomationAgent(appId, displayName);
   }
 
   /** Uninstall cascade in the current request's vault (the app lives nowhere else). */

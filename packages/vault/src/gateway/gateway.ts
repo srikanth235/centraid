@@ -87,6 +87,7 @@ import type {
   Identity,
   InvokeOutcome,
   InvokeRequest,
+  ParkedCallerKind,
   ParkedSummary,
   ReadRequest,
   ReadResult,
@@ -1197,7 +1198,8 @@ export class Gateway {
       invocationId,
       command: p.command.name,
       parkedAt: p.parkedAt,
-      callerKind: p.identity.kind,
+      callerKind: this.callerKind(p.identity),
+      callerId: p.identity.callerId,
       caller: this.callerName(p.identity),
       // The confirmation surface shows WHAT is asked, never secret material
       // (issue #293) — sealed inputs ride as hash tokens here too, nested ext
@@ -1212,6 +1214,20 @@ export class Gateway {
     }));
   }
 
+  /**
+   * The requester kind for the approval surface's trust badge — refines
+   * `Identity['kind']`'s `'agent'` into `'assistant'` when the credential is
+   * the vault assistant's own enrolled identity (`_assistant`,
+   * `VaultPlane.invokeAsAssistant`), not an automation's.
+   */
+  private callerKind(identity: Identity): ParkedCallerKind {
+    if (identity.kind !== 'agent') return identity.kind;
+    const row = this.db.vault
+      .prepare('SELECT host_key FROM agent_agent WHERE agent_id = ?')
+      .get(identity.callerId) as { host_key: string } | undefined;
+    return row?.host_key === '_assistant' ? 'assistant' : 'agent';
+  }
+
   /** Display name for a parked caller — WHO wants the act, for the owner. */
   private callerName(identity: Identity): string | null {
     if (identity.kind === 'owner-device') return 'owner';
@@ -1219,7 +1235,7 @@ export class Gateway {
     const row = this.db.vault
       .prepare(
         byApp
-          ? 'SELECT name FROM consent_app WHERE app_id = ?'
+          ? 'SELECT COALESCE(display_name, name) AS name FROM consent_app WHERE app_id = ?'
           : `SELECT p.display_name AS name FROM agent_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`,
       )

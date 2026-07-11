@@ -376,6 +376,63 @@ describe('confirmation routing + revocation + sweeps', () => {
     expect(JSON.parse(receipt.detail_json).confirmation.confirmedBy).toBe(boot.ownerPartyId);
   });
 
+  test('listParked resolves callerKind "assistant" for the vault assistant identity, distinct from an automation agent (issue: parked-invocation trust legibility)', () => {
+    db.vault
+      .prepare(
+        `UPDATE agent_capability SET requires_confirmation=1
+          WHERE command_id = (SELECT command_id FROM agent_command WHERE name='schedule.propose_event')`,
+      )
+      .run();
+
+    // The vault assistant's own enrolled identity — `host_key = '_assistant'`
+    // (VaultPlane.invokeAsAssistant) — rides the same `kind: 'agent'`
+    // credential shape as an automation, but callerKind must tell them apart.
+    const assistantAgent = enrollAgent(db, {
+      name: '_assistant',
+      modelRef: 'centraid-assistant',
+      displayName: 'Assistant',
+    });
+    const assistantDevice = enrollDevice(db, boot.ownerPartyId, 'assistant-host');
+    const assistantCred: Credential = {
+      kind: 'agent',
+      agentId: assistantAgent.agentId,
+      deviceId: assistantDevice.deviceId,
+      deviceKey: assistantDevice.deviceKey,
+    };
+    createGrant(db, {
+      granteePartyId: assistantAgent.partyId,
+      purposeConceptId: boot.concepts['dpv:ServiceProvision'] as string,
+      grantedByPartyId: boot.ownerPartyId,
+      scopes: [{ schema: 'schedule', verbs: 'read+act' }],
+    });
+    const assistantParked = gw.invoke(assistantCred, {
+      command: 'schedule.propose_event',
+      input: proposeInput(),
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(assistantParked.status).toBe('parked');
+    if (assistantParked.status !== 'parked') return;
+
+    // An ordinary automation agent, for contrast.
+    const { cred: automationCred } = grantedAgent();
+    const automationParked = gw.invoke(automationCred, {
+      command: 'schedule.propose_event',
+      input: proposeInput({ summary: 'Automation event' }),
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(automationParked.status).toBe('parked');
+    if (automationParked.status !== 'parked') return;
+
+    const listed = gw.listParked();
+    expect(listed.find((p) => p.invocationId === assistantParked.invocationId)).toMatchObject({
+      callerKind: 'assistant',
+      caller: 'Assistant',
+    });
+    expect(listed.find((p) => p.invocationId === automationParked.invocationId)).toMatchObject({
+      callerKind: 'agent',
+    });
+  });
+
   test('install-time scopes execute without parking; risk is journaled as salience (issue #306)', () => {
     // propose_event is medium risk; the agent has no ceiling anymore — the
     // granted command executes, and the receipt carries the risk marker.

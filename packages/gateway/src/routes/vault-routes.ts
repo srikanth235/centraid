@@ -82,6 +82,15 @@ export interface VaultRouteOptions {
    * drain happens now, not on the next periodic pass. Fire-and-forget.
    */
   onOutboxDecided?: (plane: VaultPlane) => void;
+  /**
+   * Resolve an automation app id to its real manifest display name, if one
+   * is currently published (build-gateway.ts, backed by `automation.list()`
+   * over the current vault's code). Threaded into the agent-grant approval
+   * handler so a FIRST-touch enrollment (owner approves access before any
+   * scheduler reconcile has run) still gets the automation's real name
+   * instead of `ensureAgentEnrolled`'s bare `humanizeSlug(appId)` fallback.
+   */
+  resolveAutomationName?: (appId: string) => Promise<string | undefined> | string | undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -285,7 +294,8 @@ export function makeVaultRouteHandler(
           });
         }
         try {
-          const grantId = plane.approveAgentGrant(appId, request);
+          const displayName = await options.resolveAutomationName?.(appId);
+          const grantId = plane.approveAgentGrant(appId, request, displayName);
           return sendJson(res, 200, { grantId });
         } catch (err) {
           return sendJson(res, 400, {

@@ -5,7 +5,12 @@
 export const CONSENT_DDL = `
 CREATE TABLE consent_app (
   app_id       TEXT PRIMARY KEY,
+  -- The host-side enrollment key (Centraid app id) — lookup identity,
+  -- never shown to the owner directly. display_name (nullable, falls
+  -- back to a humanized name — see host.ts) is what an approval/consent
+  -- surface renders (issue: parked-invocation trust legibility).
   name         TEXT NOT NULL,
+  display_name TEXT,
   publisher    TEXT,
   manifest_uri TEXT,
   signing_key  TEXT UNIQUE,

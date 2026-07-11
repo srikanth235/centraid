@@ -51,7 +51,8 @@ const needsAuthRow: ApprovalsNeedsAuthRowDTO = {
 const parkedRow: ApprovalsParkedRowDTO = {
   invocationId: 'inv1',
   command: 'social.send_message',
-  caller: 'assistant',
+  caller: 'Briefing',
+  callerKind: 'app',
   parkedAgo: '2m ago',
   inputPreview: '{\n  "to": "x"\n}',
 };
@@ -195,6 +196,30 @@ describe('ApprovalsScreen', () => {
       findButton(el, 'Approve').click();
     });
     expect(onConfirmParked).toHaveBeenCalledWith('inv1', true);
+  });
+
+  it('shows an App badge and the display name for an app-kind parked caller', () => {
+    const el = mount(makeProps({ parked: [parkedRow] }));
+    expect(el.textContent).toContain('App');
+    expect(el.textContent).toContain('Briefing');
+  });
+
+  it('shows an Automation badge for an agent-kind parked caller (automations ride the agent plane)', () => {
+    const el = mount(
+      makeProps({
+        parked: [{ ...parkedRow, caller: 'E2e Agent Purge Demo', callerKind: 'agent' }],
+      }),
+    );
+    expect(el.textContent).toContain('Automation');
+    expect(el.textContent).toContain('E2e Agent Purge Demo');
+  });
+
+  it('shows an Assistant badge for an assistant-kind parked caller, distinct from an automation', () => {
+    const el = mount(
+      makeProps({ parked: [{ ...parkedRow, caller: 'Assistant', callerKind: 'assistant' }] }),
+    );
+    expect(el.textContent).toContain('Assistant');
+    expect(el.textContent).not.toContain('Automation');
   });
 
   it('fires onDecideScopeRequest inline (no expansion needed)', () => {

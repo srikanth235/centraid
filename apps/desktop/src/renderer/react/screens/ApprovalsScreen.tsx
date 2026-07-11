@@ -1,6 +1,7 @@
 import { type JSX, useMemo, useState } from 'react';
 import Icon from '../ui/Icon.js';
 import Button from '../ui/Button.js';
+import KindBadge from '../ui/KindBadge.js';
 import { cx } from '../ui/cx.js';
 import emptyCss from '../styles/pageEmpty.module.css';
 import styles from './ApprovalsScreen.module.css';
@@ -54,6 +55,14 @@ export interface ApprovalsParkedRowDTO {
   invocationId: string;
   command: string;
   caller: string;
+  /**
+   * WHO is asking — refines a raw 'agent' credential into 'assistant' when
+   * it's the vault assistant's own identity, not an automation's (issue:
+   * parked-invocation trust legibility — the owner deciding whether to
+   * approve a destructive command couldn't tell app vs automation vs
+   * assistant apart before this field existed).
+   */
+  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
   parkedAgo: string;
   inputPreview: string;
 }
@@ -290,6 +299,20 @@ function NeedsAuthRow({
   );
 }
 
+/** The requester badge a parked row shows next to its display name. */
+function parkedKindBadge(kind: ApprovalsParkedRowDTO['callerKind']): JSX.Element | null {
+  switch (kind) {
+    case 'app':
+      return <KindBadge kind="app">App</KindBadge>;
+    case 'agent':
+      return <KindBadge kind="automation">Automation</KindBadge>;
+    case 'assistant':
+      return <KindBadge kind="assistant">Assistant</KindBadge>;
+    default:
+      return null;
+  }
+}
+
 function ParkedRow({
   row,
   busy,
@@ -311,7 +334,10 @@ function ParkedRow({
         </span>
         <span className={styles.rowBody}>
           <span className={styles.rowTitle}>{row.command}</span>
-          <span className={styles.rowSub}>{row.caller}</span>
+          <span className={cx(styles.rowSub, styles.rowSubCaller)}>
+            {parkedKindBadge(row.callerKind)}
+            <span>{row.caller}</span>
+          </span>
         </span>
         <span className={styles.rowMeta}>{row.parkedAgo}</span>
         <Icon name="ChevronRight" size={14} />

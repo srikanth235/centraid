@@ -179,19 +179,36 @@ export type InvokeOutcome =
   | { status: 'replayed'; invocationId: string; output: unknown };
 
 /**
+ * The requester kind an approval surface renders as a trust-legibility
+ * badge. Refines `Identity['kind']`'s `'agent'` into `'assistant'` when the
+ * enrolled agent IS the vault assistant (`_assistant`, `invokeAsAssistant`)
+ * rather than an automation's acting identity — the two ride the same
+ * credential shape but mean very different things to the owner deciding
+ * whether to approve a parked act.
+ */
+export type ParkedCallerKind = 'app' | 'agent' | 'assistant' | 'owner-device';
+
+/**
  * One invocation awaiting owner confirmation, as the consent surface lists
- * it. `caller` is the display name — consent.app.name for apps, the
- * agent's core.party display name for agents — so an approval UI can say
- * WHO wants the act; `input` is the command input so it can say WHAT.
- * The pause between draft and send is only meaningful when the owner can
- * read what they're confirming.
+ * it. `caller` is the display name — consent.app.display_name (falling
+ * back to a humanized app id) for apps, the agent's core.party display
+ * name for agents — so an approval UI can say WHO wants the act; `input`
+ * is the command input so it can say WHAT. The pause between draft and
+ * send is only meaningful when the owner can read what they're confirming.
  */
 export interface ParkedSummary {
   invocationId: string;
   command: string;
   parkedAt: string;
-  callerKind: Identity['kind'];
-  /** Display name of the caller (consent.app.name for apps), or null. */
+  callerKind: ParkedCallerKind;
+  /**
+   * The caller's enrolled row id (`consent_app.app_id` / `agent_agent.agent_id`)
+   * — a stable identity key, unlike `caller` (a display name, which can
+   * change). `ctx.vault`'s "my own parked invocations" op matches on this,
+   * never on the display name.
+   */
+  callerId: string;
+  /** Display name of the caller (consent.app.display_name for apps), or null. */
   caller: string | null;
   input: Record<string, unknown>;
 }

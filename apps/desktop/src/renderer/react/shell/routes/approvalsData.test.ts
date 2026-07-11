@@ -98,12 +98,29 @@ describe('buildParkedRow', () => {
       command: 'social.send_message',
       parkedAt: new Date().toISOString(),
       callerKind: 'app',
+      callerId: 'app-1',
       caller: null,
       input: { to: 'x' },
     };
     const out = buildParkedRow(row);
     expect(out.caller).toBe('app');
+    expect(out.callerKind).toBe('app');
     expect(out.inputPreview).toContain('"to"');
+  });
+
+  it('carries the assistant caller kind through for the Approvals badge', () => {
+    const row: VaultParkedEntry = {
+      invocationId: 'inv2',
+      command: 'locker.purge_item',
+      parkedAt: new Date().toISOString(),
+      callerKind: 'assistant',
+      callerId: 'agent-1',
+      caller: 'Assistant',
+      input: {},
+    };
+    const out = buildParkedRow(row);
+    expect(out.caller).toBe('Assistant');
+    expect(out.callerKind).toBe('assistant');
   });
 });
 
