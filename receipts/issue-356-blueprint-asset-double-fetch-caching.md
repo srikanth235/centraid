@@ -192,3 +192,14 @@ Boot gates: 8/8 apps pass `packages/blueprints` `src/app-boot`.
 - Compiled-artifact check: `packages/app-engine/dist/http/static-server.js`
   contains the new caching path and is what the desktop gateway loads
   (verified before the post-fix measurement).
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-f2a27b8a-b5b-1783763257-1 | claude-code | f2a27b8a-b5bc-429c-957c-54ebcc57a331 | #356 | claude-fable-5 | 50038 | 705097 | 21965071 | 197374 | 952509 | 41.1479 | 50038 | 705097 | 21965071 | 197374 | chore(app-engine): waive file-size cap for the static-server suite (#356)The sui |
+| claude-code-f2a27b8a-b5b-1783763330-1 | claude-code | f2a27b8a-b5bc-429c-957c-54ebcc57a331 | #356 | claude-fable-5 | 10 | 2613 | 973044 | 2565 | 5188 | 1.1341 | 50048 | 707710 | 22938115 | 199939 | chore(app-engine): waive file-size cap for the static-server suite (#356)The sui |

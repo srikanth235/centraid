@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit one suite per served-asset concern of a single module — CSP/nonce, shared fallback, depth-aware JSX transform, and ETag/conditional tiers all exercise serveStatic and share its fixtures
 import { describe, expect, it } from 'vitest';
 import { mkdtempSync, writeFileSync, mkdirSync, utimesSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
