@@ -498,3 +498,8 @@ export * from './gateway-client-connections.js';
 // lives in `gateway-client-outbox.ts`. Re-exported here so the Approvals
 // screen imports it from the same barrel.
 export * from './gateway-client-outbox.js';
+
+// The gateway's realtime log surface lives in `gateway-client-logs.ts`.
+// Re-exported here so the Settings → Logs screen imports it from the
+// same barrel.
+export * from './gateway-client-logs.js';

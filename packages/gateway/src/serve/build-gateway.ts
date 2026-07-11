@@ -86,6 +86,7 @@ import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band
 import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
+import { GatewayLogStore } from './gateway-log-store.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
@@ -97,6 +98,7 @@ import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
 import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
+import { makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 
@@ -278,6 +280,13 @@ export interface BuiltGateway {
    */
   webhookHandler: RouteHandler;
   /**
+   * The gateway's log ring buffer + live fan-out (realtime Logs surface).
+   * Every `logger.*` line lands here before the console. Hosts may
+   * `append()` their own lines (e.g. embed lifecycle) so they show up in
+   * the same client-visible stream.
+   */
+  logs: GatewayLogStore;
+  /**
    * Post-listener lifecycle. Call once the host has bound a socket,
    * passing the live origin so post-turn webhook minting can build
    * absolute `_centraid-hook` URLs. Mounts EVERY vault's workspace, then
@@ -290,7 +299,10 @@ export interface BuiltGateway {
 
 export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltGateway> {
   const { paths } = options;
-  const logger = options.logger ?? defaultLogger(options.logTag);
+  // Every log line tees through the gateway log store (realtime Logs
+  // surface) before reaching the console/host logger — see logs-routes.ts.
+  const logStore = new GatewayLogStore();
+  const logger = logStore.wrap(options.logger ?? defaultLogger(options.logTag));
 
   // Vault registry (duaility §12, #289): the gateway is a landlord hosting
   // N sovereign vaults — one plane per vault under the root, every request
@@ -1093,6 +1105,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     makeGatewayInfoRouteHandler(),
+    // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
+    // the desktop's Settings → Logs screen streams from.
+    makeLogsRouteHandler(logStore),
     // The assistant's `_turn`/`resolve` surface — mounted BEFORE the
     // generic `_vault` handler, which answers 404 for any sub-route it
     // doesn't know (same prefix family).
@@ -1308,6 +1323,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     extraHandlers,
     composedHandler,
     webhookHandler,
+    logs: logStore,
     start,
     stop,
   } satisfies BuiltGateway;

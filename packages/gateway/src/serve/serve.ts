@@ -95,5 +95,6 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     appsStore: gateway.appsStore,
     syncApps: gateway.syncApps,
     codeAppsDir: gateway.codeAppsDir,
+    logs: gateway.logs,
   } satisfies GatewayServeHandle;
 }
