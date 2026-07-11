@@ -9,7 +9,7 @@ https://github.com/srikanth235/centraid/issues/352
 - [x] docs app on the wrapper with editing and version history
 - [x] photos search exif slideshow duplicates
 - [x] vault plumbing geo tags activity sync faces
-- [ ] photos wave-3 ui
+- [x] photos wave-3 ui
 - [ ] docs wave-3 ui
 
 ## Decisions
@@ -87,6 +87,16 @@ Six app-plane surfaces added over data the vault already produced: (1) geolocati
 - Deviation: the face-proposer "enabled" signal exposed is the owner's enrichment-tier policy, not the automation's own cron enable/disable toggle (that flag lives outside the vault, in `@centraid/app-engine`'s `VaultOp` enum — out of this task's territory, flagged as a follow-up).
 - `packages/vault/src/host.ts` carried a pre-existing 500-line-cap violation (553 lines, no waiver) before this change touched it; added the waiver comment rather than bundling an unrelated split into this feature commit.
 
+### photos wave-3 ui
+
+Built over the vault plumbing surfaces: a crop/rotate editor that saves as a new asset (non-destructive — "save as new" by default, with an option to also trash the original), a place chip + picker over existing EXIF-linked places, tag add/remove with a sidebar filter row, a face-proposer header toggle showing enabled/disabled state honestly (no button when disabled) plus an on-demand "Detect faces now" trigger, custody-state badges, and the duplicates shelf rewritten onto real `media.asset_phash.cluster_id` clustering (replacing wave-1's sha/dimensions approximation).
+
+- New: `packages/blueprints/apps/photos/queries/_shared.js`, `queries/enrichment-status.js`, `actions/{set-place,tag-asset,untag-asset,request-enrichment}.js`, `components/{Editor,Enrichment}.jsx`
+- Modified: `app.jsx`, `app.json`, `app.css`, `index.html`, `components/{Chips,Duplicates,Lightbox}.jsx`, `duplicates.jsx`, `lightbox.jsx`, `toolbar.jsx`, `format.js`, `queries/{duplicates,library,search}.js`
+- `app.jsx` crossed the 500-line cap (524 lines); waived with the same reasoning as `docs/app.jsx`/`tally/app.jsx`.
+- Two server-side gaps found and reported rather than faked: (1) no `media`-domain edit-in-place command exists (only 10 commands in `media.ts`, none touch bytes post-upload) — crop/rotate is client-side canvas work re-uploaded as a new asset, consistent with "own the meaning, rent the bytes"; (2) `media.set_asset_place` only accepts an existing `place_id`, there's no command to mint a new `core.place` row from freehand text — built a picker over EXIF-auto-linked places instead of the free-text editor originally scoped, with an honest empty state.
+- `manifest.json`/`mock-centraid.js` regeneration deferred to the following commit (docs wave-3), since both apps' fixtures/manifest entries land in the same shared files and a single final regen after both waves land is cleaner than two partial ones.
+
 ## Out of scope
 
 Sharing, collaboration, comments. On-device face detection models. Smart albums / memories / scene recognition. Data migrations (pre-release v0: dev vaults recreate; ONTOLOGY_VERSION equality-enforced).
@@ -111,6 +121,20 @@ packages/vault: bunx vitest run src/enrich/enrich.test.ts → 14/14 passed
 packages/vault: bunx vitest run                           → 427/427 passed (41 files)
 packages/vault: tsc (tsconfig.json + tsconfig.test.json)  → clean
 bunx oxlint enrich-publishers.ts documents.ts enrich.test.ts → 0 warnings, 0 errors
+```
+
+photos wave-3 ui:
+
+```
+node packages/blueprints/scripts/lint-apps.mjs → 0 problems
+esbuild --loader:.jsx=jsx on all changed/created photos files → no syntax errors
+packages/blueprints: bunx vitest run src/app-boot/photos.test.ts → 1/1 passed
+packages/blueprints: bunx vitest run src/app-manifests.test.ts   → 74/74 passed
+visual harness live-browser pass: place chip + picker, tag add/remove +
+  sidebar filter, face-proposer enabled/disabled states + on-demand trigger,
+  custody badge tones, crop+rotate+save-as-new (original untouched), real
+  2-way/3-way phash duplicate clusters — dark/light theme, 375px width, zero
+  console errors
 ```
 
 docs app on the wrapper with editing and version history:

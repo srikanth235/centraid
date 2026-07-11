@@ -20,6 +20,7 @@ function Chip({ label, active, onClick, extraClass }) {
 
 export function ChipsView({
   albums: albumList,
+  tagOptions,
   selectedAlbum: selected,
   trashCount,
   newAlbumOpen: editing,
@@ -58,6 +59,15 @@ export function ChipsView({
           ＋ New album
         </button>
       )}
+      {(tagOptions ?? []).map((tag) => (
+        <Chip
+          key={`tag:${tag}`}
+          label={`#${tag}`}
+          active={selected === `tag:${tag}`}
+          onClick={() => onSelect(`tag:${tag}`)}
+          extraClass="chip-tag"
+        />
+      ))}
       <Chip
         label="⧉ Duplicates"
         active={selected === DUPLICATES}

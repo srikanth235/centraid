@@ -165,6 +165,22 @@ export function exifRows(asset) {
   return rows;
 }
 
+// The blob custody projection (issue #352 phase 3/4, blob/custody.ts) in
+// owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
+// custody-danger). Returns null for a custody-less row (asset has no
+// content_id resolvable to `blob_custody_state`, or the standing sweep
+// hasn't run yet) — the caller renders nothing rather than a wrong claim.
+const CUSTODY_META = {
+  'local-only': { label: 'On this device only', tone: 'warn' },
+  replicated: { label: 'Backed up', tone: 'ok' },
+  'remote-only': { label: 'Only in the cloud', tone: 'warn' },
+  missing: { label: 'Missing — needs attention', tone: 'danger' },
+};
+
+export function custodyMeta(state) {
+  return CUSTODY_META[state] ?? null;
+}
+
 export function isVideoAsset(asset) {
   const uri = asset.content_uri;
   if (typeof uri === 'string' && uri.startsWith('data:video')) return true;

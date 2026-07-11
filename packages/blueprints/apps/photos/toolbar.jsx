@@ -15,6 +15,7 @@ export function createToolbar({
   chipsRoot,
   albumToolsRoot,
   getAlbums,
+  getAssets,
   getTrash,
   getAlbumAssets,
   getSelectedAlbum,
@@ -52,9 +53,14 @@ export function createToolbar({
 
   function renderChips() {
     $('albumChips').hidden = false;
+    // Distinct tag labels across the WHOLE loaded library (issue #352) —
+    // never scoped to the currently selected shelf, so switching tags stays
+    // a one-click affair instead of a "no tags to pick from" dead end.
+    const tagOptions = [...new Set(getAssets().flatMap((a) => a.tags ?? []))].sort();
     chipsRoot.render(
       <ChipsView
         albums={getAlbums()}
+        tagOptions={tagOptions}
         selectedAlbum={getSelectedAlbum()}
         trashCount={getTrash().length}
         newAlbumOpen={newAlbumOpen}

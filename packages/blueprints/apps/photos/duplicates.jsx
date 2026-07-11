@@ -12,7 +12,6 @@ import { trashDuplicateAssets } from './duplicates-actions.js';
 export function createDuplicates({ gridRoot, refresh }) {
   let clusters = null; // null = not yet loaded
   let loading = false;
-  let limitation = null;
   const selected = new Set();
 
   function renderDuplicates() {
@@ -20,7 +19,6 @@ export function createDuplicates({ gridRoot, refresh }) {
       <DuplicatesView
         clusters={clusters}
         loading={loading}
-        limitation={limitation}
         selected={selected}
         onToggle={(assetId) => {
           if (selected.has(assetId)) selected.delete(assetId);
@@ -54,7 +52,6 @@ export function createDuplicates({ gridRoot, refresh }) {
       data = null;
     }
     clusters = data?.clusters ?? [];
-    limitation = data?.limitation ?? null;
     loading = false;
     renderDuplicates();
   }

@@ -9,10 +9,12 @@
 // lightbox.jsx) can do.
 import { armConfirm, fmtBytes, toast } from '../kit.js';
 import { restoreAsset, toggleFavorite } from '../assets-actions.js';
+import { EditorView } from './Editor.jsx';
 import { renderFaces } from '../faces.js';
 import {
   assetBytes,
   cls,
+  custodyMeta,
   exifRows,
   isRenderableUri,
   isVideoAsset,
@@ -149,11 +151,24 @@ function DetailsPanel({ asset }) {
 // on every mount, the same way the old code's `setInfo` closure got replaced
 // by each `renderLightbox` call even though the stage element itself
 // persisted underneath it.
-export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClose, onSlideshow }) {
+export function PanelBody({
+  asset,
+  albums: albumList,
+  places,
+  setInfoRef,
+  refresh,
+  onClose,
+  onSlideshow,
+  onEdit,
+}) {
   const noteRef = useRef(null);
   const infoRef = useRef(null);
   const facesHostRef = useRef(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [placeEditorOpen, setPlaceEditorOpen] = useState(false);
+  const [addingTag, setAddingTag] = useState(false);
+  const [tagText, setTagText] = useState('');
+  const custody = custodyMeta(asset.custody_state);
 
   useEffect(() => {
     setInfoRef.current = (w, h) => {
@@ -216,6 +231,59 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
         />
       </div>
       <p className="lightbox-info" ref={infoRef}></p>
+      <div className="lightbox-badges">
+        {placeEditorOpen ? (
+          <div className="lightbox-place-editor">
+            <select
+              className="kit-input"
+              aria-label="Set place"
+              defaultValue={asset.place?.place_id ?? ''}
+              onChange={async (e) => {
+                const placeId = e.currentTarget.value;
+                const outcome = await act(
+                  'set-place',
+                  placeId ? { asset_id: asset.asset_id, place_id: placeId } : { asset_id: asset.asset_id },
+                );
+                setPlaceEditorOpen(false);
+                if (narrate(outcome, noteRef.current)) await refresh();
+              }}
+            >
+              <option value="">No place</option>
+              {places.map((p) => (
+                <option key={p.place_id} value={p.place_id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="kit-icon-btn"
+              aria-label="Cancel"
+              onClick={() => setPlaceEditorOpen(false)}
+            >
+              ×
+            </button>
+            {places.length === 0 ? (
+              <p className="kit-muted kit-small lightbox-place-empty">
+                No known places yet — places are linked automatically from a photo's GPS data.
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="kit-chip lightbox-place-chip"
+            onClick={() => setPlaceEditorOpen(true)}
+          >
+            {asset.place?.name ? `📍 ${asset.place.name}` : '📍 Add place'}
+          </button>
+        )}
+        {custody ? (
+          <span className={`kit-chip custody-chip custody-${custody.tone}`} title="Backup status">
+            {custody.label}
+          </span>
+        ) : null}
+      </div>
       <button
         type="button"
         className="lightbox-details-toggle"
@@ -249,6 +317,58 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
           })}
         </div>
       ) : null}
+      <div className="lightbox-tags">
+        {(asset.tags ?? []).map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            className="kit-chip tag-chip"
+            aria-label={`Remove tag ${tag}`}
+            onClick={async () => {
+              const outcome = await act('untag-asset', { asset_id: asset.asset_id, label: tag });
+              if (narrate(outcome, noteRef.current)) await refresh();
+            }}
+          >
+            {tag} ×
+          </button>
+        ))}
+        {addingTag ? (
+          <input
+            type="text"
+            className="kit-input bare chip-input"
+            placeholder="Tag name"
+            aria-label="Add tag"
+            value={tagText}
+            autoFocus
+            onChange={(e) => setTagText(e.currentTarget.value)}
+            onKeyDown={async (e) => {
+              if (e.key === 'Escape') {
+                setAddingTag(false);
+                setTagText('');
+                return;
+              }
+              if (e.key !== 'Enter') return;
+              const label = e.currentTarget.value.trim();
+              if (!label) {
+                setAddingTag(false);
+                return;
+              }
+              const outcome = await act('tag-asset', { asset_id: asset.asset_id, label });
+              setAddingTag(false);
+              setTagText('');
+              if (narrate(outcome, noteRef.current)) await refresh();
+            }}
+            onBlur={() => {
+              setAddingTag(false);
+              setTagText('');
+            }}
+          />
+        ) : (
+          <button type="button" className="kit-chip chip-new" onClick={() => setAddingTag(true)}>
+            ＋ Tag
+          </button>
+        )}
+      </div>
       <div className="lightbox-faces" ref={facesHostRef}></div>
       <div className="lightbox-actions">
         <button
@@ -264,6 +384,11 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
         <button type="button" className="kit-btn" onClick={onSlideshow}>
           ▶ Slideshow
         </button>
+        {isRenderableUri(asset.content_uri) && !isVideoAsset(asset) ? (
+          <button type="button" className="kit-btn" onClick={onEdit}>
+            ✂ Edit
+          </button>
+        ) : null}
         {isRenderableUri(asset.content_uri) ||
         String(asset.content_uri ?? '').startsWith('data:') ? (
           <a
@@ -307,6 +432,7 @@ export function LightboxShell({
   idx,
   list,
   albums: albumList,
+  places,
   renderSeq,
   onStep,
   refresh,
@@ -314,40 +440,60 @@ export function LightboxShell({
   onSlideshow,
 }) {
   const setInfoRef = useRef(() => {});
+  // The editor swaps the WHOLE stage/panel for its own crop-rotate-save UI
+  // (components/Editor.jsx) — a plain boolean local to this shell, reset by
+  // stepping to a different photo (the key below) so editing asset A never
+  // bleeds into asset B.
+  const [editing, setEditing] = useState(false);
   return (
     <>
       <div className="lightbox-stage" onClick={(e) => e.stopPropagation()}>
-        <Stage key={asset.asset_id} asset={asset} onDims={(w, h) => setInfoRef.current(w, h)} />
+        {editing ? (
+          <EditorView
+            key={asset.asset_id}
+            asset={asset}
+            refresh={refresh}
+            onCancel={() => setEditing(false)}
+            onSaved={() => setEditing(false)}
+          />
+        ) : (
+          <Stage key={asset.asset_id} asset={asset} onDims={(w, h) => setInfoRef.current(w, h)} />
+        )}
       </div>
-      {[
-        ['prev', -1, '‹', 'Previous photo'],
-        ['next', 1, '›', 'Next photo'],
-      ].map(([variant, delta, glyph, name]) => (
-        <button
-          key={variant}
-          type="button"
-          className={`kit-viewer-nav ${variant}`}
-          aria-label={name}
-          disabled={idx < 0 || !list[idx + delta]}
-          onClick={(e) => {
-            e.stopPropagation();
-            onStep(delta);
-          }}
-        >
-          {glyph}
-        </button>
-      ))}
-      <div className="lightbox-panel" onClick={(e) => e.stopPropagation()}>
-        <PanelBody
-          key={renderSeq}
-          asset={asset}
-          albums={albumList}
-          setInfoRef={setInfoRef}
-          refresh={refresh}
-          onClose={onClose}
-          onSlideshow={onSlideshow}
-        />
-      </div>
+      {!editing &&
+        [
+          ['prev', -1, '‹', 'Previous photo'],
+          ['next', 1, '›', 'Next photo'],
+        ].map(([variant, delta, glyph, name]) => (
+          <button
+            key={variant}
+            type="button"
+            className={`kit-viewer-nav ${variant}`}
+            aria-label={name}
+            disabled={idx < 0 || !list[idx + delta]}
+            onClick={(e) => {
+              e.stopPropagation();
+              onStep(delta);
+            }}
+          >
+            {glyph}
+          </button>
+        ))}
+      {editing ? null : (
+        <div className="lightbox-panel" onClick={(e) => e.stopPropagation()}>
+          <PanelBody
+            key={renderSeq}
+            asset={asset}
+            albums={albumList}
+            places={places}
+            setInfoRef={setInfoRef}
+            refresh={refresh}
+            onClose={onClose}
+            onSlideshow={onSlideshow}
+            onEdit={() => setEditing(true)}
+          />
+        </div>
+      )}
     </>
   );
 }

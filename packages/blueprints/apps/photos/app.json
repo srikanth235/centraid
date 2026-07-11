@@ -29,7 +29,14 @@
       { "schema": "media", "table": "face_region", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
       { "schema": "media", "table": "confirm_face", "verbs": "act" },
-      { "schema": "media", "table": "reject_face", "verbs": "act" }
+      { "schema": "media", "table": "reject_face", "verbs": "act" },
+      { "schema": "core", "table": "place", "verbs": "read" },
+      { "schema": "media", "table": "set_asset_place", "verbs": "act" },
+      { "schema": "core", "table": "tag_entity", "verbs": "act" },
+      { "schema": "core", "table": "untag_entity", "verbs": "act" },
+      { "schema": "enrich", "table": "policy", "verbs": "read" },
+      { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
+      { "schema": "blob", "table": "custody_state", "verbs": "read" }
     ]
   },
   "actions": [
@@ -294,12 +301,103 @@
         }
       },
       "writes": []
+    },
+    {
+      "name": "set-place",
+      "description": "Correct or clear a photo's place through media.set_asset_place (issue #352) — points the asset at an existing core.place row, or clears it back to unknown when place_id is omitted. There is no app-plane command to mint a brand-new place.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "place_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "tag-asset",
+      "description": "Add a free-form label to a photo through core.tag_entity (issue #352) — additive and idempotent over the owner \"Labels\" concept scheme.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "untag-asset",
+      "description": "Remove one free-form label from a photo through core.untag_entity (issue #352).",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "request-enrichment",
+      "description": "Ask the enricher to run now through enrich.request_enrichment (issue #352) — the owner's on-demand \"Detect faces now\", reason 'manual'. Only fires when enrichment-status says the photos domain isn't 'off'.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
     }
   ],
   "queries": [
     {
       "name": "library",
-      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window.",
+      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list.",
       "input": {
         "type": "object",
         "properties": {
@@ -316,6 +414,7 @@
         "properties": {
           "assets": { "type": "array" },
           "albums": { "type": "array" },
+          "places": { "type": "array" },
           "trash": { "type": "array" },
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
@@ -363,7 +462,7 @@
     },
     {
       "name": "duplicates",
-      "description": "Near-duplicate clusters over the live library (issue #352 / #299's deferred duplicates shelf): exact-sha groups (structurally rare — dedupe already collapses those at upload) plus same-dimensions-and-file-size groups, the nearest signal reachable from this app plane today (the phash/vault_hamming infra isn't — see the query's doc comment).",
+      "description": "Near-duplicate clusters over the live library (issue #352 phase 3/4, closing #299's deferred duplicates shelf): reads the standing sweep's real phash hamming clustering (media.asset_phash.cluster_id) and groups/joins client-side — a true visual-similarity signal, not a coincidence-prone fingerprint.",
       "input": {
         "type": "object",
         "additionalProperties": false
@@ -372,7 +471,21 @@
         "type": "object",
         "properties": {
           "clusters": { "type": "array" },
-          "limitation": { "type": "string" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "enrichment-status",
+      "description": "Whether face-proposer enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'local' | 'model'.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tier": { "type": ["string", "null"] },
           "vaultDenied": { "type": "object" }
         }
       }

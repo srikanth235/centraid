@@ -1,123 +1,102 @@
 /**
- * Near-duplicate clusters over the live library (issue #352 phase 3 /
- * issue #299's deferred "duplicates shelf").
+ * Near-duplicate clusters over the live library (issue #352 phase 3/4 —
+ * closing #299's deferred "duplicates shelf").
  *
- * The perceptual-hash infra issue #299 built (`media_asset_phash` sidecar +
- * the `vault_hamming` SQL function, packages/vault/src/enrich/similarity.ts)
- * is NOT reachable from this app-plane query today:
- *   - `media_asset_phash` is not a registered logical entity — the schema
- *     registry (packages/vault/src/schema/tables.ts VAULT_TABLES) lists only
- *     `media.media_asset` and `media.face_region` under the `media` schema,
- *     so `ctx.vault.read({ entity: 'media.asset_phash', … })` denies with
- *     "unknown entity" — there is no logical name that resolves to it.
- *   - Even if there were, `ctx.vault.read`/consent.app_view only support
- *     column-comparison filters (packages/vault/src/gateway/filters.ts —
- *     eq/ne/lt/gt/in/is-null/…) and FK-declared joins
- *     (packages/vault/src/gateway/views.ts) — neither can express a
- *     self-join scored by a custom SQL function like `vault_hamming(a, b)`.
- * Reaching phash-based clustering would need a vault-side change (e.g. a
- * dedicated gateway "similar" op) — outside this app's territory. Filed as
- * a follow-up rather than worked around here.
+ * A prior wave of this app fell back to an approximation here: exact-sha
+ * groups plus a "same dimensions + same byte size" coarse fingerprint,
+ * because `media_asset_phash` wasn't a registered logical entity and
+ * `cluster_id` didn't exist yet (see git history of this file for that
+ * version's full reasoning). Both gaps are closed server-side now:
+ *   - `media.asset_phash` is a registered logical entity (schema/tables.ts)
+ *     an app with `{schema:'media', verbs:'read'}` can read directly.
+ *   - `cluster_id` is a column the standing sweep recomputes wholesale
+ *     every run (enrich/clusters.ts's `recomputeDuplicateClusters` —
+ *     union-find over phash hamming distance ≤ 6, deterministic id = the
+ *     group's lowest asset_id), so reading `WHERE cluster_id IS NOT NULL`
+ *     and grouping client-side is now a real visual-similarity signal, not
+ *     a coincidence-prone fingerprint.
  *
- * The nearest workable signal from the app plane: exact-sha byte duplicates
- * are structurally impossible in this vault — `media_media_asset.content_id`
- * is UNIQUE and `core_content_item.sha256` is UNIQUE (media.add_asset dedupes
- * identical bytes onto the SAME asset at upload, never creating a second
- * live asset over the same content) — so that tier is included defensively
- * (correct if that invariant is ever relaxed, e.g. by a future import path)
- * but will normally cluster nothing. The tier that actually finds anything
- * today is "same pixel dimensions + same byte size" among distinct assets:
- * a coarse fingerprint (two DIFFERENT photos could coincidentally share both
- * numbers, especially common resolutions/sizes) but a real signal for the
- * common case this shelf targets — the same photo re-exported or re-uploaded
- * from a second source, landing as a second asset over different bytes.
+ * This query does the read + group + join to content, nothing more — the
+ * clustering itself already happened server-side.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
+import { srcOf } from './_shared.js';
+
 export default async ({ ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
-    const liveAssets = await ctx.vault.read({
-      entity: 'media.media_asset',
-      where: [{ column: 'deleted_at', op: 'is-null' }],
-      orderBy: { column: 'captured_at', dir: 'desc' },
+    const phashRows = await ctx.vault.read({
+      entity: 'media.asset_phash',
+      where: [{ column: 'cluster_id', op: 'not-null' }],
       limit: 4000,
       purpose,
     });
-    const rows = liveAssets.rows ?? [];
-    if (rows.length < 2) return { clusters: [], limitation: 'phash-unreachable' };
+    const rows = phashRows.rows ?? [];
+    if (rows.length === 0) return { clusters: [] };
 
-    const contentIds = [...new Set(rows.map((a) => a.content_id))];
-    const contents = await ctx.vault.read({
-      entity: 'core.content_item',
-      where: [{ column: 'content_id', op: 'in', value: contentIds }],
+    const assetIdsByCluster = new Map();
+    for (const r of rows) {
+      if (!assetIdsByCluster.has(r.cluster_id)) assetIdsByCluster.set(r.cluster_id, []);
+      assetIdsByCluster.get(r.cluster_id).push(r.asset_id);
+    }
+    const allAssetIds = [...new Set(rows.map((r) => r.asset_id))];
+
+    // Only LIVE assets ride into a cluster card — a trashed member of an
+    // old cluster is not something to offer trashing again. Clusters left
+    // with fewer than 2 live members are dropped entirely below.
+    const assetsResult = await ctx.vault.read({
+      entity: 'media.media_asset',
+      where: [
+        { column: 'asset_id', op: 'in', value: allAssetIds },
+        { column: 'deleted_at', op: 'is-null' },
+      ],
+      limit: 4000,
       purpose,
     });
+    const assetById = new Map((assetsResult.rows ?? []).map((a) => [a.asset_id, a]));
+
+    const contentIds = [
+      ...new Set([...assetById.values()].map((a) => a.content_id).filter(Boolean)),
+    ];
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
 
-    const BLOB_ROUTE = '/centraid/_vault/blobs';
-    const srcOf = (content) => {
-      const uri = content?.content_uri;
-      if (typeof uri !== 'string') return { src: null, thumb: null };
-      if (!uri.startsWith('blob:')) return { src: uri, thumb: null };
-      const src = `${BLOB_ROUTE}/${content.content_id}`;
-      return { src, thumb: `${src}?variant=thumb` };
+    const rowFor = (assetId) => {
+      const asset = assetById.get(assetId);
+      const content = asset ? contentById.get(asset.content_id) : undefined;
+      if (!asset || !content || content.deleted_at != null) return null;
+      const { src, thumb } = srcOf(content);
+      return {
+        asset_id: asset.asset_id,
+        content_id: asset.content_id,
+        kind: asset.kind,
+        width: asset.width ?? null,
+        height: asset.height ?? null,
+        byte_size: content.byte_size ?? null,
+        media_type: content.media_type ?? null,
+        title: content.title ?? null,
+        taken_at: asset.captured_at ?? content.created_at ?? null,
+        content_uri: src,
+        thumb_uri: thumb,
+      };
     };
 
-    const withContent = rows
-      .map((asset) => {
-        const content = contentById.get(asset.content_id);
-        if (!content || content.deleted_at != null) return null;
-        const { src, thumb } = srcOf(content);
-        return {
-          asset_id: asset.asset_id,
-          content_id: asset.content_id,
-          sha256: content.sha256 ?? null,
-          kind: asset.kind,
-          width: asset.width ?? null,
-          height: asset.height ?? null,
-          byte_size: content.byte_size ?? null,
-          media_type: content.media_type ?? null,
-          title: content.title ?? null,
-          taken_at: asset.captured_at ?? content.created_at ?? null,
-          content_uri: src,
-          thumb_uri: thumb,
-        };
-      })
-      .filter((a) => a != null);
-
-    // Tier 1: exact-sha groups (see doc comment — expected to stay empty).
-    const bySha = new Map();
-    for (const a of withContent) {
-      if (!a.sha256) continue;
-      if (!bySha.has(a.sha256)) bySha.set(a.sha256, []);
-      bySha.get(a.sha256).push(a);
-    }
-    const clustered = new Set();
     const clusters = [];
-    for (const [sha, group] of bySha) {
-      if (group.length < 2) continue;
-      clusters.push({ key: sha, tier: 'exact', assets: group });
-      for (const a of group) clustered.add(a.asset_id);
+    for (const [clusterId, assetIds] of assetIdsByCluster) {
+      const assets = assetIds.map(rowFor).filter((a) => a != null);
+      if (assets.length < 2) continue;
+      clusters.push({ key: clusterId, tier: 'phash', assets });
     }
-
-    // Tier 2: same (width, height, byte_size) among assets not already
-    // claimed by an exact-sha cluster.
-    const byDims = new Map();
-    for (const a of withContent) {
-      if (clustered.has(a.asset_id)) continue;
-      if (a.width == null || a.height == null || a.byte_size == null) continue;
-      const key = `${a.width}x${a.height}|${a.byte_size}`;
-      if (!byDims.has(key)) byDims.set(key, []);
-      byDims.get(key).push(a);
-    }
-    for (const [key, group] of byDims) {
-      if (group.length < 2) continue;
-      clusters.push({ key, tier: 'near', assets: group });
-    }
-
     clusters.sort((a, b) => b.assets.length - a.assets.length);
-    return { clusters, limitation: 'phash-unreachable' };
+    return { clusters };
   } catch (err) {
     return { clusters: [], vaultDenied: { code: err.code, message: err.message } };
   }

@@ -7,7 +7,15 @@
 import { LightboxShell } from './components/Lightbox.jsx';
 import { $ } from './dom.js';
 
-export function createLightbox({ lightboxRoot, findAsset, visibleAssets, getAlbums, refresh, slideshow }) {
+export function createLightbox({
+  lightboxRoot,
+  findAsset,
+  visibleAssets,
+  getAlbums,
+  getPlaces,
+  refresh,
+  slideshow,
+}) {
   let assetId = null; // non-null while the lightbox is open
   let renderSeq = 0;
 
@@ -58,6 +66,7 @@ export function createLightbox({ lightboxRoot, findAsset, visibleAssets, getAlbu
         idx={idx}
         list={list}
         albums={getAlbums()}
+        places={getPlaces()}
         renderSeq={renderSeq}
         onStep={step}
         refresh={refresh}

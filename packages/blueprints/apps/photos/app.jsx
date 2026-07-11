@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit the app-root orchestrator owns module-level state + the render wiring for every region (issue #352 phase 3/4 added the tag filter + face-proposer mount alongside the pre-existing grid/lightbox/toolbar wiring); splitting further would scatter one cohesive boot sequence across files for no reader benefit.
 // Photos — a pure projection over the personal vault. Every tile rendered
 // here is a media.media_asset joined to its core.content_item; the bytes
 // themselves are rented, addressed by content_uri, never copied into the
@@ -44,13 +45,17 @@ import { createVisibility } from './visibility.js';
 // port used, just with React's reconciler doing the DOM diffing instead of
 // lit-html's.
 import { createRoot } from './react-core.min.js';
+import { EnrichmentPanel } from './components/Enrichment.jsx';
 import { GridBody, TrashGridBody } from './components/Grid.jsx';
 import { SelectionBarView } from './components/SelectionBar.jsx';
 
 let assets = [];
 let albums = [];
+let places = []; // issue #352: the full known core.place list, for the lightbox picker
 let trash = [];
-let selectedAlbum = null; // null = All; an album_id; or FAVORITES / TRASH / DUPLICATES
+// null = All; an album_id; FAVORITES / TRASH / DUPLICATES; or `tag:<label>`
+// (issue #352's tag filter — see albumAssets() below).
+let selectedAlbum = null;
 let uploading = false;
 let readErrorShown = false;
 let searchQuery = '';
@@ -94,6 +99,7 @@ async function refresh() {
   }
   assets = data?.assets ?? [];
   albums = data?.albums ?? [];
+  places = data?.places ?? [];
   trash = data?.trash ?? [];
   libraryTruncated = Boolean(data?.truncated);
   // The trash shelf folds away when it empties; Favorites is always a place.
@@ -103,6 +109,7 @@ async function refresh() {
     selectedAlbum !== FAVORITES &&
     selectedAlbum !== TRASH &&
     selectedAlbum !== DUPLICATES &&
+    !(typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) &&
     !albums.some((a) => a.album_id === selectedAlbum)
   ) {
     selectedAlbum = null;
@@ -120,6 +127,13 @@ function albumAssets() {
   if (!selectedAlbum) return assets;
   if (selectedAlbum === FAVORITES) return assets.filter((a) => a.favorite);
   if (selectedAlbum === TRASH) return trash;
+  // Tag filter (issue #352): a `tag:<label>` shelf, the same prefixed-value
+  // trick TRASH/FAVORITES/DUPLICATES use to ride the one selectedAlbum slot
+  // without a second piece of state.
+  if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
+    const label = selectedAlbum.slice(4);
+    return assets.filter((a) => a.tags?.includes(label));
+  }
   return assets.filter((a) => a.album_ids?.includes(selectedAlbum));
 }
 
@@ -162,15 +176,21 @@ function renderGrid() {
         ? 'No favorites yet — tap the heart on any photo.'
         : selectedAlbum === TRASH
           ? 'Trash is empty.'
-          : selectedAlbum
-            ? 'Nothing in this album yet.'
-            : 'No photos yet — your library starts with the first upload.';
+          : typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')
+            ? `No photos tagged “${selectedAlbum.slice(4)}”.`
+            : selectedAlbum
+              ? 'Nothing in this album yet.'
+              : 'No photos yet — your library starts with the first upload.';
     // `#emptyUpload` is a stable node wired once at boot (wireUpload, in
     // upload.js) — kit.js's own `emptyState()` helper replaces its
     // container's children on every call, which would silently drop that
     // listener. The kit-empty markup stays static in index.html instead;
     // this orchestrator only ever flips text/hidden on existing nodes.
-    $('emptyUpload').hidden = searching || selectedAlbum === FAVORITES || selectedAlbum === TRASH;
+    $('emptyUpload').hidden =
+      searching ||
+      selectedAlbum === FAVORITES ||
+      selectedAlbum === TRASH ||
+      (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:'));
   }
   // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
   if (selectedAlbum === TRASH) {
@@ -424,6 +444,11 @@ const selectionBarRoot = createRoot($('selectionBar'));
 const lightboxRoot = createRoot($('lightbox'));
 const pickerRoot = createRoot($('picker'));
 const slideshowRoot = createRoot($('slideshow'));
+// The face-proposer toggle (issue #352) is fully self-contained (own status/
+// open state via hooks — components/Enrichment.jsx) and never touches this
+// module's assets/albums state, so it renders once here and is never
+// re-rendered by refresh().
+createRoot($('enrichmentMount')).render(<EnrichmentPanel />);
 
 // Duplicates (issue #352) renders into the SAME gridRoot the library/trash
 // views use — selecting its chip swaps `#grid`'s content exactly the way
@@ -437,6 +462,7 @@ const lightbox = createLightbox({
   findAsset,
   visibleAssets,
   getAlbums: () => albums,
+  getPlaces: () => places,
   refresh,
   slideshow,
 });
@@ -455,6 +481,7 @@ const { renderToolbar } = createToolbar({
   chipsRoot,
   albumToolsRoot,
   getAlbums: () => albums,
+  getAssets: () => assets,
   getTrash: () => trash,
   getAlbumAssets: albumAssets,
   getSelectedAlbum: () => selectedAlbum,

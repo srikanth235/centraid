@@ -9,18 +9,21 @@
  * item falls out of the index, mirroring the library query's live-only
  * asset shelf.
  *
- * The row shape mirrors queries/library.js's `join()` output row-for-row so
- * a hit can render straight into the existing grid components without a
- * second mapping layer. Album-NAME matching (typing "vacation" to surface
- * everything in the Vacation album) deliberately stays a client-side concern
- * in app.jsx — the album list is already fully loaded, so there is no vault
- * round trip worth adding for it.
+ * The row shape mirrors queries/library.js's `join()` output row-for-row
+ * (place/tags/custody_state included, via the same queries/_shared.js
+ * helpers — phase 3/4) so a hit can render straight into the existing grid
+ * components without a second mapping layer. Album-NAME matching (typing
+ * "vacation" to surface everything in the Vacation album) deliberately
+ * stays a client-side concern in app.jsx — the album list is already fully
+ * loaded, so there is no vault round trip worth adding for it.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state.
  *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
+import { readAssetJoins, readPlaces, srcOf } from './_shared.js';
+
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
@@ -51,7 +54,7 @@ export default async ({ input, ctx }) => {
     if (assetsRaw.length === 0) return { assets: [] };
 
     const assetIds = assetsRaw.map((a) => a.asset_id);
-    const [contents, entries, albums] = await Promise.all([
+    const [contents, entries, albums, places, joins] = await Promise.all([
       ctx.vault.read({
         entity: 'core.content_item',
         where: [{ column: 'content_id', op: 'in', value: contentIds }],
@@ -66,36 +69,11 @@ export default async ({ input, ctx }) => {
         purpose,
       }),
       ctx.vault.read({ entity: 'core.collection', purpose }),
+      readPlaces({ ctx, purpose }),
+      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
     ]);
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
-
-    // Favorite mirrors library.js: a flags-scheme starred tag on the content
-    // item (issue #274).
-    const [flagSchemes, flagConcepts] = await Promise.all([
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-    ]);
-    const flagsScheme = (flagSchemes.rows ?? []).find(
-      (s) => s.uri === 'https://centraid.dev/schemes/flags',
-    );
-    const starredConcept = flagsScheme
-      ? (flagConcepts.rows ?? []).find(
-          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
-        )
-      : undefined;
-    const starredIds = new Set();
-    if (starredConcept) {
-      const starTags = await ctx.vault.read({
-        entity: 'core.tag',
-        where: [
-          { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
-          { column: 'target_type', op: 'eq', value: 'core.content_item' },
-          { column: 'target_id', op: 'in', value: contentIds },
-        ],
-        purpose,
-      });
-      for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
-    }
+    const { starredIds, tagsByAsset, custodyByContent } = joins;
 
     const albumRows = (albums.rows ?? []).map((c) => ({
       album_id: c.collection_id,
@@ -109,13 +87,9 @@ export default async ({ input, ctx }) => {
     }
     const albumsById = new Map(albumRows.map((a) => [a.album_id, a]));
 
-    const BLOB_ROUTE = '/centraid/_vault/blobs';
-    const srcOf = (content) => {
-      const uri = content?.content_uri;
-      if (typeof uri !== 'string') return { src: null, thumb: null };
-      if (!uri.startsWith('blob:')) return { src: uri, thumb: null };
-      const src = `${BLOB_ROUTE}/${content.content_id}`;
-      return { src, thumb: `${src}?variant=thumb` };
+    const placeOf = (asset) => {
+      const place = asset.place_id ? places.byId.get(asset.place_id) : undefined;
+      return place ? { place_id: place.place_id, name: place.name } : null;
     };
 
     const assets = assetsRaw
@@ -135,6 +109,9 @@ export default async ({ input, ctx }) => {
           taken_at: asset.captured_at ?? content?.created_at ?? null,
           album_ids: albumIds,
           album_titles: albumIds.map((id) => albumsById.get(id)?.title).filter((t) => t != null),
+          place: placeOf(asset),
+          tags: tagsByAsset.get(asset.asset_id) ?? [],
+          custody_state: custodyByContent.get(asset.content_id) ?? null,
         };
       });
     // Vault rank order (best match first).

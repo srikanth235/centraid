@@ -34,8 +34,7 @@ function ClusterCard({ cluster, selected, onToggle }) {
   return (
     <div className="dup-cluster">
       <p className="dup-cluster-label kit-muted kit-small">
-        {cluster.tier === 'exact' ? 'Identical bytes' : 'Same dimensions & size'} ·{' '}
-        {cluster.assets.length} copies
+        Look like the same shot · {cluster.assets.length} copies
       </p>
       <div className="dup-cluster-row">
         {cluster.assets.map((asset) => (
@@ -51,7 +50,7 @@ function ClusterCard({ cluster, selected, onToggle }) {
   );
 }
 
-export function DuplicatesView({ clusters, loading, limitation, selected, onToggle, onTrashSelected }) {
+export function DuplicatesView({ clusters, loading, selected, onToggle, onTrashSelected }) {
   if (clusters == null || loading) {
     return <kit-skeleton rows={4}></kit-skeleton>;
   }
@@ -61,14 +60,8 @@ export function DuplicatesView({ clusters, loading, limitation, selected, onTogg
         <p className="kit-muted">
           {clusters.length === 0
             ? 'No duplicates found — nice and tidy.'
-            : 'Photos that look like the same shot, uploaded more than once. Nothing is trashed until you say so.'}
+            : 'Photos that look like the same shot, grouped by visual similarity (issue #352). Nothing is trashed until you say so.'}
         </p>
-        {limitation === 'phash-unreachable' && clusters.length > 0 ? (
-          <p className="kit-muted kit-small dup-note">
-            Grouped by matching dimensions and file size — the closest signal available here, not
-            a true visual match.
-          </p>
-        ) : null}
       </div>
       {clusters.length > 0 ? (
         <>
