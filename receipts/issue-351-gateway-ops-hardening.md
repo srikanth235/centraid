@@ -7,7 +7,7 @@
 - [x] graceful gateway stop on desktop quit
 - [x] crash capture (`uncaughtException`/`unhandledRejection`) to a rotated crash log
 - [x] supervised gateway restart with backoff + crash-loop detection
-- [ ] manual "Restart gateway" action (IPC + Gateway page button)
+- [x] manual "Restart gateway" action (IPC + Gateway page button)
 - [x] boot-failure dialog instead of a blank screen
 - [x] rotated JSONL log persistence with boot tail-load
 - [x] diagnostics bundle endpoint + save-dialog export
@@ -18,7 +18,7 @@
 - [x] `vaults` probe does a real SQLite read per mounted plane
 - [x] `disk` health component with free-space watermarks
 - [x] backup status/run HTTP surface
-- [ ] Gateway page backup card with seal-key nudge
+- [x] Gateway page backup card with seal-key nudge
 - [ ] second-gateway detection / fencing token in `_gateway/info` (deferred per issue)
 - [ ] version-skew handshake wiring, outbound-call timeouts, worker admission control (Tier 4, deferred per issue)
 - [ ] missed-automation-run ledger (deferred per issue)
@@ -90,14 +90,26 @@
 ### Files
 
 - `apps/desktop/src/main.ts`
+- `apps/desktop/src/main/crash-log-core.test.ts`
+- `apps/desktop/src/main/crash-log-core.ts`
+- `apps/desktop/src/main/crash-log.ts`
 - `apps/desktop/src/main/gateway-monitor-core.test.ts`
 - `apps/desktop/src/main/gateway-monitor-core.ts`
 - `apps/desktop/src/main/gateway-monitor.ts`
+- `apps/desktop/src/main/gateway-ops-core.test.ts`
+- `apps/desktop/src/main/gateway-ops-core.ts`
+- `apps/desktop/src/main/gateway-ops.ts`
+- `apps/desktop/src/main/gateway-supervisor-core.test.ts`
+- `apps/desktop/src/main/gateway-supervisor-core.ts`
 - `apps/desktop/src/main/ipc.ts`
 - `apps/desktop/src/main/local-gateway.ts`
 - `apps/desktop/src/preload.ts`
 - `apps/desktop/src/renderer/centraid-api.d.ts`
+- `apps/desktop/src/renderer/gateway-client-backup.ts`
 - `apps/desktop/src/renderer/gateway-client.ts`
+- `apps/desktop/src/renderer/react/screens/BackupCard.module.css`
+- `apps/desktop/src/renderer/react/screens/BackupCard.test.tsx`
+- `apps/desktop/src/renderer/react/screens/BackupCard.tsx`
 - `apps/desktop/src/renderer/react/screens/GatewayScreen.module.css`
 - `apps/desktop/src/renderer/react/screens/GatewayScreen.test.tsx`
 - `apps/desktop/src/renderer/react/screens/GatewayScreen.tsx`

@@ -1,5 +1,9 @@
 import { type JSX, useEffect, useState } from 'react';
-import { streamGatewayLogs } from '../../../gateway-client.js';
+import {
+  getGatewayBackupStatus,
+  runGatewayBackupNow,
+  streamGatewayLogs,
+} from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
@@ -61,6 +65,10 @@ export default function GatewayRoute(): JSX.Element {
         health={health}
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
+        loadBackupStatus={getGatewayBackupStatus}
+        onRunBackupNow={runGatewayBackupNow}
+        onRestartGateway={() => window.CentraidApi.restartGateway()}
+        onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />
     </PageScroll>
   );

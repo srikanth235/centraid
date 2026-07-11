@@ -51,7 +51,10 @@
 }
 .row {
   display: flex;
-  align-items: center;
+  /* flex-start rather than center: a long, wrapped `detail` (the `disk`/
+     `vaults` components can bake several items into one string) shouldn't
+     pull the dot/badges away from the row's top line. */
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 16px;
 }
@@ -68,6 +71,13 @@
   flex: none;
   background: var(--diag-health, var(--ink-3));
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--diag-health, var(--ink-3)) 16%, transparent);
+}
+/* `.row` switched to `align-items: flex-start` so a long, wrapped detail
+   doesn't pull the dot toward vertical center — nudge it back to the
+   row's top line. Scoped to `.row` so the `.overall` banner's dot (still
+   `align-items: center`) is unaffected. */
+.row > .dot {
+  margin-top: 3px;
 }
 .dot[data-health='ok'] {
   --diag-health: var(--success);
@@ -96,9 +106,12 @@
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* `disk`/`vaults` (and any long lastError) can bake several items into
+     one detail string — wrap instead of the single-line ellipsis this used
+     to be, so the full text stays readable rather than clipped. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
 }
 
 .errCount {

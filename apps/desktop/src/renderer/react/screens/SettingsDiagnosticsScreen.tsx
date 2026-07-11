@@ -108,7 +108,11 @@ function ComponentRow({
       <span className={styles.dot} data-health={row.status} />
       <div className={styles.rowMeta}>
         <div className={styles.rowName}>{componentLabel(row.component)}</div>
-        {sub ? <div className={styles.rowSub}>{sub}</div> : null}
+        {sub ? (
+          <div className={styles.rowSub} title={sub}>
+            {sub}
+          </div>
+        ) : null}
       </div>
       {row.errorCount > 0 ? (
         <span className={styles.errCount} title="Errors since gateway start">

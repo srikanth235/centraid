@@ -1,6 +1,8 @@
 import { useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
+import buttonCss from '../ui/Button.module.css';
+import controlsCss from '../styles/controls.module.css';
 import {
   ALERT_PRESETS,
   availabilityPct,
@@ -19,6 +21,7 @@ import SettingsDiagnosticsScreen, {
   type SettingsDiagnosticsBridgeProps,
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
+import BackupCard, { type BackupCardProps } from './BackupCard.js';
 import styles from './GatewayScreen.module.css';
 
 // The Gateway page — a calm instrument panel over the main-process
@@ -49,6 +52,18 @@ export interface GatewayScreenProps {
   health: GatewayHealthDTO | null;
   loadHealth: SettingsDiagnosticsBridgeProps['loadHealth'];
   streamLogs: LogsBridgeProps['streamLogs'];
+  /** Backup card data (Overview tab) — `GET/POST _gateway/backup`. */
+  loadBackupStatus: BackupCardProps['loadStatus'];
+  onRunBackupNow: BackupCardProps['onRunNow'];
+  /**
+   * Restart the local embedded gateway (Overview tab, near the runtime
+   * status). Refused for a remote gateway — main answers `{ok: false}`
+   * with an explanation, rendered inline rather than thrown.
+   */
+  onRestartGateway: () => Promise<{ ok: boolean; error?: string }>;
+  /** Save `/centraid/_gateway/diagnostics` through a native dialog (Logs
+   *  tab toolbar). `canceled` when the user dismissed the dialog. */
+  onExportDiagnostics: LogsBridgeProps['onExportDiagnostics'];
 }
 
 type TabId = 'overview' | 'components' | 'logs' | 'alerts';
@@ -84,6 +99,45 @@ function Figure({
       <div className={styles.figureLabel}>{label}</div>
       <div className={styles.figureValue}>{value}</div>
       {sub ? <div className={styles.figureSub}>{sub}</div> : null}
+    </div>
+  );
+}
+
+function RestartGatewayButton({
+  onRestart,
+}: {
+  onRestart: () => Promise<{ ok: boolean; error?: string }>;
+}): JSX.Element {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const restart = async (): Promise<void> => {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await onRestart();
+      if (!result.ok) setError(result.error ?? 'Restart was refused.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <div className={styles.restartWrap}>
+      <button
+        type="button"
+        className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+        disabled={pending}
+        onClick={() => void restart()}
+      >
+        <span className={styles.restartIcon} data-spin={pending || undefined}>
+          <Icon name={pending ? 'Loader' : 'Power'} size={13} />
+        </span>
+        <span>{pending ? 'Restarting…' : 'Restart gateway'}</span>
+      </button>
+      {error ? <div className={styles.restartError}>{error}</div> : null}
     </div>
   );
 }
@@ -297,7 +351,19 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                   </dd>
                 </div>
               </dl>
+              <div className={styles.idFooter}>
+                <RestartGatewayButton onRestart={props.onRestartGateway} />
+              </div>
             </section>
+
+            {/* Backups — offsite snapshot status + a manual "back up now"
+                trigger (issue #351). Spans both columns, below the pair
+                above. */}
+            <BackupCard
+              now={now}
+              loadStatus={props.loadBackupStatus}
+              onRunNow={props.onRunBackupNow}
+            />
           </div>
         </>
       ) : null}
@@ -310,7 +376,11 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
 
       {tab === 'logs' ? (
         <div className={styles.tabPane}>
-          <LogsScreen streamLogs={props.streamLogs} focusQuery={logsFocus} />
+          <LogsScreen
+            streamLogs={props.streamLogs}
+            focusQuery={logsFocus}
+            onExportDiagnostics={props.onExportDiagnostics}
+          />
         </div>
       ) : null}
 
