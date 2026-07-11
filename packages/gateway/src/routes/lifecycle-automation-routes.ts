@@ -44,20 +44,25 @@ export async function handleAutomationCreate(
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
   // persists only the hash. A `webhook` trigger entry carries no secret in.
-  // This endpoint scaffolds cron/webhook triggers only — richer kinds (data,
-  // condition) come from templates or the builder, so reject them loudly
-  // instead of silently rewriting them into a default cron.
+  // `cron`/`webhook`/`condition`/`data` are the only trigger kinds the
+  // manifest schema knows — anything else is rejected loudly instead of
+  // being silently coerced. `condition`/`data` specs are passed through to
+  // the real validator below (`validateManifest`, via `scaffoldAppFiles`)
+  // rather than re-implemented here, so a malformed one (missing entity,
+  // non-array `where`/`entities`, bad cron gate, …) 400s with the
+  // validator's own field-scoped message.
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
   let webhook: { id: string; secret: string; url: string } | undefined;
   const triggerInput = Array.isArray(body.triggers)
-    ? (body.triggers as Array<{ kind?: string; expr?: string }>)
+    ? (body.triggers as Array<Record<string, unknown>>)
     : undefined;
   const badKind = triggerInput?.find(
-    (t) => t.kind !== undefined && t.kind !== 'cron' && t.kind !== 'webhook',
+    (t) => t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string),
   );
   if (badKind) {
     return sendJson(res, 400, {
       error: 'bad_request',
-      message: `Unsupported trigger kind "${badKind.kind}" — create accepts cron and webhook triggers; data/condition triggers come from templates or the builder.`,
+      message: `Unsupported trigger kind "${String(badKind.kind)}" — create accepts cron, webhook, condition and data triggers.`,
     });
   }
   const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
@@ -67,8 +72,31 @@ export async function handleAutomationCreate(
       webhook = { id: wid, secret, url: webhookUrl(req, wid) };
       return { kind: 'webhook', id: wid, secretHash: automation.hashWebhookSecret(secret) };
     }
+    if (t.kind === 'condition') {
+      return {
+        kind: 'condition',
+        entity: t.entity,
+        ...(t.where !== undefined ? { where: t.where } : {}),
+        ...(t.every !== undefined ? { every: t.every } : {}),
+      } as automation.Trigger;
+    }
+    if (t.kind === 'data') {
+      return {
+        kind: 'data',
+        entities: t.entities,
+        ...(t.every !== undefined ? { every: t.every } : {}),
+      } as automation.Trigger;
+    }
     return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
   });
+  // A condition/data trigger's consented read runs under a requested vault
+  // grant (duaility §12) — `validateManifest` refuses those trigger kinds
+  // without one, so pass an explicit `{ vault }` body through untouched and
+  // let the same validator reject a malformed one.
+  const vaultInput =
+    body.vault !== null && typeof body.vault === 'object' && !Array.isArray(body.vault)
+      ? (body.vault as automation.ManifestVault)
+      : undefined;
 
   const files = automation.scaffoldAppFiles(id, {
     ...(typeof body.name === 'string' && body.name ? { name: body.name } : {}),
@@ -84,6 +112,7 @@ export async function handleAutomationCreate(
       : {}),
     ...(typeof body.onFailure === 'string' && body.onFailure ? { onFailure: body.onFailure } : {}),
     ...(typeof body.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+    ...(vaultInput !== undefined ? { vault: vaultInput } : {}),
   });
   await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
   await stageAndMaybePublish(opts, {
@@ -147,6 +176,82 @@ export async function handleAutomationSetEnabled(
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
+}
+
+// ---- POST /centraid/_automations/rotate-webhook?ref= (mint a fresh secret) ----
+
+/**
+ * Rotate a webhook-triggered automation's shared secret. The plaintext is
+ * shown to the owner exactly once, at mint time (create/clone) — miss that
+ * one-time reveal and the automation is otherwise permanently uncallable,
+ * since only the SHA-256 hash persists in `automation.json`. This mints a
+ * fresh secret over the SAME route id (any caller already configured with
+ * the webhook URL keeps working; only its credential changes) and persists
+ * only the new hash, exactly like the mint path — the response shape
+ * mirrors create's `webhook` field so the renderer's existing one-time
+ * reveal UI works unchanged.
+ */
+export async function handleAutomationRotateWebhook(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const rawRef = url.searchParams.get('ref') ?? '';
+  const ref = automation.parseRef(rawRef);
+  if (!ref) {
+    return sendJson(res, 400, { error: 'bad_request', message: 'rotate-webhook needs ?ref=' });
+  }
+  const body = await readJson(req);
+  const publish = body.publish === true;
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(ref.appId);
+  const ephemeralSession = !explicitSession;
+
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
+  const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
+  const current = await readFileMap(appDir);
+
+  const targetPath = `automations/${ref.automationId}/${automation.MANIFEST_FILE}`;
+  if (!current.some((f) => f.path === targetPath)) {
+    if (ephemeralSession) await opts.store.closeSession(sessionId);
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: `Automation "${rawRef}" does not exist.`,
+    });
+  }
+
+  const { changed, rotated } = automation.rotateWebhookInFiles(
+    current as ScaffoldFile[],
+    ref.automationId,
+  );
+  if (!rotated) {
+    if (ephemeralSession) await opts.store.closeSession(sessionId);
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: `Automation "${rawRef}" has no webhook trigger to rotate.`,
+    });
+  }
+
+  await stageAndMaybePublish(opts, {
+    appId: ref.appId,
+    sessionId,
+    files: changed,
+    publish,
+    message: `rotate webhook secret for ${ref.automationId}`,
+    ephemeralSession,
+  });
+
+  return sendJson(res, 200, {
+    ok: true,
+    staged: !publish,
+    webhook: {
+      id: rotated.webhookId,
+      secret: rotated.secret,
+      url: webhookUrl(req, rotated.webhookId),
+    },
+  });
 }
 
 // ---- POST /centraid/_automations/enrichment (batch toggle, issue #306) ----

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   provisionPendingWebhooksInFiles,
+  rotateWebhookInFiles,
   verifyWebhookSecret,
   type WebhookFileMapEntry,
 } from './webhook.js';
@@ -71,5 +72,80 @@ describe('provisionPendingWebhooksInFiles', () => {
     const { minted, files: out } = provisionPendingWebhooksInFiles(files, 'a');
     expect(minted).toEqual([]);
     expect(out[0]!.content).toBe('{ not json');
+  });
+});
+
+describe('rotateWebhookInFiles', () => {
+  it('mints a fresh secret over the SAME webhook id and rewrites only the hash', () => {
+    const files: WebhookFileMapEntry[] = [
+      { path: 'app.json', content: '{}' },
+      {
+        path: 'automations/hook/automation.json',
+        content: manifest([{ kind: 'webhook', id: 'abc123', secretHash: 'stale-hash' }]),
+      },
+      { path: 'automations/hook/handler.js', content: 'export default async () => ({});' },
+    ];
+    const { changed, rotated } = rotateWebhookInFiles(files, 'hook');
+    expect(rotated).toBeTruthy();
+    expect(rotated!.webhookId).toBe('abc123'); // unchanged — any configured caller URL survives.
+    expect(rotated!.secret).toMatch(/^[0-9a-f]{48}$/);
+    expect(changed.length).toBe(1);
+    expect(changed[0]!.path).toBe('automations/hook/automation.json');
+
+    const mf = JSON.parse(changed[0]!.content) as {
+      triggers: { kind: string; id: string; secretHash: string }[];
+    };
+    expect(mf.triggers[0]!.id).toBe('abc123');
+    expect(mf.triggers[0]!.secretHash).not.toBe('stale-hash');
+    expect(verifyWebhookSecret(rotated!.secret, mf.triggers[0]!.secretHash)).toBeTruthy();
+    // The old secret (whatever it was) no longer verifies against the new hash.
+    expect(verifyWebhookSecret('whatever-the-old-plaintext-was', mf.triggers[0]!.secretHash)).toBe(
+      false,
+    );
+  });
+
+  it('is a no-op when the automation does not exist', () => {
+    const files: WebhookFileMapEntry[] = [
+      {
+        path: 'automations/other/automation.json',
+        content: manifest([{ kind: 'webhook', id: 'x', secretHash: 'h' }]),
+      },
+    ];
+    const { changed, rotated } = rotateWebhookInFiles(files, 'missing');
+    expect(changed).toEqual([]);
+    expect(rotated).toBeUndefined();
+  });
+
+  it('is a no-op for an automation with no webhook trigger', () => {
+    const files: WebhookFileMapEntry[] = [
+      {
+        path: 'automations/cron/automation.json',
+        content: manifest([{ kind: 'cron', expr: '0 9 * * *' }]),
+      },
+    ];
+    const { changed, rotated } = rotateWebhookInFiles(files, 'cron');
+    expect(changed).toEqual([]);
+    expect(rotated).toBeUndefined();
+  });
+
+  it('is a no-op for a still-pending (never minted) webhook trigger', () => {
+    const files: WebhookFileMapEntry[] = [
+      {
+        path: 'automations/hook/automation.json',
+        content: manifest([{ kind: 'webhook', pending: true }]),
+      },
+    ];
+    const { changed, rotated } = rotateWebhookInFiles(files, 'hook');
+    expect(changed).toEqual([]);
+    expect(rotated).toBeUndefined();
+  });
+
+  it('passes through an unparseable manifest', () => {
+    const files: WebhookFileMapEntry[] = [
+      { path: 'automations/bad/automation.json', content: '{ not json' },
+    ];
+    const { changed, rotated } = rotateWebhookInFiles(files, 'bad');
+    expect(changed).toEqual([]);
+    expect(rotated).toBeUndefined();
   });
 });

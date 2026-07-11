@@ -19,8 +19,10 @@
 //   POST   /centraid/_apps/<id>/meta           edit name/description
 //          body {name?, description?, sessionId?, publish?}
 //   POST   /centraid/_automations              scaffold an automation app
-//          body {id, name?, description?, prompt?, triggers?, apps?, …, publish?}
+//          body {id, name?, description?, prompt?, triggers?, vault?, apps?, …, publish?}
 //   POST   /centraid/_automations/set-enabled?ref=<ref>   toggle enabled
+//   POST   /centraid/_automations/rotate-webhook?ref=<ref>  mint a fresh webhook secret
+//          body {sessionId?, publish?} — 404 if the ref doesn't exist, 400 if it has no webhook trigger
 //   POST   /centraid/_automations/enrichment    {enabled} — batch-toggle every installed enricher (issue #306)
 //          body {enabled, publish?}
 //   DELETE /centraid/_automations?ref=<ref>&publish=      remove an automation
@@ -60,6 +62,7 @@ import { readFileMap, readJson, sendJson } from './route-helpers.js';
 import {
   handleAutomationCreate,
   handleAutomationDelete,
+  handleAutomationRotateWebhook,
   handleAutomationSetEnabled,
   handleEnrichmentToggle,
 } from './lifecycle-automation-routes.js';
@@ -107,6 +110,9 @@ export function makeLifecycleRouteHandler(
       }
       if (pathname === '/centraid/_automations/set-enabled' && method === 'POST') {
         return await handleAutomationSetEnabled(opts, req, res, url);
+      }
+      if (pathname === '/centraid/_automations/rotate-webhook' && method === 'POST') {
+        return await handleAutomationRotateWebhook(opts, req, res, url);
       }
       if (pathname === '/centraid/_automations/enrichment' && method === 'POST') {
         return await handleEnrichmentToggle(opts, req, res);

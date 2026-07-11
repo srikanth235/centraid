@@ -7,6 +7,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AppScaffoldError } from '@centraid/blueprints';
 import { ExtSpecError } from '@centraid/vault';
+import { ManifestError } from '@centraid/automation';
 import type * as automation from '@centraid/automation';
 import { WorktreeStore, WorktreeStoreError } from '../worktree-store/index.js';
 import { validateManifestAt } from '../routes/apps-store-routes.js';
@@ -217,6 +218,15 @@ export function sendLifecycleError(res: ServerResponse, err: unknown): true {
   if (err instanceof AppScaffoldError) {
     const status = err.code === 'already_exists' ? 409 : err.code === 'not_found' ? 404 : 400;
     return sendJson(res, status, { error: err.code, message: err.message });
+  }
+  if (err instanceof ManifestError) {
+    // A malformed trigger/vault/etc. spec (e.g. a create-route data/condition
+    // trigger the caller hand-authored) is a bad request, not a server fault —
+    // surface the validator's own field-scoped message instead of a 500.
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: `Invalid automation manifest (${err.code}): ${err.message}`,
+    });
   }
   if (err instanceof ExtSpecError) {
     // A declared ext table the vault refuses (bad shape, unsupported

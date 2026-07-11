@@ -26,6 +26,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { APP_AUTOMATIONS_SUBDIR, list, readAppAt, writeManifestAt } from './app.js';
 import {
   isPendingWebhookTrigger,
+  MANIFEST_FILE,
   parseManifest,
   pendingWebhookTriggerOf,
   webhookTriggerOf,
@@ -213,6 +214,69 @@ export function provisionPendingWebhooksInFiles(
     minted.push({ path: f.path, automationId: m[1]!, ownerApp, webhookId, secret });
   }
   return { files: out, minted };
+}
+
+/**
+ * Freshly minted secret for a webhook trigger that was ALREADY provisioned
+ * (rotation, not first mint — see {@link rotateWebhookInFiles}).
+ */
+export interface RotatedWebhookInFiles {
+  /** The `automation.json` path within the file map. */
+  readonly path: string;
+  /** Existing (unchanged) webhook route slug — any configured caller URL survives a rotation. */
+  readonly webhookId: string;
+  /** Freshly minted plaintext secret — shown once, never written to disk. */
+  readonly secret: string;
+}
+
+/**
+ * Rotate a specific automation's PROVISIONED webhook secret within a draft
+ * file map (issue #141 wire path, webhook-secret-rotation follow-up). The
+ * plaintext secret is shown to the owner exactly once at mint time
+ * (create/clone) — if they miss that one-time reveal the automation is
+ * otherwise permanently uncallable, since only the SHA-256 hash persists.
+ * This mints a fresh secret over the SAME route id (a caller already
+ * configured with the webhook URL keeps working, only its credential
+ * changes) and persists only the new hash — the mirror image of
+ * {@link provisionPendingWebhooksInFiles}'s first-mint pass.
+ *
+ * Returns the single changed file (empty when the automation is absent,
+ * its manifest is unparseable, or it has no *provisioned* webhook trigger —
+ * a still-`pending` one has nothing to rotate, it needs its first mint) plus
+ * the minted secret, or `undefined` in those same no-op cases.
+ */
+export function rotateWebhookInFiles(
+  current: ReadonlyArray<WebhookFileMapEntry>,
+  automationId: string,
+): { changed: WebhookFileMapEntry[]; rotated?: RotatedWebhookInFiles } {
+  const target = `${APP_AUTOMATIONS_SUBDIR}/${automationId}/${MANIFEST_FILE}`;
+  const file = current.find((f) => f.path === target);
+  if (!file) return { changed: [] };
+
+  let manifest;
+  try {
+    manifest = parseManifest(file.content);
+  } catch {
+    return { changed: [] }; // unparseable — leave it for the publish-time validator.
+  }
+  const existing = webhookTriggerOf(manifest.triggers);
+  if (!existing) return { changed: [] };
+
+  const secret = generateWebhookSecret();
+  const provisioned: WebhookTrigger = {
+    kind: 'webhook',
+    id: existing.id,
+    secretHash: hashWebhookSecret(secret),
+  };
+  const triggers: Trigger[] = manifest.triggers.map((t) => (t === existing ? provisioned : t));
+  const changedFile: WebhookFileMapEntry = {
+    path: target,
+    content: JSON.stringify({ ...manifest, triggers }, null, 2) + '\n',
+  };
+  return {
+    changed: [changedFile],
+    rotated: { path: target, webhookId: existing.id, secret },
+  };
 }
 
 /** Result of the caller-supplied automation fire. */
