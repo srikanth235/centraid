@@ -61,6 +61,14 @@ export interface InsightsAutomationRow {
   runs: number;
   tokens: number;
   costUsd: number;
+  /**
+   * The automation's last-known display name, recorded on its runs
+   * (`run_summary.automation_name`). Set only for `kind: 'automation'`
+   * rows that have at least one run recorded since the field existed —
+   * the desktop prefers the live manifest name and falls back to this,
+   * then to `key` (the raw ref), for a deleted automation.
+   */
+  automationName?: string;
 }
 
 export interface InsightsModelRow {
@@ -77,6 +85,8 @@ export interface InsightsActivityRow {
   /** `<appId>/<id>` handle — set for automation runs so the desktop can
    *  resolve the display name from the manifest (same deal as `name`). */
   automationRef?: string;
+  /** The automation's last-known display name — see `InsightsAutomationRow.automationName`. */
+  automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
@@ -146,14 +156,17 @@ export class InsightsStore {
         WHERE started_at >= ?
         GROUP BY day ORDER BY day ASC
       `),
-      // Automations live on disk (issue #98) — there is no table to
-      // join for a display name. `name` is NULL here; the desktop
-      // resolves it from the app manifest.
+      // Automations live on disk (issue #98) — there is no table to join
+      // for the CURRENT display name, so `name` here is the last-known
+      // name recorded on any run in the window (`run_summary.automation_name`,
+      // NULL for runs recorded before that field existed). The desktop
+      // prefers the live manifest name and falls back to this for a
+      // deleted automation, ahead of the raw ref.
       byAutomation: db.prepare(`
         SELECT
           kind AS kind,
           automation_ref AS automation_ref,
-          NULL AS name,
+          MAX(automation_name) AS name,
           COUNT(*) AS runs,
           SUM(${TOKEN_SUM}) AS tokens,
           SUM(COALESCE(total_cost_usd, 0)) AS cost
@@ -175,7 +188,7 @@ export class InsightsStore {
       recent: db.prepare(`
         SELECT
           run_id AS id, kind AS kind, ok AS ok, started_at AS started_at,
-          summary AS summary, note AS note, NULL AS name,
+          summary AS summary, note AS note, automation_name AS name,
           automation_ref AS automation_ref,
           ${TOKEN_SUM} AS tokens, COALESCE(total_cost_usd, 0) AS cost
         FROM run_summary
@@ -243,6 +256,7 @@ export class InsightsStore {
       runs: r.runs,
       tokens: r.tokens ?? 0,
       costUsd: round(r.cost ?? 0),
+      ...(r.name !== null ? { automationName: r.name } : {}),
     }));
 
     const byModel: InsightsModelRow[] = (
@@ -277,6 +291,7 @@ export class InsightsStore {
       kind: r.kind,
       label: r.summary ?? r.note ?? r.name ?? bucketLabel(r.kind),
       ...(r.automation_ref ? { automationRef: r.automation_ref } : {}),
+      ...(r.name ? { automationName: r.name } : {}),
       ok: r.ok !== 0,
       startedAt: r.started_at,
       tokens: r.tokens ?? 0,

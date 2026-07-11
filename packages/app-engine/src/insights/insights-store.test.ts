@@ -30,6 +30,7 @@ function seedRun(
   opts: {
     kind: 'automation' | 'chat' | 'build';
     automationRef?: string;
+    automationName?: string;
     model?: string;
     inputTokens?: number;
     outputTokens?: number;
@@ -44,7 +45,12 @@ function seedRun(
   if (opts.kind === 'automation' && opts.automationRef) {
     // Each fire is its own execution conversation, grouped by the automation ref.
     conversationId = randomUUID();
-    runs.createAutomationRun(conversationId, opts.automationRef, opts.automationRef.split('/')[0]);
+    runs.createAutomationRun(
+      conversationId,
+      opts.automationRef,
+      opts.automationRef.split('/')[0],
+      opts.automationName,
+    );
   } else {
     conversationId = runs.createConversation({ kind: opts.kind, userId: 'u' }).id;
   }
@@ -157,6 +163,25 @@ describe('InsightsStore', () => {
     expect(auto).toBeTruthy();
     expect(auto!.key).toBe('auto.x/auto-1');
     expect(auto!.tokens).toBe(500);
+  });
+
+  it('carries the run-recorded automation name on byAutomation + recent rows (orphaned-run fallback)', () => {
+    const { runs, insights } = setup();
+    seedRun(runs, {
+      kind: 'automation',
+      automationRef: 'auto.x/auto-1',
+      automationName: 'Auto One',
+      inputTokens: 500,
+    });
+    // A run recorded before this field existed carries no name.
+    seedRun(runs, { kind: 'automation', automationRef: 'auto.y/auto-2', inputTokens: 10 });
+    const s = insights.summary();
+    const named = s.byAutomation.find((r) => r.key === 'auto.x/auto-1');
+    const unnamed = s.byAutomation.find((r) => r.key === 'auto.y/auto-2');
+    expect(named?.automationName).toBe('Auto One');
+    expect(unnamed?.automationName).toBeUndefined();
+    const namedRecent = s.recent.find((r) => r.automationRef === 'auto.x/auto-1');
+    expect(namedRecent?.automationName).toBe('Auto One');
   });
 
   it('groups by each run’s dominant model', () => {
