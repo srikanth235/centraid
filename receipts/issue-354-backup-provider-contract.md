@@ -4,10 +4,10 @@
 
 - [x] `packages/backup/PROTOCOL.md` — centraid-backup-provider/1 normative spec
 - [x] `packages/backup/FORMAT.md` — centraid-snapshot/1 normative spec
-- [ ] `BackupProvider` seam, `LocalBackupProvider`, `RemoteBackupProvider`, `S3ObjectStore` (SigV4)
-- [ ] `chunkStream` FastCDC chunker (frozen gear table), keyring epochs, canonical-JSON manifest
-- [ ] `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `writeRecoveryKit` engine
-- [ ] `providerConformanceCases` conformance kit
+- [x] `BackupProvider` seam, `LocalBackupProvider`, `RemoteBackupProvider`, `S3ObjectStore` (SigV4)
+- [x] `chunkStream` FastCDC chunker (frozen gear table), keyring epochs, canonical-JSON manifest
+- [x] `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `writeRecoveryKit` engine
+- [x] `providerConformanceCases` conformance kit
 - [ ] `stageVaultDbs` receipted VACUUM INTO staging primitive (packages/vault)
 - [ ] `BackupService` scheduler + `'backups'` health component (staleness probe)
 - [ ] `centraid-gateway backup` CLI — status|run|list|verify|restore|kit

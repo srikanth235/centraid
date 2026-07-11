@@ -124,6 +124,15 @@
         "typescript": "catalog:",
       },
     },
+    "packages/backup": {
+      "name": "@centraid/backup",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@centraid/tsconfig": "workspace:*",
+        "@types/node": "^22.0.0",
+        "typescript": "catalog:",
+      },
+    },
     "packages/blueprints": {
       "name": "@centraid/blueprints",
       "version": "0.1.0",
@@ -158,6 +167,7 @@
         "@centraid/agent-runtime": "workspace:*",
         "@centraid/app-engine": "workspace:*",
         "@centraid/automation": "workspace:*",
+        "@centraid/backup": "workspace:*",
         "@centraid/blueprints": "workspace:*",
         "@centraid/skills": "workspace:*",
         "@centraid/vault": "workspace:*",
@@ -592,6 +602,8 @@
     "@centraid/app-engine": ["@centraid/app-engine@workspace:packages/app-engine"],
 
     "@centraid/automation": ["@centraid/automation@workspace:packages/automation"],
+
+    "@centraid/backup": ["@centraid/backup@workspace:packages/backup"],
 
     "@centraid/blueprints": ["@centraid/blueprints@workspace:packages/blueprints"],
 

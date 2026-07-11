@@ -10,6 +10,7 @@ export default defineConfig({
       'packages/agent-runtime',
       'packages/app-engine',
       'packages/automation',
+      'packages/backup',
       'packages/blueprints',
       'packages/gateway',
       'packages/openclaw-plugin',
