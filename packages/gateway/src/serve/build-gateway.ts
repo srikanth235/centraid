@@ -99,6 +99,8 @@ import { HealthRegistry } from './health-registry.js';
 import { makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
+import { BackupService } from '../backup/backup-service.js';
+import type { BackupConfig } from '../backup/backup-config.js';
 
 export type { DeviceAccess } from './vault-context.js';
 
@@ -139,6 +141,14 @@ export interface BuildGatewayOptions {
    * transport is implicitly enrolled in every vault.
    */
   deviceAccess?: DeviceAccess;
+  /**
+   * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
+   * `enabled`, `buildGateway` constructs a `BackupService` (component
+   * `'backups'` on `health`), starts its hourly scheduler from `start()`,
+   * and stops it from `stop()`. State lives under `paths.backupDir`
+   * (defaults to a `backup` sibling of `paths.vaultDir`).
+   */
+  backup?: BackupConfig;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the run-now route. */
@@ -185,6 +195,13 @@ export interface BuiltGateway {
    * join the same structured tail.
    */
   health: HealthRegistry;
+  /**
+   * The offsite backup service (PROTOCOL.md/FORMAT.md) — present only when
+   * `BuildGatewayOptions.backup?.enabled`. `cli/backup-admin.ts` builds its
+   * own instance from the same resolved config for one-shot CLI gestures;
+   * this is the live, scheduled one `start()`/`stop()` drive.
+   */
+  backup?: BackupService;
   /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
   prefs: PrefsStore;
   /** Run-summary rollup over the current request's journal.db. */
@@ -292,10 +309,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
+  // A mounted plane whose directory carried a restore-quarantine marker
+  // (FORMAT.md restore rule 4) stays flagged here until an operator
+  // resolves it — outbox is auto-parked (vault-quarantine.ts), automations
+  // are NOT, deliberately (see that module's header).
   health.registerProbe('vaults', async () => {
-    const count = vaultRegistry.planesList().length;
-    return count > 0
-      ? { status: 'ok', detail: `${count} vault${count === 1 ? '' : 's'} mounted` }
+    const planes = vaultRegistry.planesList();
+    const quarantined = planes.filter((p) => p.quarantine !== null);
+    if (quarantined.length > 0) {
+      const detail = quarantined
+        .map((p) => `${p.boot.vaultId} (source seq ${p.quarantine?.sourceSeq}) needs review`)
+        .join('; ');
+      return { status: 'error', detail: `restored from backup — ${detail}` };
+    }
+    return planes.length > 0
+      ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
       : { status: 'error', detail: 'no vaults mounted' };
   });
 
@@ -322,6 +350,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
   });
+
+  // Offsite backup engine (PROTOCOL.md/FORMAT.md) — constructed only when
+  // enabled; registers its own 'backups' health component (push + a
+  // staleness probe), started/stopped alongside the gateway below.
+  const backupService = options.backup?.enabled
+    ? new BackupService({
+        config: options.backup,
+        backupDir: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+        vaults: vaultRegistry,
+        health,
+        logger: health.loggerFor('backups', logger),
+      })
+    : undefined;
+
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
   // Device prefs (`prefs.json`) + the request vault's ledger stores. The
@@ -1316,11 +1358,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         );
       })();
     }
+
+    // Offsite backup engine: hourly scheduler, started only when enabled.
+    backupService?.start();
   };
 
   const stop = async (): Promise<void> => {
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearInterval(outboxTimer);
+    backupService?.stop();
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
   };
@@ -1328,6 +1374,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   return {
     runtime,
     health,
+    ...(backupService ? { backup: backupService } : {}),
     prefs,
     analyticsStore,
     conversationHistoryStore,

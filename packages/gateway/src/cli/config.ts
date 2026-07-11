@@ -21,6 +21,7 @@
  */
 
 import { promises as fs } from 'node:fs';
+import { validateBackupConfig, type BackupConfig } from '../backup/backup-config.js';
 
 export interface DaemonRunnerConfig {
   kind: 'codex' | 'claude-code';
@@ -39,6 +40,8 @@ export interface DaemonConfig {
    * setups (tests, boxes fronted by their own transport).
    */
   endpoint?: boolean;
+  /** Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. */
+  backup?: BackupConfig;
 }
 
 export class DaemonConfigError extends Error {
@@ -96,6 +99,13 @@ export function validateConfig(value: unknown): DaemonConfig {
       throw new DaemonConfigError('`endpoint` must be a boolean when set');
     }
     out.endpoint = value.endpoint;
+  }
+  if (value.backup !== undefined) {
+    try {
+      out.backup = validateBackupConfig(value.backup);
+    } catch (err) {
+      throw new DaemonConfigError(err instanceof Error ? err.message : String(err));
+    }
   }
   return out;
 }

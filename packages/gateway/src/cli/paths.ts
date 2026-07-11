@@ -16,6 +16,9 @@
  *     model-catalog.json    — chat picker's per-runner model catalog
  *     token.bin             — persistent bearer token (mode 0o600)
  *     vault/                — vault registry root (one dir per vault)
+ *     backup/               — offsite backup engine state (keyring, per-vault
+ *                              targets, staging) — kept OUTSIDE vault/ so a
+ *                              raw vault-dir copy never carries the keyring
  *     devices.json          — device enrollments: device key ↔ vault (#289)
  *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
  *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
@@ -52,6 +55,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     // gateway holding N sovereign vaults, one subdirectory each — and,
     // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
+    backupDir: path.join(abs, 'backup'),
     devicesFile: path.join(abs, 'devices.json'),
     pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
     endpointKeyFile: path.join(abs, 'endpoint-key.bin'),

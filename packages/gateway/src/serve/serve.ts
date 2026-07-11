@@ -86,6 +86,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     },
     runtime: gateway.runtime,
     health: gateway.health,
+    ...(gateway.backup ? { backup: gateway.backup } : {}),
     prefs: gateway.prefs,
     analyticsStore: gateway.analyticsStore,
     conversationHistoryStore: gateway.conversationHistoryStore,

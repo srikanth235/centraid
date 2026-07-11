@@ -26,6 +26,7 @@ const REQUIRED = [
   'data/index.html',
   'apps/index.html',
   'devices/index.html',
+  'backups/index.html',
   'ontology/index.html',
   '404.html',
   '_headers',
@@ -172,7 +173,7 @@ const homeHtml = await readFile(homeIndex, 'utf8');
 if (/https:\/\/docs\.centraid\.dev/.test(homeHtml)) {
   fail('home-site index.html: production docs links must stay under /docs/');
 }
-if (/href="\/docs\/(?:start|data|apps|devices|ontology)\.html(?:#.*?)?"/.test(homeHtml)) {
+if (/href="\/docs\/(?:start|data|apps|devices|backups|ontology)\.html(?:#.*?)?"/.test(homeHtml)) {
   fail('home-site index.html: docs links must use clean /docs/<route>/ URLs');
 }
 

@@ -250,7 +250,7 @@ export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from '
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
 export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { type BackupResult } from './gateway/custody.js';
+export { stageVaultDbs, type BackupResult, type StageDbsResult } from './gateway/custody.js';
 export {
   validateExtSpecs,
   canonicalSpecJson,
