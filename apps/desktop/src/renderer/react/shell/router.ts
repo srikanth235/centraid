@@ -34,6 +34,7 @@ export function routeKey(route: ShellRoute): string {
     case 'starred':
     case 'automations':
     case 'approvals':
+    case 'gateway':
     case 'templates':
       return route.kind;
     case 'automation-view':

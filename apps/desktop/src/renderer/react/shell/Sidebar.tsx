@@ -36,6 +36,7 @@ export type SidebarPage =
   | 'starred'
   | 'automations'
   | 'approvals'
+  | 'gateway'
   | 'settings';
 
 export interface SidebarApp {
@@ -65,6 +66,9 @@ export interface SidebarProps {
   onApprovals?: () => void;
   /** Count badge next to "Approvals" — omitted (no live count source yet) shows no badge. */
   approvalsCount?: number;
+  onGateway?: () => void;
+  /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
+  gatewayStatus?: 'up' | 'down' | 'unknown';
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
@@ -235,6 +239,20 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         active={props.activePage === 'approvals'}
         disabled={!props.onApprovals}
         onClick={props.onApprovals}
+      />
+      <SbItem
+        icon={<Icon name="Cellular" size={15} />}
+        label="Gateway"
+        active={props.activePage === 'gateway'}
+        disabled={!props.onGateway}
+        onClick={props.onGateway}
+        trailing={
+          props.gatewayStatus && props.gatewayStatus !== 'unknown' ? (
+            <StatusPill tone={props.gatewayStatus === 'up' ? 'live' : 'down'}>
+              {props.gatewayStatus}
+            </StatusPill>
+          ) : undefined
+        }
       />
 
       <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />

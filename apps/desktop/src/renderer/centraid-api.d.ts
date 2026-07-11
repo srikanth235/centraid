@@ -90,6 +90,62 @@ export interface CentraidSettings {
    * profile-setup view before mounting home.
    */
   onboardingCompletedAt?: string;
+  /**
+   * Gateway down-alert threshold in seconds — the monitor notifies once
+   * the active gateway has been continuously unreachable this long.
+   * Absent → the 2-minute default. Clamped main-side to [15, 3600].
+   */
+  gatewayAlertSeconds?: number;
+  /** Master switch for the gateway down alert. Absent → enabled. */
+  gatewayAlertsEnabled?: boolean;
+}
+
+/** One heartbeat probe in the runtime sample strip. */
+export interface CentraidGatewaySample {
+  at: number;
+  ok: boolean;
+  latencyMs?: number;
+}
+
+/** One continuous stretch of failed heartbeats. Open-ended while ongoing. */
+export interface CentraidGatewayOutage {
+  startedAt: number;
+  endedAt?: number;
+  /** Set when the OS down-alert fired for this outage. */
+  alertedAt?: number;
+  recoveredNoticeAt?: number;
+}
+
+/**
+ * Snapshot of the main-process gateway runtime watch (gateway-monitor.ts):
+ * heartbeat status, per-launch sample strip + outage log, the gateway's own
+ * reported uptime, and the effective alert config. Pushed on every poll via
+ * `onGatewayRuntime`; `getGatewayRuntime` covers first paint.
+ */
+export interface CentraidGatewayRuntime {
+  gatewayId: string;
+  gatewayLabel: string;
+  gatewayKind: 'local' | 'remote';
+  /** When tracking began (app launch or gateway switch), epoch ms. */
+  trackingSince: number;
+  status: 'unknown' | 'up' | 'down';
+  /** When the current status began. */
+  statusSince?: number;
+  lastCheckAt?: number;
+  latencyMs?: number;
+  /** Server-reported process start (gateway clock). */
+  gatewayStartedAt?: number;
+  /** Server-reported uptime — clock-skew-safe companion. */
+  gatewayUptimeMs?: number;
+  version?: string;
+  schemaEpoch?: number;
+  lastError?: string;
+  checksTotal: number;
+  checksFailed: number;
+  samples: CentraidGatewaySample[];
+  outages: CentraidGatewayOutage[];
+  alert: { enabled: boolean; thresholdSeconds: number };
+  pollIntervalMs: number;
 }
 
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */
@@ -429,6 +485,17 @@ interface CentraidApi {
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
   getGatewayAuth(): Promise<{ baseUrl: string; token?: string; vaultId?: string }>;
+  /**
+   * Latest gateway-runtime snapshot from the main-process heartbeat
+   * monitor. Resolves immediately from the last poll (≤5s old); the first
+   * call after launch may run a probe.
+   */
+  getGatewayRuntime(): Promise<CentraidGatewayRuntime>;
+  /**
+   * Subscribe to per-poll runtime snapshots (every ~5s, plus immediately
+   * after settings writes and gateway switches). Returns the unsubscribe.
+   */
+  onGatewayRuntime(cb: (snapshot: CentraidGatewayRuntime) => void): () => void;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:
