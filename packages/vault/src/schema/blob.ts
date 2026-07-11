@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS core_content_derivative (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_derivative_content ON core_content_derivative(content_id);
 
+-- Custody-state mirror (issue #352 phase 3/4): a rebuildable projection over
+-- BlobCustody.statusFor, refreshed wholesale by refreshCustodyState
+-- (blob/custody.ts) on every standing blob sweep. Registered as the logical
+-- entity blob.custody_state (schema/tables.ts) so apps can read it like any
+-- other table — the vault's ONE app-readable window into local-vs-replicated
+-- byte custody. Never written by a command; read-only from the app plane by
+-- construction (no command targets it).
+CREATE TABLE IF NOT EXISTS blob_custody_state (
+  content_id    TEXT PRIMARY KEY REFERENCES core_content_item(content_id) ON DELETE CASCADE,
+  sha256        TEXT NOT NULL CHECK (length(sha256) = 64),
+  custody_state TEXT NOT NULL CHECK (custody_state IN ('local-only','replicated','remote-only','missing')),
+  checked_at    TEXT NOT NULL
+) STRICT;
+
 -- Rebuild the document's FTS sync derivative-aware (see header).
 DROP TRIGGER IF EXISTS fts_core_document_ai;
 DROP TRIGGER IF EXISTS fts_core_document_au;

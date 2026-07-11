@@ -120,6 +120,14 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
        VALUES (?, ?, ?, 'active', ?, '{}', ?)`,
     )
     .run(vaultId, ownerPartyId, displayName, options.baseCurrency ?? 'INR', now);
+  // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
+  // readEnrichSettings/updateEnrichSettings): `local` is the default on both
+  // domains, same as the settings-bag default this table shadows.
+  for (const domain of ['photos', 'docs'] as const) {
+    db.vault
+      .prepare(`INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`)
+      .run(domain, now);
+  }
   // Events require a calendar (schedule.propose_event's calendar_exists
   // precondition) but no vault command creates one — without a minted
   // default, a fresh vault can never hold a single event and Agenda's

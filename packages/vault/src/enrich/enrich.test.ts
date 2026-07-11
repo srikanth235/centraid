@@ -678,6 +678,35 @@ describe('enrich settings', () => {
       /must be one of/,
     );
   });
+
+  // issue #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
+  // /centraid/_vault/enrich); `enrich_policy` mirrors the one column of it —
+  // "is this domain's model-tier enrichment on" — apps can actually reach
+  // through the normal consent-checked read path.
+  test('enrich_policy mirrors the settings bag, seeded local at bootstrap and readable via gw.read', () => {
+    const seeded = db.vault
+      .prepare('SELECT domain, tier FROM enrich_policy ORDER BY domain')
+      .all() as { domain: string; tier: string }[];
+    expect(seeded).toEqual([
+      { domain: 'docs', tier: 'local' },
+      { domain: 'photos', tier: 'local' },
+    ]);
+    updateEnrichSettings(db, { photos: 'model' });
+    const afterUpdate = db.vault
+      .prepare('SELECT tier FROM enrich_policy WHERE domain = ?')
+      .get('photos') as { tier: string };
+    expect(afterUpdate.tier).toBe('model');
+
+    // The exact surface an app reaches: ctx.vault.read({ entity: 'enrich.policy', ... }).
+    const read = gw.read(owner, {
+      entity: 'enrich.policy',
+      where: [{ column: 'domain', op: 'eq', value: 'photos' }],
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(read.rows).toEqual([
+      expect.objectContaining({ domain: 'photos', tier: 'model' }),
+    ]);
+  });
 });
 
 describe('per-class standing consent (issue #310 C3)', () => {

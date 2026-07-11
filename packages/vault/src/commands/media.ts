@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (8 commands with their contracts), so it is large by design.
+// governance: allow-repo-hygiene file-size-limit one command pack per domain is the vault contract (registered as a unit, read wholesale); media owns the whole library loop (9 commands with their contracts), so it is large by design.
 // Media domain commands (§08): the command pack the Photos projection was
 // parked on. An asset is meaning over bytes — media_media_asset decorates a
 // canonical core_content_item (sha256-deduped data: URI, same custody as
@@ -38,6 +38,46 @@ function assetKindFor(mediaType: string): string {
 
 function purgeAt(now: string): string {
   return new Date(new Date(now).getTime() + PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * Round to ~11m precision (4 decimal places) for find-or-create IDENTITY —
+ * photos taken a few meters apart at "the same place" share one core_place
+ * row instead of minting a new one per shutter click. The row itself keeps
+ * the PRECISE coordinates of whichever asset created it (issue #352).
+ */
+function roundCoord(v: number): number {
+  return Math.round(v * 10_000) / 10_000;
+}
+
+/**
+ * Find-or-create the core_place an asset's EXIF GPS names. Identity is the
+ * rounded coordinate pair; `geo_lat`/`geo_lng` on the row stay precise. A
+ * fresh row gets a plain coordinate label — geocoding a human place name is
+ * out of scope here (no network egress from a command handler); the owner or
+ * a future enrichment pass may rename it later like any other core.place.
+ */
+function findOrCreatePlace(ctx: HandlerCtx, lat: number, lng: number): string {
+  const rLat = roundCoord(lat);
+  const rLng = roundCoord(lng);
+  const existing = ctx.db
+    .prepare(
+      `SELECT place_id FROM core_place
+        WHERE geo_lat IS NOT NULL AND geo_lng IS NOT NULL
+          AND ROUND(geo_lat, 4) = ? AND ROUND(geo_lng, 4) = ?
+        LIMIT 1`,
+    )
+    .get(rLat, rLng) as { place_id: string } | undefined;
+  if (existing) return existing.place_id;
+  const placeId = ctx.newId();
+  ctx.db
+    .prepare(
+      `INSERT INTO core_place (place_id, name, kind, geo_lat, geo_lng, geohash, address_json, tz, parent_place_id, created_at)
+       VALUES (?, ?, NULL, ?, ?, NULL, NULL, NULL, NULL, ?)`,
+    )
+    .run(placeId, `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng, ctx.now);
+  ctx.wrote('core.place', placeId);
+  return placeId;
 }
 
 /**
@@ -220,16 +260,23 @@ function addAsset(ctx: HandlerCtx): Record<string, unknown> {
     Object.entries(meta).filter(([k, v]) => k !== 'text' && v !== undefined),
   );
   const assetId = ctx.newId();
+  // GPS already passed the media.location policy gate at staging time
+  // (pipeline.ts) — coordinates only ride here when the owner kept them.
+  const placeId =
+    meta.latitude !== undefined && meta.longitude !== undefined
+      ? findOrCreatePlace(ctx, meta.latitude, meta.longitude)
+      : null;
   ctx.db
     .prepare(
       `INSERT INTO media_media_asset (asset_id, content_id, kind, captured_at, place_id, camera_device_id, width, height, duration_s, exif_json, deleted_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL)`,
+       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL)`,
     )
     .run(
       assetId,
       contentId,
       input.kind ?? assetKindFor(minted.mediaType),
       input.captured_at ?? meta.captured_at ?? null,
+      placeId,
       input.width ?? meta.width ?? null,
       input.height ?? meta.height ?? null,
       input.duration_s ?? null,
@@ -339,6 +386,78 @@ function updateAsset(ctx: HandlerCtx): Record<string, unknown> {
   }
   ctx.wrote('media.media_asset', input.asset_id);
   return { asset_id: input.asset_id };
+}
+
+const SET_ASSET_PLACE: CommandDefinition = {
+  name: 'media.set_asset_place',
+  ownerSchema: 'media',
+  inputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    additionalProperties: false,
+    properties: {
+      asset_id: { type: 'string', minLength: 1 },
+      // Omitted place_id clears the asset's place (issue #352) — the same
+      // "omit to reset" convention core.move_document uses for folder_id.
+      place_id: { type: 'string', minLength: 1 },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    required: ['asset_id'],
+    // place_id is string | null (cleared) — the validator's `type` is a
+    // single string (json-schema.ts), so left unconstrained here; outputSchema
+    // is documentation only (never runtime-validated, unlike inputSchema).
+    properties: { asset_id: { type: 'string' }, place_id: {} },
+  },
+  preconditions: [
+    {
+      name: 'asset_exists',
+      sql: 'SELECT count(*) AS n FROM media_media_asset WHERE asset_id = :asset_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'place_exists_if_given',
+      sql: `SELECT CASE WHEN :place_id IS NULL THEN 1
+               ELSE EXISTS(SELECT 1 FROM core_place WHERE place_id = :place_id) END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'place_applied',
+      sql: `SELECT count(*) AS n FROM media_media_asset
+             WHERE asset_id = :asset_id
+               AND ((:place_id IS NULL AND place_id IS NULL) OR place_id = :place_id)`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  idempotency: 'idempotent',
+  risk: 'low',
+  handler: setAssetPlace,
+};
+
+function setAssetPlace(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { asset_id: string; place_id?: string };
+  const placeId = input.place_id ?? null;
+  ctx.db
+    .prepare('UPDATE media_media_asset SET place_id = ? WHERE asset_id = ?')
+    .run(placeId, input.asset_id);
+  ctx.wrote('media.media_asset', input.asset_id);
+  ctx.cite({
+    claim: placeId
+      ? `asset ${input.asset_id} located at place ${placeId}`
+      : `asset ${input.asset_id} location cleared`,
+    entityType: 'media.media_asset',
+    entityId: input.asset_id,
+  });
+  return { asset_id: input.asset_id, place_id: placeId };
 }
 
 const DELETE_ASSET: CommandDefinition = {
@@ -815,6 +934,7 @@ function removeFromAlbum(ctx: HandlerCtx): Record<string, unknown> {
 export function registerMediaCommands(gateway: Gateway): void {
   gateway.registerCommand(ADD_ASSET);
   gateway.registerCommand(UPDATE_ASSET);
+  gateway.registerCommand(SET_ASSET_PLACE);
   gateway.registerCommand(DELETE_ASSET);
   gateway.registerCommand(RESTORE_ASSET);
   gateway.registerCommand(CREATE_ALBUM);

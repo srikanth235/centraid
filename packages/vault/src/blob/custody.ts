@@ -18,8 +18,10 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { VaultDb } from '../db.js';
+import { nowIso } from '../ids.js';
 import type { LocalBlobStore } from './local.js';
-import { sha256OfBytes, type BlobRange, type BlobStore } from './store.js';
+import { sha256OfBytes, shaOfBlobUri, type BlobRange, type BlobStore } from './store.js';
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
@@ -54,6 +56,14 @@ export interface RemoteTier {
   /** Seal remote objects with this key (settings `blob_store.encrypt`). */
   encryptKey?: Buffer;
 }
+
+/**
+ * Per-content custody state (issue #352 phase 3/4): whether a piece of
+ * content's ORIGINAL bytes sit in the local tier, the remote tier, both, or
+ * (an integrity gap) neither. `blob_custody_state` mirrors this per
+ * content_id — see `refreshCustodyState` below and schema/blob.ts.
+ */
+export type CustodyState = 'local-only' | 'replicated' | 'remote-only' | 'missing';
 
 export interface ReconcileResult {
   /** Remote objects no live sha claims — deleted. */
@@ -195,6 +205,36 @@ export class BlobCustody {
   }
 
   /**
+   * Non-mutating custody status per sha (issue #352 phase 3/4) — the
+   * read-path snapshot `refreshCustodyState` persists into
+   * `blob_custody_state`. Unlike `reconcile`, this never pushes, deletes or
+   * re-caches; it only asks each tier what it currently holds, so it is safe
+   * to call from anywhere (including mid-sweep, right after `reconcile` has
+   * already brought the tiers into their steady state).
+   */
+  async statusFor(shas: Iterable<string>): Promise<Map<string, CustodyState>> {
+    const remote = this.remoteTier();
+    const remoteShas = remote ? new Set(await remote.store.list()) : null;
+    const out = new Map<string, CustodyState>();
+    for (const sha of shas) {
+      const local = this.local.hasSync(sha);
+      const remoteHas = remoteShas?.has(sha) ?? false;
+      if (remoteShas === null) {
+        out.set(sha, local ? 'local-only' : 'missing');
+      } else if (local && remoteHas) {
+        out.set(sha, 'replicated');
+      } else if (local) {
+        out.set(sha, 'local-only');
+      } else if (remoteHas) {
+        out.set(sha, 'remote-only');
+      } else {
+        out.set(sha, 'missing');
+      }
+    }
+    return out;
+  }
+
+  /**
    * Copy the whole local tier into `destDir/blobs` — the self-contained
    * export/backup gesture (issue #296 §6: the exit ramp from S3 is a
    * directory). The local tier is always complete, so no remote pull needed.
@@ -222,4 +262,51 @@ function writeBlobFile(file: string, bytes: Buffer): void {
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(tmp, bytes, { mode: 0o600 });
   renameSync(tmp, file);
+}
+
+/**
+ * Persist a custody-state snapshot into `blob_custody_state` (issue #352
+ * phase 3/4) — the rebuildable projection apps read as `blob.custody_state`
+ * (schema/tables.ts). Only LIVE content items' ORIGINAL bytes are covered —
+ * derivatives (thumb/preview) are an implementation detail of serving, not
+ * something an app needs custody visibility into. Called from the standing
+ * blob sweep (gateway.ts `sweepBlobs`), right after `reconcile()` has already
+ * brought both tiers to their steady state, so the snapshot reflects the
+ * POST-sweep truth. A full delete+reinsert every run — cheap at personal-vault
+ * scale, and it means a purged/trashed content item's stale row can never
+ * linger (rebuildable projection, never a durable fact of its own).
+ */
+export async function refreshCustodyState(db: VaultDb): Promise<{ updated: number }> {
+  const rows = db.vault
+    .prepare(
+      `SELECT content_id, content_uri FROM core_content_item
+        WHERE content_uri LIKE 'blob:%' AND deleted_at IS NULL`,
+    )
+    .all() as { content_id: string; content_uri: string }[];
+  const byContent = new Map<string, string>();
+  const shas = new Set<string>();
+  for (const row of rows) {
+    const sha = shaOfBlobUri(row.content_uri);
+    if (!sha) continue;
+    byContent.set(row.content_id, sha);
+    shas.add(sha);
+  }
+  const status = await db.blobs.statusFor(shas);
+  const now = nowIso();
+  db.vault.exec('BEGIN');
+  try {
+    db.vault.prepare('DELETE FROM blob_custody_state').run();
+    const insert = db.vault.prepare(
+      `INSERT INTO blob_custody_state (content_id, sha256, custody_state, checked_at)
+       VALUES (?, ?, ?, ?)`,
+    );
+    for (const [contentId, sha] of byContent) {
+      insert.run(contentId, sha, status.get(sha) ?? 'missing', now);
+    }
+    db.vault.exec('COMMIT');
+  } catch (err) {
+    db.vault.exec('ROLLBACK');
+    throw err;
+  }
+  return { updated: byContent.size };
 }

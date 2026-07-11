@@ -208,6 +208,7 @@ export { registerSyncCommands } from './commands/sync.js';
 export { registerEnrichCommands } from './commands/enrich.js';
 export { registerOutboxCommands } from './commands/outbox.js';
 export { registerJudgmentCommands } from './commands/judgment.js';
+export { registerTagCommands, LABELS_SCHEME_URI } from './commands/tags.js';
 
 export {
   AGENT_CONTENT_VARIANTS,

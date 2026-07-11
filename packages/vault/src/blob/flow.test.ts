@@ -285,3 +285,31 @@ test('readonly devices cannot stage; blob maintenance sweep replicates and repor
   expect(swept.missing).toEqual([]);
   expect(swept.receiptId).toBeTruthy();
 });
+
+test('blob maintenance sweep refreshes the app-readable custody-state mirror (issue #352)', async () => {
+  const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
+  const doc = executed<{ content_id: string }>(
+    invoke('core.add_document', { staged_sha: staged.sha256, title: 'p.png' }),
+  );
+  await gw.sweepBlobs(owner);
+  const row = db.vault
+    .prepare('SELECT sha256, custody_state FROM blob_custody_state WHERE content_id = ?')
+    .get(doc.content_id) as { sha256: string; custody_state: string } | undefined;
+  expect(row).toMatchObject({ sha256: staged.sha256, custody_state: 'local-only' });
+  // Read via the registered logical entity — the same surface an app uses.
+  const read = gw.read(owner, {
+    entity: 'blob.custody_state',
+    where: [{ column: 'content_id', op: 'eq', value: doc.content_id }],
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(read.rows).toHaveLength(1);
+
+  // Purging the document's content releases the mirror row too (ON DELETE
+  // CASCADE), not a stale entry the app plane would misread.
+  await gw.sweepBlobs(owner); // idempotent re-run, still one row
+  expect(
+    (
+      db.vault.prepare('SELECT count(*) AS n FROM blob_custody_state').get() as { n: number }
+    ).n,
+  ).toBe(1);
+});

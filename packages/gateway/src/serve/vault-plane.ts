@@ -72,6 +72,7 @@ import {
   registerOutboxCommands,
   registerJudgmentCommands,
   registerSyncCommands,
+  registerTagCommands,
   registerTallyCommands,
   registerTaskCommands,
   type AgentSummary,
@@ -326,6 +327,7 @@ export class VaultPlane {
     registerBusinessCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
     registerLinkCommands(this.gateway);
+    registerTagCommands(this.gateway);
     registerPartyCommands(this.gateway);
     registerMediaCommands(this.gateway);
     registerDocumentCommands(this.gateway);

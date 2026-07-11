@@ -7,6 +7,7 @@
 // staging is pre-model (no receipt until a command claims), egress is
 // consent-checked resolution; the bytes themselves live behind db.blobs.
 
+import type { DatabaseSync } from 'node:sqlite';
 import { nowIso, uuidv7 } from '../ids.js';
 import type { VaultDb } from '../db.js';
 import { resolveServableBlob, liveBlobShas, type BlobResolveOutcome } from '../blob/read.js';
@@ -16,8 +17,9 @@ import {
   type AgentContentOutcome,
   type AgentContentVariant,
 } from '../enrich/content.js';
+import { recomputeDuplicateClusters } from '../enrich/clusters.js';
 import { stageBlobBytes, type StageBlobOptions, type StagedBlob } from '../blob/staging.js';
-import type { ReconcileResult } from '../blob/custody.js';
+import { refreshCustodyState, type ReconcileResult } from '../blob/custody.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { resolveEntity } from '../schema/tables.js';
 import { resolveRefCards, type RefRequest, type ResolveResult } from './cards.js';
@@ -105,6 +107,56 @@ interface Parked {
   grantId: string | null;
   command: CommandRow;
   parkedAt: string;
+}
+
+/**
+ * Structural guard for reading `consent.provenance` (issue #352 phase 3/4 —
+ * the app-plane activity read). journal.db already carries a full audit
+ * trail keyed by (entity_type, entity_id) — every command write stamps one
+ * via `writeProvenance` — and `consent.provenance` is a registered logical
+ * entity, so a table-scoped grant alone would let `read()`'s normal path
+ * return it. That is not enough: a caller holding read on `consent.provenance`
+ * could otherwise pass ANY `entity_type` in `where` and browse another app's
+ * or another domain's activity history wholesale — the grant is a table-level
+ * yes/no, it cannot itself express "only entities you can already read".
+ *
+ * So a non-owner read of this one table is held to two EXTRA rules beyond
+ * the normal consent check: it must scope to exactly one (entity_type,
+ * entity_id) pair, and the caller must independently hold read consent on
+ * that entity's own table. Returns a failure reason, or null when the read
+ * is properly scoped. Owner-device reads (the assistant, the shell) bypass
+ * this — same as every other entity, the owner already sees everything.
+ */
+function provenanceScopeFailure(
+  vault: DatabaseSync,
+  identity: Identity,
+  request: ReadRequest,
+): string | null {
+  const eqValue = (column: string): string | undefined => {
+    const clause = (request.where ?? []).find((c) => c.column === column && c.op === 'eq');
+    return typeof clause?.value === 'string' ? clause.value : undefined;
+  };
+  const targetType = eqValue('entity_type');
+  const targetId = eqValue('entity_id');
+  if (!targetType || !targetId) {
+    return 'activity reads must scope to exactly one entity_type and one entity_id (eq filters)';
+  }
+  const targetRef = resolveEntity(targetType, vault);
+  if (!targetRef || targetRef.file !== 'vault') {
+    return `activity target names unknown entity "${targetType}"`;
+  }
+  const targetConsent = evaluateConsent(
+    vault,
+    identity,
+    targetRef.schema,
+    targetRef.table,
+    'read',
+    request.purpose,
+  );
+  if (targetConsent.decision === 'deny') {
+    return `no read consent for ${targetType}: ${targetConsent.failing}`;
+  }
+  return null;
 }
 
 export class Gateway {
@@ -232,6 +284,25 @@ export class Gateway {
         detail: { failing: consent.failing },
       });
       throw new GatewayError('consent', `deny (receipt ${receiptId}): ${consent.failing}`);
+    }
+    // Per-entity activity guard (issue #352 phase 3/4) — see
+    // provenanceScopeFailure's doc comment for why a table-level grant on
+    // consent.provenance alone is not a safe read.
+    if (ref.schema === 'consent' && ref.table === 'provenance' && identity.kind !== 'owner-device') {
+      const failing = provenanceScopeFailure(this.db.vault, identity, request);
+      if (failing) {
+        const receiptId = writeReceipt(this.db.journal, {
+          grantId: consent.grantId,
+          invocationId: null,
+          action: 'read',
+          objectType: request.entity,
+          objectId: null,
+          purpose: request.purpose,
+          decision: 'deny',
+          detail: { failing },
+        });
+        throw new GatewayError('consent', `deny (receipt ${receiptId}): ${failing}`);
+      }
     }
     const target = ref.file === 'vault' ? this.db.vault : this.db.journal;
     const now = nowIso();
@@ -781,7 +852,12 @@ export class Gateway {
     const owner = this.identify(cred);
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner runs sweeps');
-    return sweepLifecycle(this.db, owner);
+    const result = sweepLifecycle(this.db, owner);
+    // Near-duplicate cluster projection (issue #352 phase 3/4) — a cheap,
+    // fully rebuildable recompute; riding the same standing clock as
+    // everything else in duties.ts keeps it fresh without a bespoke timer.
+    recomputeDuplicateClusters(this.db.vault);
+    return result;
   }
 
   /**
@@ -1152,6 +1228,10 @@ export class Gateway {
     if (owner.kind !== 'owner-device')
       throw new GatewayError('consent', 'only the owner sweeps blob custody');
     const result = await this.db.blobs.reconcile(liveBlobShas(this.db.vault));
+    // Refresh the app-readable custody-state mirror (issue #352 phase 3/4)
+    // AFTER reconcile — the snapshot reflects the post-sweep steady state,
+    // not a stale pre-sweep gap.
+    await refreshCustodyState(this.db);
     const receiptId = writeReceipt(this.db.journal, {
       grantId: null,
       invocationId: null,

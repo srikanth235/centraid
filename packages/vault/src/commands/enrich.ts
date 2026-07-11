@@ -291,7 +291,10 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     properties: {
       entity_type: { type: 'string', minLength: 1 },
       entity_id: { type: 'string', minLength: 1 },
-      reason: { type: 'string', enum: ['search-miss', 'on-view'] },
+      // `manual` (issue #352 phase 3/4): an owner-driven on-demand ask from
+      // an app — "detect faces now" — distinct from a passive search-miss
+      // or on-view signal.
+      reason: { type: 'string', enum: ['search-miss', 'on-view', 'manual'] },
       detail: { type: 'string' },
     },
   },
@@ -316,7 +319,7 @@ const REQUEST_ENRICHMENT: CommandDefinition = {
     const input = ctx.input as {
       entity_type: string;
       entity_id?: string;
-      reason: 'search-miss' | 'on-view';
+      reason: 'search-miss' | 'on-view' | 'manual';
       detail?: string;
     };
     const requestId = ctx.newId();
