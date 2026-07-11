@@ -7,15 +7,15 @@
 - [x] Revise PROTOCOL.md: extract account + grant layer (discovery, capability flags, grant request carries a `store` class, usage endpoint schema); scope the existing backup semantics to the `backup` store; add the `cas` store section (key layout `<prefix>/blobs/<sha>`, grants must include list permission for reconciliation).
 - [x] Usage endpoint schema: per store class — bytes stored, object count, op counts (optional), quota limit, billing-period window. Optional capability.
 - [x] Extend the conformance kit: grant-layer tests, store-class scoping tests, usage endpoint tests (skippable when capability absent).
-- [ ] Land as its own reviewable PR before either implementation.
+- [x] Land as its own reviewable PR before either implementation.
 
 ### B. Clawgnition
 
-- [ ] Implement store-class grants: same token-issuing machinery as backups, two prefixes per user (`u/<id>/backup/`, `u/<id>/cas/`); reuse the existing scoping mechanism.
-- [ ] Per-user, per-prefix metering (bytes, object count, ops) — this is also the billing foundation for the add-on service; retrofitting metering later is much harder. *(blind spot #7)*
-- [ ] Serve the `usage` endpoint from the metering data.
-- [ ] Optionally: colder storage class on the backup prefix (it is never read outside restore).
-- [ ] Pass the extended conformance kit.
+- [x] Implement store-class grants: same token-issuing machinery as backups, two prefixes per user (`u/<id>/backup/`, `u/<id>/cas/`); reuse the existing scoping mechanism.
+- [x] Per-user, per-prefix metering (bytes, object count, ops) — this is also the billing foundation for the add-on service; retrofitting metering later is much harder. *(blind spot #7)*
+- [x] Serve the `usage` endpoint from the metering data.
+- [x] Optionally: colder storage class on the backup prefix (it is never read outside restore).
+- [x] Pass the extended conformance kit.
 
 ### C. Centraid — CAS remote tier
 
@@ -33,10 +33,10 @@
 
 ### D. Usage metrics + UI
 
-- [ ] Gateway: poll the provider `usage` endpoint on a slow cadence with caching; expose via a `_gateway/storage` route alongside the backup routes. BYO-S3 fallback: local custody-derived estimates only.
-- [ ] `storage-quota` health component: degraded ~80% of quota, error ~95% — mirrors the disk-watermark pattern.
-- [ ] **Storage card** on the Gateway page (sibling of the Backup card): quota bar, per-store breakdown (backup vs CAS), replication backlog from custody counts, last reconcile, warning states. Show provider-reported usage AND locally-computed replicated bytes — drift between them is an integrity signal.
-- [ ] Settings: storage-connection screen (endpoint/region/credentials/test-connection) shared by backup + CAS enablement flows.
+- [x] Gateway: poll the provider `usage` endpoint on a slow cadence with caching; expose via a `_gateway/storage` route alongside the backup routes. BYO-S3 fallback: local custody-derived estimates only.
+- [x] `storage-quota` health component: degraded ~80% of quota, error ~95% — mirrors the disk-watermark pattern.
+- [x] **Storage card** on the Gateway page (sibling of the Backup card): quota bar, per-store breakdown (backup vs CAS), replication backlog from custody counts, last reconcile, warning states. Show provider-reported usage AND locally-computed replicated bytes — drift between them is an integrity signal.
+- [x] Settings: storage-connection screen (endpoint/region/credentials/test-connection) shared by backup + CAS enablement flows.
 
 ### E. vault.db runway (the v2 insurance — keeps the deferral safe)
 
@@ -76,9 +76,15 @@
   `openDataPlane` signature and per-store disk layout (compile/behavior
   alignment only — gateway CAS consumption is Section C, a follow-up PR).
 
+- Land as its own reviewable PR before either implementation. — done: the
+  spec landed as PR #369 (stacked on the wave-4 PR #368), and both
+  implementations reference it.
+- Optionally: colder storage class on the backup prefix (it is never read outside restore). — evaluated in Clawgnition:
+  R2 exposes no storage-class ladder to map onto today; recorded there as
+  out of scope rather than silently dropped.
 - **Clawgnition (Section B, landed in Clawgnition PR #99 / its issue #98 with its own receipt)** —
   Implement store-class grants: same token-issuing machinery as backups, two prefixes per user (`u/<id>/backup/`, `u/<id>/cas/`); reuse the existing scoping mechanism.
-  Per-user, per-prefix metering (bytes, object count, ops) — this is also the billing foundation for the add-on service; retrofitting metering later is much harder.
+  Per-user, per-prefix metering (bytes, object count, ops) — this is also the billing foundation for the add-on service; retrofitting metering later is much harder. *(blind spot #7)*
   Serve the `usage` endpoint from the metering data.
   Pass the extended conformance kit.
   — verified over the wire from this repo: the full interop suite (19 tests)
@@ -420,6 +426,9 @@ npx turbo run typecheck test --filter=@centraid/backup --filter=@centraid/gatewa
 | claude-code-ac2077f8-e15-1783795799-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 2 | 1109 | 584464 | 181 | 1292 | 0.6074 | 995726 | 15160388 | 625107117 | 2989234 | test (#367) |
 | claude-code-ac2077f8-e15-1783795841-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 6 | 882 | 1756719 | 3906 | 4794 | 1.9631 | 995732 | 15161270 | 626863836 | 2993140 | feat(vault,gateway): vault.db runway — dbstat, journal archival, FTS budget, inl |
 | claude-code-ac2077f8-e15-1783795881-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 7276 | 3070 | 1171734 | 1886 | 12232 | 1.3772 | 1003008 | 15164340 | 628035570 | 2995026 | feat(vault,gateway): vault.db runway — dbstat, journal archival, FTS + body caps |
+| claude-code-ac2077f8-e15-1783795946-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 3508 | 12221 | 1766926 | 3260 | 18989 | 2.1178 | 1006516 | 15176561 | 629802496 | 2998286 | feat(gateway,desktop): storage usage metrics, quota health, Storage card + setti |
+| claude-code-ac2077f8-e15-1783795975-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 2 | 1584 | 594903 | 181 | 1767 | 0.6238 | 1006518 | 15178145 | 630397399 | 2998467 | test (#367) |
+| claude-code-ac2077f8-e15-1783796028-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 8 | 3121 | 2387382 | 4425 | 7554 | 2.6477 | 1006526 | 15181266 | 632784781 | 3002892 | feat(gateway,desktop): storage usage metrics, quota health, Storage card + setti |
 ## Audit
 
 ### Section A (Checklist items 1-3)

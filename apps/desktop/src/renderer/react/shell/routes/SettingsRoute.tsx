@@ -9,6 +9,7 @@ import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.j
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
+import SettingsStorageScreen from '../../screens/SettingsStorageScreen.js';
 import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
@@ -29,6 +30,16 @@ import SpaceModal, {
   type SpaceModalInitial,
 } from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
+import {
+  attachVaultConnection,
+  confirmStorageRecoveryKit,
+  createStorageConnection,
+  detachVaultConnection,
+  loadVaultBlobStoreData,
+  loadStorageConnectionsData,
+  makeDeleteStorageConnection,
+  testStorageConnection,
+} from './settingsStorageData.js';
 import styles from './SettingsRoute.module.css';
 
 // React-owned Settings — the inner-sidebar shell. Replaces the vanilla
@@ -48,7 +59,8 @@ type SettingsPageId =
   | 'phone'
   | 'import'
   | 'connections'
-  | 'providers';
+  | 'providers'
+  | 'storage';
 
 interface PageDef {
   id: SettingsPageId;
@@ -112,6 +124,14 @@ const PAGES: readonly PageDef[] = [
       'Data sources the vault pulls from — Gmail, Calendar, GitHub, and anything else you connect yourself.',
   },
   {
+    id: 'storage',
+    label: 'Storage',
+    section: 'Account',
+    icon: 'Webhook',
+    subtitle:
+      'Where your offsite backup snapshots and replicated blobs live — bring your own S3-compatible bucket, or connect a Centraid storage provider.',
+  },
+  {
     id: 'providers',
     label: 'Agents',
     section: 'Models',
@@ -124,10 +144,18 @@ const PAGES: readonly PageDef[] = [
 const AUTO_SAVE = new Set<SettingsPageId>(['appearance', 'layout', 'workspace']);
 const SECTIONS = ['Workspace', 'Account', 'Models'];
 
+function isSettingsPageId(id: string | undefined): id is SettingsPageId {
+  return PAGES.some((p) => p.id === id);
+}
+
 export interface SettingsRouteProps {
   prefs: AppearancePrefs;
   setPrefs: (patch: Partial<AppearancePrefs>) => void;
-  initialPage?: SettingsPageId;
+  // Loosely typed (not `SettingsPageId`) so a router-level deep link (e.g.
+  // `{kind: 'settings', page: 'storage'}` — issue #367 §D3, the Gateway
+  // page's Storage card) doesn't need a type-only import of this module's
+  // private page union; validated against `PAGES` below.
+  initialPage?: string;
 }
 
 export default function SettingsRoute({
@@ -135,12 +163,18 @@ export default function SettingsRoute({
   setPrefs,
   initialPage,
 }: SettingsRouteProps): JSX.Element {
-  const [page, setPage] = useState<SettingsPageId>(initialPage ?? 'appearance');
+  const [page, setPage] = useState<SettingsPageId>(
+    isSettingsPageId(initialPage) ? initialPage : 'appearance',
+  );
   const def = PAGES.find((p) => p.id === page);
   const { showToast, navigate, confirm } = useShellActions();
   const phoneProps = useMemo(() => phoneCallbacks(showToast), [showToast]);
   const importProps = useMemo(() => importCallbacks(showToast), [showToast]);
   const detachConnection = useMemo(() => makeDetachConnection(confirm), [confirm]);
+  const deleteStorageConnectionGated = useMemo(
+    () => makeDeleteStorageConnection(confirm),
+    [confirm],
+  );
   const [spacesNonce, setSpacesNonce] = useState(0);
   const spaces = useAsyncData(loadProfilesData, [spacesNonce]);
   const refreshSpaces = (): void => setSpacesNonce((n) => n + 1);
@@ -297,6 +331,18 @@ export default function SettingsRoute({
                 setConnectionStatus={updateConnectionStatus}
                 detachConnection={detachConnection}
                 beginAuthorize={beginConnectionAuthorize}
+                showToast={showToast}
+              />
+            ) : page === 'storage' ? (
+              <SettingsStorageScreen
+                loadConnections={loadStorageConnectionsData}
+                createConnection={createStorageConnection}
+                deleteConnection={deleteStorageConnectionGated}
+                testConnection={testStorageConnection}
+                confirmRecoveryKit={confirmStorageRecoveryKit}
+                loadVaultBlobStore={loadVaultBlobStoreData}
+                attachVaultConnection={attachVaultConnection}
+                detachVaultConnection={detachVaultConnection}
                 showToast={showToast}
               />
             ) : page === 'profiles' ? (

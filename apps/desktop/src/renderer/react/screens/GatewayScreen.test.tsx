@@ -56,10 +56,29 @@ const noLoadBackupStatus = (): Promise<{ configured: boolean; vaults: never[] }>
   new Promise(() => {});
 const noRunBackupNow = (): Promise<{ accepted: boolean }> => new Promise(() => {});
 const noConfirmRecoveryKit = (): Promise<{ confirmedAt: number }> => new Promise(() => {});
+const noLoadStorageStatus = (): Promise<{ connections: never[]; vaults: never[] }> =>
+  new Promise(() => {});
 const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> => new Promise(() => {});
 const noExportDiagnostics = (): Promise<
   { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
 > => new Promise(() => {});
+
+// One spreadable bag of the never-resolving stubs — interaction tests
+// override the handful of props they actually exercise.
+const stubProps = {
+  onAlertSecondsChange: noop,
+  onAlertsEnabledChange: noop,
+  health: null,
+  loadHealth: noLoadHealth,
+  streamLogs: noStreamLogs,
+  loadBackupStatus: noLoadBackupStatus,
+  onRunBackupNow: noRunBackupNow,
+  onConfirmRecoveryKit: noConfirmRecoveryKit,
+  loadStorageStatus: noLoadStorageStatus,
+  onOpenStorageSettings: noop,
+  onRestartGateway: noRestartGateway,
+  onExportDiagnostics: noExportDiagnostics,
+} as const;
 
 const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | null = null): string =>
   renderToStaticMarkup(
@@ -74,6 +93,8 @@ const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | nul
       loadBackupStatus={noLoadBackupStatus}
       onRunBackupNow={noRunBackupNow}
       onConfirmRecoveryKit={noConfirmRecoveryKit}
+      loadStorageStatus={noLoadStorageStatus}
+      onOpenStorageSettings={noop}
       onRestartGateway={noRestartGateway}
       onExportDiagnostics={noExportDiagnostics}
     />,
@@ -184,6 +205,8 @@ describe('GatewayScreen interactions', () => {
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
           onConfirmRecoveryKit={noConfirmRecoveryKit}
+          loadStorageStatus={noLoadStorageStatus}
+          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -203,16 +226,9 @@ describe('GatewayScreen interactions', () => {
         <GatewayScreen
           snapshot={base}
           now={NOW}
+          {...stubProps}
           onAlertSecondsChange={onSeconds}
           onAlertsEnabledChange={onEnabled}
-          health={null}
-          loadHealth={noLoadHealth}
-          streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          onRestartGateway={noRestartGateway}
-          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -243,16 +259,8 @@ describe('GatewayScreen interactions', () => {
         <GatewayScreen
           snapshot={base}
           now={NOW}
-          onAlertSecondsChange={noop}
-          onAlertsEnabledChange={noop}
-          health={null}
+          {...stubProps}
           loadHealth={loadHealth}
-          streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          onRestartGateway={noRestartGateway}
-          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -270,16 +278,7 @@ describe('GatewayScreen interactions', () => {
         <GatewayScreen
           snapshot={base}
           now={NOW}
-          onAlertSecondsChange={noop}
-          onAlertsEnabledChange={noop}
-          health={null}
-          loadHealth={noLoadHealth}
-          streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          onRestartGateway={noRestartGateway}
-          onExportDiagnostics={noExportDiagnostics}
+          {...stubProps}
         />,
       );
     });
@@ -307,16 +306,8 @@ describe('GatewayScreen interactions', () => {
         <GatewayScreen
           snapshot={base}
           now={NOW}
-          onAlertSecondsChange={noop}
-          onAlertsEnabledChange={noop}
-          health={null}
+          {...stubProps}
           loadHealth={loadHealth}
-          streamLogs={noStreamLogs}
-          loadBackupStatus={noLoadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          onRestartGateway={noRestartGateway}
-          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -342,16 +333,8 @@ describe('GatewayScreen interactions', () => {
         <GatewayScreen
           snapshot={base}
           now={NOW}
-          onAlertSecondsChange={noop}
-          onAlertsEnabledChange={noop}
-          health={null}
-          loadHealth={noLoadHealth}
-          streamLogs={noStreamLogs}
+          {...stubProps}
           loadBackupStatus={loadBackupStatus}
-          onRunBackupNow={noRunBackupNow}
-          onConfirmRecoveryKit={noConfirmRecoveryKit}
-          onRestartGateway={noRestartGateway}
-          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -380,6 +363,8 @@ describe('GatewayScreen interactions', () => {
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
           onConfirmRecoveryKit={noConfirmRecoveryKit}
+          loadStorageStatus={noLoadStorageStatus}
+          onOpenStorageSettings={noop}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -415,6 +400,8 @@ describe('GatewayScreen interactions', () => {
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
           onConfirmRecoveryKit={noConfirmRecoveryKit}
+          loadStorageStatus={noLoadStorageStatus}
+          onOpenStorageSettings={noop}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -446,6 +433,8 @@ describe('GatewayScreen interactions', () => {
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
           onConfirmRecoveryKit={noConfirmRecoveryKit}
+          loadStorageStatus={noLoadStorageStatus}
+          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,
@@ -480,6 +469,8 @@ describe('GatewayScreen interactions', () => {
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
           onConfirmRecoveryKit={noConfirmRecoveryKit}
+          loadStorageStatus={noLoadStorageStatus}
+          onOpenStorageSettings={noop}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,
