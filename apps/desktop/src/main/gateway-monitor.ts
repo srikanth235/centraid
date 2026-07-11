@@ -19,6 +19,13 @@
  * alerts land even when the window is backgrounded. State is in-memory and
  * per-launch; switching the active gateway resets tracking (the history
  * belongs to the gateway it was recorded against).
+ *
+ * Wave 2 of #351 adds a fourth alert: the version handshake (previously
+ * dead code — see version-handshake.ts) is now judged every tick for a
+ * REMOTE gateway (a local gateway is embedded in this build and can't
+ * skew), and a de-duped notification fires the first time a mismatch is
+ * observed. This is v0's "surface loudly" posture, not a hard refusal —
+ * see gateway-monitor-core.ts's file header for why.
  */
 
 import { BrowserWindow, Notification } from 'electron';
@@ -28,6 +35,7 @@ import { CRASH_LOOP_THRESHOLD, CRASH_LOOP_WINDOW_MS } from './gateway-supervisor
 import {
   applyComponentAlerts,
   applyProbe,
+  applyVersionSkewAlert,
   DEFAULT_ALERT_SECONDS,
   DEFAULT_COMPONENT_ALERT_SECONDS,
   evaluateAlert,
@@ -39,6 +47,7 @@ import {
   type GatewayComponentIssue,
   type GatewayProbe,
   type GatewayRuntimeState,
+  type GatewayVersionSkewAction,
 } from './gateway-monitor-core.js';
 
 export const GATEWAY_RUNTIME_POLL_MS = 5000;
@@ -51,11 +60,15 @@ const INFO_PATH = '/centraid/_gateway/info';
 
 /**
  * The wire snapshot the renderer's Gateway page renders. `componentAlerts`
- * is internal alert-dedupe bookkeeping (mirrors the outage log's
- * `alertedAt`) — deliberately NOT part of the broadcast payload, so it's
- * omitted here rather than inherited from `GatewayRuntimeState`.
+ * and `versionSkewAlertedAt` are internal alert-dedupe bookkeeping (mirrors
+ * the outage log's `alertedAt`) — deliberately NOT part of the broadcast
+ * payload, so they're omitted here rather than inherited from
+ * `GatewayRuntimeState`.
  */
-export interface GatewayRuntimeSnapshot extends Omit<GatewayRuntimeState, 'componentAlerts'> {
+export interface GatewayRuntimeSnapshot extends Omit<
+  GatewayRuntimeState,
+  'componentAlerts' | 'versionSkewAlertedAt'
+> {
   alert: GatewayAlertConfig;
   pollIntervalMs: number;
 }
@@ -189,6 +202,25 @@ function notifyComponent(action: GatewayComponentAlertAction, gatewayLabel: stri
   n.show();
 }
 
+/**
+ * Version-skew alert (wave 2 of #351) — fires once when a REMOTE gateway's
+ * reported version/schemaEpoch first diverges from this build's pinned
+ * expectations, de-duped by `applyVersionSkewAlert`. v0 policy is
+ * "surface loudly", not refuse — see gateway-monitor-core.ts's file header.
+ */
+function notifyVersionSkew(action: GatewayVersionSkewAction, gatewayLabel: string): void {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({
+    title: 'Gateway version mismatch',
+    body:
+      `“${gatewayLabel}” is running v${action.gatewayVersion} (schema epoch ` +
+      `${action.gatewaySchemaEpoch}), which doesn’t match what this app expects. ` +
+      'Update both to the same version to avoid undebuggable weirdness.',
+    urgency: 'critical',
+  });
+  n.show();
+}
+
 /** Fired once when the embedded local gateway's supervised restart gives up (issue #351). */
 function notifyCrashLoop(gatewayLabel: string, lastError: string | undefined): void {
   if (!Notification.isSupported()) return;
@@ -306,6 +338,13 @@ async function tick(): Promise<void> {
   state = componentEvaluated.state;
   for (const action of componentEvaluated.actions) notifyComponent(action, state.gatewayLabel);
 
+  // Version-skew alert (wave 2 of #351) — same enable switch, no threshold
+  // (see applyVersionSkewAlert's doc comment for why). `versionSkew` is only
+  // ever set for a remote gateway, so this is a no-op for local.
+  const skewEvaluated = applyVersionSkewAlert(state, alert, Date.now());
+  state = skewEvaluated.state;
+  if (skewEvaluated.action) notifyVersionSkew(skewEvaluated.action, state.gatewayLabel);
+
   // Crash-loop alert — fires once per loop-broken episode; clears when the
   // supervisor recovers (a manual restart, or the app relaunching) so a
   // later crash loop can alert again.
@@ -318,9 +357,13 @@ async function tick(): Promise<void> {
     crashLoopNotified.delete(state.gatewayId);
   }
 
-  // `componentAlerts` is internal dedupe bookkeeping — not part of the wire
-  // snapshot (see GatewayRuntimeSnapshot's doc comment).
-  const { componentAlerts: _componentAlerts, ...publicState } = state;
+  // `componentAlerts`/`versionSkewAlertedAt` are internal dedupe bookkeeping
+  // — not part of the wire snapshot (see GatewayRuntimeSnapshot's doc comment).
+  const {
+    componentAlerts: _componentAlerts,
+    versionSkewAlertedAt: _skewAlertedAt,
+    ...publicState
+  } = state;
   lastSnapshot = { ...publicState, alert, pollIntervalMs: GATEWAY_RUNTIME_POLL_MS };
   broadcast(lastSnapshot);
 }

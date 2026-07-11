@@ -47,6 +47,17 @@ export interface GatewayScreenProps {
   savingAlert?: boolean;
   onAlertSecondsChange: (seconds: number) => void;
   onAlertsEnabledChange: (enabled: boolean) => void;
+  /**
+   * Launch-at-login toggle (issue #351, tier 4) — the cheap 80% fix for
+   * "always-on": the desktop-hosted gateway still dies when the app quits,
+   * but the app itself can come back after a reboot/login. Optional so the
+   * Alerts tab renders unchanged wherever a caller hasn't wired settings up
+   * yet (e.g. existing tests) — `launchAtLogin` defaults to `false`.
+   */
+  launchAtLogin?: boolean;
+  onLaunchAtLoginChange?: (enabled: boolean) => void;
+  /** True while the launch-at-login write is in flight — locks just that switch. */
+  savingLaunchAtLogin?: boolean;
   /** Polled component-health summary — reconciles the Overview orb and
    *  badges the Components tab. `null` before the first poll lands. */
   health: GatewayHealthDTO | null;
@@ -437,6 +448,37 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
                     </span>
                   ) : null}
                 </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Launch at login — the cheap 80% fix for "always-on" (no OS
+              scheduler keeps the desktop-hosted gateway up once the app quits,
+              but this brings the app itself back after a reboot/login). */}
+          <section className={styles.panel}>
+            <div className={styles.panelHead}>
+              <h2>Launch at login</h2>
+            </div>
+            <div className={styles.alertBody}>
+              <div className={styles.alertToggleRow}>
+                <div>
+                  <div className={styles.alertToggleLabel}>Start Centraid at login</div>
+                  <div className={styles.alertToggleSub}>
+                    Keeps your gateway available without having to open Centraid by hand.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={props.launchAtLogin ?? false}
+                  aria-label="Start Centraid at login"
+                  className={styles.switch}
+                  data-on={props.launchAtLogin || undefined}
+                  disabled={props.savingLaunchAtLogin}
+                  onClick={() => props.onLaunchAtLoginChange?.(!(props.launchAtLogin ?? false))}
+                >
+                  <span className={styles.switchThumb} />
+                </button>
               </div>
             </div>
           </section>

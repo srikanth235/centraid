@@ -104,6 +104,14 @@ export interface CentraidSettings {
    * then writes the new version back via `saveSettings`. Absent → never seen.
    */
   changelogSeenVersion?: string;
+  /**
+   * Launch Centraid automatically at OS login (issue #351) — the cheap 80%
+   * fix for "always-on" given the desktop-hosted gateway dies when the app
+   * quits and there's deliberately no OS scheduler. Applied to the OS
+   * immediately on save via `app.setLoginItemSettings`; no-op on Linux.
+   * Absent → disabled (opt-in).
+   */
+  launchAtLogin?: boolean;
 }
 
 /** A single published release shown in the "What's new" modal. */
@@ -191,6 +199,23 @@ export interface CentraidGatewayRuntime {
   componentIssues?: { component: string; status: string; message?: string }[];
   /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
   latencyDegraded?: boolean;
+  /**
+   * Version-handshake verdict (issue #351, wave 2) — REMOTE gateways only.
+   * A local gateway is embedded in this same build and can never skew, so
+   * this stays absent for it. Absent for a remote gateway too until the
+   * first probe carrying `version`/`schemaEpoch` lands; persists at its
+   * last value while unreachable. `skewed: true` means the gateway's
+   * reported version/schemaEpoch doesn't match what this app was built
+   * against — v0 policy surfaces this loudly (this field + a de-duped OS
+   * notification) rather than refusing requests.
+   */
+  versionSkew?: {
+    skewed: boolean;
+    gatewayVersion: string;
+    gatewaySchemaEpoch: number;
+    clientVersion: string;
+    clientSchemaEpoch: number;
+  };
 }
 
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */

@@ -21,7 +21,21 @@
  *     `error` and fires a de-duped OS notification once it crosses
  *     {@link DEFAULT_COMPONENT_ALERT_SECONDS} — mirroring `evaluateAlert`'s
  *     shape but keyed per-component instead of per-gateway.
+ *
+ * Wave 2 of #351 wires up the version handshake (version-handshake.ts) that
+ * previously had zero runtime callers: `applyProbe` judges a REMOTE
+ * gateway's reported `version`/`schemaEpoch` against this build's pinned
+ * expectations and records the verdict as `versionSkew`. A local gateway is
+ * embedded — always built from the same tree as the app — so it's never
+ * judged; `versionSkew` stays permanently undefined for it. This is v0's
+ * "surface loudly" posture, NOT the hard-refuse policy `judgeGatewayInfo`'s
+ * doc comment describes — {@link applyVersionSkewAlert} just fires a
+ * de-duped OS notification. Hard refusal (blocking requests to a skewed
+ * remote gateway) is the documented escalation path, deliberately not
+ * implemented yet.
  */
+
+import { EXPECTED_GATEWAY_VERSION, EXPECTED_SCHEMA_EPOCH } from './version-handshake.js';
 
 /** Result of one heartbeat probe (`/centraid/_gateway/health`, or `/info` on a fallback). */
 export interface GatewayProbe {
@@ -53,6 +67,28 @@ export interface GatewayComponentIssue {
   status: 'degraded' | 'error';
   message?: string;
 }
+
+/**
+ * Version-handshake verdict for the active (REMOTE only, see file header)
+ * gateway, folded from the probe's `version`/`schemaEpoch` against this
+ * build's pinned expectations ({@link EXPECTED_GATEWAY_VERSION} /
+ * {@link EXPECTED_SCHEMA_EPOCH}, imported from version-handshake.ts so both
+ * call sites — the switcher's one-shot handshake and this continuous
+ * heartbeat — judge against the same pinned pair).
+ */
+export interface GatewayVersionSkew {
+  skewed: boolean;
+  gatewayVersion: string;
+  gatewaySchemaEpoch: number;
+  clientVersion: string;
+  clientSchemaEpoch: number;
+}
+
+/** Action returned by {@link applyVersionSkewAlert} when a skew notification is due. */
+export type GatewayVersionSkewAction = {
+  gatewayVersion: string;
+  gatewaySchemaEpoch: number;
+};
 
 /** Per-component alert bookkeeping — mirrors `GatewayOutage`'s de-dupe shape. */
 export interface GatewayComponentAlertRecord {
@@ -126,6 +162,16 @@ export interface GatewayRuntimeState {
   latencyDegraded: boolean;
   /** Per-component alert bookkeeping, capped small — internal to the monitor. */
   componentAlerts: GatewayComponentAlertRecord[];
+  /**
+   * Version-handshake verdict, REMOTE gateways only (see file header) —
+   * undefined for a local gateway (always in lockstep) and while no probe
+   * carrying `version`/`schemaEpoch` has landed yet. Persists at its last
+   * value across a failed probe or an `/info`-fallback probe, same posture
+   * as `version`/`schemaEpoch` themselves.
+   */
+  versionSkew?: GatewayVersionSkew;
+  /** De-dupe marker for the skew OS notification — internal, not on the wire snapshot. */
+  versionSkewAlertedAt?: number;
 }
 
 export interface GatewayAlertConfig {
@@ -263,6 +309,25 @@ export function applyProbe(state: GatewayRuntimeState, probe: GatewayProbe): Gat
             : {}),
           ...(probe.version !== undefined ? { version: probe.version } : {}),
           ...(probe.schemaEpoch !== undefined ? { schemaEpoch: probe.schemaEpoch } : {}),
+          // Version handshake (wave 2 of #351) — REMOTE gateways only; a
+          // local gateway is embedded in this same build and can never
+          // skew. `/info`-fallback probes (no version/schemaEpoch) leave
+          // the last-known verdict in place, same as `version` above.
+          ...(state.gatewayKind === 'remote' &&
+          probe.version !== undefined &&
+          probe.schemaEpoch !== undefined
+            ? {
+                versionSkew: {
+                  skewed:
+                    probe.version !== EXPECTED_GATEWAY_VERSION ||
+                    probe.schemaEpoch !== EXPECTED_SCHEMA_EPOCH,
+                  gatewayVersion: probe.version,
+                  gatewaySchemaEpoch: probe.schemaEpoch,
+                  clientVersion: EXPECTED_GATEWAY_VERSION,
+                  clientSchemaEpoch: EXPECTED_SCHEMA_EPOCH,
+                } satisfies GatewayVersionSkew,
+              }
+            : {}),
         }
       : probe.detail !== undefined
         ? { lastError: probe.detail }
@@ -374,6 +439,34 @@ export function applyComponentAlerts(
   return {
     state: { ...state, componentAlerts: nextRecords.slice(-COMPONENT_ALERT_CAP) },
     actions,
+  };
+}
+
+/**
+ * Decide whether the version-skew OS notification is due. Unlike
+ * {@link applyComponentAlerts}, there's no "sustained past a threshold"
+ * wait: a version/schema mismatch is a static build fact, not a transient
+ * blip that might self-heal within a few probes, so it fires as soon as
+ * it's observed. It still de-dupes like the component-alert pattern —
+ * `versionSkewAlertedAt` marks an already-notified skew so it doesn't refire
+ * every 5s tick, and clears the moment the gateway stops reporting skew
+ * (e.g. both sides get upgraded to match), re-arming for a later mismatch.
+ */
+export function applyVersionSkewAlert(
+  state: GatewayRuntimeState,
+  config: GatewayAlertConfig,
+  now: number,
+): { state: GatewayRuntimeState; action?: GatewayVersionSkewAction } {
+  const skew = state.versionSkew;
+  if (!skew?.skewed) {
+    if (state.versionSkewAlertedAt === undefined) return { state };
+    const { versionSkewAlertedAt: _cleared, ...rest } = state;
+    return { state: rest as GatewayRuntimeState };
+  }
+  if (!config.enabled || state.versionSkewAlertedAt !== undefined) return { state };
+  return {
+    state: { ...state, versionSkewAlertedAt: now },
+    action: { gatewayVersion: skew.gatewayVersion, gatewaySchemaEpoch: skew.gatewaySchemaEpoch },
   };
 }
 

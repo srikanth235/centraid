@@ -21,9 +21,9 @@
 - [x] Gateway page backup card with seal-key nudge
 - [x] gateway instance lease (second-gateway split-brain detection)
 - [x] `instanceId` exposed via `_gateway/info`
-- [ ] desktop single-instance lock
-- [ ] version-skew handshake wired for remote gateways
-- [ ] launch-at-login setting
+- [x] desktop single-instance lock
+- [x] version-skew handshake wired for remote gateways
+- [x] launch-at-login setting
 - [x] missed-automation-run ledger (recorded, never retro-executed)
 - [x] `broker` health probe (needs-auth + overdue token refresh)
 - [x] `scheduler` health probe (per-vault tick staleness + missed windows)

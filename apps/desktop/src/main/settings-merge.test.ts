@@ -137,3 +137,29 @@ test('gateway alert fields preserve-or-set, clamping the threshold on write', ()
   expect(absent.gatewayAlertSeconds).toBeUndefined();
   expect(absent.gatewayAlertsEnabled).toBeUndefined();
 });
+
+test('launchAtLogin preserve-or-sets like a plain boolean field (issue #351)', () => {
+  // Unset everywhere → dropped, not persisted as a default.
+  expect(mergePersistedSettings({ activeGatewayId: 'local' }, {}).launchAtLogin).toBeUndefined();
+
+  // A patch sets it.
+  expect(
+    mergePersistedSettings({ activeGatewayId: 'local' }, { launchAtLogin: true }).launchAtLogin,
+  ).toBe(true);
+
+  // An unrelated save carries the current value through.
+  expect(
+    mergePersistedSettings(
+      { activeGatewayId: 'local', launchAtLogin: true },
+      { chatModelByRunner: { codex: 'gpt-5.5' } },
+    ).launchAtLogin,
+  ).toBe(true);
+
+  // A patch can flip it back off.
+  expect(
+    mergePersistedSettings(
+      { activeGatewayId: 'local', launchAtLogin: true },
+      { launchAtLogin: false },
+    ).launchAtLogin,
+  ).toBe(false);
+});

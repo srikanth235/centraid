@@ -18,6 +18,7 @@ import {
   type GatewayProfile,
 } from './gateway-store.js';
 import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
+import { applyLaunchAtLogin } from './login-item.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
@@ -229,6 +230,9 @@ export function registerIpcHandlers(): void {
     // Alert-threshold/toggle changes ride this surface too — re-broadcast
     // the runtime snapshot now so the Gateway page reflects them instantly.
     nudgeGatewayMonitor();
+    // launchAtLogin (issue #351) rides this same generic surface — apply it
+    // to the OS immediately rather than waiting for next launch.
+    if ('launchAtLogin' in patch) applyLaunchAtLogin(next.launchAtLogin);
     return next;
   });
 
