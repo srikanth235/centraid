@@ -8,9 +8,28 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
+import { DiskFullTracker } from '@centraid/vault';
 import { GatewayLogStore, type GatewayLogEntry } from './gateway-log-store.ts';
+
+// ESM's `node:fs` module namespace isn't configurable, so `vi.spyOn` can't
+// stub a single export (vitest's documented limitation) — mock the whole
+// module through to the real implementation, with `appendFileSync` swapped
+// for a toggleable stub, so the disk-full tests below can force an
+// ENOSPC-shaped failure deterministically without touching any other test
+// in this file (every other fs call in this file keeps its real behavior).
+let appendFileSyncShouldFail = false;
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  const appendFileSync: typeof actual.appendFileSync = (...args) => {
+    if (appendFileSyncShouldFail) {
+      throw Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+    }
+    return (actual.appendFileSync as (...a: typeof args) => void)(...args);
+  };
+  return { ...actual, appendFileSync, default: { ...actual, appendFileSync } };
+});
 
 const tmpDirs: string[] = [];
 
@@ -187,4 +206,66 @@ test('dropped-writes counter increments on an unwritable dir, never throws', () 
   expect(store.droppedWriteCount()).toBeGreaterThan(0);
   // In-memory behavior is unaffected by the persistence failure.
   expect(store.snapshot().map((e) => e.message)).toEqual(['should not throw', 'another']);
+});
+
+test('disk-full: fails open to the in-memory ring, never throws, and stops hammering the disk', () => {
+  const dir = makeTmpDir();
+  const tracker = new DiskFullTracker();
+  const store = new GatewayLogStore(2000, { dir, diskFullTracker: tracker });
+
+  appendFileSyncShouldFail = true;
+  try {
+    expect(() => store.append('error', 'one')).not.toThrow();
+    expect(store.diskFullSuspended()).toBe(true);
+    expect(tracker.current()?.context).toBe('gateway log persistence');
+
+    // Backed off: a second append during the retry window must NOT call
+    // appendFileSync again — droppedWrites still counts it, but the ring
+    // (the thing that must survive) keeps growing regardless.
+    const before = store.droppedWriteCount();
+    store.append('error', 'two');
+    expect(store.droppedWriteCount()).toBe(before + 1);
+    expect(store.snapshot().map((e) => e.message)).toEqual(['one', 'two']);
+  } finally {
+    appendFileSyncShouldFail = false;
+  }
+});
+
+test('disk-full: recovers once appendFileSync succeeds again after the backoff window', () => {
+  const dir = makeTmpDir();
+  const tracker = new DiskFullTracker();
+  const store = new GatewayLogStore(2000, { dir, diskFullTracker: tracker });
+
+  appendFileSyncShouldFail = true;
+  store.append('error', 'during outage');
+  expect(store.diskFullSuspended()).toBe(true);
+  appendFileSyncShouldFail = false;
+
+  // Force the retry window to have elapsed without a real sleep.
+  vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 60_000);
+  try {
+    store.append('info', 'after recovery');
+  } finally {
+    vi.restoreAllMocks();
+  }
+  expect(store.diskFullSuspended()).toBe(false);
+
+  const raw = fs.readFileSync(path.join(dir, 'gateway.jsonl'), 'utf8');
+  expect(raw).toContain('after recovery');
+});
+
+test('disk-full: a non-ENOSPC failure keeps retrying every append (unchanged prior behavior)', () => {
+  const parent = makeTmpDir();
+  const blocker = path.join(parent, 'blocker');
+  fs.writeFileSync(blocker, 'not a directory');
+  const dir = path.join(blocker, 'gateway-logs');
+  const tracker = new DiskFullTracker();
+
+  const store = new GatewayLogStore(2000, { dir, diskFullTracker: tracker });
+  store.append('error', 'one');
+  store.append('error', 'two');
+
+  expect(store.diskFullSuspended()).toBe(false);
+  expect(tracker.current()).toBeNull();
+  expect(store.droppedWriteCount()).toBe(2);
 });

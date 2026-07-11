@@ -8,10 +8,21 @@
  *
  * `statfs`/`fileSize` are injectable so tests can exercise the thresholds
  * without needing an actual near-full filesystem.
+ *
+ * Disk-full (issue #351 wave 4): a `statfs` snapshot alone can miss a real
+ * write failure — a per-volume quota, or a few bytes freed up between the
+ * ENOSPC and the next health tick — so every write path (vault SQLite
+ * writes, blob CAS, gateway log persistence) reports into
+ * `sharedDiskFullTracker` on an ENOSPC/SQLITE_FULL error. This probe reads
+ * that tracker: a recorded event forces `error` (with an "ENOSPC observed
+ * at <time> in <context>" detail) for at least the one tick right after it
+ * fires, even if that tick's statfs reading already looks recovered; the
+ * event then clears so the FOLLOWING tick reflects statfs normally.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { sharedDiskFullTracker, type DiskFullTracker } from '@centraid/vault';
 import type { HealthProbe } from './health-registry.js';
 
 /** Free space below this ⇒ `error` — writes are about to start failing. */
@@ -45,6 +56,13 @@ export interface DiskHealthOptions {
    * file doesn't exist (a vault with no WAL file yet is not an error).
    */
   fileSize?: (file: string) => number;
+  /**
+   * The last-ENOSPC record every write path (vault SQLite writes, blob CAS,
+   * gateway log persistence) reports into. Defaults to the process-wide
+   * `sharedDiskFullTracker` so this wires up with no caller changes — tests
+   * inject their own `new DiskFullTracker()` for isolation.
+   */
+  diskFullTracker?: DiskFullTracker;
 }
 
 const defaultFileSize = (file: string): number => {
@@ -77,6 +95,7 @@ export function formatBytes(bytes: number): string {
 export function createDiskHealthProbe(options: DiskHealthOptions): HealthProbe {
   const statfs = options.statfs ?? ((dir: string) => fs.statfsSync(dir));
   const fileSize = options.fileSize ?? defaultFileSize;
+  const diskFullTracker = options.diskFullTracker ?? sharedDiskFullTracker;
   return async () => {
     const stat = statfs(options.rootDir);
     const freeBytes = stat.bavail * stat.bsize;
@@ -90,7 +109,23 @@ export function createDiskHealthProbe(options: DiskHealthOptions): HealthProbe {
     const detail =
       `${formatBytes(freeBytes)} free of ${formatBytes(totalBytes)}` +
       (perVault.length > 0 ? ` — ${perVault}` : '');
+
+    // A prior ENOSPC/SQLITE_FULL write failure forces `error` — even on a
+    // tick where statfs reports plenty free (a write can fail on a volume
+    // quota, or space can free up again microseconds after the failure) —
+    // for at least the one tick right after the event, so an operator
+    // never sees a health page that silently skipped straight from "a write
+    // just failed" to "ok" with no trace. A reading back ABOVE the error
+    // watermark clears the event for the FOLLOWING tick.
+    const diskFull = diskFullTracker.current();
+    if (freeBytes >= DISK_ERROR_BELOW_BYTES) diskFullTracker.clear();
     if (freeBytes < DISK_ERROR_BELOW_BYTES) return { status: 'error', detail };
+    if (diskFull) {
+      return {
+        status: 'error',
+        detail: `${detail} — ENOSPC observed at ${diskFull.at} in ${diskFull.context}`,
+      };
+    }
     if (freeBytes < DISK_DEGRADED_BELOW_BYTES) return { status: 'degraded', detail };
     return { status: 'ok', detail };
   };

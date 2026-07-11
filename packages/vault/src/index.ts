@@ -10,6 +10,14 @@ export {
   type BlobStoreSettings,
 } from './db.js';
 export {
+  isDiskFullError,
+  asVaultDiskFullError,
+  VaultDiskFullError,
+  DiskFullTracker,
+  sharedDiskFullTracker,
+  type DiskFullEvent,
+} from './errors.js';
+export {
   BLOB_URI_PREFIX,
   blobUriFor,
   isBlobUri,
@@ -21,7 +29,15 @@ export {
 } from './blob/store.js';
 export { FsBlobStore, MemoryBlobStore, type LocalBlobStore } from './blob/local.js';
 export { S3BlobStore, type S3BlobStoreOptions, type S3Credentials } from './blob/s3.js';
-export { BlobCustody, sealBlob, unsealBlob, type ReconcileResult } from './blob/custody.js';
+export {
+  BlobCustody,
+  sealBlob,
+  unsealBlob,
+  custodyStateCounts,
+  type ReconcileResult,
+  type CustodyState,
+  type BlobSweepStatus,
+} from './blob/custody.js';
 export {
   stageBlobBytes,
   sweepBlobStaging,

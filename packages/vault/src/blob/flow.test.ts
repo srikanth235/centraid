@@ -311,3 +311,22 @@ test('blob maintenance sweep refreshes the app-readable custody-state mirror (is
     (db.vault.prepare('SELECT count(*) AS n FROM blob_custody_state').get() as { n: number }).n,
   ).toBe(1);
 });
+
+test('custodyStateCounts groups the mirror by state, zero-filled (issue #351 wave 4)', async () => {
+  const { custodyStateCounts } = await import('./custody.js');
+  expect(custodyStateCounts(db.vault)).toEqual({
+    'local-only': 0,
+    replicated: 0,
+    'remote-only': 0,
+    missing: 0,
+  });
+  const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
+  executed(invoke('core.add_document', { staged_sha: staged.sha256, title: 'p.png' }));
+  await gw.sweepBlobs(owner); // no remote tier configured — settles local-only
+  expect(custodyStateCounts(db.vault)).toEqual({
+    'local-only': 1,
+    replicated: 0,
+    'remote-only': 0,
+    missing: 0,
+  });
+});

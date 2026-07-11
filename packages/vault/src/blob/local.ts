@@ -22,6 +22,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { asVaultDiskFullError } from '../errors.js';
 import { assertSha, resolveRange, type BlobRange, type BlobStat, type BlobStore } from './store.js';
 
 /* eslint-disable max-classes-per-file -- (#296) FsBlobStore + MemoryBlobStore are the two tiers of one LocalBlobStore contract (file-backed + in-memory, identical semantics), paired by design */
@@ -52,14 +53,21 @@ export class FsBlobStore implements LocalBlobStore {
     mkdirSync(path.dirname(file), { recursive: true });
     // Write-then-rename so a crash never leaves a half blob under its key.
     const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`;
-    const fd = openSync(tmp, 'w', 0o600);
     try {
-      writeSync(fd, bytes);
-      fsyncSync(fd);
-    } finally {
-      closeSync(fd);
+      const fd = openSync(tmp, 'w', 0o600);
+      try {
+        writeSync(fd, bytes);
+        fsyncSync(fd);
+      } finally {
+        closeSync(fd);
+      }
+      renameSync(tmp, file);
+    } catch (err) {
+      // A write that ran out of disk leaves a partial (or zero-byte) tmp
+      // file behind — never let that linger under the blob's fan-out dir.
+      rmSync(tmp, { force: true });
+      throw asVaultDiskFullError('blob CAS write', err);
     }
-    renameSync(tmp, file);
   }
 
   getSync(sha: string, range?: BlobRange): Buffer | null {

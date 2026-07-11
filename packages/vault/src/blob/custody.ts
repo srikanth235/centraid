@@ -16,9 +16,11 @@
 // vault.db's disk trust; the remote tier is the third party).
 
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import type { VaultDb } from '../db.js';
+import { asVaultDiskFullError } from '../errors.js';
 import { nowIso } from '../ids.js';
 import type { LocalBlobStore } from './local.js';
 import { sha256OfBytes, shaOfBlobUri, type BlobRange, type BlobStore } from './store.js';
@@ -74,7 +76,28 @@ export interface ReconcileResult {
   missing: string[];
 }
 
+/**
+ * The standing sweep's own liveness (issue #351 wave 4, #367 prep): before
+ * this, a `reconcile()` failure only ever surfaced as a one-line log warn
+ * from `VaultPlane.runSweep` — nothing a health probe could read back. Kept
+ * in-memory only (process-lifetime, per `BlobCustody` instance = per mounted
+ * vault): a rebuildable liveness signal, not a durable fact worth its own
+ * table.
+ */
+export interface BlobSweepStatus {
+  /** ISO timestamp of the last `reconcile()` that returned without throwing. */
+  lastCompletedAt: string | null;
+  /** The last `reconcile()` failure's message, cleared on the next success. */
+  lastError: string | null;
+  /** Consecutive failures since the last success — the `blob-sweep` probe's "persistent vs. transient" line. */
+  consecutiveFailures: number;
+}
+
 export class BlobCustody {
+  private lastSweepCompletedAt: string | null = null;
+  private lastSweepError: string | null = null;
+  private sweepConsecutiveFailures = 0;
+
   constructor(
     readonly local: LocalBlobStore,
     /**
@@ -84,6 +107,15 @@ export class BlobCustody {
      */
     private readonly remoteTier: () => RemoteTier | null,
   ) {}
+
+  /** The `blob-sweep` health probe's read of the last `reconcile()` run. */
+  sweepStatus(): BlobSweepStatus {
+    return {
+      lastCompletedAt: this.lastSweepCompletedAt,
+      lastError: this.lastSweepError,
+      consecutiveFailures: this.sweepConsecutiveFailures,
+    };
+  }
 
   /** Hash raw bytes and store them locally — the one ingress everything uses. */
   ingestSync(bytes: Buffer): { sha256: string; byteSize: number } {
@@ -159,8 +191,28 @@ export class BlobCustody {
    * The reconciliation sweep (issue #296 §6): remote list vs the live sha
    * set. Orphans (remote objects nothing claims) delete; missing replicas
    * re-push; shas absent from BOTH tiers are reported, never invented.
+   *
+   * Records `sweepStatus()` around the same try/catch a caller would need
+   * anyway — success or failure, every run stamps a result the `blob-sweep`
+   * health probe can read without polling logs. The original throw still
+   * propagates (`VaultPlane.runSweep` already catches it to log a warning);
+   * this only ADDS a readable trace of that same outcome.
    */
   async reconcile(liveShas: Set<string>): Promise<ReconcileResult> {
+    try {
+      const result = await this.doReconcile(liveShas);
+      this.lastSweepCompletedAt = nowIso();
+      this.lastSweepError = null;
+      this.sweepConsecutiveFailures = 0;
+      return result;
+    } catch (err) {
+      this.lastSweepError = err instanceof Error ? err.message : String(err);
+      this.sweepConsecutiveFailures += 1;
+      throw err;
+    }
+  }
+
+  private async doReconcile(liveShas: Set<string>): Promise<ReconcileResult> {
     const result: ReconcileResult = { orphansDeleted: [], replicated: [], missing: [] };
     const remote = this.remoteTier();
     const remoteShas = remote ? new Set(await remote.store.list()) : new Set<string>();
@@ -260,8 +312,15 @@ export class BlobCustody {
 function writeBlobFile(file: string, bytes: Buffer): void {
   const tmp = `${file}.tmp`;
   mkdirSync(path.dirname(file), { recursive: true });
-  writeFileSync(tmp, bytes, { mode: 0o600 });
-  renameSync(tmp, file);
+  try {
+    writeFileSync(tmp, bytes, { mode: 0o600 });
+    renameSync(tmp, file);
+  } catch (err) {
+    // Same rule as the CAS write path (blob/local.ts): a disk-full export
+    // never leaves a partial `.tmp` file next to the real blob path.
+    rmSync(tmp, { force: true });
+    throw asVaultDiskFullError('blob export write', err);
+  }
 }
 
 /**
@@ -309,4 +368,26 @@ export async function refreshCustodyState(db: VaultDb): Promise<{ updated: numbe
     throw err;
   }
   return { updated: byContent.size };
+}
+
+/**
+ * Cheap per-vault custody breakdown (issue #351 wave 4, #367 prep): counts
+ * `blob_custody_state` GROUP BY state — read-only, no tier I/O — so the
+ * `blob-sweep` health probe (and #367's later Storage UI card) get
+ * replicated-vs-backlog counts without re-listing the remote tier on every
+ * poll. Zero-filled for states the mirror currently has no rows in, so
+ * callers never need an `?? 0` per key.
+ */
+export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, number> {
+  const counts: Record<CustodyState, number> = {
+    'local-only': 0,
+    replicated: 0,
+    'remote-only': 0,
+    missing: 0,
+  };
+  const rows = vault
+    .prepare(`SELECT custody_state, COUNT(*) AS n FROM blob_custody_state GROUP BY custody_state`)
+    .all() as { custody_state: CustodyState; n: number }[];
+  for (const row of rows) counts[row.custody_state] = row.n;
+  return counts;
 }

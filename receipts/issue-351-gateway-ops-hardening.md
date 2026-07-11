@@ -33,8 +33,8 @@
 - [x] SSE subscriber cap
 - [x] worker admission control
 - [x] CLI daemon service unit (`centraid-gateway service` install/uninstall/status, launchd + systemd)
-- [ ] scoped ENOSPC fail-closed handling (typed disk-full errors, partial-file cleanup, log-writer fail-open)
-- [ ] disk health surfaces last ENOSPC event
+- [x] scoped ENOSPC fail-closed handling (typed disk-full errors, partial-file cleanup, log-writer fail-open)
+- [x] disk health surfaces last ENOSPC event
 - [ ] `enrichment` health probe
 - [ ] `blob-sweep` health probe
 - [ ] desktop outage-history persistence (survives restart)
@@ -495,6 +495,7 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 | claude-code-ac2077f8-e15-1783788630-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 6 | 2628 | 753261 | 1227 | 3861 | 0.8475 | 871534 | 14422514 | 514798052 | 2698371 | test (#351) |
 | claude-code-ac2077f8-e15-1783788721-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 5267 | 17936 | 1011680 | 14606 | 37809 | 2.0189 | 876801 | 14440450 | 515809732 | 2712977 | feat(gateway): centraid-gateway service — launchd/systemd unit for the headless  |
 | claude-code-ac2077f8-e15-1783788767-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 8 | 3182 | 1049774 | 1471 | 4661 | 1.1632 | 876809 | 14443632 | 516859506 | 2714448 |  |
+| claude-code-ac2077f8-e15-1783788829-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 6 | 2376 | 791463 | 4230 | 6612 | 1.0327 | 876815 | 14446008 | 517650969 | 2718678 | feat(vault,gateway): ENOSPC fail-closed handling + blob-sweep status groundwork  |
 ## Audit
 
 Fresh-context sub-agent (haiku) verdict at ordinal 81:
