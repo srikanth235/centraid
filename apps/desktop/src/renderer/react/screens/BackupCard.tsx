@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import { formatDuration } from '../shell/routes/gatewayData.js';
+import { formatClock, formatDuration } from '../shell/routes/gatewayData.js';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 import gwStyles from './GatewayScreen.module.css';
@@ -12,9 +12,16 @@ import styles from './BackupCard.module.css';
 // workstream — the `centraid-gateway backup` CLI had status/run but nothing
 // surfaced it to the desktop). Not-configured renders an explainer instead
 // of an empty panel; configured renders per-vault last-backup/last-verify
-// ages and a manual "Back up now" trigger. The seal-key reminder is a
-// permanent fixture of the card, not a dismissable toast — losing track of
-// the seal key makes every snapshot unrecoverable ciphertext.
+// ages and a manual "Back up now" trigger.
+//
+// The recovery-kit reminder (wave 4 of #351) is a permanent fixture of the
+// card, not a dismissable toast — losing track of the seal key makes every
+// snapshot unrecoverable ciphertext. It's now a real gate, not just a
+// nudge: unconfirmed renders a prominent call-to-action with a confirm
+// button that POSTs `_gateway/backup/kit-confirmed`; confirmed renders a
+// quiet one-line state with the date. The flag itself is generic (issue
+// #367 reuses it to gate the S3-storage enable flow), so this card is just
+// its first consumer, not its owner.
 
 export interface BackupVaultStatusDTO {
   vaultId: string;
@@ -25,9 +32,17 @@ export interface BackupVaultStatusDTO {
   running?: boolean;
 }
 
+export interface RecoveryKitStatusDTO {
+  /** Epoch SECONDS the operator last confirmed, or `null` if never. */
+  confirmedAt: number | null;
+}
+
 export interface BackupStatusDTO {
   configured: boolean;
   vaults: BackupVaultStatusDTO[];
+  /** Optional so a pre-wave-4 fixture / stub still type-checks; treated as
+   *  "never confirmed" when absent. */
+  recoveryKit?: RecoveryKitStatusDTO;
 }
 
 export interface BackupCardProps {
@@ -35,6 +50,8 @@ export interface BackupCardProps {
   now: number;
   loadStatus: () => Promise<BackupStatusDTO>;
   onRunNow: () => Promise<{ accepted: boolean; alreadyRunning?: boolean }>;
+  /** POSTs `_gateway/backup/kit-confirmed` — the recovery-kit gate's confirm button. */
+  onConfirmRecoveryKit: () => Promise<{ confirmedAt: number }>;
 }
 
 /** Regular refresh cadence — matches useGatewayHealth's poll order of
@@ -51,14 +68,69 @@ function ageLabel(iso: string | undefined, now: number): string {
   return `${formatDuration(Math.max(0, now - at))} ago`;
 }
 
-function SealKeyNudge(): JSX.Element {
+function RecoveryKitGate({
+  configured,
+  recoveryKit,
+  onConfirm,
+}: {
+  configured: boolean;
+  recoveryKit: RecoveryKitStatusDTO;
+  onConfirm: () => Promise<{ confirmedAt: number }>;
+}): JSX.Element {
+  const [confirmedAt, setConfirmedAt] = useState(recoveryKit.confirmedAt);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // The server is the source of truth (a poll can also observe a
+  // confirmation made from elsewhere) — resync local state whenever the
+  // parent's status refresh lands a new value.
+  useEffect(() => setConfirmedAt(recoveryKit.confirmedAt), [recoveryKit.confirmedAt]);
+
+  const confirm = async (): Promise<void> => {
+    setConfirming(true);
+    setError(null);
+    try {
+      const result = await onConfirm();
+      setConfirmedAt(result.confirmedAt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (confirmedAt != null) {
+    return (
+      <div className={styles.sealConfirmed} data-testid="recovery-kit-confirmed">
+        <Icon name="CheckCircle" size={13} />
+        <span>Recovery kit confirmed {formatClock(confirmedAt * 1000)}</span>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.sealNudge}>
+    <div className={styles.sealNudge} data-testid="recovery-kit-gate">
       <Icon name="Key" size={13} />
-      <span>
-        Backups are ciphertext without the seal key — export it once with{' '}
-        <code>centraid-gateway backup kit</code> (or <code>key export</code>) and store it offline.
-      </span>
+      <div className={styles.sealNudgeBody}>
+        <span>
+          Backups are ciphertext without the seal key — export it once with{' '}
+          <code>centraid-gateway backup kit</code> (or <code>key export</code>) and store it
+          offline.
+        </span>
+        {configured ? (
+          <>
+            <button
+              type="button"
+              className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft, styles.sealConfirmBtn)}
+              disabled={confirming}
+              onClick={() => void confirm()}
+            >
+              {confirming ? 'Saving…' : "I've saved my recovery kit"}
+            </button>
+            {error ? <div className={styles.runError}>{error}</div> : null}
+          </>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -82,7 +154,12 @@ function VaultRow({ vault, now }: { vault: BackupVaultStatusDTO; now: number }):
   );
 }
 
-export default function BackupCard({ now, loadStatus, onRunNow }: BackupCardProps): JSX.Element {
+export default function BackupCard({
+  now,
+  loadStatus,
+  onRunNow,
+  onConfirmRecoveryKit,
+}: BackupCardProps): JSX.Element {
   const [status, setStatus] = useState<BackupStatusDTO | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState(false);
@@ -176,7 +253,11 @@ export default function BackupCard({ now, loadStatus, onRunNow }: BackupCardProp
             </div>
           </>
         )}
-        <SealKeyNudge />
+        <RecoveryKitGate
+          configured={status?.configured ?? false}
+          recoveryKit={status?.recoveryKit ?? { confirmedAt: null }}
+          onConfirm={onConfirmRecoveryKit}
+        />
       </div>
     </section>
   );

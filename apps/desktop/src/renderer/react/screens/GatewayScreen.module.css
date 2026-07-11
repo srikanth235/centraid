@@ -403,6 +403,23 @@
   padding: 2px 5px;
 }
 
+/* Alert-history rows (Alerts tab) reuse .outage's shell; the dot recolors
+   by event kind so a skim of the list reads severity at a glance. */
+.outageDot[data-kind='recovered'] {
+  background: var(--success);
+  opacity: 1;
+}
+.outageDot[data-kind='degraded'],
+.outageDot[data-kind='version-skew'] {
+  background: var(--icon-amber);
+  opacity: 1;
+}
+.outageDot[data-kind='down'],
+.outageDot[data-kind='component-error'] {
+  background: var(--danger);
+  opacity: 1;
+}
+
 /* Down-alert card. */
 .alertBody {
   padding: 14px 18px 18px;

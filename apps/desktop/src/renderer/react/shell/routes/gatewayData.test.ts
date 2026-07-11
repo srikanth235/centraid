@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALERT_PRESETS,
+  alertKindLabel,
   availabilityPct,
+  buildAlertHistoryRows,
   buildOutageRows,
   formatAgo,
   formatDuration,
@@ -27,6 +29,7 @@ const snapshot = (over: Partial<GatewayRuntimeSnapshot> = {}): GatewayRuntimeSna
   outages: [],
   alert: { enabled: true, thresholdSeconds: 120 },
   pollIntervalMs: 5000,
+  alertHistory: [],
   ...over,
 });
 
@@ -89,5 +92,50 @@ describe('alert presets', () => {
     expect(thresholdLabel(120)).toBe('2m');
     expect(thresholdLabel(45)).toBe('45s');
     expect(thresholdLabel(600)).toBe('10m');
+  });
+});
+
+describe('buildAlertHistoryRows', () => {
+  it('orders newest first and carries detail/duration/previousSession through', () => {
+    const rows = buildAlertHistoryRows(
+      snapshot({
+        alertHistory: [
+          { at: T0, kind: 'down', detail: 'fetch failed', previousSession: true },
+          { at: T0 + 10_000, kind: 'recovered', durationMs: 10_000, previousSession: false },
+        ],
+      }),
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      kind: 'recovered',
+      kindLabel: 'Recovered',
+      durationLabel: '10s',
+      previousSession: false,
+    });
+    expect(rows[1]).toMatchObject({
+      kind: 'down',
+      kindLabel: 'Gateway down',
+      detail: 'fetch failed',
+      previousSession: true,
+    });
+  });
+
+  it('is empty for a fresh session with no history', () => {
+    expect(buildAlertHistoryRows(snapshot({ alertHistory: [] }))).toEqual([]);
+  });
+
+  it('falls back to an empty list for a snapshot fixture missing the field', () => {
+    const { alertHistory: _drop, ...rest } = snapshot();
+    expect(buildAlertHistoryRows(rest as GatewayRuntimeSnapshot)).toEqual([]);
+  });
+});
+
+describe('alertKindLabel', () => {
+  it('labels every event kind', () => {
+    expect(alertKindLabel('down')).toBe('Gateway down');
+    expect(alertKindLabel('recovered')).toBe('Recovered');
+    expect(alertKindLabel('degraded')).toBe('Degraded');
+    expect(alertKindLabel('component-error')).toBe('Component error');
+    expect(alertKindLabel('version-skew')).toBe('Version mismatch');
   });
 });

@@ -32,6 +32,7 @@ const base: GatewayRuntimeSnapshot = {
   outages: [{ startedAt: NOW - 10_000, endedAt: NOW - 5000, alertedAt: NOW - 8000 }],
   alert: { enabled: true, thresholdSeconds: 120 },
   pollIntervalMs: 5000,
+  alertHistory: [{ at: NOW - 5000, kind: 'recovered', durationMs: 5000, previousSession: false }],
 };
 
 function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
@@ -54,6 +55,7 @@ const noStreamLogs = (): Promise<void> => new Promise<void>(() => {}); // never 
 const noLoadBackupStatus = (): Promise<{ configured: boolean; vaults: never[] }> =>
   new Promise(() => {});
 const noRunBackupNow = (): Promise<{ accepted: boolean }> => new Promise(() => {});
+const noConfirmRecoveryKit = (): Promise<{ confirmedAt: number }> => new Promise(() => {});
 const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> => new Promise(() => {});
 const noExportDiagnostics = (): Promise<
   { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
@@ -71,6 +73,7 @@ const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | nul
       streamLogs={noStreamLogs}
       loadBackupStatus={noLoadBackupStatus}
       onRunBackupNow={noRunBackupNow}
+      onConfirmRecoveryKit={noConfirmRecoveryKit}
       onRestartGateway={noRestartGateway}
       onExportDiagnostics={noExportDiagnostics}
     />,
@@ -180,6 +183,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -206,6 +210,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -222,6 +227,9 @@ describe('GatewayScreen interactions', () => {
     const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]');
     await act(async () => toggle?.click());
     expect(onEnabled).toHaveBeenCalledWith(false);
+
+    // Panel rendering itself is covered by AlertHistoryPanel.test.tsx.
+    expect(host.querySelector('[data-testid="alert-history-panel"]')).not.toBeNull();
   });
 
   it('switching to the Components tab mounts the diagnostics screen', async () => {
@@ -242,6 +250,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -268,6 +277,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -304,6 +314,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -338,6 +349,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={loadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -367,6 +379,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -401,6 +414,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={onRestartGateway}
           onExportDiagnostics={noExportDiagnostics}
         />,
@@ -431,6 +445,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,
@@ -464,6 +479,7 @@ describe('GatewayScreen interactions', () => {
           streamLogs={noStreamLogs}
           loadBackupStatus={noLoadBackupStatus}
           onRunBackupNow={noRunBackupNow}
+          onConfirmRecoveryKit={noConfirmRecoveryKit}
           onRestartGateway={noRestartGateway}
           onExportDiagnostics={onExportDiagnostics}
         />,

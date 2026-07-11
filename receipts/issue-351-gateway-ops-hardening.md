@@ -37,8 +37,8 @@
 - [x] disk health surfaces last ENOSPC event
 - [x] `enrichment` health probe
 - [x] `blob-sweep` health probe
-- [ ] desktop outage-history persistence (survives restart)
-- [ ] recovery-kit confirmation gate (persisted flag + backup card gate)
+- [x] desktop outage-history persistence (survives restart)
+- [x] recovery-kit confirmation gate (persisted flag + backup card gate)
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
 - [x] app-engine `_changes` per-app SSE cap (third SSE surface)
 - [ ] hard refusal on version skew (surfaced loudly for now; refusal is the documented escalation path)
@@ -497,6 +497,7 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 | claude-code-ac2077f8-e15-1783788767-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 8 | 3182 | 1049774 | 1471 | 4661 | 1.1632 | 876809 | 14443632 | 516859506 | 2714448 |  |
 | claude-code-ac2077f8-e15-1783788829-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 6 | 2376 | 791463 | 4230 | 6612 | 1.0327 | 876815 | 14446008 | 517650969 | 2718678 | feat(vault,gateway): ENOSPC fail-closed handling + blob-sweep status groundwork  |
 | claude-code-ac2077f8-e15-1783788884-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 4 | 3384 | 529226 | 1762 | 5150 | 0.6597 | 876819 | 14449392 | 518180195 | 2720440 | feat(gateway): enrichment + blob-sweep health probes (#351)Wave 4 health-coverag |
+| claude-code-ac2077f8-e15-1783788929-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 4 | 2236 | 532610 | 2122 | 4362 | 0.6667 | 876823 | 14451628 | 518712805 | 2722562 | feat(desktop,gateway): persisted outage history + recovery-kit confirmation gate |
 ## Audit
 
 Fresh-context sub-agent (haiku) verdict at ordinal 81:

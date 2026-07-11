@@ -92,7 +92,9 @@
   overflow-wrap: anywhere;
 }
 
-/* Seal-key reminder — a permanent fixture, not a dismissable toast. */
+/* Recovery-kit gate — a permanent fixture, not a dismissable toast, while
+   unconfirmed. Same amber-warning shell as the old seal-key nudge; the
+   confirm button + error live in a stacked body beside the icon. */
 .sealNudge {
   display: flex;
   align-items: flex-start;
@@ -114,6 +116,29 @@
   font-family: var(--font-mono);
   font-size: 10.5px;
   color: var(--ink);
+}
+.sealNudgeBody {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.sealConfirmBtn {
+  flex: none;
+}
+
+/* Recovery-kit gate — confirmed state: quiet, subdued, no action needed. */
+.sealConfirmed {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 2px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.sealConfirmed svg {
+  flex: none;
+  color: var(--success);
 }
 
 /* Spinner — mirrors RunViewScreen's cd-spin (rotate, reduced-motion off). */

@@ -82,6 +82,53 @@ export function buildOutageRows(snapshot: GatewayRuntimeSnapshot, now: number): 
   });
 }
 
+/** One durable alert-history row (Alerts tab) — the persisted counterpart
+ *  of `OutageRowDTO`, spanning restarts (issue #351 wave 4). */
+export interface AlertHistoryRowDTO {
+  id: string;
+  kind: GatewayRuntimeSnapshot['alertHistory'][number]['kind'];
+  kindLabel: string;
+  timeLabel: string;
+  detail?: string;
+  durationLabel?: string;
+  previousSession: boolean;
+}
+
+const ALERT_KIND_LABEL: Record<GatewayRuntimeSnapshot['alertHistory'][number]['kind'], string> = {
+  down: 'Gateway down',
+  recovered: 'Recovered',
+  degraded: 'Degraded',
+  'component-error': 'Component error',
+  'version-skew': 'Version mismatch',
+};
+
+/** Human label for an alert-history event kind — shared by the row badge
+ *  and anywhere else the kind needs a display string. */
+export function alertKindLabel(
+  kind: GatewayRuntimeSnapshot['alertHistory'][number]['kind'],
+): string {
+  return ALERT_KIND_LABEL[kind];
+}
+
+/** Alert-history rows, newest first. `alertHistory` arrives oldest-last from
+ *  main (mirrors `outages`' ordering) — this is the display-order reversal,
+ *  same shape as `buildOutageRows`. Falls back to an empty list for a
+ *  snapshot fixture that predates this field (older tests, gateway-monitor
+ *  before wave 4). */
+export function buildAlertHistoryRows(snapshot: GatewayRuntimeSnapshot): AlertHistoryRowDTO[] {
+  return (snapshot.alertHistory ?? []).toReversed().map(
+    (e, i): AlertHistoryRowDTO => ({
+      id: `alert-${e.at}-${i}`,
+      kind: e.kind,
+      kindLabel: alertKindLabel(e.kind),
+      timeLabel: formatClock(e.at),
+      ...(e.detail !== undefined ? { detail: e.detail } : {}),
+      ...(e.durationMs !== undefined ? { durationLabel: formatDuration(e.durationMs) } : {}),
+      previousSession: e.previousSession,
+    }),
+  );
+}
+
 /** The threshold ladder the alert card renders. 120s is the shipped default. */
 export const ALERT_PRESETS: readonly { seconds: number; label: string }[] = [
   { seconds: 30, label: '30s' },

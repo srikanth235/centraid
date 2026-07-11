@@ -5,7 +5,10 @@ import type { RouteHandler } from '../serve/build-gateway.js';
 import type { BackupService } from '../backup/backup-service.js';
 import type { BackupTargetState } from '../backup/backup-state.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
-import { makeBackupRouteHandler } from './backup-routes.js';
+import { makeBackupRouteHandler, type BackupStatusBody } from './backup-routes.js';
+
+/** Loosened GET-body shape for tests that only assert a slice of it. */
+type BackupStatusBodyForTest = Pick<BackupStatusBody, 'recoveryKit'>;
 
 const servers: http.Server[] = [];
 
@@ -40,16 +43,18 @@ function fakeVaults(planes: Array<{ vaultId: string; name: string }>): VaultRegi
   } as unknown as VaultRegistry;
 }
 
-/** A `BackupService` stand-in with controllable `status`/`isRunning`/`runAll`
- *  — deterministic in a way a real service's timing isn't (e.g. the
- *  "already running" race). */
+/** A `BackupService` stand-in with controllable `status`/`isRunning`/`runAll`/
+ *  recovery-kit methods — deterministic in a way a real service's timing
+ *  isn't (e.g. the "already running" race). */
 function fakeBackupService(opts: {
   targets?: Record<string, BackupTargetState>;
   running?: Set<string> | boolean;
   runAll?: () => Promise<void>;
+  recoveryKitConfirmedAt?: number | null;
 }): BackupService {
   const targets = opts.targets ?? {};
   const running = opts.running ?? false;
+  let confirmedAt = opts.recoveryKitConfirmedAt ?? null;
   return {
     status: async () => targets,
     isRunning: (vaultId?: string) => {
@@ -57,17 +62,26 @@ function fakeBackupService(opts: {
       return vaultId === undefined ? running.size > 0 : running.has(vaultId);
     },
     runAll: opts.runAll ?? (async () => undefined),
+    recoveryKitStatus: async () => ({ confirmedAt }),
+    confirmRecoveryKit: async () => {
+      confirmedAt = 1_752_235_200; // fixed stub "now" — the route just echoes it back
+      return { confirmedAt };
+    },
   } as unknown as BackupService;
 }
 
 describe('makeBackupRouteHandler — GET /centraid/_gateway/backup', () => {
-  it('reports {configured: false, vaults: []} when no BackupService is wired', async () => {
+  it('reports {configured: false, vaults: [], recoveryKit: {confirmedAt: null}} when no BackupService is wired', async () => {
     const url = await startHandlerServer(
       makeBackupRouteHandler({ vaults: fakeVaults([{ vaultId: 'v1', name: 'Main' }]) }),
     );
     const res = await fetch(`${url}/centraid/_gateway/backup`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ configured: false, vaults: [] });
+    expect(await res.json()).toEqual({
+      configured: false,
+      vaults: [],
+      recoveryKit: { confirmedAt: null },
+    });
   });
 
   it('reports per-vault status when configured, merging state onto every mounted vault', async () => {
@@ -209,5 +223,70 @@ describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/run', () => 
     );
     const res = await fetch(`${url}/centraid/_gateway/backup/run`);
     expect(res.status).toBe(405);
+  });
+});
+
+describe('makeBackupRouteHandler — GET /centraid/_gateway/backup — recoveryKit', () => {
+  it('carries the confirmed-kit timestamp through when set', async () => {
+    const backupService = fakeBackupService({ recoveryKitConfirmedAt: 1_752_200_000 });
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup`);
+    const body = (await res.json()) as BackupStatusBodyForTest;
+    expect(body.recoveryKit).toEqual({ confirmedAt: 1_752_200_000 });
+  });
+
+  it('reports null when the kit has never been confirmed on a configured gateway', async () => {
+    const backupService = fakeBackupService({});
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup`);
+    const body = (await res.json()) as BackupStatusBodyForTest;
+    expect(body.recoveryKit).toEqual({ confirmedAt: null });
+  });
+});
+
+describe('makeBackupRouteHandler — POST /centraid/_gateway/backup/kit-confirmed', () => {
+  it('refuses with 409 + a clear body when not configured', async () => {
+    const url = await startHandlerServer(makeBackupRouteHandler({ vaults: fakeVaults([]) }));
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, { method: 'POST' });
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe('not_configured');
+    expect(body.message).toMatch(/not configured/);
+  });
+
+  it('confirms the kit and echoes the new confirmedAt', async () => {
+    const backupService = fakeBackupService({});
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`, { method: 'POST' });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; confirmedAt: number };
+    expect(body.ok).toBe(true);
+    expect(body.confirmedAt).toBe(1_752_235_200);
+
+    // The next GET reflects the confirmation.
+    const statusRes = await fetch(`${url}/centraid/_gateway/backup`);
+    const status = (await statusRes.json()) as BackupStatusBodyForTest;
+    expect(status.recoveryKit).toEqual({ confirmedAt: 1_752_235_200 });
+  });
+
+  it('answers 405 for non-POST', async () => {
+    const backupService = fakeBackupService({});
+    const url = await startHandlerServer(
+      makeBackupRouteHandler({ backupService, vaults: fakeVaults([]) }),
+    );
+    const res = await fetch(`${url}/centraid/_gateway/backup/kit-confirmed`);
+    expect(res.status).toBe(405);
+  });
+
+  it('ignores unrelated paths (returns false → server 404)', async () => {
+    const url = await startHandlerServer(makeBackupRouteHandler({ vaults: fakeVaults([]) }));
+    const res = await fetch(`${url}/centraid/_gateway/health`);
+    expect(res.status).toBe(404);
   });
 });

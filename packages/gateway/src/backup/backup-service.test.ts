@@ -228,3 +228,41 @@ test('verify-only staleness (backup fresh, verify old) degrades without erroring
   expect(backups?.status).toBe('degraded');
   expect(backups?.detail).toMatch(/verification is stale/);
 });
+
+// ── Recovery-kit confirmation gate (issue #351 wave 4 / #367) ───────────
+
+test('recoveryKitStatus starts unconfirmed', async () => {
+  const h = await harness();
+  expect(await h.service.recoveryKitStatus()).toEqual({ confirmedAt: null });
+});
+
+test('confirmRecoveryKit stamps the current clock (epoch seconds) and persists it', async () => {
+  const h = await harness();
+  h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
+
+  const result = await h.service.confirmRecoveryKit();
+  expect(result).toEqual({ confirmedAt: Math.floor(h.clock.now / 1000) });
+  expect(await h.service.recoveryKitStatus()).toEqual({
+    confirmedAt: Math.floor(h.clock.now / 1000),
+  });
+});
+
+test('confirming again refreshes the timestamp rather than erroring', async () => {
+  const h = await harness();
+  h.clock.now = Date.UTC(2026, 6, 11, 12, 0, 0);
+  await h.service.confirmRecoveryKit();
+
+  h.clock.now += 60_000;
+  const second = await h.service.confirmRecoveryKit();
+  expect(second.confirmedAt).toBe(Math.floor(h.clock.now / 1000));
+});
+
+test('confirmRecoveryKit does not disturb existing per-vault target state', async () => {
+  const h = await harness();
+  await h.service.runBackup(h.vaultId);
+  const beforeTargets = await h.service.status();
+
+  await h.service.confirmRecoveryKit();
+
+  expect(await h.service.status()).toEqual(beforeTargets);
+});

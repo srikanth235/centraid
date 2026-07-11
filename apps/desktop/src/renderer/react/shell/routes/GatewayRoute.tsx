@@ -1,5 +1,6 @@
 import { type JSX, useEffect, useState } from 'react';
 import {
+  confirmGatewayRecoveryKit,
   getGatewayBackupStatus,
   runGatewayBackupNow,
   streamGatewayLogs,
@@ -101,6 +102,7 @@ export default function GatewayRoute(): JSX.Element {
         streamLogs={streamGatewayLogs}
         loadBackupStatus={getGatewayBackupStatus}
         onRunBackupNow={runGatewayBackupNow}
+        onConfirmRecoveryKit={confirmGatewayRecoveryKit}
         onRestartGateway={() => window.CentraidApi.restartGateway()}
         onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />

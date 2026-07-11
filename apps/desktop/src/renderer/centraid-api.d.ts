@@ -157,6 +157,24 @@ export interface CentraidGatewayOutage {
 }
 
 /**
+ * One durable alert-history entry (issue #351 wave 4) — persisted under
+ * Electron userData (`gateway-monitor.ts` / `gateway-outage-log.ts`), so
+ * unlike `CentraidGatewayOutage` above (in-memory, per-launch) this
+ * history survives a restart. `previousSession` marks an entry that
+ * predates this launch (loaded from disk at boot) vs. one recorded during
+ * the current run.
+ */
+export interface CentraidGatewayAlertHistoryEntry {
+  at: number;
+  kind: 'down' | 'degraded' | 'component-error' | 'version-skew' | 'recovered';
+  /** Component name / error message / version string — kind-dependent. */
+  detail?: string;
+  /** Downtime length for `recovered`; time-at-error for `component-error`. */
+  durationMs?: number;
+  previousSession: boolean;
+}
+
+/**
  * Snapshot of the main-process gateway runtime watch (gateway-monitor.ts):
  * heartbeat status, per-launch sample strip + outage log, the gateway's own
  * reported uptime, and the effective alert config. Pushed on every poll via
@@ -186,6 +204,12 @@ export interface CentraidGatewayRuntime {
   outages: CentraidGatewayOutage[];
   alert: { enabled: boolean; thresholdSeconds: number };
   pollIntervalMs: number;
+  /**
+   * Durable alert-history log (issue #351 wave 4) — the persisted
+   * counterpart of `outages`, spanning restarts. Newest-last, capped at
+   * ~500 entries (`gateway-outage-log-core.ts`'s `OUTAGE_LOG_CAP`).
+   */
+  alertHistory: CentraidGatewayAlertHistoryEntry[];
   /**
    * Reconciled health signal (issue #351): folds `/centraid/_gateway/health`'s
    * component statuses plus a sustained-high-latency check into one badge —
