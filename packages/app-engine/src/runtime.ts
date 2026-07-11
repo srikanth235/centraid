@@ -605,9 +605,13 @@ export class Runtime {
             const appSettings = readAppSettings(entry.path);
             const queryOverrides = route.query as Record<string, unknown>;
             const settingsInject = buildSettingsInject([globalPrefs, appSettings, queryOverrides]);
-            await serveStatic(res, codeDir, rel, { settingsInject, ...draftServe, ...sharedServe });
+            await serveStatic(req, res, codeDir, rel, {
+              settingsInject,
+              ...draftServe,
+              ...sharedServe,
+            });
           } else {
-            await serveStatic(res, codeDir, rel, { ...draftServe, ...sharedServe });
+            await serveStatic(req, res, codeDir, rel, { ...draftServe, ...sharedServe });
           }
           return;
         }
