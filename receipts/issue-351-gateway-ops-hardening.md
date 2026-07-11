@@ -28,10 +28,10 @@
 - [ ] `broker` health probe (needs-auth + overdue token refresh)
 - [ ] `scheduler` health probe (per-vault tick staleness + missed windows)
 - [ ] numeric metrics on the health snapshot
-- [ ] OAuth token-refresh timeout
-- [ ] outbox external-write timeout
-- [ ] SSE subscriber cap
-- [ ] worker admission control
+- [x] OAuth token-refresh timeout
+- [x] outbox external-write timeout
+- [x] SSE subscriber cap
+- [x] worker admission control
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
 - [ ] app-engine `_changes` per-app SSE cap (third SSE surface, flagged as its own follow-up)
 - [ ] hard refusal on version skew (surfaced loudly for now; refusal is the documented escalation path)

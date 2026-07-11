@@ -37,6 +37,7 @@ import { sealAad, unsealValue, type InvokeOutcome } from '@centraid/vault';
 import type { ConnectionAuth, ResolveConnection } from '@centraid/automation';
 import type { VaultPlane } from './vault-plane.js';
 import { authDeadError, ConnectionLimiter, delay } from './connection-limiter.js';
+import { timeoutSignal } from './fetch-timeout.js';
 
 /** Purpose stamped on the broker's own vault acts. */
 const BROKER_PURPOSE = 'dpv:ServiceProvision';
@@ -46,6 +47,15 @@ const EXPIRY_SLACK_MS = 60 * 1000;
 
 /** One transient retry before a refresh gives up for this fire. */
 const TRANSIENT_RETRY_DELAY_MS = 500;
+
+/**
+ * Bound on one token-endpoint POST (issue #351 Tier 4 hygiene) — a hung IdP
+ * would otherwise wedge whatever awaits the refresh (a fire, the outbox
+ * drain) indefinitely. A timeout rejects the `fetch` exactly like a dropped
+ * connection would, so it rides the existing transient-failure path below
+ * (retry once, then give up for this fire WITHOUT flipping the connection).
+ */
+export const TOKEN_ENDPOINT_TIMEOUT_MS = 30_000;
 
 interface ConnectionCredRow {
   connection_id: string;
@@ -81,7 +91,11 @@ export class ConnectionBroker {
   /** In-flight consent ceremonies, single-use, TTL-bound. */
   private readonly pending = new Map<string, PendingCeremony>();
 
-  constructor(private readonly planeFor: () => VaultPlane) {}
+  constructor(
+    private readonly planeFor: () => VaultPlane,
+    /** Overridable for tests; production callers take the default. */
+    private readonly tokenTimeoutMs: number = TOKEN_ENDPOINT_TIMEOUT_MS,
+  ) {}
 
   /**
    * Start the consent ceremony (issue #304 decision 3): mint the PKCE
@@ -397,6 +411,7 @@ export class ConnectionBroker {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: form.toString(),
+          signal: timeoutSignal(this.tokenTimeoutMs),
         });
         status = res.status;
         text = await res.text();

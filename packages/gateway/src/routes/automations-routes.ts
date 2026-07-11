@@ -45,6 +45,20 @@ import {
 import * as automation from '@centraid/automation';
 import type { WorktreeStore } from '../worktree-store/index.js';
 import { readJson, sendError, sendJson } from './route-helpers.js';
+import { SseSubscriberCap } from './sse-cap.js';
+
+/**
+ * The production subscriber cap for `/centraid/_automations/run/events` —
+ * one gateway process serves one of these (`buildGateway` calls
+ * `makeAutomationsRouteHandler` with no override), so this instance's live
+ * count IS the real count (issue #351).
+ */
+const defaultSubscriberCap = new SseSubscriberCap();
+
+/** Live subscriber count on the automation run-events SSE stream. */
+export function runEventsSubscriberCount(): number {
+  return defaultSubscriberCap.current();
+}
 
 export interface AutomationsRouteOptions {
   /** Git store — code (manifests) resolve from `<getActiveMainLink()>/apps`. */
@@ -67,6 +81,8 @@ export interface AutomationsRouteOptions {
    * don't stream — the SSE endpoint then replays the ledger and closes.
    */
   subscribeRunEvents?: (runId: string, listener: (ev: RunStreamEvent) => void) => () => void;
+  /** Overridable for tests; production callers take the shared default. */
+  subscriberCap?: SseSubscriberCap;
 }
 
 /** Parse a stored `*_json` ledger column back to a value; raw string on failure. */
@@ -255,6 +271,7 @@ export function makeAutomationsRouteHandler(
   opts: AutomationsRouteOptions,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<boolean> {
   const codeAppsDir = (): string => path.join(opts.store.getActiveMainLink(), 'apps');
+  const subscriberCap = opts.subscriberCap ?? defaultSubscriberCap;
 
   // Run-ledger store — every run's full ledger is the vault's single
   // `journal.db` (#280), so run-id → file resolution is gone. A ledger
@@ -269,6 +286,9 @@ export function makeAutomationsRouteHandler(
   // to the bus first (so events during replay aren't lost), replay the durable
   // ledger snapshot, then drain buffered + live events until `run.end`.
   const streamRunEvents = (req: IncomingMessage, res: ServerResponse, runId: string): boolean => {
+    const releaseSlot = subscriberCap.admit(res);
+    if (!releaseSlot) return true; // 503 + Retry-After already written
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -288,6 +308,7 @@ export function makeAutomationsRouteHandler(
       closed = true;
       clearInterval(heartbeat);
       unsub();
+      releaseSlot();
       if (!res.writableEnded) res.end();
     };
     req.on('close', cleanup);

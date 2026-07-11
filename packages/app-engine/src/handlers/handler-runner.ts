@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import type { AppRef } from '../types.js';
 import { appendLogs, type LogEntry } from '../data/log-store.js';
 import type { VaultBridge, VaultOp } from './vault-bridge.js';
+import { sharedWorkerAdmission, type WorkerAdmission } from './worker-admission.js';
 
 function resolveWorkerFile(): string {
   // `here` is this module's dir (`src/handlers` → `dist/handlers` once built);
@@ -40,6 +41,8 @@ export interface RunHandlerOptions {
    * capability behind it is the host's to mount.
    */
   vault?: VaultBridge;
+  /** Overridable for tests; production callers take the shared default (issue #351). */
+  admission?: WorkerAdmission;
 }
 
 export interface HandlerOutcome {
@@ -47,6 +50,8 @@ export interface HandlerOutcome {
   value?: unknown;
   error?: string;
   logs: Array<{ level: 'info' | 'warn' | 'error'; msg: string }>;
+  /** Set when `ok` is false because admission refused a worker slot (issue #351) — no worker ever spawned. */
+  busy?: boolean;
 }
 
 /**
@@ -56,6 +61,27 @@ export interface HandlerOutcome {
  * #286 phase 2).
  */
 export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcome> {
+  const admission = opts.admission ?? sharedWorkerAdmission;
+  // Admission gates the WORKER SPAWN itself (issue #351) — a saturated
+  // gateway must fail fast here, before a single extra worker thread comes
+  // into existence, not after.
+  try {
+    await admission.acquire();
+  } catch (err) {
+    return {
+      ok: false,
+      busy: true,
+      error: err instanceof Error ? err.message : String(err),
+      logs: [],
+    };
+  }
+  let released = false;
+  const releaseSlot = (): void => {
+    if (released) return;
+    released = true;
+    admission.release();
+  };
+
   const logs: HandlerOutcome['logs'] = [];
 
   const worker = new Worker(WORKER_FILE, {
@@ -82,6 +108,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
     const finish = (outcome: HandlerOutcome) => {
       if (resolved) return;
       resolved = true;
+      releaseSlot();
       if (timeoutHandle) clearTimeout(timeoutHandle);
       // Notify only on successful action turns — the app acted, views
       // should re-derive. The notifier is wrapped so a thrown listener

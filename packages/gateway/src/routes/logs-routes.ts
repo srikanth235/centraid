@@ -19,6 +19,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { GatewayLogEntry, GatewayLogStore } from '../serve/gateway-log-store.js';
 import { sendJson } from './route-helpers.js';
+import { SseSubscriberCap } from './sse-cap.js';
 
 const LOGS_PATH = '/centraid/_logs';
 const EVENTS_PATH = '/centraid/_logs/events';
@@ -27,6 +28,18 @@ const EVENTS_PATH = '/centraid/_logs/events';
 const DEFAULT_LIMIT = 500;
 const MAX_LIMIT = 2000;
 
+/**
+ * The production subscriber cap for `/centraid/_logs/events` — one gateway
+ * process serves one of these (`buildGateway` calls `makeLogsRouteHandler`
+ * with no override), so this instance's live count IS the real count.
+ */
+const defaultSubscriberCap = new SseSubscriberCap();
+
+/** Live subscriber count on the gateway-logs SSE stream (issue #351). */
+export function logsEventsSubscriberCount(): number {
+  return defaultSubscriberCap.current();
+}
+
 function intParam(url: URL, name: string): number | undefined {
   const raw = url.searchParams.get(name);
   if (raw === null) return undefined;
@@ -34,12 +47,25 @@ function intParam(url: URL, name: string): number | undefined {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
 }
 
-export function makeLogsRouteHandler(logs: GatewayLogStore): RouteHandler {
+export interface LogsRouteOptions {
+  /** Overridable for tests; production callers take the shared default. */
+  subscriberCap?: SseSubscriberCap;
+}
+
+export function makeLogsRouteHandler(
+  logs: GatewayLogStore,
+  options: LogsRouteOptions = {},
+): RouteHandler {
+  const subscriberCap = options.subscriberCap ?? defaultSubscriberCap;
+
   const streamLogEvents = (
     req: IncomingMessage,
     res: ServerResponse,
     afterSeq: number,
   ): boolean => {
+    const releaseSlot = subscriberCap.admit(res);
+    if (!releaseSlot) return true; // 503 + Retry-After already written
+
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
@@ -59,6 +85,7 @@ export function makeLogsRouteHandler(logs: GatewayLogStore): RouteHandler {
       closed = true;
       clearInterval(heartbeat);
       unsub();
+      releaseSlot();
       if (!res.writableEnded) res.end();
     };
     req.on('close', cleanup);

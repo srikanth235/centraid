@@ -32,6 +32,7 @@ import type { ConnectionAuth } from '@centraid/automation';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import type { ConnectionBroker } from './connection-broker.js';
 import type { VaultPlane } from './vault-plane.js';
+import { timeoutSignal } from './fetch-timeout.js';
 
 const CONNECTION_REF_RE = /\{\{connection:([a-z_]+)\}\}/g;
 const BODY_SNIPPET_CHARS = 300;
@@ -41,6 +42,15 @@ const DEFAULT_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MAX_ITEMS_PER_DRAIN = 25;
 /** Per-actor bound within one pass (issue #308 A8). */
 const DEFAULT_MAX_ITEMS_PER_ACTOR = 10;
+/**
+ * Bound on one external write (issue #351 Tier 4 hygiene) — a hung
+ * third-party endpoint would otherwise wedge the whole drain pass (drains
+ * run one item at a time, see `drainPass`). A timeout rejects the `fetch`
+ * exactly like a dropped connection, so it lands in `drainItem`'s existing
+ * network-failure catch: the item stays approved and retries next drain —
+ * same as any other transient upstream failure, no new state.
+ */
+export const DEFAULT_WRITE_TIMEOUT_MS = 60_000;
 
 interface ApprovedRow {
   item_id: string;
@@ -59,6 +69,8 @@ export interface OutboxExecutorOptions {
   maxItemsPerDrain?: number;
   /** Max items drained in one pass per staging actor. */
   maxItemsPerActor?: number;
+  /** Per-write timeout to the external endpoint (issue #351). */
+  writeTimeoutMs?: number;
 }
 
 interface StagedRequest {
@@ -84,6 +96,7 @@ export class OutboxExecutor {
   private readonly staleAfterMs: number;
   private readonly maxItemsPerDrain: number;
   private readonly maxItemsPerActor: number;
+  private readonly writeTimeoutMs: number;
 
   constructor(
     private readonly broker: ConnectionBroker,
@@ -94,6 +107,7 @@ export class OutboxExecutor {
     this.staleAfterMs = options.staleAfterMs ?? DEFAULT_STALE_AFTER_MS;
     this.maxItemsPerDrain = options.maxItemsPerDrain ?? DEFAULT_MAX_ITEMS_PER_DRAIN;
     this.maxItemsPerActor = options.maxItemsPerActor ?? DEFAULT_MAX_ITEMS_PER_ACTOR;
+    this.writeTimeoutMs = options.writeTimeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
   }
 
   drain(plane: VaultPlane): Promise<DrainReport> {
@@ -271,6 +285,7 @@ export class OutboxExecutor {
         // Injected requests never auto-follow: a cross-host Location would
         // carry the Authorization header past the pin (issue #304).
         redirect: 'manual',
+        signal: timeoutSignal(this.writeTimeoutMs),
       });
       return { status: response.status, text: await response.text() };
     };
