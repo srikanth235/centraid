@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Verify the realtime gateway Logs surface (Settings → Gateway → Logs):
-//  - the new Settings section/tab renders,
+// Verify the realtime gateway Logs surface (sidebar Gateway → Logs tab):
+//  - the Logs tab renders,
 //  - the SSE stream goes Live and replays the gateway's boot lines,
 //  - a fresh gateway-side log line (vault rename via the real HTTP plane)
 //    lands in the UI live, with no navigation/refresh,
@@ -62,23 +62,20 @@ async function main() {
     await page.setViewportSize({ width: 1400, height: 900 });
 
     await step(
-      'open-settings-logs',
-      'Settings shows a Gateway → Logs tab and it opens',
+      'open-gateway-logs',
+      'The sidebar Gateway page shows a Logs tab and it opens',
       async () => {
         await page
-          .getByRole('button', { name: /^Settings/ })
+          .getByRole('button', { name: /^Gateway/ })
           .first()
           .click();
         await page
-          .getByRole('heading', { name: 'Appearance' })
+          .getByRole('heading', { name: 'Gateway' })
           .waitFor({ state: 'visible', timeout: 15_000 });
-        // The inner settings nav: new "Gateway" section with a "Logs" item.
-        const logsTab = page.getByRole('button', { name: 'Logs', exact: true });
+        // The page's own tab strip: Overview / Components / Logs / Alerts.
+        const logsTab = page.getByRole('tab', { name: 'Logs', exact: true });
         await logsTab.waitFor({ state: 'visible', timeout: 10_000 });
         await logsTab.click();
-        await page
-          .getByRole('heading', { name: 'Logs' })
-          .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('01-logs-tab-open');
       },
     );
