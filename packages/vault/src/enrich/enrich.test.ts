@@ -446,9 +446,9 @@ describe('the enrichment staging path', () => {
 });
 
 describe('core.set_extracted_text', () => {
-  test('writes the text derivative and the PARENT document becomes searchable', () => {
+  test('writes the text derivative and the OWNING document becomes searchable', () => {
     const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'scanned.png' });
-    const doc = output<{ content_id: string }>(
+    const doc = output<{ document_id: string; content_id: string }>(
       invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan' }),
     );
     const set = invoke(agent, 'core.set_extracted_text', {
@@ -457,7 +457,7 @@ describe('core.set_extracted_text', () => {
     });
     expect(set.status).toBe('executed');
     const hits = gw.search(owner, {
-      entity: 'core.content_item',
+      entity: 'core.document',
       query: 'espresso',
       purpose: 'dpv:ServiceProvision',
     }) as { rows: unknown[] };

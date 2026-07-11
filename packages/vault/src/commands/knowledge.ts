@@ -14,6 +14,7 @@ import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { sha256Hex } from '../ids.js';
 import { releaseContentIfUnreferenced } from './media.js';
+import { recordRevision } from './revisions.js';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -213,16 +214,22 @@ function editNote(ctx: HandlerCtx): Record<string, unknown> {
     pinned?: number;
   };
   const current = ctx.db
-    .prepare('SELECT format FROM knowledge_note WHERE note_id = ?')
-    .get(input.note_id) as { format: string } | undefined;
+    .prepare('SELECT format, body_content_id FROM knowledge_note WHERE note_id = ?')
+    .get(input.note_id) as { format: string; body_content_id: string } | undefined;
   if (!current) throw new Error('note vanished between check and execute');
   const sets: string[] = ['updated_at = ?'];
   const values: (string | number)[] = [ctx.now];
   let contentId: string | undefined;
   if (input.body_text !== undefined) {
     // A body edit re-resolves the reference: new (or deduped) content item,
-    // decoded with the format the note will have after this edit.
+    // decoded with the format the note will have after this edit. Heals the
+    // notes/docs divergence (issue #352): a genuine bump gets the same
+    // `revises` link core.edit_document records, so a note's edit history is
+    // walkable through core_link exactly like a document's.
     contentId = contentItemFor(ctx, input.body_text, input.format ?? current.format);
+    if (contentId !== current.body_content_id) {
+      recordRevision(ctx, contentId, current.body_content_id);
+    }
     sets.push('body_content_id = ?');
     values.push(contentId);
   }

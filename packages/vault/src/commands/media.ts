@@ -57,6 +57,13 @@ const CONTENT_REFERENCES: { table: string; column: string; onlyLive?: string }[]
   // A trashed asset is not a rental — it must not keep its bytes alive, or
   // trash could never release anything.
   { table: 'media_media_asset', column: 'content_id', onlyLive: 'deleted_at IS NULL' },
+  // A document's CURRENT content is a rental like any other (issue #352).
+  // Superseded revisions are NOT covered here — they are protected by the
+  // dedicated chain-aware check the document purge pass runs instead
+  // (gateway/duties.ts), because "still part of some live document's
+  // history" cannot be expressed as a single-column FK lookup. A trashed
+  // document still lives (only purge releases it, see documents.ts).
+  { table: 'core_document', column: 'current_content_id' },
 ];
 
 /** True when no canonical row still points at this content item. */

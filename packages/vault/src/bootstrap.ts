@@ -51,6 +51,10 @@ const SEED_CONCEPTS: SeedConcept[] = [
   // vaults by the v3 migration, which must stay in step with these two.
   { scheme: 'relations', notation: 'references', label: 'References' },
   { scheme: 'relations', notation: 'attachment-of', label: 'Attachment of' },
+  // Version lineage (issue #352): a newer content item revises an older one —
+  // core.edit_document, core.replace_document_content,
+  // core.restore_document_version, and knowledge.edit_note all assert it.
+  { scheme: 'relations', notation: 'revises', label: 'Revises' },
   { scheme: 'activity-kinds', notation: 'meeting', label: 'Meeting' },
   { scheme: 'activity-kinds', notation: 'run', label: 'Run' },
   { scheme: 'activity-kinds', notation: 'sleep', label: 'Sleep' },

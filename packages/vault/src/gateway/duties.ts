@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit standing duties are one cohesive sweep pipeline (revocation, lifecycle purge incl. the document-chain purge, retention, ingest); splitting mid-sweep would scatter one transaction's worth of reasoning across files.
 // Standing duties (§10) — the work between requests. Not request-shaped, but
 // each duty still writes receipts and provenance like any caller would.
 //
@@ -10,6 +11,7 @@ import type { VaultDb } from '../db.js';
 import { nowIso } from '../ids.js';
 import { sweepBlobStaging } from '../blob/staging.js';
 import { shaOfBlobUri } from '../blob/store.js';
+import { RELATIONS_SCHEME_URI } from '../commands/links.js';
 import { resolveEntity } from '../schema/tables.js';
 import { retainExtBand } from './ext.js';
 import { writeScopeTombstones } from '../install-memory.js';
@@ -121,6 +123,8 @@ export interface SweepResult {
   assetsPurged: number;
   /** Trashed notes whose grace window lapsed (issue #308 A6). */
   notesPurged: number;
+  /** Trashed documents whose grace window lapsed (issue #352). */
+  documentsPurged: number;
   retentionDeleted: number;
   /** CAS bytes reclaimed with their purged content items (issue #296). */
   blobsReclaimed: number;
@@ -165,6 +169,170 @@ function enforceRetention(db: VaultDb, now: string): number {
   return deleted;
 }
 
+/** The `revises` relation concept id, or null when nothing ever seeded it. */
+function revisesConceptId(db: VaultDb): string | null {
+  const row = db.vault
+    .prepare(
+      `SELECT c.concept_id FROM core_concept c
+         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+        WHERE s.uri = ? AND c.notation = 'revises'`,
+    )
+    .get(RELATIONS_SCHEME_URI) as { concept_id: string } | undefined;
+  return row?.concept_id ?? null;
+}
+
+/**
+ * Every content item reachable from a document's head through live
+ * `revises` links (NEW content item -> OLD content item) — a full
+ * reachability walk (BFS, every outgoing edge), not a single linked path.
+ * Restoring an old version gives that version's content id a NEW outgoing
+ * edge (restore IS a revision, rule R3), so a node CAN end up with more
+ * than one outgoing edge over a document's lifetime, and the graph CAN
+ * cycle back through content already visited — the seen-set is load-
+ * bearing, not defensive: without it this does not terminate.
+ */
+function documentChain(db: VaultDb, headContentId: string, revisesId: string): string[] {
+  const seen = new Set<string>([headContentId]);
+  const queue: string[] = [headContentId];
+  while (queue.length > 0) {
+    const cur = queue.shift() as string;
+    const next = db.vault
+      .prepare(
+        `SELECT to_id FROM core_link
+          WHERE from_type = 'core.content_item' AND from_id = ? AND to_type = 'core.content_item'
+            AND relation_concept_id = ? AND valid_to IS NULL`,
+      )
+      .all(cur, revisesId) as { to_id: string }[];
+    for (const n of next) {
+      if (!seen.has(n.to_id)) {
+        seen.add(n.to_id);
+        queue.push(n.to_id);
+      }
+    }
+  }
+  return [...seen];
+}
+
+/**
+ * True when some canonical row besides core_document still rents these
+ * bytes — the serve-side twin of media.ts CONTENT_REFERENCES minus the
+ * core_document row itself (the document purge pass below already knows the
+ * answer for its OWN row; this asks about everything else).
+ */
+function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
+  const row = db.vault
+    .prepare(
+      `SELECT (
+         EXISTS(SELECT 1 FROM core_attachment WHERE content_id = ?)
+         OR EXISTS(SELECT 1 FROM core_party WHERE avatar_content_id = ?)
+         OR EXISTS(SELECT 1 FROM knowledge_note WHERE body_content_id = ? AND deleted_at IS NULL)
+         OR EXISTS(SELECT 1 FROM social_message WHERE body_content_id = ?)
+         OR EXISTS(SELECT 1 FROM business_invoice WHERE pdf_content_id = ?)
+         OR EXISTS(SELECT 1 FROM home_warranty WHERE terms_content_id = ?)
+         OR EXISTS(SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = ?)
+         OR EXISTS(SELECT 1 FROM media_media_asset WHERE content_id = ? AND deleted_at IS NULL)
+       ) AS n`,
+    )
+    .get(contentId, contentId, contentId, contentId, contentId, contentId, contentId, contentId) as {
+    n: number;
+  };
+  return row.n > 0;
+}
+
+/**
+ * True when some OTHER live document's own chain still reaches this content
+ * id — sha256 dedup (or two documents deliberately sharing bytes) means a
+ * superseded revision of the document being purged can coincide with a
+ * live page of a different one.
+ */
+function ownedByAnotherLiveDocument(
+  db: VaultDb,
+  contentId: string,
+  excludeDocumentId: string,
+  revisesId: string,
+): boolean {
+  const others = db.vault
+    .prepare(
+      `SELECT current_content_id FROM core_document WHERE document_id != ? AND deleted_at IS NULL`,
+    )
+    .all(excludeDocumentId) as { current_content_id: string }[];
+  return others.some((o) => documentChain(db, o.current_content_id, revisesId).includes(contentId));
+}
+
+/**
+ * Hard-delete one content item: derivative registry rows + their CAS bytes
+ * first (the FK), then the row itself, then end-date/drop whatever else
+ * pointed at it (issues #296, #272, #274). Shared by the generic
+ * core_content_item purge and the document-chain purge below — a purged
+ * content item is purged the same way regardless of which wrapper decided
+ * it was time. Returns CAS blobs reclaimed.
+ */
+function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: string): number {
+  let reclaimed = 0;
+  // A trashed media asset over these bytes goes with them — the asset row
+  // references the content (NOT NULL), so purging one must purge both.
+  const asset = db.vault
+    .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
+    .get(contentId) as { asset_id: string } | undefined;
+  if (asset) {
+    writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
+    db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
+    db.vault
+      .prepare('DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?')
+      .run('media.media_asset', asset.asset_id);
+    db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
+    db.vault
+      .prepare(
+        `UPDATE core_link SET valid_to = ? WHERE valid_to IS NULL
+          AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
+      )
+      .run(now, 'media.media_asset', asset.asset_id, 'media.media_asset', asset.asset_id);
+    db.vault
+      .prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?')
+      .run('media.media_asset', asset.asset_id);
+  }
+  writeProvenance(db.journal, owner, 'core.content_item', contentId, 'sweep.purge');
+  // A collection cover pointing at these bytes goes dark rather than
+  // dangling (the FK would refuse the delete otherwise).
+  db.vault
+    .prepare('UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?')
+    .run(contentId);
+  // Derivatives go with their parent (issue #296): registry rows first (the
+  // FK), then their CAS bytes, then the original's bytes. sha256 is UNIQUE
+  // on content items, so nothing else can claim the original — remote
+  // replicas fall to the reconciliation sweep by design.
+  const variants = db.vault
+    .prepare('SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL')
+    .all(contentId) as { sha256: string }[];
+  db.vault.prepare('DELETE FROM core_content_derivative WHERE content_id = ?').run(contentId);
+  const contentRow = db.vault
+    .prepare('SELECT content_uri FROM core_content_item WHERE content_id = ?')
+    .get(contentId) as { content_uri: string } | undefined;
+  db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(contentId);
+  for (const v of variants) {
+    db.blobs.deleteLocalSync(v.sha256);
+    reclaimed += 1;
+  }
+  const originalSha = contentRow ? shaOfBlobUri(contentRow.content_uri) : null;
+  if (originalSha) {
+    db.blobs.deleteLocalSync(originalSha);
+    reclaimed += 1;
+  }
+  db.vault
+    .prepare(
+      `UPDATE core_link SET valid_to = ? WHERE valid_to IS NULL
+        AND ((from_type = ? AND from_id = ?) OR (to_type = ? AND to_id = ?))`,
+    )
+    .run(now, 'core.content_item', contentId, 'core.content_item', contentId);
+  db.vault
+    .prepare('DELETE FROM core_tag WHERE target_type = ? AND target_id = ?')
+    .run('core.content_item', contentId);
+  db.vault
+    .prepare('DELETE FROM core_collection_entry WHERE target_type = ? AND target_id = ?')
+    .run('core.content_item', contentId);
+  return reclaimed;
+}
+
 /**
  * Lifecycle sweep: lapse grants and shares at expires_at, execute purge_at
  * deletions (GDPR storage limitation), enforce retention policy. Run on a
@@ -186,10 +354,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     )
     .run(now, now);
   const purgeable = db.vault
-    .prepare(
-      `SELECT content_id, content_uri FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
-    )
-    .all(now) as { content_id: string; content_uri: string }[];
+    .prepare(`SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`)
+    .all(now) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
   // temporal link duty runs here too: live links onto a purged row end-date
   // rather than dangle (issue #272).
@@ -228,58 +394,34 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     endDateLinks.run(now, 'knowledge.note', n.note_id, 'knowledge.note', n.note_id);
     dropTags.run('knowledge.note', n.note_id);
   }
+  // Lapsed trashed documents purge next (issue #352), same reason as notes
+  // above: the wrapper rents its current content (NOT NULL FK), so the row
+  // must go before any of its content items can be deleted. Retention
+  // stance: superseded bodies are durable while the document lives — only
+  // at purge time does each chain content item get judged, and only THIS
+  // document's own chain is even considered for release.
+  const revisesId = revisesConceptId(db);
+  const lapsedDocuments = db.vault
+    .prepare('SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .all(now) as { document_id: string; current_content_id: string }[];
+  for (const doc of lapsedDocuments) {
+    const chain = revisesId
+      ? documentChain(db, doc.current_content_id, revisesId)
+      : [doc.current_content_id];
+    writeProvenance(db.journal, owner, 'core.document', doc.document_id, 'sweep.purge');
+    dropEntries.run('core.document', doc.document_id);
+    dropTags.run('core.document', doc.document_id);
+    endDateLinks.run(now, 'core.document', doc.document_id, 'core.document', doc.document_id);
+    db.vault.prepare('DELETE FROM core_document WHERE document_id = ?').run(doc.document_id);
+    for (const contentId of chain) {
+      if (contentRentedElsewhere(db, contentId)) continue;
+      if (revisesId && ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId)) continue;
+      blobsReclaimed += purgeContentItem(db, owner, now, contentId);
+    }
+  }
   for (const row of purgeable) {
     // The row disappears; its provenance trail in journal.db remains.
-    // A trashed media asset over these bytes goes with them — the asset row
-    // references the content (NOT NULL), so purging one must purge both.
-    const asset = db.vault
-      .prepare('SELECT asset_id FROM media_media_asset WHERE content_id = ?')
-      .get(row.content_id) as { asset_id: string } | undefined;
-    if (asset) {
-      writeProvenance(db.journal, owner, 'media.media_asset', asset.asset_id, 'sweep.purge');
-      db.vault.prepare('DELETE FROM media_face_region WHERE asset_id = ?').run(asset.asset_id);
-      dropEntries.run('media.media_asset', asset.asset_id);
-      db.vault.prepare('DELETE FROM media_media_asset WHERE asset_id = ?').run(asset.asset_id);
-      endDateLinks.run(
-        now,
-        'media.media_asset',
-        asset.asset_id,
-        'media.media_asset',
-        asset.asset_id,
-      );
-      dropTags.run('media.media_asset', asset.asset_id);
-    }
-    writeProvenance(db.journal, owner, 'core.content_item', row.content_id, 'sweep.purge');
-    // A collection cover pointing at these bytes goes dark rather than
-    // dangling (the FK would refuse the delete otherwise).
-    db.vault
-      .prepare('UPDATE core_collection SET cover_content_id = NULL WHERE cover_content_id = ?')
-      .run(row.content_id);
-    // Derivatives go with their parent (issue #296): registry rows first
-    // (the FK), then their CAS bytes, then the original's bytes. sha256 is
-    // UNIQUE on content items, so nothing else can claim the original —
-    // remote replicas fall to the reconciliation sweep by design.
-    const variants = db.vault
-      .prepare(
-        'SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL',
-      )
-      .all(row.content_id) as { sha256: string }[];
-    db.vault
-      .prepare('DELETE FROM core_content_derivative WHERE content_id = ?')
-      .run(row.content_id);
-    db.vault.prepare('DELETE FROM core_content_item WHERE content_id = ?').run(row.content_id);
-    for (const v of variants) {
-      db.blobs.deleteLocalSync(v.sha256);
-      blobsReclaimed += 1;
-    }
-    const originalSha = shaOfBlobUri(row.content_uri);
-    if (originalSha) {
-      db.blobs.deleteLocalSync(originalSha);
-      blobsReclaimed += 1;
-    }
-    endDateLinks.run(now, 'core.content_item', row.content_id, 'core.content_item', row.content_id);
-    dropTags.run('core.content_item', row.content_id);
-    dropEntries.run('core.content_item', row.content_id);
+    blobsReclaimed += purgeContentItem(db, owner, now, row.content_id);
   }
   // The standard soft-delete pair on domain rows (issue #274): a trashed
   // asset whose own grace window lapsed purges even while its bytes stay
@@ -315,6 +457,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
       contentPurged: purgeable.length,
       assetsPurged: lapsedAssets.length,
       notesPurged: lapsedNotes.length,
+      documentsPurged: lapsedDocuments.length,
       retentionDeleted,
       blobsReclaimed,
       stagingExpired: staging.expired.length,
@@ -326,6 +469,7 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     contentPurged: purgeable.length,
     assetsPurged: lapsedAssets.length,
     notesPurged: lapsedNotes.length,
+    documentsPurged: lapsedDocuments.length,
     retentionDeleted,
     blobsReclaimed,
     stagingExpired: staging.expired.length,

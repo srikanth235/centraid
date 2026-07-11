@@ -107,6 +107,38 @@ test('edit_note updates only the fields sent; a body edit re-points the referenc
   expect(media.media_type).toBe('text/markdown'); // inherits the note's format
 });
 
+test('edit_note records a revises link when the body actually changes (issue #352)', () => {
+  const { note_id, body_content_id: v1 } = createNote({ title: 'Draft', body_text: 'v1' });
+  const revisesLinkCount = () =>
+    (
+      db.vault
+        .prepare(
+          `SELECT count(*) AS n FROM core_link l
+             JOIN core_concept c ON c.concept_id = l.relation_concept_id
+            WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item'
+              AND c.notation = 'revises' AND l.valid_to IS NULL`,
+        )
+        .get() as { n: number }
+    ).n;
+  expect(revisesLinkCount()).toBe(0);
+  const edited = invoke('knowledge.edit_note', { note_id, body_text: 'v2' });
+  expect(edited.status).toBe('executed');
+  const v2 = (edited as { output: { body_content_id: string } }).output.body_content_id;
+  expect(v2).not.toBe(v1);
+  expect(revisesLinkCount()).toBe(1);
+  const link = db.vault
+    .prepare(
+      `SELECT from_id, to_id FROM core_link l
+         JOIN core_concept c ON c.concept_id = l.relation_concept_id
+        WHERE c.notation = 'revises'`,
+    )
+    .get() as { from_id: string; to_id: string };
+  expect(link).toEqual({ from_id: v2, to_id: v1 });
+  // A no-op edit (same words, dedup lands back on v2) records no new link.
+  invoke('knowledge.edit_note', { note_id, body_text: 'v2' });
+  expect(revisesLinkCount()).toBe(1);
+});
+
 test('edit_note on an unknown note is refused by precondition', () => {
   const outcome = invoke('knowledge.edit_note', { note_id: 'ghost', title: 'New' });
   expect(outcome.status).toBe('failed');

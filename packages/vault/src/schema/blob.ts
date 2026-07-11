@@ -11,29 +11,33 @@
 // `core_content_derivative` IS registered (core.content_derivative): what
 // variants exist is model. Binary variants (thumb/preview) live in the CAS
 // under their own sha; the text variant lives INLINE in `text_content` so
-// the parent's FTS row can index extracted document text in-transaction —
-// the same no-I/O constraint that keeps text/* bodies inline (issue #296 §1)
-// applies to the index feed.
+// the owning document's FTS row can index extracted document text
+// in-transaction — the same no-I/O constraint that keeps text/* bodies
+// inline (issue #296 §1) applies to the index feed.
 //
-// A match inside a PDF must surface the DOCUMENT, so extracted text feeds
-// the parent content item's own FTS row rather than a shadow row. The v2
-// triggers rebuilt the row from `vault_content_text` alone — any title
-// rename would clobber derivative text — so v9 recreates them with the
-// derivative-aware body expression, and mirrors it from the derivative side.
+// A match inside a PDF must surface the DOCUMENT (issue #352: core_document,
+// not the raw content item), so extracted text feeds the OWNING document's
+// FTS row rather than a shadow row. The v2 triggers rebuilt the row from
+// `vault_content_text` alone — any title rename would clobber derivative
+// text — so this recreates them with the derivative-aware body expression,
+// and mirrors it from the derivative side. A content item can be the
+// current body of more than one document (sha256 dedup, or two documents
+// deliberately sharing bytes) — the refresh fans out to every one of them.
 
-/** Body of a content item's FTS row: extracted text wins, inline text else. */
-const CONTENT_BODY = (ref: string) => `COALESCE(
-    (SELECT d.text_content FROM core_content_derivative d
-      WHERE d.content_id = ${ref}."content_id" AND d.variant = 'text'),
-    vault_content_text(${ref}."media_type", ${ref}."content_uri"))`;
+/** Body of a document's FTS row: extracted text wins, inline text else. */
+const DOCUMENT_BODY = (ref: string) => `COALESCE(
+    (SELECT dv.text_content FROM core_content_derivative dv
+      WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'text'),
+    (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
+      WHERE ci.content_id = ${ref}."current_content_id"))`;
 
-const REFRESH_PARENT_FTS = (idRef: string) => `
-  DELETE FROM fts_core_content_item
-   WHERE rowid = (SELECT rowid FROM core_content_item WHERE content_id = ${idRef});
-  INSERT INTO fts_core_content_item (rowid, content_id, title, body)
-  SELECT i.rowid, i."content_id", i."title", ${CONTENT_BODY('i')}
-    FROM core_content_item i
-   WHERE i.content_id = ${idRef} AND i."deleted_at" IS NULL;`;
+const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
+  DELETE FROM fts_core_document
+   WHERE rowid IN (SELECT rowid FROM core_document WHERE current_content_id = ${contentIdRef});
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY('d')}
+    FROM core_document d
+   WHERE d.current_content_id = ${contentIdRef} AND d."deleted_at" IS NULL;`;
 
 export const BLOB_DDL = `
 CREATE TABLE IF NOT EXISTS blob_staging (
@@ -67,31 +71,34 @@ CREATE TABLE IF NOT EXISTS core_content_derivative (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_content_derivative_content ON core_content_derivative(content_id);
 
--- Rebuild the content item's FTS sync derivative-aware (see header).
-DROP TRIGGER IF EXISTS fts_core_content_item_ai;
-DROP TRIGGER IF EXISTS fts_core_content_item_au;
-CREATE TRIGGER IF NOT EXISTS fts_core_content_item_ai AFTER INSERT ON core_content_item BEGIN
-  INSERT INTO fts_core_content_item (rowid, content_id, title, body)
-  SELECT new.rowid, new."content_id", new."title", ${CONTENT_BODY('new')}
+-- Rebuild the document's FTS sync derivative-aware (see header).
+DROP TRIGGER IF EXISTS fts_core_document_ai;
+DROP TRIGGER IF EXISTS fts_core_document_au;
+CREATE TRIGGER IF NOT EXISTS fts_core_document_ai AFTER INSERT ON core_document BEGIN
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY('new')}
    WHERE new."deleted_at" IS NULL;
 END;
-CREATE TRIGGER IF NOT EXISTS fts_core_content_item_au AFTER UPDATE ON core_content_item BEGIN
-  DELETE FROM fts_core_content_item WHERE rowid = old.rowid;
-  INSERT INTO fts_core_content_item (rowid, content_id, title, body)
-  SELECT new.rowid, new."content_id", new."title", ${CONTENT_BODY('new')}
+CREATE TRIGGER IF NOT EXISTS fts_core_document_au AFTER UPDATE ON core_document BEGIN
+  DELETE FROM fts_core_document WHERE rowid = old.rowid;
+  INSERT INTO fts_core_document (rowid, document_id, title, body)
+  SELECT new.rowid, new."document_id", new."title", ${DOCUMENT_BODY('new')}
    WHERE new."deleted_at" IS NULL;
 END;
 
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_derivative_ai AFTER INSERT ON core_content_derivative
+-- Extracted text can arrive AFTER the document already exists (async OCR/
+-- text-layer extraction) — refresh whichever document(s) are currently
+-- pointed at the derivative's parent content item.
+CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_ai AFTER INSERT ON core_content_derivative
 WHEN NEW.variant = 'text'
-BEGIN${REFRESH_PARENT_FTS('NEW.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS('NEW.content_id')}
 END;
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_derivative_au AFTER UPDATE ON core_content_derivative
+CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_au AFTER UPDATE ON core_content_derivative
 WHEN NEW.variant = 'text'
-BEGIN${REFRESH_PARENT_FTS('NEW.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS('NEW.content_id')}
 END;
-CREATE TRIGGER IF NOT EXISTS trg_fts_content_derivative_ad AFTER DELETE ON core_content_derivative
+CREATE TRIGGER IF NOT EXISTS trg_fts_document_derivative_ad AFTER DELETE ON core_content_derivative
 WHEN OLD.variant = 'text'
-BEGIN${REFRESH_PARENT_FTS('OLD.content_id')}
+BEGIN${REFRESH_DOCUMENT_FTS('OLD.content_id')}
 END;
 `;

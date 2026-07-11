@@ -201,6 +201,47 @@ test('lifecycle sweep purges lapsed trashed notes with their edges (issue #308 A
   ).toBeTruthy();
 });
 
+test('lifecycle sweep purges a lapsed trashed document and its exclusively-owned content (issue #352)', () => {
+  const now = new Date().toISOString();
+  const past = '2020-01-01T00:00:00Z';
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES ('doc-body-1', 'text/plain', 'data:text/plain,x', 'sha-doc-body', 1, ?)`,
+    )
+    .run(past);
+  db.vault
+    .prepare(
+      `INSERT INTO core_document (document_id, title, current_content_id, created_at, updated_at, deleted_at, purge_at)
+       VALUES ('d-lapsed', 'Lapsed', 'doc-body-1', ?, ?, ?, ?)`,
+    )
+    .run(past, past, past, past);
+  // A trashed document still inside its window survives the sweep.
+  db.vault
+    .prepare(
+      `INSERT INTO core_content_item (content_id, media_type, content_uri, sha256, byte_size, created_at)
+       VALUES ('doc-body-2', 'text/plain', 'data:text/plain,y', 'sha-doc-body-2', 1, ?)`,
+    )
+    .run(now);
+  db.vault
+    .prepare(
+      `INSERT INTO core_document (document_id, title, current_content_id, created_at, updated_at, deleted_at, purge_at)
+       VALUES ('d-fresh', 'Fresh trash', 'doc-body-2', ?, ?, ?, '2999-01-01T00:00:00Z')`,
+    )
+    .run(now, now, now);
+  const result = gw.sweep(owner);
+  expect(result.documentsPurged).toBe(1);
+  expect(db.vault.prepare(`SELECT 1 FROM core_document WHERE document_id = 'd-lapsed'`).get()).toBe(
+    undefined,
+  );
+  expect(
+    db.vault.prepare(`SELECT 1 FROM core_content_item WHERE content_id = 'doc-body-1'`).get(),
+  ).toBe(undefined);
+  expect(
+    db.vault.prepare(`SELECT 1 FROM core_document WHERE document_id = 'd-fresh'`).get(),
+  ).toBeTruthy();
+});
+
 function calendarAppWithEvent(): { cred: Credential; appId: string } {
   const app = enrollApp(db, { name: 'agenda-widget', origin: 'generated' });
   createGrant(db, {
