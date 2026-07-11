@@ -347,6 +347,55 @@
   color: var(--ink);
 }
 
+/* Relaunch-to-update pill — pinned above Settings when the main process
+   sees a newer build on disk. A raised card (vs the flat sbItem rows) so
+   the one action that restarts the app reads as distinct from navigation. */
+.sbUpdate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-block: 6px 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-elev);
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent);
+  transition:
+    background 100ms,
+    box-shadow 100ms;
+}
+.sbUpdate:hover {
+  background: color-mix(in srgb, var(--ink) 4%, var(--bg-elev));
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.sbUpdate > svg:last-child {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+.sbUpdateBody {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sbUpdateTitle {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sbUpdateVersion {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--ink-4);
+}
+
 /* Small icon tile rendered inline in sidebar app rows. Matches the
    home-grid tile look in miniature so the sidebar tells the user
    which apps they own at a glance. */

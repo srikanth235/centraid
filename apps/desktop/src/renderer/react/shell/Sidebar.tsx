@@ -1,9 +1,11 @@
 import type { JSX, ReactNode } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from '../ui/Icon.js';
+import Logo from '../ui/Logo.js';
 import StatusPill from '../ui/StatusPill.js';
 import chrome from './chrome.module.css';
 import {
+  ArrowRightGlyph,
   HomeGlyph,
   PlusGlyph,
   SearchGlyph,
@@ -70,6 +72,13 @@ export interface SidebarProps {
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
+  /**
+   * A newer build is on disk (main's dist watcher): the version a relaunch
+   * would load. Set alongside onRelaunchToUpdate to show the pill above
+   * Settings; omitted = no update, no pill.
+   */
+  updateVersion?: string;
+  onRelaunchToUpdate?: () => void;
 }
 
 function SbItem(props: {
@@ -106,12 +115,7 @@ function SbSection({ label, onAction }: { label: string; onAction?: () => void }
       <span>{label}</span>
       {onAction ? (
         <span className={chrome.sbSectionActions}>
-          <button
-            className={chrome.sbSectionBtn}
-            type="button"
-            aria-label="Add"
-            onClick={onAction}
-          >
+          <button className={chrome.sbSectionBtn} type="button" aria-label="Add" onClick={onAction}>
             <PlusGlyph />
           </button>
         </span>
@@ -270,6 +274,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       <SbItem icon={<SparkleGlyph />} label="No saved chats yet" disabled />
 
       <span style={{ flex: '1', minHeight: '12px' }} />
+      {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
+        <button className={chrome.sbUpdate} type="button" onClick={props.onRelaunchToUpdate}>
+          <Logo size={26} />
+          <span className={chrome.sbUpdateBody}>
+            <span className={chrome.sbUpdateTitle}>Relaunch to update</span>
+            <span className={chrome.sbUpdateVersion}>v{props.updateVersion}</span>
+          </span>
+          <ArrowRightGlyph />
+        </button>
+      ) : null}
       <SbItem
         icon={<SettingsGlyph />}
         label="Settings"

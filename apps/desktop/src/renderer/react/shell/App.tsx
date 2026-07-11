@@ -17,6 +17,7 @@ import { useBlockingCount } from './useBlockingCount.js';
 import { useGatewayRuntime } from './useGatewayRuntime.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
+import { relaunchToUpdate, useUpdateStatus } from './useUpdateStatus.js';
 import { closeVaultSwitcher, openVaultSwitcher } from './vaultSwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
@@ -86,6 +87,7 @@ export default function App(): JSX.Element {
   const { isStarred, toggleStar } = useStarred();
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
+  const updateStatus = useUpdateStatus();
   const gatewayStatus = useGatewayRuntime()?.status;
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -200,10 +202,13 @@ export default function App(): JSX.Element {
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
+          {...(updateStatus?.available
+            ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
+            : {})}
         />
       );
     },
-    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount, gatewayStatus],
+    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount, updateStatus, gatewayStatus],
   );
 
   const renderRoute = useCallback(
