@@ -61,6 +61,15 @@ export function Card({ note, search, pending, onOpen, onTogglePin }) {
           </span>
         </div>
       ) : null}
+      {note.tags?.length ? (
+        <div className="nt-card-tags">
+          {note.tags.map((t) => (
+            <span className="nt-tag-chip nt-tag-chip-static" key={t.tag_id}>
+              #{t.label}
+            </span>
+          ))}
+        </div>
+      ) : null}
       <div className="nt-card-meta">
         {notebookId ? (
           <span className="nt-card-notebook">

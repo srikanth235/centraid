@@ -23,6 +23,44 @@ function AttachStrip({ note, onRemove }) {
   return <div className="kit-attach-strip nt-editor-attach" ref={ref} />;
 }
 
+function TagStrip({ note, onAddTag, onRemoveTag }) {
+  const [draft, setDraft] = useState('');
+  const submit = (e) => {
+    e.preventDefault();
+    const label = draft.trim();
+    if (!label) return;
+    onAddTag(note.note_id, label);
+    setDraft('');
+  };
+  return (
+    <div className="nt-tag-strip">
+      {(note.tags ?? []).map((t) => (
+        <span className="nt-tag-chip" key={t.tag_id}>
+          #{t.label}
+          <button
+            type="button"
+            className="nt-tag-remove"
+            aria-label={`Remove tag ${t.label}`}
+            onClick={() => onRemoveTag(t.tag_id)}
+          >
+            <Icon svg={I.close} />
+          </button>
+        </span>
+      ))}
+      <form className="nt-tag-add" onSubmit={submit}>
+        <input
+          type="text"
+          className="nt-tag-input"
+          placeholder="Add a tag…"
+          aria-label="Add a tag"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </form>
+    </div>
+  );
+}
+
 function DeleteButton({ onDelete }) {
   const [armed, setArmed] = useState(false);
   return (
@@ -137,6 +175,8 @@ export function Editor({
   onDelete,
   onAttach,
   onRemoveAttachment,
+  onAddTag,
+  onRemoveTag,
 }) {
   const [title, setTitleState] = useState(note.title ?? '');
   const [body, setBodyState] = useState(note.body ?? '');
@@ -406,6 +446,9 @@ export function Editor({
           ) : (
             <Blocks body={body} onToggleCheck={toggleCheck} onEnter={enterEdit} />
           )}
+
+          <div className="nt-eyebrow-label">Tags</div>
+          <TagStrip note={note} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
 
           <div className="nt-eyebrow-label">Attachments</div>
           <AttachStrip note={note} onRemove={onRemoveAttachment} />
