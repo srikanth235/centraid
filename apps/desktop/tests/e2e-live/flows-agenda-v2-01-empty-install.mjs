@@ -134,18 +134,22 @@ async function main() {
       assert(/Nothing coming up/.test(emptyTitle ?? ''), `expected "Nothing coming up" empty state, got: ${emptyTitle}`);
     });
 
-    await step('flow5-create-modal-no-calendars', 'Create event modal with ZERO calendars: shows "import an .ics" message, Propose disabled', async () => {
+    await step('flow5-create-modal-default-calendar', 'Create event modal on a fresh vault: the bootstrapped "Personal" calendar is pickable and Propose is enabled', async () => {
+      // A fresh dev vault now bootstraps with a default "Personal" calendar
+      // (gateway/vault bootstrap behavior — the old "zero calendars, import an
+      // .ics" dead end this step used to assert no longer applies). So the
+      // picker shows the calendar chip and Propose is enabled from the start;
+      // the no-calendars hint is exercised only if a vault truly has none.
       const fl = frameLoc(page);
       await fl.locator('#createEventBtn, .ag-new', { hasText: 'Create event' }).first().click();
       const modal = fl.locator('.ag-create-modal');
       await modal.waitFor({ state: 'visible', timeout: 5000 });
       await page.waitForTimeout(300); // let kit's 0.18s fade-in/rise-lg modal animation settle
-      await shot('06-create-modal-no-calendars');
-      const noCalMsg = await modal.locator('text=import an .ics file').count();
-      assert(noCalMsg >= 1, 'expected the no-calendars hint in the create modal');
+      await shot('06-create-modal-default-calendar');
+      const calChips = await modal.locator('.ag-cal-chips:not(.ag-guest-chips) .ag-cal-chip').count();
+      assert(calChips >= 1, `expected at least the bootstrapped calendar chip, got ${calChips}`);
       const proposeBtn = modal.getByRole('button', { name: 'Propose event' });
-      const disabled = await proposeBtn.isDisabled();
-      assert(disabled, 'Propose event button should be disabled when there are no calendars to pick');
+      assert(!(await proposeBtn.isDisabled()), 'Propose event should be enabled when a calendar exists');
       await page.keyboard.press('Escape');
       await modal.waitFor({ state: 'hidden', timeout: 5000 });
       await shot('07-create-modal-escaped');

@@ -50,6 +50,35 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
+/**
+ * Group `schedule_attendee` rows into a map keyed by event_id, each value the
+ * UI-ready guest list the EventDrawer renders: `{ party_id, name, partstat,
+ * is_you }`, with the caller ("you") first so its RSVP-controls row leads the
+ * Guests section. `nameById` resolves display names from the joined
+ * `core_party` rows; `mePartyId` is the vault's owner party, so `is_you`
+ * marks the one guest who gets the Going/Maybe/Decline controls.
+ */
+function attendeesByEvent(attendees, nameById, mePartyId) {
+  const byEvent = new Map();
+  for (const a of attendees) {
+    if (!byEvent.has(a.event_id)) byEvent.set(a.event_id, []);
+    byEvent.get(a.event_id).push({
+      party_id: a.party_id,
+      name: nameById.get(a.party_id) ?? 'Guest',
+      partstat: a.partstat,
+      role: a.role,
+      is_you: mePartyId != null && a.party_id === mePartyId,
+    });
+  }
+  for (const list of byEvent.values()) {
+    list.sort(
+      (x, y) =>
+        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) || String(x.name).localeCompare(String(y.name)),
+    );
+  }
+  return byEvent;
+}
+
 // How far back of `from` the dtstart filter reaches so still-running
 // multi-day events are not cut off at the window edge.
 const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
@@ -80,9 +109,11 @@ export default async ({ query, ctx }) => {
     const eventIds = windowed.map((e) => e.event_id);
     // Joins are `in`-bounded by the windowed events (issue #264) — the
     // event→calendar edge in schedule.event_ext (the UI colors and filters
-    // by calendar, so each event carries its calendar_id), then the
-    // attachment edges.
-    const [exts, attachments] = await Promise.all([
+    // by calendar, so each event carries its calendar_id), the attachment
+    // edges, and the guest list (schedule.attendee, joined to core.party for
+    // names below). The owner's own party comes from core.vault so a guest
+    // that IS you gets the RSVP controls (issue #337).
+    const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
         entity: 'schedule.event_ext',
         where: [{ column: 'event_id', op: 'in', value: eventIds }],
@@ -96,7 +127,27 @@ export default async ({ query, ctx }) => {
         ],
         purpose,
       }),
+      ctx.vault.read({
+        entity: 'schedule.attendee',
+        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        purpose,
+      }),
+      ctx.vault.read({ entity: 'core.vault', purpose }),
     ]);
+    const attendeeRows = attendeesRes.rows ?? [];
+    const mePartyId = (vaultRes.rows ?? [])[0]?.owner_party_id ?? null;
+    // One bounded pull resolves only the guests' display names.
+    const attendeePartyIds = [...new Set(attendeeRows.map((a) => a.party_id))].filter(Boolean);
+    const partiesRes =
+      attendeePartyIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.party',
+            where: [{ column: 'party_id', op: 'in', value: attendeePartyIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const partyNameById = new Map((partiesRes.rows ?? []).map((p) => [p.party_id, p.display_name]));
+    const guestsByEvent = attendeesByEvent(attendeeRows, partyNameById, mePartyId);
     // One bounded pull covers only the bytes those attachments reference.
     const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
       Boolean,
@@ -122,6 +173,7 @@ export default async ({ query, ctx }) => {
         ...e,
         calendar_id: calByEvent.get(e.event_id) ?? null,
         attachments: attByEvent.get(e.event_id) ?? [],
+        attendees: guestsByEvent.get(e.event_id) ?? [],
       }))
       .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
     return {

@@ -136,7 +136,12 @@ async function main() {
       assert(status === 'tentative', `expected proposed event to be tentative, got ${status}`);
     });
 
-    await step('flow3-event-detail-drawer-no-guests', 'Open event detail: no Guests section (attendees never joined by upcoming.js)', async () => {
+    await step('flow3-event-detail-drawer-no-guests', 'Open event detail for an event proposed with no guests: no Guests section (empty attendees array)', async () => {
+      // "Design review sync" was proposed above without inviting anyone, so
+      // its attendees array is empty and the Guests section stays hidden.
+      // (upcoming.js now DOES join schedule_attendee -- issue #337 -- so this
+      // asserts the empty case, not the old "never joined" gap; suite 3
+      // covers the populated case end to end.)
       const pill = fl.locator('.ag-pill', { hasText: normalEventTitle });
       await pill.click();
       const drawer = fl.locator('.ag-drawer');
@@ -144,8 +149,8 @@ async function main() {
       await page.waitForTimeout(300);
       await shot('04-event-drawer-normal');
       const guestsLabel = await drawer.locator('text=Guests').count();
-      console.log(`[agv2-2] "Guests" eyebrow present: ${guestsLabel > 0} (expected 0 -- confirms upcoming.js never returns attendees)`);
-      assert(guestsLabel === 0, 'expected NO Guests section since upcoming.js never joins schedule_attendee');
+      console.log(`[agv2-2] "Guests" eyebrow present: ${guestsLabel > 0} (expected 0 -- no one was invited to this event)`);
+      assert(guestsLabel === 0, 'expected NO Guests section for an event proposed without any guests');
       await fl.locator('[aria-label="Close"]').first().click();
       await drawer.waitFor({ state: 'hidden', timeout: 5000 });
     });

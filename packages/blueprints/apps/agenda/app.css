@@ -1275,6 +1275,28 @@ mark {
   color: var(--ink);
   font-weight: 600;
 }
+/* A guest chip carries a small initials avatar ahead of the name; selecting
+   it invites that person (aria-pressed reuses the calendar-chip treatment). */
+.ag-guest-chips {
+  margin-top: 4px;
+}
+.ag-guest-chip-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--sel);
+  color: var(--ink-2);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+.ag-cal-chip[aria-pressed='true'] .ag-guest-chip-avatar {
+  background: var(--bg-elev);
+  color: var(--ink);
+}
 .ag-create-desc {
   width: 100%;
   min-height: 64px;

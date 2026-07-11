@@ -19,14 +19,16 @@
 //     Same suspected defect applies to `schedule.reschedule_event` (also
 //     risk:'medium', also no confirm:true) -- tested too.
 //
-// (B) The "upcoming lacks attendees" flag, taken further: since
-//     upcoming.js/search.js never join schedule_attendee, the Guests/RSVP
-//     UI can NEVER render for real through the app (confirmed in suite 2).
-//     This suite proves the RSVP *write* path itself is NOT broken (refutes
-//     the "rsvp.js schema mismatch" flag) by invoking
-//     `window.centraid.write({action:'rsvp', ...})` directly against a
-//     rig-seeded event+attendee row (seed-agenda-calendars.mjs), exactly
-//     the shape rsvp.js forwards to `schedule.respond_rsvp`.
+// (B) Attendees/RSVP, now that issue #337 has landed: upcoming.js/search.js
+//     join schedule_attendee -> core_party, so the Guests section renders for
+//     real through the app, and the drawer's "You" row + Going/Maybe/Decline
+//     controls light up when the owner is an invited attendee. This suite
+//     drives all of that end to end against the rig-seeded events
+//     (seed-agenda-calendars.mjs): the Dana-invited event shows a Guests
+//     section (needs-action), the owner-invited event exposes the clickable
+//     RSVP controls and records a response, and the direct
+//     window.centraid.write({action:'rsvp', ...}) probes still confirm the
+//     write path (valid party -> executed, non-invited party -> failed).
 //
 // PREREQ: run in order --
 //   node tests/e2e-live/flows-agenda-v2-01-empty-install.mjs
@@ -85,6 +87,11 @@ async function shot(name) {
 
 function frameLoc(p) {
   return p.frameLocator('iframe[data-centraid-app="1"]');
+}
+
+function localInput(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 async function main() {
@@ -148,7 +155,7 @@ async function main() {
       }
     });
 
-    await step('flow2-cancel-outcome', 'Ask-to-cancel an event -- observe whether cancel_event ACTUALLY parks (Approvals gets an entry) or executes immediately with no owner say-so', async () => {
+    await step('flow2-cancel-parks', 'Ask-to-cancel an event -> cancel_event PARKS for the owner (confirm:true honored): drawer shows "Cancel pending", event stays on the agenda', async () => {
       await fl.locator('.ag-today', { hasText: 'Today' }).click();
       await page.waitForTimeout(300);
       const pill = fl.locator('.ag-pill', { hasText: 'All-day offsite' });
@@ -167,47 +174,101 @@ async function main() {
       assert(/ask to cancel\?/i.test(armedText ?? ''), `expected armed label "Ask to cancel?", got ${armedText}`);
       await shot('03-cancel-armed');
       await cancelBtn.click(); // confirm
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1200);
       await shot('04-after-cancel-confirm');
 
-      const noticeText = await fl.locator('#noticeBanner').textContent().catch(() => '');
-      console.log(`[agv2-3] noticeBanner text after cancel-confirm: ${JSON.stringify(noticeText)}`);
-      const drawerStillOpen = await drawer.isVisible().catch(() => false);
-      console.log(`[agv2-3] drawer still open after cancel-confirm: ${drawerStillOpen}`);
+      // Parking's tells (logic.js cancelEvent 'parked' branch): the drawer
+      // stays open with a "Cancel pending" badge and the button relabels to
+      // "Cancellation pending" -- there is no noticeBanner text (that surface
+      // is reserved for failed/denied), so detect park on the drawer state.
+      const pendingBadge = await drawer.locator('.ag-badge', { hasText: 'Cancel pending' }).count();
+      const pendingBtn = await drawer.getByRole('button', { name: 'Cancellation pending' }).count();
+      findings.cancelParked = pendingBadge > 0 || pendingBtn > 0;
+      console.log(`[agv2-3] FINDING: cancel_event PARKED (drawer shows pending): ${findings.cancelParked}`);
+      assert(findings.cancelParked, 'expected the cancel to park (Cancel pending badge / Cancellation pending button)');
 
-      findings.cancelParked = /waiting for your approval/i.test(noticeText ?? '');
-      findings.cancelNoticeText = noticeText;
-      console.log(`[agv2-3] FINDING: cancel_event actually PARKED: ${findings.cancelParked}`);
-
-      if (!findings.cancelParked) {
-        // Suspected: executed immediately. Verify the event actually
-        // vanished (status flips to 'cancelled', and the upcoming/search
-        // queries filter cancelled events out entirely -- see upcoming.js
-        // `status != 'cancelled'`).
-        await fl.locator('.kit-seg button', { hasText: 'Month' }).click().catch(() => undefined);
-        await page.waitForTimeout(400);
-        const stillThere = await fl.locator('.ag-pill', { hasText: 'All-day offsite' }).count();
-        findings.cancelExecutedEventGone = stillThere === 0;
-        console.log(`[agv2-3] FINDING: event gone from calendar immediately after "Ask to cancel" confirm (no owner review happened): ${stillThere === 0}`);
-        await shot('05-month-view-after-immediate-cancel');
-      }
+      // Close the drawer so its backdrop stops intercepting later clicks.
+      await page.keyboard.press('Escape');
+      await drawer.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
+      await fl.locator('.kit-seg button', { hasText: 'Month' }).click().catch(() => undefined);
+      await page.waitForTimeout(400);
+      // Parked, not executed: the event is still on the agenda (status is
+      // unchanged until the owner approves).
+      const stillThere = await fl.locator('.ag-pill', { hasText: 'All-day offsite' }).count();
+      findings.cancelEventStillOnAgenda = stillThere > 0;
+      console.log(`[agv2-3] FINDING: event still on the agenda after the parked cancel: ${stillThere > 0}`);
+      assert(stillThere > 0, 'a parked cancel must NOT remove the event from the agenda yet');
+      await shot('05-month-view-after-parked-cancel');
     });
 
-    await step('flow3-approvals-no-parked-cancel-entry', 'Approvals screen: check whether ANY schedule.cancel_event / reschedule_event entry is actually waiting there', async () => {
+    await step('flow3-approvals-has-parked-entries', 'Approvals screen: the parked schedule.cancel_event / reschedule_event asks ARE waiting there', async () => {
       await navTo(page, 'Approvals');
       await page.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
       await page.waitForTimeout(500);
       await shot('06-approvals-screen');
       const scheduleRows = await page.locator('text=/schedule\\.(cancel_event|reschedule_event)/').count();
       findings.approvalsHasScheduleEntries = scheduleRows > 0;
-      console.log(`[agv2-3] FINDING: Approvals shows ${scheduleRows} schedule.cancel_event/reschedule_event row(s) (expected >0 only if the app.json/UI promise of parking is actually honored)`);
-      const emptyState = await page.locator('text=Nothing waiting on you.').count();
-      console.log(`[agv2-3] Approvals "Nothing waiting on you." empty state showing: ${emptyState > 0}`);
+      console.log(`[agv2-3] FINDING: Approvals shows ${scheduleRows} schedule.cancel_event/reschedule_event row(s)`);
+      assert(scheduleRows > 0, 'expected the parked reschedule/cancel asks to appear in Approvals');
     });
 
-    // ---- (B) RSVP / attendees ----
+    await step('flow4c-create-modal-guest-picker', 'Invite Dana through the CreateModal guest picker -> the proposed event carries her as a guest end to end', async () => {
+      // flow3 left us on the Approvals screen (no Agenda iframe), so re-open
+      // Agenda via the persistent left-rail item before touching its UI.
+      await page.getByRole('button', { name: 'Agenda', exact: true }).first().click();
+      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      fl = frameLoc(page);
+      await fl.locator('.ag-brand-name', { hasText: 'Agenda' }).waitFor({ state: 'visible', timeout: 15_000 });
+      await page.waitForTimeout(600);
+      await fl.locator('.ag-new', { hasText: 'Create event' }).first().click();
+      const modal = fl.locator('.ag-create-modal');
+      await modal.waitFor({ state: 'visible', timeout: 5000 });
+      await page.waitForTimeout(300);
+      const start = new Date(Date.now() + 10 * 86400000);
+      start.setHours(12, 0, 0, 0);
+      const end = new Date(start.getTime() + 3600000);
+      await modal.locator('.ag-create-title').fill('Team lunch with Dana');
+      await modal.locator('input[type="datetime-local"]').first().fill(localInput(start));
+      await modal.locator('input[type="datetime-local"]').nth(1).fill(localInput(end));
+      await modal.locator('.ag-cal-chip', { hasText: 'Personal' }).click();
+      // The guest picker only paints once the `parties` query resolves.
+      const danaChip = modal.locator('.ag-guest-chips .ag-cal-chip', { hasText: 'Dana Kim' });
+      await danaChip.waitFor({ state: 'visible', timeout: 8000 });
+      await shot('10-create-modal-guest-picker');
+      await danaChip.click();
+      assert(
+        (await danaChip.getAttribute('aria-pressed')) === 'true',
+        'expected the Dana guest chip to read aria-pressed=true once selected',
+      );
+      await modal.getByRole('button', { name: 'Propose event' }).click();
+      await modal.waitFor({ state: 'hidden', timeout: 10_000 });
+      await page.waitForTimeout(600);
 
-    await step('flow4-seeded-event-no-guests-in-ui', 'The rig-seeded event (real schedule_attendee row in the DB) STILL shows no Guests section in the drawer -- proves the gap is query-side, not data-side', async () => {
+      await fl.locator('#searchInput').fill('Team lunch with Dana');
+      await page.waitForTimeout(700);
+      const card = fl.locator('.ag-sched-card', { hasText: 'Team lunch with Dana' }).first();
+      await card.waitFor({ state: 'visible', timeout: 10_000 });
+      await card.click();
+      const drawer = fl.locator('.ag-drawer');
+      await drawer.waitFor({ state: 'visible', timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shot('11-created-event-with-guest');
+      const guests = await drawer.locator('.ag-eyebrow-label', { hasText: 'Guests' }).count();
+      assert(guests > 0, 'expected a Guests section on the event just created with a guest invited');
+      const danaRow = drawer.locator('.ag-guest-row', { hasText: 'Dana Kim' });
+      await danaRow.waitFor({ state: 'visible', timeout: 5000 });
+      const stat = await danaRow.locator('.ag-guest-stat').textContent().catch(() => '');
+      assert(/invited/i.test(stat ?? ''), `expected the invited guest to show "Invited", got ${JSON.stringify(stat)}`);
+      findings.createModalGuestInvited = true;
+      await fl.locator('[aria-label="Close"]').first().click();
+      await fl.locator('#searchInput').fill('');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    });
+
+    // ---- (B) RSVP write-path probes (direct invoke) ----
+
+    await step('flow4-seeded-event-guests-render', 'The rig-seeded Dana event now SHOWS its Guests section in the drawer -- upcoming/search join schedule_attendee (issue #337)', async () => {
       // `[data-app-id="agenda"]` only exists on Home's app-grid card (absent
       // on the Approvals screen we just navigated to, per the same trap
       // documented in flows-approvals-02-corner-cases.mjs) -- use the
@@ -217,24 +278,74 @@ async function main() {
       fl = frameLoc(page);
       await fl.locator('.ag-brand-name', { hasText: 'Agenda' }).waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(600);
-      await fl.locator('#searchInput').fill('SEEDED');
-      await page.waitForTimeout(600);
+      // Reset the window to today-forward before searching: opening a search
+      // result opens the drawer via findEvent(), which only looks in the
+      // loaded `data.events` window (app.jsx) -- an earlier create can have
+      // moved the cursor weeks out, dropping the seeded near-term events from
+      // that window. "Today" reloads it so the seeded event is present.
+      await fl.locator('.ag-today', { hasText: 'Today' }).click();
+      await page.waitForTimeout(400);
+      await fl.locator('#searchInput').fill('RSVP probe');
+      await page.waitForTimeout(700);
       // The seeded event's dtstart is "now + 3 days" at whatever wall-clock
       // time the seed script ran -- if that happens to land near midnight,
       // it spans two day-groups in the Schedule view (two `.ag-sched-card`
       // segments for the same event, same as the overnight-event corner
       // case in suite 2), so scope to `.first()` rather than assume one.
-      const card = fl.locator('.ag-sched-card', { hasText: 'SEEDED' }).first();
+      const card = fl.locator('.ag-sched-card', { hasText: 'RSVP probe' }).first();
       await card.waitFor({ state: 'visible', timeout: 10_000 });
       await card.click();
       const drawer = fl.locator('.ag-drawer');
       await drawer.waitFor({ state: 'visible', timeout: 5000 });
       await page.waitForTimeout(300);
-      await shot('07-seeded-event-drawer-no-guests');
-      const guestsLabel = await drawer.locator('text=Guests').count();
-      assert(guestsLabel === 0, `expected NO Guests section even though schedule_attendee has a real row for this event (party ${seedIds.danaId}) -- proves upcoming.js/search.js never join attendees`);
-      findings.seededEventAttendeeInvisibleInUI = true;
+      await shot('07-seeded-event-drawer-guests');
+      const guestsLabel = await drawer.locator('.ag-eyebrow-label', { hasText: 'Guests' }).count();
+      assert(guestsLabel > 0, `expected a Guests section now that schedule_attendee is joined for this event (party ${seedIds.danaId})`);
+      const danaRow = drawer.locator('.ag-guest-row', { hasText: 'Dana Kim' });
+      await danaRow.waitFor({ state: 'visible', timeout: 5000 });
+      const danaStat = await danaRow.locator('.ag-guest-stat').textContent().catch(() => '');
+      console.log(`[agv2-3] Dana's row status in the Guests section: ${JSON.stringify(danaStat)}`);
+      assert(/invited/i.test(danaStat ?? ''), `expected Dana to show as "Invited" (needs-action), got ${JSON.stringify(danaStat)}`);
+      // Dana is not the owner, so her row must NOT expose the "You" RSVP controls.
+      const danaHasControls = await danaRow.locator('.ag-guest-opt').count();
+      assert(danaHasControls === 0, 'a non-you guest must not get the Going/Maybe/Decline controls');
+      findings.seededEventGuestsRender = true;
       await fl.locator('[aria-label="Close"]').first().click();
+      await fl.locator('#searchInput').fill('');
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(300);
+    });
+
+    await step('flow4b-owner-rsvp-controls-record', 'The owner-invited seeded event exposes the "You" RSVP row; clicking Going records the response end to end', async () => {
+      await fl.locator('.ag-today', { hasText: 'Today' }).click();
+      await page.waitForTimeout(400);
+      await fl.locator('#searchInput').fill('Your RSVP event');
+      await page.waitForTimeout(700);
+      const card = fl.locator('.ag-sched-card', { hasText: 'Your RSVP event' }).first();
+      await card.waitFor({ state: 'visible', timeout: 10_000 });
+      await card.click();
+      const drawer = fl.locator('.ag-drawer');
+      await drawer.waitFor({ state: 'visible', timeout: 5000 });
+      await page.waitForTimeout(300);
+      await shot('08-owner-rsvp-drawer-before');
+      const youRow = drawer.locator('.ag-guest-row', { hasText: 'You' }).first();
+      await youRow.waitFor({ state: 'visible', timeout: 5000 });
+      const goingBtn = youRow.getByRole('button', { name: 'Going' });
+      await goingBtn.waitFor({ state: 'visible', timeout: 5000 });
+      assert((await youRow.locator('.ag-guest-opt').count()) === 3, 'expected the three RSVP controls on the "You" row');
+      await goingBtn.click();
+      await page.waitForTimeout(1200);
+      await shot('09-owner-rsvp-drawer-after-going');
+      // write() -> executed -> refresh() re-reads upcoming with the new
+      // partstat, and the drawer (keyed by event_id) remounts, so the Going
+      // control now reads data-active="true".
+      const reopened = fl.locator('.ag-drawer');
+      const activeGoing = reopened.locator('.ag-guest-row', { hasText: 'You' }).first().getByRole('button', { name: 'Going' });
+      const activeState = await activeGoing.getAttribute('data-active').catch(() => null);
+      console.log(`[agv2-3] "Going" control data-active after RSVP: ${JSON.stringify(activeState)}`);
+      findings.ownerRsvpRecorded = activeState === 'true';
+      assert(activeState === 'true', `expected the "Going" control to be active after recording the RSVP, got data-active=${JSON.stringify(activeState)}`);
+      await reopened.locator('[aria-label="Close"]').first().click().catch(() => undefined);
       await fl.locator('#searchInput').fill('');
       await page.keyboard.press('Escape');
       await page.waitForTimeout(300);

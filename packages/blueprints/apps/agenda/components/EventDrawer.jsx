@@ -1,9 +1,10 @@
 // The right slide-over event detail drawer. Mounted keyed by event_id at the
 // call site (app.jsx) so switching events remounts this component fresh —
 // local reschedule-draft state always starts from the newly opened event, no
-// stale-buffer bugs. Guests render only when the (currently mock-only —
-// upcoming.js/search.js are not extended here) event carries an `attendees`
-// list; the "You" row gets RSVP controls, other guests show their PARTSTAT.
+// stale-buffer bugs. Guests render only when the event carries an `attendees`
+// list — upcoming.js/search.js join schedule_attendee → core_party per event
+// (issue #337); the "You" row (is_you) gets RSVP controls, other guests show
+// their PARTSTAT.
 import { useEffect, useRef, useState } from '../react-core.min.js';
 import { armConfirm, outcomeMessage, renderAttachments } from '../kit.js';
 import { fmtRange, initials, toIsoUtc, toLocalInput } from '../format.js';

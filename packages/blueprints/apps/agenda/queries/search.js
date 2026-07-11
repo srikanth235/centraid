@@ -43,6 +43,28 @@ function attachmentsBySubject(subjectType, attachments, contentById) {
   return bySubject;
 }
 
+/** The shared guest projection — see upcoming.js for the shape's home. */
+function attendeesByEvent(attendees, nameById, mePartyId) {
+  const byEvent = new Map();
+  for (const a of attendees) {
+    if (!byEvent.has(a.event_id)) byEvent.set(a.event_id, []);
+    byEvent.get(a.event_id).push({
+      party_id: a.party_id,
+      name: nameById.get(a.party_id) ?? 'Guest',
+      partstat: a.partstat,
+      role: a.role,
+      is_you: mePartyId != null && a.party_id === mePartyId,
+    });
+  }
+  for (const list of byEvent.values()) {
+    list.sort(
+      (x, y) =>
+        (y.is_you ? 1 : 0) - (x.is_you ? 1 : 0) || String(x.name).localeCompare(String(y.name)),
+    );
+  }
+  return byEvent;
+}
+
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   const term = String(input?.term ?? '').trim();
@@ -59,8 +81,10 @@ export default async ({ input, ctx }) => {
     if (hits.length === 0) return { events: [] };
     const eventIds = hits.map((e) => e.event_id);
     // Joins are `in`-bounded by the matched ids — the event→calendar edge
-    // in schedule.event_ext, then the attachment edges.
-    const [exts, attachments] = await Promise.all([
+    // in schedule.event_ext, the attachment edges, and the guest list
+    // (schedule.attendee, joined to core.party for names below); the owner's
+    // own party (core.vault) drives the `is_you` RSVP row (issue #337).
+    const [exts, attachments, attendeesRes, vaultRes] = await Promise.all([
       ctx.vault.read({
         entity: 'schedule.event_ext',
         where: [{ column: 'event_id', op: 'in', value: eventIds }],
@@ -74,7 +98,26 @@ export default async ({ input, ctx }) => {
         ],
         purpose,
       }),
+      ctx.vault.read({
+        entity: 'schedule.attendee',
+        where: [{ column: 'event_id', op: 'in', value: eventIds }],
+        purpose,
+      }),
+      ctx.vault.read({ entity: 'core.vault', purpose }),
     ]);
+    const attendeeRows = attendeesRes.rows ?? [];
+    const mePartyId = (vaultRes.rows ?? [])[0]?.owner_party_id ?? null;
+    const attendeePartyIds = [...new Set(attendeeRows.map((a) => a.party_id))].filter(Boolean);
+    const partiesRes =
+      attendeePartyIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.party',
+            where: [{ column: 'party_id', op: 'in', value: attendeePartyIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const partyNameById = new Map((partiesRes.rows ?? []).map((p) => [p.party_id, p.display_name]));
+    const guestsByEvent = attendeesByEvent(attendeeRows, partyNameById, mePartyId);
     // One bounded pull covers only the bytes those attachments reference.
     const contentIds = [...new Set((attachments.rows ?? []).map((a) => a.content_id))].filter(
       Boolean,
@@ -96,6 +139,7 @@ export default async ({ input, ctx }) => {
       ...e,
       calendar_id: calByEvent.get(e.event_id) ?? null,
       attachments: attByEvent.get(e.event_id) ?? [],
+      attendees: guestsByEvent.get(e.event_id) ?? [],
       snippet: typeof _snippet === 'string' ? _snippet : '',
     }));
     return { events };
