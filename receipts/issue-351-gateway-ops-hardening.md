@@ -19,10 +19,23 @@
 - [x] `disk` health component with free-space watermarks
 - [x] backup status/run HTTP surface
 - [x] Gateway page backup card with seal-key nudge
-- [ ] second-gateway detection / fencing token in `_gateway/info` (deferred per issue)
-- [ ] version-skew handshake wiring, outbound-call timeouts, worker admission control (Tier 4, deferred per issue)
-- [ ] missed-automation-run ledger (deferred per issue)
+- [x] gateway instance lease (second-gateway split-brain detection)
+- [x] `instanceId` exposed via `_gateway/info`
+- [ ] desktop single-instance lock
+- [ ] version-skew handshake wired for remote gateways
+- [ ] launch-at-login setting
+- [ ] missed-automation-run ledger (recorded, never retro-executed)
+- [ ] `broker` health probe (needs-auth + overdue token refresh)
+- [ ] `scheduler` health probe (per-vault tick staleness + missed windows)
+- [ ] numeric metrics on the health snapshot
+- [ ] OAuth token-refresh timeout
+- [ ] outbox external-write timeout
+- [ ] SSE subscriber cap
+- [ ] worker admission control
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
+- [ ] app-engine `_changes` per-app SSE cap (third SSE surface, flagged as its own follow-up)
+- [ ] hard refusal on version skew (surfaced loudly for now; refusal is the documented escalation path)
+- [ ] remote/headless self-update + mobile-down UX (distribution / RN-app work, out of this repo pass)
 
 ## What changed
 
@@ -87,6 +100,54 @@
   diagnostics button, and the Components tab now wraps long detail strings
   instead of clipping them. Docs: the backups chapter mentions the card.
 
+- **packages/gateway (instance lease)** — gateway instance lease
+  (second-gateway split-brain detection): `gateway.lease` JSON at the vault
+  registry root (`instanceId`/pid/hostname/startedAt/renewedAt), renewed
+  every 30s, fresh window 90s. A fresh foreign lease at start or a foreign
+  rewrite mid-run flips a persistent `instance` health error naming the
+  rival and STOPS rewriting while conflicted (split-brain is made loud,
+  never auto-resolved — same philosophy as backup generation fencing); a
+  stale lease from a crashed process is reclaimed with a distinct detail;
+  graceful stop removes only our own lease. `instanceId` exposed via
+  `_gateway/info` (additive field) so clients can detect a gateway
+  swap-under-them.
+- **apps/desktop (wave 2)** — desktop single-instance lock
+  (`app.requestSingleInstanceLock()`, second launch focuses the existing
+  window); version-skew handshake wired for remote gateways — the
+  previously dead `version-handshake.ts` now judges every remote heartbeat,
+  adds `versionSkew` to the runtime snapshot and fires an immediate,
+  de-duped OS notification (skew is a static build fact, not a transient
+  blip; hard refusal is the documented escalation path, not built);
+  launch-at-login setting (`launchAtLogin` in settings →
+  `app.setLoginItemSettings`, toggle on the Gateway page Alerts tab,
+  documented no-op on Linux).
+- **packages/automation + gateway (missed runs + probes + metrics)** —
+  missed-automation-run ledger (recorded, never retro-executed): the
+  in-process scheduler persists `lastTickAt` in the vault's
+  `automation_state` KV (sentinel `__scheduler`); a gap > 3× the scheduler
+  period computes one missed-window entry per automation per gap (earliest
+  fire time, 7-day scan cap) and pushes `automation-runs` degraded — the
+  deliberate asymmetry with the self-healing outbox is documented in code.
+  New `broker` health probe (needs-auth + overdue token refresh)
+  flagging oauth2 tokens >1h past expiry with no refresh, and a
+  `scheduler` health probe (per-vault tick staleness + missed windows).
+  The webhook fire path now reports to `automation-runs` health (it never
+  did — a webhook-triggered connector could fail silently forever).
+  Numeric metrics on the health snapshot: `metrics = { rssBytes,
+  outboxPending, sseClients, uptimeMs }` (outbox pending counted per vault;
+  SSE count summed from the new subscriber-cap accessors).
+- **packages/gateway + app-engine (hygiene bounds)** — OAuth token-refresh
+  timeout (30s via a shared `timeoutSignal` helper) and outbox
+  external-write timeout (60s), each riding the exact pre-existing
+  network-failure path (broker: transient retry; outbox: stays approved,
+  retried next drain — no new states). SSE subscriber cap (32 per surface)
+  on `_logs/events` and `_automations/run/events`: over cap → 503
+  `sse_capacity` + `Retry-After: 5`, counts exposed via accessors. Worker
+  admission control at the real spawn site (`app-engine`'s handler-runner,
+  not vault/host.ts as the audit guessed): 8 concurrent / 16 queued / 10s
+  max wait, FIFO; refusal returns a `GATEWAY_BUSY` 503 through the existing
+  error shape BEFORE any worker thread spawns.
+
 ### Files
 
 - `apps/desktop/src/main.ts`
@@ -103,6 +164,10 @@
 - `apps/desktop/src/main/gateway-supervisor-core.ts`
 - `apps/desktop/src/main/ipc.ts`
 - `apps/desktop/src/main/local-gateway.ts`
+- `apps/desktop/src/main/login-item.ts`
+- `apps/desktop/src/main/settings-merge.test.ts`
+- `apps/desktop/src/main/settings-merge.ts`
+- `apps/desktop/src/main/settings.ts`
 - `apps/desktop/src/preload.ts`
 - `apps/desktop/src/renderer/centraid-api.d.ts`
 - `apps/desktop/src/renderer/gateway-client-backup.ts`
@@ -119,20 +184,49 @@
 - `apps/desktop/src/renderer/react/screens/SettingsDiagnosticsScreen.test.tsx`
 - `apps/desktop/src/renderer/react/screens/SettingsDiagnosticsScreen.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/GatewayRoute.tsx`
+- `packages/app-engine/src/handlers/dispatcher.ts`
+- `packages/app-engine/src/handlers/handler-runner.test.ts`
+- `packages/app-engine/src/handlers/handler-runner.ts`
+- `packages/app-engine/src/handlers/worker-admission.ts`
+- `packages/app-engine/src/index.ts`
+- `packages/automation/src/fire/in-process-scheduler.test.ts`
+- `packages/automation/src/fire/in-process-scheduler.ts`
+- `packages/automation/src/fire/scheduler-ledger.test.ts`
+- `packages/automation/src/fire/scheduler-ledger.ts`
+- `packages/automation/src/index.ts`
 - `packages/gateway/src/backup/backup-service.ts`
 - `packages/gateway/src/cli/paths.ts`
 - `packages/gateway/src/paths.ts`
+- `packages/gateway/src/routes/automations-routes.test.ts`
+- `packages/gateway/src/routes/automations-routes.ts`
 - `packages/gateway/src/routes/backup-routes.test.ts`
 - `packages/gateway/src/routes/backup-routes.ts`
 - `packages/gateway/src/routes/diagnostics-routes.ts`
+- `packages/gateway/src/routes/gateway-info-routes.ts`
+- `packages/gateway/src/routes/logs-routes.test.ts`
+- `packages/gateway/src/routes/logs-routes.ts`
+- `packages/gateway/src/routes/sse-cap.ts`
+- `packages/gateway/src/serve/broker-health.test.ts`
+- `packages/gateway/src/serve/broker-health.ts`
 - `packages/gateway/src/serve/build-gateway.test.ts`
 - `packages/gateway/src/serve/build-gateway.ts`
+- `packages/gateway/src/serve/connection-broker.test.ts`
+- `packages/gateway/src/serve/connection-broker.ts`
 - `packages/gateway/src/serve/disk-health.test.ts`
 - `packages/gateway/src/serve/disk-health.ts`
+- `packages/gateway/src/serve/fetch-timeout.ts`
 - `packages/gateway/src/serve/gateway-diagnostics.test.ts`
 - `packages/gateway/src/serve/gateway-diagnostics.ts`
+- `packages/gateway/src/serve/gateway-instance-lease.test.ts`
+- `packages/gateway/src/serve/gateway-instance-lease.ts`
 - `packages/gateway/src/serve/gateway-log-store.test.ts`
 - `packages/gateway/src/serve/gateway-log-store.ts`
+- `packages/gateway/src/serve/health-registry.test.ts`
+- `packages/gateway/src/serve/health-registry.ts`
+- `packages/gateway/src/serve/outbox-executor.test.ts`
+- `packages/gateway/src/serve/outbox-executor.ts`
+- `packages/gateway/src/serve/scheduler-health.test.ts`
+- `packages/gateway/src/serve/scheduler-health.ts`
 - `packages/gateway/src/serve/serve.test.ts`
 - `packages/gateway/src/serve/vault-registry.test.ts`
 - `packages/gateway/src/serve/vault-registry.ts`
@@ -172,37 +266,66 @@
   the wire (noted, not silently approximated).
 - Crash handlers log-and-continue (never exit on `uncaughtException`) —
   desktop-shell posture, documented inline.
+- (wave 2) The instance lease reports health push-style (the `BackupService`
+  pattern, not a stateless probe) because conflict state must persist
+  across ticks; the lease file lives directly under the vault root, where
+  the registry scan already ignores non-directories.
+- (wave 2) Missed windows: ONE entry per automation per downtime gap (not
+  per missed minute), gap threshold 3× the scheduler period, 7-day scan
+  cap; entries are persisted in the vault's `automation_state` KV under the
+  `__scheduler` sentinel. An HTTP read surface for the ledger is NOT wired
+  yet — `SchedulerLedgerStore.load()` is exported and ready; the health
+  probes carry counts + latest in the meantime (known gap).
+- (wave 2) No dedicated `webhooks` health component — the webhook route
+  holds only in-memory rate-limit state, nothing worth probing; the real
+  gap found instead was `webhookFire` never reporting run health, fixed.
+- (wave 2) The worker spawn site is `app-engine`'s handler-runner (the
+  audit's guess of vault/host.ts was wrong — vault spawns no workers);
+  the busy refusal is a factory-built error, not a class, per the
+  one-class-per-file lint rule.
+- (wave 2) Version-skew alert fires immediately (no sustained window) —
+  a build mismatch is a static fact, unlike transient component errors.
 
 ## Out of scope (tracked in #351)
 
-- Second-gateway detection / fencing token in `_gateway/info`, version-skew
-  handshake wiring, outbound-call timeouts, worker admission control, and a
-  missed-automation-run ledger — explicitly listed as lower-urgency
-  follow-ups in the issue.
 - Ontology-version open-time guard — `ontology_version` is stamped per-row
   (mixed versions legitimately coexist), so there is no single marker to
   compare at open time; needs a product decision first.
-- Remote/headless gateway self-update and mobile-down UX (Tier 4).
+- Hard refusal on version skew (surfaced + alerted for now).
+- The app-engine per-app `_changes` SSE surface is still uncapped (flagged
+  as its own follow-up task — needs per-app rather than global counting).
+- Remote/headless gateway self-update and mobile-down UX (Tier 4;
+  distribution / RN-app work).
+- Bearer-token rotation/expiry for remote enrollment (enrollment redesign;
+  the desktop's local bearer now rotates on every gateway restart).
 
 ## Verification
 
 ```sh
 npx turbo run typecheck test build --filter=@centraid/vault \
   --filter=@centraid/gateway --filter=@centraid/backup \
-  --filter=@centraid/desktop
+  --filter=@centraid/desktop --filter=@centraid/automation \
+  --filter=@centraid/app-engine
 ```
 
-- The command above: 26/26 tasks green — vault 447 tests,
-  gateway 331 (+1 pre-existing `tsx`-binary skip), backup 108
-  (+15 interop-gated skips), desktop 561, including the new suites:
+- The command above: 28/28 tasks green across the six touched packages
+  (vault 447 tests, gateway 331→371 across the two waves, backup 108,
+  desktop 572, automation and app-engine suites included; +1 pre-existing
+  `tsx`-binary skip, +15 interop-gated backup skips). New suites include:
   downgrade-guard + synchronous-pragma tests (vault), log rotation /
   boot-tail / dropped-writes and diagnostics shape + redaction + bearer
   gating (gateway), failed-mount retry/backoff, broken-DB probe, disk
   watermark thresholds (gateway), backup route shapes incl. a real
   end-to-end configured round-trip over a local provider (gateway),
   crash-log, supervisor backoff/crash-loop, health reconciliation +
-  component-alert de-dupe, diagnostics-export seams (desktop main), and
-  backup card / restart / export UI states (desktop renderer).
+  component-alert de-dupe, diagnostics-export seams (desktop main),
+  backup card / restart / export UI states (desktop renderer); and in
+  wave 2: instance-lease conflict/stale/reclaim/stop semantics (7),
+  missed-window computation + scheduler/broker probes (29+), version-skew
+  detection + alert de-dupe (11), launch-at-login settings merge, hung
+  token-endpoint and hung outbox-write timeouts against real
+  never-responding servers, SSE cap 503 + count-decrement, and worker
+  admission burst/FIFO/queue-timeout tests.
 - `serve.test.ts` proves the diagnostics endpoint 401s without the bearer
   and that the gateway's own token never appears in the response body.
 - oxlint/oxfmt run scoped to touched files by each workstream; one
@@ -225,13 +348,13 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 
 Fresh-context sub-agent (haiku) verdict:
 
-- **A1 — What changed matches the diff:** PASS — All files and descriptions in receipt's "What changed" section are present in the diff with correct scope; vault schema guard (migrate.ts, db.ts), desktop graceful quit/crash/restart/UI (main.ts, crash-log*.ts, gateway-ops*.ts, BackupCard.tsx), gateway logs/diagnostics/health/backup (gateway-log-store.ts, gateway-diagnostics.ts, disk-health.ts, backup-routes.ts, vault-registry.ts), docs update present.
-- **A2 — checked items realized in the diff:** PASS — All 17 [x] checked items are realized: vault schema downgrade + PRAGMA FULL (migrate.ts, db.ts); graceful quit (main.ts before-quit handler); crash capture (crash-log*.ts); supervised restart with backoff (gateway-supervisor-core.ts); manual restart (BackupCard.tsx, GatewayScreen.tsx); boot-failure dialog (main.ts); rotated JSONL logs (gateway-log-store.ts); diagnostics bundle (gateway-diagnostics.ts); heartbeat on /health (gateway-monitor.ts); degraded-latency threshold (gateway-monitor-core.ts); component-error alerts (gateway-ops.ts); vault mount failures (vault-registry.ts); vaults real SQLite read (vault-registry.ts); disk health watermarks (disk-health.ts); backup HTTP surface (backup-routes.ts, backup-service.ts); backup card (BackupCard.tsx).
-- **A3 — checklist mirrors the issue:** PASS — Receipt's 21-item checklist (17 [x] checked, 4 [ ] deferred) matches issue #351's "Hardening pass checklist (first PR wave)" exactly: same items in same order, same checked/unchecked status, same deferral reasons.
+- **A1 — What changed matches the diff:** PASS — All files and descriptions in receipt's "What changed" section match the current diff (committed + uncommitted + untracked). Wave 1 fully realized: vault schema guard (migrate.ts, db.ts), desktop graceful quit/crash/restart/UI (main.ts, crash-log*.ts, gateway-ops*.ts, gateway-supervisor*.ts, BackupCard.tsx), gateway logs/diagnostics/health/backup (gateway-log-store.ts, gateway-diagnostics.ts, disk-health.ts, backup-routes.ts, vault-registry.ts). Wave 2 fully realized: instance lease + split-brain detection (gateway-instance-lease*.ts), launch-at-login (login-item.ts, settings-merge.ts), version-skew handshake wired (gateway-monitor*.ts), missed-automation ledger (scheduler-ledger*.ts, automations-routes.ts), broker/scheduler probes (broker-health*.ts, scheduler-health*.ts), metrics (gateway-log-store.ts, health-registry.ts), OAuth/outbox/SSE/worker bounds (fetch-timeout.ts, sse-cap.ts, handler-runner.ts, worker-admission.ts, outbox-executor.ts, connection-broker.ts). Docs: backups.html updated.
+- **A2 — checked items realized in the diff:** PASS — All 30 [x] checked items fully realized. Wave 1 (items 1-17): vault schema downgrade + PRAGMA FULL (migrate.ts, db.ts); graceful quit + before-quit handler (main.ts, local-gateway.ts); crash capture to rotated log (crash-log*.ts); supervised restart with backoff/detection (gateway-supervisor-core.ts); manual Restart (ipc.ts, GatewayScreen.tsx); boot-failure dialog (main.ts); rotated JSONL logs + boot tail-load (gateway-log-store.ts); diagnostics bundle endpoint + export (gateway-diagnostics.ts, SettingsDiagnosticsScreen.tsx); heartbeat on /health + fallback (gateway-monitor.ts); degraded-latency threshold 2s/3-sample (gateway-monitor-core.ts); component-error OS alerts + de-dupe (gateway-ops*.ts); vault mount failures retried (vault-registry.ts); vaults probe real SQLite read (vault-registry.ts); disk health + watermarks (disk-health.ts); backup status/run HTTP surface (backup-routes.ts, backup-service.ts); backup card + seal-key nudge (BackupCard.tsx). Wave 2 (items 18-30): instance lease + conflict detection (gateway-instance-lease*.ts); instanceId via /info (gateway-info-routes.ts); desktop single-instance lock (main.ts); version-skew detection + alert (gateway-monitor*.ts, version-handshake.ts); launch-at-login setting (login-item.ts, settings-merge.ts, main.ts); missed-automation ledger (scheduler-ledger*.ts, in-process-scheduler.ts); broker probe for token stale (broker-health*.ts, health-registry.ts); scheduler probe for tick/windows (scheduler-health*.ts); numeric metrics object (health-registry.ts); OAuth token-refresh 30s timeout (connection-broker.ts, fetch-timeout.ts); outbox external-write 60s timeout (outbox-executor.ts, fetch-timeout.ts); SSE subscriber cap 32/surface + 503 (sse-cap.ts, logs-routes.ts, automations-routes.ts); worker admission 8/16/10s (handler-runner.ts, worker-admission.ts, app-engine dispatcher.ts).
+- **A3 — checklist mirrors the issue:** PASS — Receipt's 34-item checklist (30 [x] checked, 4 [ ] deferred) matches issue #351's "Hardening pass checklist (waves 1+2, PR #361)" exactly: same items in same order, same checked/unchecked status, identical deferral notes (ontology open-time guard skipped as data question; _changes per-app SSE cap flagged as follow-up; hard refusal on version skew as escalation path; remote/headless self-update + mobile UX as distribution work).
 
 ## Steering
 
 Fresh-context sub-agent (haiku) verdict:
 
-- **B1 — all steering events recorded:** PASS — Three steering events identified and recorded: event #949 (interrupt at 04:54:29Z), event #1079 (interrupt at 05:30:46Z for tool use), event #1652 (correction at 08:42:51Z — user flagged PRs merged before E2E verification; all recorded as rows in Steering table with ordinals 249, 285, 424.
-- **B2 — no non-steering message recorded as steering:** PASS — Steering table contains only genuine steering events (2 interrupts + 1 correction); no ordinary /goal commands, task continuations, or system messages falsely recorded as steering.
+- **B1 — all steering events recorded:** PASS — No new human steering events after prior ordinal 424. Transcript review (human user messages only, excluding task notifications and hook output) found zero new steering directives in recent turns. Accounting Steering table remains valid: three recorded events (steer-key identifiers steer-ac2077f8-1-1, steer-ac2077f8-1-2, steer-ac2077f8-1-3) at ordinals 249/285/424 with session ac2077f8-e15a-46d5-be12-0c583922f047. No new rows to append.
+- **B2 — no non-steering message recorded as steering:** PASS — Steering table contains only genuine steering events (2 interrupts at ordinals 249/285, 1 correction at ordinal 424, all with clear structural or classifier basis); no false positives from task notifications, hook output, system reminders, or ordinary message continuations.
