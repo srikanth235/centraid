@@ -62,6 +62,11 @@
   --radius: 0.75rem;
   --accent-soft: var(--accs);
   --accent-deep: var(--accd);
+
+  /* --accd mixes toward a dark base for background+white-text buttons; chips/
+     nav-items that show it AS foreground on --accs need the opposite move in
+     dark mode — --accd-fg is that escape hatch (light mode just mirrors it). */
+  --accd-fg: var(--accd);
 }
 :root[data-theme='dark'] {
   --ink: hsl(214 16% 93%);
@@ -73,7 +78,8 @@
   --bg-side: hsl(216 18% 13%);
   --line: hsla(214 28% 78% / 0.12);
   --line-strong: hsla(214 28% 80% / 0.22);
-  --accd: color-mix(in oklab, var(--_accent) 76%, #eaf1ff);
+  --accd: color-mix(in oklab, var(--_accent) 76%, hsl(216 40% 12%));
+  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
@@ -255,11 +261,11 @@ textarea {
 }
 .v-nav-item[aria-current='true'] {
   background: var(--accs);
-  color: var(--accd);
+  color: var(--accd-fg);
   font-weight: 600;
 }
 .v-nav-item[aria-current='true'] .ic {
-  color: var(--accd);
+  color: var(--accd-fg);
 }
 .v-seclabel {
   font: var(--t-tiny);
@@ -596,7 +602,7 @@ textarea {
   letter-spacing: 0.02em;
 }
 .v-field-v a {
-  color: var(--accd);
+  color: var(--accd-fg);
   text-decoration: none;
 }
 .v-fbtn {
@@ -674,7 +680,7 @@ textarea {
   font-family: var(--mono);
   font-size: 19px;
   letter-spacing: 0.14em;
-  color: var(--accd);
+  color: var(--accd-fg);
   font-weight: 600;
 }
 .v-ring {

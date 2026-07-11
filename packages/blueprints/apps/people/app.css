@@ -75,6 +75,11 @@
   --radius: 0.75rem;
   --accent-soft: var(--accs);
   --accent-deep: var(--accd);
+
+  /* --accd mixes toward a dark base for background+white-text buttons; chips/
+     nav-items that show it AS foreground on --accs need the opposite move in
+     dark mode — --accd-fg is that escape hatch (light mode just mirrors it). */
+  --accd-fg: var(--accd);
 }
 
 :root[data-theme='dark'] {
@@ -89,7 +94,8 @@
   --line-strong: hsla(20 26% 82% / 0.2);
   --danger: #f0645b;
   --ok: #5fbd88;
-  --accd: color-mix(in oklab, var(--_accent) 84%, #ffe9ee);
+  --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
+  --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
   --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
 }
@@ -107,7 +113,8 @@
     --line-strong: hsla(20 26% 82% / 0.2);
     --danger: #f0645b;
     --ok: #5fbd88;
-    --accd: color-mix(in oklab, var(--_accent) 84%, #ffe9ee);
+    --accd: color-mix(in oklab, var(--_accent) 84%, hsl(345 40% 12%));
+    --accd-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --shadow-md: 0 12px 30px -14px rgba(0, 0, 0, 0.6), 0 2px 8px -3px rgba(0, 0, 0, 0.5);
     --shadow-lg: 0 30px 70px -24px rgba(0, 0, 0, 0.7);
   }
@@ -295,7 +302,7 @@ button {
 }
 .d-nav-item[aria-current='true'] {
   background: var(--accs);
-  color: var(--accd);
+  color: var(--accd-fg);
   font-weight: 600;
 }
 .d-nav-count {
@@ -425,7 +432,7 @@ button {
   color: var(--ink-3);
 }
 .d-consent-line svg {
-  color: var(--accd);
+  color: var(--accd-fg);
   flex-shrink: 0;
 }
 .d-consent-line span {
