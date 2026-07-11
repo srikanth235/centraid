@@ -35,8 +35,8 @@
 - [x] CLI daemon service unit (`centraid-gateway service` install/uninstall/status, launchd + systemd)
 - [x] scoped ENOSPC fail-closed handling (typed disk-full errors, partial-file cleanup, log-writer fail-open)
 - [x] disk health surfaces last ENOSPC event
-- [ ] `enrichment` health probe
-- [ ] `blob-sweep` health probe
+- [x] `enrichment` health probe
+- [x] `blob-sweep` health probe
 - [ ] desktop outage-history persistence (survives restart)
 - [ ] recovery-kit confirmation gate (persisted flag + backup card gate)
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
@@ -496,6 +496,7 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 | claude-code-ac2077f8-e15-1783788721-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 5267 | 17936 | 1011680 | 14606 | 37809 | 2.0189 | 876801 | 14440450 | 515809732 | 2712977 | feat(gateway): centraid-gateway service — launchd/systemd unit for the headless  |
 | claude-code-ac2077f8-e15-1783788767-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 8 | 3182 | 1049774 | 1471 | 4661 | 1.1632 | 876809 | 14443632 | 516859506 | 2714448 |  |
 | claude-code-ac2077f8-e15-1783788829-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 6 | 2376 | 791463 | 4230 | 6612 | 1.0327 | 876815 | 14446008 | 517650969 | 2718678 | feat(vault,gateway): ENOSPC fail-closed handling + blob-sweep status groundwork  |
+| claude-code-ac2077f8-e15-1783788884-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 4 | 3384 | 529226 | 1762 | 5150 | 0.6597 | 876819 | 14449392 | 518180195 | 2720440 | feat(gateway): enrichment + blob-sweep health probes (#351)Wave 4 health-coverag |
 ## Audit
 
 Fresh-context sub-agent (haiku) verdict at ordinal 81:

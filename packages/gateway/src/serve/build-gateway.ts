@@ -68,11 +68,14 @@ import {
   type RunnerPrefs,
   type SurfaceStatus,
 } from '@centraid/agent-runtime';
+import { readBlobStoreSettings, custodyStateCounts } from '@centraid/vault';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import { createDiskHealthProbe } from './disk-health.js';
 import { createBrokerHealthProbe } from './broker-health.js';
 import { createSchedulerHealthProbe } from './scheduler-health.js';
+import { createEnrichmentHealthProbe } from './enrichment-health.js';
+import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
@@ -469,6 +472,59 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         vaultRegistry.planesList().map((p) => ({
           vaultId: p.boot.vaultId,
           snapshot: () => schedulerLedgerFor(p.boot.vaultId).load(),
+        })),
+    }),
+  );
+
+  // Enricher run health (issue #351 wave 4) — see enrichment-health.ts for
+  // why this is narrower than `automations`/`automation-runs`. Run history
+  // rides its own memoized `ConversationStore` (same journalDbFile binding
+  // `schedulerLedgerFor` uses, kept separate so this probe never reaches
+  // into scheduler-ledger.ts's private state).
+  const enrichmentConversationStores = new Map<string, ConversationStore>();
+  const enrichmentConversationStoreFor = (vaultId: string): ConversationStore => {
+    const existing = enrichmentConversationStores.get(vaultId);
+    if (existing) return existing;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    const store = new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile));
+    enrichmentConversationStores.set(vaultId, store);
+    return store;
+  };
+  health.registerProbe(
+    'enrichment',
+    createEnrichmentHealthProbe({
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({
+          vaultId: p.boot.vaultId,
+          listAutomations: async () => {
+            const { rows } = await automation.list(settledHostFor(p.boot.vaultId).codeAppsDir());
+            return rows.map((r) => ({ id: r.id, enabled: r.enabled, ref: r.ref }));
+          },
+          recentRuns: (automationRef, limit) =>
+            enrichmentConversationStoreFor(p.boot.vaultId)
+              .listAutomationTurns(automationRef, { limit })
+              .map((t) => ({
+                ok: t.ok,
+                ...(t.endedAt !== undefined ? { endedAt: t.endedAt } : {}),
+              })),
+        })),
+    }),
+  );
+
+  // Blob custody-sweep health (issue #351 wave 4, #367 prep) — see
+  // blob-sweep-health.ts. `s3Configured`/`counts` are cheap synchronous
+  // reads (settings JSON + a GROUP BY over the custody mirror); `sweepStatus`
+  // reads `BlobCustody`'s own in-memory record of its last `reconcile()`.
+  health.registerProbe(
+    'blob-sweep',
+    createBlobSweepHealthProbe({
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({
+          vaultId: p.boot.vaultId,
+          s3Configured: () => readBlobStoreSettings(p.db.vault).kind === 's3',
+          counts: () => custodyStateCounts(p.db.vault),
+          sweepStatus: () => p.db.blobs.sweepStatus(),
         })),
     }),
   );
