@@ -101,6 +101,7 @@ export default function AutomationViewScreen({
   onToggleEnabled,
   onCopyWebhook,
   onOpenRun,
+  onRegenerateWebhookSecret,
 }: AutomationViewBridgeProps): JSX.Element {
   const [state, setState] = useState<AutomationViewData | 'loading' | 'error' | 'missing'>(
     'loading',
@@ -108,6 +109,7 @@ export default function AutomationViewScreen({
   const [filter, setFilter] = useState<'all' | 'cron' | 'webhook' | 'manual'>('all');
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
+  const [regenBusy, setRegenBusy] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -122,9 +124,34 @@ export default function AutomationViewScreen({
     void reload();
   }, [reload]);
 
-  if (state === 'loading') return <div className={au.auLoading}>Loading automation…</div>;
-  if (state === 'error') return <div className={au.auLoading}>Could not load automation.</div>;
-  if (state === 'missing') return <div className={au.auLoading}>Automation not found.</div>;
+  // Keep a breadcrumb/back affordance on screen through loading/error/missing
+  // — a screen that can't resolve its data must never strand the user on a
+  // bare, dead-end div (same class of fix as RunViewScreen's pre-snapshot
+  // state).
+  if (state === 'loading' || state === 'error' || state === 'missing') {
+    return (
+      <div className={au.auLoading}>
+        <div className={au.auCrumb}>
+          <button type="button" onClick={onBack}>
+            Automations
+          </button>
+          <span className={au.auCrumbSep} aria-hidden="true">
+            <Icon name="ArrowRight" size={12} />
+          </span>
+          <span>
+            {state === 'loading' ? 'Loading…' : state === 'missing' ? 'Not found' : 'Error'}
+          </span>
+        </div>
+        <div className={styles.loadingBody}>
+          {state === 'loading'
+            ? 'Loading automation…'
+            : state === 'missing'
+              ? 'Automation not found.'
+              : 'Could not load automation.'}
+        </div>
+      </div>
+    );
+  }
 
   const d = state;
   const shownRuns = d.runs.filter((r) => filter === 'all' || r.filterKey === filter);
@@ -146,6 +173,10 @@ export default function AutomationViewScreen({
       if (ok) void reload();
     });
   };
+  const doRegenerate = (): void => {
+    setRegenBusy(true);
+    void onRegenerateWebhookSecret().finally(() => setRegenBusy(false));
+  };
 
   return (
     <div className={styles.view}>
@@ -161,7 +192,7 @@ export default function AutomationViewScreen({
             <span>{d.name}</span>
           </div>
           <div className={styles.vtitle}>
-            <span className={au.auGlyph} data-hue={d.hue} style={{ width: 46, height: 46 }}>
+            <span className={au.auGlyph} data-hue={d.hue} data-size="lg">
               <Icon name={d.glyphIcon as IconName} size={21} />
             </span>
             <div className={styles.vtitleText}>
@@ -192,7 +223,7 @@ export default function AutomationViewScreen({
           </button>
           <button
             type="button"
-            className={cx(au.auBtn, au.auBtnPrimary)}
+            className={cx(au.auBtn, au.auBtnPrimary, styles.btnRun)}
             disabled={busy || running}
             onClick={doRun}
           >
@@ -267,8 +298,52 @@ export default function AutomationViewScreen({
                   </span>
                   Secret minted server-side
                 </span>
+                <button
+                  type="button"
+                  className={styles.heroRegen}
+                  disabled={regenBusy}
+                  onClick={doRegenerate}
+                >
+                  <Icon name="Refresh" size={12} />
+                  <span>{regenBusy ? 'Regenerating…' : 'Regenerate secret'}</span>
+                </button>
               </div>
             )
+          ) : null}
+          {d.dataDetail ? (
+            <div className={styles.heroDetail}>
+              {d.dataDetail.entities.map((entity) => (
+                <span key={entity} className={styles.heroEntity}>
+                  <span className={styles.heroEntityIc} aria-hidden="true">
+                    <Icon name="Folder" size={12} />
+                  </span>
+                  <code>{entity}</code>
+                </span>
+              ))}
+              {d.dataDetail.everyLabel ? (
+                <span className={styles.heroEvery}>{d.dataDetail.everyLabel}</span>
+              ) : null}
+            </div>
+          ) : null}
+          {d.conditionDetail ? (
+            <div className={styles.heroCondition}>
+              <div className={styles.heroDetail}>
+                <span className={styles.heroEntity}>
+                  <span className={styles.heroEntityIc} aria-hidden="true">
+                    <Icon name="Folder" size={12} />
+                  </span>
+                  <code>{d.conditionDetail.entity}</code>
+                </span>
+                {d.conditionDetail.everyLabel ? (
+                  <span className={styles.heroEvery}>{d.conditionDetail.everyLabel}</span>
+                ) : null}
+              </div>
+              <div className={styles.heroConditionWhereLbl}>
+                <Icon name="Filter" size={11} />
+                <span>Checks</span>
+              </div>
+              <pre className={styles.heroConditionWhere}>{d.conditionDetail.whereText}</pre>
+            </div>
           ) : null}
         </div>
         <div className={styles.heroStatus}>

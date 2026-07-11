@@ -213,13 +213,47 @@ async function adoptTemplate(templateName) {
   const dialog = page.getByRole('dialog', { name: new RegExp(esc(templateName)) });
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await dialog.getByRole('button', { name: 'Use template' }).click();
+
+  // Templates that mint a webhook now show a one-time in-app "Webhook
+  // minted" reveal modal (webhookReveal.ts openWebhookReveal, awaited by
+  // TemplatesRoute.tsx useAutoTemplate) BEFORE navigating to the builder --
+  // this is layered on top of the old console.info reveal (still emitted,
+  // kept as a dev-only fallback by templatesData.ts surfaceMintedWebhook),
+  // not a replacement for it. Race the reveal dialog against the builder's
+  // "Config" button (non-webhook templates skip straight to the builder,
+  // no modal ever appears) so this helper stays generic across every
+  // adoptTemplate() call site in this suite.
+  // The dialog's aria-label mirrors its visible heading ("Webhook minted"
+  // by default, or the caller-supplied title, e.g. rotate's "New webhook
+  // secret") — one shared fallback in openWebhookReveal().
+  const reveal = page.getByRole('dialog', { name: 'Webhook minted' });
+  const configBtn = page.getByRole('button', { name: 'Config' });
+  const first = await Promise.race([
+    reveal.waitFor({ state: 'visible', timeout: 40_000 }).then(() => 'reveal').catch(() => null),
+    configBtn.waitFor({ state: 'visible', timeout: 40_000 }).then(() => 'config').catch(() => null),
+  ]);
+  assert(first === 'reveal' || first === 'config', `adopting "${templateName}" produced neither the webhook-reveal modal nor the builder's Config button`);
+
+  let revealedWebhook = null;
+  if (first === 'reveal') {
+    const codes = reveal.locator('code');
+    revealedWebhook = {
+      url: (await codes.nth(0).textContent())?.trim() ?? null,
+      secret: (await codes.nth(1).textContent())?.trim() ?? null,
+    };
+    console.log(`[auto02] "Webhook minted" reveal modal shown for "${templateName}": url=${JSON.stringify(revealedWebhook.url)} secretLen=${revealedWebhook.secret?.length ?? 0}`);
+    await reveal.getByRole('button', { name: 'Done' }).click();
+    await reveal.waitFor({ state: 'hidden', timeout: 5_000 });
+  }
+
   // Adopting an automation template navigates straight to its builder
   // (TemplatesRoute.tsx) — the clone itself already published to `main`
   // (cloneAutomationTemplate -> gwCloneTemplate -> `_clone` runs with
   // publish:true, confirmed via templatesData.ts's installAppTemplate
   // comment describing the same underlying clone route).
-  await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+  await configBtn.waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(500);
+  return revealedWebhook;
 }
 
 async function main() {
@@ -288,8 +322,21 @@ async function main() {
       'webhook-adopt-and-display',
       `Adopt "${TEMPLATE_WEBHOOK}" from Discover -> Automations, open its view screen, record exactly what the webhook URL display shows`,
       async () => {
-        await adoptTemplate(TEMPLATE_WEBHOOK);
+        const revealedWebhook = await adoptTemplate(TEMPLATE_WEBHOOK);
         await shot('wh-01-after-adopt-builder');
+
+        // fix: adopting a webhook template now shows the one-time in-app
+        // "Webhook minted" reveal modal (webhookReveal.ts) before handing
+        // off to the builder -- assert it actually fired for this template
+        // and rendered a real URL + secret, not just that adoptTemplate()
+        // was able to dismiss *a* dialog.
+        assert(Boolean(revealedWebhook), 'expected the "Webhook minted" reveal modal to appear when adopting a webhook template');
+        assert(
+          /^https?:\/\/[^/]+\/_centraid-hook\//.test(revealedWebhook.url ?? ''),
+          `expected the reveal modal's Webhook URL field to show an absolute "_centraid-hook" URL, got ${JSON.stringify(revealedWebhook.url)}`,
+        );
+        assert(Boolean(revealedWebhook.secret) && revealedWebhook.secret.length >= 16, `expected the reveal modal's Bearer secret field to show a real secret, got ${JSON.stringify(revealedWebhook.secret)}`);
+        console.log(`[auto02] "Webhook minted" reveal modal confirmed for "${TEMPLATE_WEBHOOK}"`);
 
         await openAutomationView(TEMPLATE_WEBHOOK);
         await shot('wh-02-view-screen');
@@ -324,6 +371,7 @@ async function main() {
         // Still no secret in the visible URL text itself (the secret is a
         // separate once-only console reveal, checked below).
         assert(!/secret/i.test(webhookUrlText), 'BUG CHECK expectation failed (unexpectedly true): the webhook URL text itself appears to contain the word "secret"');
+        assert(webhookUrlText === revealedWebhook.url, `expected the hero's persisted webhook URL to match what the one-time reveal modal showed at adopt time, hero=${JSON.stringify(webhookUrlText)} modal=${JSON.stringify(revealedWebhook.url)}`);
 
         // fix #4: the once-only plaintext webhook secret must be surfaced to
         // the console at adopt time (templatesData.ts surfaceMintedWebhook),
@@ -379,11 +427,17 @@ async function main() {
         const switchLabel = page.locator('label:has(input[role="switch"])');
         const before = await sw.getAttribute('aria-checked');
         console.log(`[auto02] webhook automation switch state before enabling: aria-checked=${before}`);
+        let afterEnable = before;
         if (before !== 'true') {
           await switchLabel.click({ timeout: 5_000 });
-          await page.waitForTimeout(600);
+          // Poll rather than a single fixed sleep -- the toggle round-trips
+          // through a real set-enabled publish (gateway snapshot + stage),
+          // whose latency isn't guaranteed to land inside one fixed window.
+          for (let i = 0; i < 10 && afterEnable !== 'true'; i++) {
+            await page.waitForTimeout(300);
+            afterEnable = await sw.getAttribute('aria-checked');
+          }
         }
-        const afterEnable = await sw.getAttribute('aria-checked');
         assert(afterEnable === 'true', `expected the webhook automation to be enabled before firing, got aria-checked=${afterEnable}`);
         await shot('wh-04a-enabled-before-fire');
 

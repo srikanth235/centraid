@@ -15,6 +15,7 @@ function makeSnapshot(over: Partial<RunViewSnapshot> = {}): RunViewSnapshot {
     statusKind: 'success',
     statusLabel: 'Completed',
     inFlight: false,
+    deleted: false,
     triggerLabel: 'Every day at 8am',
     triggersSummary: 'Every day at 8am',
     triggerHeroIcon: 'Clock',
@@ -118,12 +119,48 @@ function push(snap: RunViewSnapshot | null): void {
 }
 
 describe('RunViewScreen', () => {
-  it('shows a loading state until the first snapshot arrives', () => {
-    const el = mount(makeProps());
+  it('shows a loading state until the first snapshot arrives, with a back affordance', () => {
+    const props = makeProps();
+    const el = mount(props);
     expect(el.textContent).toContain('Loading run…');
+    // The loading state must never strand the user without a way back.
+    const crumbBtn = el.querySelector('.auCrumb button') as HTMLButtonElement;
+    expect(crumbBtn).toBeTruthy();
+    act(() => crumbBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onBack).toHaveBeenCalled();
     push(makeSnapshot());
     expect(el.querySelector('.rv')).toBeTruthy();
     expect(el.textContent).not.toContain('Loading run…');
+  });
+
+  it('renders a deleted-automation notice with breadcrumb/back affordance, and hides actions requiring the automation', () => {
+    const props = makeProps();
+    const el = mount(props);
+    push(
+      makeSnapshot({
+        deleted: true,
+        crumbName: 'digest/main',
+        headerName: 'digest/main',
+        promptInstr: 'This automation was deleted. Its instructions are no longer available.',
+      }),
+    );
+    expect(el.textContent).toContain('This automation was deleted');
+    expect(el.textContent).toContain('digest/main');
+    // The crumb segment for the automation is no longer a clickable link.
+    const crumbButtons = [...el.querySelectorAll('.auCrumb button')];
+    expect(crumbButtons.some((b) => b.textContent === 'digest/main')).toBe(false);
+    // "Run again" requires a live automation row — hidden when deleted.
+    const runAgain = [...el.querySelectorAll('.auBtn')].find((b) =>
+      b.textContent?.includes('Run again'),
+    );
+    expect(runAgain).toBeUndefined();
+    // Back navigation still works.
+    act(() =>
+      (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      ),
+    );
+    expect(props.onBack).toHaveBeenCalled();
   });
 
   it('renders the timeline: breadcrumb, header, node cards, final outcome, KPI rail', () => {
@@ -160,6 +197,21 @@ describe('RunViewScreen', () => {
     expect(el.querySelector('.log')).toBeTruthy();
     expect(el.querySelectorAll('.logRow').length).toBe(3);
     expect(el.querySelector('.tl')).toBeNull();
+  });
+
+  it('dedupes the final attribution label when provider and model are the same string', () => {
+    const el = mount(makeProps());
+    push(makeSnapshot({ final: { kind: 'ok', model: 'Centraid', summary: 'Done.' } }));
+    const name = el.querySelector('.tlItemFinal .tlName');
+    expect(name?.textContent).toBe('Centraid');
+    expect(name?.textContent).not.toContain('Centraid · Centraid');
+  });
+
+  it('keeps the provider · model attribution when they differ', () => {
+    const el = mount(makeProps());
+    push(makeSnapshot());
+    const name = el.querySelector('.tlItemFinal .tlName');
+    expect(name?.textContent).toBe('Centraid · claude-opus-4-8');
   });
 
   it('shows a pending final node while in flight', () => {

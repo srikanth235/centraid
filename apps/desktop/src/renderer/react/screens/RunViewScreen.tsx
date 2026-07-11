@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';
 import type {
@@ -146,6 +146,39 @@ function LogRow({ row }: { row: RunLogRowDTO }): JSX.Element {
   );
 }
 
+function TriggerInstructions({ text }: { text: string }): JSX.Element {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [text]);
+
+  return (
+    <>
+      <div
+        ref={ref}
+        className={open ? cx(styles.trigInstr, styles.trigInstrOpen) : styles.trigInstr}
+      >
+        {text}
+      </div>
+      {overflowing ? (
+        <button
+          type="button"
+          className={styles.trigInstrToggle}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 /**
  * Automation run-viewer, ported to React (issue #325, Phase 3). The vanilla
  * side owns the SSE stream + node model and pushes a fully-derived snapshot on
@@ -169,7 +202,26 @@ export default function RunViewScreen({
     onReady((s) => setSnap(s));
   }, [onReady]);
 
-  if (!snap) return <div className={au.auLoading}>Loading run…</div>;
+  // Even before the first snapshot arrives, keep a breadcrumb/back affordance
+  // on screen — a run that never resolves (e.g. its automation was deleted
+  // and the route bails before the first update) must never strand the user
+  // on a bare, dead-end div.
+  if (!snap) {
+    return (
+      <div className={au.auLoading}>
+        <div className={au.auCrumb}>
+          <button type="button" onClick={onBack}>
+            Automations
+          </button>
+          <span className={au.auCrumbSep} aria-hidden="true">
+            <Icon name="ArrowRight" size={12} />
+          </span>
+          <span>Run</span>
+        </div>
+        <div className={styles.rvLoadingBody}>Loading run…</div>
+      </div>
+    );
+  }
 
   const setModeAnd = (m: 'timeline' | 'log'): void => {
     setMode(m);
@@ -185,16 +237,28 @@ export default function RunViewScreen({
         <span className={au.auCrumbSep} aria-hidden="true">
           <Icon name="ArrowRight" size={12} />
         </span>
-        <button type="button" onClick={onOpenAutomation}>
-          {snap.crumbName}
-        </button>
+        {snap.deleted ? (
+          <span>{snap.crumbName}</span>
+        ) : (
+          <button type="button" onClick={onOpenAutomation}>
+            {snap.crumbName}
+          </button>
+        )}
         <span className={au.auCrumbSep} aria-hidden="true">
           <Icon name="ArrowRight" size={12} />
         </span>
         <span>Run</span>
       </div>
+      {snap.deleted ? (
+        <div className={styles.deletedNotice} role="status">
+          <span className={styles.deletedNoticeIc} aria-hidden="true">
+            <Icon name="AlertCircle" size={14} />
+          </span>
+          <span>This automation was deleted — showing the last recorded details for this run.</span>
+        </div>
+      ) : null}
       <div className={styles.rvHead}>
-        <span className={au.auGlyph} data-hue={snap.hue} style={{ width: 42, height: 42 }}>
+        <span className={au.auGlyph} data-hue={snap.hue}>
           <Icon name={snap.glyphIcon as IconName} size={19} />
         </span>
         <div className={styles.rvHeadMain}>
@@ -204,7 +268,7 @@ export default function RunViewScreen({
           </div>
           <div className={styles.rvHeadMeta}>{`${snap.startedLabel}  ·  ${snap.model}`}</div>
         </div>
-        <div className={au.auActions}>
+        <div className={cx(au.auActions, styles.rvHeadActions)}>
           <div className={styles.rvSeg} role="tablist" aria-label="Run view">
             {(['timeline', 'log'] as const).map((k) => (
               <button
@@ -231,14 +295,16 @@ export default function RunViewScreen({
               <span>{detailsHidden ? 'Show details' : 'Hide details'}</span>
             </button>
           ) : null}
-          <button
-            type="button"
-            className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
-            onClick={onRunAgain}
-          >
-            <Icon name="Reset" size={13} />
-            <span>Run again</span>
-          </button>
+          {snap.deleted ? null : (
+            <button
+              type="button"
+              className={cx(au.auBtn, au.auBtnGhost, styles.btnSm)}
+              onClick={onRunAgain}
+            >
+              <Icon name="Reset" size={13} />
+              <span>Run again</span>
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -313,7 +379,7 @@ export default function RunViewScreen({
                   </span>
                   {snap.triggersSummary}
                 </div>
-                <div className={cx(styles.trigInstr, styles.trigInstrOpen)}>{snap.promptInstr}</div>
+                <TriggerInstructions text={snap.promptInstr} />
               </div>
             </div>
 
@@ -354,7 +420,11 @@ export default function RunViewScreen({
                     />
                   </span>
                   <span className={styles.tlName}>
-                    {snap.final.kind === 'fail' ? 'Run failed' : `Centraid · ${snap.final.model}`}
+                    {snap.final.kind === 'fail'
+                      ? 'Run failed'
+                      : snap.final.model === 'Centraid'
+                        ? 'Centraid'
+                        : `Centraid · ${snap.final.model}`}
                   </span>
                 </div>
                 {snap.final.kind === 'pending' ? (
@@ -434,12 +504,21 @@ export default function RunViewScreen({
           </div>
           <div className={styles.rsideCard}>
             <div className={styles.rsideH}>Belongs to</div>
-            <button type="button" className={styles.rsideLink} onClick={onOpenAutomation}>
-              <span>{snap.crumbName}</span>
-              <span aria-hidden="true">
-                <Icon name="ArrowRight" size={14} />
-              </span>
-            </button>
+            {snap.deleted ? (
+              <div className={styles.rsideDeleted}>
+                <span aria-hidden="true">
+                  <Icon name="AlertCircle" size={13} />
+                </span>
+                <span>{snap.crumbName} (deleted)</span>
+              </div>
+            ) : (
+              <button type="button" className={styles.rsideLink} onClick={onOpenAutomation}>
+                <span>{snap.crumbName}</span>
+                <span aria-hidden="true">
+                  <Icon name="ArrowRight" size={14} />
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>

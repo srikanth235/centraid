@@ -22,20 +22,39 @@ const NODE_TYPE_ICON: Record<string, string> = {
 };
 
 export function buildRunSnapshot(
-  row: CentraidAutomationRow,
+  // `null` when the run's parent automation was deleted — the Automations
+  // overview deliberately keeps those runs visible (raw-ref fallback name),
+  // so this must degrade gracefully instead of requiring a live row.
+  row: CentraidAutomationRow | null,
   run: CentraidAutomationRunRecord,
   nodes: readonly CentraidAutomationRunNode[],
   liveText: Map<number, string>,
 ): RunViewSnapshot {
+  const deleted = row === null;
+  // Matches the Automations overview's orphan-run label (InsightsRoute does
+  // the same fallback for the same reason).
+  const fallbackRef = run.automationId ?? run.runId;
+  const identityId = row === null ? fallbackRef : row.id;
   const inFlight = run.endedAt === undefined;
-  const model = row.manifest.requires.model ?? 'Centraid';
+  const model = row === null ? 'Centraid' : (row.manifest.requires.model ?? 'Centraid');
   const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
   const duration =
     run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
   const statusKind: AuStatusKind = inFlight ? 'running' : run.ok ? 'success' : 'failed';
   const statusLabel = inFlight ? 'Running' : run.ok ? 'Completed' : 'Failed';
   const hasWebhook =
-    row.triggers.some((t) => t.kind === 'webhook') && !row.triggers.some((t) => t.kind === 'cron');
+    row !== null &&
+    row.triggers.some((t) => t.kind === 'webhook') &&
+    !row.triggers.some((t) => t.kind === 'cron');
+  // Deleted automation: prefer the run's own last-known name over the raw
+  // ref (matches the Automations overview's orphan-run fallback).
+  const crumbName = row === null ? (run.automationName ?? fallbackRef) : row.name;
+  const promptInstr =
+    row === null
+      ? 'This automation was deleted. Its instructions are no longer available.'
+      : row.manifest.prompt || 'No instructions.';
+  const triggersSummaryText =
+    row === null ? 'Trigger configuration unavailable' : triggersSummary(row.triggers);
   const startedLabel = ((): string => {
     const d = new Date(run.startedAt);
     const nowMs = Date.now();
@@ -82,7 +101,11 @@ export function buildRunSnapshot(
       ? { icon: 'Webhook', label: 'Webhook' }
       : origin === 'manual'
         ? { icon: 'Play', label: 'Manual' }
-        : { icon: 'Clock', label: 'Cron' };
+        : origin === 'data'
+          ? { icon: 'Clock', label: 'Data' }
+          : origin === 'condition'
+            ? { icon: 'Clock', label: 'Condition' }
+            : { icon: 'Clock', label: 'Cron' };
   const start = run.startedAt;
   const elapsed = (ms: number): string => {
     const d = Math.max(0, ms - start);
@@ -94,11 +117,15 @@ export function buildRunSnapshot(
       ? 'Run started by webhook'
       : origin === 'manual'
         ? 'Run started manually'
-        : 'Run started by cron';
+        : origin === 'data'
+          ? 'Run started by data trigger'
+          : origin === 'condition'
+            ? 'Run started by condition trigger'
+            : 'Run started by cron';
   const logRows: RunLogRowDTO[] = [
     {
       label: startedBy,
-      sub: triggersSummary(row.triggers),
+      sub: triggersSummaryText,
       time: elapsed(run.startedAt),
       tone: 'trigger',
     },
@@ -132,7 +159,8 @@ export function buildRunSnapshot(
   ];
 
   return {
-    crumbName: row.name,
+    crumbName,
+    deleted,
     final: inFlight
       ? { kind: 'pending', model }
       : run.ok
@@ -143,9 +171,9 @@ export function buildRunSnapshot(
             summary: run.summary ?? undefined,
           }
         : { error: run.error ?? undefined, kind: 'fail', model },
-    glyphIcon: glyphForId(row.id),
-    headerName: row.name,
-    hue: hueForId(row.id),
+    glyphIcon: glyphForId(identityId),
+    headerName: crumbName,
+    hue: hueForId(identityId),
     inFlight,
     logKpi: {
       cost: run.totalCostUsd !== undefined ? `$${run.totalCostUsd.toFixed(3)}` : '—',
@@ -157,7 +185,7 @@ export function buildRunSnapshot(
     logRows,
     model,
     nodes: runNodes,
-    promptInstr: row.manifest.prompt || 'No instructions.',
+    promptInstr,
     side: {
       cost: run.totalCostUsd ? `$${run.totalCostUsd.toFixed(2)}` : '—',
       duration,
@@ -175,6 +203,6 @@ export function buildRunSnapshot(
     statusLabel,
     triggerHeroIcon: hasWebhook ? 'Webhook' : 'Clock',
     triggerLabel: runTriggerLabel(run),
-    triggersSummary: triggersSummary(row.triggers),
+    triggersSummary: triggersSummaryText,
   };
 }

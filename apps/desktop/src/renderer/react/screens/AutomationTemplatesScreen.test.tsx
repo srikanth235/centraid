@@ -34,6 +34,34 @@ const templates: DiscoverTemplate[] = [
     triggerLabel: 'On webhook',
     integrations: ['Slack', 'GitHub'],
   },
+  {
+    id: 'photo-captioner',
+    name: 'Photo captions',
+    desc: 'Captions and tags new photos.',
+    colorKey: 'ochre',
+    iconKey: 'Sparkle',
+    version: '1',
+    kind: 'automation',
+    emoji: '🖼️',
+    category: 'Enrichment',
+    triggerKind: 'data',
+    triggerLabel: 'When new photos arrive',
+    integrations: [],
+  },
+  {
+    id: 'renewal-reminders',
+    name: 'Renewal reminders',
+    desc: 'Briefs you when a deadline is inside two weeks.',
+    colorKey: 'indigo',
+    iconKey: 'Sparkle',
+    version: '1',
+    kind: 'automation',
+    emoji: '🔔',
+    category: 'Enrichment',
+    triggerKind: 'condition',
+    triggerLabel: 'When a deadline is 14 days out',
+    integrations: [],
+  },
 ];
 
 function makeProps(
@@ -70,13 +98,40 @@ const count = (html: string, needle: string): number => html.split(needle).lengt
 describe('AutomationTemplatesScreen', () => {
   it('renders a card per template grouped by category, with the trigger filter', () => {
     const html = renderToStaticMarkup(<AutomationTemplatesScreen {...makeProps()} />);
-    expect(count(html, 'card')).toBe(2);
+    expect(count(html, 'card')).toBe(4);
     expect(html).toContain('>Inbox<');
     expect(html).toContain('>Ops<');
-    expect(count(html, 'segB')).toBe(3);
+    expect(html).toContain('>Enrichment<');
+    // all/cron/webhook/data/condition
+    expect(count(html, 'segB')).toBe(5);
     // integration filter chips derived from the catalog
     expect(html).toContain('Gmail');
     expect(html).toContain('GitHub');
+  });
+
+  it('labels data and condition trigger cards honestly instead of Cron/Clock fallback', () => {
+    const html = renderToStaticMarkup(<AutomationTemplatesScreen {...makeProps()} />);
+    expect(html).toContain('When new photos arrive');
+    expect(html).toContain('When a deadline is 14 days out');
+  });
+
+  it('offers Data and Condition as segmented filter options and filters by them', () => {
+    const el = mount(makeProps());
+    const dataTab = [...el.querySelectorAll('.segB')].find(
+      (b) => (b as HTMLElement).dataset.k === 'data',
+    ) as HTMLButtonElement;
+    expect(dataTab.textContent).toBe('Data');
+    act(() => dataTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.querySelectorAll('.card').length).toBe(1);
+    expect(el.textContent).toContain('Photo captions');
+
+    const conditionTab = [...el.querySelectorAll('.segB')].find(
+      (b) => (b as HTMLElement).dataset.k === 'condition',
+    ) as HTMLButtonElement;
+    expect(conditionTab.textContent).toBe('Condition');
+    act(() => conditionTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.querySelectorAll('.card').length).toBe(1);
+    expect(el.textContent).toContain('Renewal reminders');
   });
 
   it('opens the preview drawer callback when a card is clicked', () => {

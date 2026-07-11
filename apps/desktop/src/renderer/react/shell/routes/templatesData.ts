@@ -37,18 +37,15 @@ export async function cloneAutomationTemplate(
   return { automationId: result.app.id, webhooks: result.webhooks ?? [] };
 }
 
-/** Surface a freshly-minted webhook credential. Only the SHA-256 hash is
- *  persisted, so this is the one and only chance anyone has to read the
- *  plaintext secret — the toast points at the console, so the console line
- *  must actually exist. */
-export function surfaceMintedWebhook(
-  w: { url: string; secret: string },
-  showToast: (msg: string) => void,
-): void {
+/** Log a freshly-minted webhook credential to the console — a dev-only
+ *  fallback kept alongside the in-app one-time reveal modal
+ *  (`openWebhookReveal`, driven by the call site, which owns ShellActions).
+ *  Only the SHA-256 hash is persisted server-side, so between the two this
+ *  is the one and only chance anyone has to read the plaintext secret. */
+export function surfaceMintedWebhook(w: { url: string; secret: string }): void {
   console.info(
     `[centraid] Webhook minted: ${w.url}\n  Bearer secret (shown once, only its hash is stored): ${w.secret}`,
   );
-  showToast(`Webhook URL: ${w.url} (secret shown once in console)`);
 }
 
 /** Clone an app template on the gateway and pin it straight to Home as an

@@ -298,6 +298,30 @@ export function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: s
   return parts.join(' · ') || 'Manual only';
 }
 
+/**
+ * Render a condition trigger's `where` clauses compactly: one
+ * `column op value` line per clause — the builder's authoring form
+ * (BuilderAutomationTriggers) and the automation view screen
+ * (automationsData) both read a condition trigger's `where`, so this lives
+ * here rather than duplicated per layer. Returns `null` for an absent/empty
+ * `where` (the caller decides what "no clause" renders as); falls back to
+ * raw pretty-printed JSON for any shape that isn't a structured
+ * `{column, op, value?}` array.
+ */
+export function formatWhereClauses(where: unknown): string | null {
+  if (!Array.isArray(where) || where.length === 0) return null;
+  const lines: string[] = [];
+  for (const raw of where) {
+    if (!raw || typeof raw !== 'object') return JSON.stringify(where, null, 2);
+    const c = raw as Record<string, unknown>;
+    if (typeof c.column !== 'string' || typeof c.op !== 'string') {
+      return JSON.stringify(where, null, 2);
+    }
+    lines.push(`${c.column} ${c.op}${c.value !== undefined ? ` ${JSON.stringify(c.value)}` : ''}`);
+  }
+  return lines.join('\n');
+}
+
 // Duration in ms → "950ms" / "1.4s" / "2m 5s".
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;

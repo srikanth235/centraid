@@ -10,11 +10,12 @@ import { useAsyncData } from '../useAsyncData.js';
 // into the effect; the InsightsScreen owns the dashboard exactly as before.
 // Insights paints its own header, so PageScroll carries no title.
 //
-// The store's summary carries automation REFS but no display names (the
-// manifests live on disk, not in journal.db — see InsightsStore) — this route
-// resolves them from the automation list. Deleted automations fall back to
-// their raw ref (matching the Automations overview's orphan-run labels)
-// rather than the store's indistinct "Automation" label.
+// The store's summary carries automation REFS but no CURRENT display names
+// (the manifests live on disk, not in journal.db — see InsightsStore) — this
+// route resolves them from the automation list. A deleted automation falls
+// back to its run's own last-known `automationName` (recorded on the run
+// itself, so it survives the automation being deleted) and only then to the
+// raw ref (matching the Automations overview's orphan-run labels).
 export default function InsightsRoute(): JSX.Element {
   const state = useAsyncData(async () => {
     const [summary, automations] = await Promise.all([
@@ -26,12 +27,15 @@ export default function InsightsRoute(): JSX.Element {
       ...summary,
       byAutomation: summary.byAutomation.map((row) =>
         row.kind === 'automation'
-          ? { ...row, label: nameByRef.get(row.key) ?? row.key }
+          ? { ...row, label: nameByRef.get(row.key) ?? row.automationName ?? row.key }
           : row,
       ),
       recent: summary.recent.map((row) =>
         row.automationRef
-          ? { ...row, label: nameByRef.get(row.automationRef) ?? row.automationRef }
+          ? {
+              ...row,
+              label: nameByRef.get(row.automationRef) ?? row.automationName ?? row.automationRef,
+            }
           : row,
       ),
     };

@@ -16,6 +16,20 @@ type Layout = 'tiles' | 'rows';
 
 const isAutomation = (t: DiscoverTemplate): boolean => t.kind === 'automation';
 
+// Trigger-kind → icon/label, matching the labels automationsData.ts'
+// buildAutomationViewData (kindEyebrow/run trig) uses for the same four kinds —
+// data and condition triggers reuse the Clock glyph there too (only webhook
+// gets its own icon), so the badge stays honest without inventing a new mark.
+const TRIGGER_KIND_META: Record<
+  'cron' | 'webhook' | 'data' | 'condition',
+  { icon: IconName; label: string }
+> = {
+  cron: { icon: 'Clock', label: 'Cron' },
+  webhook: { icon: 'Webhook', label: 'Webhook' },
+  data: { icon: 'Clock', label: 'Data' },
+  condition: { icon: 'Clock', label: 'Condition' },
+};
+
 // Rect-based glyphs the path-only Icon set can't express — copied verbatim from
 // app-glyphs.ts (GRID_RECTS / ROWS_RECTS) so the React screen and the vanilla
 // Home page render the identical marks.
@@ -129,9 +143,9 @@ function TemplateCard({
           <>
             <span className={styles.trig}>
               <span aria-hidden="true" style={{ display: 'inline-flex' }}>
-                <Icon name={t.triggerKind === 'webhook' ? 'Webhook' : 'Clock'} size={12} />
+                <Icon name={TRIGGER_KIND_META[t.triggerKind ?? 'cron'].icon} size={12} />
               </span>
-              <span>{t.triggerKind === 'webhook' ? 'Webhook' : 'Cron'}</span>
+              <span>{TRIGGER_KIND_META[t.triggerKind ?? 'cron'].label}</span>
             </span>
             <IntegrationDots names={[...(t.integrations ?? [])]} />
           </>

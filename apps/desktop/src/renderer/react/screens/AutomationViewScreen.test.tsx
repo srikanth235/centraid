@@ -16,6 +16,8 @@ function makeData(over: Partial<AutomationViewData> = {}): AutomationViewData {
     cronExprs: ['0 8 * * *'],
     nextRuns: ['Tomorrow', 'In 2 days', 'In 3 days'],
     webhook: null,
+    dataDetail: null,
+    conditionDetail: null,
     enabled: true,
     statusKind: 'active',
     statusLabel: 'Active',
@@ -60,6 +62,7 @@ function makeProps(over: Partial<AutomationViewBridgeProps> = {}): AutomationVie
     onToggleEnabled: vi.fn().mockResolvedValue(true),
     onCopyWebhook: vi.fn(),
     onOpenRun: vi.fn(),
+    onRegenerateWebhookSecret: vi.fn().mockResolvedValue(true),
     ...over,
   };
 }
@@ -167,8 +170,96 @@ describe('AutomationViewScreen', () => {
     expect(props.onCopyWebhook).toHaveBeenCalledWith('/_centraid-hook/abc');
   });
 
-  it('renders the not-found state when loadData resolves null', async () => {
-    const el = await mount(makeProps({ loadData: vi.fn().mockResolvedValue(null) }));
+  it('renders the not-found state when loadData resolves null, with a working breadcrumb back', async () => {
+    const props = makeProps({ loadData: vi.fn().mockResolvedValue(null) });
+    const el = await mount(props);
     expect(el.textContent).toContain('Automation not found.');
+    const back = el.querySelector('.auCrumb button') as HTMLButtonElement;
+    expect(back).toBeTruthy();
+    await act(async () => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onBack).toHaveBeenCalled();
+  });
+
+  it('renders a breadcrumb back affordance in the loading state, before data resolves', async () => {
+    const props = makeProps({ loadData: vi.fn().mockReturnValue(new Promise(() => {})) });
+    const el = await mount(props);
+    expect(el.textContent).toContain('Loading automation…');
+    const back = el.querySelector('.auCrumb button') as HTMLButtonElement;
+    expect(back).toBeTruthy();
+    await act(async () => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onBack).toHaveBeenCalled();
+  });
+
+  it('renders the error state with a breadcrumb back affordance', async () => {
+    const props = makeProps({ loadData: vi.fn().mockRejectedValue(new Error('boom')) });
+    const el = await mount(props);
+    expect(el.textContent).toContain('Could not load automation.');
+    expect(el.querySelector('.auCrumb button')).toBeTruthy();
+  });
+
+  it('regenerates the webhook secret and shows "Regenerating…" while in flight', async () => {
+    const props = makeProps({
+      loadData: vi.fn().mockResolvedValue(
+        makeData({
+          kindEyebrow: 'Webhook',
+          heroIcon: 'Webhook',
+          cronExprs: [],
+          nextRuns: [],
+          webhook: { pending: false, url: '/_centraid-hook/abc' },
+        }),
+      ),
+      onRegenerateWebhookSecret: vi.fn().mockReturnValue(new Promise(() => {})),
+    });
+    const el = await mount(props);
+    const regenBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Regenerate secret'),
+    ) as HTMLButtonElement;
+    expect(regenBtn).toBeTruthy();
+    await act(async () => regenBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onRegenerateWebhookSecret).toHaveBeenCalledTimes(1);
+    expect(regenBtn.textContent).toContain('Regenerating…');
+    expect(regenBtn.disabled).toBe(true);
+  });
+
+  it('renders data-trigger entity chips + cadence', async () => {
+    const el = await mount(
+      makeProps({
+        loadData: vi.fn().mockResolvedValue(
+          makeData({
+            kindEyebrow: 'Data trigger',
+            heroIcon: 'Clock',
+            cronExprs: [],
+            nextRuns: [],
+            dataDetail: { entities: ['core.content_derivative', 'core.event'], everyLabel: 'Every 5m' },
+          }),
+        ),
+      }),
+    );
+    expect(el.textContent).toContain('core.content_derivative');
+    expect(el.textContent).toContain('core.event');
+    expect(el.textContent).toContain('Every 5m');
+  });
+
+  it('renders the condition entity + readable where clause', async () => {
+    const el = await mount(
+      makeProps({
+        loadData: vi.fn().mockResolvedValue(
+          makeData({
+            kindEyebrow: 'Condition',
+            heroIcon: 'Clock',
+            cronExprs: [],
+            nextRuns: [],
+            conditionDetail: {
+              entity: 'core.event',
+              whereText: '{\n  "status": "overdue"\n}',
+              everyLabel: null,
+            },
+          }),
+        ),
+      }),
+    );
+    expect(el.textContent).toContain('core.event');
+    expect(el.textContent).toContain('Checks');
+    expect(el.querySelector('pre')?.textContent).toBe('{\n  "status": "overdue"\n}');
   });
 });
