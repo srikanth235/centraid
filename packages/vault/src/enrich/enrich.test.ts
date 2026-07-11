@@ -396,12 +396,16 @@ describe('the enrichment staging path', () => {
     expect(entries.n).toBe(1); // deduped photo = one distinct asset
   });
 
-  test('filing proposals update title + folder tag and never mint documents', () => {
+  test('filing a WRAPPED content item retargets title + folder tag onto its core_document', () => {
+    // issue #352: core_document wraps content items, so a filing proposal
+    // against a content id that's already a document's current head must
+    // land on the document, not the (no-longer-read) content item — else
+    // the tag is silently invisible to every document-scoped read path.
     const staged = gw.stageBlob(owner, {
       bytes: Buffer.from('scan scan scan'),
       filename: 'scan_001.txt',
     });
-    const doc = output<{ content_id: string }>(
+    const doc = output<{ document_id: string; content_id: string }>(
       invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan_001' }),
     );
     const stagedBatch = invoke(owner, 'sync.stage_rows', {
@@ -429,19 +433,70 @@ describe('the enrichment staging path', () => {
       invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
     );
     expect(published.updated).toBe(1);
-    expect(published.failed).toBe(1); // the missing doc refused to create
+    expect(published.failed).toBe(1); // the missing content item refused to create
+    // never mints a document: the wrapper row count doesn't grow
+    const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      n: number;
+    };
+    expect(docCount.n).toBe(1);
+    const contentTitleUnchanged = db.vault
+      .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
+      .get(doc.content_id) as { title: string | null };
+    expect(contentTitleUnchanged.title).toBe('scan_001'); // untouched — the content item isn't the document's identity
+    const document = db.vault
+      .prepare('SELECT title FROM core_document WHERE document_id = ?')
+      .get(doc.document_id) as { title: string };
+    expect(document.title).toBe('Home insurance policy 2026');
+    const folder = db.vault
+      .prepare(
+        `SELECT c.pref_label FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+          WHERE t.target_id = ? AND t.target_type = 'core.document'`,
+      )
+      .get(doc.document_id) as { pref_label: string };
+    expect(folder.pref_label).toBe('Insurance');
+  });
+
+  test('filing an UNWRAPPED content item still tags the content item directly', () => {
+    // A content item that no core_document wraps yet (e.g. a media asset,
+    // or ingest that hasn't gone through core.add_document) keeps the
+    // original content-item-scoped filing behavior.
+    const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'loose.png' });
+    const asset = output<{ content_id: string }>(
+      invoke(owner, 'media.add_asset', { staged_sha: staged.sha256, kind: 'photo' }),
+    );
+    const stagedBatch = invoke(owner, 'sync.stage_rows', {
+      kind: 'enrichment.doctype',
+      label: 'docs',
+      rows: [
+        {
+          entity_type: 'core.content_item',
+          external_id: `${asset.content_id}:filing`,
+          payload: { content_id: asset.content_id, title: 'Loose scan', folder: 'Inbox' },
+        },
+      ],
+    });
+    const batchId = output<{ batch_id: string }>(stagedBatch).batch_id;
+    const published = output<{ updated: number }>(
+      invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
+    );
+    expect(published.updated).toBe(1);
+    const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      n: number;
+    };
+    expect(docCount.n).toBe(0); // still never mints a document
     const item = db.vault
       .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
-      .get(doc.content_id) as { title: string };
-    expect(item.title).toBe('Home insurance policy 2026');
+      .get(asset.content_id) as { title: string };
+    expect(item.title).toBe('Loose scan');
     const folder = db.vault
       .prepare(
         `SELECT c.pref_label FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
           WHERE t.target_id = ? AND t.target_type = 'core.content_item'`,
       )
-      .get(doc.content_id) as { pref_label: string };
-    expect(folder.pref_label).toBe('Insurance');
+      .get(asset.content_id) as { pref_label: string };
+    expect(folder.pref_label).toBe('Inbox');
   });
 });
 

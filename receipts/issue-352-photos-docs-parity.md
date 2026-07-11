@@ -5,6 +5,7 @@ https://github.com/srikanth235/centraid/issues/352
 ## Checklist
 
 - [x] document wrapper entity and revises lineage
+- [x] filing publisher retargets wrapped content items onto their document
 - [ ] docs app on the wrapper with editing and version history
 - [x] photos search exif slideshow duplicates
 - [ ] vault plumbing geo tags activity sync faces
@@ -43,6 +44,14 @@ Documents get identity separate from their bytes: new `core_document` table wrap
 - `scripts/docs-site/src/content/ontology-body.html` — document contract added, knowledge state line updated, v1.3
 - Tests: `packages/vault/src/commands/documents.test.ts`, `packages/vault/src/commands/knowledge.test.ts`, `packages/vault/src/gateway/duties.test.ts`, `packages/vault/src/blob/flow.test.ts`, `packages/vault/src/enrich/enrich.test.ts`
 
+### filing publisher retargets wrapped content items onto their document
+
+`filingPublisher` (packages/vault/src/ingest/enrich-publishers.ts) predates the document wrapper and still tagged/renamed the raw `core_content_item` unconditionally. Once a content item is a document's current head, no read path resolves `core.content_item`-targeted tags anymore (`DOCUMENT_EXISTS_SQL`, `blob/read.ts`'s SERVE_REFERENCES, and the docs app all key off `core.document`), so an enrichment-driven "file this scan under Insurance" proposal against an already-wrapped content item silently did nothing. Fixed by resolving `entityId` to its owning `core_document` (`current_content_id = entityId`) and retargeting the title update and folder tag there when one exists; content items with no document wrapper (e.g. media assets) keep the original content-item-scoped behavior. The "never mints a document" invariant is unchanged — `create()` still throws for a missing content item, and the fix never inserts into `core_document`.
+
+- `packages/vault/src/commands/documents.ts` — exported `DOCUMENT_TARGET_TYPE`
+- `packages/vault/src/ingest/enrich-publishers.ts` — `filingPublisher.update` resolves the owning document and retargets title/tag writes
+- `packages/vault/src/enrich/enrich.test.ts` — rewrote the filing test for the wrapped case (asserts the content item's title is untouched and the tag lands on `core.document`), added a new test for the unwrapped-content-item fallback
+
 ### photos search exif slideshow duplicates
 
 Server-side FTS search replaces the client-window filter; EXIF details panel in the lightbox; full-screen slideshow (4s auto-advance, Space pause, Esc exits, videos skipped); near-duplicates review shelf (exact-sha + same-dimensions/byte-size approximation — `media_asset_phash`/`vault_hamming` are not reachable from app-plane queries yet; real clustering lands with the plumbing phase).
@@ -66,6 +75,15 @@ packages/gateway: tsc → clean; vitest → 166 passed, 1 skipped, 0 failed
                   (22 test files fail to LOAD from pre-existing unbuilt sibling dists in this
                    cold worktree — confirmed identical without these changes)
 bunx oxlint <22 changed .ts files> → 0 warnings, 0 errors
+```
+
+filing publisher retargets wrapped content items onto their document:
+
+```
+packages/vault: bunx vitest run src/enrich/enrich.test.ts → 14/14 passed
+packages/vault: bunx vitest run                           → 427/427 passed (41 files)
+packages/vault: tsc (tsconfig.json + tsconfig.test.json)  → clean
+bunx oxlint enrich-publishers.ts documents.ts enrich.test.ts → 0 warnings, 0 errors
 ```
 
 photos search exif slideshow duplicates — lint + transpile + live-browser harness pass:

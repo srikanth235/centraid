@@ -34,7 +34,7 @@ const PURGE_AFTER_DAYS = 30;
 export const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
 
 /** Document identity marks the wrapper row, never the raw content item. */
-const DOCUMENT_TARGET_TYPE = 'core.document';
+export const DOCUMENT_TARGET_TYPE = 'core.document';
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
