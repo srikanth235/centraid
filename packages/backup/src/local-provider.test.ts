@@ -183,4 +183,66 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.manifestKey).toBe('manifests/1.json');
   });
+
+  // Gap 1 (the whole point of generation fencing, PROTOCOL.md: "two
+  // gateways, one vault"): a SECOND provider instance opened on the same
+  // rootDir BEFORE the first instance's write must still observe it on its
+  // next operation — no in-memory cache may shadow a sibling instance's (or,
+  // in production, a sibling PROCESS's) write to registry.json.
+  test("two independent instances sharing one rootDir observe each other's writes (cross-process fencing)", async () => {
+    const dir = await tempDir();
+    // Instance A creates the target and registers generation 1 first, so
+    // both instances open with a real target already on disk.
+    const a = new LocalBackupProvider({ rootDir: dir });
+    const { targetId } = await a.createTarget({ label: 't' });
+    await a.registerSnapshot(targetId, {
+      idempotencyKey: 'k1',
+      manifestKey: 'manifests/1.json',
+      manifestHash: 'a'.repeat(64),
+      totalBytes: 1,
+      objectCount: 1,
+      generation: 1,
+      format: 'centraid-snapshot/1',
+      appMeta: {},
+    });
+
+    // Instance B is opened AFTER A's gen-1 write but has performed no
+    // operation of its own yet — simulating a second gateway process that
+    // mounted the same NAS-backed provider dir sometime after the first.
+    const b = new LocalBackupProvider({ rootDir: dir });
+
+    // A takes over (a restore-takeover, PROTOCOL.md's fencing story):
+    // registers generation 2, bumping currentGeneration on disk.
+    await a.registerSnapshot(targetId, {
+      idempotencyKey: 'k2',
+      manifestKey: 'manifests/2.json',
+      manifestHash: 'b'.repeat(64),
+      totalBytes: 1,
+      objectCount: 1,
+      generation: 2,
+      format: 'centraid-snapshot/1',
+      appMeta: {},
+    });
+
+    // B — despite having been constructed before A's gen-2 write, and never
+    // itself having read the registry until now — must observe
+    // currentGeneration 2 on its very next operation (no stale cache).
+    const targetInfo = await b.getTarget(targetId);
+    expect(targetInfo.currentGeneration).toBe(2);
+
+    // And B's next registration at the now-stale generation 1 must fence —
+    // the real cross-process split-brain detection this bug defeated.
+    await expect(
+      b.registerSnapshot(targetId, {
+        idempotencyKey: 'k3-from-b',
+        manifestKey: 'manifests/3.json',
+        manifestHash: 'c'.repeat(64),
+        totalBytes: 1,
+        objectCount: 1,
+        generation: 1,
+        format: 'centraid-snapshot/1',
+        appMeta: {},
+      }),
+    ).rejects.toMatchObject({ code: 'conflict_generation', details: { currentGeneration: 2 } });
+  });
 });
