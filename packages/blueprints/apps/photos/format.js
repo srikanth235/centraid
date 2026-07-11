@@ -1,7 +1,7 @@
 // Pure formatting/predicate helpers over an asset row — no DOM, no vault IO,
 // no app state. Shared by app.jsx's own orchestrators (refresh/matchesSearch)
 // and by every component file that needs to format or classify an asset.
-import { BLOB_ROUTE, localDayKey } from './kit.js';
+import { BLOB_ROUTE, fmtBytes, localDayKey } from './kit.js';
 
 export function dayKey(iso) {
   // Local wall-clock bucketing (kit localDayKey), never the UTC slice — an
@@ -58,6 +58,111 @@ export function assetBytes(asset) {
     }
   }
   return null;
+}
+
+// Human labels for the EXIF keys `packages/vault/src/blob/pipeline.ts`'s
+// `parseJpegExif`/`extractBlobMeta` may write into `media_media_asset.
+// exif_json` at upload — plus a few common camera fields (make/model/iso/
+// aperture/shutter/focal length) that infra doesn't populate YET but a
+// future codec plug-in could (see enrich.ts's own "same queries" note on
+// the phash sidecar for the same forward-looking shape). Reading a key this
+// vault never writes just means that row never renders — see exifRows below.
+const EXIF_LABELS = {
+  make: 'Camera make',
+  model: 'Camera model',
+  lens: 'Lens',
+  iso: 'ISO',
+  f_number: 'Aperture',
+  aperture: 'Aperture',
+  exposure_time: 'Shutter',
+  shutter_speed: 'Shutter',
+  focal_length: 'Focal length',
+};
+
+/**
+ * The Lightbox details panel's rows: whatever `asset.exif_json` actually
+ * carries (issue #352 — today that's captured time/GPS from
+ * packages/vault/src/blob/pipeline.ts's minimal EXIF walk, never camera
+ * make/model/ISO/aperture — this vault doesn't parse those tags yet) plus
+ * the always-available dimensions/size/captured-time/type every asset row
+ * carries regardless of EXIF. Degrades to an empty array when nothing is
+ * known — the panel then shows its own "nothing to show" copy.
+ */
+export function exifRows(asset) {
+  const rows = [];
+  let exif = null;
+  if (typeof asset.exif_json === 'string') {
+    try {
+      exif = JSON.parse(asset.exif_json);
+    } catch {
+      exif = null;
+    }
+  } else if (asset.exif_json && typeof asset.exif_json === 'object') {
+    exif = asset.exif_json;
+  }
+  if (exif) {
+    const camera = [exif.make, exif.model].filter(Boolean).join(' ');
+    if (camera) rows.push({ label: 'Camera', value: camera });
+    const aperture = exif.f_number ?? exif.aperture;
+    const shutter = exif.exposure_time ?? exif.shutter_speed;
+    const exposure = [
+      exif.iso != null ? `ISO ${exif.iso}` : null,
+      aperture != null ? `ƒ/${aperture}` : null,
+      shutter ?? null,
+      exif.focal_length != null ? `${exif.focal_length}mm` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    if (exposure) rows.push({ label: 'Exposure', value: exposure });
+    // Any OTHER labeled EXIF key this vault might carry beyond the two
+    // folded groups above (lens today; forward-compatible with whatever a
+    // future codec plug-in adds) — see EXIF_LABELS' own doc comment.
+    const FOLDED = new Set([
+      'make',
+      'model',
+      'iso',
+      'f_number',
+      'aperture',
+      'exposure_time',
+      'shutter_speed',
+      'focal_length',
+    ]);
+    for (const [key, label] of Object.entries(EXIF_LABELS)) {
+      if (FOLDED.has(key)) continue;
+      if (exif[key] != null) rows.push({ label, value: String(exif[key]) });
+    }
+    if (exif.has_location && exif.latitude != null && exif.longitude != null) {
+      const lat = Number(exif.latitude).toFixed(5);
+      const lon = Number(exif.longitude).toFixed(5);
+      rows.push({
+        label: 'Location',
+        value: `${lat}, ${lon}`,
+        href: `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=15/${lat}/${lon}`,
+      });
+    } else if (exif.has_location) {
+      rows.push({ label: 'Location', value: 'recorded, not shared' });
+    }
+  }
+  if (asset.width && asset.height) {
+    rows.push({ label: 'Dimensions', value: `${asset.width} × ${asset.height}` });
+  }
+  const size = fmtBytes(assetBytes(asset));
+  if (size) rows.push({ label: 'File size', value: size });
+  const captured = asset.captured_at ?? asset.taken_at;
+  if (captured) {
+    const d = new Date(captured);
+    if (!Number.isNaN(d.getTime())) {
+      // `dateStyle`/`timeStyle` can't be mixed with component options like
+      // `weekday` (Intl.DateTimeFormat throws) — `dateStyle: 'full'` already
+      // spells out the weekday on its own.
+      rows.push({
+        label: 'Captured',
+        value: d.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' }),
+      });
+    }
+  }
+  if (asset.media_type) rows.push({ label: 'Type', value: asset.media_type });
+  return rows;
 }
 
 export function isVideoAsset(asset) {

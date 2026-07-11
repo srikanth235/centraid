@@ -3,7 +3,7 @@
   "id": "photos",
   "name": "Photos",
   "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "iconKey": "Camera",
   "colorKey": "ochre",
   "vault": {
@@ -340,6 +340,40 @@
           "regions": { "type": "array" },
           "people": { "type": "array" },
           "denied": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Title/caption search over the whole live library via FTS5 (issue #352) — not just the loaded window: matches core.content_item titles, joins albums/favorite the same way the library query does, and returns rows shaped for the same grid.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "assets": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "duplicates",
+      "description": "Near-duplicate clusters over the live library (issue #352 / #299's deferred duplicates shelf): exact-sha groups (structurally rare — dedupe already collapses those at upload) plus same-dimensions-and-file-size groups, the nearest signal reachable from this app plane today (the phash/vault_hamming infra isn't — see the query's doc comment).",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "clusters": { "type": "array" },
+          "limitation": { "type": "string" },
+          "vaultDenied": { "type": "object" }
         }
       }
     }

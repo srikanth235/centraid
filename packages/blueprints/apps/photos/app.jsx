@@ -9,24 +9,33 @@
 // while the library remains the owner's.
 //
 // This file is the entry/orchestrator only: module-level state, refresh(),
-// the grid/selection-bar/lightbox render orchestrators, the React roots, and
-// the raw DOM event wiring. The album-chips/album-tools and album-picker
-// regions are self-contained enough (their own small slice of state, one
-// root each) to carry their own render orchestrator too — see
-// createToolbar()/createPicker() in toolbar.jsx/picker.jsx, constructed once
-// at boot below. Every pure view lives in components/*.jsx; the pure helpers
-// live in format.js/media.js/constants.js; the vault-write flows too large to
-// keep inline live in outcomes.js/assets-actions.js/albums-actions.js/
-// selection-actions.js/picker-actions.js/upload.js/faces.js.
+// the grid/selection-bar render orchestrators, the React roots, and the raw
+// DOM event wiring. The album-chips/album-tools, album-picker, lightbox,
+// slideshow and duplicates-shelf regions (issue #352 added the last two) are
+// self-contained enough (their own small slice of state, one root each) to
+// carry their own render orchestrator too — see createToolbar()/
+// createPicker()/createLightbox()/createSlideshow()/createDuplicates() in
+// toolbar.jsx/picker.jsx/lightbox.jsx/slideshow.jsx/duplicates.jsx,
+// constructed once at boot below. `visibility.js` holds the pure
+// "what's visible right now" computation (album × search filter) both the
+// grid and lightbox need. Every pure view lives in components/*.jsx; the
+// pure helpers live in format.js/media.js/constants.js; the vault-write
+// flows too large to keep inline live in outcomes.js/assets-actions.js/
+// albums-actions.js/selection-actions.js/picker-actions.js/upload.js/
+// faces.js/duplicates-actions.js.
 
-import { FAVORITES, TRASH } from './constants.js';
+import { DUPLICATES, FAVORITES, TRASH } from './constants.js';
 import { $ } from './dom.js';
-import { dayKey, fmtDay, fmtMonth } from './format.js';
-import { debounce, readFailed } from './kit.js';
+import { createDuplicates } from './duplicates.jsx';
+import { readFailed } from './kit.js';
+import { createLightbox } from './lightbox.jsx';
 import { notice } from './outcomes.js';
 import { createPicker } from './picker.jsx';
+import { createSearch } from './search.js';
+import { createSlideshow } from './slideshow.jsx';
 import { createToolbar } from './toolbar.jsx';
 import { runUpload, wireUpload } from './upload.js';
+import { createVisibility } from './visibility.js';
 // React owns six containers — one root per dynamic region of the static
 // index.html body (chips, album tools, grid, selection bar, lightbox,
 // picker). Each region's render orchestrator (renderGrid, renderLightbox, …)
@@ -37,16 +46,15 @@ import { runUpload, wireUpload } from './upload.js';
 import { createRoot } from './react-core.min.js';
 import { GridBody, TrashGridBody } from './components/Grid.jsx';
 import { SelectionBarView } from './components/SelectionBar.jsx';
-import { LightboxShell } from './components/Lightbox.jsx';
 
 let assets = [];
 let albums = [];
 let trash = [];
-let selectedAlbum = null; // null = All; an album_id; or FAVORITES / TRASH
-let lightboxAssetId = null; // non-null while the lightbox is open
+let selectedAlbum = null; // null = All; an album_id; or FAVORITES / TRASH / DUPLICATES
 let uploading = false;
 let readErrorShown = false;
 let searchQuery = '';
+let searchResults = null; // server FTS hits (title/caption, issue #352); null = no active search
 let selectMode = false;
 let batchBusy = false;
 let selectAnchor = null; // last toggled asset_id, for shift-click ranges
@@ -94,6 +102,7 @@ async function refresh() {
     selectedAlbum &&
     selectedAlbum !== FAVORITES &&
     selectedAlbum !== TRASH &&
+    selectedAlbum !== DUPLICATES &&
     !albums.some((a) => a.album_id === selectedAlbum)
   ) {
     selectedAlbum = null;
@@ -104,7 +113,7 @@ async function refresh() {
   renderToolbar();
   renderGrid();
   renderSelectionBar();
-  if (lightboxAssetId != null) renderLightbox();
+  lightbox.renderIfOpen();
 }
 
 function albumAssets() {
@@ -114,36 +123,33 @@ function albumAssets() {
   return assets.filter((a) => a.album_ids?.includes(selectedAlbum));
 }
 
-function matchesSearch(asset) {
-  if (!searchQuery) return true;
-  const key = dayKey(asset.taken_at);
-  const hay = [
-    asset.title,
-    asset.kind,
-    asset.media_type,
-    key,
-    fmtDay(key),
-    fmtMonth(key.slice(0, 7)),
-    ...(asset.album_titles ?? []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-  return searchQuery
-    .toLowerCase()
-    .split(/\s+/)
-    .every((token) => hay.includes(token));
-}
-
-// What the grid shows right now: the album filter, then the search filter.
-function visibleAssets() {
-  return albumAssets().filter(matchesSearch);
-}
+// visibility.js owns the pure "what's visible right now" computation
+// (album filter × search filter, plus the off-window asset lookup the
+// lightbox needs) — app.jsx stays the one holder of the actual
+// assets/trash/searchResults arrays and hands them over as getters.
+const { visibleAssets, findAsset } = createVisibility({
+  getAssets: () => assets,
+  getTrash: () => trash,
+  getAlbumAssets: albumAssets,
+  getSearchResults: () => searchResults,
+  getSearchQuery: () => searchQuery,
+  getSelectedAlbum: () => selectedAlbum,
+});
 
 // ---------- Grid ----------
 
 function renderGrid() {
   const grid = $('grid');
+  // Duplicates (issue #352) swaps the WHOLE grid for its own cluster-card
+  // view — not a filter over `assets`, so it short-circuits before any of
+  // the timeline/empty-state machinery below.
+  if (selectedAlbum === DUPLICATES) {
+    grid.classList.remove('selecting');
+    $('empty').hidden = true;
+    duplicates.ensureLoaded();
+    duplicates.renderDuplicates();
+    return;
+  }
   grid.classList.toggle('selecting', selectMode);
   const shown = visibleAssets();
   const empty = $('empty');
@@ -192,7 +198,7 @@ function renderGrid() {
       selectedIds={selectedIds}
       onEnterSelectMode={enterSelectMode}
       onToggleSelect={toggleSelect}
-      onOpen={openLightbox}
+      onOpen={lightbox.openLightbox}
       onShowMore={async (e) => {
         e.target.disabled = true;
         libraryWindow += 500;
@@ -318,69 +324,13 @@ function renderSelectionBar() {
 }
 
 // ---------- Lightbox ----------
-
-function openLightbox(assetId) {
-  lightboxAssetId = assetId;
-  renderLightbox();
-}
-
-function closeLightbox() {
-  lightboxAssetId = null;
-  const box = $('lightbox');
-  box.hidden = true;
-  lightboxRoot.render(null);
-}
-
-function step(delta) {
-  const list = visibleAssets();
-  const idx = list.findIndex((a) => a.asset_id === lightboxAssetId);
-  const next = idx < 0 ? undefined : list[idx + delta];
-  if (!next) return;
-  lightboxAssetId = next.asset_id;
-  renderLightbox();
-}
-
-let lightboxRenderSeq = 0;
-
-function renderLightbox() {
-  const box = $('lightbox');
-  const asset = assets.find((a) => a.asset_id === lightboxAssetId);
-  if (!asset) {
-    closeLightbox();
-    return;
-  }
-  lightboxRenderSeq += 1;
-  const list = visibleAssets();
-  const idx = list.findIndex((a) => a.asset_id === asset.asset_id);
-  lightboxRoot.render(
-    <LightboxShell
-      asset={asset}
-      idx={idx}
-      list={list}
-      albums={albums}
-      renderSeq={lightboxRenderSeq}
-      onStep={step}
-      refresh={refresh}
-      onClose={closeLightbox}
-    />,
-  );
-  box.hidden = false;
-}
-
-// A plain native listener directly on `#lightbox` (which doubles as this
-// region's React root container) — `e.stopPropagation()` inside a nested
-// component's onClick handler cannot save us here: React's own delegated
-// listener lives on this SAME node and is registered *after* this one (at
-// `createRoot()` time, in Boot below), so a raw `addEventListener` here
-// would otherwise always fire first and close the box before React's
-// synthetic dispatch (and its stopPropagation calls) ever run — breaking
-// every click inside the lightbox (nav arrows, favorite, caption, chips…),
-// not just genuine backdrop clicks. Gating on `e.target === e.currentTarget`
-// sidesteps the race entirely: only a click that lands on the backdrop
-// itself (never on a descendant) closes it, regardless of listener order.
-$('lightbox').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) closeLightbox();
-});
+// lightbox.jsx owns the render orchestrator (see its header comment) — wired
+// up in Boot below, since it needs `lightboxRoot`/`slideshow`, both
+// constructed there. `renderGrid` (above) and the keyboard handler (below)
+// only ever call `openLightbox`/`closeLightbox`/`step` inside their own
+// deferred callbacks, never while THIS module is still evaluating — so
+// referencing them ahead of the Boot assignment is safe (same forward
+// reference `renderGrid` already makes to `gridRoot`).
 
 // ---------- Keyboard ----------
 
@@ -398,26 +348,39 @@ window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') e.target.blur();
     return;
   }
-  if (e.key === 'Escape') closeLightbox();
-  else if (e.key === 'ArrowLeft') step(-1);
-  else if (e.key === 'ArrowRight') step(1);
+  if (e.key === 'Escape') lightbox.closeLightbox();
+  else if (e.key === 'ArrowLeft') lightbox.step(-1);
+  else if (e.key === 'ArrowRight') lightbox.step(1);
 });
 
 // ---------- Search ----------
+// Server FTS (queries/search.js, issue #352) is debounced via search.js's
+// createSearch; the immediate renderGrid() call below keeps the existing
+// client-side match (day/month/album-name/loaded-title) responsive at zero
+// latency while that request is in flight.
 
-const applySearch = debounce(() => renderGrid(), 120);
+const { run: runSearch, invalidate: invalidateSearch } = createSearch({
+  getQuery: () => searchQuery,
+  setResults: (r) => {
+    searchResults = r;
+  },
+  renderGrid,
+});
 
 $('searchInput').addEventListener('input', () => {
   searchQuery = $('searchInput').value.trim();
   $('searchClear').hidden = searchQuery === '';
-  applySearch();
+  renderGrid();
+  runSearch();
 });
 
 function clearSearch() {
   $('searchInput').value = '';
   $('searchClear').hidden = true;
-  if (searchQuery !== '') {
+  invalidateSearch();
+  if (searchQuery !== '' || searchResults !== null) {
     searchQuery = '';
+    searchResults = null;
     renderGrid();
   }
 }
@@ -460,6 +423,23 @@ const gridRoot = createRoot($('grid'));
 const selectionBarRoot = createRoot($('selectionBar'));
 const lightboxRoot = createRoot($('lightbox'));
 const pickerRoot = createRoot($('picker'));
+const slideshowRoot = createRoot($('slideshow'));
+
+// Duplicates (issue #352) renders into the SAME gridRoot the library/trash
+// views use — selecting its chip swaps `#grid`'s content exactly the way
+// selecting Trash already does. Slideshow gets its own root/container since
+// it can open from the lightbox too, independent of whatever the grid is
+// currently showing.
+const duplicates = createDuplicates({ gridRoot, refresh });
+const slideshow = createSlideshow({ slideshowRoot });
+const lightbox = createLightbox({
+  lightboxRoot,
+  findAsset,
+  visibleAssets,
+  getAlbums: () => albums,
+  refresh,
+  slideshow,
+});
 
 // The album picker is constructed before the toolbar, since the toolbar's
 // "Add photos" button needs a live `openPicker` to hand `<AlbumToolsView>`.
@@ -479,6 +459,9 @@ const { renderToolbar } = createToolbar({
   getAlbumAssets: albumAssets,
   getSelectedAlbum: () => selectedAlbum,
   setSelectedAlbum: (id) => {
+    // Leaving the shelf: the next visit re-fetches rather than showing a
+    // list that a trash/upload done elsewhere has since gone stale.
+    if (selectedAlbum === DUPLICATES && id !== DUPLICATES) duplicates.invalidate();
     selectedAlbum = id;
   },
   refresh,
@@ -499,6 +482,10 @@ $('selectBtn').addEventListener('click', () => {
   if (selectMode) exitSelectMode();
   else enterSelectMode();
 });
+
+// Desktop-only toolbar entry point (CSS-gated at >=720px — see app.css); the
+// lightbox's own "Slideshow" button is the entry point at every width.
+$('slideshowBtn').addEventListener('click', () => lightbox.startSlideshow(null));
 
 window.addEventListener('focus', refresh);
 // Shimmer rows while the first read is in flight — the genuine

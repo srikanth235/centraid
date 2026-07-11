@@ -3,13 +3,23 @@
 // only app.jsx-owned pieces threaded down as props — every command here
 // (caption/capture-time/album-toggle/favorite/delete) fires through `act`
 // imported directly from outcomes.js, since none of it touches app.jsx's
-// asset/album *lists*, only a single asset by id.
+// asset/album *lists*, only a single asset by id. `onSlideshow` (issue #352)
+// is the one exception threaded through instead: starting a slideshow means
+// closing THIS region and opening a different one, which only app.jsx (via
+// lightbox.jsx) can do.
 import { armConfirm, fmtBytes, toast } from '../kit.js';
 import { restoreAsset, toggleFavorite } from '../assets-actions.js';
 import { renderFaces } from '../faces.js';
-import { assetBytes, cls, isRenderableUri, isVideoAsset, toLocalInputValue } from '../format.js';
+import {
+  assetBytes,
+  cls,
+  exifRows,
+  isRenderableUri,
+  isVideoAsset,
+  toLocalInputValue,
+} from '../format.js';
 import { act, narrate } from '../outcomes.js';
-import { useEffect, useRef } from '../react-core.min.js';
+import { useEffect, useRef, useState } from '../react-core.min.js';
 
 // Double-click zooms the stage image; while zoomed a pointer drag pans it.
 function wireZoom(img) {
@@ -96,6 +106,37 @@ export function Stage({ asset, onDims }) {
   return <div className="lightbox-placeholder">{asset.media_type ?? asset.kind ?? 'media'}</div>;
 }
 
+// The details/EXIF disclosure (issue #352): whatever `exifRows` found —
+// captured server-side at upload (packages/vault/src/blob/pipeline.ts) plus
+// the always-known dimensions/size/captured-time/type. Degrades to a plain
+// sentence when nothing at all is known (an asset with no dimensions, no
+// recorded size, no captured time — effectively never happens today, but a
+// row with everything null must still render something, not a blank box).
+function DetailsPanel({ asset }) {
+  const rows = exifRows(asset);
+  if (rows.length === 0) {
+    return <p className="lightbox-details-empty kit-muted kit-small">No details available.</p>;
+  }
+  return (
+    <dl className="lightbox-details">
+      {rows.map((row) => (
+        <div className="lightbox-details-row" key={row.label}>
+          <dt>{row.label}</dt>
+          <dd>
+            {row.href ? (
+              <a href={row.href} target="_blank" rel="noreferrer">
+                {row.value}
+              </a>
+            ) : (
+              row.value
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 // The lightbox's caption/capture-time form, info line and faces host, keyed
 // by `renderSeq` (so every call to `renderLightbox` mints a wholly fresh copy
 // of this subtree) — exactly mirroring the Lit port's choice to rebuild these
@@ -108,10 +149,11 @@ export function Stage({ asset, onDims }) {
 // on every mount, the same way the old code's `setInfo` closure got replaced
 // by each `renderLightbox` call even though the stage element itself
 // persisted underneath it.
-export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClose }) {
+export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClose, onSlideshow }) {
   const noteRef = useRef(null);
   const infoRef = useRef(null);
   const facesHostRef = useRef(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     setInfoRef.current = (w, h) => {
@@ -174,6 +216,15 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
         />
       </div>
       <p className="lightbox-info" ref={infoRef}></p>
+      <button
+        type="button"
+        className="lightbox-details-toggle"
+        aria-expanded={detailsOpen ? 'true' : 'false'}
+        onClick={() => setDetailsOpen((v) => !v)}
+      >
+        {detailsOpen ? '▾ Hide details' : '▸ Details'}
+      </button>
+      {detailsOpen ? <DetailsPanel asset={asset} /> : null}
       {albumList.length > 0 ? (
         <div className="lightbox-albums">
           {albumList.map((album) => {
@@ -209,6 +260,9 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
           }}
         >
           {asset.favorite ? '♥ Favorited' : '♡ Favorite'}
+        </button>
+        <button type="button" className="kit-btn" onClick={onSlideshow}>
+          ▶ Slideshow
         </button>
         {isRenderableUri(asset.content_uri) ||
         String(asset.content_uri ?? '').startsWith('data:') ? (
@@ -257,6 +311,7 @@ export function LightboxShell({
   onStep,
   refresh,
   onClose,
+  onSlideshow,
 }) {
   const setInfoRef = useRef(() => {});
   return (
@@ -290,6 +345,7 @@ export function LightboxShell({
           setInfoRef={setInfoRef}
           refresh={refresh}
           onClose={onClose}
+          onSlideshow={onSlideshow}
         />
       </div>
     </>

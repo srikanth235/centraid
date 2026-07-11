@@ -2,7 +2,7 @@
 // Trash. Pure view — every interaction is a callback prop; the new-album
 // submit/cancel/select handlers all touch app.jsx's module state
 // (selectedAlbum, newAlbumOpen) so they stay owned by app.jsx.
-import { FAVORITES, TRASH } from '../constants.js';
+import { DUPLICATES, FAVORITES, TRASH } from '../constants.js';
 import { InlineInput } from './InlineInput.jsx';
 
 function Chip({ label, active, onClick, extraClass }) {
@@ -58,6 +58,12 @@ export function ChipsView({
           ＋ New album
         </button>
       )}
+      <Chip
+        label="⧉ Duplicates"
+        active={selected === DUPLICATES}
+        onClick={() => onSelect(DUPLICATES)}
+        extraClass="chip-duplicates"
+      />
       {trashCount > 0 ? (
         <Chip
           label={`Trash (${trashCount})`}

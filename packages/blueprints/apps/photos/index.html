@@ -71,6 +71,12 @@
           </button>
         </label>
         <button id="selectBtn" type="button" class="kit-btn head-btn">Select</button>
+        <!-- Desktop-only toolbar entry point for the slideshow (issue #352) —
+             CSS-gated to >=720px in app.css so the mobile header is untouched;
+             the lightbox's own "Slideshow" button covers every width. -->
+        <button id="slideshowBtn" type="button" class="kit-btn head-btn slideshow-toolbar-btn">
+          ▶ Slideshow
+        </button>
         <button id="uploadBtn" type="button" class="kit-btn primary">＋ Add photos</button>
       </header>
 
@@ -129,6 +135,14 @@
       </p>
 
       <div id="lightbox" class="lightbox" hidden></div>
+      <div
+        id="slideshow"
+        class="slideshow"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Slideshow"
+        hidden
+      ></div>
       <div
         id="selectionBar"
         class="selection-bar"

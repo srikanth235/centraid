@@ -8,7 +8,7 @@
 import { AlbumToolsView } from './components/AlbumTools.jsx';
 import { ChipsView } from './components/Chips.jsx';
 import { deleteAlbumConfirmed, submitNewAlbum, submitRenameAlbum } from './albums-actions.js';
-import { TRASH } from './constants.js';
+import { DUPLICATES, TRASH } from './constants.js';
 import { $ } from './dom.js';
 
 export function createToolbar({
@@ -36,8 +36,11 @@ export function createToolbar({
   function renderToolbar() {
     renderChips();
     renderAlbumTools();
-    // Trash tiles offer exactly one action — selection has nothing to select.
-    $('selectBtn').hidden = getSelectedAlbum() === TRASH;
+    // Trash tiles offer exactly one action, and Duplicates has its own
+    // checkbox-select model (DuplicatesView) — the grid's own multi-select
+    // has nothing to attach to on either shelf.
+    const shelf = getSelectedAlbum();
+    $('selectBtn').hidden = shelf === TRASH || shelf === DUPLICATES;
   }
 
   function selectAlbum(albumId) {
