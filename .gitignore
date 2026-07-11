@@ -26,8 +26,8 @@ ds-bundle/
 .design-sync/ds-src/styles/tokens.css
 .design-sync/ds-src/styles/kit.css
 .design-sync/ds-src/styles/bundle.css
-# issue #327: build outputs of the wrapper-free (Lit) design-sync build —
-# copied component source, generated preview cards, and the derived manifest.
+# issue #327: build outputs of the wrapper-free design-sync build — copied
+# component source, generated preview cards, and the derived manifest.
 .design-sync/ds-src/components/
 .design-sync/ds-src/previews/
 .design-sync/ds-src/manifest.json

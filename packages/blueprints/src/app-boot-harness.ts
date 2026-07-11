@@ -29,11 +29,9 @@
 // SCOPE, honestly: the vault mock returns `{}`, so every collection falls back
 // to empty. This proves each app loads, boots, commits its templates, clears
 // them on revoke and re-renders — but it renders NO ROWS, so it cannot catch a
-// regression that only manifests with content (a raw clear of a Lit-owned
-// container, for instance, throws only once the template has real nodes to
-// insert). Those Lit container-ownership invariants are pinned directly in
-// kit-smoke.test.ts. Giving each app a populated fixture would strengthen this
-// considerably; it needs one hand-written shape per app's query.
+// regression that only manifests with content. Giving each app a populated
+// fixture would strengthen this considerably; it needs one hand-written shape
+// per app's query.
 import { execFileSync } from 'node:child_process';
 import {
   cpSync,
@@ -53,7 +51,7 @@ const PKG = process.cwd();
 // Apps import these as siblings (`./kit.js`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
-const SHARED = ['kit.js', 'elements.js', 'lit-core.min.js', 'react-core.min.js', 'jsx-runtime.js'];
+const SHARED = ['kit.js', 'elements.js', 'react-core.min.js', 'jsx-runtime.js'];
 
 // React-dialect apps ship app.jsx; the gateway transpiles it per-request. The
 // harness mirrors that with the same transform options + specifier rewrite as
@@ -198,8 +196,7 @@ export function describeAppBoot(app: string) {
       await settle();
       expectNoErrors('rendering an empty granted vault');
 
-      // Revoke: every app clears its containers. They are Lit-owned by now, so
-      // this is the raw-clear-corrupts-the-part-cache path.
+      // Revoke: every app clears its containers.
       response = DENIED;
       window.dispatchEvent(new Event('focus'));
       await settle();

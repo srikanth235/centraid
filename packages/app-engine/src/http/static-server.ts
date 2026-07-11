@@ -15,10 +15,10 @@ import { sendError } from './http-utils.js';
  * shared dir when the app folder has no copy of its own. An app *may* still
  * ship its own file to override — the per-app copy wins.
  *
- * `kit.js` imports `elements.js` (the kit's native Web Components, issue #327),
- * which in turn imports `lit-core.min.js` (the vendored runtime-only Lit
- * bundle). Both are relative same-origin ESM imports resolved the same way as
- * `kit.js`, so they must fall back to the shared dir too.
+ * `kit.js` imports `elements.js` (the kit's native Web Components, issue #327
+ * — dependency-free vanilla custom elements, no runtime import of their own).
+ * It's a relative same-origin ESM import resolved the same way as `kit.js`,
+ * so it must fall back to the shared dir too.
  *
  * `react-core.min.js` (vendored runtime-only React bundle) and
  * `jsx-runtime.js` (the `automatic` JSX runtime esbuild's transform imports,
@@ -36,7 +36,6 @@ const SHARED_ASSET_FILES = new Set([
   'kit.js',
   'kit.css',
   'elements.js',
-  'lit-core.min.js',
   'react-core.min.js',
   'jsx-runtime.js',
   'tokens.css',

@@ -167,27 +167,21 @@ describe('serveStatic — shared kit asset fallback', () => {
     expect(css.data.headers['Content-Type']).toMatch(/css/);
   });
 
-  it('serves the kit Web Component modules (elements.js / lit-core.min.js) from the shared dir', async () => {
-    // kit.js does `import './elements.js'`, which imports `./lit-core.min.js`
-    // (issue #327). Both are same-origin relative ESM imports that must fall
-    // back to the shared dir the same way kit.js does, or the import chain 404s.
+  it('serves the kit Web Component module (elements.js) from the shared dir', async () => {
+    // kit.js does `import './elements.js'` (issue #327's native custom
+    // elements, dependency-free — no further runtime import of their own).
+    // It's a same-origin relative ESM import that must fall back to the
+    // shared dir the same way kit.js does, or the import 404s.
     const appDir = newAppDir({ 'index.html': '<html></html>' }); // no kit files
     const sharedAssetsDir = newAppDir({
-      'elements.js': "import './lit-core.min.js';",
-      'lit-core.min.js': 'export const LitElement = class {};',
+      'elements.js': 'export const KitElement = class {};',
     });
 
     const els = mockRes();
     await serveStatic(els.res, appDir, 'elements.js', { sharedAssetsDir });
     expect(els.data.statusCode).toBe(200);
-    expect(els.data.body.toString('utf8')).toBe("import './lit-core.min.js';");
+    expect(els.data.body.toString('utf8')).toBe('export const KitElement = class {};');
     expect(els.data.headers['Content-Type']).toMatch(/javascript/);
-
-    const lit = mockRes();
-    await serveStatic(lit.res, appDir, 'lit-core.min.js', { sharedAssetsDir });
-    expect(lit.data.statusCode).toBe(200);
-    expect(lit.data.body.toString('utf8')).toBe('export const LitElement = class {};');
-    expect(lit.data.headers['Content-Type']).toMatch(/javascript/);
   });
 
   it("prefers the app's own copy over the shared one", async () => {

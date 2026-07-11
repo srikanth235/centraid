@@ -40,9 +40,10 @@
   </head>
   <body>
     <div class="locker" id="root" data-locker-root>
-      <!-- App chrome (sidebar / list / detail) is built in app.js. A hidden
-           consent + notice banner mirror the Docs pattern; the rest of the
-           surface renders into #stage. -->
+      <!-- App chrome (sidebar / list / detail) is a single React root
+           mounted into #stage by app.jsx (no static shell markup here — the
+           original Lit app had none either). A hidden consent + notice
+           banner mirror the Docs pattern. -->
       <div id="consentBanner" class="k-banner" hidden>
         <strong>No vault access yet.</strong>
         <span id="consentDetail"
@@ -63,6 +64,6 @@
         suggest: ['Find my GitHub login', 'Add a new credit card', 'Which passwords are weak?'],
       };
     </script>
-    <script type="module" src="app.js"></script>
+    <script type="module" src="./app.jsx"></script>
   </body>
 </html>

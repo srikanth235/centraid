@@ -6,15 +6,17 @@
 // @vitest-environment jsdom
 // Runtime smoke test: evaluates the real kit modules (elements.js + kit.js)
 // under jsdom and exercises the shared surface the apps consume.
+//
+// `elements.js` is Lit-free (native custom elements — see its header); Lit
+// has been fully removed from the kit (issue #327 reverted — no apps import
+// it anymore), so this file only exercises the vanilla surface.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-// Resolved at runtime so tsc never follows the import into the vendored
-// lit-core bundle (which its DOM-less config can't type-check). The file URL
-// loads natively; jsdom's globals are already installed by the environment.
+// Resolved at runtime so the file URL loads natively; jsdom's globals are
+// already installed by the environment.
 const kitUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/kit.js')).href;
-const litUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/lit-core.min.js')).href;
 const elementsUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/elements.js')).href;
 const {
   barSpan,
@@ -30,7 +32,6 @@ const {
   renderAttachments,
   snippetInto,
 } = await import(kitUrl);
-const { html, render, repeat, classMap, live, ref, createRef, nothing } = await import(litUrl);
 const { KitElement } = await import(elementsUrl);
 
 describe('kit smoke', () => {
@@ -56,10 +57,11 @@ describe('kit smoke', () => {
     expect(el('<span id="q">z</span>').id).toBe('q');
   });
 
-  it('letterAvatar honours color/initials and scales type', async () => {
+  it('letterAvatar honours color/initials and scales type', () => {
     const av = letterAvatar('Grace Hopper', { size: '34px', color: '#0FA678', initials: 'You' });
+    // Vanilla custom elements render synchronously on connect — no update
+    // microtask to await (elements.js has no Lit, no scheduler underneath).
     document.body.appendChild(av);
-    await av.updateComplete;
     const span = av.querySelector('.kit-avatar');
     expect(span).toBeTruthy();
     expect(span.getAttribute('style')).toContain('background:#0FA678');
@@ -67,19 +69,17 @@ describe('kit smoke', () => {
     expect(span.textContent.trim()).toBe('You');
   });
 
-  it('letterAvatar defaults to hashed hue + derived initials', async () => {
+  it('letterAvatar defaults to hashed hue + derived initials', () => {
     const av = letterAvatar('Ada Lovelace');
     document.body.appendChild(av);
-    await av.updateComplete;
     const span = av.querySelector('.kit-avatar');
     expect(span.getAttribute('style')).toMatch(/background:hsl\(/);
     expect(span.textContent.trim()).toBe('AL');
   });
 
-  it('barSpan carries the tone onto the fill', async () => {
+  it('barSpan carries the tone onto the fill', () => {
     const bar = barSpan(0.8, { tone: 'ok' });
     document.body.appendChild(bar);
-    await bar.updateComplete;
     expect(bar.querySelector('.kit-bar-fill').dataset.tone).toBe('ok');
   });
 
@@ -157,71 +157,26 @@ describe('kit smoke', () => {
     expect(fmtBytes(1024 * 1024 * 1.3)).toBe('1.3 MB');
   });
 
-  it('lit bundle exports the app-layer surface', () => {
-    for (const [name, fn] of Object.entries({ render, repeat, classMap, live, ref, createRef })) {
-      expect(fn, name).toBeTypeOf('function');
-    }
-  });
-
-  it('KitElement subclasses render light DOM and stamp data-kit-host', async () => {
+  it('KitElement subclasses render light DOM and stamp data-kit-host', () => {
     class SmokeCard extends KitElement {
       static properties = { label: { type: String } };
       render() {
-        return html`<span class="smoke-label">${this.label}</span>`;
+        const span = document.createElement('span');
+        span.className = 'smoke-label';
+        span.textContent = this.label;
+        return span;
       }
     }
     customElements.define('smoke-card', SmokeCard);
     const card = document.createElement('smoke-card');
     card.label = 'hi <b>there</b>';
     document.body.appendChild(card);
-    await card.updateComplete;
     expect(card.shadowRoot).toBeNull();
     expect(Object.hasOwn(card.dataset, 'kitHost')).toBe(true);
     const span = card.querySelector('.smoke-label');
-    // Lit templates escape interpolated strings — no live <b> element.
+    // textContent, not innerHTML — no live <b> element regardless of markup
+    // in the string.
     expect(span.textContent).toBe('hi <b>there</b>');
     expect(span.querySelector('b')).toBeNull();
-  });
-
-  it('standalone render() drives kit-owned containers (popover pattern)', () => {
-    const anchor = document.createElement('button');
-    document.body.appendChild(anchor);
-    openPopover(anchor, (box) => {
-      render(
-        html`${repeat(
-          ['a', 'b'],
-          (x) => x,
-          (x) => html`<button class=${classMap({ 'kit-popover-item': true })}>${x}</button>`,
-        )}`,
-        box,
-      );
-    });
-    expect(document.querySelectorAll('.kit-popover-item').length).toBe(2);
-    closePopover();
-  });
-
-  // The two container-ownership rules every blueprint app now depends on. They
-  // are Lit semantics, not ours, so pin them: a lit upgrade that changed either
-  // would silently break the apps' skeleton mounts and consent-denied clears.
-  it('render() does NOT clear a container it renders into for the first time', () => {
-    const box = document.createElement('div');
-    box.innerHTML = '<span class="skeleton">…</span>';
-    render(html`<p class="fresh">one</p>`, box);
-    // Hence every app's one-shot replaceChildren() mount guard over its skeleton.
-    expect(box.querySelector('.skeleton'), 'skeleton should survive — guard needed').toBeTruthy();
-    expect(box.querySelector('.fresh')).toBeTruthy();
-  });
-
-  it('raw-clearing a Lit-owned container breaks it; render(nothing) does not', () => {
-    const raw = document.createElement('div');
-    render(html`<p class="a">one</p>`, raw);
-    raw.innerHTML = ''; // drops the marker nodes Lit's part still references
-    expect(() => render(html`<p class="b">two</p>`, raw)).toThrow();
-
-    const clean = document.createElement('div');
-    render(html`<p class="a">one</p>`, clean);
-    render(nothing, clean);
-    render(html`<p class="b">two</p>`, clean);
-    expect(clean.querySelector('.b')).toBeTruthy();
   });
 });

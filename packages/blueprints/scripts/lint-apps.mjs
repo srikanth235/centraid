@@ -20,8 +20,7 @@ const PKG = path.resolve(fileURLToPath(import.meta.url), '../..');
 // oxlint is hoisted to the workspace root, never to this package's own .bin.
 const OXLINT = path.resolve(PKG, '../../node_modules/.bin/oxlint');
 
-// An app's entry is app.jsx (React dialect) or app.js (Lit dialect) — same
-// gate either way; oxlint parses JSX natively. React apps may split into
+// An app's entry is app.jsx; oxlint parses JSX natively. Apps may split into
 // further browser modules (components/*.jsx, helpers .js) which are just as
 // unexecuted by CI as the entry, so the gate walks the whole app dir —
 // skipping the handler dirs (queries/actions/automations), which are

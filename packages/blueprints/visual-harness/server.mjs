@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// Visual-verification harness for the docs/photos/tasks blueprint apps.
+// Visual-verification harness for the blueprint apps (see SUPPORTED_APPS).
 //
 // Serves the two apps EXACTLY the way the real gateway does — same
 // `serveStatic()` from packages/app-engine/src/http/static-server.ts (real
@@ -31,7 +31,7 @@ const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
 const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
 
 const PORT = 4173;
-const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes', 'agenda']);
+const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes', 'agenda', 'people', 'tally', 'locker']);
 const BLOB_PREFIX = '/centraid/_vault/blobs';
 
 // ---------------------------------------------------------------------
@@ -222,6 +222,9 @@ const server = http.createServer(async (req, res) => {
           '<li><a href="/centraid/tasks/">/centraid/tasks/</a></li>' +
           '<li><a href="/centraid/notes/">/centraid/notes/</a></li>' +
           '<li><a href="/centraid/agenda/">/centraid/agenda/</a></li>' +
+          '<li><a href="/centraid/people/">/centraid/people/</a></li>' +
+          '<li><a href="/centraid/tally/">/centraid/tally/</a></li>' +
+          '<li><a href="/centraid/locker/">/centraid/locker/</a></li>' +
           '</ul>' +
           '<p>Knobs: <code>?empty=1</code>, <code>?denied=1</code>, <code>#theme=dark&amp;bgL=10</code></p>' +
           '</body></html>',
@@ -241,7 +244,7 @@ const server = http.createServer(async (req, res) => {
     }
     const appId = decodeURIComponent(appMatch[1]);
     if (!SUPPORTED_APPS.has(appId)) {
-      sendPlain(res, 404, `unknown app: ${appId} (only docs/photos/tasks are wired up)`);
+      sendPlain(res, 404, `unknown app: ${appId} (wired up: ${[...SUPPORTED_APPS].join('/')})`);
       return;
     }
     let rel = appMatch[2] || '/';
@@ -271,5 +274,8 @@ server.listen(PORT, () => {
   console.log(`  tasks:  http://localhost:${PORT}/centraid/tasks/`);
   console.log(`  notes:  http://localhost:${PORT}/centraid/notes/`);
   console.log(`  agenda: http://localhost:${PORT}/centraid/agenda/`);
+  console.log(`  people: http://localhost:${PORT}/centraid/people/`);
+  console.log(`  tally:  http://localhost:${PORT}/centraid/tally/`);
+  console.log(`  locker: http://localhost:${PORT}/centraid/locker/`);
   console.log('  knobs:  ?empty=1  ?denied=1  #theme=dark&bgL=10');
 });

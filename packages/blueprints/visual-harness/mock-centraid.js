@@ -1710,6 +1710,1609 @@
   }
 
   // ---------------------------------------------------------------------
+  // People fixtures — see packages/blueprints/apps/people/queries/people.js
+  // for the list-row shape (party_id/name/role/avatar_color/cadence_days/
+  // last_contacted_at/created_at/circle_id/starred/reminders), person.js for
+  // the full-profile shape (met/contact/relationships/dates/notes/tasks/
+  // gifts/debts/interactions), dashboard.js (reconnect/upcoming/recent/
+  // counts), journal.js (owner 'entry' rows folded with 'auto' interaction
+  // rows) and search.js (people-row + snippet, reminders ALWAYS [] — the
+  // real query never re-fetches dates, replicated here on purpose). The
+  // store keeps one superset row per person and projects per query. Seed
+  // names/interactions come from apps/people/seed.js; circles, favorites,
+  // relationships, journal entries etc. are invented (seed.js has none).
+  // "(park)" in any typed text — or in the target person's name — parks the
+  // write, same convention as tasks/notes/agenda.
+  // ---------------------------------------------------------------------
+  function buildPeopleStore() {
+    if (EMPTY_MODE) return { circles: [], people: [], journal: [] };
+
+    var circles = [
+      { circle_id: 'circle-college', name: 'College' },
+      { circle_id: 'circle-family', name: 'Family' },
+      { circle_id: 'circle-work', name: 'Work' },
+    ];
+
+    function person(id, name, opts) {
+      opts = opts || {};
+      return {
+        party_id: id,
+        name: name,
+        role: opts.role || '',
+        avatar_color: opts.avatar_color || null,
+        cadence_days: opts.cadence_days || 30,
+        last_contacted_at: opts.lastDays == null ? null : isoDaysAgo(opts.lastDays),
+        created_at: isoDaysAgo(opts.createdDays != null ? opts.createdDays : 120),
+        met: opts.met || '',
+        circle_id: opts.circle_id || null,
+        starred: !!opts.starred,
+        contact: opts.contact || [],
+        relationships: opts.relationships || [],
+        dates: opts.dates || [],
+        notes: opts.notes || [],
+        tasks: opts.tasks || [],
+        gifts: opts.gifts || [],
+        debts: opts.debts || [], // open debts only — settle-debt removes the row
+        interactions: opts.interactions || [],
+      };
+    }
+
+    var people = [
+      // The rich profile — every drawer section populated.
+      person('party-dadu', 'Dadu', {
+        role: 'Grandfather',
+        avatar_color: '#E89A3C',
+        cadence_days: 7,
+        lastDays: 2,
+        createdDays: 400,
+        circle_id: 'circle-family',
+        starred: true,
+        met: 'Family — my mother’s father.',
+        contact: [
+          { kind: 'phone', value: '+91 98400 22110' },
+          { kind: 'email', value: 'dadu.letters@gmail.com' },
+        ],
+        relationships: [
+          { relationship_id: 'rel-dadu-1', name: 'Nani', kind: 'Spouse', pet: null },
+          { relationship_id: 'rel-dadu-2', name: 'Laddu', kind: 'Pet', pet: 'dog' },
+        ],
+        dates: [
+          { date_id: 'date-dadu-bday', label: 'Birthday', month_day: '08-14', reminder_on: true },
+          { date_id: 'date-dadu-anniv', label: 'Anniversary', month_day: '02-21', reminder_on: false },
+        ],
+        notes: [
+          {
+            annotation_id: 'note-dadu-1',
+            text: 'Retold the Marina Beach story again — third time, still funnier every telling.',
+            created_at: isoDaysAgo(2, 15),
+          },
+          {
+            annotation_id: 'note-dadu-2',
+            text: 'Wants large-print books only now. Eyes tire after a page of normal type.',
+            created_at: isoDaysAgo(20, 11),
+          },
+        ],
+        tasks: [
+          { task_id: 'task-dadu-1', text: 'Fix the font size on his tablet', done: false },
+          { task_id: 'task-dadu-2', text: 'Send the Ooty photos', done: true },
+        ],
+        gifts: [
+          { gift_id: 'gift-dadu-1', text: 'Large-print edition of Malgudi Days', state: 'idea' },
+          { gift_id: 'gift-dadu-2', text: 'Wool shawl from the hill market', state: 'given' },
+        ],
+        interactions: [
+          {
+            interaction_id: 'int-dadu-1',
+            kind: 'visit',
+            text: 'Sunday lunch. BP is under control again; he beat me at carrom twice.',
+            occurred_at: isoDaysAgo(2, 13),
+          },
+          {
+            interaction_id: 'int-dadu-2',
+            kind: 'call',
+            text: 'Reminded him about the eye check-up on Thursday.',
+            occurred_at: isoDaysAgo(9, 18),
+          },
+        ],
+      }),
+      person('party-meera', 'Meera Pillai', {
+        role: 'College friend',
+        avatar_color: '#7C5BD9',
+        cadence_days: 30,
+        lastDays: 12,
+        createdDays: 300,
+        circle_id: 'circle-college',
+        dates: [{ date_id: 'date-meera-bday', label: 'Birthday', month_day: '11-02', reminder_on: true }],
+        interactions: [
+          {
+            interaction_id: 'int-meera-1',
+            kind: 'call',
+            text: 'Caught up about her Pune move; she wants the Goa dates.',
+            occurred_at: isoDaysAgo(12, 19),
+          },
+        ],
+      }),
+      // Overdue — cadence 45, last spoke 60 days ago (Reconnect material).
+      person('party-arjun', 'Arjun Rao', {
+        role: 'Flatmate from Bangalore days',
+        avatar_color: '#2EA098',
+        cadence_days: 45,
+        lastDays: 60,
+        createdDays: 350,
+        circle_id: 'circle-college',
+        debts: [
+          {
+            debt_id: 'debt-arjun-1',
+            direction: 'owe',
+            amount_minor: 120000,
+            currency: 'USD',
+            reason: 'His half of the deposit refund',
+          },
+        ],
+        interactions: [
+          {
+            interaction_id: 'int-arjun-1',
+            kind: 'message',
+            text: 'Split the deposit refund; still owe him his half.',
+            occurred_at: isoDaysAgo(60, 10),
+          },
+        ],
+      }),
+      // Due soon — 50 of 60 cadence days elapsed.
+      person('party-sana', 'Sana Qureshi', {
+        role: 'Design lead, ex-colleague',
+        avatar_color: '#E0567A',
+        cadence_days: 60,
+        lastDays: 50,
+        createdDays: 500,
+        circle_id: 'circle-work',
+        starred: true,
+        gifts: [{ gift_id: 'gift-sana-1', text: 'Fountain pen ink sampler', state: 'idea' }],
+        interactions: [
+          {
+            interaction_id: 'int-sana-1',
+            kind: 'message',
+            text: 'Sent the portfolio feedback she asked for.',
+            occurred_at: isoDaysAgo(50, 16),
+          },
+        ],
+      }),
+      // No circle, no stored avatar colour (exercises the hash fallback),
+      // never contacted (daysSince counts from created_at).
+      person('party-ravi', 'Ravi Menon', {
+        role: 'Neighbour',
+        cadence_days: 90,
+        createdDays: 25,
+      }),
+      // "(park)" in the NAME: every write targeting this person parks —
+      // the reliable way to see the pending treatment from the drawer.
+      person('party-priya', 'Priya Nair (park)', {
+        role: 'Mentor',
+        avatar_color: '#4E68DD',
+        cadence_days: 21,
+        lastDays: 30,
+        createdDays: 200,
+        circle_id: 'circle-work',
+      }),
+    ];
+
+    var journal = [
+      {
+        entry_id: 'jr-1',
+        mood: '🙂',
+        text: 'Long walk after the standup. Called Dadu on the way back.',
+        entry_date: dayKey(0),
+        created_at: isoDaysAgo(0, 20),
+      },
+      {
+        entry_id: 'jr-2',
+        mood: '😄',
+        text: 'Meera confirmed the Goa dates. December, finally.',
+        entry_date: dayKey(-3),
+        created_at: isoDaysAgo(3, 21),
+      },
+    ];
+
+    return { circles: circles, people: people, journal: journal };
+  }
+
+  var peopleStore = appId === 'people' ? buildPeopleStore() : null;
+
+  function peopleDaysSince(iso) {
+    var t = new Date(iso).getTime();
+    return isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  }
+  // Days until the next annual MM-DD from today (0 = today) — mirrors
+  // queries/dashboard.js's daysUntilMonthDay.
+  function peopleDaysUntil(monthDay) {
+    var parts = String(monthDay).split('-');
+    var mo = Number(parts[0]);
+    var da = Number(parts[1]);
+    if (!mo || !da) return 9999;
+    var now = new Date();
+    var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    var next = new Date(now.getFullYear(), mo - 1, da);
+    if (next < today) next = new Date(now.getFullYear() + 1, mo - 1, da);
+    return Math.round((next - today) / 86400000);
+  }
+  function peopleRow(p) {
+    return {
+      party_id: p.party_id,
+      name: p.name,
+      role: p.role,
+      avatar_color: p.avatar_color,
+      cadence_days: p.cadence_days,
+      last_contacted_at: p.last_contacted_at,
+      created_at: p.created_at,
+      circle_id: p.circle_id,
+      starred: p.starred,
+      reminders: p.dates
+        .filter(function (d) {
+          return d.reminder_on;
+        })
+        .map(function (d) {
+          return { date_id: d.date_id, label: d.label, month_day: d.month_day };
+        }),
+    };
+  }
+  function peopleCard(p) {
+    return { party_id: p.party_id, name: p.name, avatar_color: p.avatar_color, role: p.role };
+  }
+
+  function peopleRead(query, input) {
+    var sortedCircles = peopleStore.circles.slice().sort(function (a, b) {
+      return String(a.name).localeCompare(String(b.name));
+    });
+    if (query === 'people') {
+      var limit = Math.min(Math.max(Number(input.limit) || 200, 20), 2000);
+      return {
+        people: peopleStore.people.slice(0, limit).map(peopleRow),
+        circles: sortedCircles,
+        truncated: peopleStore.people.length >= limit,
+        window: limit,
+      };
+    }
+    if (query === 'person') {
+      var p = peopleStore.people.find(function (x) {
+        return x.party_id === String(input.party_id || '');
+      });
+      if (!p) return { person: null };
+      return {
+        person: {
+          party_id: p.party_id,
+          name: p.name,
+          role: p.role,
+          avatar_color: p.avatar_color,
+          cadence_days: p.cadence_days,
+          last_contacted_at: p.last_contacted_at,
+          created_at: p.created_at,
+          met: p.met,
+          circle_id: p.circle_id,
+          starred: p.starred,
+          contact: p.contact,
+          relationships: p.relationships,
+          dates: p.dates,
+          notes: p.notes,
+          tasks: p.tasks,
+          gifts: p.gifts,
+          debts: p.debts,
+          interactions: p.interactions,
+        },
+      };
+    }
+    if (query === 'dashboard') {
+      var reconnect = peopleStore.people
+        .map(function (px) {
+          return { p: px, over: peopleDaysSince(px.last_contacted_at || px.created_at) - px.cadence_days };
+        })
+        .filter(function (x) {
+          return x.over >= 0;
+        })
+        .sort(function (a, b) {
+          return b.over - a.over;
+        })
+        .map(function (x) {
+          return peopleCard(x.p);
+        });
+      var upcoming = [];
+      peopleStore.people.forEach(function (px) {
+        px.dates.forEach(function (d) {
+          if (!d.reminder_on) return;
+          upcoming.push(
+            Object.assign({}, peopleCard(px), {
+              date_id: d.date_id,
+              label: d.label,
+              month_day: d.month_day,
+              until: peopleDaysUntil(d.month_day),
+            }),
+          );
+        });
+      });
+      upcoming.sort(function (a, b) {
+        return a.until - b.until;
+      });
+      upcoming.forEach(function (u) {
+        delete u.until;
+      });
+      var recent = [];
+      peopleStore.people.forEach(function (px) {
+        px.interactions.forEach(function (i) {
+          recent.push(
+            Object.assign({}, peopleCard(px), {
+              interaction_id: i.interaction_id,
+              kind: i.kind,
+              text: i.text,
+              occurred_at: i.occurred_at,
+            }),
+          );
+        });
+      });
+      recent.sort(function (a, b) {
+        return String(b.occurred_at).localeCompare(String(a.occurred_at));
+      });
+      var starredCount = peopleStore.people.filter(function (px) {
+        return px.starred;
+      }).length;
+      return {
+        reconnect: reconnect,
+        upcoming: upcoming,
+        recent: recent.slice(0, 30),
+        counts: {
+          all: peopleStore.people.length,
+          reconnect: reconnect.length,
+          upcoming: upcoming.length,
+          starred: starredCount,
+        },
+      };
+    }
+    if (query === 'journal') {
+      var owner = peopleStore.journal.map(function (e) {
+        return { kind: 'entry', id: e.entry_id, sort_at: e.created_at, date: e.entry_date, mood: e.mood, text: e.text };
+      });
+      var auto = [];
+      peopleStore.people.forEach(function (px) {
+        px.interactions.forEach(function (i) {
+          auto.push({
+            kind: 'auto',
+            id: i.interaction_id,
+            sort_at: i.occurred_at,
+            date: i.occurred_at,
+            touch: i.kind,
+            text: i.text,
+            party_id: px.party_id,
+            name: px.name,
+            avatar_color: px.avatar_color,
+          });
+        });
+      });
+      var entries = owner.concat(auto).sort(function (a, b) {
+        return String(b.sort_at).localeCompare(String(a.sort_at));
+      });
+      return { entries: entries };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { people: [] };
+      var hits = peopleStore.people.filter(function (px) {
+        var noteText = px.notes
+          .map(function (n) {
+            return n.text;
+          })
+          .join(' ');
+        return (px.name + ' ' + px.role + ' ' + noteText).toLowerCase().indexOf(term) !== -1;
+      });
+      return {
+        people: hits.map(function (px) {
+          var noteHit = px.notes.find(function (n) {
+            return n.text.toLowerCase().indexOf(term) !== -1;
+          });
+          var row = peopleRow(px);
+          // The real search query never re-fetches dates — reminders stays [].
+          row.reminders = [];
+          row.snippet = noteHit ? '…⟦' + noteHit.text.slice(0, 80) + '⟧…' : '';
+          return row;
+        }),
+      };
+    }
+    console.warn('[mock-centraid] people: unmapped query', query);
+    return {};
+  }
+
+  function peopleWrite(action, input) {
+    function findPerson(id) {
+      return peopleStore.people.find(function (p) {
+        return p.party_id === id;
+      });
+    }
+    function findCircle(id) {
+      return peopleStore.circles.find(function (c) {
+        return c.circle_id === id;
+      });
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(predicate) {
+      return { status: 'failed', reason: predicate, predicate: predicate };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+    // Park when the write targets a person whose NAME carries the marker, or
+    // when the typed text itself does.
+    function personParked(p) {
+      return p && isParkTrigger(p.name);
+    }
+
+    switch (action) {
+      case 'add-person': {
+        var displayName = String(input.display_name || '').trim();
+        if (isParkTrigger(displayName)) return parked();
+        var id = uid('party');
+        peopleStore.people.unshift({
+          party_id: id,
+          name: displayName,
+          role: input.role || '',
+          avatar_color: input.avatar_color || null,
+          cadence_days: Number(input.cadence_days) || 30,
+          last_contacted_at: null,
+          created_at: new Date().toISOString(),
+          met: '',
+          circle_id: input.circle_id || null,
+          starred: false,
+          contact: [],
+          relationships: [],
+          dates: [],
+          notes: [],
+          tasks: [],
+          gifts: [],
+          debts: [],
+          interactions: [],
+        });
+        return ok({ party_id: id });
+      }
+      case 'edit-person': {
+        var p1 = findPerson(input.party_id);
+        if (!p1) return refuse('not_found');
+        if (personParked(p1) || isParkTrigger(input.display_name)) return parked();
+        if (input.display_name != null) p1.name = String(input.display_name);
+        if (input.role != null) p1.role = String(input.role);
+        if (input.avatar_color != null) p1.avatar_color = String(input.avatar_color);
+        if (input.met != null) p1.met = String(input.met);
+        return ok({ party_id: p1.party_id });
+      }
+      case 'set-cadence': {
+        var p2 = findPerson(input.party_id);
+        if (!p2) return refuse('not_found');
+        if (personParked(p2)) return parked();
+        p2.cadence_days = Number(input.cadence_days);
+        return ok({ party_id: p2.party_id });
+      }
+      case 'log-interaction': {
+        var p3 = findPerson(input.party_id);
+        if (!p3) return refuse('not_found');
+        if (personParked(p3) || isParkTrigger(input.text)) return parked();
+        var now = new Date().toISOString();
+        p3.interactions.unshift({
+          interaction_id: uid('int'),
+          kind: String(input.kind),
+          text: input.text ? String(input.text) : '',
+          occurred_at: now,
+        });
+        p3.last_contacted_at = now;
+        return ok({ interaction_id: p3.interactions[0].interaction_id });
+      }
+      case 'star-person':
+      case 'unstar-person': {
+        var p4 = findPerson(input.party_id);
+        if (!p4) return refuse('not_found');
+        if (personParked(p4)) return parked();
+        p4.starred = action === 'star-person';
+        return ok({ party_id: p4.party_id });
+      }
+      case 'move-person': {
+        var p5 = findPerson(input.party_id);
+        if (!p5) return refuse('not_found');
+        if (personParked(p5)) return parked();
+        if (input.circle_id != null && !findCircle(input.circle_id)) return refuse('not_found');
+        p5.circle_id = input.circle_id != null ? String(input.circle_id) : null;
+        return ok({ party_id: p5.party_id });
+      }
+      case 'add-note': {
+        var p6 = findPerson(input.party_id);
+        if (!p6) return refuse('not_found');
+        if (personParked(p6) || isParkTrigger(input.text)) return parked();
+        var note = { annotation_id: uid('note'), text: String(input.text), created_at: new Date().toISOString() };
+        p6.notes.unshift(note);
+        return ok({ annotation_id: note.annotation_id });
+      }
+      case 'add-task': {
+        var p7 = findPerson(input.party_id);
+        if (!p7) return refuse('not_found');
+        if (personParked(p7) || isParkTrigger(input.text)) return parked();
+        var ptask = { task_id: uid('ptask'), text: String(input.text), done: false };
+        p7.tasks.unshift(ptask);
+        return ok({ task_id: ptask.task_id });
+      }
+      case 'toggle-task': {
+        var ownerT = null;
+        var hitT = null;
+        peopleStore.people.forEach(function (px) {
+          px.tasks.forEach(function (t) {
+            if (t.task_id === input.task_id) {
+              ownerT = px;
+              hitT = t;
+            }
+          });
+        });
+        if (!hitT) return refuse('not_found');
+        if (personParked(ownerT)) return parked();
+        hitT.done = !hitT.done;
+        return ok({ task_id: hitT.task_id });
+      }
+      case 'add-important-date': {
+        var p8 = findPerson(input.party_id);
+        if (!p8) return refuse('not_found');
+        if (personParked(p8) || isParkTrigger(input.label)) return parked();
+        var date = {
+          date_id: uid('date'),
+          label: String(input.label),
+          month_day: String(input.month_day),
+          reminder_on: !!input.reminder_on,
+        };
+        p8.dates.push(date);
+        return ok({ date_id: date.date_id });
+      }
+      case 'toggle-reminder': {
+        var ownerD = null;
+        var hitD = null;
+        peopleStore.people.forEach(function (px) {
+          px.dates.forEach(function (d) {
+            if (d.date_id === input.date_id) {
+              ownerD = px;
+              hitD = d;
+            }
+          });
+        });
+        if (!hitD) return refuse('not_found');
+        if (personParked(ownerD)) return parked();
+        hitD.reminder_on = !hitD.reminder_on;
+        return ok({ date_id: hitD.date_id });
+      }
+      case 'add-relationship': {
+        var p9 = findPerson(input.party_id);
+        if (!p9) return refuse('not_found');
+        if (personParked(p9) || isParkTrigger(input.name)) return parked();
+        var rel = {
+          relationship_id: uid('rel'),
+          name: String(input.name),
+          kind: String(input.kind),
+          pet: input.pet != null ? String(input.pet) : null,
+        };
+        p9.relationships.push(rel);
+        return ok({ relationship_id: rel.relationship_id });
+      }
+      case 'add-gift': {
+        var p10 = findPerson(input.party_id);
+        if (!p10) return refuse('not_found');
+        if (personParked(p10) || isParkTrigger(input.text)) return parked();
+        var gift = { gift_id: uid('gift'), text: String(input.text), state: 'idea' };
+        p10.gifts.unshift(gift);
+        return ok({ gift_id: gift.gift_id });
+      }
+      case 'toggle-gift': {
+        var ownerG = null;
+        var hitG = null;
+        peopleStore.people.forEach(function (px) {
+          px.gifts.forEach(function (g) {
+            if (g.gift_id === input.gift_id) {
+              ownerG = px;
+              hitG = g;
+            }
+          });
+        });
+        if (!hitG) return refuse('not_found');
+        if (personParked(ownerG)) return parked();
+        hitG.state = hitG.state === 'given' ? 'idea' : 'given';
+        return ok({ gift_id: hitG.gift_id });
+      }
+      case 'add-debt': {
+        var p11 = findPerson(input.party_id);
+        if (!p11) return refuse('not_found');
+        if (personParked(p11) || isParkTrigger(input.reason)) return parked();
+        var debt = {
+          debt_id: uid('debt'),
+          direction: String(input.direction),
+          amount_minor: Number(input.amount_minor),
+          currency: 'USD',
+          reason: input.reason ? String(input.reason) : '',
+        };
+        p11.debts.unshift(debt);
+        return ok({ debt_id: debt.debt_id });
+      }
+      case 'settle-debt': {
+        var ownerDb = null;
+        peopleStore.people.forEach(function (px) {
+          var idx = px.debts.findIndex(function (d) {
+            return d.debt_id === input.debt_id;
+          });
+          if (idx !== -1) {
+            ownerDb = px;
+            if (!isParkTrigger(px.name)) px.debts.splice(idx, 1);
+          }
+        });
+        if (!ownerDb) return refuse('not_found');
+        if (personParked(ownerDb)) return parked();
+        // The real command stamps settled_at; the person query filters those
+        // out, so dropping the row is observationally identical.
+        return ok({});
+      }
+      case 'create-circle': {
+        var cname = String(input.name || '').trim();
+        if (isParkTrigger(cname)) return parked();
+        var dupC = peopleStore.circles.some(function (c) {
+          return c.name === cname;
+        });
+        if (dupC) return refuse('name_unused_by_owner');
+        var circle = { circle_id: uid('circle'), name: cname };
+        peopleStore.circles.push(circle);
+        return ok({ circle_id: circle.circle_id });
+      }
+      case 'rename-circle': {
+        var c1 = findCircle(input.circle_id);
+        if (!c1) return refuse('not_found');
+        var newCName = String(input.name || '').trim();
+        if (isParkTrigger(c1.name) || isParkTrigger(newCName)) return parked();
+        var dupC2 = peopleStore.circles.some(function (c) {
+          return c.circle_id !== c1.circle_id && c.name === newCName;
+        });
+        if (dupC2) return refuse('name_unused_by_owner');
+        c1.name = newCName;
+        return ok({ circle_id: c1.circle_id });
+      }
+      case 'delete-circle': {
+        var c2 = findCircle(input.circle_id);
+        if (!c2) return refuse('not_found');
+        if (isParkTrigger(c2.name)) return parked();
+        var occupied = peopleStore.people.some(function (px) {
+          return px.circle_id === c2.circle_id;
+        });
+        if (occupied) return refuse('circle_is_empty');
+        peopleStore.circles = peopleStore.circles.filter(function (c) {
+          return c.circle_id !== c2.circle_id;
+        });
+        return ok({});
+      }
+      case 'add-journal-entry': {
+        if (isParkTrigger(input.text)) return parked();
+        var entry = {
+          entry_id: uid('jr'),
+          mood: String(input.mood),
+          text: String(input.text),
+          entry_date: input.entry_date ? String(input.entry_date) : dayKey(0),
+          created_at: new Date().toISOString(),
+        };
+        peopleStore.journal.unshift(entry);
+        return ok({ entry_id: entry.entry_id });
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Tally fixtures — see packages/blueprints/apps/tally/queries/dashboard.js
+  // for the shared balance engine every query reads through: balances are
+  // DERIVED (pairwise: positive = the friend owes me; groupNet: positive =
+  // that member gets money back) and ledgerRow decorates each expense with
+  // the owner's lent/borrowed stance + named splits. The store keeps ground
+  // facts (friends/groups/expenses-with-splits/settlements) and this mock
+  // ports those three fold functions verbatim. Money is INTEGER minor units;
+  // currency INR keeps seed.js's Goa-trip amounts realistic (fmtMoney
+  // localizes ₹). Scenario from apps/tally/seed.js (3 friends, Goa Trip,
+  // 5 expenses, 1 partial settlement) plus a second group with exact- and
+  // percent-style uneven splits. seed.js's icon 'Palmtree'/named colors are
+  // NOT reused: the components render `icon` as a literal glyph and the
+  // app's own pickers use emoji + hex (see format.js GROUP_ICONS /
+  // FRIEND_COLORS), so the fixture follows the components. "(park)" in an
+  // expense description / friend / group name parks the write.
+  // ---------------------------------------------------------------------
+  var TALLY_ME = 'party-you';
+
+  function buildTallyStore() {
+    if (EMPTY_MODE) return { me: TALLY_ME, currency: 'INR', friends: [], groups: [], expenses: [], settlements: [] };
+
+    var friends = [
+      { party_id: 'party-meera', name: 'Meera', avatar_color: '#E0567A' },
+      { party_id: 'party-arjun', name: 'Arjun', avatar_color: '#2EA098' },
+      { party_id: 'party-sana', name: 'Sana', avatar_color: '#7C5BD9' },
+    ];
+    var groups = [
+      {
+        group_id: 'group-goa',
+        name: 'Goa Trip',
+        icon: '🏖️',
+        color: '#0FA678',
+        members: [TALLY_ME, 'party-meera', 'party-arjun', 'party-sana'],
+      },
+      {
+        group_id: 'group-flat',
+        name: 'Flat 4B',
+        icon: '🏠',
+        color: '#4E68DD',
+        members: [TALLY_ME, 'party-arjun'],
+      },
+    ];
+
+    function exp(id, groupId, description, amount, paidBy, category, daysAgo, splits) {
+      return {
+        expense_id: id,
+        group_id: groupId,
+        description: description,
+        amount_minor: amount,
+        category: category,
+        spent_on: dayKey(-daysAgo),
+        paid_by: paidBy,
+        splits: splits, // { party_id: share_minor } — must sum to amount_minor
+      };
+    }
+
+    var expenses = [
+      // Equal 4-way splits (remainder on the payer, like seed.js's even()).
+      exp('exp-lunch', 'group-goa', 'Beach shack lunch', 248000, TALLY_ME, 'food', 6, {
+        'party-you': 62000,
+        'party-meera': 62000,
+        'party-arjun': 62000,
+        'party-sana': 62000,
+      }),
+      exp('exp-scooter', 'group-goa', 'Scooter rentals, 2 days', 160000, 'party-arjun', 'transport', 6, {
+        'party-you': 40000,
+        'party-meera': 40000,
+        'party-arjun': 40000,
+        'party-sana': 40000,
+      }),
+      exp('exp-groceries', 'group-goa', 'Groceries for the villa', 187550, 'party-meera', 'groceries', 5, {
+        'party-you': 46887,
+        'party-meera': 46889,
+        'party-arjun': 46887,
+        'party-sana': 46887,
+      }),
+      // Partial participation — Arjun sat this one out.
+      exp('exp-market', 'group-goa', 'Night market', 92000, 'party-sana', 'fun', 4, {
+        'party-you': 30666,
+        'party-meera': 30666,
+        'party-sana': 30668,
+      }),
+      exp('exp-ferry', 'group-goa', 'Ferry tickets', 60000, TALLY_ME, 'travel', 4, {
+        'party-you': 15000,
+        'party-meera': 15000,
+        'party-arjun': 15000,
+        'party-sana': 15000,
+      }),
+      // Exact-style uneven split (bigger room, bigger share).
+      exp('exp-rent', 'group-flat', 'July rent', 3600000, TALLY_ME, 'rent', 10, {
+        'party-you': 2000000,
+        'party-arjun': 1600000,
+      }),
+      // Percent-style split (60/40).
+      exp('exp-internet', 'group-flat', 'Fiber internet', 140000, 'party-arjun', 'utilities', 8, {
+        'party-you': 84000,
+        'party-arjun': 56000,
+      }),
+    ];
+
+    var settlements = [
+      {
+        settlement_id: 'settle-1',
+        from_party: 'party-sana',
+        to_party: TALLY_ME,
+        amount_minor: 50000,
+        group_id: 'group-goa',
+        paid_on: dayKey(-2),
+      },
+    ];
+
+    return { me: TALLY_ME, currency: 'INR', friends: friends, groups: groups, expenses: expenses, settlements: settlements };
+  }
+
+  var tallyStore = appId === 'tally' ? buildTallyStore() : null;
+
+  function tallyInitials(name) {
+    if (!name) return '?';
+    return name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map(function (w) {
+        return w[0];
+      })
+      .join('')
+      .toUpperCase();
+  }
+  function tallyPerson(pid) {
+    if (pid === tallyStore.me) {
+      return { party_id: pid, name: 'You', color: '#0FA678', initials: 'You', is_me: true };
+    }
+    var f = tallyStore.friends.find(function (x) {
+      return x.party_id === pid;
+    });
+    if (!f) return { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?', is_me: false };
+    return {
+      party_id: pid,
+      name: f.name,
+      color: f.avatar_color || '#5C677D',
+      initials: tallyInitials(f.name),
+      is_me: false,
+    };
+  }
+  /** Port of queries/dashboard.js pairwise(): net per friend vs the owner —
+   *  positive = they owe me. */
+  function tallyPairwise() {
+    var me = tallyStore.me;
+    var b = {};
+    tallyStore.friends.forEach(function (f) {
+      b[f.party_id] = 0;
+    });
+    tallyStore.expenses.forEach(function (e) {
+      Object.keys(e.splits).forEach(function (pid) {
+        if (pid === e.paid_by) return;
+        var share = e.splits[pid];
+        if (e.paid_by === me && pid !== me) b[pid] = (b[pid] || 0) + share;
+        else if (pid === me && e.paid_by !== me) b[e.paid_by] = (b[e.paid_by] || 0) - share;
+      });
+    });
+    tallyStore.settlements.forEach(function (s) {
+      if (s.from_party === me && s.to_party !== me) b[s.to_party] = (b[s.to_party] || 0) + s.amount_minor;
+      else if (s.to_party === me && s.from_party !== me) b[s.from_party] = (b[s.from_party] || 0) - s.amount_minor;
+    });
+    return b;
+  }
+  /** Port of queries/dashboard.js groupNet(): net per member within a group —
+   *  positive = gets money back. */
+  function tallyGroupNet(gid) {
+    var net = {};
+    var g = tallyStore.groups.find(function (x) {
+      return x.group_id === gid;
+    });
+    (g ? g.members : []).forEach(function (pid) {
+      net[pid] = 0;
+    });
+    tallyStore.expenses.forEach(function (e) {
+      if (e.group_id !== gid) return;
+      net[e.paid_by] = (net[e.paid_by] || 0) + e.amount_minor;
+      Object.keys(e.splits).forEach(function (pid) {
+        net[pid] = (net[pid] || 0) - e.splits[pid];
+      });
+    });
+    tallyStore.settlements.forEach(function (s) {
+      if (s.group_id !== gid) return;
+      net[s.from_party] = (net[s.from_party] || 0) + s.amount_minor;
+      net[s.to_party] = (net[s.to_party] || 0) - s.amount_minor;
+    });
+    return net;
+  }
+  /** Port of queries/dashboard.js ledgerRow(): the expense decorated with the
+   *  owner's lent/borrowed stance. */
+  function tallyLedgerRow(e) {
+    var me = tallyStore.me;
+    var yourShare = e.splits[me] != null ? e.splits[me] : 0;
+    var involved = e.splits[me] != null;
+    var role;
+    var amount;
+    if (e.paid_by === me) {
+      role = 'lent';
+      amount = e.amount_minor - yourShare;
+    } else if (involved) {
+      role = 'borrowed';
+      amount = yourShare;
+    } else {
+      role = 'none';
+      amount = e.amount_minor;
+    }
+    return {
+      expense_id: e.expense_id,
+      group_id: e.group_id,
+      description: e.description,
+      amount_minor: e.amount_minor,
+      category: e.category,
+      spent_on: e.spent_on,
+      paid_by: e.paid_by,
+      paid_by_name: tallyPerson(e.paid_by).name,
+      your_role: role,
+      your_amount_minor: amount,
+      splits: Object.keys(e.splits).map(function (pid) {
+        var p = tallyPerson(pid);
+        return { party_id: pid, name: p.name, color: p.color, initials: p.initials, share_minor: e.splits[pid] };
+      }),
+    };
+  }
+  function tallyGroupName(gid) {
+    var g = tallyStore.groups.find(function (x) {
+      return x.group_id === gid;
+    });
+    return g ? g.name : '';
+  }
+  function tallySortedExpenses() {
+    return tallyStore.expenses.slice().sort(function (a, b) {
+      return String(b.spent_on).localeCompare(String(a.spent_on));
+    });
+  }
+
+  function tallyRead(query, input) {
+    if (query === 'dashboard') {
+      var bal = tallyPairwise();
+      var friends = tallyStore.friends.map(function (f) {
+        var p = tallyPerson(f.party_id);
+        return { party_id: f.party_id, name: p.name, color: p.color, initials: p.initials, net_minor: bal[f.party_id] || 0 };
+      });
+      var owe = 0;
+      var owed = 0;
+      Object.keys(bal).forEach(function (pid) {
+        if (bal[pid] > 0) owed += bal[pid];
+        else if (bal[pid] < 0) owe += -bal[pid];
+      });
+      var groups = tallyStore.groups.map(function (g) {
+        var net = tallyGroupNet(g.group_id);
+        return {
+          group_id: g.group_id,
+          name: g.name,
+          icon: g.icon,
+          color: g.color,
+          member_count: g.members.length,
+          owner_net_minor: net[tallyStore.me] || 0,
+        };
+      });
+      return {
+        me: tallyStore.me,
+        currency: tallyStore.currency,
+        friends: friends,
+        groups: groups,
+        owe_total_minor: owe,
+        owed_total_minor: owed,
+      };
+    }
+    if (query === 'group') {
+      var gid = String(input.group_id || '');
+      var g = tallyStore.groups.find(function (x) {
+        return x.group_id === gid;
+      });
+      if (!g) return { me: tallyStore.me, currency: tallyStore.currency, group: null, members: [], ledger: [] };
+      var net = tallyGroupNet(gid);
+      return {
+        me: tallyStore.me,
+        currency: tallyStore.currency,
+        group: { group_id: g.group_id, name: g.name, icon: g.icon, color: g.color },
+        members: g.members.map(function (pid) {
+          var p = tallyPerson(pid);
+          return { party_id: pid, name: p.name, color: p.color, initials: p.initials, is_me: p.is_me, net_minor: net[pid] || 0 };
+        }),
+        ledger: tallySortedExpenses()
+          .filter(function (e) {
+            return e.group_id === gid;
+          })
+          .map(tallyLedgerRow),
+      };
+    }
+    if (query === 'friend') {
+      var pid = String(input.party_id || '');
+      var isFriend = tallyStore.friends.some(function (f) {
+        return f.party_id === pid;
+      });
+      if (!isFriend || pid === tallyStore.me) {
+        return { me: tallyStore.me, currency: tallyStore.currency, friend: null, ledger: [] };
+      }
+      var p = tallyPerson(pid);
+      var netF = tallyPairwise()[pid] || 0;
+      var me = tallyStore.me;
+      return {
+        me: me,
+        currency: tallyStore.currency,
+        friend: { party_id: pid, name: p.name, color: p.color, initials: p.initials, net_minor: netF },
+        ledger: tallySortedExpenses()
+          .filter(function (e) {
+            return e.splits[pid] != null && e.splits[me] != null && (e.paid_by === pid || e.paid_by === me);
+          })
+          .map(tallyLedgerRow),
+      };
+    }
+    if (query === 'activity') {
+      var meA = tallyStore.me;
+      var rows = [];
+      tallyStore.expenses.forEach(function (e) {
+        var yourShare = e.splits[meA] != null ? e.splits[meA] : 0;
+        var role = 'none';
+        var amount = 0;
+        if (e.paid_by === meA) {
+          role = 'lent';
+          amount = e.amount_minor - yourShare;
+        } else if (e.splits[meA] != null) {
+          role = 'borrowed';
+          amount = yourShare;
+        }
+        rows.push({
+          kind: 'expense',
+          date: e.spent_on,
+          description: e.description,
+          category: e.category,
+          group_name: tallyGroupName(e.group_id),
+          paid_by: e.paid_by,
+          paid_by_name: tallyPerson(e.paid_by).name,
+          amount_minor: e.amount_minor,
+          your_role: role,
+          your_amount_minor: amount,
+        });
+      });
+      tallyStore.settlements.forEach(function (s) {
+        rows.push({
+          kind: 'settlement',
+          date: s.paid_on,
+          from_party: s.from_party,
+          from_name: tallyPerson(s.from_party).name,
+          to_party: s.to_party,
+          to_name: tallyPerson(s.to_party).name,
+          amount_minor: s.amount_minor,
+        });
+      });
+      rows.sort(function (a, b) {
+        return String(b.date).localeCompare(String(a.date));
+      });
+      return { me: meA, currency: tallyStore.currency, activity: rows };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { me: null, currency: 'USD', results: [] };
+      var results = tallySortedExpenses()
+        .filter(function (e) {
+          return String(e.description || '').toLowerCase().indexOf(term) !== -1;
+        })
+        .map(function (e) {
+          return Object.assign(tallyLedgerRow(e), { group_name: tallyGroupName(e.group_id) });
+        });
+      return { me: tallyStore.me, currency: tallyStore.currency, results: results };
+    }
+    console.warn('[mock-centraid] tally: unmapped query', query);
+    return {};
+  }
+
+  function tallyWrite(action, input) {
+    function findGroup(id) {
+      return tallyStore.groups.find(function (g) {
+        return g.group_id === id;
+      });
+    }
+    function findExpense(id) {
+      return tallyStore.expenses.find(function (e) {
+        return e.expense_id === id;
+      });
+    }
+    function splitsToMap(arr) {
+      var map = {};
+      (arr || []).forEach(function (s) {
+        map[s.party_id] = Number(s.share_minor);
+      });
+      return map;
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(predicate) {
+      return { status: 'failed', reason: predicate, predicate: predicate };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+
+    switch (action) {
+      case 'add-expense': {
+        var desc = String(input.description || '').trim();
+        if (isParkTrigger(desc)) return parked();
+        var g0 = findGroup(input.group_id);
+        if (!g0) return refuse('not_found');
+        var e0 = {
+          expense_id: uid('exp'),
+          group_id: g0.group_id,
+          description: desc,
+          amount_minor: Number(input.amount_minor),
+          category: input.category || 'general',
+          spent_on: input.spent_on ? String(input.spent_on) : dayKey(0),
+          paid_by: String(input.paid_by),
+          splits: splitsToMap(input.splits),
+        };
+        tallyStore.expenses.unshift(e0);
+        return ok({ expense_id: e0.expense_id });
+      }
+      case 'edit-expense': {
+        var e1 = findExpense(input.expense_id);
+        if (!e1) return refuse('not_found');
+        if (isParkTrigger(e1.description) || isParkTrigger(input.description)) return parked();
+        if (input.description != null) e1.description = String(input.description).trim();
+        if (input.amount_minor != null) e1.amount_minor = Number(input.amount_minor);
+        if (input.paid_by != null) e1.paid_by = String(input.paid_by);
+        if (input.category != null) e1.category = String(input.category);
+        if (input.spent_on != null) e1.spent_on = String(input.spent_on);
+        if (input.splits != null) e1.splits = splitsToMap(input.splits);
+        return ok({ expense_id: e1.expense_id });
+      }
+      case 'delete-expense': {
+        var e2 = findExpense(input.expense_id);
+        if (!e2) return refuse('not_found');
+        if (isParkTrigger(e2.description)) return parked();
+        tallyStore.expenses = tallyStore.expenses.filter(function (e) {
+          return e.expense_id !== e2.expense_id;
+        });
+        return ok({});
+      }
+      case 'settle-up': {
+        var s0 = {
+          settlement_id: uid('settle'),
+          from_party: String(input.from_party),
+          to_party: String(input.to_party),
+          amount_minor: Number(input.amount_minor),
+          group_id: input.group_id != null ? String(input.group_id) : null,
+          paid_on: input.paid_on ? String(input.paid_on) : dayKey(0),
+        };
+        tallyStore.settlements.unshift(s0);
+        return ok({ settlement_id: s0.settlement_id });
+      }
+      case 'add-friend': {
+        var fname = String(input.name || '').trim();
+        if (isParkTrigger(fname)) return parked();
+        var fid = uid('party');
+        tallyStore.friends.push({ party_id: fid, name: fname, avatar_color: input.avatar_color || '#5C677D' });
+        return ok({ party_id: fid });
+      }
+      case 'create-group': {
+        var gname = String(input.name || '').trim();
+        if (isParkTrigger(gname)) return parked();
+        var gid2 = uid('group');
+        var memberIds = (input.member_ids || []).map(String);
+        if (memberIds.indexOf(tallyStore.me) === -1) memberIds.unshift(tallyStore.me);
+        tallyStore.groups.push({
+          group_id: gid2,
+          name: gname,
+          icon: input.icon || '👥',
+          color: input.color || '#0FA678',
+          members: memberIds,
+        });
+        return ok({ group_id: gid2 });
+      }
+      case 'rename-group': {
+        var g1 = findGroup(input.group_id);
+        if (!g1) return refuse('not_found');
+        var newGName = String(input.name || '').trim();
+        if (isParkTrigger(g1.name) || isParkTrigger(newGName)) return parked();
+        g1.name = newGName;
+        return ok({ group_id: g1.group_id });
+      }
+      case 'add-group-member': {
+        var g2 = findGroup(input.group_id);
+        if (!g2) return refuse('not_found');
+        if (isParkTrigger(g2.name)) return parked();
+        var pidAdd = String(input.party_id);
+        if (g2.members.indexOf(pidAdd) !== -1) return refuse('member_not_in_group');
+        g2.members.push(pidAdd);
+        return ok({});
+      }
+      case 'remove-group-member': {
+        var g3 = findGroup(input.group_id);
+        if (!g3) return refuse('not_found');
+        if (isParkTrigger(g3.name)) return parked();
+        var pidRm = String(input.party_id);
+        var onLedger = tallyStore.expenses.some(function (e) {
+          return e.group_id === g3.group_id && (e.paid_by === pidRm || e.splits[pidRm] != null);
+        });
+        if (onLedger) return refuse('member_off_ledger');
+        g3.members = g3.members.filter(function (m) {
+          return m !== pidRm;
+        });
+        return ok({});
+      }
+      case 'delete-group': {
+        var g4 = findGroup(input.group_id);
+        if (!g4) return refuse('not_found');
+        if (isParkTrigger(g4.name)) return parked();
+        var holdsExpenses = tallyStore.expenses.some(function (e) {
+          return e.group_id === g4.group_id;
+        });
+        if (holdsExpenses) return refuse('group_holds_no_expenses');
+        tallyStore.groups = tallyStore.groups.filter(function (g) {
+          return g.group_id !== g4.group_id;
+        });
+        return ok({});
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // Locker fixtures — see packages/blueprints/apps/locker/queries/items.js
+  // for the secret-free list-row shape (item_id/type/title/subtitle/favorite/
+  // tags/weak/reused/compromised/severity/updated_at/purge_at) and item.js
+  // for the single-item detail — the ONLY query carrying secrets (password/
+  // otp_seed/card_number/cvv/content, plaintext here since there is no
+  // reveal round trip to mock). The store keeps one superset object per
+  // item; lockerRow() replicates items.js's subtitleOf()/severity rules. The
+  // GitHub login carries the classic 'JBSWY3DPEHPK3PXP' base32 seed so the
+  // real totp.js ticker computes live 6-digit codes. Trash rows lose their
+  // weak/reused flags (queries/trash.js never consults the watchtower) —
+  // replicated on purpose. locker has no seed.js; data is invented. The
+  // UI's "Connector alias" field sends an `alias` key the real action
+  // wrappers silently drop — the mock ignores it the same way. "(park)" in
+  // an item title parks every write against it.
+  // ---------------------------------------------------------------------
+  function buildLockerStore() {
+    if (EMPTY_MODE) return { items: [] };
+
+    function item(id, type, title, opts) {
+      opts = opts || {};
+      return {
+        item_id: id,
+        type: type,
+        title: title,
+        username: opts.username || null,
+        password: opts.password || null,
+        url: opts.url || null,
+        otp_seed: opts.otp_seed || null,
+        notes: opts.notes || null,
+        cardholder: opts.cardholder || null,
+        card_number: opts.card_number || null,
+        expiry: opts.expiry || null,
+        cvv: opts.cvv || null,
+        brand: opts.brand || null,
+        content: opts.content || null,
+        fullname: opts.fullname || null,
+        email: opts.email || null,
+        phone: opts.phone || null,
+        address: opts.address || null,
+        network: opts.network || null,
+        compromised: !!opts.compromised,
+        weak: !!opts.weak,
+        reused: !!opts.reused,
+        favorite: !!opts.favorite,
+        tags: opts.tags || [],
+        trashed: !!opts.trashed,
+        purge_at: opts.purge_at || null,
+        updated_at: isoDaysAgo(opts.age != null ? opts.age : 10),
+      };
+    }
+
+    var items = [
+      item('item-github', 'login', 'GitHub', {
+        username: 'maya-codes',
+        password: 'correct-horse-battery-9!',
+        url: 'https://github.com/login',
+        otp_seed: 'JBSWY3DPEHPK3PXP',
+        favorite: true,
+        tags: ['dev', 'work'],
+        age: 2,
+      }),
+      item('item-card-visa', 'card', 'HDFC Visa', {
+        cardholder: 'Maya Krishnan',
+        card_number: '4111111111111111',
+        expiry: '09/28',
+        cvv: '842',
+        brand: 'Visa',
+        tags: ['finance'],
+        age: 11,
+      }),
+      item('item-note-server', 'note', 'Server room passcode', {
+        content: 'Rack B, cabinet 3. Combo 4-8-15-16.\nAsk facilities for the new badge before Friday.',
+        tags: ['office'],
+        age: 60,
+      }),
+      item('item-identity', 'identity', 'Personal', {
+        fullname: 'Maya Krishnan',
+        email: 'maya@fastmail.in',
+        phone: '+91 98765 43210',
+        address: '14 Cunningham Rd, Bengaluru 560052',
+        age: 90,
+      }),
+      // Watchtower material: one weak+reused, one breached.
+      item('item-forum', 'login', 'Old Forum Account', {
+        username: 'maya',
+        password: 'password1',
+        url: 'https://forum.example.com',
+        weak: true,
+        reused: true,
+        age: 200,
+      }),
+      item('item-linkedin', 'login', 'LinkedIn', {
+        username: 'maya@fastmail.in',
+        password: 'Sunshine123!',
+        url: 'https://www.linkedin.com',
+        compromised: true,
+        tags: ['social'],
+        age: 150,
+      }),
+      item('item-wifi-home', 'wifi', 'Home Wi-Fi', {
+        network: 'Casa-5G',
+        password: 'chai-biscuit-42',
+        age: 30,
+      }),
+      item('item-door-code', 'password', 'Building door code', {
+        password: '4415#',
+        tags: ['home'],
+        age: 45,
+      }),
+      // Parks every write against it (title marker).
+      item('item-bank', 'login', 'Netbanking (park)', {
+        username: 'maya.krishnan',
+        password: 'v3ry-s3cret-phrase',
+        url: 'https://netbanking.example.in',
+        tags: ['finance'],
+        age: 5,
+      }),
+      // Trashed — only the `trash` query returns it.
+      item('item-myspace', 'login', 'MySpace', {
+        username: 'maya_2006',
+        password: 'letmein',
+        url: 'https://myspace.com',
+        trashed: true,
+        purge_at: isoDaysFromNow(18),
+        age: 25,
+      }),
+    ];
+
+    return { items: items };
+  }
+
+  var lockerStore = appId === 'locker' ? buildLockerStore() : null;
+
+  /** Replicates queries/items.js decorate(): the secret-free list row.
+   *  Trash rows (queries/trash.js) never consult the watchtower, so their
+   *  weak/reused read false and severity comes from `compromised` alone. */
+  function lockerRow(it, inTrash) {
+    var subtitle;
+    if (it.type === 'login') subtitle = it.username || '—';
+    else if (it.type === 'card') subtitle = it.card_number ? '•••• ' + it.card_number.slice(-4) : 'Card';
+    else if (it.type === 'note') subtitle = 'Secure note';
+    else if (it.type === 'identity') subtitle = it.email || '—';
+    else if (it.type === 'wifi') subtitle = it.network || '—';
+    else subtitle = 'Password';
+    var weak = inTrash ? false : it.weak;
+    var reused = inTrash ? false : it.reused;
+    var severity = it.compromised ? 'danger' : weak || reused ? 'warn' : '';
+    return {
+      item_id: it.item_id,
+      type: it.type,
+      title: it.title,
+      subtitle: subtitle,
+      favorite: it.favorite,
+      tags: it.tags.slice().sort(),
+      weak: weak,
+      reused: reused,
+      compromised: it.compromised,
+      severity: severity,
+      updated_at: it.updated_at,
+      purge_at: it.purge_at,
+    };
+  }
+
+  function lockerRead(query, input) {
+    function live() {
+      return lockerStore.items.filter(function (it) {
+        return !it.trashed;
+      });
+    }
+    if (query === 'items') {
+      var limit = Math.min(Math.max(Number(input.limit) || 300, 20), 2000);
+      var rows = live().map(function (it) {
+        return lockerRow(it, false);
+      });
+      return { items: rows.slice(0, limit), truncated: rows.length > limit, window: limit };
+    }
+    if (query === 'item') {
+      var it = lockerStore.items.find(function (x) {
+        return x.item_id === String(input.item_id || '');
+      });
+      if (!it) return { item: null };
+      return {
+        item: {
+          item_id: it.item_id,
+          type: it.type,
+          title: it.title,
+          username: it.username,
+          password: it.password,
+          url: it.url,
+          otp_seed: it.otp_seed,
+          notes: it.notes,
+          cardholder: it.cardholder,
+          card_number: it.card_number,
+          expiry: it.expiry,
+          cvv: it.cvv,
+          brand: it.brand,
+          content: it.content,
+          fullname: it.fullname,
+          email: it.email,
+          phone: it.phone,
+          address: it.address,
+          network: it.network,
+          compromised: it.compromised,
+          favorite: it.favorite,
+          tags: it.tags.slice().sort(),
+          trashed: it.trashed,
+          purge_at: it.purge_at,
+          updated_at: it.updated_at,
+        },
+      };
+    }
+    if (query === 'search') {
+      var term = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term) return { items: [] };
+      return {
+        items: live()
+          .filter(function (x) {
+            var hay = (x.title + ' ' + (x.username || '') + ' ' + (x.url || '')).toLowerCase();
+            return hay.indexOf(term) !== -1;
+          })
+          .map(function (x) {
+            return lockerRow(x, false);
+          }),
+      };
+    }
+    if (query === 'watchtower') {
+      var affected = live().filter(function (x) {
+        return x.compromised || x.weak || x.reused;
+      });
+      return {
+        compromised: live().filter(function (x) {
+          return x.compromised;
+        }).length,
+        weak: live().filter(function (x) {
+          return x.weak;
+        }).length,
+        reused: live().filter(function (x) {
+          return x.reused;
+        }).length,
+        items: affected.map(function (x) {
+          return lockerRow(x, false);
+        }),
+      };
+    }
+    if (query === 'trash') {
+      return {
+        items: lockerStore.items
+          .filter(function (x) {
+            return x.trashed;
+          })
+          .map(function (x) {
+            return lockerRow(x, true);
+          }),
+      };
+    }
+    console.warn('[mock-centraid] locker: unmapped query', query);
+    return {};
+  }
+
+  // Field lists straight from app.json's add-item/edit-item input schemas —
+  // anything else (the UI's `alias`, notably) is silently dropped, exactly
+  // like the real action wrappers' FIELDS whitelist.
+  var LOCKER_FIELDS = [
+    'username',
+    'password',
+    'url',
+    'otp_seed',
+    'notes',
+    'cardholder',
+    'card_number',
+    'expiry',
+    'cvv',
+    'brand',
+    'content',
+    'fullname',
+    'email',
+    'phone',
+    'address',
+    'network',
+  ];
+
+  function lockerWrite(action, input) {
+    function findItem(id) {
+      return lockerStore.items.find(function (x) {
+        return x.item_id === id;
+      });
+    }
+    function ok(output) {
+      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+    }
+    function refuse(predicate) {
+      return { status: 'failed', reason: predicate, predicate: predicate };
+    }
+    function parked() {
+      return { status: 'parked', invocationId: uid('inv') };
+    }
+
+    switch (action) {
+      case 'add-item': {
+        var title = String(input.title || '').trim();
+        if (isParkTrigger(title)) return parked();
+        var id = uid('item');
+        var it0 = {
+          item_id: id,
+          type: String(input.type || 'login'),
+          title: title,
+          compromised: false,
+          weak: false,
+          reused: false,
+          favorite: false,
+          tags: (input.tags || []).map(String),
+          trashed: false,
+          purge_at: null,
+          updated_at: new Date().toISOString(),
+        };
+        LOCKER_FIELDS.forEach(function (f) {
+          it0[f] = input[f] != null ? String(input[f]) : null;
+        });
+        lockerStore.items.unshift(it0);
+        return ok({ item_id: id });
+      }
+      case 'edit-item': {
+        var it1 = findItem(input.item_id);
+        if (!it1) return refuse('not_found');
+        if (it1.trashed) return refuse('item_trashed');
+        if (isParkTrigger(it1.title) || isParkTrigger(input.title)) return parked();
+        if (input.title != null) it1.title = String(input.title);
+        if (input.tags != null) it1.tags = input.tags.map(String);
+        LOCKER_FIELDS.forEach(function (f) {
+          if (input[f] != null) it1[f] = String(input[f]);
+        });
+        it1.updated_at = new Date().toISOString();
+        return ok({ item_id: it1.item_id });
+      }
+      case 'trash-item': {
+        var it2 = findItem(input.item_id);
+        if (!it2) return refuse('not_found');
+        if (isParkTrigger(it2.title)) return parked();
+        it2.trashed = true;
+        it2.purge_at = isoDaysFromNow(30);
+        it2.updated_at = new Date().toISOString();
+        return ok({ item_id: it2.item_id });
+      }
+      case 'restore-item': {
+        var it3 = findItem(input.item_id);
+        if (!it3) return refuse('not_found');
+        if (isParkTrigger(it3.title)) return parked();
+        it3.trashed = false;
+        it3.purge_at = null;
+        it3.updated_at = new Date().toISOString();
+        return ok({ item_id: it3.item_id });
+      }
+      case 'purge-item': {
+        var it4 = findItem(input.item_id);
+        if (!it4) return refuse('not_found');
+        if (isParkTrigger(it4.title)) return parked();
+        lockerStore.items = lockerStore.items.filter(function (x) {
+          return x.item_id !== it4.item_id;
+        });
+        return ok({});
+      }
+      case 'star-item': {
+        var it5 = findItem(input.item_id);
+        if (!it5) return refuse('not_found');
+        if (it5.trashed) return refuse('item_trashed');
+        if (isParkTrigger(it5.title)) return parked();
+        it5.favorite = true;
+        return ok({ item_id: it5.item_id });
+      }
+      case 'unstar-item': {
+        var it6 = findItem(input.item_id);
+        if (!it6) return refuse('not_found');
+        if (isParkTrigger(it6.title)) return parked();
+        it6.favorite = false;
+        return ok({ item_id: it6.item_id });
+      }
+      default:
+        return null; // unmapped — caller logs + returns {}
+    }
+  }
+
+  // ---------------------------------------------------------------------
   // window.centraid — fully replaces the real change-bridge's version
   // (static-server.ts's injectChangeBridge, which ran just before this
   // script and already opened an EventSource against our harness's
@@ -1725,6 +3328,9 @@
       if (appId === 'tasks') return tasksRead(opts.query, opts.input || {});
       if (appId === 'notes') return notesRead(opts.query, opts.input || {});
       if (appId === 'agenda') return agendaRead(opts.query, opts.input || {});
+      if (appId === 'people') return peopleRead(opts.query, opts.input || {});
+      if (appId === 'tally') return tallyRead(opts.query, opts.input || {});
+      if (appId === 'locker') return lockerRead(opts.query, opts.input || {});
       console.warn('[mock-centraid] unknown appId for read()', appId);
       return {};
     },
@@ -1737,6 +3343,9 @@
       else if (appId === 'tasks') result = tasksWrite(opts.action, opts.input || {});
       else if (appId === 'notes') result = notesWrite(opts.action, opts.input || {});
       else if (appId === 'agenda') result = agendaWrite(opts.action, opts.input || {});
+      else if (appId === 'people') result = peopleWrite(opts.action, opts.input || {});
+      else if (appId === 'tally') result = tallyWrite(opts.action, opts.input || {});
+      else if (appId === 'locker') result = lockerWrite(opts.action, opts.input || {});
       else console.warn('[mock-centraid] unknown appId for write()', appId);
       if (result == null) {
         console.warn('[mock-centraid] unmapped action, returning {}', opts.action, opts.input);
@@ -1779,7 +3388,13 @@
               ? notesStore
               : appId === 'agenda'
                 ? agendaStore
-                : null;
+                : appId === 'people'
+                  ? peopleStore
+                  : appId === 'tally'
+                    ? tallyStore
+                    : appId === 'locker'
+                      ? lockerStore
+                      : null;
     },
     reset() {
       if (appId === 'docs') docsStore = buildDocsStore();
@@ -1787,6 +3402,9 @@
       else if (appId === 'tasks') tasksStore = buildTasksStore();
       else if (appId === 'notes') notesStore = buildNotesStore();
       else if (appId === 'agenda') agendaStore = buildAgendaStore();
+      else if (appId === 'people') peopleStore = buildPeopleStore();
+      else if (appId === 'tally') tallyStore = buildTallyStore();
+      else if (appId === 'locker') lockerStore = buildLockerStore();
       fireChange([appId]);
     },
     fireChange: fireChange,

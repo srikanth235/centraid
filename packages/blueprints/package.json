@@ -31,7 +31,6 @@
     "@centraid/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "esbuild": "^0.28.1",
-    "lit": "3.3.3",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "typescript": "catalog:"

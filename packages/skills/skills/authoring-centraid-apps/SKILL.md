@@ -28,23 +28,13 @@ You are working inside a centraid app app folder. Your job is to author or modif
 
 Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/openclaw-plugin` (installed as a devDependency).
 
-### UI dialect — React or Lit (both supported)
+### UI dialect — React
 
-Two UI dialects are first-class; the runtime serves both:
-
-- **React** — `app.jsx`, imports from `./react-core.min.js` (createRoot, hooks, flushSync). The **default for new apps**: fresh scaffolds ship a React `app.jsx`.
-- **Lit** — `app.js`, imports `html`/`render`/directives from `./lit-core.min.js` (and optionally the kit's `KitElement` from `./elements.js`). This is the dialect of the bundled blueprint apps.
-
-**When modifying an existing app, keep its dialect.** Detect it before writing UI code: an `app.jsx` entry means React; an `app.js` importing `./lit-core.min.js` means Lit. Never convert an app between dialects unless the user explicitly asks for a rewrite.
+Apps are authored as React: `app.jsx`, imports from `./react-core.min.js` (createRoot, hooks, flushSync). The kit's own custom elements (`kit-avatar`, `kit-meter`, etc., from `./elements.js`) are dependency-free vanilla Web Components and drop directly into a React tree as lowercase JSX tags (`<kit-avatar name={...} />`).
 
 React apps may (and beyond a few hundred lines, should) split into modules: `app.jsx` stays the entry/orchestrator, pure view components live in `components/<Name>.jsx`, JSX-free helpers in sibling `.js` files. The gateway transpiles every `.jsx` per-request at any depth. Two rules keep this working: every relative import carries its extension (`./components/Grid.jsx`, never `./components/Grid` — tooling resolves extensionless imports but a real browser 404s), and from a subdirectory the shared runtime imports go up one level (`../react-core.min.js`, `../kit.js`). Keep every file under 500 lines.
 
-Everything else is dialect-independent: `window.centraid` read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes (`class=` in Lit templates, `className=` in JSX), and the inline settings bridge in `index.html`.
-
-Lit-specific traps (React apps have neither):
-
-1. Lit's standalone `render()` does **not** clear a container's pre-existing children on first commit — containers pre-filled with skeleton markup need a one-shot `replaceChildren()` mount guard before the first render.
-2. Once Lit owns a container, never raw-clear it (`innerHTML = ''` corrupts Lit's part cache and the next render throws) — clear with `render(nothing, container)`.
+Everything else: `window.centraid` read/write/describe/onChange, the `#consentBanner` pattern, kit.css classes via `className=`, and the inline settings bridge in `index.html`.
 
 ### Design system — shared tokens + kit primitives
 

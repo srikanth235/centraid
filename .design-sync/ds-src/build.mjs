@@ -9,9 +9,9 @@
 //   2. copies the canonical `kit.css` verbatim,
 //   3. concatenates tokens + fonts + bridge + kit.css into `styles/bundle.css`
 //      (the `cssEntry` every rendered design receives),
-//   4. copies the REAL component source (`elements.js` + its `lit-core.min.js`
-//      runtime) into `components/` — the single source of truth, no wrapper to
-//      keep in sync,
+//   4. copies the REAL component source (`elements.js`, dependency-free —
+//      no runtime bundle to carry alongside it) into `components/` — the
+//      single source of truth, no wrapper to keep in sync,
 //   5. emits one `@dsCard` preview HTML per component (embedding the real
 //      `<kit-*>` tag) and a `manifest.json` mapping tag → source + preview.
 //
@@ -50,16 +50,15 @@ writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
 console.log('[build] wrote styles/bundle.css (cssEntry)');
 
 // 4. The REAL component source — no wrapper. Copied so the sync bundle is
-// self-contained; the files are the same ones the product ships.
-for (const f of ['elements.js', 'lit-core.min.js']) {
-  copyFileSync(resolve(kitDir, f), resolve(componentsDir, f));
-}
-console.log('[build] copied components/elements.js + lit-core.min.js');
+// self-contained; the file is the same one the product ships. Dependency-free
+// (no vendored runtime bundle to copy alongside it).
+copyFileSync(resolve(kitDir, 'elements.js'), resolve(componentsDir, 'elements.js'));
+console.log('[build] copied components/elements.js');
 
 // 5. One preview + manifest entry per ported component. Each preview embeds the
 // real custom element with example attributes (arrays/objects pass as JSON
-// attributes — Lit's default converter parses them), links the CSS bundle, and
-// loads the component module so claude.ai/design renders a live card.
+// attributes — the elements' default converter parses them), links the CSS
+// bundle, and loads the component module so claude.ai/design renders a live card.
 const COMPONENTS = [
   {
     tag: 'kit-avatar',
@@ -195,7 +194,6 @@ console.log(`[build] wrote ${COMPONENTS.length} preview cards → previews/`);
 // former React wrapper index — it points straight at the ported component
 // files, so there is nothing to keep in sync by hand.
 const manifest = {
-  runtime: 'components/lit-core.min.js',
   source: 'components/elements.js',
   cssEntry: 'styles/bundle.css',
   components: COMPONENTS.map((c) => ({
