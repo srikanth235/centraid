@@ -85,10 +85,10 @@ async function mockScriptSource() {
  * means whichever script runs LAST wins each key) and before any app code
  * touches `window.centraid`.
  */
-async function serveAppAsset(res, appId, rel) {
+async function serveAppAsset(req, res, appId, rel) {
   const appDir = path.join(APPS_DIR, appId);
   const cap = new CaptureResponse();
-  await serveStatic(cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
+  await serveStatic(req, cap, appDir, rel, { sharedAssetsDir: KIT_DIR });
 
   const contentType = String(cap.headers['Content-Type'] || '');
   let body = cap.body;
@@ -270,7 +270,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (rel === '/' || rel === '') rel = '/index.html';
-    await serveAppAsset(res, appId, rel);
+    await serveAppAsset(req, res, appId, rel);
   } catch (err) {
     console.error('[visual-harness] request failed:', err);
     if (!res.headersSent) sendPlain(res, 500, 'internal error');

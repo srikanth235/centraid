@@ -146,12 +146,6 @@ textarea {
 .k-banner.notice {
   border-color: color-mix(in oklab, var(--warn) 40%, var(--line-strong));
 }
-.locker.denied .v-side,
-.locker.denied .v-list,
-.locker.denied .v-detail {
-  visibility: hidden;
-}
-
 /* Sidebar */
 .v-side {
   width: 230px;
@@ -462,6 +456,26 @@ textarea {
   text-align: center;
   font: var(--t-small);
   color: var(--ink-3);
+}
+.v-list-empty .ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--bg-sunken);
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+}
+.v-list-empty-title {
+  font: var(--t-strong);
+  color: var(--ink-2);
+}
+.v-list-empty-sub {
+  font: var(--t-small);
+  color: var(--ink-3);
+  margin-top: 3px;
 }
 
 /* Detail pane */
@@ -947,4 +961,13 @@ textarea {
 }
 .locker.is-narrow .v-wt-stats {
   grid-template-columns: 1fr;
+}
+.locker.is-narrow .v-list-head {
+  padding-right: 96px;
+}
+.locker.is-narrow .k-ask-mount {
+  position: fixed;
+  top: 12px;
+  right: 14px;
+  z-index: 45;
 }

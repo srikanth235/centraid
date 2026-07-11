@@ -347,23 +347,6 @@ select {
   display: none;
 }
 
-/* Consent-denied: no grant yet — collapse the app to just the banner. */
-.tally.denied .s-side,
-.tally.denied .s-topbar,
-.tally.denied .s-scroll {
-  display: none;
-}
-.tally.denied {
-  display: block;
-}
-.tally.denied .s-main {
-  height: auto;
-}
-.tally.denied .s-banner {
-  margin: 22px auto;
-  max-width: 32rem;
-}
-
 .s-main {
   flex: 1;
   min-width: 0;
@@ -767,6 +750,8 @@ select {
 .s-exmain {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 .s-exdesc {
   font: var(--t-body);
@@ -783,6 +768,9 @@ select {
   margin-top: 1px;
 }
 .s-exright {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   text-align: right;
   flex-shrink: 0;
 }

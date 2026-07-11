@@ -1383,26 +1383,6 @@ span.d-chip-sm {
   }
 }
 
-/* ---------- Consent denied ---------- */
-
-.docs.denied .d-side,
-.docs.denied .d-topbar,
-.docs.denied .d-toolbar,
-.docs.denied .d-bulk,
-.docs.denied .d-scroll {
-  display: none;
-}
-.docs.denied {
-  display: block;
-}
-.docs.denied .d-main {
-  height: auto;
-}
-.docs.denied .d-banner {
-  margin: 22px auto;
-  max-width: 32rem;
-}
-
 /* ---------- Narrow (phone) — driven by JS .is-narrow on #root ---------- */
 
 .docs.is-narrow .d-side {
@@ -1462,6 +1442,13 @@ span.d-chip-sm {
 .docs.is-narrow .d-list-head {
   display: none !important;
 }
+.docs.is-narrow .d-topbar {
+  flex-wrap: wrap;
+}
 .docs.is-narrow .d-search {
   max-width: none;
+  min-width: 160px;
+}
+.docs.is-narrow .d-toolbar-div {
+  display: none;
 }

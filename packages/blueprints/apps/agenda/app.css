@@ -25,12 +25,20 @@
      accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
      --ink-faint/--radius aliases) comes from tokens.css. */
   --warn: #b06a12;
+
+  /* --accent-deep is tuned for background+white-text buttons (dark in both
+     themes). Chips/nav-items/dots that show accent-deep AS foreground on top
+     of --accent-soft need the opposite move in dark mode — this alias is the
+     escape hatch; light mode just mirrors accent-deep. */
+  --accent-deep-fg: var(--accent-deep);
 }
 :root[data-theme='dark'] {
   --warn: #e0a13c;
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
     --warn: #e0a13c;
   }
 }
@@ -1106,7 +1114,8 @@ mark {
   width: 38px;
   flex-shrink: 0;
 }
-.ag-field-row input {
+.ag-field-row input,
+.ag-field-row select {
   flex: 1;
   min-width: 0;
   font: var(--t-body);
@@ -1119,7 +1128,12 @@ mark {
   outline: none;
   font-family: var(--font-sans);
 }
-.ag-field-row input:focus {
+.ag-field-row select {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ag-field-row input:focus,
+.ag-field-row select:focus {
   border-color: var(--selb);
   box-shadow: var(--kit-focus-ring);
 }
