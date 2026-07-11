@@ -141,3 +141,34 @@ test('start() activates the vault workspace so its apps dir exists', async () =>
   const stat = await fs.stat(path.join(dataDir, 'vault', vaultId, 'apps'));
   expect(stat.isDirectory()).toBeTruthy();
 });
+
+test('serves component health through the composed chain', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  // Host-pushed components (e.g. the desktop tunnel) join the aggregate.
+  gateway.health.reportError('tunnel', 'iroh endpoint dial failed');
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    const body = (await (await fetch(`${srv.url}/centraid/_gateway/health`)).json()) as {
+      status: string;
+      components: Array<{ component: string; status: string; detail?: string }>;
+      recentEvents: Array<{ component: string; level: string; message: string }>;
+    };
+    expect(body.status).toBe('error');
+    const byName = new Map(body.components.map((c) => [c.component, c]));
+    // Wired-in probes: the boot vault mounted, no connections configured.
+    expect(byName.get('vaults')).toMatchObject({ status: 'ok', detail: '1 vault mounted' });
+    expect(byName.get('connections')).toMatchObject({ status: 'ok' });
+    // Reconcile ran during start() and reported the scheduler healthy.
+    expect(byName.get('automations')?.status).toBe('ok');
+    // The host-pushed failure carries its structured event.
+    expect(byName.get('tunnel')).toMatchObject({
+      status: 'error',
+      lastError: 'iroh endpoint dial failed',
+    });
+    expect(body.recentEvents).toContainEqual(
+      expect.objectContaining({ component: 'tunnel', level: 'error' }),
+    );
+  } finally {
+    await srv.close();
+  }
+});

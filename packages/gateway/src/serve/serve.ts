@@ -88,6 +88,7 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
       await server.close();
     },
     runtime: gateway.runtime,
+    health: gateway.health,
     prefs: gateway.prefs,
     analyticsStore: gateway.analyticsStore,
     conversationHistoryStore: gateway.conversationHistoryStore,

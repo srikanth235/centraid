@@ -28,6 +28,17 @@ export {
   type FireAutomationFactory,
 } from './serve/build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
+// Component-level health (self-hosting observability): hosts push their
+// own components (tunnel, disk) through `BuiltGateway.health`; clients
+// read the aggregate at `GET /centraid/_gateway/health`.
+export {
+  HealthRegistry,
+  type ComponentHealth,
+  type ComponentStatus,
+  type HealthEvent,
+  type HealthSnapshot,
+  type HealthProbe,
+} from './serve/health-registry.js';
 export type { GatewayPaths } from './paths.js';
 export { readAgentsStatus, type AgentsStatus } from './routes/agents-routes.js';
 export {
