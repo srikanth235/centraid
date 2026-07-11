@@ -46,7 +46,9 @@ export function createLogic({ state, data, render, refresh }) {
   function markPending(action, input, outcome) {
     if (action === 'create-note') {
       state.pendingCreates.push({
-        key: outcome?.invocationId ?? `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        key:
+          outcome?.invocationId ??
+          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title: deriveTitle(input.title, input.body_text),
         notebookId: input.notebook_id ?? null,
       });
@@ -110,7 +112,10 @@ export function createLogic({ state, data, render, refresh }) {
   async function editNoteAutosave(noteId, patch) {
     let outcome;
     try {
-      outcome = await window.centraid.write({ action: 'edit-note', input: { note_id: noteId, ...patch } });
+      outcome = await window.centraid.write({
+        action: 'edit-note',
+        input: { note_id: noteId, ...patch },
+      });
     } catch (err) {
       notice(String(err?.message ?? err));
       return undefined;
@@ -192,7 +197,8 @@ export function createLogic({ state, data, render, refresh }) {
   async function togglePin(note) {
     const nextPinned = note.pinned === 1 ? 0 : 1;
     const outcome = await write('edit-note', { note_id: note.note_id, pinned: nextPinned });
-    if (outcome?.status === 'executed') toast(nextPinned ? 'Pinned · receipt' : 'Unpinned · receipt');
+    if (outcome?.status === 'executed')
+      toast(nextPinned ? 'Pinned · receipt' : 'Unpinned · receipt');
     return outcome;
   }
 
@@ -229,7 +235,8 @@ export function createLogic({ state, data, render, refresh }) {
     name_unused: 'You already have a notebook with that name.',
   };
   const DELETE_NOTEBOOK_FRIENDLY = {
-    notebook_has_no_children: 'This notebook still has notebooks inside it — delete or move those first.',
+    notebook_has_no_children:
+      'This notebook still has notebooks inside it — delete or move those first.',
   };
 
   // Each of these three mutates state AFTER `write()` has already resolved
@@ -241,7 +248,11 @@ export function createLogic({ state, data, render, refresh }) {
   async function createNotebook(name) {
     const n = String(name ?? '').trim();
     if (!n) return undefined;
-    const outcome = await write('create-notebook', { name: n }, { friendly: CREATE_NOTEBOOK_FRIENDLY });
+    const outcome = await write(
+      'create-notebook',
+      { name: n },
+      { friendly: CREATE_NOTEBOOK_FRIENDLY },
+    );
     if (outcome?.status === 'executed') {
       state.nav = { kind: 'notebook', notebookId: outcome.output?.notebook_id };
       state.creatingNotebook = false;
@@ -440,7 +451,8 @@ export function tagNoteCounts(data) {
 export function buildWall(data, state) {
   const rows = scopedRows(data, state);
   const searching = Boolean(state.search.trim());
-  const showPinnedGroup = state.nav.kind !== 'pinned' && !searching && rows.some((n) => n.pinned === 1);
+  const showPinnedGroup =
+    state.nav.kind !== 'pinned' && !searching && rows.some((n) => n.pinned === 1);
   const pinned = showPinnedGroup ? rows.filter((n) => n.pinned === 1) : [];
   const others = showPinnedGroup ? rows.filter((n) => n.pinned !== 1) : rows;
 

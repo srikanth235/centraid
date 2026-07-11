@@ -35,7 +35,12 @@ export interface UseBuilderInput {
   appKind: 'app' | 'automation';
   appContext?: AppMetaResolvedType;
   initialPrompt?: string;
-  onAddToHome?: (input: { prompt?: string; appId: string; name?: string; versionId?: string }) => void;
+  onAddToHome?: (input: {
+    prompt?: string;
+    appId: string;
+    name?: string;
+    versionId?: string;
+  }) => void;
   onMetaChange?: (input: { appId: string; name?: string; description?: string }) => void;
   showToast: (message: string) => void;
 }
@@ -156,7 +161,9 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     (idx: number, patch: Partial<ConversationMsg>): void => {
       const at = chat.current[idx];
       if (!at) return;
-      chat.current = chat.current.map((m, i) => (i === idx ? ({ ...m, ...patch } as ConversationMsg) : m));
+      chat.current = chat.current.map((m, i) =>
+        i === idx ? ({ ...m, ...patch } as ConversationMsg) : m,
+      );
       renderChat();
     },
     [renderChat],
@@ -168,7 +175,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   const closeThinking = useCallback((): void => {
     if (currentThinkingMsgIndex.current < 0) return;
     const cur = chat.current[currentThinkingMsgIndex.current];
-    if (cur && cur.kind === 'thinking') updateMessage(currentThinkingMsgIndex.current, { streaming: false });
+    if (cur && cur.kind === 'thinking')
+      updateMessage(currentThinkingMsgIndex.current, { streaming: false });
     currentThinkingMsgIndex.current = -1;
   }, [updateMessage]);
 
@@ -222,11 +230,18 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         case 'assistant.delta':
           closeThinking();
           if (currentAiMsgIndex.current < 0) {
-            currentAiMsgIndex.current = pushMessage({ kind: 'ai', text: event.delta, streaming: true });
+            currentAiMsgIndex.current = pushMessage({
+              kind: 'ai',
+              text: event.delta,
+              streaming: true,
+            });
           } else {
             const cur = chat.current[currentAiMsgIndex.current];
             if (cur && cur.kind === 'ai') {
-              updateMessage(currentAiMsgIndex.current, { text: cur.text + event.delta, streaming: true });
+              updateMessage(currentAiMsgIndex.current, {
+                text: cur.text + event.delta,
+                streaming: true,
+              });
             }
           }
           return;
@@ -264,7 +279,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
             renderChat();
             pendingToolStarts.current.set(event.toolCallId, lastIdx);
           } else {
-            const idx = pushMessage({ kind: 'toolGroup', id: event.toolCallId, calls: [newCall], open: true });
+            const idx = pushMessage({
+              kind: 'toolGroup',
+              id: event.toolCallId,
+              calls: [newCall],
+              open: true,
+            });
             pendingToolStarts.current.set(event.toolCallId, idx);
           }
           return;
@@ -308,7 +328,15 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           break;
       }
     },
-    [announceMintedWebhooks, closeAi, closeThinking, finishAgentTurn, pushMessage, renderChat, updateMessage],
+    [
+      announceMintedWebhooks,
+      closeAi,
+      closeThinking,
+      finishAgentTurn,
+      pushMessage,
+      renderChat,
+      updateMessage,
+    ],
   );
 
   const ensureConversation = useCallback(
@@ -429,14 +457,19 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     if (publishing.current) return;
     publishing.current = true;
     bump();
-    const statusIdx = pushMessage({ kind: 'status', text: 'Building & publishing…', spinning: true });
+    const statusIdx = pushMessage({
+      kind: 'status',
+      text: 'Building & publishing…',
+      spinning: true,
+    });
     try {
       const result = await publish({ id: appId.current });
       lastPublishedVersionId.current = result.versionId;
       appVersionCount.current += 1;
       appLastEditedAt.current = Date.now();
       const migCount = result.migrationsApplied?.length ?? 0;
-      const migText = migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
+      const migText =
+        migCount > 0 ? ` · ${migCount} migration${migCount === 1 ? '' : 's'} applied` : '';
       updateMessage(statusIdx, {
         kind: 'status',
         text: `Published ${shortVersionTitle(result)} (${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB)${migText}`,
@@ -445,7 +478,12 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       if (tab.current === 'preview') bumpPreview();
       if (chatView.current === 'history') historyNonce.current += 1;
       renderChat();
-      onAddToHome?.({ prompt: initialPrompt, appId: appId.current, name: projName.current, versionId: result.versionId });
+      onAddToHome?.({
+        prompt: initialPrompt,
+        appId: appId.current,
+        name: projName.current,
+        versionId: result.versionId,
+      });
     } catch (err) {
       const msg = String(err);
       if (/no_changes|no staged changes/i.test(msg)) {
@@ -453,9 +491,14 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         showToast('Already published — added to Home.');
         onAddToHome?.({ prompt: initialPrompt, appId: appId.current, name: projName.current });
       } else if (/HTTP 401|HTTP 403|gateway rejected|auth_required/i.test(msg)) {
-        updateMessage(statusIdx, { kind: 'status', text: 'Gateway needs a token to accept uploads.' });
+        updateMessage(statusIdx, {
+          kind: 'status',
+          text: 'Gateway needs a token to accept uploads.',
+        });
         showToast('Gateway requires a token. Configure it in Settings.');
-      } else if (/gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)) {
+      } else if (
+        /gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)
+      ) {
         updateMessage(statusIdx, { kind: 'status', text: 'Gateway not reachable. Is it running?' });
         showToast('Gateway not reachable. Check the URL in Settings.');
       } else if (/HTTP 422/i.test(msg)) {
@@ -511,7 +554,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
           /* never published — local preview takes over */
         }
         chat.current = chat.current.concat([
-          { kind: 'ai', text: `Loaded "${projName.current}". Pick a direction below or describe the next change.` },
+          {
+            kind: 'ai',
+            text: `Loaded "${projName.current}". Pick a direction below or describe the next change.`,
+          },
         ]);
         renderChat();
         return;
@@ -531,7 +577,13 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       pushMessage({ kind: 'status', text: 'Setting up app…', spinning: true });
       try {
         const visual = inferAppVisual(initialPrompt);
-        await createApp({ id, name: projName.current, version: '0.1.0', iconKey: visual.iconKey, colorKey: visual.colorKey });
+        await createApp({
+          id,
+          name: projName.current,
+          version: '0.1.0',
+          iconKey: visual.iconKey,
+          colorKey: visual.colorKey,
+        });
         appId.current = id;
         bump();
       } catch (err) {
@@ -644,7 +696,8 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
   } else if (lastPublishedVersionId.current) {
     const parts = ['Live'];
     if (appVersionCount.current > 0) parts.push(`v${appVersionCount.current}`);
-    if (appLastEditedAt.current) parts.push(`edited ${relTime(appLastEditedAt.current, Date.now())}`);
+    if (appLastEditedAt.current)
+      parts.push(`edited ${relTime(appLastEditedAt.current, Date.now())}`);
     statusText = parts.join(' · ');
   } else {
     statusText = 'Draft';

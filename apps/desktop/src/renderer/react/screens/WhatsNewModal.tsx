@@ -65,12 +65,7 @@ function ReleaseSection({
         <p className={styles.emptyNotes}>No notes for this release.</p>
       )}
       {release.url ? (
-        <a
-          className={styles.ghLink}
-          href={release.url}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
+        <a className={styles.ghLink} href={release.url} target="_blank" rel="noreferrer noopener">
           View on GitHub →
         </a>
       ) : null}
@@ -142,7 +137,11 @@ export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX
             </div>
           ) : (
             state.result.releases.map((r) => (
-              <ReleaseSection key={r.version} release={r} isCurrent={sameVersion(r.version, current)} />
+              <ReleaseSection
+                key={r.version}
+                release={r}
+                isCurrent={sameVersion(r.version, current)}
+              />
             ))
           )}
         </div>

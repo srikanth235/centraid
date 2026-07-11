@@ -41,7 +41,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `01-onb-${id}-FAILURE.png`) });
@@ -94,22 +100,30 @@ async function main() {
       await shot('01-first-run-onboarding');
     });
 
-    await step('onb-cta-disabled-when-empty', 'CTA "Enter Centraid" is disabled while name is empty', async () => {
-      const cta = page.getByRole('button', { name: 'Enter Centraid' });
-      await cta.waitFor({ state: 'visible', timeout: 10_000 });
-      assert(await cta.isDisabled(), 'CTA should be disabled with an empty name');
-      const state = await cta.getAttribute('data-state');
-      console.log(`[onb] CTA data-state with empty name: ${state}`);
-    });
+    await step(
+      'onb-cta-disabled-when-empty',
+      'CTA "Enter Centraid" is disabled while name is empty',
+      async () => {
+        const cta = page.getByRole('button', { name: 'Enter Centraid' });
+        await cta.waitFor({ state: 'visible', timeout: 10_000 });
+        assert(await cta.isDisabled(), 'CTA should be disabled with an empty name');
+        const state = await cta.getAttribute('data-state');
+        console.log(`[onb] CTA data-state with empty name: ${state}`);
+      },
+    );
 
-    await step('onb-name-and-initials', 'Typing a name updates the avatar initials live', async () => {
-      const input = page.getByLabel('Your name');
-      await input.fill('QA Tester');
-      await page.waitForTimeout(200);
-      const bodyText = await page.locator('body').innerText();
-      assert(/QT/.test(bodyText), `avatar initials "QT" not found after typing "QA Tester"`);
-      await shot('02-name-typed');
-    });
+    await step(
+      'onb-name-and-initials',
+      'Typing a name updates the avatar initials live',
+      async () => {
+        const input = page.getByLabel('Your name');
+        await input.fill('QA Tester');
+        await page.waitForTimeout(200);
+        const bodyText = await page.locator('body').innerText();
+        assert(/QT/.test(bodyText), `avatar initials "QT" not found after typing "QA Tester"`);
+        await shot('02-name-typed');
+      },
+    );
 
     await step('onb-color-swatch', 'Selecting a color swatch flips aria-checked', async () => {
       const swatch = page.getByRole('radio', { name: 'Color #4FB077' });
@@ -122,72 +136,108 @@ async function main() {
       await shot('03-color-picked');
     });
 
-    await step('onb-submit-lands-home', '"Enter Centraid" completes onboarding and lands on Home', async () => {
-      const cta = page.getByRole('button', { name: 'Enter Centraid' });
-      assert(!(await cta.isDisabled()), 'CTA still disabled with a valid name');
-      await cta.click();
-      await page
-        .getByRole('heading', { name: 'What should we build?' })
-        .waitFor({ state: 'visible', timeout: 60_000 });
-      await shot('04-home-after-onboarding');
-      // The persisted flag must now exist on disk.
-      const raw = await fs.readFile(path.join(userDataDir, 'centraid-settings.json'), 'utf8');
-      const settings = JSON.parse(raw);
-      console.log(`[onb] settings after onboarding: ${raw}`);
-      assert(
-        typeof settings.onboardingCompletedAt === 'string' && settings.onboardingCompletedAt.length > 0,
-        'onboardingCompletedAt not persisted to centraid-settings.json',
-      );
-    });
+    await step(
+      'onb-submit-lands-home',
+      '"Enter Centraid" completes onboarding and lands on Home',
+      async () => {
+        const cta = page.getByRole('button', { name: 'Enter Centraid' });
+        assert(!(await cta.isDisabled()), 'CTA still disabled with a valid name');
+        await cta.click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 60_000 });
+        await shot('04-home-after-onboarding');
+        // The persisted flag must now exist on disk.
+        const raw = await fs.readFile(path.join(userDataDir, 'centraid-settings.json'), 'utf8');
+        const settings = JSON.parse(raw);
+        console.log(`[onb] settings after onboarding: ${raw}`);
+        assert(
+          typeof settings.onboardingCompletedAt === 'string' &&
+            settings.onboardingCompletedAt.length > 0,
+          'onboardingCompletedAt not persisted to centraid-settings.json',
+        );
+      },
+    );
 
-    await step('onb-profile-name-visible', 'Chosen display name surfaces in Settings -> Spaces (gateway connection row)', async () => {
-      // Observation from a prior run: the display name does NOT appear
-      // anywhere in the main shell chrome (sidebar head shows the vault
-      // name "Owner's vault"). The only surface that reads the profile
-      // displayName back is Settings -> Spaces -> Connections (listGateways
-      // threads gateway-store displayName). Verify it landed there.
-      const homeText = await page.locator('body').innerText();
-      console.log(`[onb] name in main shell chrome: ${/QA Tester/.test(homeText)} (expected false — recorded as UX observation)`);
-      await page.getByRole('button', { name: /^Settings/ }).first().click();
-      await page.getByRole('heading', { name: 'Appearance' }).waitFor({ state: 'visible', timeout: 15_000 });
-      await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-      await page.getByRole('heading', { name: 'Spaces' }).first().waitFor({ state: 'visible', timeout: 15_000 });
-      await page.waitForTimeout(600);
-      await shot('05-settings-spaces-after-onboarding');
-      const spacesText = await page.locator('body').innerText();
-      const found = /QA Tester/.test(spacesText);
-      console.log(`[onb] "QA Tester" visible in Settings -> Spaces: ${found}`);
-      assert(found, 'display name "QA Tester" not visible in Settings -> Spaces either — onboarding write is a dead end');
-      await page.getByRole('button', { name: 'Home', exact: true }).first().click();
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-    });
+    await step(
+      'onb-profile-name-visible',
+      'Chosen display name surfaces in Settings -> Spaces (gateway connection row)',
+      async () => {
+        // Observation from a prior run: the display name does NOT appear
+        // anywhere in the main shell chrome (sidebar head shows the vault
+        // name "Owner's vault"). The only surface that reads the profile
+        // displayName back is Settings -> Spaces -> Connections (listGateways
+        // threads gateway-store displayName). Verify it landed there.
+        const homeText = await page.locator('body').innerText();
+        console.log(
+          `[onb] name in main shell chrome: ${/QA Tester/.test(homeText)} (expected false — recorded as UX observation)`,
+        );
+        await page
+          .getByRole('button', { name: /^Settings/ })
+          .first()
+          .click();
+        await page
+          .getByRole('heading', { name: 'Appearance' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
+        await page
+          .getByRole('heading', { name: 'Spaces' })
+          .first()
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(600);
+        await shot('05-settings-spaces-after-onboarding');
+        const spacesText = await page.locator('body').innerText();
+        const found = /QA Tester/.test(spacesText);
+        console.log(`[onb] "QA Tester" visible in Settings -> Spaces: ${found}`);
+        assert(
+          found,
+          'display name "QA Tester" not visible in Settings -> Spaces either — onboarding write is a dead end',
+        );
+        await page.getByRole('button', { name: 'Home', exact: true }).first().click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+      },
+    );
 
     // ---------- Relaunch: onboarding must NOT show again ----------
-    await step('onb-relaunch-skips', 'Relaunch (same profile) boots straight to Home, name intact', async () => {
-      await app.close().catch(() => undefined);
-      await new Promise((r) => setTimeout(r, 500));
-      ({ app, page } = await launchVirgin(userDataDir));
-      wireConsole(page);
-      await page.setViewportSize({ width: 1400, height: 900 });
-      await page
-        .getByRole('heading', { name: 'What should we build?' })
-        .waitFor({ state: 'visible', timeout: 120_000 });
-      const onboardingVisible = await page
-        .getByRole('heading', { name: /Make yourself/ })
-        .isVisible()
-        .catch(() => false);
-      assert(!onboardingVisible, 'onboarding rendered again after completion');
-      await shot('06-relaunch-straight-to-home');
-      // Name persistence check goes where the name actually surfaces:
-      // Settings -> Spaces connections row.
-      await page.getByRole('button', { name: /^Settings/ }).first().click();
-      await page.getByRole('heading', { name: 'Appearance' }).waitFor({ state: 'visible', timeout: 15_000 });
-      await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-      await page.waitForTimeout(600);
-      const spacesText = await page.locator('body').innerText();
-      assert(/QA Tester/.test(spacesText), 'display name did not persist across relaunch (Settings -> Spaces)');
-      await shot('07-relaunch-spaces-name-persisted');
-    });
+    await step(
+      'onb-relaunch-skips',
+      'Relaunch (same profile) boots straight to Home, name intact',
+      async () => {
+        await app.close().catch(() => undefined);
+        await new Promise((r) => setTimeout(r, 500));
+        ({ app, page } = await launchVirgin(userDataDir));
+        wireConsole(page);
+        await page.setViewportSize({ width: 1400, height: 900 });
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 120_000 });
+        const onboardingVisible = await page
+          .getByRole('heading', { name: /Make yourself/ })
+          .isVisible()
+          .catch(() => false);
+        assert(!onboardingVisible, 'onboarding rendered again after completion');
+        await shot('06-relaunch-straight-to-home');
+        // Name persistence check goes where the name actually surfaces:
+        // Settings -> Spaces connections row.
+        await page
+          .getByRole('button', { name: /^Settings/ })
+          .first()
+          .click();
+        await page
+          .getByRole('heading', { name: 'Appearance' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
+        await page.waitForTimeout(600);
+        const spacesText = await page.locator('body').innerText();
+        assert(
+          /QA Tester/.test(spacesText),
+          'display name did not persist across relaunch (Settings -> Spaces)',
+        );
+        await shot('07-relaunch-spaces-name-persisted');
+      },
+    );
 
     // ---- Report ----
     const consoleErrors = consoleMessages.filter((m) => m.type === 'error');

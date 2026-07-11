@@ -57,8 +57,9 @@ describe('useActiveVault', () => {
   });
 
   it('falls back to the first vault when the gateway has no explicit pointer', async () => {
-    (globalThis as unknown as { CentraidApi: { getGatewayAuth: () => Promise<unknown> } }).CentraidApi.getGatewayAuth =
-      () => Promise.resolve({ baseUrl: '' });
+    (
+      globalThis as unknown as { CentraidApi: { getGatewayAuth: () => Promise<unknown> } }
+    ).CentraidApi.getGatewayAuth = () => Promise.resolve({ baseUrl: '' });
     listVaults.mockResolvedValue([{ vaultId: 'only', name: 'Solo', ownerPartyId: 'p1' }]);
     await mount();
     expect(ctl.active?.vaultId).toBe('only');

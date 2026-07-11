@@ -104,7 +104,12 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
     if (!dragRef.current) return;
     const cur = fractionAt(e);
     const { x: sx, y: sy } = dragRef.current;
-    setCrop({ x: Math.min(sx, cur.x), y: Math.min(sy, cur.y), w: Math.abs(cur.x - sx), h: Math.abs(cur.y - sy) });
+    setCrop({
+      x: Math.min(sx, cur.x),
+      y: Math.min(sy, cur.y),
+      w: Math.abs(cur.x - sx),
+      h: Math.abs(cur.y - sy),
+    });
   }
   function onPointerUp() {
     dragRef.current = null;
@@ -171,10 +176,20 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
         ) : null}
       </div>
       <div className="editor-toolbar">
-        <button type="button" className="kit-btn" disabled={busy} onClick={() => setRotation((r) => (r + 90) % 360)}>
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={busy}
+          onClick={() => setRotation((r) => (r + 90) % 360)}
+        >
           ⟳ Rotate
         </button>
-        <button type="button" className="kit-btn" disabled={busy || !crop} onClick={() => setCrop(null)}>
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={busy || !crop}
+          onClick={() => setCrop(null)}
+        >
           Reset crop
         </button>
         <label className="editor-trash-toggle">

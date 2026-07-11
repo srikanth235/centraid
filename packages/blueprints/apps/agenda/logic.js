@@ -103,7 +103,8 @@ export function createLogic({ state, data, render, refresh }) {
   async function respondRsvp(eventId, partyId, partstat) {
     const outcome = await write('rsvp', { event_id: eventId, party_id: partyId, partstat });
     if (outcome?.status === 'executed') {
-      const label = partstat === 'accepted' ? 'Going' : partstat === 'declined' ? 'Not going' : 'Maybe';
+      const label =
+        partstat === 'accepted' ? 'Going' : partstat === 'declined' ? 'Not going' : 'Maybe';
       logActivity(eventId, `RSVP: ${label}`, outcome);
       toast(`RSVP recorded: ${label} · receipt`);
     } else if (outcome?.status === 'parked') {

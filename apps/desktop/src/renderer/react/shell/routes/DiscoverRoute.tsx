@@ -95,7 +95,9 @@ export default function DiscoverRoute({
           automationTemplates={state.data.automationTemplates as unknown as DiscoverTemplate[]}
           tileVariant={tileVariant}
           onOpenTemplate={(t) => openTemplatePreview(asEntry(t), applyAppTemplate)}
-          onOpenAutomationTemplate={(t) => openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)}
+          onOpenAutomationTemplate={(t) =>
+            openAutomationTemplatePreview(asEntry(t), applyAutoTemplate)
+          }
           onTemplateContext={(t, anchor) => {
             const auto = t.kind === 'automation';
             openMenu(

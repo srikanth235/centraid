@@ -6,7 +6,14 @@
 // re-implemented here.
 import { armConfirm, closePopover, h, openPopover, popItem } from './kit.js';
 
-export function createPopovers({ data, openQuick, moveDocs, startRenameDoc, toggleStar, trashDoc }) {
+export function createPopovers({
+  data,
+  openQuick,
+  moveDocs,
+  startRenameDoc,
+  toggleStar,
+  trashDoc,
+}) {
   // One "Move to…" target row. `popItem` (kit.js) builds the real button
   // node; these popovers stay plain DOM (built with `h()`/`popItem()`),
   // exactly as before — the target list mixes a fixed depth-0 root with

@@ -233,7 +233,16 @@ function contentRentedElsewhere(db: VaultDb, contentId: string): boolean {
          OR EXISTS(SELECT 1 FROM media_media_asset WHERE content_id = ? AND deleted_at IS NULL)
        ) AS n`,
     )
-    .get(contentId, contentId, contentId, contentId, contentId, contentId, contentId, contentId) as {
+    .get(
+      contentId,
+      contentId,
+      contentId,
+      contentId,
+      contentId,
+      contentId,
+      contentId,
+      contentId,
+    ) as {
     n: number;
   };
   return row.n > 0;
@@ -302,7 +311,9 @@ function purgeContentItem(db: VaultDb, owner: Identity, now: string, contentId: 
   // on content items, so nothing else can claim the original — remote
   // replicas fall to the reconciliation sweep by design.
   const variants = db.vault
-    .prepare('SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL')
+    .prepare(
+      'SELECT sha256 FROM core_content_derivative WHERE content_id = ? AND sha256 IS NOT NULL',
+    )
     .all(contentId) as { sha256: string }[];
   db.vault.prepare('DELETE FROM core_content_derivative WHERE content_id = ?').run(contentId);
   const contentRow = db.vault
@@ -354,7 +365,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     )
     .run(now, now);
   const purgeable = db.vault
-    .prepare(`SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`)
+    .prepare(
+      `SELECT content_id FROM core_content_item WHERE purge_at IS NOT NULL AND purge_at <= ?`,
+    )
     .all(now) as { content_id: string }[];
   // Purges are the one hard delete outside the command pipeline, so the
   // temporal link duty runs here too: live links onto a purged row end-date
@@ -402,7 +415,9 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
   // document's own chain is even considered for release.
   const revisesId = revisesConceptId(db);
   const lapsedDocuments = db.vault
-    .prepare('SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?')
+    .prepare(
+      'SELECT document_id, current_content_id FROM core_document WHERE purge_at IS NOT NULL AND purge_at <= ?',
+    )
     .all(now) as { document_id: string; current_content_id: string }[];
   for (const doc of lapsedDocuments) {
     const chain = revisesId
@@ -415,7 +430,8 @@ export function sweepLifecycle(db: VaultDb, owner: Identity): SweepResult {
     db.vault.prepare('DELETE FROM core_document WHERE document_id = ?').run(doc.document_id);
     for (const contentId of chain) {
       if (contentRentedElsewhere(db, contentId)) continue;
-      if (revisesId && ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId)) continue;
+      if (revisesId && ownedByAnotherLiveDocument(db, contentId, doc.document_id, revisesId))
+        continue;
       blobsReclaimed += purgeContentItem(db, owner, now, contentId);
     }
   }

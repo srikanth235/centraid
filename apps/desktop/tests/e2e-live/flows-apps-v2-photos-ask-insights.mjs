@@ -27,7 +27,9 @@ let page;
 let currentStep = 'boot';
 const consoleMessages = [];
 function wireConsole(p) {
-  p.on('console', (msg) => consoleMessages.push({ text: msg.text(), type: msg.type(), step: currentStep }));
+  p.on('console', (msg) =>
+    consoleMessages.push({ text: msg.text(), type: msg.type(), step: currentStep }),
+  );
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', step: currentStep });
     console.error(`[console][during ${currentStep}] pageerror: ${err}`);
@@ -50,7 +52,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `pai-FAILURE-${id}.png`) });
@@ -69,16 +77,23 @@ async function installApp(name, appId) {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await dialog.getByRole('button', { name: 'Use this template' }).click();
   await page.locator('[data-global-toast]').waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(`[data-app-id="${appId}"]`).waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 async function openApp(appId) {
   await navTo(page, 'Home').catch(() => undefined);
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   const tile = page.locator(`[data-app-id="${appId}"]`);
   await tile.getByTestId('app-tile').click();
-  await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+  await page.waitForSelector('iframe[data-centraid-app="1"]', {
+    state: 'attached',
+    timeout: 20_000,
+  });
   const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
   await frameLoc.locator('body').first().waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(800);
@@ -106,8 +121,13 @@ async function main() {
       frameLoc = await openApp('photos');
       await shot('01-photos-empty');
       const emptyVisible = (await frameLoc.locator('#empty').getAttribute('hidden')) === null;
-      const gridText = await frameLoc.locator('#grid').textContent().catch(() => '');
-      console.log(`[pai] photos empty visible=${emptyVisible}, grid text=${JSON.stringify(gridText?.slice(0, 100))}`);
+      const gridText = await frameLoc
+        .locator('#grid')
+        .textContent()
+        .catch(() => '');
+      console.log(
+        `[pai] photos empty visible=${emptyVisible}, grid text=${JSON.stringify(gridText?.slice(0, 100))}`,
+      );
       assert(emptyVisible, 'Photos empty state should be visible on a fresh vault');
     });
 
@@ -121,29 +141,33 @@ async function main() {
       assert(count >= 1, 'expected at least one thumbnail in the Photos grid after upload');
     });
 
-    await step('photos-lightbox', 'Open the photo -> lightbox shows the image; Escape closes', async () => {
-      await frameLoc.locator('#grid img').first().click();
-      const lightbox = frameLoc.locator('#lightbox');
-      const t0 = Date.now();
-      let open = false;
-      while (Date.now() - t0 < 10_000) {
-        if ((await lightbox.getAttribute('hidden')) === null) {
-          open = true;
-          break;
+    await step(
+      'photos-lightbox',
+      'Open the photo -> lightbox shows the image; Escape closes',
+      async () => {
+        await frameLoc.locator('#grid img').first().click();
+        const lightbox = frameLoc.locator('#lightbox');
+        const t0 = Date.now();
+        let open = false;
+        while (Date.now() - t0 < 10_000) {
+          if ((await lightbox.getAttribute('hidden')) === null) {
+            open = true;
+            break;
+          }
+          await page.waitForTimeout(200);
         }
-        await page.waitForTimeout(200);
-      }
-      await shot('03-photos-lightbox');
-      assert(open, 'lightbox did not open after clicking the thumbnail');
-      const stageImgs = await lightbox.locator('img').count();
-      const placeholder = await lightbox.locator('.lightbox-placeholder').count();
-      console.log(`[pai] lightbox imgs=${stageImgs} placeholders=${placeholder}`);
-      assert(stageImgs >= 1 || placeholder >= 1, 'lightbox stage is empty');
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(500);
-      const closed = (await lightbox.getAttribute('hidden')) !== null;
-      assert(closed, 'lightbox did not close on Escape');
-    });
+        await shot('03-photos-lightbox');
+        assert(open, 'lightbox did not open after clicking the thumbnail');
+        const stageImgs = await lightbox.locator('img').count();
+        const placeholder = await lightbox.locator('.lightbox-placeholder').count();
+        console.log(`[pai] lightbox imgs=${stageImgs} placeholders=${placeholder}`);
+        assert(stageImgs >= 1 || placeholder >= 1, 'lightbox stage is empty');
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(500);
+        const closed = (await lightbox.getAttribute('hidden')) !== null;
+        assert(closed, 'lightbox did not close on Escape');
+      },
+    );
 
     // ---------- Ask panel ----------
     await step('ask-open-close', 'Ask panel opens from the kit button; ✕ closes it', async () => {
@@ -158,17 +182,24 @@ async function main() {
       await shot('05-ask-closed');
     });
 
-    await step('ask-empty-submit', 'Corner: empty submit is a no-op (no user bubble appears)', async () => {
-      await frameLoc.locator('#kitAskBtn').click();
-      const panel = frameLoc.locator('.kit-ask-panel[role="dialog"]');
-      await panel.waitFor({ state: 'visible', timeout: 10_000 });
-      const before = await frameLoc.locator('.kit-msg.user').count();
-      await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
-      await page.waitForTimeout(500);
-      const after = await frameLoc.locator('.kit-msg.user').count();
-      assert(before === after, `empty submit should not add a user bubble (before=${before}, after=${after})`);
-      await shot('06-ask-empty-submit');
-    });
+    await step(
+      'ask-empty-submit',
+      'Corner: empty submit is a no-op (no user bubble appears)',
+      async () => {
+        await frameLoc.locator('#kitAskBtn').click();
+        const panel = frameLoc.locator('.kit-ask-panel[role="dialog"]');
+        await panel.waitFor({ state: 'visible', timeout: 10_000 });
+        const before = await frameLoc.locator('.kit-msg.user').count();
+        await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
+        await page.waitForTimeout(500);
+        const after = await frameLoc.locator('.kit-msg.user').count();
+        assert(
+          before === after,
+          `empty submit should not add a user bubble (before=${before}, after=${after})`,
+        );
+        await shot('06-ask-empty-submit');
+      },
+    );
 
     await step('ask-escape-closes', 'Corner: Escape closes the open Ask panel', async () => {
       // Panel still open from the previous step; focus is in the input.
@@ -178,46 +209,50 @@ async function main() {
       await shot('07-ask-escaped');
     });
 
-    await step('ask-llm-turn', 'ONE real LLM turn: ask about the library, response renders', async () => {
-      await frameLoc.locator('#kitAskBtn').click();
-      const panel = frameLoc.locator('.kit-ask-panel[role="dialog"]');
-      await panel.waitFor({ state: 'visible', timeout: 10_000 });
-      const input = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
-      const log = frameLoc.locator('.kit-ask-log');
-      const aiBefore = await log.locator('.kit-msg.ai').count();
-      await input.fill('How many photos are in my library right now? Answer briefly.');
-      await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
+    await step(
+      'ask-llm-turn',
+      'ONE real LLM turn: ask about the library, response renders',
+      async () => {
+        await frameLoc.locator('#kitAskBtn').click();
+        const panel = frameLoc.locator('.kit-ask-panel[role="dialog"]');
+        await panel.waitFor({ state: 'visible', timeout: 10_000 });
+        const input = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
+        const log = frameLoc.locator('.kit-ask-log');
+        const aiBefore = await log.locator('.kit-msg.ai').count();
+        await input.fill('How many photos are in my library right now? Answer briefly.');
+        await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
 
-      const t0 = Date.now();
-      let outcome = 'timeout';
-      while (Date.now() - t0 < 150_000) {
-        if ((await log.locator('text=/No coding agent is configured/').count()) > 0) {
-          outcome = 'no_runner';
-          break;
+        const t0 = Date.now();
+        let outcome = 'timeout';
+        while (Date.now() - t0 < 150_000) {
+          if ((await log.locator('text=/No coding agent is configured/').count()) > 0) {
+            outcome = 'no_runner';
+            break;
+          }
+          const typing = await frameLoc.locator('.kit-ask-typing').count();
+          const aiNow = await log.locator('.kit-msg.ai').count();
+          if (typing === 0 && aiNow > aiBefore) {
+            outcome = 'replied';
+            break;
+          }
+          await page.waitForTimeout(2000);
         }
-        const typing = await frameLoc.locator('.kit-ask-typing').count();
-        const aiNow = await log.locator('.kit-msg.ai').count();
-        if (typing === 0 && aiNow > aiBefore) {
-          outcome = 'replied';
-          break;
+        await shot('08-ask-llm-turn');
+        if (outcome === 'no_runner') {
+          askVerdict = 'INCONCLUSIVE';
+          askDetail = 'no conversation runner configured in this environment';
+          console.log('[pai] LLM turn INCONCLUSIVE — no runner configured');
+        } else {
+          assert(outcome === 'replied', `LLM turn did not complete: ${outcome}`);
+          const lastAi = await log.locator('.kit-msg.ai').last().textContent();
+          console.log(`[pai] AI reply: ${JSON.stringify(lastAi?.slice(0, 300))}`);
+          askVerdict = 'PASS';
+          askDetail = lastAi?.slice(0, 120) ?? '';
+          assert((lastAi ?? '').trim().length > 0, 'AI reply bubble is empty');
         }
-        await page.waitForTimeout(2000);
-      }
-      await shot('08-ask-llm-turn');
-      if (outcome === 'no_runner') {
-        askVerdict = 'INCONCLUSIVE';
-        askDetail = 'no conversation runner configured in this environment';
-        console.log('[pai] LLM turn INCONCLUSIVE — no runner configured');
-      } else {
-        assert(outcome === 'replied', `LLM turn did not complete: ${outcome}`);
-        const lastAi = await log.locator('.kit-msg.ai').last().textContent();
-        console.log(`[pai] AI reply: ${JSON.stringify(lastAi?.slice(0, 300))}`);
-        askVerdict = 'PASS';
-        askDetail = lastAi?.slice(0, 120) ?? '';
-        assert((lastAi ?? '').trim().length > 0, 'AI reply bubble is empty');
-      }
-      await frameLoc.locator('.kit-ask-x[aria-label="Close"]').click();
-    });
+        await frameLoc.locator('.kit-ask-x[aria-label="Close"]').click();
+      },
+    );
 
     // ---------- Insights ----------
     await step('insights-renders', 'Insights screen renders with no NaN/undefined', async () => {
@@ -231,14 +266,18 @@ async function main() {
       console.log(`[pai] insights text sample: ${JSON.stringify(mainText?.slice(0, 300))}`);
     });
 
-    await step('insights-after-turn', 'If a turn ran: Insights reflects transcript-derived numbers (else zero-state)', async () => {
-      const mainText = await page.locator('main, [class*="content"], body').first().textContent();
-      // Not asserting exact spend — just that money/number placeholders are
-      // well-formed wherever they appear.
-      const badMoney = /(\$|₹)\s*(NaN|undefined)/.test(mainText ?? '');
-      assert(!badMoney, 'Insights renders a malformed money value');
-      await shot('10-insights-final');
-    });
+    await step(
+      'insights-after-turn',
+      'If a turn ran: Insights reflects transcript-derived numbers (else zero-state)',
+      async () => {
+        const mainText = await page.locator('main, [class*="content"], body').first().textContent();
+        // Not asserting exact spend — just that money/number placeholders are
+        // well-formed wherever they appear.
+        const badMoney = /(\$|₹)\s*(NaN|undefined)/.test(mainText ?? '');
+        assert(!badMoney, 'Insights renders a malformed money value');
+        await shot('10-insights-final');
+      },
+    );
 
     // ---- Report ----
     const consoleErrors = consoleMessages.filter((m) => m.type === 'error');

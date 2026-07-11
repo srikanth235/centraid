@@ -43,7 +43,11 @@ const consoleMessages = [];
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -57,7 +61,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto01-${id}.png`) });
@@ -111,16 +121,22 @@ async function gwFindRef(name) {
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
 async function openAutomationView(name) {
   await openAutomationsOverview();
-  const row = page.getByRole('button', { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
+  const row = page
+    .getByRole('button', { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+    .first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -172,8 +188,12 @@ async function main() {
         await adoptTemplate(TEMPLATE_NAME);
 
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
-        const homeCard = page.locator('button[data-kind="automation"]', { hasText: TEMPLATE_NAME }).first();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        const homeCard = page
+          .locator('button[data-kind="automation"]', { hasText: TEMPLATE_NAME })
+          .first();
         await homeCard.waitFor({ state: 'visible', timeout: 10_000 });
         await shot('01-home-autocard');
 
@@ -184,8 +204,13 @@ async function main() {
 
         const rows = await gwListAutomations();
         const row = rows.find((r) => r.name === TEMPLATE_NAME);
-        assert(Boolean(row), `expected a gateway automation row named "${TEMPLATE_NAME}" after adopt, rows: ${JSON.stringify(rows.map((r) => r.name))}`);
-        console.log(`[auto01] adopted ref=${row.ref} enabled=${row.enabled} triggers=${JSON.stringify(row.triggers)}`);
+        assert(
+          Boolean(row),
+          `expected a gateway automation row named "${TEMPLATE_NAME}" after adopt, rows: ${JSON.stringify(rows.map((r) => r.name))}`,
+        );
+        console.log(
+          `[auto01] adopted ref=${row.ref} enabled=${row.enabled} triggers=${JSON.stringify(row.triggers)}`,
+        );
       },
     );
 
@@ -206,9 +231,18 @@ async function main() {
         // NOTE: document.body.innerText reflects CSS text-transform (the
         // heroNextLbl/eyebrow labels render visually as "NEXT 3 RUNS" via
         // `text-transform: uppercase`), so match case-insensitively.
-        assert(/30 17 \* \* \*/.test(bodyTxt), `expected cron expr "30 17 * * *" in hero, got body head: ${bodyTxt.slice(0, 300)}`);
-        assert(/next 3 runs/i.test(bodyTxt), 'expected "Next 3 runs" hero block for a cron-triggered automation');
-        assert(!/Provisioning endpoint/.test(bodyTxt), 'unexpected webhook-provisioning UI for a cron-only automation');
+        assert(
+          /30 17 \* \* \*/.test(bodyTxt),
+          `expected cron expr "30 17 * * *" in hero, got body head: ${bodyTxt.slice(0, 300)}`,
+        );
+        assert(
+          /next 3 runs/i.test(bodyTxt),
+          'expected "Next 3 runs" hero block for a cron-triggered automation',
+        );
+        assert(
+          !/Provisioning endpoint/.test(bodyTxt),
+          'unexpected webhook-provisioning UI for a cron-only automation',
+        );
 
         // The native checkbox is the standard visually-hidden-input pattern
         // (AutomationViewScreen.module.css `.switch input { opacity: 0;
@@ -218,15 +252,23 @@ async function main() {
         const sw = page.locator('input[role="switch"]');
         await sw.waitFor({ state: 'attached', timeout: 5_000 });
         const checked = await sw.getAttribute('aria-checked');
-        console.log(`[auto01] enable switch aria-checked=${checked} (template default is enabled:false)`);
-        assert(checked === 'false', `expected freshly-adopted automation to start disabled (template default), got aria-checked=${checked}`);
+        console.log(
+          `[auto01] enable switch aria-checked=${checked} (template default is enabled:false)`,
+        );
+        assert(
+          checked === 'false',
+          `expected freshly-adopted automation to start disabled (template default), got aria-checked=${checked}`,
+        );
 
         const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
         await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
 
         const editBtn = page.locator('button[title="Edit in builder"]');
         await editBtn.waitFor({ state: 'visible', timeout: 5_000 });
-        const deleteBtn = page.getByRole('button', { name: `Delete ${TEMPLATE_NAME}`, exact: true });
+        const deleteBtn = page.getByRole('button', {
+          name: `Delete ${TEMPLATE_NAME}`,
+          exact: true,
+        });
         await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 });
       },
     );
@@ -258,11 +300,16 @@ async function main() {
         }
         console.log(`[auto01] final timeline node data-status after settle: ${finalStatus}`);
         await shot('03-run-view-timeline-collapsed');
-        assert(finalStatus === 'ok' || finalStatus === 'fail', `run did not resolve within 30s, stuck at data-status=${finalStatus}`);
+        assert(
+          finalStatus === 'ok' || finalStatus === 'fail',
+          `run did not resolve within 30s, stuck at data-status=${finalStatus}`,
+        );
 
         if (finalStatus === 'fail') {
           const errTxt = (await bodyText()).slice(0, 600);
-          console.log(`[auto01] WARNING: run resolved as FAIL -- capturing body for root-cause: ${errTxt}`);
+          console.log(
+            `[auto01] WARNING: run resolved as FAIL -- capturing body for root-cause: ${errTxt}`,
+          );
         }
 
         // Expand a timeline node if any tool-call nodes exist between the
@@ -288,7 +335,9 @@ async function main() {
         // (confirmed: this is what happened on pass 2 of this suite).
         const nodeHeads = page.locator('button[class*="tlHead"]');
         const nodeCount = await nodeHeads.count();
-        console.log(`[auto01] expandable timeline node heads (excludes trigger/final): ${nodeCount}`);
+        console.log(
+          `[auto01] expandable timeline node heads (excludes trigger/final): ${nodeCount}`,
+        );
         if (nodeCount > 0) {
           await nodeHeads.first().click();
           await page.waitForTimeout(300);
@@ -296,7 +345,9 @@ async function main() {
           assert(expandedAttr === 'true', 'expected node aria-expanded=true after click');
           await shot('03-run-view-timeline-expanded');
         } else {
-          console.log('[auto01] no intermediate tool-call nodes (health-check automation is a plain LLM turn) -- switching to Log mode to verify expandable content there');
+          console.log(
+            '[auto01] no intermediate tool-call nodes (health-check automation is a plain LLM turn) -- switching to Log mode to verify expandable content there',
+          );
           await page.getByRole('tab', { name: 'Log' }).click();
           await page.waitForTimeout(300);
           await shot('03-run-view-log-mode');
@@ -342,9 +393,13 @@ async function main() {
 
         const rows = await gwListAutomations();
         const ref = rows.find((r) => r.name === TEMPLATE_NAME)?.ref;
-        const { json: runsJson } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=50`);
+        const { json: runsJson } = await gwFetch(
+          `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=50`,
+        );
         const runs = runsJson?.runs ?? [];
-        console.log(`[auto01] gateway runs for ${ref}: ${runs.length} (ids: ${runs.map((r) => r.runId).join(', ')})`);
+        console.log(
+          `[auto01] gateway runs for ${ref}: ${runs.length} (ids: ${runs.map((r) => r.runId).join(', ')})`,
+        );
         assert(runs.length === 3, `expected 3 runs in the gateway ledger, got ${runs.length}`);
         // Oldest run = last in a newest-first feed.
         olderRunId = runs[runs.length - 1]?.runId ?? null;
@@ -359,7 +414,10 @@ async function main() {
         await finalNodes.first().waitFor({ state: 'visible', timeout: 10_000 });
         const lastStatus = await finalNodes.last().getAttribute('data-status');
         console.log(`[auto01] older run's final node data-status: ${lastStatus}`);
-        assert(lastStatus === 'ok' || lastStatus === 'fail', `older run did not render a resolved timeline, data-status=${lastStatus}`);
+        assert(
+          lastStatus === 'ok' || lastStatus === 'fail',
+          `older run did not render a resolved timeline, data-status=${lastStatus}`,
+        );
       },
     );
 
@@ -393,7 +451,10 @@ async function main() {
         let ref = await gwFindRef(TEMPLATE_NAME);
         let { json } = await gwFetch(`/centraid/_automations/read?ref=${encodeURIComponent(ref)}`);
         console.log(`[auto01] gateway row after enable: enabled=${json?.row?.enabled}`);
-        assert(json?.row?.enabled === true, `expected gateway enabled:true after enabling, got ${JSON.stringify(json?.row?.enabled)}`);
+        assert(
+          json?.row?.enabled === true,
+          `expected gateway enabled:true after enabling, got ${JSON.stringify(json?.row?.enabled)}`,
+        );
 
         // ---- turn OFF ----
         await clickSwitch();
@@ -403,7 +464,10 @@ async function main() {
         assert(checked === 'false', `expected aria-checked=false after disabling, got ${checked}`);
         ({ json } = await gwFetch(`/centraid/_automations/read?ref=${encodeURIComponent(ref)}`));
         console.log(`[auto01] gateway row after disable: enabled=${json?.row?.enabled}`);
-        assert(json?.row?.enabled === false, `expected gateway enabled:false after disabling, got ${JSON.stringify(json?.row?.enabled)}`);
+        assert(
+          json?.row?.enabled === false,
+          `expected gateway enabled:false after disabling, got ${JSON.stringify(json?.row?.enabled)}`,
+        );
 
         // ---- turn back ON, leave enabled for the rest of the suite ----
         await clickSwitch();
@@ -430,18 +494,25 @@ async function main() {
         // automation" (createAutomation({ id, name: 'New automation',
         // enabled: false })) before the builder even paints, then navigates
         // to { kind: 'automation-builder', automationId: id }.
-        await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('button', { name: 'Config' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
         await shot('06-new-automation-builder-opened');
 
         const rowsAfterScaffold = await gwListAutomations();
         const draftRow = rowsAfterScaffold.find((r) => r.name === 'New automation');
-        console.log(`[auto01] scaffolded draft row present in gateway: ${Boolean(draftRow)} ref=${draftRow?.ref}`);
-        assert(Boolean(draftRow), 'expected "New automation" to exist as a real gateway row immediately after clicking New automation');
+        console.log(
+          `[auto01] scaffolded draft row present in gateway: ${Boolean(draftRow)} ref=${draftRow?.ref}`,
+        );
+        assert(
+          Boolean(draftRow),
+          'expected "New automation" to exist as a real gateway row immediately after clicking New automation',
+        );
 
         const textarea = page.getByPlaceholder('Describe a change…');
         await textarea.waitFor({ state: 'visible', timeout: 10_000 });
-        await textarea.fill('Every weekday morning, summarize yesterday\'s new GitHub issues.');
+        await textarea.fill("Every weekday morning, summarize yesterday's new GitHub issues.");
         await page.getByRole('button', { name: 'Send' }).click();
         await page.waitForTimeout(1500);
         await shot('06-new-automation-after-send');
@@ -457,7 +528,9 @@ async function main() {
           if (thinkingCount === 0 && sawThinking) break;
           await page.waitForTimeout(1000);
         }
-        console.log(`[auto01] saw a "thinking" bubble during New-automation prompt: ${sawThinking}`);
+        console.log(
+          `[auto01] saw a "thinking" bubble during New-automation prompt: ${sawThinking}`,
+        );
         await shot('06-new-automation-after-progress-wait');
         const errs = consoleMessages.filter((m) => m.type === 'error');
         console.log(`[auto01] console errors so far after New-automation prompt: ${errs.length}`);
@@ -476,7 +549,9 @@ async function main() {
         await editBtn.waitFor({ state: 'visible', timeout: 5_000 });
         await editBtn.click();
 
-        await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('button', { name: 'Config' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
         await shot('07-edit-in-builder-opened');
 
@@ -485,10 +560,17 @@ async function main() {
         // somewhere in the Config pane, unlike the blank "New automation"
         // draft from flow 6.
         const bodyTxt = await bodyText();
-        console.log(`[auto01] builder body after Edit-in-builder (first 400 chars): ${bodyTxt.slice(0, 400).replace(/\n/g, ' | ')}`);
+        console.log(
+          `[auto01] builder body after Edit-in-builder (first 400 chars): ${bodyTxt.slice(0, 400).replace(/\n/g, ' | ')}`,
+        );
         const hasCron = /30 17 \* \* \*/.test(bodyTxt) || /System health check/.test(bodyTxt);
-        console.log(`[auto01] builder shows existing automation identity (cron expr or name): ${hasCron}`);
-        assert(hasCron, 'expected the builder opened via Edit-in-builder to show the existing automation\'s name or cron expr somewhere (Config tab)');
+        console.log(
+          `[auto01] builder shows existing automation identity (cron expr or name): ${hasCron}`,
+        );
+        assert(
+          hasCron,
+          "expected the builder opened via Edit-in-builder to show the existing automation's name or cron expr somewhere (Config tab)",
+        );
       },
     );
 
@@ -500,7 +582,10 @@ async function main() {
       'Delete -> Cancel keeps it; Delete -> confirm removes it from overview, Home, and the gateway',
       async () => {
         await openAutomationView(TEMPLATE_NAME);
-        const deleteBtn = page.getByRole('button', { name: `Delete ${TEMPLATE_NAME}`, exact: true });
+        const deleteBtn = page.getByRole('button', {
+          name: `Delete ${TEMPLATE_NAME}`,
+          exact: true,
+        });
         await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 });
 
         // ---- Cancel path ----
@@ -512,9 +597,14 @@ async function main() {
         await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
         await page.waitForTimeout(300);
         // Still on the view screen -- automation was not deleted.
-        await page.getByRole('heading', { name: TEMPLATE_NAME, level: 1 }).waitFor({ state: 'visible', timeout: 5_000 });
+        await page
+          .getByRole('heading', { name: TEMPLATE_NAME, level: 1 })
+          .waitFor({ state: 'visible', timeout: 5_000 });
         let rows = await gwListAutomations();
-        assert(rows.some((r) => r.name === TEMPLATE_NAME), 'automation should still exist in the gateway after Cancel');
+        assert(
+          rows.some((r) => r.name === TEMPLATE_NAME),
+          'automation should still exist in the gateway after Cancel',
+        );
         await shot('08-after-cancel-still-present');
 
         // ---- Confirm path ----
@@ -523,19 +613,34 @@ async function main() {
         await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
         await page.waitForTimeout(800);
         // onDelete navigates back to the overview on success.
-        await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+        await page
+          .getByRole('heading', { name: 'Automations', level: 1 })
+          .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('08-after-confirm-overview');
         const ovGone = await page.getByRole('button', { name: new RegExp(TEMPLATE_NAME) }).count();
-        assert(ovGone === 0, `expected 0 overview rows for "${TEMPLATE_NAME}" after confirmed delete, found ${ovGone}`);
+        assert(
+          ovGone === 0,
+          `expected 0 overview rows for "${TEMPLATE_NAME}" after confirmed delete, found ${ovGone}`,
+        );
 
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-        const homeGone = await page.locator('button[data-kind="automation"]', { hasText: TEMPLATE_NAME }).count();
-        assert(homeGone === 0, `expected 0 Home AutoCards for "${TEMPLATE_NAME}" after confirmed delete, found ${homeGone}`);
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        const homeGone = await page
+          .locator('button[data-kind="automation"]', { hasText: TEMPLATE_NAME })
+          .count();
+        assert(
+          homeGone === 0,
+          `expected 0 Home AutoCards for "${TEMPLATE_NAME}" after confirmed delete, found ${homeGone}`,
+        );
         await shot('08-after-confirm-home');
 
         rows = await gwListAutomations();
-        assert(!rows.some((r) => r.name === TEMPLATE_NAME), `expected "${TEMPLATE_NAME}" gone from the gateway, rows: ${JSON.stringify(rows.map((r) => r.name))}`);
+        assert(
+          !rows.some((r) => r.name === TEMPLATE_NAME),
+          `expected "${TEMPLATE_NAME}" gone from the gateway, rows: ${JSON.stringify(rows.map((r) => r.name))}`,
+        );
       },
     );
 
@@ -553,7 +658,9 @@ async function main() {
         await shot('09-before-relaunch-run-view');
 
         const refBefore = await gwFindRef(TEMPLATE_NAME);
-        const { json: runsBeforeJson } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(refBefore)}&limit=50`);
+        const { json: runsBeforeJson } = await gwFetch(
+          `/centraid/_automations/runs?ref=${encodeURIComponent(refBefore)}&limit=50`,
+        );
         const runsBefore = runsBeforeJson?.runs ?? [];
         console.log(`[auto01] runs recorded before relaunch: ${runsBefore.length}`);
         assert(runsBefore.length >= 1, 'expected at least 1 recorded run before relaunch');
@@ -576,14 +683,25 @@ async function main() {
         await shot('09-relaunch-view-screen');
         const runRowsAfter = await page.locator('button[data-ok]').count();
         console.log(`[auto01] run-history rows visible after relaunch: ${runRowsAfter}`);
-        assert(runRowsAfter >= 1, `expected >=1 run-history row after relaunch, got ${runRowsAfter}`);
+        assert(
+          runRowsAfter >= 1,
+          `expected >=1 run-history row after relaunch, got ${runRowsAfter}`,
+        );
 
         const refAfter = await gwFindRef(TEMPLATE_NAME);
-        assert(refAfter === refBefore, `expected the same automation ref to survive relaunch, before=${refBefore} after=${refAfter}`);
-        const { json: runsAfterJson } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(refAfter)}&limit=50`);
+        assert(
+          refAfter === refBefore,
+          `expected the same automation ref to survive relaunch, before=${refBefore} after=${refAfter}`,
+        );
+        const { json: runsAfterJson } = await gwFetch(
+          `/centraid/_automations/runs?ref=${encodeURIComponent(refAfter)}&limit=50`,
+        );
         const runsAfter = runsAfterJson?.runs ?? [];
         console.log(`[auto01] runs recorded after relaunch: ${runsAfter.length}`);
-        assert(runsAfter.length === runsBefore.length, `expected run count to survive relaunch unchanged, before=${runsBefore.length} after=${runsAfter.length}`);
+        assert(
+          runsAfter.length === runsBefore.length,
+          `expected run count to survive relaunch unchanged, before=${runsBefore.length} after=${runsAfter.length}`,
+        );
 
         // Open the persisted run and confirm its timeline still renders (not
         // just the row list).
@@ -594,7 +712,10 @@ async function main() {
         await finalNodes.first().waitFor({ state: 'visible', timeout: 10_000 });
         const status = await finalNodes.last().getAttribute('data-status');
         console.log(`[auto01] persisted run's final node data-status after relaunch: ${status}`);
-        assert(status === 'ok' || status === 'fail', `persisted run did not render a resolved timeline after relaunch, data-status=${status}`);
+        assert(
+          status === 'ok' || status === 'fail',
+          `persisted run did not render a resolved timeline after relaunch, data-status=${status}`,
+        );
       },
     );
 

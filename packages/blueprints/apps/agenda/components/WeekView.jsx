@@ -12,7 +12,9 @@ const HOUR_PX = 48;
 function WeekDayHead({ date, isToday }) {
   return (
     <div className="ag-week-day-head" data-today={String(isToday)}>
-      <span className="ag-week-dow">{date.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+      <span className="ag-week-dow">
+        {date.toLocaleDateString(undefined, { weekday: 'short' })}
+      </span>
       <span className="ag-week-num">{date.getDate()}</span>
     </div>
   );
@@ -44,7 +46,9 @@ function WeekAxis() {
     <div className="ag-week-axis" style={{ height: 24 * HOUR_PX }}>
       {hours.map((h) => (
         <span key={h} className="ag-week-hour" style={{ top: h * HOUR_PX }}>
-          {new Date(2024, 0, 1, h).toLocaleTimeString(undefined, { hour: 'numeric' }).replace(' ', '')}
+          {new Date(2024, 0, 1, h)
+            .toLocaleTimeString(undefined, { hour: 'numeric' })
+            .replace(' ', '')}
         </span>
       ))}
     </div>
@@ -67,8 +71,17 @@ function WeekCol({ date, byDay, isToday, colorFor, onSlotCreate, onEventOpen }) 
       onClick={(e) => {
         if (e.target instanceof Element && e.target.closest('.ag-week-ev')) return;
         const rect = e.currentTarget.getBoundingClientRect();
-        const hour = Math.max(0, Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2));
-        const at = new Date(date.getFullYear(), date.getMonth(), date.getDate(), Math.floor(hour), (hour % 1) * 60);
+        const hour = Math.max(
+          0,
+          Math.min(23.5, Math.floor(((e.clientY - rect.top) / HOUR_PX) * 2) / 2),
+        );
+        const at = new Date(
+          date.getFullYear(),
+          date.getMonth(),
+          date.getDate(),
+          Math.floor(hour),
+          (hour % 1) * 60,
+        );
         onSlotCreate(date, at);
       }}
     >
@@ -107,7 +120,10 @@ function WeekCol({ date, byDay, isToday, colorFor, onSlotCreate, onEventOpen }) 
 
 export function WeekView({ cursor, events, colorFor, onSlotCreate, onEventOpen }) {
   const start = startOfWeek(cursor);
-  const days = Array.from({ length: 7 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+  const days = Array.from(
+    { length: 7 },
+    (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i),
+  );
   const byDay = bucketByDay(events);
   const todayKey = localDayKey(new Date());
   const hasAllDay = days.some((d) => (byDay.get(localDayKey(d)) ?? []).some((s) => s.spansAll));
@@ -130,7 +146,13 @@ export function WeekView({ cursor, events, colorFor, onSlotCreate, onEventOpen }
         <div className="ag-week-allday">
           <span className="ag-week-allday-label">all-day</span>
           {days.map((d) => (
-            <AllDayCell key={localDayKey(d)} date={d} byDay={byDay} colorFor={colorFor} onEventOpen={onEventOpen} />
+            <AllDayCell
+              key={localDayKey(d)}
+              date={d}
+              byDay={byDay}
+              colorFor={colorFor}
+              onEventOpen={onEventOpen}
+            />
           ))}
         </div>
       ) : null}

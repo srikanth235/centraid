@@ -49,7 +49,11 @@ const consoleMessages = []; // { text, type, frameUrl }
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
 }
 
@@ -101,7 +105,9 @@ async function main() {
   // ============================= SUITE 1 =============================
 
   await step('1', 'Fresh boot -> Home renders', async () => {
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible' });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible' });
     await shot('01-home');
   });
 
@@ -147,7 +153,9 @@ async function main() {
     const toastText = await toast.textContent();
     assert(/Installed "Docs"/.test(toastText ?? ''), `unexpected toast: ${toastText}`);
 
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     const tile = page.locator('[data-app-id="docs"]');
     await tile.waitFor({ state: 'visible', timeout: 10_000 });
     await shot('03a-home-with-docs');
@@ -157,8 +165,14 @@ async function main() {
     await menu.waitFor({ state: 'visible', timeout: 5_000 });
     const menuText = await menu.textContent();
     assert(/Open/.test(menuText ?? ''), `expected "Open" verb, menu was: ${menuText}`);
-    assert(/Edit with Centraid/.test(menuText ?? ''), `expected "Edit with Centraid", menu was: ${menuText}`);
-    assert(!/Continue editing/.test(menuText ?? ''), `should NOT show draft verb "Continue editing": ${menuText}`);
+    assert(
+      /Edit with Centraid/.test(menuText ?? ''),
+      `expected "Edit with Centraid", menu was: ${menuText}`,
+    );
+    assert(
+      !/Continue editing/.test(menuText ?? ''),
+      `should NOT show draft verb "Continue editing": ${menuText}`,
+    );
     assert(!/Delete draft/.test(menuText ?? ''), `should NOT show "Delete draft": ${menuText}`);
     // The plain context-menu overlay (contextMenu.ts) has NO Escape handler —
     // only clicking its full-screen backdrop closes it. Click a neutral point.
@@ -166,17 +180,21 @@ async function main() {
     await menu.waitFor({ state: 'hidden', timeout: 5_000 });
   });
 
-  await step('3a-diag', 'Diagnostic: does the gateway list "docs" as an app right after publish?', async () => {
-    const diag = await page.evaluate(async () => {
-      const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
-      const res = await fetch(`${baseUrl}/centraid/_apps`, {
-        headers: { Authorization: `Bearer ${token}` },
+  await step(
+    '3a-diag',
+    'Diagnostic: does the gateway list "docs" as an app right after publish?',
+    async () => {
+      const diag = await page.evaluate(async () => {
+        const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
+        const res = await fetch(`${baseUrl}/centraid/_apps`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = await res.json().catch(() => null);
+        return { status: res.status, body };
       });
-      const body = await res.json().catch(() => null);
-      return { status: res.status, body };
-    });
-    console.log(`[3a-diag] GET /_apps status=${diag.status} body=${JSON.stringify(diag.body)}`);
-  });
+      console.log(`[3a-diag] GET /_apps status=${diag.status} body=${JSON.stringify(diag.body)}`);
+    },
+  );
 
   await step('3b', 'Install same template again -> unique id/name, both coexist', async () => {
     await navTo(page, 'Discover');
@@ -209,8 +227,13 @@ async function main() {
     });
     console.log(`[3b] toast after action: ${JSON.stringify(toastText)}`);
     console.log(`[3b] /_apps after action: ${JSON.stringify(diagAfter)}`);
-    assert(/Installed "Docs 2"/.test(toastText ?? ''), `expected "Docs 2", toast was: ${toastText}`);
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+    assert(
+      /Installed "Docs 2"/.test(toastText ?? ''),
+      `expected "Docs 2", toast was: ${toastText}`,
+    );
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     await page.locator('[data-app-id="docs"]').waitFor({ state: 'visible', timeout: 5_000 });
     await page.locator('[data-app-id="docs-2"]').waitFor({ state: 'visible', timeout: 5_000 });
     await shot('03b-home-two-docs');
@@ -253,7 +276,10 @@ async function main() {
     });
     console.log(`[3c] toast after action: ${JSON.stringify(agendaToastText)}`);
     console.log(`[3c] /_apps after action: ${JSON.stringify(diagAfter)}`);
-    assert(/Installed "Agenda"/.test(agendaToastText ?? ''), `expected Agenda install toast, got: ${agendaToastText}`);
+    assert(
+      /Installed "Agenda"/.test(agendaToastText ?? ''),
+      `expected Agenda install toast, got: ${agendaToastText}`,
+    );
     await page.locator('[data-app-id="agenda"]').waitFor({ state: 'visible', timeout: 10_000 });
   });
 
@@ -264,7 +290,12 @@ async function main() {
       await navTo(page, 'Discover');
       const autoCard = page.locator('button[data-kind="automation"]').first();
       await autoCard.waitFor({ state: 'visible', timeout: 10_000 });
-      const autoName = (await autoCard.locator('.cardName, [class*="cardName"]').first().textContent().catch(() => null)) ?? '';
+      const autoName =
+        (await autoCard
+          .locator('.cardName, [class*="cardName"]')
+          .first()
+          .textContent()
+          .catch(() => null)) ?? '';
 
       // Preview first (non-destructive).
       await autoCard.click({ button: 'right' });
@@ -274,7 +305,10 @@ async function main() {
       const drawer = page.getByRole('dialog', { name: /template$/ });
       await drawer.waitFor({ state: 'visible', timeout: 5_000 });
       const drawerText = await drawer.textContent();
-      assert(/Fires /.test(drawerText ?? ''), `expected trigger info ("Fires ...") in drawer: ${drawerText}`);
+      assert(
+        /Fires /.test(drawerText ?? ''),
+        `expected trigger info ("Fires ...") in drawer: ${drawerText}`,
+      );
       await page.waitForTimeout(400); // let the slide-in animation settle before the screenshot
       await shot('03d-automation-preview-drawer');
       await page.keyboard.press('Escape');
@@ -288,7 +322,9 @@ async function main() {
 
       // Must land in the automation builder — assert Config tab appears and
       // we did NOT bounce back to the Home composer heading.
-      await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+      await page
+        .getByRole('button', { name: 'Config' })
+        .waitFor({ state: 'visible', timeout: 15_000 });
       const homeHeadingVisible = await page
         .getByRole('heading', { name: 'What should we build?' })
         .isVisible()
@@ -297,22 +333,28 @@ async function main() {
       await shot('03d-automation-builder');
       void autoName;
       await navTo(page, 'Home');
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
     },
   );
 
-  await step('3e', 'Restart persistence — relaunch with SAME userData, installed apps still on Home', async () => {
-    await session.close();
-    await new Promise((r) => setTimeout(r, 500));
-    session = await launchApp({ userDataDir: USER_DATA_DIR });
-    page = session.page;
-    wireConsole(page);
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await page.locator('[data-app-id="docs"]').waitFor({ state: 'visible', timeout: 15_000 });
-    await page.locator('[data-app-id="docs-2"]').waitFor({ state: 'visible', timeout: 5_000 });
-    await page.locator('[data-app-id="agenda"]').waitFor({ state: 'visible', timeout: 5_000 });
-    await shot('03e-restart-home');
-  });
+  await step(
+    '3e',
+    'Restart persistence — relaunch with SAME userData, installed apps still on Home',
+    async () => {
+      await session.close();
+      await new Promise((r) => setTimeout(r, 500));
+      session = await launchApp({ userDataDir: USER_DATA_DIR });
+      page = session.page;
+      wireConsole(page);
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.locator('[data-app-id="docs"]').waitFor({ state: 'visible', timeout: 15_000 });
+      await page.locator('[data-app-id="docs-2"]').waitFor({ state: 'visible', timeout: 5_000 });
+      await page.locator('[data-app-id="agenda"]').waitFor({ state: 'visible', timeout: 5_000 });
+      await shot('03e-restart-home');
+    },
+  );
 
   let docsFirstOpenConsoleCountAtOpen = 0;
   await step('4', 'Open installed Docs app -> iframe renders; back+reopen still fine', async () => {
@@ -329,109 +371,134 @@ async function main() {
 
     // "Back" — the shell's back nav.
     await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     await tile.getByTestId('app-tile').click();
-    await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
+    await page
+      .locator('iframe[data-centraid-app="1"]')
+      .waitFor({ state: 'attached', timeout: 15_000 });
     await shot('04-docs-app-reopen');
   });
 
-  await step('5', 'Edit installed Docs app -> builder opens with WORKING preview iframe', async () => {
-    await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-    await openAppContextMenu(page, 'docs');
-    const menu = page.getByRole('menu');
-    await menu.waitFor({ state: 'visible', timeout: 5_000 });
-    await menu.getByRole('menuitem', { name: 'Edit with Centraid' }).click();
+  await step(
+    '5',
+    'Edit installed Docs app -> builder opens with WORKING preview iframe',
+    async () => {
+      await navTo(page, 'Home');
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+      await openAppContextMenu(page, 'docs');
+      const menu = page.getByRole('menu');
+      await menu.waitFor({ state: 'visible', timeout: 5_000 });
+      await menu.getByRole('menuitem', { name: 'Edit with Centraid' }).click();
 
-    // Builder chrome should appear (Preview/Code/Cloud tabs — app-kind).
-    await page
-      .getByRole('button', { name: 'Preview', exact: true })
-      .waitFor({ state: 'visible', timeout: 15_000 });
-    await shot('05-builder-opened');
+      // Builder chrome should appear (Preview/Code/Cloud tabs — app-kind).
+      await page
+        .getByRole('button', { name: 'Preview', exact: true })
+        .waitFor({ state: 'visible', timeout: 15_000 });
+      await shot('05-builder-opened');
 
-    // The critical regression check: preview must NOT be stuck on "Building…"
-    // forever — wait generously, then assert the iframe attaches and the
-    // building pill disappears.
-    const iframe = page.locator('iframe[data-centraid-app="1"]');
-    await iframe.waitFor({ state: 'attached', timeout: 20_000 });
-    await page.getByText('Building · preview refreshes on save').waitFor({ state: 'hidden', timeout: 20_000 });
-    await shot('05-builder-preview-resolved');
+      // The critical regression check: preview must NOT be stuck on "Building…"
+      // forever — wait generously, then assert the iframe attaches and the
+      // building pill disappears.
+      const iframe = page.locator('iframe[data-centraid-app="1"]');
+      await iframe.waitFor({ state: 'attached', timeout: 20_000 });
+      await page
+        .getByText('Building · preview refreshes on save')
+        .waitFor({ state: 'hidden', timeout: 20_000 });
+      await shot('05-builder-preview-resolved');
 
-    await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-  });
+      await navTo(page, 'Home');
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+    },
+  );
 
-  await step('6', 'Rename + delete installed app; delete then re-install same template', async () => {
-    // Rename Agenda -> "Agenda Renamed".
-    await openAppContextMenu(page, 'agenda');
-    let menu = page.getByRole('menu');
-    await menu.waitFor({ state: 'visible', timeout: 5_000 });
-    await menu.getByRole('menuitem', { name: 'Rename' }).click();
-    const renameDialog = page.getByRole('dialog', { name: 'Rename app' });
-    await renameDialog.waitFor({ state: 'visible', timeout: 5_000 });
-    const promptInput = renameDialog.locator('input');
-    await promptInput.waitFor({ state: 'visible', timeout: 5_000 });
-    await promptInput.fill('Agenda Renamed');
-    console.log(`[6] rename input value before submit: ${JSON.stringify(await promptInput.inputValue())}`);
-    await renameDialog.getByRole('button', { name: 'Rename', exact: true }).click();
-    await renameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
-    const renameToast = await page
-      .locator('[data-global-toast]')
-      .textContent({ timeout: 3_000 })
-      .catch(() => '(no toast seen)');
-    console.log(`[6] toast after rename: ${JSON.stringify(renameToast)}`);
-    await page.waitForTimeout(800);
-    const diagAfterRename = await page.evaluate(async () => {
-      const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
-      const res = await fetch(`${baseUrl}/centraid/_apps`, {
-        headers: { Authorization: `Bearer ${token}` },
+  await step(
+    '6',
+    'Rename + delete installed app; delete then re-install same template',
+    async () => {
+      // Rename Agenda -> "Agenda Renamed".
+      await openAppContextMenu(page, 'agenda');
+      let menu = page.getByRole('menu');
+      await menu.waitFor({ state: 'visible', timeout: 5_000 });
+      await menu.getByRole('menuitem', { name: 'Rename' }).click();
+      const renameDialog = page.getByRole('dialog', { name: 'Rename app' });
+      await renameDialog.waitFor({ state: 'visible', timeout: 5_000 });
+      const promptInput = renameDialog.locator('input');
+      await promptInput.waitFor({ state: 'visible', timeout: 5_000 });
+      await promptInput.fill('Agenda Renamed');
+      console.log(
+        `[6] rename input value before submit: ${JSON.stringify(await promptInput.inputValue())}`,
+      );
+      await renameDialog.getByRole('button', { name: 'Rename', exact: true }).click();
+      await renameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
+      const renameToast = await page
+        .locator('[data-global-toast]')
+        .textContent({ timeout: 3_000 })
+        .catch(() => '(no toast seen)');
+      console.log(`[6] toast after rename: ${JSON.stringify(renameToast)}`);
+      await page.waitForTimeout(800);
+      const diagAfterRename = await page.evaluate(async () => {
+        const { baseUrl, token } = await window.CentraidApi.getGatewayAuth();
+        const res = await fetch(`${baseUrl}/centraid/_apps`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return res.json().catch(() => null);
       });
-      return res.json().catch(() => null);
-    });
-    console.log(`[6] /_apps after rename: ${JSON.stringify(diagAfterRename)}`);
-    const tileNameText = await page
-      .locator('[data-app-id="agenda"]')
-      .locator('div')
-      .filter({ hasText: 'Agenda Renamed' })
-      .first()
-      .isVisible()
-      .catch(() => false);
-    assert(tileNameText, 'renamed tile text "Agenda Renamed" not found on Home');
-    await shot('06-renamed');
+      console.log(`[6] /_apps after rename: ${JSON.stringify(diagAfterRename)}`);
+      const tileNameText = await page
+        .locator('[data-app-id="agenda"]')
+        .locator('div')
+        .filter({ hasText: 'Agenda Renamed' })
+        .first()
+        .isVisible()
+        .catch(() => false);
+      assert(tileNameText, 'renamed tile text "Agenda Renamed" not found on Home');
+      await shot('06-renamed');
 
-    // Delete Agenda.
-    await openAppContextMenu(page, 'agenda');
-    menu = page.getByRole('menu');
-    await menu.waitFor({ state: 'visible', timeout: 5_000 });
-    await menu.getByRole('menuitem', { name: 'Delete' }).click();
-    const confirmDialog = page.getByRole('dialog').filter({ hasText: 'Delete app?' });
-    await confirmDialog.waitFor({ state: 'visible', timeout: 5_000 });
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
-    await page.locator('[data-app-id="agenda"]').waitFor({ state: 'hidden', timeout: 10_000 });
-    await shot('06-deleted');
+      // Delete Agenda.
+      await openAppContextMenu(page, 'agenda');
+      menu = page.getByRole('menu');
+      await menu.waitFor({ state: 'visible', timeout: 5_000 });
+      await menu.getByRole('menuitem', { name: 'Delete' }).click();
+      const confirmDialog = page.getByRole('dialog').filter({ hasText: 'Delete app?' });
+      await confirmDialog.waitFor({ state: 'visible', timeout: 5_000 });
+      await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+      await page.locator('[data-app-id="agenda"]').waitFor({ state: 'hidden', timeout: 10_000 });
+      await shot('06-deleted');
 
-    // Re-install Agenda from its template.
-    await navTo(page, 'Discover');
-    const agendaCard = page.locator('button[data-kind="app"]', { hasText: 'Agenda' }).first();
-    await agendaCard.waitFor({ state: 'visible', timeout: 10_000 });
-    await agendaCard.click();
-    const dialog = page.getByRole('dialog', { name: /^Preview Agenda/ });
-    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-    await dialog.getByRole('button', { name: 'Use this template' }).click();
-    await page.locator('[data-app-id="agenda"]').waitFor({ state: 'visible', timeout: 10_000 });
-    await navTo(page, 'Home');
-  });
+      // Re-install Agenda from its template.
+      await navTo(page, 'Discover');
+      const agendaCard = page.locator('button[data-kind="app"]', { hasText: 'Agenda' }).first();
+      await agendaCard.waitFor({ state: 'visible', timeout: 10_000 });
+      await agendaCard.click();
+      const dialog = page.getByRole('dialog', { name: /^Preview Agenda/ });
+      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+      await dialog.getByRole('button', { name: 'Use this template' }).click();
+      await page.locator('[data-app-id="agenda"]').waitFor({ state: 'visible', timeout: 10_000 });
+      await navTo(page, 'Home');
+    },
+  );
 
   await step('7', 'Theme toggle: shell flips AND open blueprint app iframe follows', async () => {
     // Open Docs first so we have a live iframe to observe.
     await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
-    await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
+    await page
+      .locator('iframe[data-centraid-app="1"]')
+      .waitFor({ state: 'attached', timeout: 15_000 });
     const themeBefore = await page.evaluate(() => document.documentElement.dataset.theme);
 
     // Settings' sidebar button has a trailing "live" status pill, so its
     // accessible name isn't the exact string "Settings" — navTo's exact
     // match doesn't fit; match by regex instead.
-    await page.getByRole('button', { name: /^Settings/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Settings/ })
+      .first()
+      .click();
     // Appearance is the default settings page.
     const radios = page.getByRole('radio');
     await radios.first().waitFor({ state: 'visible', timeout: 10_000 });
@@ -456,9 +523,13 @@ async function main() {
     // 'centraid:theme' on the app's own <html data-theme>).
     await navTo(page, 'Home');
     await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
-    const frame = await (await page.waitForSelector('iframe[data-centraid-app="1"]')).contentFrame();
+    const frame = await (
+      await page.waitForSelector('iframe[data-centraid-app="1"]')
+    ).contentFrame();
     await page.waitForTimeout(600);
-    const frameTheme = await frame.evaluate(() => document.documentElement.dataset.theme || document.body.dataset.theme);
+    const frameTheme = await frame.evaluate(
+      () => document.documentElement.dataset.theme || document.body.dataset.theme,
+    );
     await shot('07-docs-app-theme-followed');
     console.log(`[7] shell theme=${themeAfter} frame theme=${frameTheme}`);
   });
@@ -466,7 +537,9 @@ async function main() {
   await step('8', 'Consent seam: first open of freshly installed app (observation)', async () => {
     // Docs-2 has never been opened yet — a clean "first open" to observe.
     await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     const tile = page.locator('[data-app-id="docs-2"]');
     await tile.waitFor({ state: 'visible', timeout: 10_000 });
     await tile.getByTestId('app-tile').click();
@@ -484,7 +557,10 @@ async function main() {
       .catch(() => false);
     await shot('08-docs2-first-open');
     console.log(`[8] consentBanner hidden=${bannerHidden} kit-empty visible=${emptyVisible}`);
-    assert(bannerHidden || emptyVisible, 'first open shows neither data nor an empty state — stuck?');
+    assert(
+      bannerHidden || emptyVisible,
+      'first open shows neither data nor an empty state — stuck?',
+    );
   });
 
   await step('9', 'Narrow window (~500px) -> shell usable, docs app adapts', async () => {
@@ -492,7 +568,9 @@ async function main() {
     await page.waitForTimeout(400);
     await shot('09-narrow-shell');
     await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 10_000 });
     const tile = page.locator('[data-app-id="docs"]');
     await tile.waitFor({ state: 'visible', timeout: 10_000 });
     await tile.getByTestId('app-tile').click();
@@ -513,52 +591,80 @@ async function main() {
 
   const docsFrame = () => page.frameLocator('iframe[data-centraid-app="1"]');
 
-  await step('S2-empty', 'Empty vault first-run: docs empty state, storage zeros, no console errors', async () => {
-    await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-    const tile = page.locator('[data-app-id="docs"]');
-    await tile.waitFor({ state: 'visible', timeout: 10_000 });
-    await tile.getByTestId('app-tile').click();
-    await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
-    const frameLoc = docsFrame();
-    await frameLoc.locator('.kit-empty').first().waitFor({ state: 'visible', timeout: 15_000 });
-    const storageText = await frameLoc.locator('.d-storage-label, [class*="storage"]').first().textContent().catch(() => '');
-    await shot('S2-empty-docs');
-    console.log(`[S2-empty] storage label: ${JSON.stringify(storageText)}`);
-  });
+  await step(
+    'S2-empty',
+    'Empty vault first-run: docs empty state, storage zeros, no console errors',
+    async () => {
+      await navTo(page, 'Home');
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+      const tile = page.locator('[data-app-id="docs"]');
+      await tile.waitFor({ state: 'visible', timeout: 10_000 });
+      await tile.getByTestId('app-tile').click();
+      await page
+        .locator('iframe[data-centraid-app="1"]')
+        .waitFor({ state: 'attached', timeout: 15_000 });
+      const frameLoc = docsFrame();
+      await frameLoc.locator('.kit-empty').first().waitFor({ state: 'visible', timeout: 15_000 });
+      const storageText = await frameLoc
+        .locator('.d-storage-label, [class*="storage"]')
+        .first()
+        .textContent()
+        .catch(() => '');
+      await shot('S2-empty-docs');
+      console.log(`[S2-empty] storage label: ${JSON.stringify(storageText)}`);
+    },
+  );
 
-  await step('S2-upload', 'Real upload via #uploadInput lands in vault; survives close+reopen+restart', async () => {
-    const frameLoc = docsFrame();
-    const fileInput = frameLoc.locator('#uploadInput');
-    await fileInput.setInputFiles([fixtures.pngPath, fixtures.txtPath, fixtures.pdfPath]);
-    await frameLoc.locator('.d-card').first().waitFor({ state: 'visible', timeout: 20_000 });
-    await page.waitForTimeout(500);
-    const cardCount = await frameLoc.locator('.d-card').count();
-    assert(cardCount >= 3, `expected >= 3 cards after uploading 3 files, got ${cardCount}`);
-    await shot('S2-upload-grid');
+  await step(
+    'S2-upload',
+    'Real upload via #uploadInput lands in vault; survives close+reopen+restart',
+    async () => {
+      const frameLoc = docsFrame();
+      const fileInput = frameLoc.locator('#uploadInput');
+      await fileInput.setInputFiles([fixtures.pngPath, fixtures.txtPath, fixtures.pdfPath]);
+      await frameLoc.locator('.d-card').first().waitFor({ state: 'visible', timeout: 20_000 });
+      await page.waitForTimeout(500);
+      const cardCount = await frameLoc.locator('.d-card').count();
+      assert(cardCount >= 3, `expected >= 3 cards after uploading 3 files, got ${cardCount}`);
+      await shot('S2-upload-grid');
 
-    // Close app (nav home) + reopen -> persists within the same process.
-    await navTo(page, 'Home');
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-    await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
-    await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
-    await docsFrame().locator('.d-card').first().waitFor({ state: 'visible', timeout: 15_000 });
-    assert((await docsFrame().locator('.d-card').count()) >= 3, 'uploaded cards gone after reopen');
+      // Close app (nav home) + reopen -> persists within the same process.
+      await navTo(page, 'Home');
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+      await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
+      await page
+        .locator('iframe[data-centraid-app="1"]')
+        .waitFor({ state: 'attached', timeout: 15_000 });
+      await docsFrame().locator('.d-card').first().waitFor({ state: 'visible', timeout: 15_000 });
+      assert(
+        (await docsFrame().locator('.d-card').count()) >= 3,
+        'uploaded cards gone after reopen',
+      );
 
-    // Full app restart (reused userData) -> vault persistence.
-    await session.close();
-    await new Promise((r) => setTimeout(r, 500));
-    session = await launchApp({ userDataDir: USER_DATA_DIR });
-    page = session.page;
-    wireConsole(page);
-    await page.setViewportSize({ width: 1400, height: 900 });
-    await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
-    await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
-    await docsFrame().locator('.d-card').first().waitFor({ state: 'visible', timeout: 15_000 });
-    const countAfterRestart = await docsFrame().locator('.d-card').count();
-    assert(countAfterRestart >= 3, `uploaded cards gone after full app restart, got ${countAfterRestart}`);
-    await shot('S2-upload-after-restart');
-  });
+      // Full app restart (reused userData) -> vault persistence.
+      await session.close();
+      await new Promise((r) => setTimeout(r, 500));
+      session = await launchApp({ userDataDir: USER_DATA_DIR });
+      page = session.page;
+      wireConsole(page);
+      await page.setViewportSize({ width: 1400, height: 900 });
+      await page.locator('[data-app-id="docs"]').getByTestId('app-tile').click();
+      await page
+        .locator('iframe[data-centraid-app="1"]')
+        .waitFor({ state: 'attached', timeout: 15_000 });
+      await docsFrame().locator('.d-card').first().waitFor({ state: 'visible', timeout: 15_000 });
+      const countAfterRestart = await docsFrame().locator('.d-card').count();
+      assert(
+        countAfterRestart >= 3,
+        `uploaded cards gone after full app restart, got ${countAfterRestart}`,
+      );
+      await shot('S2-upload-after-restart');
+    },
+  );
 
   await step('S2-search', 'Search filters the grid', async () => {
     const frameLoc = docsFrame();
@@ -570,7 +676,9 @@ async function main() {
     await frameLoc.locator('#searchInput').fill('');
     await page.waitForTimeout(400);
     const after = await frameLoc.locator('.d-card').count();
-    console.log(`[S2-search] cards: before=${before} during("note")=${during} after-clear=${after}`);
+    console.log(
+      `[S2-search] cards: before=${before} during("note")=${during} after-clear=${after}`,
+    );
     assert(after === before, 'clearing search did not restore full card count');
   });
 
@@ -584,64 +692,78 @@ async function main() {
     await frameLoc.locator('#viewGrid').click();
     await page.waitForTimeout(300);
     await shot('S2-grid-view');
-    assert((await frameLoc.locator('.d-card').count()) >= 3, 'grid cards missing after switching back from list');
+    assert(
+      (await frameLoc.locator('.d-card').count()) >= 3,
+      'grid cards missing after switching back from list',
+    );
   });
 
-  await step('S2-details-star', 'Details drawer opens; star toggles and persists across reopen', async () => {
-    const frameLoc = docsFrame();
-    // Click the title text (NOT the thumbnail, which owns its own onClick ->
-    // quick-look and stops propagation) to open the details drawer.
-    await frameLoc.locator('.d-card-title').first().click();
-    const details = frameLoc.locator('[aria-label="Document details"]');
-    await details.waitFor({ state: 'visible', timeout: 10_000 });
-    await shot('S2-details-drawer');
+  await step(
+    'S2-details-star',
+    'Details drawer opens; star toggles and persists across reopen',
+    async () => {
+      const frameLoc = docsFrame();
+      // Click the title text (NOT the thumbnail, which owns its own onClick ->
+      // quick-look and stops propagation) to open the details drawer.
+      await frameLoc.locator('.d-card-title').first().click();
+      const details = frameLoc.locator('[aria-label="Document details"]');
+      await details.waitFor({ state: 'visible', timeout: 10_000 });
+      await shot('S2-details-drawer');
 
-    const starBtn = details.getByRole('button', { name: /Star/ });
-    await starBtn.waitFor({ state: 'visible', timeout: 5_000 });
-    const before = await starBtn.textContent();
-    await starBtn.click();
-    await page.waitForTimeout(400);
-    const after = await starBtn.textContent();
-    assert(before !== after, `star button text did not change: ${before} -> ${after}`);
-    await shot('S2-starred');
+      const starBtn = details.getByRole('button', { name: /Star/ });
+      await starBtn.waitFor({ state: 'visible', timeout: 5_000 });
+      const before = await starBtn.textContent();
+      await starBtn.click();
+      await page.waitForTimeout(400);
+      const after = await starBtn.textContent();
+      assert(before !== after, `star button text did not change: ${before} -> ${after}`);
+      await shot('S2-starred');
 
-    await details.getByRole('button', { name: 'Close' }).click();
-    await details.waitFor({ state: 'hidden', timeout: 5_000 });
+      await details.getByRole('button', { name: 'Close' }).click();
+      await details.waitFor({ state: 'hidden', timeout: 5_000 });
 
-    // Reopen and confirm the star persisted.
-    await frameLoc.locator('.d-card-title').first().click();
-    await details.waitFor({ state: 'visible', timeout: 10_000 });
-    const reopenedStarText = await details.getByRole('button', { name: /Star/ }).textContent();
-    assert(reopenedStarText === after, `star did not persist across reopen: expected ${after}, got ${reopenedStarText}`);
-    await details.getByRole('button', { name: 'Close' }).click();
-    await details.waitFor({ state: 'hidden', timeout: 5_000 });
-  });
+      // Reopen and confirm the star persisted.
+      await frameLoc.locator('.d-card-title').first().click();
+      await details.waitFor({ state: 'visible', timeout: 10_000 });
+      const reopenedStarText = await details.getByRole('button', { name: /Star/ }).textContent();
+      assert(
+        reopenedStarText === after,
+        `star did not persist across reopen: expected ${after}, got ${reopenedStarText}`,
+      );
+      await details.getByRole('button', { name: 'Close' }).click();
+      await details.waitFor({ state: 'hidden', timeout: 5_000 });
+    },
+  );
 
-  await step('S2-quicklook', 'Quick-look: opens from thumbnail, arrows, on-dark close, download', async () => {
-    const frameLoc = docsFrame();
-    await frameLoc.locator('.d-thumb').first().click();
-    const quick = frameLoc.locator('[aria-label="Quick look"]');
-    await quick.waitFor({ state: 'visible', timeout: 10_000 });
-    await shot('S2-quicklook-open');
+  await step(
+    'S2-quicklook',
+    'Quick-look: opens from thumbnail, arrows, on-dark close, download',
+    async () => {
+      const frameLoc = docsFrame();
+      await frameLoc.locator('.d-thumb').first().click();
+      const quick = frameLoc.locator('[aria-label="Quick look"]');
+      await quick.waitFor({ state: 'visible', timeout: 10_000 });
+      await shot('S2-quicklook-open');
 
-    const nextBtn = quick.getByRole('button', { name: 'Next' });
-    if (await nextBtn.isEnabled().catch(() => false)) {
-      await nextBtn.click();
-      await page.waitForTimeout(300);
-      await shot('S2-quicklook-next');
-      await quick.getByRole('button', { name: 'Previous' }).click();
-      await page.waitForTimeout(300);
-    }
-    assert(await quick.getByText('Download').isVisible(), 'quick-look missing Download control');
-    await quick.getByRole('button', { name: 'Close' }).click();
-    await quick.waitFor({ state: 'hidden', timeout: 5_000 });
+      const nextBtn = quick.getByRole('button', { name: 'Next' });
+      if (await nextBtn.isEnabled().catch(() => false)) {
+        await nextBtn.click();
+        await page.waitForTimeout(300);
+        await shot('S2-quicklook-next');
+        await quick.getByRole('button', { name: 'Previous' }).click();
+        await page.waitForTimeout(300);
+      }
+      assert(await quick.getByText('Download').isVisible(), 'quick-look missing Download control');
+      await quick.getByRole('button', { name: 'Close' }).click();
+      await quick.waitFor({ state: 'hidden', timeout: 5_000 });
 
-    // Re-open and close via Escape instead (global keydown in chrome.js).
-    await frameLoc.locator('.d-thumb').first().click();
-    await quick.waitFor({ state: 'visible', timeout: 10_000 });
-    await page.keyboard.press('Escape');
-    await quick.waitFor({ state: 'hidden', timeout: 5_000 });
-  });
+      // Re-open and close via Escape instead (global keydown in chrome.js).
+      await frameLoc.locator('.d-thumb').first().click();
+      await quick.waitFor({ state: 'visible', timeout: 10_000 });
+      await page.keyboard.press('Escape');
+      await quick.waitFor({ state: 'hidden', timeout: 5_000 });
+    },
+  );
 
   await step('S2-folders', 'Folder create + move a file into it + folder counts', async () => {
     const frameLoc = docsFrame();
@@ -722,7 +844,9 @@ async function main() {
 
     // Confirm no wait-free purge control is offered from Trash (30-day auto-purge only).
     const purgeBtnCount = await frameLoc.getByRole('button', { name: /purge/i }).count();
-    console.log(`[S2-bulk-trash-restore] explicit "purge now" controls found: ${purgeBtnCount} (expected 0 — 30-day auto-purge only)`);
+    console.log(
+      `[S2-bulk-trash-restore] explicit "purge now" controls found: ${purgeBtnCount} (expected 0 — 30-day auto-purge only)`,
+    );
 
     await frameLoc.getByRole('button', { name: 'All documents' }).click();
     await page.waitForTimeout(300);
@@ -746,40 +870,58 @@ async function main() {
     }
   });
 
-  await step('S2-consent-banner', 'Consent banner stays hidden throughout granted use', async () => {
-    const frameLoc = docsFrame();
-    const bannerHidden = await frameLoc.locator('#consentBanner').isHidden().catch(() => true);
-    assert(bannerHidden, '#consentBanner is visible during normal granted use');
-  });
+  await step(
+    'S2-consent-banner',
+    'Consent banner stays hidden throughout granted use',
+    async () => {
+      const frameLoc = docsFrame();
+      const bannerHidden = await frameLoc
+        .locator('#consentBanner')
+        .isHidden()
+        .catch(() => true);
+      assert(bannerHidden, '#consentBanner is visible during normal granted use');
+    },
+  );
 
-  await step('S2-ask-panel', 'Ask button visible; panel closed by default; opens/closes via button + Esc; no scrim', async () => {
-    const frameLoc = docsFrame();
-    const scrimVisibleBefore = await frameLoc
-      .locator('.kit-ask-ov')
-      .first()
-      .isVisible()
-      .catch(() => false);
-    assert(!scrimVisibleBefore, 'Ask overlay (.kit-ask-ov) is visible BEFORE opening it — the [hidden] bug is back');
-    const askBtn = frameLoc.locator('#kitAskBtn');
-    await askBtn.waitFor({ state: 'visible', timeout: 5_000 });
-    await shot('S2-ask-closed-topbar');
-    await askBtn.click();
-    await frameLoc.locator('#kitAskOverlay').waitFor({ state: 'visible', timeout: 5_000 });
-    await shot('S2-ask-open');
-    await page.keyboard.press('Escape');
-    const askHiddenAfterEsc = await frameLoc
-      .locator('#kitAskOverlay')
-      .isHidden()
-      .catch(() => false);
-    assert(askHiddenAfterEsc, 'Ask overlay did not close on Escape');
-  });
+  await step(
+    'S2-ask-panel',
+    'Ask button visible; panel closed by default; opens/closes via button + Esc; no scrim',
+    async () => {
+      const frameLoc = docsFrame();
+      const scrimVisibleBefore = await frameLoc
+        .locator('.kit-ask-ov')
+        .first()
+        .isVisible()
+        .catch(() => false);
+      assert(
+        !scrimVisibleBefore,
+        'Ask overlay (.kit-ask-ov) is visible BEFORE opening it — the [hidden] bug is back',
+      );
+      const askBtn = frameLoc.locator('#kitAskBtn');
+      await askBtn.waitFor({ state: 'visible', timeout: 5_000 });
+      await shot('S2-ask-closed-topbar');
+      await askBtn.click();
+      await frameLoc.locator('#kitAskOverlay').waitFor({ state: 'visible', timeout: 5_000 });
+      await shot('S2-ask-open');
+      await page.keyboard.press('Escape');
+      const askHiddenAfterEsc = await frameLoc
+        .locator('#kitAskOverlay')
+        .isHidden()
+        .catch(() => false);
+      assert(askHiddenAfterEsc, 'Ask overlay did not close on Escape');
+    },
+  );
 
-  await step('S2-dark-narrow', 'Dark + narrow inside the shell for a sample of the docs journeys', async () => {
-    await page.setViewportSize({ width: 480, height: 850 });
-    await page.waitForTimeout(500);
-    await shot('S2-dark-narrow-docs');
-    await page.setViewportSize({ width: 1400, height: 900 });
-  });
+  await step(
+    'S2-dark-narrow',
+    'Dark + narrow inside the shell for a sample of the docs journeys',
+    async () => {
+      await page.setViewportSize({ width: 480, height: 850 });
+      await page.waitForTimeout(500);
+      await shot('S2-dark-narrow-docs');
+      await page.setViewportSize({ width: 1400, height: 900 });
+    },
+  );
 
   // ============================= REPORT =============================
 

@@ -34,7 +34,9 @@ async function createAndTrash(page, fl, title) {
   await fl.locator('.v-list').waitFor({ state: 'visible', timeout: 8000 });
   await fl.locator('button.v-nav-item', { hasText: 'Trash' }).click();
   const trashCount = await fl.locator('.v-item', { hasText: title }).count();
-  console.log(`[probe] immediately after moving "${title}" to trash, Trash list count for it: ${trashCount}`);
+  console.log(
+    `[probe] immediately after moving "${title}" to trash, Trash list count for it: ${trashCount}`,
+  );
   if (trashCount === 0) {
     await page.waitForTimeout(1000);
     const retryCount = await fl.locator('.v-item', { hasText: title }).count();
@@ -59,7 +61,10 @@ async function main() {
     const tile = page.locator('[data-app-id="locker"]');
     await tile.waitFor({ state: 'visible', timeout: 15_000 });
     await tile.getByTestId('app-tile').click();
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 20_000,
+    });
     const fl = frameLoc(page);
     await fl.locator('.v-newbtn').waitFor({ state: 'visible', timeout: 15_000 });
 

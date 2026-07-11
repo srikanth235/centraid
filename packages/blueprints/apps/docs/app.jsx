@@ -353,7 +353,9 @@ function renderRows() {
 let detailsRootReact;
 
 function renderDetails() {
-  const doc = state.detailsId ? data.documents.find((d) => d.document_id === state.detailsId) : null;
+  const doc = state.detailsId
+    ? data.documents.find((d) => d.document_id === state.detailsId)
+    : null;
   detailsRootReact.render(
     doc ? (
       <Details
@@ -420,7 +422,9 @@ async function closeEditorSafely() {
 }
 
 function renderEditor() {
-  const doc = state.editingId ? data.documents.find((d) => d.document_id === state.editingId) : null;
+  const doc = state.editingId
+    ? data.documents.find((d) => d.document_id === state.editingId)
+    : null;
   editorRootReact.render(
     doc ? (
       <Editor

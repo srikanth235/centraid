@@ -4,7 +4,14 @@ import { toSidebarApps } from './sidebarApps.js';
 const app = (id: string, name: string): UserAppMeta =>
   ({ id, name, iconKey: 'Todo', color: '#123', colorKey: 'blue' }) as unknown as UserAppMeta;
 const draft = (id: string, name: string): DraftAppMeta =>
-  ({ id, name, iconKey: 'Sparkle', color: '#456', __draft: true, hasIndex: true }) as unknown as DraftAppMeta;
+  ({
+    id,
+    name,
+    iconKey: 'Sparkle',
+    color: '#456',
+    __draft: true,
+    hasIndex: true,
+  }) as unknown as DraftAppMeta;
 
 describe('toSidebarApps', () => {
   it('maps installed apps with the `new` status and drafts with `draft`', () => {

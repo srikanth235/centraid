@@ -391,7 +391,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
           <button
             key={`f:${node.path}`}
             type="button"
-            className={cx(styles.treeRow, "code-tree-folder")}
+            className={cx(styles.treeRow, 'code-tree-folder')}
             data-depth={String(depth)}
             style={{ '--depth': String(depth) } as React.CSSProperties}
             onClick={() =>
@@ -425,7 +425,7 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
         <button
           key={`p:${node.path}`}
           type="button"
-          className={cx(styles.treeRow, "code-tree-file")}
+          className={cx(styles.treeRow, 'code-tree-file')}
           data-active={String(activePath === node.path)}
           data-dirty={String(isDirty)}
           data-depth={String(depth)}
@@ -657,7 +657,9 @@ export default function BuilderCode({ appId, reloadNonce }: BuilderCodeProps): J
             <pre
               className={styles.editPre}
               ref={preRef}
-              dangerouslySetInnerHTML={{ __html: tokenize(buf.current, lang, TOKEN_CLASSES) + '\n' }}
+              dangerouslySetInnerHTML={{
+                __html: tokenize(buf.current, lang, TOKEN_CLASSES) + '\n',
+              }}
             />
           </div>
           <textarea

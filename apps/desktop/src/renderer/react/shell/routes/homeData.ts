@@ -66,12 +66,15 @@ export function buildHomeAutoItems(
   return rows.map((row) => {
     const last = lastByRef.get(row.ref);
     const isWebhook =
-      row.triggers.some((t) => t.kind === 'webhook') && !row.triggers.some((t) => t.kind === 'cron');
+      row.triggers.some((t) => t.kind === 'webhook') &&
+      !row.triggers.some((t) => t.kind === 'cron');
     const statusKind = auStatusForRow(row.enabled, !!last) as AuStatusKind;
     return {
       blurb: row.manifest.description || triggersSummary(row.triggers),
       footOk: !!last?.run.ok,
-      footTimeLabel: last ? relativeTime(new Date(last.run.startedAt).toISOString()) : 'No runs yet',
+      footTimeLabel: last
+        ? relativeTime(new Date(last.run.startedAt).toISOString())
+        : 'No runs yet',
       glyphIcon: glyphForId(row.id),
       hue: hueForId(row.id),
       integrations: [...(row.manifest.requires.mcps ?? [])],

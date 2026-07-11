@@ -162,9 +162,9 @@ describe('HomeScreen', () => {
     expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
     const autoWrap = autoCard.closest('.wrap') as HTMLElement;
     act(() =>
-      (autoWrap.querySelector('button[aria-label="More actions"]') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      ),
+      (
+        autoWrap.querySelector('button[aria-label="More actions"]') as HTMLButtonElement
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
     expect(props.onAutomationMenu).toHaveBeenCalledWith(
       'a@1',

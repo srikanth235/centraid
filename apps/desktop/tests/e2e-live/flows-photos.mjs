@@ -41,7 +41,9 @@ async function main() {
   await fs.mkdir(path.dirname(USER_DATA_DIR), { recursive: true });
   const t0 = Date.now();
   const { page, userDataDir, close } = await launchApp({ userDataDir: USER_DATA_DIR });
-  console.log(`[flows-photos] launched + Home ready in ${Date.now() - t0}ms (userData=${userDataDir})`);
+  console.log(
+    `[flows-photos] launched + Home ready in ${Date.now() - t0}ms (userData=${userDataDir})`,
+  );
 
   page.on('console', (msg) => {
     consoleLog.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
@@ -68,7 +70,10 @@ async function main() {
     await tile.getByTestId('app-tile').click();
     console.log('[setup] opened the Photos app tile');
 
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 30_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 30_000,
+    });
     const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     console.log('[setup] app iframe attached');
 
@@ -79,7 +84,11 @@ async function main() {
       const shot1 = await shot(page, '01-fresh-open');
       const dispClosed = await askOverlayDisplay(frameLoc);
       if (dispClosed !== 'none') {
-        record('1-ask-panel', 'fail-escalated', `#kitAskOverlay computed display="${dispClosed}" on fresh open (expected none); screenshot ${shot1}`);
+        record(
+          '1-ask-panel',
+          'fail-escalated',
+          `#kitAskOverlay computed display="${dispClosed}" on fresh open (expected none); screenshot ${shot1}`,
+        );
       } else {
         // Ask button visible
         const askBtn = frameLoc.locator('#kitAskBtn');
@@ -110,7 +119,8 @@ async function main() {
         if (ovBox) await page.mouse.click(ovBox.x + 10, ovBox.y + 10);
         await page.waitForTimeout(150);
         const dispAfterBackdrop = await askOverlayDisplay(frameLoc);
-        if (dispAfterBackdrop !== 'none') throw new Error('Backdrop click did not close the ask overlay');
+        if (dispAfterBackdrop !== 'none')
+          throw new Error('Backdrop click did not close the ask overlay');
         // reopen, type + send
         await askBtn.click();
         await page.waitForTimeout(150);
@@ -127,7 +137,11 @@ async function main() {
         await page.waitForTimeout(150);
         const dispFinal = await askOverlayDisplay(frameLoc);
         if (dispFinal !== 'none') throw new Error('Ask overlay wedged open after send+close');
-        record('1-ask-panel', 'pass', `closed on fresh open; open/close/X/Esc/backdrop all verified; send produced bubbles=${JSON.stringify(bubbles).slice(0, 300)}`);
+        record(
+          '1-ask-panel',
+          'pass',
+          `closed on fresh open; open/close/X/Esc/backdrop all verified; send produced bubbles=${JSON.stringify(bubbles).slice(0, 300)}`,
+        );
       }
     } catch (err) {
       await shot(page, '01x-ask-FAILURE');
@@ -166,8 +180,16 @@ async function main() {
       await page.waitForTimeout(500);
       const tileCount = await frameLoc.locator('.tile-wrap').count();
       await shot(page, '06-after-upload');
-      const monthLabel = await frameLoc.locator('.month-label').first().textContent().catch(() => null);
-      const dayLabel = await frameLoc.locator('.day-label').first().textContent().catch(() => null);
+      const monthLabel = await frameLoc
+        .locator('.month-label')
+        .first()
+        .textContent()
+        .catch(() => null);
+      const dayLabel = await frameLoc
+        .locator('.day-label')
+        .first()
+        .textContent()
+        .catch(() => null);
       record(
         '3-real-upload',
         tileCount === files.length ? 'pass' : 'fail-escalated',
@@ -181,16 +203,25 @@ async function main() {
     // ================= FLOW 4a: persistence (reopen within session) =================
     try {
       await navTo(page, 'Home');
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
       const tileHome = page.locator('[data-app-id="photos"]');
       await tileHome.waitFor({ state: 'visible', timeout: 10_000 });
       await tileHome.getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       const frameLoc2 = page.frameLocator('iframe[data-centraid-app="1"]');
       await frameLoc2.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 15_000 });
       const count2 = await frameLoc2.locator('.tile-wrap').count();
       await shot(page, '07-reopen-same-session');
-      record('4a-persistence-reopen', count2 === uploadedNames.length ? 'pass' : 'fail-escalated', `tiles after reopen = ${count2}`);
+      record(
+        '4a-persistence-reopen',
+        count2 === uploadedNames.length ? 'pass' : 'fail-escalated',
+        `tiles after reopen = ${count2}`,
+      );
     } catch (err) {
       await shot(page, '07x-reopen-FAILURE');
       record('4a-persistence-reopen', 'fail-escalated', String(err?.message ?? err));
@@ -223,7 +254,11 @@ async function main() {
 
       // exit select mode
       await frameLoc3.locator('.bar-close').click();
-      record('5a-select-and-favorite', favedCount >= 1 && barCount?.includes('selected') ? 'pass' : 'fail-escalated', `barCount=${JSON.stringify(barCount)} favedCount=${favedCount}`);
+      record(
+        '5a-select-and-favorite',
+        favedCount >= 1 && barCount?.includes('selected') ? 'pass' : 'fail-escalated',
+        `barCount=${JSON.stringify(barCount)} favedCount=${favedCount}`,
+      );
     } catch (err) {
       await shot(page, '08x-select-FAILURE');
       record('5a-select-and-favorite', 'fail-escalated', String(err?.message ?? err));
@@ -232,14 +267,23 @@ async function main() {
     // hearts persist across reopen
     try {
       await navTo(page, 'Home');
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
       const tileHome = page.locator('[data-app-id="photos"]');
       await tileHome.getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       frameLoc3 = page.frameLocator('iframe[data-centraid-app="1"]');
       await frameLoc3.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 15_000 });
       const favedAfter = await frameLoc3.locator('.tile-wrap.faved').count();
-      record('5b-hearts-persist', favedAfter >= 1 ? 'pass' : 'fail-escalated', `favedAfter=${favedAfter}`);
+      record(
+        '5b-hearts-persist',
+        favedAfter >= 1 ? 'pass' : 'fail-escalated',
+        `favedAfter=${favedAfter}`,
+      );
     } catch (err) {
       record('5b-hearts-persist', 'fail-escalated', String(err?.message ?? err));
     }
@@ -269,7 +313,8 @@ async function main() {
       const menuBox = await menu.boundingBox();
       const btnBox = await barBtn.boundingBox();
       await shot(page, '11-album-menu-open');
-      const anchored = menuBox && btnBox ? Math.abs(menuBox.y - (btnBox.y + btnBox.height)) < 200 : false;
+      const anchored =
+        menuBox && btnBox ? Math.abs(menuBox.y - (btnBox.y + btnBox.height)) < 200 : false;
       await frameLoc3.locator('.album-menu-item', { hasText: 'Test Album' }).click();
       await page.waitForTimeout(400);
       await frameLoc3.locator('.bar-close').click();
@@ -429,7 +474,11 @@ async function main() {
       await page.waitForTimeout(300);
       const trashTiles = frameLoc3.locator('.tile-wrap.trash');
       const trashCount = await trashTiles.count();
-      const purgeLabel = await trashTiles.first().locator('.tile-purge').textContent().catch(() => null);
+      const purgeLabel = await trashTiles
+        .first()
+        .locator('.tile-purge')
+        .textContent()
+        .catch(() => null);
       await shot(page, '21-trash-view');
 
       // favorites count excludes trashed
@@ -449,7 +498,9 @@ async function main() {
 
       record(
         '7-trash',
-        afterDeleteCount === before - 2 && trashCount >= 2 && trashCountAfterRestore === trashCount - 1
+        afterDeleteCount === before - 2 &&
+          trashCount >= 2 &&
+          trashCountAfterRestore === trashCount - 1
           ? 'pass'
           : 'fail-escalated',
         `before=${before} afterDelete=${afterDeleteCount} trashChipText=${JSON.stringify(trashChipText)} trashCount=${trashCount} purgeLabel=${JSON.stringify(purgeLabel)} favVisibleCount=${favVisibleCount} trashAfterRestore=${trashCountAfterRestore}`,
@@ -518,15 +569,22 @@ async function main() {
       await darkCard.click();
       await page.waitForTimeout(500);
       await navTo(page, 'Home');
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
       const tileHome2 = page.locator('[data-app-id="photos"]');
       await tileHome2.getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       const frameLocDark = page.frameLocator('iframe[data-centraid-app="1"]');
       await frameLocDark.locator('h1').first().waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
       const dataTheme = await frameLocDark.locator('html').evaluate((el) => el.dataset.theme);
-      const bg = await frameLocDark.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const bg = await frameLocDark
+        .locator('body')
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
       await shot(page, '27-dark-mode');
       record(
         '10-dark-theme-bridge',
@@ -540,9 +598,14 @@ async function main() {
       await lightCard.click();
       await page.waitForTimeout(400);
       await navTo(page, 'Home');
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
       await page.locator('[data-app-id="photos"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
     } catch (err) {
       await shot(page, '26x-dark-FAILURE');
       record('10-dark-theme-bridge', 'fail-escalated', String(err?.message ?? err));
@@ -553,7 +616,10 @@ async function main() {
       await page.setViewportSize({ width: 500, height: 800 });
       await page.waitForTimeout(400);
       const frameLocNarrow = page.frameLocator('iframe[data-centraid-app="1"]');
-      await frameLocNarrow.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 10_000 });
+      await frameLocNarrow
+        .locator('.tile-wrap')
+        .first()
+        .waitFor({ state: 'visible', timeout: 10_000 });
       await shot(page, '28-narrow-grid');
       const scrollInfo = await frameLocNarrow.locator('body').evaluate((el) => ({
         scrollWidth: el.scrollWidth,
@@ -583,7 +649,11 @@ async function main() {
     try {
       const frameLocFinal = page.frameLocator('iframe[data-centraid-app="1"]');
       const dispFinal = await askOverlayDisplay(frameLocFinal);
-      record('1-ask-panel-final-smoke', dispFinal === 'none' ? 'pass' : 'fail-escalated', `display=${dispFinal}`);
+      record(
+        '1-ask-panel-final-smoke',
+        dispFinal === 'none' ? 'pass' : 'fail-escalated',
+        `display=${dispFinal}`,
+      );
     } catch (err) {
       record('1-ask-panel-final-smoke', 'fail-escalated', String(err?.message ?? err));
     }
@@ -595,14 +665,19 @@ async function main() {
   } finally {
     const errCount = consoleLog.filter((c) => c.type === 'error').length;
     const warnCount = consoleLog.filter((c) => c.type === 'warning').length;
-    console.log(`\n[console-summary] total=${consoleLog.length} error=${errCount} warning=${warnCount}`);
+    console.log(
+      `\n[console-summary] total=${consoleLog.length} error=${errCount} warning=${warnCount}`,
+    );
     for (const c of consoleLog.filter((c) => c.type === 'error' || c.type === 'warning')) {
       console.log(`  [${c.type}] ${c.text} (${c.frameUrl})`);
     }
     console.log('\n[verdict-table]');
-    for (const r of results) console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
+    for (const r of results)
+      console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
     await close();
-    console.log(`\n[flows-photos] userDataDir kept at ${USER_DATA_DIR} for restart-persistence check`);
+    console.log(
+      `\n[flows-photos] userDataDir kept at ${USER_DATA_DIR} for restart-persistence check`,
+    );
   }
 }
 

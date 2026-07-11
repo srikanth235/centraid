@@ -106,7 +106,13 @@ export function Dashboard({ dash, onOpenFriend, onOpenGroup, onOpenAddFriend, on
             <div className="s-empty-row">Nobody owes you right now.</div>
           ) : (
             owedList.map((p) => (
-              <BalRow key={p.party_id} p={p} kind="owed" currency={currency} onOpen={onOpenFriend} />
+              <BalRow
+                key={p.party_id}
+                p={p}
+                kind="owed"
+                currency={currency}
+                onOpen={onOpenFriend}
+              />
             ))
           )}
         </div>
@@ -118,7 +124,13 @@ export function Dashboard({ dash, onOpenFriend, onOpenGroup, onOpenAddFriend, on
             No groups yet.
             <button
               type="button"
-              style={{ border: 'none', background: 'none', color: 'var(--accd)', fontWeight: 600, cursor: 'pointer' }}
+              style={{
+                border: 'none',
+                background: 'none',
+                color: 'var(--accd)',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
               onClick={onOpenNewGroup}
             >
               Create one

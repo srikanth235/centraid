@@ -63,7 +63,14 @@ function OtpFieldRow({ seed }) {
         <div className="v-otp">
           <span className="v-otp-code">{code || '••• •••'}</span>
           <svg className="v-ring" viewBox="0 0 36 36">
-            <circle cx="18" cy="18" r="15" fill="none" stroke="var(--line-strong)" strokeWidth="3" />
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke="var(--line-strong)"
+              strokeWidth="3"
+            />
             <circle
               cx="18"
               cy="18"
@@ -122,7 +129,12 @@ function FieldRow({ f, reveal, onToggleReveal }) {
           <div className={f.mono ? 'v-field-v mono' : 'v-field-v'}>{f.val}</div>
         </div>
         {f.canCopy ? (
-          <button type="button" className="v-fbtn" aria-label="Copy" onClick={() => copy(f.val, f.k)}>
+          <button
+            type="button"
+            className="v-fbtn"
+            aria-label="Copy"
+            onClick={() => copy(f.val, f.k)}
+          >
             <Icon name="copy" sw={1.6} />
           </button>
         ) : null}
@@ -211,9 +223,19 @@ export function ItemPane({
                 aria-label="Favorite"
                 onClick={() => onToggleFav(sel)}
               >
-                <Icon name="starFill" size={17} sw={1.6} fill={sel.favorite ? 'currentColor' : 'none'} />
+                <Icon
+                  name="starFill"
+                  size={17}
+                  sw={1.6}
+                  fill={sel.favorite ? 'currentColor' : 'none'}
+                />
               </button>
-              <button type="button" className="v-dtool" aria-label="Edit" onClick={() => onEdit(sel)}>
+              <button
+                type="button"
+                className="v-dtool"
+                aria-label="Edit"
+                onClick={() => onEdit(sel)}
+              >
                 <Icon name="edit" />
               </button>
             </>

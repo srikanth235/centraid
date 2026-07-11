@@ -7,7 +7,9 @@ const updateVault = vi.fn((_input?: unknown) => Promise.resolve({}));
 // before spaceModals.js pulls gateway-client-core's load-time side-effect.
 vi.mock('../../../gateway-client.js', () => ({
   listVaults: () =>
-    Promise.resolve([{ vaultId: 'v1', name: 'Work', color: '#222', icon: 'Folder', blurb: 'real' }]),
+    Promise.resolve([
+      { vaultId: 'v1', name: 'Work', color: '#222', icon: 'Folder', blurb: 'real' },
+    ]),
   updateVault: (a: unknown) => updateVault(a),
 }));
 

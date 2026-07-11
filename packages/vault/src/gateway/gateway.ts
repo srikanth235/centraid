@@ -288,7 +288,11 @@ export class Gateway {
     // Per-entity activity guard (issue #352 phase 3/4) — see
     // provenanceScopeFailure's doc comment for why a table-level grant on
     // consent.provenance alone is not a safe read.
-    if (ref.schema === 'consent' && ref.table === 'provenance' && identity.kind !== 'owner-device') {
+    if (
+      ref.schema === 'consent' &&
+      ref.table === 'provenance' &&
+      identity.kind !== 'owner-device'
+    ) {
       const failing = provenanceScopeFailure(this.db.vault, identity, request);
       if (failing) {
         const receiptId = writeReceipt(this.db.journal, {

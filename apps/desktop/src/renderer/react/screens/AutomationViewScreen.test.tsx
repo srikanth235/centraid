@@ -230,7 +230,10 @@ describe('AutomationViewScreen', () => {
             heroIcon: 'Clock',
             cronExprs: [],
             nextRuns: [],
-            dataDetail: { entities: ['core.content_derivative', 'core.event'], everyLabel: 'Every 5m' },
+            dataDetail: {
+              entities: ['core.content_derivative', 'core.event'],
+              everyLabel: 'Every 5m',
+            },
           }),
         ),
       }),

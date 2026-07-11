@@ -28,7 +28,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v05-${id}.png`) });
@@ -72,7 +78,10 @@ async function main() {
     let fl;
     await step('open-tasks', 'Open Tasks iframe', async () => {
       await page.locator('[data-app-id="tasks"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       fl = frameLoc(page);
       await fl.locator('.tk-capture-input').waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(600);
@@ -88,30 +97,43 @@ async function main() {
       await shot('01-task-added-due-tomorrow');
     });
 
-    await step('switch-to-anytime-view', 'Switch to "Anytime" view (undated-only bucket) -- task should NOT appear here', async () => {
-      await fl.locator('.tk-nav-item', { hasText: 'Anytime' }).click();
-      await page.waitForTimeout(400);
-      await shot('02-anytime-view-task-excluded');
-      const rowCount = await fl.locator('.tk-row', { hasText: 'landlord' }).count();
-      console.log(`[v05] "landlord" task visible in Anytime view (should be 0, it's due tomorrow): ${rowCount}`);
-      assert(rowCount === 0, 'sanity check: the tomorrow-due task should NOT show in the Anytime (undated) view');
-    });
+    await step(
+      'switch-to-anytime-view',
+      'Switch to "Anytime" view (undated-only bucket) -- task should NOT appear here',
+      async () => {
+        await fl.locator('.tk-nav-item', { hasText: 'Anytime' }).click();
+        await page.waitForTimeout(400);
+        await shot('02-anytime-view-task-excluded');
+        const rowCount = await fl.locator('.tk-row', { hasText: 'landlord' }).count();
+        console.log(
+          `[v05] "landlord" task visible in Anytime view (should be 0, it's due tomorrow): ${rowCount}`,
+        );
+        assert(
+          rowCount === 0,
+          'sanity check: the tomorrow-due task should NOT show in the Anytime (undated) view',
+        );
+      },
+    );
 
-    await step('search-surfaces-task-from-anytime', 'Search for the title WHILE still on Anytime -- must surface the match (the fix)', async () => {
-      const searchInput = fl.locator('#searchInput');
-      await searchInput.fill('landlord');
-      await page.waitForTimeout(500);
-      await shot('03-search-from-anytime-view');
-      const rows = fl.locator('.tk-rows .tk-row, .tk-row');
-      const count = await rows.count();
-      console.log(`[v05] search "landlord" rows while on Anytime view: ${count}`);
-      assert(
-        count >= 1,
-        'search for "landlord" (a task due TOMORROW) returned NO rows while on the Anytime view -- search is still wrongly scoped to the current view',
-      );
-      const matchText = await fl.locator('.tk-row', { hasText: 'landlord' }).count();
-      assert(matchText >= 1, 'the landlord task specifically must be among the search results');
-    });
+    await step(
+      'search-surfaces-task-from-anytime',
+      'Search for the title WHILE still on Anytime -- must surface the match (the fix)',
+      async () => {
+        const searchInput = fl.locator('#searchInput');
+        await searchInput.fill('landlord');
+        await page.waitForTimeout(500);
+        await shot('03-search-from-anytime-view');
+        const rows = fl.locator('.tk-rows .tk-row, .tk-row');
+        const count = await rows.count();
+        console.log(`[v05] search "landlord" rows while on Anytime view: ${count}`);
+        assert(
+          count >= 1,
+          'search for "landlord" (a task due TOMORROW) returned NO rows while on the Anytime view -- search is still wrongly scoped to the current view',
+        );
+        const matchText = await fl.locator('.tk-row', { hasText: 'landlord' }).count();
+        assert(matchText >= 1, 'the landlord task specifically must be among the search results');
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-05 VERDICT TABLE ================');

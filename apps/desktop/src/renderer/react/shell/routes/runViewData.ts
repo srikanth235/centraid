@@ -11,7 +11,12 @@ import {
   triggersSummary,
 } from '../../../app-format.js';
 import { glyphForId, hueForId } from '../../../automation-identity.js';
-import type { AuStatusKind, RunLogRowDTO, RunNodeDTO, RunViewSnapshot } from '../../screen-contracts.js';
+import type {
+  AuStatusKind,
+  RunLogRowDTO,
+  RunNodeDTO,
+  RunViewSnapshot,
+} from '../../screen-contracts.js';
 
 const NODE_TYPE_ICON: Record<string, string> = {
   trigger: 'Bolt',
@@ -138,7 +143,8 @@ export function buildRunSnapshot(
         label: node.name ?? node.model ?? node.kind,
         output: !isAgent && node.outputJson ? prettyJson(node.outputJson) : undefined,
         response: isAgent
-          ? (liveText.get(node.ordinal) ?? (node.outputJson ? prettyJson(node.outputJson) : undefined))
+          ? (liveText.get(node.ordinal) ??
+            (node.outputJson ? prettyJson(node.outputJson) : undefined))
           : undefined,
         sub: node.kind,
         time: elapsed(node.startedAt),

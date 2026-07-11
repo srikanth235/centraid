@@ -188,7 +188,9 @@ describe('DiscoverRoute', () => {
       c.textContent?.includes('Digest'),
     ) as HTMLButtonElement;
     await act(async () => {
-      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+      card.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+      );
     });
     const useItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
       b.textContent?.includes('Use this template'),
@@ -212,7 +214,9 @@ describe('DiscoverRoute', () => {
       c.textContent?.includes('Digest'),
     ) as HTMLButtonElement;
     await act(async () => {
-      card.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+      card.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }),
+      );
     });
     const previewItem = [...document.querySelectorAll('[role="menuitem"]')].find((b) =>
       b.textContent?.includes('Preview'),

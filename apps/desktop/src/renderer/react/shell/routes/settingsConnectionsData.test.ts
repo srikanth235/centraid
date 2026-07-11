@@ -18,7 +18,11 @@ const setConnectionStatus = vi.fn((_input?: unknown) =>
   Promise.resolve({ connectionId: 'c1', status: 'paused' }),
 );
 const beginConnectionAuthorization = vi.fn((_input?: unknown) =>
-  Promise.resolve({ authUrl: 'https://accounts.example/auth', redirectUri: 'http://x', state: 's1' }),
+  Promise.resolve({
+    authUrl: 'https://accounts.example/auth',
+    redirectUri: 'http://x',
+    state: 's1',
+  }),
 );
 const removeConnection = vi.fn((_connectionId?: unknown) =>
   Promise.resolve({ connectionId: 'c1' }),

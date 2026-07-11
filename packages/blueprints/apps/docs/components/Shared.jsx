@@ -35,7 +35,14 @@ export function Checkbox({ cls, selected, onClick, label }) {
 export function CustodyDot({ state }) {
   const meta = custodyMeta(state);
   if (!meta) return null;
-  return <span className={`d-custody-dot custody-${meta.tone}`} title={meta.label} aria-label={meta.label} role="img" />;
+  return (
+    <span
+      className={`d-custody-dot custody-${meta.tone}`}
+      title={meta.label}
+      aria-label={meta.label}
+      role="img"
+    />
+  );
 }
 
 // The search-hit snippet: replicated as JSX `<mark>` spans instead of calling

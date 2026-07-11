@@ -176,7 +176,9 @@ export default async ({ input, ctx }) => {
             purpose,
           })
         : { rows: [] };
-    const tagLabelByConcept = new Map((tagConcepts.rows ?? []).map((c) => [c.concept_id, c.pref_label]));
+    const tagLabelByConcept = new Map(
+      (tagConcepts.rows ?? []).map((c) => [c.concept_id, c.pref_label]),
+    );
     const tagsByTask = new Map();
     for (const t of tagRows) {
       if (!tagsByTask.has(t.target_id)) tagsByTask.set(t.target_id, []);

@@ -106,7 +106,11 @@ function rangeLabel() {
 function nav(dir) {
   state.cursor =
     state.view === 'week'
-      ? new Date(state.cursor.getFullYear(), state.cursor.getMonth(), state.cursor.getDate() + dir * 7)
+      ? new Date(
+          state.cursor.getFullYear(),
+          state.cursor.getMonth(),
+          state.cursor.getDate() + dir * 7,
+        )
       : new Date(state.cursor.getFullYear(), state.cursor.getMonth() + dir, 1);
   load();
 }
@@ -224,21 +228,48 @@ function render() {
     />,
   );
   sidebarCalsRoot.render(
-    <CalendarList calendars={data.calendars} hiddenCals={state.hiddenCals} counts={counts} onToggle={toggleCalendar} />,
+    <CalendarList
+      calendars={data.calendars}
+      hiddenCals={state.hiddenCals}
+      counts={counts}
+      onToggle={toggleCalendar}
+    />,
   );
 
   headerRoot.render(
-    <HeaderBar view={state.view} rangeLabel={rangeLabel()} onToday={goToday} onPrev={() => nav(-1)} onNext={() => nav(1)} onSetView={setView} />,
+    <HeaderBar
+      view={state.view}
+      rangeLabel={rangeLabel()}
+      onToday={goToday}
+      onPrev={() => nav(-1)}
+      onNext={() => nav(1)}
+      onSetView={setView}
+    />,
   );
 
   const events = visibleEvents(data.events);
   let canvas;
   if (state.view === 'month') {
     canvas = (
-      <MonthView cursor={state.cursor} events={events} colorFor={logic.colorFor} onDayCreate={onDayCreate} onEventOpen={openEventDetail} onMoreOpen={openDayPanel} />
+      <MonthView
+        cursor={state.cursor}
+        events={events}
+        colorFor={logic.colorFor}
+        onDayCreate={onDayCreate}
+        onEventOpen={openEventDetail}
+        onMoreOpen={openDayPanel}
+      />
     );
   } else if (state.view === 'week') {
-    canvas = <WeekView cursor={state.cursor} events={events} colorFor={logic.colorFor} onSlotCreate={onSlotCreate} onEventOpen={openEventDetail} />;
+    canvas = (
+      <WeekView
+        cursor={state.cursor}
+        events={events}
+        colorFor={logic.colorFor}
+        onSlotCreate={onSlotCreate}
+        onEventOpen={openEventDetail}
+      />
+    );
   } else {
     const source = state.searchResults ?? events;
     canvas = (
@@ -278,7 +309,14 @@ function render() {
   );
 
   modalRoot.render(
-    state.createOpen ? <CreateModal calendars={data.calendars} prefill={state.createPrefill} onClose={closeCreate} onSubmit={submitCreate} /> : null,
+    state.createOpen ? (
+      <CreateModal
+        calendars={data.calendars}
+        prefill={state.createPrefill}
+        onClose={closeCreate}
+        onSubmit={submitCreate}
+      />
+    ) : null,
   );
 }
 
@@ -289,7 +327,12 @@ let loadSeq = 0;
 async function load() {
   const seq = ++loadSeq;
   const miniRange = monthGridRange(state.cursor);
-  const canvasRange = state.view === 'month' ? miniRange : state.view === 'week' ? weekRange(state.cursor) : { from: scheduleFrom(state.cursor) };
+  const canvasRange =
+    state.view === 'month'
+      ? miniRange
+      : state.view === 'week'
+        ? weekRange(state.cursor)
+        : { from: scheduleFrom(state.cursor) };
   const needsSecondRead = state.view !== 'month';
 
   let canvasData;

@@ -7,7 +7,8 @@ export function DetailModal({ row, me, groups, currency, onClose, onEdit, onDele
   const c = cat(row.category);
   const d = new Date((row.spent_on || todayKey()) + 'T12:00:00');
   const when = `${MS[d.getMonth()]} ${d.getDate()}`;
-  const paidLine = row.paid_by === me ? `You paid · ${when}` : `${first(row.paid_by_name)} paid · ${when}`;
+  const paidLine =
+    row.paid_by === me ? `You paid · ${when}` : `${first(row.paid_by_name)} paid · ${when}`;
   const groupName = groups.find((g) => g.group_id === row.group_id)?.name || '';
 
   return (
@@ -25,7 +26,14 @@ export function DetailModal({ row, me, groups, currency, onClose, onEdit, onDele
             <div className="s-sub">{groupName}</div>
           </div>
         </div>
-        <div style={{ font: 'var(--font-title)', fontSize: '30px', fontWeight: 600, margin: '16px 0 4px' }}>
+        <div
+          style={{
+            font: 'var(--font-title)',
+            fontSize: '30px',
+            fontWeight: 600,
+            margin: '16px 0 4px',
+          }}
+        >
           {money(row.amount_minor, currency)}
         </div>
         <div className="s-sub" style={{ marginBottom: '14px' }}>

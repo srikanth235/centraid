@@ -39,7 +39,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v12-${id}.png`) });
@@ -86,7 +92,10 @@ async function main() {
     let frame;
     await step('create-note-and-open-editor', 'Quick-add a note, open its editor', async () => {
       await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       frame = frameLoc(page);
       await frame.locator('.nt-qa-title').waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
@@ -114,38 +123,49 @@ async function main() {
       await shot('01-attachment-added');
     });
 
-    await step('arm-then-race-then-confirm', 'Arm remove, force a mid-confirm rebuild (window focus refresh), then confirm -- single second click must delete it', async () => {
-      const removeBtn = frame.locator('.kit-attach-remove');
-      await removeBtn.waitFor({ state: 'visible', timeout: 5000 });
-      await removeBtn.click(); // arm
-      await page.waitForTimeout(200);
-      const armedLabel = await removeBtn.textContent();
-      console.log(`[v12] armed remove button label: ${JSON.stringify(armedLabel)}`);
-      assert(/sure\?/i.test(armedLabel ?? ''), `expected the remove button to arm with "Sure?", got: ${armedLabel}`);
-      await shot('02-remove-armed');
+    await step(
+      'arm-then-race-then-confirm',
+      'Arm remove, force a mid-confirm rebuild (window focus refresh), then confirm -- single second click must delete it',
+      async () => {
+        const removeBtn = frame.locator('.kit-attach-remove');
+        await removeBtn.waitFor({ state: 'visible', timeout: 5000 });
+        await removeBtn.click(); // arm
+        await page.waitForTimeout(200);
+        const armedLabel = await removeBtn.textContent();
+        console.log(`[v12] armed remove button label: ${JSON.stringify(armedLabel)}`);
+        assert(
+          /sure\?/i.test(armedLabel ?? ''),
+          `expected the remove button to arm with "Sure?", got: ${armedLabel}`,
+        );
+        await shot('02-remove-armed');
 
-      // Force the exact race the fix targets: an imperative rebuild
-      // (chrome.js's window.addEventListener('focus', refresh)) landing
-      // between the arm click and the confirm click.
-      await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('focus')));
-      await page.waitForTimeout(500);
-      await shot('03-after-forced-refresh-mid-confirm');
+        // Force the exact race the fix targets: an imperative rebuild
+        // (chrome.js's window.addEventListener('focus', refresh)) landing
+        // between the arm click and the confirm click.
+        await frame.locator('body').evaluate(() => window.dispatchEvent(new Event('focus')));
+        await page.waitForTimeout(500);
+        await shot('03-after-forced-refresh-mid-confirm');
 
-      const removeBtnAfterRebuild = frame.locator('.kit-attach-remove');
-      const stillArmedLabel = await removeBtnAfterRebuild.textContent().catch(() => '');
-      console.log(`[v12] remove button label after forced refresh (should still read "Sure?" if armed state survived the rebuild): ${JSON.stringify(stillArmedLabel)}`);
+        const removeBtnAfterRebuild = frame.locator('.kit-attach-remove');
+        const stillArmedLabel = await removeBtnAfterRebuild.textContent().catch(() => '');
+        console.log(
+          `[v12] remove button label after forced refresh (should still read "Sure?" if armed state survived the rebuild): ${JSON.stringify(stillArmedLabel)}`,
+        );
 
-      await removeBtnAfterRebuild.click(); // confirm -- must be a single click, not a re-arm
-      await page.waitForTimeout(1000);
-      await shot('04-after-confirm-click');
+        await removeBtnAfterRebuild.click(); // confirm -- must be a single click, not a re-arm
+        await page.waitForTimeout(1000);
+        await shot('04-after-confirm-click');
 
-      const tileCountAfter = await frame.locator('.kit-attach-tile').count();
-      console.log(`[v12] attachment tile count after the single confirm click post-rebuild: ${tileCountAfter}`);
-      assert(
-        tileCountAfter === 0,
-        `attachment was NOT removed by the single second click after a mid-confirm rebuild -- it likely just re-armed instead of deleting (the pre-fix race), tile count=${tileCountAfter}`,
-      );
-    });
+        const tileCountAfter = await frame.locator('.kit-attach-tile').count();
+        console.log(
+          `[v12] attachment tile count after the single confirm click post-rebuild: ${tileCountAfter}`,
+        );
+        assert(
+          tileCountAfter === 0,
+          `attachment was NOT removed by the single second click after a mid-confirm rebuild -- it likely just re-armed instead of deleting (the pre-fix race), tile count=${tileCountAfter}`,
+        );
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-12 VERDICT TABLE ================');

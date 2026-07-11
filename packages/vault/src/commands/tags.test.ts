@@ -141,7 +141,11 @@ test('the same label tags a task, a note, a document and a media asset under one
 });
 
 test('tag_item refuses an unknown subject type and a missing subject', () => {
-  const badType = invoke('core.tag_item', { subject_type: 'core.event', subject_id: 'x', label: 'a' });
+  const badType = invoke('core.tag_item', {
+    subject_type: 'core.event',
+    subject_id: 'x',
+    label: 'a',
+  });
   expect(badType.status).toBe('failed');
   const missing = invoke('core.tag_item', {
     subject_type: 'schedule.task',
@@ -164,7 +168,11 @@ test('tag_item refuses a trashed document (live check applies to soft-deletable 
 
 test('tagging is additive and multi-label on a document', () => {
   const documentId = addDocument();
-  invoke('core.tag_item', { subject_type: 'core.document', subject_id: documentId, label: 'Taxes' });
+  invoke('core.tag_item', {
+    subject_type: 'core.document',
+    subject_id: documentId,
+    label: 'Taxes',
+  });
   invoke('core.tag_item', {
     subject_type: 'core.document',
     subject_id: documentId,
@@ -196,7 +204,9 @@ test('untag_item removes the edge; the concept and scheme survive for other subj
   ).output;
   const removed = invoke('core.untag_item', { tag_id: tagId });
   expect(removed.status).toBe('executed');
-  const tagRow = db.vault.prepare('SELECT count(*) AS n FROM core_tag WHERE tag_id = ?').get(tagId) as {
+  const tagRow = db.vault
+    .prepare('SELECT count(*) AS n FROM core_tag WHERE tag_id = ?')
+    .get(tagId) as {
     n: number;
   };
   expect(tagRow.n).toBe(0);
@@ -213,7 +223,11 @@ test('untag_item removes exactly the named edge on a media asset, leaving others
     subject_id: assetId,
     label: 'Trip',
   });
-  invoke('core.tag_item', { subject_type: 'media.media_asset', subject_id: assetId, label: 'Beach' });
+  invoke('core.tag_item', {
+    subject_type: 'media.media_asset',
+    subject_id: assetId,
+    label: 'Beach',
+  });
   const tripTagId = (trip as { output: { tag_id: string } }).output.tag_id;
   const outcome = invoke('core.untag_item', { tag_id: tripTagId });
   expect(outcome.status).toBe('executed');
@@ -233,7 +247,11 @@ test('untag_item on an unknown tag is refused', () => {
 
 test('labels are readable through the standard entity read path (no dedicated query needed)', () => {
   const documentId = addDocument();
-  invoke('core.tag_item', { subject_type: 'core.document', subject_id: documentId, label: 'Taxes' });
+  invoke('core.tag_item', {
+    subject_type: 'core.document',
+    subject_id: documentId,
+    label: 'Taxes',
+  });
   // The exact three-read pattern an app-plane query already uses for the
   // flags-scheme star (photos/queries/library.js) works verbatim for labels.
   const scheme = gw.read(owner, {

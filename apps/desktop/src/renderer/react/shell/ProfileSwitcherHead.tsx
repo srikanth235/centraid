@@ -67,7 +67,10 @@ export default function ProfileSwitcherHead({
       disabled={!active}
       onClick={(e) => onToggle(e.currentTarget.getBoundingClientRect())}
     >
-      <Avatar icon={active?.icon ?? DEFAULT_SPACE_ICON} color={active?.color ?? PROFILE_COLORS[0]!} />
+      <Avatar
+        icon={active?.icon ?? DEFAULT_SPACE_ICON}
+        color={active?.color ?? PROFILE_COLORS[0]!}
+      />
       <span className={styles.text}>
         <span className={styles.name} title={name}>
           {name}

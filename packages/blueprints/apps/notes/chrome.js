@@ -8,7 +8,14 @@ import { wireThemeToggle } from './kit.js';
 
 const $ = (id) => document.getElementById(id);
 
-export function wireChrome({ state, render, refresh, applySearchInput, focusQuickAdd, closeEditor }) {
+export function wireChrome({
+  state,
+  render,
+  refresh,
+  applySearchInput,
+  focusQuickAdd,
+  closeEditor,
+}) {
   $('hamburger').addEventListener('click', () => $('shell').classList.add('side-open'));
   $('sideClose').addEventListener('click', () => $('shell').classList.remove('side-open'));
   $('scrim').addEventListener('click', () => $('shell').classList.remove('side-open'));

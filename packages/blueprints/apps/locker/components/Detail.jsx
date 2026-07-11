@@ -22,7 +22,11 @@ function EmptyPane() {
 
 function WatchItemRow({ item, onSelect }) {
   const badge = item.compromised
-    ? { t: 'Compromised', bg: 'color-mix(in oklab, var(--danger) 14%, transparent)', c: 'var(--danger)' }
+    ? {
+        t: 'Compromised',
+        bg: 'color-mix(in oklab, var(--danger) 14%, transparent)',
+        c: 'var(--danger)',
+      }
     : item.weak
       ? { t: 'Weak', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' }
       : { t: 'Reused', bg: 'color-mix(in oklab, var(--warn) 16%, transparent)', c: 'var(--warn)' };
@@ -30,7 +34,12 @@ function WatchItemRow({ item, onSelect }) {
     <button type="button" className="v-wt-item" onClick={() => onSelect(item.item_id)}>
       <span
         className="v-itile"
-        style={{ width: '32px', height: '32px', fontSize: '13px', background: catOf(item.type).color }}
+        style={{
+          width: '32px',
+          height: '32px',
+          fontSize: '13px',
+          background: catOf(item.type).color,
+        }}
       >
         {monoOf(item)}
       </span>

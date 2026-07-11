@@ -30,7 +30,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v11-${id}.png`) });
@@ -74,43 +80,66 @@ async function main() {
     let fl;
     await step('open-tasks', 'Open Tasks iframe', async () => {
       await page.locator('[data-app-id="tasks"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       fl = frameLoc(page);
       await fl.locator('.tk-capture-input').waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
     });
 
     let maxObservedToasts = 0;
-    await step('rapid-add-ten-tasks', 'Quick-capture 10 tasks back-to-back, sampling the live toast count as it goes', async () => {
-      const input = fl.locator('.tk-capture-input');
-      for (let i = 1; i <= 10; i++) {
-        // Submit via Enter on the (always-focused, always-enabled) input
-        // rather than clicking the Add button -- the button is disabled
-        // while Capture's own `busy` flag is set mid-submit (Capture.jsx),
-        // and racing that disabled window isn't the point of this test.
-        const t0 = Date.now();
-        await input.fill(`Toast cap probe task ${i}`);
-        await input.press('Enter');
-        await page.waitForTimeout(150);
-        console.log(`[v11] add #${i} took ${Date.now() - t0}ms`);
-        const count = await fl.locator('kit-toast').count().catch(() => 0);
-        maxObservedToasts = Math.max(maxObservedToasts, count);
-        if (i === 6) await shot('01-mid-burst-toast-stack');
-      }
-      await page.waitForTimeout(200);
-      const finalCount = await fl.locator('kit-toast').count().catch(() => 0);
-      maxObservedToasts = Math.max(maxObservedToasts, finalCount);
-      console.log(`[v11] max toast count observed during/after the burst: ${maxObservedToasts}`);
-      await shot('02-after-burst-toast-stack');
-    });
+    await step(
+      'rapid-add-ten-tasks',
+      'Quick-capture 10 tasks back-to-back, sampling the live toast count as it goes',
+      async () => {
+        const input = fl.locator('.tk-capture-input');
+        for (let i = 1; i <= 10; i++) {
+          // Submit via Enter on the (always-focused, always-enabled) input
+          // rather than clicking the Add button -- the button is disabled
+          // while Capture's own `busy` flag is set mid-submit (Capture.jsx),
+          // and racing that disabled window isn't the point of this test.
+          const t0 = Date.now();
+          await input.fill(`Toast cap probe task ${i}`);
+          await input.press('Enter');
+          await page.waitForTimeout(150);
+          console.log(`[v11] add #${i} took ${Date.now() - t0}ms`);
+          const count = await fl
+            .locator('kit-toast')
+            .count()
+            .catch(() => 0);
+          maxObservedToasts = Math.max(maxObservedToasts, count);
+          if (i === 6) await shot('01-mid-burst-toast-stack');
+        }
+        await page.waitForTimeout(200);
+        const finalCount = await fl
+          .locator('kit-toast')
+          .count()
+          .catch(() => 0);
+        maxObservedToasts = Math.max(maxObservedToasts, finalCount);
+        console.log(`[v11] max toast count observed during/after the burst: ${maxObservedToasts}`);
+        await shot('02-after-burst-toast-stack');
+      },
+    );
 
     await step('toast-cap-enforced', 'At no point did more than 3 toasts stack up', async () => {
-      assert(maxObservedToasts <= 3, `observed ${maxObservedToasts} toasts stacked at once -- expected the MAX_TOASTS=3 cap to evict older ones`);
+      assert(
+        maxObservedToasts <= 3,
+        `observed ${maxObservedToasts} toasts stacked at once -- expected the MAX_TOASTS=3 cap to evict older ones`,
+      );
       // Sanity: all 10 tasks were actually added (the cap is cosmetic, not a
       // functional drop of the underlying writes).
-      await fl.locator('.tk-nav-item', { hasText: 'Anytime' }).click().catch(() => undefined);
+      await fl
+        .locator('.tk-nav-item', { hasText: 'Anytime' })
+        .click()
+        .catch(() => undefined);
       await page.waitForTimeout(400);
-      const allOpenCount = await fl.locator('.tk-nav-item', { hasText: 'All open' }).locator('.tk-nav-count').textContent().catch(() => '');
+      const allOpenCount = await fl
+        .locator('.tk-nav-item', { hasText: 'All open' })
+        .locator('.tk-nav-count')
+        .textContent()
+        .catch(() => '');
       console.log(`[v11] "All open" count after adding 10 tasks: ${allOpenCount}`);
     });
 

@@ -70,7 +70,10 @@ function scheduleSummary(triggers: CentraidAutomationManifest['triggers']): stri
 }
 
 /** "What happened last" + "when it fires next" — the at-a-glance pairing for "When it runs". */
-function ActivityCard({ automationRef, triggers }: {
+function ActivityCard({
+  automationRef,
+  triggers,
+}: {
   automationRef: string;
   triggers: CentraidAutomationManifest['triggers'];
 }): JSX.Element {

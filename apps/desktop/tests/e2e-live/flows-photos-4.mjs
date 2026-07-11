@@ -30,7 +30,10 @@ async function partA() {
   page.on('console', (msg) => consoleLog.push({ text: msg.text(), type: msg.type() }));
   await page.setViewportSize({ width: 1400, height: 900 });
   try {
-    await page.getByRole('button', { name: /^Discover/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Discover/ })
+      .first()
+      .click();
     const card = page.locator('button[data-kind="app"]', { hasText: 'Photos' });
     await card.first().waitFor({ state: 'visible', timeout: 20_000 });
     await card.first().click();
@@ -40,20 +43,28 @@ async function partA() {
     const tile = page.locator('[data-app-id="photos"]');
     await tile.waitFor({ state: 'visible', timeout: 20_000 });
     await tile.getByTestId('app-tile').click();
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 30_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 30_000,
+    });
     const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     await frameLoc.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
     await page.waitForTimeout(300);
     const errBefore = consoleLog.filter((c) => c.type === 'error').length;
-    await frameLoc.locator('#fileInput').setInputFiles([
-      path.join(FIXTURES_DIR, 'red-100.png'),
-      path.join(FIXTURES_DIR, 'green-100.png'),
-      path.join(FIXTURES_DIR, 'teal-800.png'),
-    ]);
+    await frameLoc
+      .locator('#fileInput')
+      .setInputFiles([
+        path.join(FIXTURES_DIR, 'red-100.png'),
+        path.join(FIXTURES_DIR, 'green-100.png'),
+        path.join(FIXTURES_DIR, 'teal-800.png'),
+      ]);
     await frameLoc.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 20_000 });
     await page.waitForTimeout(1500);
     const tiles = await frameLoc.locator('.tile-wrap').count();
-    const newErrs = consoleLog.filter((c) => c.type === 'error').slice(errBefore).map((e) => e.text.slice(0, 130));
+    const newErrs = consoleLog
+      .filter((c) => c.type === 'error')
+      .slice(errBefore)
+      .map((e) => e.text.slice(0, 130));
     const probe = await frameLoc.locator('body').evaluate(() => {
       return [...document.querySelectorAll('.tile-wrap img')].map((img) => ({
         src: (img.currentSrc || img.src).slice((img.currentSrc || img.src).indexOf('/centraid')),
@@ -62,19 +73,30 @@ async function partA() {
     });
     const p = path.join(OUT_DIR, '60-small-no-404.png');
     await page.screenshot({ path: p });
-    record('3d-small-image-404-skip', tiles === 3 && newErrs.length === 0 ? 'pass-after-fix' : 'fail-escalated',
-      `tiles=${tiles} newConsoleErrorsDuringUploadAndRender=${JSON.stringify(newErrs)} imgs=${JSON.stringify(probe)}`);
+    record(
+      '3d-small-image-404-skip',
+      tiles === 3 && newErrs.length === 0 ? 'pass-after-fix' : 'fail-escalated',
+      `tiles=${tiles} newConsoleErrorsDuringUploadAndRender=${JSON.stringify(newErrs)} imgs=${JSON.stringify(probe)}`,
+    );
     // reload the view once more to prove steady-state renders stay silent
     await page.getByRole('button', { name: /^Home/ }).first().click();
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 15_000 });
     const errBeforeReopen = consoleLog.filter((c) => c.type === 'error').length;
     await page.locator('[data-app-id="photos"]').getByTestId('app-tile').click();
     const fl2 = page.frameLocator('iframe[data-centraid-app="1"]');
     await fl2.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 20_000 });
     await page.waitForTimeout(1200);
-    const reopenErrs = consoleLog.filter((c) => c.type === 'error').slice(errBeforeReopen).map((e) => e.text.slice(0, 130));
-    record('3e-steady-state-console-clean', reopenErrs.length === 0 ? 'pass-after-fix' : 'fail-escalated',
-      `errorsOnReopenRender=${JSON.stringify(reopenErrs)}`);
+    const reopenErrs = consoleLog
+      .filter((c) => c.type === 'error')
+      .slice(errBeforeReopen)
+      .map((e) => e.text.slice(0, 130));
+    record(
+      '3e-steady-state-console-clean',
+      reopenErrs.length === 0 ? 'pass-after-fix' : 'fail-escalated',
+      `errorsOnReopenRender=${JSON.stringify(reopenErrs)}`,
+    );
   } finally {
     await close();
   }
@@ -92,9 +114,14 @@ async function partB() {
   await page.setViewportSize({ width: 1400, height: 900 });
   try {
     await page.getByRole('button', { name: /^Home/ }).first().click();
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('[data-app-id="photos"]').getByTestId('app-tile').click();
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 20_000,
+    });
     const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     await frameLoc.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
     await frameLoc.locator('#kitAskBtn').click();
@@ -104,16 +131,25 @@ async function partB() {
     await input.press('Enter');
     for (let i = 0; i < 12 && !pageClosed; i++) await page.waitForTimeout(1000);
     if (pageClosed) {
-      record('1f-ask-crash-repro', 'fail-escalated',
-        `REPRODUCED: window closed during _turn send on the phase-1 vault. main tail=${JSON.stringify(mainLines.slice(-8).join('').slice(-800))}`);
+      record(
+        '1f-ask-crash-repro',
+        'fail-escalated',
+        `REPRODUCED: window closed during _turn send on the phase-1 vault. main tail=${JSON.stringify(mainLines.slice(-8).join('').slice(-800))}`,
+      );
     } else {
       const bubbles = await frameLoc.locator('.kit-msg').allTextContents();
-      record('1f-ask-crash-repro', 'pass',
-        `no crash on retry; bubbles=${JSON.stringify(bubbles).slice(0, 400)}`);
+      record(
+        '1f-ask-crash-repro',
+        'pass',
+        `no crash on retry; bubbles=${JSON.stringify(bubbles).slice(0, 400)}`,
+      );
     }
   } catch (err) {
-    record('1f-ask-crash-repro', pageClosed ? 'fail-escalated' : 'not-testable',
-      `${String(err?.message ?? err).slice(0, 200)}; pageClosed=${pageClosed}; main tail=${JSON.stringify(mainLines.slice(-8).join('').slice(-800))}`);
+    record(
+      '1f-ask-crash-repro',
+      pageClosed ? 'fail-escalated' : 'not-testable',
+      `${String(err?.message ?? err).slice(0, 200)}; pageClosed=${pageClosed}; main tail=${JSON.stringify(mainLines.slice(-8).join('').slice(-800))}`,
+    );
   } finally {
     await close();
   }

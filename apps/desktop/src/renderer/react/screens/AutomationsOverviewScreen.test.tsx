@@ -111,9 +111,7 @@ describe('AutomationsOverviewScreen', () => {
   it('fires the header actions', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const [browse, create] = [
-      ...el.querySelectorAll('.auActions .auBtn'),
-    ] as HTMLButtonElement[];
+    const [browse, create] = [...el.querySelectorAll('.auActions .auBtn')] as HTMLButtonElement[];
     await act(async () => browse?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => create?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onBrowseTemplates).toHaveBeenCalledTimes(1);

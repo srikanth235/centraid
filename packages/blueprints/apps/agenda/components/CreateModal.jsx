@@ -72,7 +72,9 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
     const next = new Date(nextStr);
     if (!Number.isNaN(next.getTime())) {
       const dur =
-        !Number.isNaN(prevStart.getTime()) && !Number.isNaN(prevEnd.getTime()) && prevEnd > prevStart
+        !Number.isNaN(prevStart.getTime()) &&
+        !Number.isNaN(prevEnd.getTime()) &&
+        prevEnd > prevStart
           ? prevEnd.getTime() - prevStart.getTime()
           : 3600000;
       setEndVal(toLocalInput(new Date(next.getTime() + dur)));
@@ -133,7 +135,12 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="kit-modal ag-create-modal" role="dialog" aria-modal="true" aria-labelledby="createEventTitle">
+      <div
+        className="kit-modal ag-create-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="createEventTitle"
+      >
         <div className="ag-create-head">
           <span id="createEventTitle" className="ag-create-heading">
             New event
@@ -159,11 +166,19 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
             </label>
             <label className="ag-field-row">
               <span>End</span>
-              <input type="datetime-local" value={endVal} onChange={(e) => setEndVal(e.target.value)} />
+              <input
+                type="datetime-local"
+                value={endVal}
+                onChange={(e) => setEndVal(e.target.value)}
+              />
             </label>
             <label className="ag-field-row">
               <span>Repeat</span>
-              <select value={repeat} onChange={(e) => setRepeat(e.target.value)} aria-label="Repeat">
+              <select
+                value={repeat}
+                onChange={(e) => setRepeat(e.target.value)}
+                aria-label="Repeat"
+              >
                 {REPEAT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
@@ -194,7 +209,8 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
               </div>
             ) : (
               <p className="muted small">
-                The vault has no calendars yet — import an .ics file through the vault's ingest to create one.
+                The vault has no calendars yet — import an .ics file through the vault's ingest to
+                create one.
               </p>
             )}
           </div>
@@ -244,7 +260,12 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={busy || !calendars.length} onClick={submit}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={busy || !calendars.length}
+            onClick={submit}
+          >
             Propose event
           </button>
         </div>

@@ -96,7 +96,10 @@ async function main() {
     const afterPressed = await weekBtn.getAttribute('aria-pressed');
     console.log(`[iframe-probe] #weekViewBtn aria-pressed: ${beforePressed} → ${afterPressed}`);
     assert(beforePressed !== 'true', 'week view should not start pressed (month is default)');
-    assert(afterPressed === 'true', 'click inside iframe did not flip aria-pressed — click failed to land');
+    assert(
+      afterPressed === 'true',
+      'click inside iframe did not flip aria-pressed — click failed to land',
+    );
 
     // 4) Prove page.on('console') captures CHILD-FRAME console messages: emit
     //    a uniquely-tagged log INSIDE the iframe's own JS realm via

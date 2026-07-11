@@ -2,10 +2,10 @@
   "name": "@centraid/desktop-shell-ds",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "description": "The Centraid desktop shell's React DOM component library (apps/desktop/src/renderer/react/ui) packaged as a design-sync input for claude.ai/design. Real shipped components — Icon/Button/Logo/AppCard — emitting the renderer's cd-* classes, styled by the desktop styles.css.",
-  "module": "./dist/index.js",
+  "type": "module",
   "main": "./dist/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {

@@ -31,7 +31,16 @@ const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
 const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
 
 const PORT = 4173;
-const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes', 'agenda', 'people', 'tally', 'locker']);
+const SUPPORTED_APPS = new Set([
+  'docs',
+  'photos',
+  'tasks',
+  'notes',
+  'agenda',
+  'people',
+  'tally',
+  'locker',
+]);
 const BLOB_PREFIX = '/centraid/_vault/blobs';
 
 // ---------------------------------------------------------------------
@@ -129,7 +138,10 @@ function hashHue(id) {
 }
 
 function escapeXml(s) {
-  return s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+  return s.replace(
+    /[<>&"]/g,
+    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c],
+  );
 }
 
 function placeholderSvg(id, thumb) {

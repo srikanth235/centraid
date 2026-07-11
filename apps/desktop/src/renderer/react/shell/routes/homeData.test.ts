@@ -13,9 +13,23 @@ beforeEach(() => {
 });
 
 const userApp = (id: string): UserAppMeta =>
-  ({ id, name: id, iconKey: 'Todo', color: '#123', updatedAt: '2020-01-01T00:00:00Z' }) as unknown as UserAppMeta;
+  ({
+    id,
+    name: id,
+    iconKey: 'Todo',
+    color: '#123',
+    updatedAt: '2020-01-01T00:00:00Z',
+  }) as unknown as UserAppMeta;
 const draft = (id: string): DraftAppMeta =>
-  ({ id, name: id, iconKey: 'Sparkle', color: '#456', __draft: true, hasIndex: true, desc: 'd' }) as unknown as DraftAppMeta;
+  ({
+    id,
+    name: id,
+    iconKey: 'Sparkle',
+    color: '#456',
+    __draft: true,
+    hasIndex: true,
+    desc: 'd',
+  }) as unknown as DraftAppMeta;
 
 const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
   ({
@@ -31,7 +45,12 @@ const row = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =
 const entry = (ok: boolean): AutomationFeedEntry => ({
   automationId: 'digest/main',
   automationName: 'Digest',
-  run: { runId: 'r', automationId: 'digest/main', startedAt: Date.now(), ok } as unknown as CentraidAutomationRunRecord,
+  run: {
+    runId: 'r',
+    automationId: 'digest/main',
+    startedAt: Date.now(),
+    ok,
+  } as unknown as CentraidAutomationRunRecord,
 });
 
 describe('homeData', () => {

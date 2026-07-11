@@ -48,9 +48,9 @@ describe('SettingsAppearanceScreen', () => {
     expect(el.querySelectorAll('.swatch').length).toBe(5);
     expect(el.querySelectorAll('.previewTile').length).toBe(4);
     // active theme marked
-    expect(
-      (el.querySelector('.themeCard[data-name="light"]') as HTMLElement).dataset.active,
-    ).toBe('true');
+    expect((el.querySelector('.themeCard[data-name="light"]') as HTMLElement).dataset.active).toBe(
+      'true',
+    );
     // active accent
     expect(el.querySelectorAll('.swatch[data-active="true"]').length).toBe(1);
   });

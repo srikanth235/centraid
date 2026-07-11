@@ -193,12 +193,19 @@ function render() {
     return;
   }
   if (state.view === 'activity') {
-    wrapRoot.render(<ActivityFeed viewData={state.viewData} me={dash.me} currency={dash.currency} />);
+    wrapRoot.render(
+      <ActivityFeed viewData={state.viewData} me={dash.me} currency={dash.currency} />,
+    );
     return;
   }
   if (state.view === 'group' || state.view === 'friend') {
     wrapRoot.render(
-      <Ledger view={state.view} viewData={state.viewData} currency={dash.currency} onOpenDetail={logic.openDetail} />,
+      <Ledger
+        view={state.view}
+        viewData={state.viewData}
+        currency={dash.currency}
+        onOpenDetail={logic.openDetail}
+      />,
     );
   }
 }

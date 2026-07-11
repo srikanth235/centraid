@@ -24,7 +24,14 @@ mkdirSync(stylesDir, { recursive: true });
 // 1. Copy the real components fresh (no hand-maintained twins → no drift).
 //    Gallery is a demo composite, not a library primitive — excluded from the
 //    DS entry (it can be authored as a preview instead).
-const COMPONENT_FILES = ['Icon.tsx', 'Button.tsx', 'Logo.tsx', 'AppCard.tsx', 'cx.ts', 'tile-visual.ts'];
+const COMPONENT_FILES = [
+  'Icon.tsx',
+  'Button.tsx',
+  'Logo.tsx',
+  'AppCard.tsx',
+  'cx.ts',
+  'tile-visual.ts',
+];
 for (const f of COMPONENT_FILES) copyFileSync(resolve(uiDir, f), resolve(srcDir, f));
 console.log('[build] copied', COMPONENT_FILES.length, 'component files from apps/desktop');
 
@@ -60,12 +67,18 @@ mkdirSync(fontsOut, { recursive: true });
 for (const f of readdirSync(dsFontsDir).filter((n) => n.endsWith('.woff2'))) {
   copyFileSync(resolve(dsFontsDir, f), resolve(fontsOut, f));
 }
-copyFileSync(resolve(repoRoot, '.design-sync/ds-src/styles/fonts.css'), resolve(stylesDir, 'fonts.css'));
+copyFileSync(
+  resolve(repoRoot, '.design-sync/ds-src/styles/fonts.css'),
+  resolve(stylesDir, 'fonts.css'),
+);
 console.log('[build] copied fonts/*.woff2 + styles/fonts.css');
 
 // 5. The canonical renderer stylesheet — copied verbatim, never edited here.
 //    It defines the type scale + every cd-* component rule the shell draws.
-copyFileSync(resolve(repoRoot, 'apps/desktop/src/renderer/styles.css'), resolve(stylesDir, 'styles.css'));
+copyFileSync(
+  resolve(repoRoot, 'apps/desktop/src/renderer/styles.css'),
+  resolve(stylesDir, 'styles.css'),
+);
 console.log('[build] copied styles/styles.css');
 
 // 6. The flat cssEntry the converter copies into _ds_bundle.css. Concatenated
@@ -82,7 +95,9 @@ console.log('[build] wrote styles/bundle.css (cssEntry)');
 //    inlined from TS source (its dist is CJS; source keeps named exports
 //    clean), react/react-dom external so the converter binds them to _vendor.
 rmSync(distDir, { recursive: true, force: true });
-const esbuild = await import(pathToFileURL(resolve(repoRoot, '.ds-sync/node_modules/esbuild/lib/main.js')).href);
+const esbuild = await import(
+  pathToFileURL(resolve(repoRoot, '.ds-sync/node_modules/esbuild/lib/main.js')).href
+);
 await esbuild.build({
   entryPoints: [resolve(srcDir, 'index.ts')],
   bundle: true,

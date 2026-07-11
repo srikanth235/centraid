@@ -71,8 +71,22 @@ describe('WhatsNewModal', () => {
     mockChangelog(() =>
       Promise.resolve(
         result([
-          { version: 'v0.2.0', title: 'Now', notes: '', publishedAt: null, url: '', prerelease: false },
-          { version: 'v0.1.0', title: 'Old', notes: '', publishedAt: null, url: '', prerelease: false },
+          {
+            version: 'v0.2.0',
+            title: 'Now',
+            notes: '',
+            publishedAt: null,
+            url: '',
+            prerelease: false,
+          },
+          {
+            version: 'v0.1.0',
+            title: 'Old',
+            notes: '',
+            publishedAt: null,
+            url: '',
+            prerelease: false,
+          },
         ]),
       ),
     );

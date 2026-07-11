@@ -46,14 +46,19 @@ async function installApp(name, appId) {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await dialog.getByRole('button', { name: 'Use this template' }).click();
   await page.locator('[data-global-toast]').waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator(`[data-app-id="${appId}"]`).waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 async function openApp(appId) {
   const tile = page.locator(`[data-app-id="${appId}"]`);
   await tile.getByTestId('app-tile').click();
-  await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+  await page.waitForSelector('iframe[data-centraid-app="1"]', {
+    state: 'attached',
+    timeout: 20_000,
+  });
   const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
   await frameLoc.locator('body').first().waitFor({ state: 'visible', timeout: 15_000 });
   return frameLoc;
@@ -83,7 +88,9 @@ async function main() {
     await page.waitForTimeout(2000);
 
     await frameLoc.locator('#kitAskBtn').click();
-    await frameLoc.locator('.kit-ask-panel[role="dialog"]').waitFor({ state: 'visible', timeout: 10_000 });
+    await frameLoc
+      .locator('.kit-ask-panel[role="dialog"]')
+      .waitFor({ state: 'visible', timeout: 10_000 });
     await shot('01-panel-open-before-turn');
 
     const input = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
@@ -157,16 +164,20 @@ async function main() {
       const board = frameLoc.locator('#board');
       const boardText = (await board.textContent().catch(() => '')) ?? '';
       const rowCount = await board.locator('.row[data-task-id]').count();
-      console.log(`[ask02] board row count: ${rowCount}, board text: ${JSON.stringify(boardText.slice(0, 300))}`);
+      console.log(
+        `[ask02] board row count: ${rowCount}, board text: ${JSON.stringify(boardText.slice(0, 300))}`,
+      );
       const taskAppeared = /buy milk/i.test(boardText);
       if (taskAppeared) {
         verdict = 'PASS';
-        detail = 'Agent replied and a "buy milk" task actually appears in the Tasks board without needing a remount.';
+        detail =
+          'Agent replied and a "buy milk" task actually appears in the Tasks board without needing a remount.';
       } else {
         const parkedCard = log.locator('.kit-ask-action');
         if ((await parkedCard.count()) > 0) {
           verdict = 'INCONCLUSIVE';
-          detail = 'Agent proposed a parked write instead of applying directly — see screenshot 03-after-turn. Unexpected for an already-granted ACT scope; worth a follow-up look.';
+          detail =
+            'Agent proposed a parked write instead of applying directly — see screenshot 03-after-turn. Unexpected for an already-granted ACT scope; worth a follow-up look.';
         } else {
           // Board not showing the row yet does NOT necessarily mean the
           // write failed — a separate raw-SSE reliability probe (3/3 trials)
@@ -180,11 +191,16 @@ async function main() {
           // it. Confirm ground truth via a remount before calling this a
           // hard failure.
           await navTo(page, 'Home');
-          await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+          await page
+            .getByRole('heading', { name: 'What should we build?' })
+            .waitFor({ state: 'visible', timeout: 10_000 });
           await page.waitForTimeout(300);
           const tile = page.locator('[data-app-id="tasks"]');
           await tile.getByTestId('app-tile').click();
-          await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+          await page.waitForSelector('iframe[data-centraid-app="1"]', {
+            state: 'attached',
+            timeout: 20_000,
+          });
           const frameLoc2 = page.frameLocator('iframe[data-centraid-app="1"]');
           await frameLoc2.locator('#board').waitFor({ state: 'visible', timeout: 15_000 });
           await page.waitForTimeout(800);
@@ -192,10 +208,13 @@ async function main() {
           const board2 = frameLoc2.locator('#board');
           const boardText2 = (await board2.textContent().catch(() => '')) ?? '';
           const rowCount2 = await board2.locator('.row[data-task-id]').count();
-          console.log(`[ask02] board row count after a forced remount: ${rowCount2}, text: ${JSON.stringify(boardText2.slice(0, 300))}`);
+          console.log(
+            `[ask02] board row count after a forced remount: ${rowCount2}, text: ${JSON.stringify(boardText2.slice(0, 300))}`,
+          );
           if (/buy milk/i.test(boardText2)) {
             verdict = 'PASS (with caveat)';
-            detail = 'Agent replied and the write DID land in the vault (task_id present after a full app remount), but the already-open Tasks board did not live-refresh to show it — a real UX gap, not a data-loss bug. Root cause read from source: packages/blueprints/apps/tasks/app.js only calls refresh() on its own quick-add/complete actions or on `window.addEventListener(\'focus\', refresh)`; it has no subscription to vault changes made by other callers (e.g. the Ask agent), so an Ask-driven write can sit invisible on an already-open board until refocus or reopen.';
+            detail =
+              "Agent replied and the write DID land in the vault (task_id present after a full app remount), but the already-open Tasks board did not live-refresh to show it — a real UX gap, not a data-loss bug. Root cause read from source: packages/blueprints/apps/tasks/app.js only calls refresh() on its own quick-add/complete actions or on `window.addEventListener('focus', refresh)`; it has no subscription to vault changes made by other callers (e.g. the Ask agent), so an Ask-driven write can sit invisible on an already-open board until refocus or reopen.";
           } else {
             verdict = 'FAIL';
             detail = `Agent replied but no "buy milk" task appeared in the Tasks board even after a full remount. Board text: ${boardText2.slice(0, 300)}`;

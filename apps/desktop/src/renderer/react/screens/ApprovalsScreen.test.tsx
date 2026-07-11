@@ -320,13 +320,18 @@ describe('ApprovalsScreen', () => {
     });
     const setNativeValue = (input: HTMLInputElement | HTMLTextAreaElement, value: string): void => {
       const proto =
-        input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        input instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
       const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
       setter?.call(input, value);
       input.dispatchEvent(new Event('input', { bubbles: true }));
     };
     act(() => {
-      setNativeValue(el.querySelector('input[aria-label="Subject"]') as HTMLInputElement, 'New subject');
+      setNativeValue(
+        el.querySelector('input[aria-label="Subject"]') as HTMLInputElement,
+        'New subject',
+      );
       setNativeValue(
         el.querySelector('textarea[aria-label="Body"]') as HTMLTextAreaElement,
         'New body.',

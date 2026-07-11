@@ -52,7 +52,7 @@ function addDocument(): string {
 }
 
 describe('activity read over consent.provenance', () => {
-  test('an app holding both scopes reads the specific entity\'s activity', () => {
+  test("an app holding both scopes reads the specific entity's activity", () => {
     const documentId = addDocument();
     const cred = grantApp('docs-app', [
       { schema: 'core', table: 'document', verbs: 'read' },

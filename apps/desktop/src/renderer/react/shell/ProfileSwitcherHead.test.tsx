@@ -25,14 +25,18 @@ const active = { id: 'v1', name: "Owner's vault", color: '#4E68DD', icon: 'Spark
 
 describe('ProfileSwitcherHead', () => {
   it('renders the active vault name + subtitle', () => {
-    const el = render(<ProfileSwitcherHead active={active} subtitle="2 apps" onToggle={() => {}} />);
+    const el = render(
+      <ProfileSwitcherHead active={active} subtitle="2 apps" onToggle={() => {}} />,
+    );
     expect(el.textContent).toContain("Owner's vault");
     expect(el.textContent).toContain('2 apps');
   });
 
   it('fires onToggle with the button rect when clicked', () => {
     const onToggle = vi.fn();
-    const el = render(<ProfileSwitcherHead active={active} subtitle="2 apps" onToggle={onToggle} />);
+    const el = render(
+      <ProfileSwitcherHead active={active} subtitle="2 apps" onToggle={onToggle} />,
+    );
     act(() => (el.querySelector('button') as HTMLButtonElement).click());
     expect(onToggle).toHaveBeenCalledWith(expect.objectContaining({ left: expect.any(Number) }));
   });

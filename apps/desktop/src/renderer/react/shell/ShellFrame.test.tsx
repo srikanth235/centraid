@@ -61,7 +61,9 @@ describe('ShellFrame', () => {
       <ShellFrame {...base} canGoBack onBack={onBack} onToggleSidebar={onToggleSidebar} />,
     );
     act(() => (el.querySelector('[aria-label="Back"]') as HTMLButtonElement).click());
-    act(() => (el.querySelector('.tlSide [aria-label="Hide sidebar"]') as HTMLButtonElement).click());
+    act(() =>
+      (el.querySelector('.tlSide [aria-label="Hide sidebar"]') as HTMLButtonElement).click(),
+    );
     expect(onBack).toHaveBeenCalled();
     expect(onToggleSidebar).toHaveBeenCalled();
   });

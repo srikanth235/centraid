@@ -48,7 +48,8 @@ export default function BuilderHistory({
   }, [appId, nonce]);
 
   if (!appId) return <div className={atomsCss.empty}>No app yet.</div>;
-  if (error) return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
+  if (error)
+    return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;
   if (!data) return <div className={atomsCss.empty}>Loading…</div>;
   if (data.versions.length === 0) {
     return <div className={atomsCss.empty}>No versions yet. Publish to create the first one.</div>;

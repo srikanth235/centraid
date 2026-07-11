@@ -28,7 +28,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v09-${id}.png`) });
@@ -63,16 +69,27 @@ async function main() {
       assert(!disabled, 'sidebar Search nav item is disabled -- onSearch was not wired');
     });
 
-    await step('search-click-opens-palette', 'Clicking Search opens the command palette', async () => {
-      const searchBtn = page.getByRole('button', { name: /^Search/ }).first();
-      await searchBtn.click();
-      await page.waitForTimeout(400);
-      await shot('02-palette-opened-via-search-button');
-      const paletteInput = page.locator('input[placeholder], [role="dialog"] input').first();
-      const paletteVisible = await page.locator('[role="dialog"]').first().isVisible().catch(() => false);
-      console.log(`[v09] a dialog (palette) is visible after clicking Search: ${paletteVisible}`);
-      assert(paletteVisible, 'clicking the sidebar Search button did not open any dialog/palette');
-    });
+    await step(
+      'search-click-opens-palette',
+      'Clicking Search opens the command palette',
+      async () => {
+        const searchBtn = page.getByRole('button', { name: /^Search/ }).first();
+        await searchBtn.click();
+        await page.waitForTimeout(400);
+        await shot('02-palette-opened-via-search-button');
+        const paletteInput = page.locator('input[placeholder], [role="dialog"] input').first();
+        const paletteVisible = await page
+          .locator('[role="dialog"]')
+          .first()
+          .isVisible()
+          .catch(() => false);
+        console.log(`[v09] a dialog (palette) is visible after clicking Search: ${paletteVisible}`);
+        assert(
+          paletteVisible,
+          'clicking the sidebar Search button did not open any dialog/palette',
+        );
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-09 VERDICT TABLE ================');

@@ -42,7 +42,10 @@ describe('summarizeToolArgs', () => {
 
 describe('toBuilderMsg', () => {
   it('splits AI text into paragraphs', () => {
-    expect(toBuilderMsg({ kind: 'ai', text: 'a\n\nb' }, 0)).toEqual({ kind: 'ai', paras: ['a', 'b'] });
+    expect(toBuilderMsg({ kind: 'ai', text: 'a\n\nb' }, 0)).toEqual({
+      kind: 'ai',
+      paras: ['a', 'b'],
+    });
   });
 
   it('builds a change card from ok file-writes, versioned by count', () => {

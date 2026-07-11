@@ -98,7 +98,10 @@ export function Details({
           </div>
           {custody ? (
             <div className="d-detail-custody">
-              <span className={`kit-chip custody-chip custody-${custody.tone}`} title="Backup status">
+              <span
+                className={`kit-chip custody-chip custody-${custody.tone}`}
+                title="Backup status"
+              >
                 {custody.label}
               </span>
             </div>
@@ -130,11 +133,7 @@ export function Details({
               </button>
             )}
             {trashed ? null : isTextEditable(doc) ? (
-              <button
-                type="button"
-                className="kit-btn d-detail-btn"
-                onClick={() => onEdit(doc)}
-              >
+              <button type="button" className="kit-btn d-detail-btn" onClick={() => onEdit(doc)}>
                 <Icon svg={RENAME_ICON} />
                 Edit
               </button>
@@ -154,7 +153,11 @@ export function Details({
             <dd>{trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
           </dl>
           <div className="d-detail-label">Activity</div>
-          <Activity key={doc.document_id} documentId={doc.document_id} loadActivity={loadActivity} />
+          <Activity
+            key={doc.document_id}
+            documentId={doc.document_id}
+            loadActivity={loadActivity}
+          />
           <button
             type="button"
             className="d-detail-label d-version-toggle"

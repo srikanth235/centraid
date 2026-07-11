@@ -34,7 +34,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v14-${id}.png`) });
@@ -60,22 +66,26 @@ async function main() {
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
 
-    await step('sidebar-item', 'Sidebar "What\'s new" item opens the modal (real GitHub fetch)', async () => {
-      const btn = page.getByRole('button', { name: /What.s new/i }).first();
-      await btn.waitFor({ state: 'visible', timeout: 10_000 });
-      await btn.click();
-      const dialog = page.getByRole('dialog', { name: /What.s new/i });
-      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-      // Real repo has no releases yet -> graceful empty (or a transient load).
-      await page.waitForTimeout(1200);
-      await shot('01-live-empty-state');
-      const bodyText = await dialog.textContent();
-      console.log(`[v14] live modal text: ${bodyText?.slice(0, 120)}`);
-      assert(
-        /No releases published yet|Loading release notes/.test(bodyText ?? ''),
-        'live modal did not show the empty/loading state',
-      );
-    });
+    await step(
+      'sidebar-item',
+      'Sidebar "What\'s new" item opens the modal (real GitHub fetch)',
+      async () => {
+        const btn = page.getByRole('button', { name: /What.s new/i }).first();
+        await btn.waitFor({ state: 'visible', timeout: 10_000 });
+        await btn.click();
+        const dialog = page.getByRole('dialog', { name: /What.s new/i });
+        await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+        // Real repo has no releases yet -> graceful empty (or a transient load).
+        await page.waitForTimeout(1200);
+        await shot('01-live-empty-state');
+        const bodyText = await dialog.textContent();
+        console.log(`[v14] live modal text: ${bodyText?.slice(0, 120)}`);
+        assert(
+          /No releases published yet|Loading release notes/.test(bodyText ?? ''),
+          'live modal did not show the empty/loading state',
+        );
+      },
+    );
 
     await step('escape-closes', 'Escape dismisses the modal', async () => {
       await page.keyboard.press('Escape');
@@ -88,7 +98,10 @@ async function main() {
     });
 
     await step('close-button', 'Close button dismisses the reopened modal', async () => {
-      await page.getByRole('button', { name: /What.s new/i }).first().click();
+      await page
+        .getByRole('button', { name: /What.s new/i })
+        .first()
+        .click();
       const dialog = page.getByRole('dialog', { name: /What.s new/i });
       await dialog.waitFor({ state: 'visible', timeout: 10_000 });
       await page.getByRole('button', { name: 'Close' }).click();

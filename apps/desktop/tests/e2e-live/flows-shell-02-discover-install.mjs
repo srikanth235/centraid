@@ -23,7 +23,11 @@ const consoleMessages = [];
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -37,7 +41,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-disc-${id}.png`) });
@@ -83,9 +93,14 @@ async function main() {
       await page.waitForTimeout(200);
       let visible = await page.locator('button[data-kind="app"]:visible').count();
       let hiddenAutomations = await page.locator('button[data-kind="automation"]:visible').count();
-      console.log(`[disc] Apps tab: visible apps=${visible} visible automations=${hiddenAutomations}`);
+      console.log(
+        `[disc] Apps tab: visible apps=${visible} visible automations=${hiddenAutomations}`,
+      );
       assert(visible === 8, `Apps tab: expected 8 visible app tiles, got ${visible}`);
-      assert(hiddenAutomations === 0, `Apps tab: expected 0 visible automation tiles, got ${hiddenAutomations}`);
+      assert(
+        hiddenAutomations === 0,
+        `Apps tab: expected 0 visible automation tiles, got ${hiddenAutomations}`,
+      );
       await shot('02-apps-only');
 
       await page.getByRole('tab', { name: /^Automations/ }).click();
@@ -96,108 +111,147 @@ async function main() {
 
       await page.getByRole('tab', { name: /^All/ }).click();
       await page.waitForTimeout(200);
-      assert((await page.locator('button[data-kind]:visible').count()) === 32, 'All tab should restore 32 visible');
+      assert(
+        (await page.locator('button[data-kind]:visible').count()) === 32,
+        'All tab should restore 32 visible',
+      );
     });
 
-    await step('discover-layout-toggle', 'Rows/Tiles layout toggle changes presentation', async () => {
-      const layoutGroup = page.getByRole('group', { name: 'Layout' });
-      await layoutGroup.getByRole('button', { name: 'Rows', exact: true }).click();
-      await page.waitForTimeout(200);
-      await shot('03-rows-layout');
-      await layoutGroup.getByRole('button', { name: 'Tiles', exact: true }).click();
-      await page.waitForTimeout(200);
-      await shot('03-tiles-layout');
-    });
+    await step(
+      'discover-layout-toggle',
+      'Rows/Tiles layout toggle changes presentation',
+      async () => {
+        const layoutGroup = page.getByRole('group', { name: 'Layout' });
+        await layoutGroup.getByRole('button', { name: 'Rows', exact: true }).click();
+        await page.waitForTimeout(200);
+        await shot('03-rows-layout');
+        await layoutGroup.getByRole('button', { name: 'Tiles', exact: true }).click();
+        await page.waitForTimeout(200);
+        await shot('03-tiles-layout');
+      },
+    );
 
-    await step('discover-preview-open-close', 'Open a template preview dialog and close it (Escape)', async () => {
-      const notesCard = page.locator('button[data-kind="app"]', { hasText: 'Notes' }).first();
-      await notesCard.waitFor({ state: 'visible', timeout: 10_000 });
-      await notesCard.click();
-      const dialog = page.getByRole('dialog', { name: /^Preview Notes/ });
-      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-      await shot('04-preview-dialog-open');
-      await page.keyboard.press('Escape');
-      await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
-      await shot('04-preview-dialog-closed');
-    });
+    await step(
+      'discover-preview-open-close',
+      'Open a template preview dialog and close it (Escape)',
+      async () => {
+        const notesCard = page.locator('button[data-kind="app"]', { hasText: 'Notes' }).first();
+        await notesCard.waitFor({ state: 'visible', timeout: 10_000 });
+        await notesCard.click();
+        const dialog = page.getByRole('dialog', { name: /^Preview Notes/ });
+        await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+        await shot('04-preview-dialog-open');
+        await page.keyboard.press('Escape');
+        await dialog.waitFor({ state: 'hidden', timeout: 5_000 });
+        await shot('04-preview-dialog-closed');
+      },
+    );
 
-    await step('install-notes-e2e', 'Install Notes: Discover -> preview -> Use this template -> Home tile + sidebar APPS entry', async () => {
-      const notesCard = page.locator('button[data-kind="app"]', { hasText: 'Notes' }).first();
-      await notesCard.waitFor({ state: 'visible', timeout: 10_000 });
-      await notesCard.click();
-      const dialog = page.getByRole('dialog', { name: /^Preview Notes/ });
-      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-      await dialog.getByRole('button', { name: 'Use this template' }).click();
+    await step(
+      'install-notes-e2e',
+      'Install Notes: Discover -> preview -> Use this template -> Home tile + sidebar APPS entry',
+      async () => {
+        const notesCard = page.locator('button[data-kind="app"]', { hasText: 'Notes' }).first();
+        await notesCard.waitFor({ state: 'visible', timeout: 10_000 });
+        await notesCard.click();
+        const dialog = page.getByRole('dialog', { name: /^Preview Notes/ });
+        await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+        await dialog.getByRole('button', { name: 'Use this template' }).click();
 
-      const toast = page.locator('[data-global-toast]');
-      await toast.waitFor({ state: 'visible', timeout: 10_000 });
-      const toastText = await toast.textContent();
-      assert(/Installed "Notes"/.test(toastText ?? ''), `unexpected toast: ${toastText}`);
-      console.log(`[disc] install toast: ${toastText}`);
+        const toast = page.locator('[data-global-toast]');
+        await toast.waitFor({ state: 'visible', timeout: 10_000 });
+        const toastText = await toast.textContent();
+        assert(/Installed "Notes"/.test(toastText ?? ''), `unexpected toast: ${toastText}`);
+        console.log(`[disc] install toast: ${toastText}`);
 
-      // Lands on Home with the new tile.
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-      const tile = page.locator('[data-app-id="notes"]');
-      await tile.waitFor({ state: 'visible', timeout: 10_000 });
-      await shot('05-home-with-notes-tile');
+        // Lands on Home with the new tile.
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        const tile = page.locator('[data-app-id="notes"]');
+        await tile.waitFor({ state: 'visible', timeout: 10_000 });
+        await shot('05-home-with-notes-tile');
 
-      // Sidebar APPS section should now list it too.
-      const sidebarAppsSection = page.locator('text=APPS').first();
-      await sidebarAppsSection.waitFor({ state: 'visible', timeout: 5_000 }).catch(() => undefined);
-      const sidebarNotesEntry = page.locator('.chrome-module__side, aside, nav').first();
-      void sidebarNotesEntry;
-      const sidebarHasNotes = await page.getByRole('button', { name: /Notes/ }).count();
-      console.log(`[disc] sidebar buttons matching /Notes/: ${sidebarHasNotes}`);
-      assert(sidebarHasNotes >= 1, 'sidebar APPS section does not show the installed Notes app');
-      await shot('05-sidebar-with-notes');
-    });
+        // Sidebar APPS section should now list it too.
+        const sidebarAppsSection = page.locator('text=APPS').first();
+        await sidebarAppsSection
+          .waitFor({ state: 'visible', timeout: 5_000 })
+          .catch(() => undefined);
+        const sidebarNotesEntry = page.locator('.chrome-module__side, aside, nav').first();
+        void sidebarNotesEntry;
+        const sidebarHasNotes = await page.getByRole('button', { name: /Notes/ }).count();
+        console.log(`[disc] sidebar buttons matching /Notes/: ${sidebarHasNotes}`);
+        assert(sidebarHasNotes >= 1, 'sidebar APPS section does not show the installed Notes app');
+        await shot('05-sidebar-with-notes');
+      },
+    );
 
-    await step('open-notes-iframe-create-note', 'Open Notes app -> iframe renders real content -> create a note (proves live)', async () => {
-      const tile = page.locator('[data-app-id="notes"]');
-      await tile.getByTestId('app-tile').click();
-      const iframe = page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
-      await iframe;
-      const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
-      await frameLoc.locator('body').first().waitFor({ state: 'visible', timeout: 15_000 });
-      await page.waitForTimeout(500);
-      await shot('06-notes-app-open-empty');
+    await step(
+      'open-notes-iframe-create-note',
+      'Open Notes app -> iframe renders real content -> create a note (proves live)',
+      async () => {
+        const tile = page.locator('[data-app-id="notes"]');
+        await tile.getByTestId('app-tile').click();
+        const iframe = page.waitForSelector('iframe[data-centraid-app="1"]', {
+          state: 'attached',
+          timeout: 20_000,
+        });
+        await iframe;
+        const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
+        await frameLoc.locator('body').first().waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(500);
+        await shot('06-notes-app-open-empty');
 
-      // Create one note via the quick-add title input + Enter.
-      const titleInput = frameLoc.locator('#titleInput');
-      await titleInput.waitFor({ state: 'visible', timeout: 10_000 });
-      await titleInput.fill('E2E QA note — shell suite');
-      await page.keyboard.press('Enter');
-      await page.waitForTimeout(700);
-      await shot('06-notes-app-after-create');
+        // Create one note via the quick-add title input + Enter.
+        const titleInput = frameLoc.locator('#titleInput');
+        await titleInput.waitFor({ state: 'visible', timeout: 10_000 });
+        await titleInput.fill('E2E QA note — shell suite');
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(700);
+        await shot('06-notes-app-after-create');
 
-      const noteList = frameLoc.locator('#noteList');
-      const listText = await noteList.textContent().catch(() => '');
-      console.log(`[disc] note list text after create: ${JSON.stringify(listText)}`);
-      assert(/E2E QA note/.test(listText ?? ''), 'created note not showing in the note list');
-    });
+        const noteList = frameLoc.locator('#noteList');
+        const listText = await noteList.textContent().catch(() => '');
+        console.log(`[disc] note list text after create: ${JSON.stringify(listText)}`);
+        assert(/E2E QA note/.test(listText ?? ''), 'created note not showing in the note list');
+      },
+    );
 
-    await step('relaunch-reopen-installed-app', 'Corner case: relaunch (same userDataDir) -> Notes still installed with note persisted', async () => {
-      await session.close();
-      await new Promise((r) => setTimeout(r, 500));
-      session = await launchApp({ userDataDir: USER_DATA_DIR });
-      page = session.page;
-      wireConsole(page);
-      await page.setViewportSize({ width: 1400, height: 900 });
+    await step(
+      'relaunch-reopen-installed-app',
+      'Corner case: relaunch (same userDataDir) -> Notes still installed with note persisted',
+      async () => {
+        await session.close();
+        await new Promise((r) => setTimeout(r, 500));
+        session = await launchApp({ userDataDir: USER_DATA_DIR });
+        page = session.page;
+        wireConsole(page);
+        await page.setViewportSize({ width: 1400, height: 900 });
 
-      const tile = page.locator('[data-app-id="notes"]');
-      await tile.waitFor({ state: 'visible', timeout: 15_000 });
-      await shot('07-relaunch-home');
+        const tile = page.locator('[data-app-id="notes"]');
+        await tile.waitFor({ state: 'visible', timeout: 15_000 });
+        await shot('07-relaunch-home');
 
-      await tile.getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
-      const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
-      await frameLoc.locator('#noteList').waitFor({ state: 'visible', timeout: 15_000 });
-      await page.waitForTimeout(500);
-      const listText = await frameLoc.locator('#noteList').textContent().catch(() => '');
-      console.log(`[disc] note list text after relaunch: ${JSON.stringify(listText)}`);
-      assert(/E2E QA note/.test(listText ?? ''), 'note created before relaunch did not persist across relaunch');
-      await shot('07-relaunch-reopened-app-with-note');
-    });
+        await tile.getByTestId('app-tile').click();
+        await page.waitForSelector('iframe[data-centraid-app="1"]', {
+          state: 'attached',
+          timeout: 20_000,
+        });
+        const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
+        await frameLoc.locator('#noteList').waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(500);
+        const listText = await frameLoc
+          .locator('#noteList')
+          .textContent()
+          .catch(() => '');
+        console.log(`[disc] note list text after relaunch: ${JSON.stringify(listText)}`);
+        assert(
+          /E2E QA note/.test(listText ?? ''),
+          'note created before relaunch did not persist across relaunch',
+        );
+        await shot('07-relaunch-reopened-app-with-note');
+      },
+    );
 
     // ---- Report ----
     const consoleErrors = consoleMessages.filter((m) => m.type === 'error');

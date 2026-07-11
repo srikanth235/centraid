@@ -47,10 +47,7 @@ describe('normalizeReleases', () => {
   });
 
   it('falls back tag<->name and normalizes missing fields', () => {
-    const [byName, byTag] = normalizeReleases([
-      { name: 'Named only' },
-      { tag_name: 'v1.0.0' },
-    ]);
+    const [byName, byTag] = normalizeReleases([{ name: 'Named only' }, { tag_name: 'v1.0.0' }]);
     expect(byName).toMatchObject({ version: 'Named only', title: 'Named only' });
     expect(byTag).toMatchObject({
       version: 'v1.0.0',

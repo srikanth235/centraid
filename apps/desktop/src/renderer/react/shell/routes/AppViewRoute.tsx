@@ -81,7 +81,11 @@ export default function AppViewRoute({
     <span className={styles.brandChip}>
       <span
         className={styles.brandChipIcon}
-        style={{ background: finish.background, color: finish.glyphColor, boxShadow: finish.boxShadow || undefined }}
+        style={{
+          background: finish.background,
+          color: finish.glyphColor,
+          boxShadow: finish.boxShadow || undefined,
+        }}
         dangerouslySetInnerHTML={{ __html: iconSvg(app.iconKey, 11, 1.9) }}
       />
       <span className={styles.brandChipName}>{app.name}</span>
@@ -96,11 +100,21 @@ export default function AppViewRoute({
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
       <div className={styles.modeSwitch}>
         <button className={styles.modeSeg} type="button" data-active="true">
-          <span className={styles.modeSegIcon} dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }} />
+          <span
+            className={styles.modeSegIcon}
+            dangerouslySetInnerHTML={{ __html: iconSvg('Eye', 12) }}
+          />
           Use
         </button>
-        <button className={styles.modeSeg} type="button" onClick={() => enterBuilder({ appContext: app })}>
-          <span className={styles.modeSegIcon} dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }} />
+        <button
+          className={styles.modeSeg}
+          type="button"
+          onClick={() => enterBuilder({ appContext: app })}
+        >
+          <span
+            className={styles.modeSegIcon}
+            dangerouslySetInnerHTML={{ __html: iconSvg('Sparkle', 12) }}
+          />
           Build
         </button>
       </div>

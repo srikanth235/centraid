@@ -84,7 +84,7 @@ describe('buildOverviewData', () => {
     expect(data.subtitle).toContain('1 drafts');
   });
 
-  it('Title-Cases the trigger origin in a run\'s metaLabel instead of the raw enum', () => {
+  it("Title-Cases the trigger origin in a run's metaLabel instead of the raw enum", () => {
     const dataRun = buildOverviewData(
       [row()],
       [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never)],
@@ -198,7 +198,13 @@ describe('buildAutomationViewData', () => {
   it('derives dataDetail (entities + cadence) for a data trigger', () => {
     const withEvery = buildAutomationViewData(
       viewRow({
-        triggers: [{ kind: 'data', entities: ['core.content_derivative', 'core.event'], every: '5m' } as never],
+        triggers: [
+          {
+            kind: 'data',
+            entities: ['core.content_derivative', 'core.event'],
+            every: '5m',
+          } as never,
+        ],
       }),
       [],
       GATEWAY_ORIGIN,

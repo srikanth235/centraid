@@ -95,7 +95,9 @@ describe('AppSettingsPanel', () => {
   it('hides the Vault tab until the manifest declares one', () => {
     const el = mount(makeProps());
     push(makeSnapshot({ vaultVisible: false }));
-    expect([...el.querySelectorAll('.settingsTab')].some((b) => b.textContent?.includes('Vault'))).toBe(false);
+    expect(
+      [...el.querySelectorAll('.settingsTab')].some((b) => b.textContent?.includes('Vault')),
+    ).toBe(false);
     push(makeSnapshot({ vaultVisible: true, vaultBadge: 3 }));
     const vaultTab = [...el.querySelectorAll('.settingsTab')].find((b) =>
       b.textContent?.includes('Vault'),
@@ -167,9 +169,7 @@ describe('AppSettingsPanel', () => {
       ),
     );
     expect(props.onRunOrder).toHaveBeenCalledWith('auto/a1');
-    act(() =>
-      (el.querySelector('.orderToggle input') as HTMLInputElement).click(),
-    );
+    act(() => (el.querySelector('.orderToggle input') as HTMLInputElement).click());
     expect(props.onToggleOrder).toHaveBeenCalledWith('auto/a1', false);
     act(() =>
       (el.querySelector('.orderName') as HTMLButtonElement).dispatchEvent(

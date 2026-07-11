@@ -24,7 +24,11 @@ afterEach(() => {
 
 const screenFor = (nav: ShellNav): React.ReactNode => (
   <div data-testid="screen" data-kind={nav.route.kind}>
-    <button type="button" data-testid="go-insights" onClick={() => nav.navigate({ kind: 'insights' })}>
+    <button
+      type="button"
+      data-testid="go-insights"
+      onClick={() => nav.navigate({ kind: 'insights' })}
+    >
       go
     </button>
   </div>

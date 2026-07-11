@@ -67,7 +67,9 @@ export default function AutomationViewRoute({
             navigate({ kind: 'automations' });
             return true;
           } catch (err) {
-            showToast(`Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`);
+            showToast(
+              `Could not delete ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
             return false;
           }
         }}

@@ -31,11 +31,21 @@ export function SettleModal({ st, me, currency, personOf, onPatch, onClose, onSa
         <div className="s-row2">
           <div className="s-field" style={{ flex: 1 }}>
             <div className="s-flabel">From</div>
-            <SettleSelect people={st.people} value={st.from} me={me} onChange={(v) => onPatch({ from: v })} />
+            <SettleSelect
+              people={st.people}
+              value={st.from}
+              me={me}
+              onChange={(v) => onPatch({ from: v })}
+            />
           </div>
           <div className="s-field" style={{ flex: 1 }}>
             <div className="s-flabel">To</div>
-            <SettleSelect people={st.people} value={st.to} me={me} onChange={(v) => onPatch({ to: v })} />
+            <SettleSelect
+              people={st.people}
+              value={st.to}
+              me={me}
+              onChange={(v) => onPatch({ to: v })}
+            />
           </div>
         </div>
         <div className="s-field">
@@ -58,7 +68,12 @@ export function SettleModal({ st, me, currency, personOf, onPatch, onClose, onSa
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={!(cents > 0 && st.from !== st.to)} onClick={onSave}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={!(cents > 0 && st.from !== st.to)}
+            onClick={onSave}
+          >
             Record payment
           </button>
         </div>

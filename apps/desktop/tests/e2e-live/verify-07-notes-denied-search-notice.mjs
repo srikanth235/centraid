@@ -34,7 +34,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v07-${id}.png`) });
@@ -78,72 +84,104 @@ async function main() {
     let frame;
     await step('open-notes-add-note', 'Open Notes, add a searchable note', async () => {
       await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       frame = frameLoc(page);
       await frame.locator('.nt-qa-title').waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
       await frame.locator('.nt-qa-title').fill('Denial probe note');
       await frame.locator('.nt-qa-actions .kit-btn.primary', { hasText: 'Add note' }).click();
       await page.waitForTimeout(600);
-      await frame.locator('.nt-card', { hasText: 'Denial probe note' }).waitFor({ state: 'visible', timeout: 10_000 });
+      await frame
+        .locator('.nt-card', { hasText: 'Denial probe note' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
     });
 
     let revoked = false;
-    await step('revoke-app-grant', 'Revoke the Notes app\'s own vault grant via App settings -> Vault tab', async () => {
-      const gear = page.getByRole('button', { name: 'App settings' });
-      const gearVisible = await gear.isVisible().catch(() => false);
-      if (!gearVisible) {
-        skipped = 'App settings gear button not found/visible in this build -- cannot reach the Vault tab in the time budget';
-        return;
-      }
-      await gear.click();
-      const dialog = page.getByRole('dialog', { name: 'App settings' });
-      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-      await dialog.getByRole('button', { name: 'Vault' }).click();
-      await page.waitForTimeout(400);
-      await shot('01-vault-tab-before-revoke');
-      const revokeBtn = dialog.getByRole('button', { name: 'Revoke' });
-      const revokeVisible = await revokeBtn.isVisible().catch(() => false);
-      if (!revokeVisible) {
-        skipped = 'No "Revoke" button visible on the Vault tab (app may not show a granted row) -- cannot trigger a real denial in the time budget';
-        await dialog.getByRole('button', { name: 'Close' }).click().catch(() => undefined);
-        return;
-      }
-      await revokeBtn.click();
-      await page.waitForTimeout(800);
-      await shot('02-vault-tab-after-revoke');
-      await dialog.getByRole('button', { name: 'Close' }).click();
-      await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
-      revoked = true;
-    });
+    await step(
+      'revoke-app-grant',
+      "Revoke the Notes app's own vault grant via App settings -> Vault tab",
+      async () => {
+        const gear = page.getByRole('button', { name: 'App settings' });
+        const gearVisible = await gear.isVisible().catch(() => false);
+        if (!gearVisible) {
+          skipped =
+            'App settings gear button not found/visible in this build -- cannot reach the Vault tab in the time budget';
+          return;
+        }
+        await gear.click();
+        const dialog = page.getByRole('dialog', { name: 'App settings' });
+        await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+        await dialog.getByRole('button', { name: 'Vault' }).click();
+        await page.waitForTimeout(400);
+        await shot('01-vault-tab-before-revoke');
+        const revokeBtn = dialog.getByRole('button', { name: 'Revoke' });
+        const revokeVisible = await revokeBtn.isVisible().catch(() => false);
+        if (!revokeVisible) {
+          skipped =
+            'No "Revoke" button visible on the Vault tab (app may not show a granted row) -- cannot trigger a real denial in the time budget';
+          await dialog
+            .getByRole('button', { name: 'Close' })
+            .click()
+            .catch(() => undefined);
+          return;
+        }
+        await revokeBtn.click();
+        await page.waitForTimeout(800);
+        await shot('02-vault-tab-after-revoke');
+        await dialog.getByRole('button', { name: 'Close' }).click();
+        await dialog.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
+        revoked = true;
+      },
+    );
 
     if (revoked) {
-      await step('search-shows-denial-notice', 'Searching after revoke shows a denial NOTICE, not a silent fake-empty result', async () => {
-        // Re-enter the app fresh so the revoked grant is actually exercised
-        // on the next read (avoid any in-memory cache from before revoke).
-        await page.getByRole('button', { name: 'Home', exact: true }).first().click().catch(() => undefined);
-        await page.waitForTimeout(300);
-        await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
-        await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
-        frame = frameLoc(page);
-        await page.waitForTimeout(800);
-        await shot('03-notes-reopened-after-revoke');
+      await step(
+        'search-shows-denial-notice',
+        'Searching after revoke shows a denial NOTICE, not a silent fake-empty result',
+        async () => {
+          // Re-enter the app fresh so the revoked grant is actually exercised
+          // on the next read (avoid any in-memory cache from before revoke).
+          await page
+            .getByRole('button', { name: 'Home', exact: true })
+            .first()
+            .click()
+            .catch(() => undefined);
+          await page.waitForTimeout(300);
+          await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
+          await page.waitForSelector('iframe[data-centraid-app="1"]', {
+            state: 'attached',
+            timeout: 20_000,
+          });
+          frame = frameLoc(page);
+          await page.waitForTimeout(800);
+          await shot('03-notes-reopened-after-revoke');
 
-        const searchInput = frame.locator('#searchInput');
-        await searchInput.fill('Denial probe');
-        await page.waitForTimeout(700);
-        await shot('04-search-after-revoke');
+          const searchInput = frame.locator('#searchInput');
+          await searchInput.fill('Denial probe');
+          await page.waitForTimeout(700);
+          await shot('04-search-after-revoke');
 
-        const noticeText = await frame.locator('#noticeBanner').textContent().catch(() => '');
-        console.log(`[v07] noticeBanner text after searching with a revoked grant: ${JSON.stringify(noticeText)}`);
-        const resultCount = await frame.locator('.nt-card, .nt-sched-card, [class*="result"]').count();
-        console.log(`[v07] visible result-like elements: ${resultCount}`);
+          const noticeText = await frame
+            .locator('#noticeBanner')
+            .textContent()
+            .catch(() => '');
+          console.log(
+            `[v07] noticeBanner text after searching with a revoked grant: ${JSON.stringify(noticeText)}`,
+          );
+          const resultCount = await frame
+            .locator('.nt-card, .nt-sched-card, [class*="result"]')
+            .count();
+          console.log(`[v07] visible result-like elements: ${resultCount}`);
 
-        assert(
-          (noticeText ?? '').trim().length > 0,
-          `expected a non-empty denial notice after searching with a revoked grant, got: ${JSON.stringify(noticeText)}`,
-        );
-      });
+          assert(
+            (noticeText ?? '').trim().length > 0,
+            `expected a non-empty denial notice after searching with a revoked grant, got: ${JSON.stringify(noticeText)}`,
+          );
+        },
+      );
     } else {
       console.log(`[v07] SKIPPED denial-notice check: ${skipped}`);
       results.push({ id: 'search-shows-denial-notice', label: 'skipped', verdict: 'skip', ms: 0 });

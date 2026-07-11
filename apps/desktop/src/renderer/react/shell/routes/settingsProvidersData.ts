@@ -13,7 +13,11 @@ const RUNNER_META = [
   { kind: 'claude-code', title: 'Claude Code', bin: 'claude', accent: '#a855f7' },
 ] as const;
 
-function toDTO(status: Snap, kind: AgentRunnerKind, modelMap: Record<string, string>): AgentsStatusDTO {
+function toDTO(
+  status: Snap,
+  kind: AgentRunnerKind,
+  modelMap: Record<string, string>,
+): AgentsStatusDTO {
   return {
     anyLoading: [
       status.codexModelsStatus,
@@ -26,7 +30,8 @@ function toDTO(status: Snap, kind: AgentRunnerKind, modelMap: Record<string, str
       const ver = r.kind === 'codex' ? status.codexVersion : status.claudeVersion;
       const models = (r.kind === 'codex' ? status.codexModels : status.claudeModels) ?? [];
       const tools = (r.kind === 'codex' ? status.codexTools : status.claudeTools) ?? [];
-      const modelsStatus = r.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
+      const modelsStatus =
+        r.kind === 'codex' ? status.codexModelsStatus : status.claudeModelsStatus;
       const toolsStatus = r.kind === 'codex' ? status.codexToolsStatus : status.claudeToolsStatus;
       return {
         accent: r.accent,

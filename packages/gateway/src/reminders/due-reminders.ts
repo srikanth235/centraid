@@ -45,7 +45,9 @@ function parseReminders(json: string): { minutes_before: number }[] {
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(
       (r): r is { minutes_before: number } =>
-        typeof r === 'object' && r !== null && typeof (r as { minutes_before?: unknown }).minutes_before === 'number',
+        typeof r === 'object' &&
+        r !== null &&
+        typeof (r as { minutes_before?: unknown }).minutes_before === 'number',
     );
   } catch {
     return [];

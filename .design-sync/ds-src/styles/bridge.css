@@ -22,9 +22,9 @@
   --radius-sm: var(--r-md);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   /* Type families (brand fonts shipped in fonts/). */
-  --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --display: "Space Grotesk", var(--sans);
+  --sans: 'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --display: 'Space Grotesk', var(--sans);
 
   /* Base page look so previews/designs inherit brand type + surface. */
   color: var(--text);

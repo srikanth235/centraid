@@ -7,7 +7,15 @@
 // Lit template did of `state.expense`. Plain controlled inputs replace Lit's
 // `live()` directive — a full re-render on every keystroke already keeps the
 // value in sync, same as every other field here.
-import { CAT_LIST, cat, curSymbolFor, money, resolveSplits, splitSumInfo, toCents } from '../format.js';
+import {
+  CAT_LIST,
+  cat,
+  curSymbolFor,
+  money,
+  resolveSplits,
+  splitSumInfo,
+  toCents,
+} from '../format.js';
 import { I } from '../icons.js';
 import { ArmedButton, Icon, ModalBackdrop } from './Shared.jsx';
 
@@ -82,7 +90,9 @@ export function ExpenseModal({
   const parts = members.filter((m) => exp.include.has(m.party_id));
   const eqShare = parts.length && amountCents > 0 ? amountCents / parts.length : 0;
   const sumInfo = splitSumInfo(exp, members, currency);
-  const valid = Boolean(exp.desc.trim() && amountCents > 0 && resolveSplits(exp, amountCents, members));
+  const valid = Boolean(
+    exp.desc.trim() && amountCents > 0 && resolveSplits(exp, amountCents, members),
+  );
 
   return (
     <ModalBackdrop onClose={onClose}>
@@ -126,7 +136,11 @@ export function ExpenseModal({
         <div className="s-row2">
           <div className="s-field" style={{ flex: 1 }}>
             <div className="s-flabel">Group</div>
-            <select className="s-select" value={exp.groupId} onChange={(e) => onGroupChange(e.target.value)}>
+            <select
+              className="s-select"
+              value={exp.groupId}
+              onChange={(e) => onGroupChange(e.target.value)}
+            >
               {groups.map((g) => (
                 <option key={g.group_id} value={g.group_id}>
                   {g.name}
@@ -136,7 +150,11 @@ export function ExpenseModal({
           </div>
           <div className="s-field" style={{ flex: 1 }}>
             <div className="s-flabel">Paid by</div>
-            <select className="s-select" value={exp.paidBy} onChange={(e) => onPatch({ paidBy: e.target.value })}>
+            <select
+              className="s-select"
+              value={exp.paidBy}
+              onChange={(e) => onPatch({ paidBy: e.target.value })}
+            >
               {members.map((m) => (
                 <option key={m.party_id} value={m.party_id}>
                   {m.is_me || m.party_id === me ? 'You' : m.name}

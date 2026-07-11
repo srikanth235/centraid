@@ -1,6 +1,11 @@
 import { Button } from '@centraid/desktop-shell-ds';
 
-const row: React.CSSProperties = { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' };
+const row: React.CSSProperties = {
+  display: 'flex',
+  gap: 10,
+  alignItems: 'center',
+  flexWrap: 'wrap',
+};
 
 /** The three weights — `primary` for the page's main action, `soft` for
  *  secondary, `ghost` for tertiary/toolbar actions. */

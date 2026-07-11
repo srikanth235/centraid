@@ -308,8 +308,6 @@ test('blob maintenance sweep refreshes the app-readable custody-state mirror (is
   // CASCADE), not a stale entry the app plane would misread.
   await gw.sweepBlobs(owner); // idempotent re-run, still one row
   expect(
-    (
-      db.vault.prepare('SELECT count(*) AS n FROM blob_custody_state').get() as { n: number }
-    ).n,
+    (db.vault.prepare('SELECT count(*) AS n FROM blob_custody_state').get() as { n: number }).n,
   ).toBe(1);
 });

@@ -137,7 +137,12 @@ export function Editor({ doc, registerFlush, onClose, onSave }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="d-editor" role="dialog" aria-modal="true" aria-label={`Edit ${doc.title ?? 'document'}`}>
+      <div
+        className="d-editor"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Edit ${doc.title ?? 'document'}`}
+      >
         <div className="d-editor-top">
           <button type="button" className="kit-icon-btn" aria-label="Close" onClick={onClose}>
             <Icon svg={I.close} />

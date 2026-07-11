@@ -6,7 +6,20 @@
 // Same role as tasks/format.js and notes/format.js.
 import { fmtMoney, localDayKey } from './kit.js';
 
-export const MS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const MS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
 // The closed category set — emoji + tint, straight from the prototype.
 export const CATS = {
@@ -176,6 +189,8 @@ export function splitSumInfo(exp, members, currency) {
   const per = parts.length && cents > 0 ? cents / parts.length : 0;
   return {
     bad: false,
-    text: parts.length ? money(per, currency) + ' each · ' + parts.length + ' people' : 'Select who splits',
+    text: parts.length
+      ? money(per, currency) + ' each · ' + parts.length + ' people'
+      : 'Select who splits',
   };
 }

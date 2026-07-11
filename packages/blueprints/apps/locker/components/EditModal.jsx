@@ -149,7 +149,13 @@ export function EditModal({ edit, onClose, onSave, onOpenGenerator }) {
         </div>
 
         {fieldDefs.map((f) => (
-          <EditFieldRow key={f.key} f={f} value={fields[f.key]} onChange={setField} onGenerate={generate} />
+          <EditFieldRow
+            key={f.key}
+            f={f}
+            value={fields[f.key]}
+            onChange={setField}
+            onGenerate={generate}
+          />
         ))}
 
         <div className="v-field-lg">

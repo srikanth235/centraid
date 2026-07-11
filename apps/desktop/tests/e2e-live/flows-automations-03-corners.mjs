@@ -87,7 +87,11 @@ function note(msg) {
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -101,7 +105,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto03-${id}.png`) });
@@ -176,7 +186,9 @@ async function gwFindRef(name) {
 }
 
 async function gwRuns(ref, limit = 50) {
-  const { json } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`);
+  const { json } = await gwFetch(
+    `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`,
+  );
   return json?.runs ?? [];
 }
 
@@ -199,7 +211,10 @@ async function scaffoldCustomAutomation({ id, name, handlerJs }) {
   });
   assert(createRes.status === 201, `automation scaffold failed: ${JSON.stringify(createRes)}`);
   const sessionId = createRes.json?.sessionId;
-  assert(Boolean(sessionId), `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`);
+  assert(
+    Boolean(sessionId),
+    `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`,
+  );
 
   const putRes = await putDraftFile(id, sessionId, `automations/${id}/handler.js`, handlerJs);
   assert(putRes.status === 200, `handler.js draft write failed: ${JSON.stringify(putRes)}`);
@@ -222,13 +237,18 @@ async function approveAgentGrant(appId, scopes) {
     method: 'POST',
     body: { purpose: PURPOSE, scopes },
   });
-  assert(res.status === 200 && res.json?.grantId, `agent grant approval failed: ${JSON.stringify(res)}`);
+  assert(
+    res.status === 200 && res.json?.grantId,
+    `agent grant approval failed: ${JSON.stringify(res)}`,
+  );
   return res.json.grantId;
 }
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
@@ -237,7 +257,9 @@ async function openAutomationView(name) {
   const row = page.getByRole('button', { name: new RegExp(esc(name)) }).first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -276,8 +298,13 @@ async function openLocker(p) {
 }
 
 async function goApprovals(p) {
-  await p.getByRole('button', { name: /^Approvals/ }).first().click();
-  await p.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await p
+    .getByRole('button', { name: /^Approvals/ })
+    .first()
+    .click();
+  await p
+    .getByRole('heading', { name: 'Approvals', level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 /** ParkedRow's whole toggle surface is a <button> containing the command text. */
@@ -373,7 +400,10 @@ async function main() {
         await toast.waitFor({ state: 'visible', timeout: 10_000 });
 
         const fl = await openLocker(page);
-        const consentVisible = await fl.locator('#consentBanner').isVisible().catch(() => false);
+        const consentVisible = await fl
+          .locator('#consentBanner')
+          .isVisible()
+          .catch(() => false);
         if (consentVisible) {
           await page.locator('button[aria-label="App settings"]').click();
           const settingsDialog = page.getByRole('dialog', { name: 'App settings' });
@@ -420,7 +450,10 @@ async function main() {
               `said "Nothing here.") on an earlier run of this suite. See auto03-01-locker-item-trashed.png for the eventual state.`,
           );
         }
-        assert(trashedCount === 1, `expected "${LOCKER_TARGET_TITLE}" trashed once, got ${trashedCount}`);
+        assert(
+          trashedCount === 1,
+          `expected "${LOCKER_TARGET_TITLE}" trashed once, got ${trashedCount}`,
+        );
         await shot('01-locker-item-trashed');
       },
     );
@@ -439,8 +472,12 @@ async function main() {
           name: AGENT_AUTO_NAME,
           handlerJs: AGENT_PURGE_HANDLER_JS,
         });
-        const grantId = await approveAgentGrant(AGENT_AUTO_ID, [{ schema: 'locker', verbs: 'read+act' }]);
-        console.log(`[auto03] approved agent grant ${grantId} for "${AGENT_AUTO_ID}" (schema locker, read+act)`);
+        const grantId = await approveAgentGrant(AGENT_AUTO_ID, [
+          { schema: 'locker', verbs: 'read+act' },
+        ]);
+        console.log(
+          `[auto03] approved agent grant ${grantId} for "${AGENT_AUTO_ID}" (schema locker, read+act)`,
+        );
 
         const agentsRes = await gwFetch('/centraid/_vault/agents');
         console.log(`[auto03] GET /_vault/agents after grant: ${JSON.stringify(agentsRes.json)}`);
@@ -469,8 +506,14 @@ async function main() {
           await page.waitForTimeout(700);
         }
         console.log(`[auto03] parked entry found: ${JSON.stringify(parked)}`);
-        assert(Boolean(parked), 'expected a parked locker.purge_item invocation within 30s of Run now');
-        assert(parked.callerKind === 'agent', `expected callerKind "agent", got ${JSON.stringify(parked.callerKind)}`);
+        assert(
+          Boolean(parked),
+          'expected a parked locker.purge_item invocation within 30s of Run now',
+        );
+        assert(
+          parked.callerKind === 'agent',
+          `expected callerKind "agent", got ${JSON.stringify(parked.callerKind)}`,
+        );
         parkedInvocationId = parked.invocationId;
         parkedCallerLabel = parked.caller;
         note(
@@ -494,15 +537,31 @@ async function main() {
         // before checking it, matching that suite's pattern.
         const subtitle = await page.locator('text=waiting on you').first().textContent();
         console.log(`[auto03] Approvals page subtitle: ${JSON.stringify(subtitle)}`);
-        assert(/1 waiting on you/.test(subtitle ?? ''), `expected the Approvals page subtitle to read "1 waiting on you", got ${JSON.stringify(subtitle)}`);
+        assert(
+          /1 waiting on you/.test(subtitle ?? ''),
+          `expected the Approvals page subtitle to read "1 waiting on you", got ${JSON.stringify(subtitle)}`,
+        );
 
-        const badgeBeforeFocus = await page.getByRole('button', { name: /^Approvals/ }).first().textContent();
-        console.log(`[auto03] sidebar Approvals badge BEFORE a focus event (expected to lag for a background-sourced park): ${JSON.stringify(badgeBeforeFocus)}`);
+        const badgeBeforeFocus = await page
+          .getByRole('button', { name: /^Approvals/ })
+          .first()
+          .textContent();
+        console.log(
+          `[auto03] sidebar Approvals badge BEFORE a focus event (expected to lag for a background-sourced park): ${JSON.stringify(badgeBeforeFocus)}`,
+        );
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
         await page.waitForTimeout(600);
-        const badgeAfterFocus = await page.getByRole('button', { name: /^Approvals/ }).first().textContent();
-        console.log(`[auto03] sidebar Approvals badge AFTER a focus event: ${JSON.stringify(badgeAfterFocus)}`);
-        assert(/Approvals1/.test(badgeAfterFocus ?? ''), `expected the sidebar badge to catch up to "Approvals1" after a focus event, got ${JSON.stringify(badgeAfterFocus)}`);
+        const badgeAfterFocus = await page
+          .getByRole('button', { name: /^Approvals/ })
+          .first()
+          .textContent();
+        console.log(
+          `[auto03] sidebar Approvals badge AFTER a focus event: ${JSON.stringify(badgeAfterFocus)}`,
+        );
+        assert(
+          /Approvals1/.test(badgeAfterFocus ?? ''),
+          `expected the sidebar badge to catch up to "Approvals1" after a focus event, got ${JSON.stringify(badgeAfterFocus)}`,
+        );
         note(
           `sidebar Approvals badge for an automation-sourced (background) park: BEFORE focus=${JSON.stringify(badgeBeforeFocus)}, ` +
             `AFTER focus=${JSON.stringify(badgeAfterFocus)} -- confirms the known badge-lag behavior (issue #306 decision 5) also applies ` +
@@ -512,14 +571,19 @@ async function main() {
         const row = parkedRowToggle(page, 'locker.purge_item', 0);
         await row.waitFor({ state: 'visible', timeout: 10_000 });
         const rowText = await row.innerText();
-        console.log(`[auto03] Parked row text (what the owner actually sees): ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`);
+        console.log(
+          `[auto03] Parked row text (what the owner actually sees): ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+        );
         await row.click();
         await page.waitForTimeout(300);
         await shot('05-approvals-agent-parked-row-expanded');
         const pre = page.locator('pre').first();
         const preText = await pre.textContent().catch(() => '');
         console.log(`[auto03] expanded parked row input preview: ${preText}`);
-        assert(/item_id/.test(preText ?? ''), `expected item_id in the raw input preview, got: ${preText}`);
+        assert(
+          /item_id/.test(preText ?? ''),
+          `expected item_id in the raw input preview, got: ${preText}`,
+        );
       },
     );
 
@@ -550,17 +614,29 @@ async function main() {
         await page.waitForTimeout(800);
         await shot('06-approvals-after-approve');
         const remaining = await page.locator('button', { hasText: 'locker.purge_item' }).count();
-        console.log(`[auto03] "locker.purge_item" parked rows remaining after approve: ${remaining}`);
-        assert(remaining === 0, `expected the parked row to be gone after approve, got ${remaining} remaining`);
+        console.log(
+          `[auto03] "locker.purge_item" parked rows remaining after approve: ${remaining}`,
+        );
+        assert(
+          remaining === 0,
+          `expected the parked row to be gone after approve, got ${remaining} remaining`,
+        );
 
         const fl = await openLocker(page);
         await fl.locator('button.v-nav-item', { hasText: 'Trash' }).click();
         await page.waitForTimeout(400);
         const stillThere = await fl.locator('.v-item', { hasText: LOCKER_TARGET_TITLE }).count();
-        console.log(`[auto03] "${LOCKER_TARGET_TITLE}" still in Locker trash after approve: ${stillThere}`);
-        assert(stillThere === 0, `expected "${LOCKER_TARGET_TITLE}" to be purged for real after approval, found ${stillThere}`);
+        console.log(
+          `[auto03] "${LOCKER_TARGET_TITLE}" still in Locker trash after approve: ${stillThere}`,
+        );
+        assert(
+          stillThere === 0,
+          `expected "${LOCKER_TARGET_TITLE}" to be purged for real after approval, found ${stillThere}`,
+        );
         await shot('07-locker-trash-target-purged');
-        console.log(`[auto03] confirmed: invocation ${parkedInvocationId} (caller="${parkedCallerLabel}") executed for real on approval`);
+        console.log(
+          `[auto03] confirmed: invocation ${parkedInvocationId} (caller="${parkedCallerLabel}") executed for real on approval`,
+        );
       },
     );
 
@@ -584,15 +660,26 @@ async function main() {
 
         const ref = await gwFindRef(TEMPLATE_HEALTH);
         const runsAfter = await gwRuns(ref);
-        console.log(`[auto03] run count after rapid double-click: ${runsAfter.length} (delta ${runsAfter.length - before})`);
-        assert(runsAfter.length - before >= 1, `expected at least 1 new run from the double-click, got delta ${runsAfter.length - before}`);
-        assert(runsAfter.length - before <= 2, `expected AT MOST 2 new runs from a double-click (no runaway duplication), got delta ${runsAfter.length - before}`);
+        console.log(
+          `[auto03] run count after rapid double-click: ${runsAfter.length} (delta ${runsAfter.length - before})`,
+        );
+        assert(
+          runsAfter.length - before >= 1,
+          `expected at least 1 new run from the double-click, got delta ${runsAfter.length - before}`,
+        );
+        assert(
+          runsAfter.length - before <= 2,
+          `expected AT MOST 2 new runs from a double-click (no runaway duplication), got delta ${runsAfter.length - before}`,
+        );
         note(
           `rapid double-click "Run now" on ${TEMPLATE_HEALTH} produced ${runsAfter.length - before} new run(s) (before=${before}, after=${runsAfter.length}) -- ` +
             `${runsAfter.length - before === 2 ? 'both clicks fired their own run (queued/sequential), which the brief treats as acceptable' : 'the second click was effectively debounced/ignored'}. No crash, no stuck spinner.`,
         );
         const errorsSoFar = consoleMessages.filter((m) => m.type === 'error');
-        assert(errorsSoFar.length === 0, `expected no console errors from rapid double-click, got: ${JSON.stringify(errorsSoFar)}`);
+        assert(
+          errorsSoFar.length === 0,
+          `expected no console errors from rapid double-click, got: ${JSON.stringify(errorsSoFar)}`,
+        );
       },
     );
 
@@ -614,7 +701,10 @@ async function main() {
         if (before !== 'true') {
           await switchLabel.click({ timeout: 5_000 });
           await page.waitForTimeout(500);
-          assert((await sw.getAttribute('aria-checked')) === 'true', 'failed to pre-enable the automation for this flow');
+          assert(
+            (await sw.getAttribute('aria-checked')) === 'true',
+            'failed to pre-enable the automation for this flow',
+          );
         }
 
         const ref = await gwFindRef(TEMPLATE_HEALTH);
@@ -635,12 +725,18 @@ async function main() {
         // anyway (another device, the CLI, Settings) -- exercise it the
         // same way: fire the run for real via the UI, then race a genuine
         // concurrent disable in over the wire, same as a second actor would.
-        const disableRes = await gwFetch(`/centraid/_automations/set-enabled?ref=${encodeURIComponent(ref)}`, {
-          method: 'POST',
-          body: { enabled: false, publish: true },
-        });
+        const disableRes = await gwFetch(
+          `/centraid/_automations/set-enabled?ref=${encodeURIComponent(ref)}`,
+          {
+            method: 'POST',
+            body: { enabled: false, publish: true },
+          },
+        );
         console.log(`[auto03] concurrent disable while run in flight: status=${disableRes.status}`);
-        assert(disableRes.status === 200, `expected the concurrent disable to succeed, got ${JSON.stringify(disableRes)}`);
+        assert(
+          disableRes.status === 200,
+          `expected the concurrent disable to succeed, got ${JSON.stringify(disableRes)}`,
+        );
         await page.waitForTimeout(1500);
         await shot('09-disable-during-run-immediately-after');
 
@@ -652,9 +748,17 @@ async function main() {
           if (runsAfter.length > runsBefore.length) break;
           await page.waitForTimeout(700);
         }
-        console.log(`[auto03] runs before=${runsBefore.length} after=${runsAfter.length}: latest=${JSON.stringify(runsAfter[0])}`);
-        assert(runsAfter.length > runsBefore.length, 'expected the in-flight run to land a run record, not vanish/hang');
-        assert(typeof runsAfter[0]?.endedAt === 'number', `expected the in-flight run to have ended, got ${JSON.stringify(runsAfter[0])}`);
+        console.log(
+          `[auto03] runs before=${runsBefore.length} after=${runsAfter.length}: latest=${JSON.stringify(runsAfter[0])}`,
+        );
+        assert(
+          runsAfter.length > runsBefore.length,
+          'expected the in-flight run to land a run record, not vanish/hang',
+        );
+        assert(
+          typeof runsAfter[0]?.endedAt === 'number',
+          `expected the in-flight run to have ended, got ${JSON.stringify(runsAfter[0])}`,
+        );
 
         await openAutomationView(TEMPLATE_HEALTH);
         const sw2 = page.locator('input[role="switch"]');
@@ -662,11 +766,21 @@ async function main() {
         const after = await sw2.getAttribute('aria-checked');
         console.log(`[auto03] switch state after in-flight disable + renav: aria-checked=${after}`);
         await shot('10-disable-during-run-automation-view-after');
-        assert(after === 'false', `expected the UI switch to reflect the concurrent disable after renav, got aria-checked=${after}`);
+        assert(
+          after === 'false',
+          `expected the UI switch to reflect the concurrent disable after renav, got aria-checked=${after}`,
+        );
 
-        const { json } = await gwFetch(`/centraid/_automations/read?ref=${encodeURIComponent(ref)}`);
-        console.log(`[auto03] gateway row enabled state after in-flight disable: ${json?.row?.enabled}`);
-        assert(json?.row?.enabled === false, `expected the automation to end up disabled, got enabled=${JSON.stringify(json?.row?.enabled)}`);
+        const { json } = await gwFetch(
+          `/centraid/_automations/read?ref=${encodeURIComponent(ref)}`,
+        );
+        console.log(
+          `[auto03] gateway row enabled state after in-flight disable: ${json?.row?.enabled}`,
+        );
+        assert(
+          json?.row?.enabled === false,
+          `expected the automation to end up disabled, got enabled=${JSON.stringify(json?.row?.enabled)}`,
+        );
 
         const errorsSoFar = consoleMessages.filter((m) => m.type === 'error');
         console.log(`[auto03] console errors after disable-during-run: ${errorsSoFar.length}`);
@@ -681,7 +795,10 @@ async function main() {
       'Delete System health check (which has run history) -> confirm modal -> no crash; orphaned recent-run rows do not break the overview',
       async () => {
         await openAutomationView(TEMPLATE_HEALTH);
-        const deleteBtn = page.getByRole('button', { name: `Delete ${TEMPLATE_HEALTH}`, exact: true });
+        const deleteBtn = page.getByRole('button', {
+          name: `Delete ${TEMPLATE_HEALTH}`,
+          exact: true,
+        });
         await deleteBtn.waitFor({ state: 'visible', timeout: 5_000 });
         await deleteBtn.click();
         const dialog = page.getByRole('dialog', { name: 'Delete automation?' });
@@ -689,14 +806,24 @@ async function main() {
         await shot('11-delete-confirm-dialog');
         await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
         await page.waitForTimeout(800);
-        await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+        await page
+          .getByRole('heading', { name: 'Automations', level: 1 })
+          .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('12-overview-after-delete');
 
-        const ovGone = await page.getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) }).count();
-        assert(ovGone === 0, `expected 0 overview rows for "${TEMPLATE_HEALTH}" after delete, found ${ovGone}`);
+        const ovGone = await page
+          .getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) })
+          .count();
+        assert(
+          ovGone === 0,
+          `expected 0 overview rows for "${TEMPLATE_HEALTH}" after delete, found ${ovGone}`,
+        );
 
         const crashed = await page.evaluate(() => document.title).catch(() => null);
-        assert(crashed !== null, 'page appears to have crashed after deleting an automation with run history');
+        assert(
+          crashed !== null,
+          'page appears to have crashed after deleting an automation with run history',
+        );
 
         // The global "Recent runs" feed on the overview screen may still
         // list orphaned rows for the deleted automation (AutomationsOverviewScreen.tsx
@@ -704,15 +831,25 @@ async function main() {
         // must not crash, even if it 404s or shows an error state.
         const orphanRuns = page.locator('button[class*="auOvRun"]');
         const orphanCount = await orphanRuns.count();
-        console.log(`[auto03] "Recent runs" rows visible on the overview after delete: ${orphanCount}`);
+        console.log(
+          `[auto03] "Recent runs" rows visible on the overview after delete: ${orphanCount}`,
+        );
         if (orphanCount > 0) {
-          const rowText = await orphanRuns.first().innerText().catch(() => '');
-          console.log(`[auto03] first recent-run row text after delete: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`);
+          const rowText = await orphanRuns
+            .first()
+            .innerText()
+            .catch(() => '');
+          console.log(
+            `[auto03] first recent-run row text after delete: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+          );
           await orphanRuns.first().click();
           await page.waitForTimeout(1000);
           await shot('13-clicked-orphaned-recent-run-row');
           const crashedAfterClick = await page.evaluate(() => document.title).catch(() => null);
-          assert(crashedAfterClick !== null, 'page appears to have crashed after clicking an orphaned recent-run row');
+          assert(
+            crashedAfterClick !== null,
+            'page appears to have crashed after clicking an orphaned recent-run row',
+          );
           note(
             `after deleting "${TEMPLATE_HEALTH}" (which had run history), the overview's global "Recent runs" feed still listed ` +
               `${orphanCount} row(s) referencing it; clicking the first one did not crash the app (see auto03-13-clicked-orphaned-recent-run-row.png).`,
@@ -720,7 +857,9 @@ async function main() {
           // Navigate back to a known-good screen for the next flow.
           await openAutomationsOverview();
         } else {
-          note(`after deleting "${TEMPLATE_HEALTH}", the overview's "Recent runs" feed showed 0 rows (orphaned runs were not surfaced there).`);
+          note(
+            `after deleting "${TEMPLATE_HEALTH}", the overview's "Recent runs" feed showed 0 rows (orphaned runs were not surfaced there).`,
+          );
         }
       },
     );
@@ -730,15 +869,19 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'insights-cross-check',
-      'Insights shows this session\'s automation runs, attributed by real automation display name (regression check on last session\'s fix)',
+      "Insights shows this session's automation runs, attributed by real automation display name (regression check on last session's fix)",
       async () => {
         await navTo(page, 'Insights');
-        await page.getByRole('heading', { name: 'Insights', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('heading', { name: 'Insights', level: 1 })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(800);
         await shot('14-insights-after-session');
 
         const bodyTxt = await bodyText();
-        console.log(`[auto03] Insights body (first 900 chars): ${bodyTxt.slice(0, 900).replace(/\n/g, ' | ')}`);
+        console.log(
+          `[auto03] Insights body (first 900 chars): ${bodyTxt.slice(0, 900).replace(/\n/g, ' | ')}`,
+        );
 
         const hasAgentAutoName = bodyTxt.includes(AGENT_AUTO_NAME);
         const hasHealthCheckName = bodyTxt.includes(TEMPLATE_HEALTH);
@@ -746,7 +889,10 @@ async function main() {
         console.log(
           `[auto03] Insights shows "${AGENT_AUTO_NAME}" by name: ${hasAgentAutoName}; shows "${TEMPLATE_HEALTH}" by name (even though it's deleted): ${hasHealthCheckName}; generic "Automation" tag present: ${hasGenericAutomationOnly}`,
         );
-        assert(hasAgentAutoName || hasHealthCheckName, 'expected at least one real automation display name to appear on Insights, not just a generic "Automation" label');
+        assert(
+          hasAgentAutoName || hasHealthCheckName,
+          'expected at least one real automation display name to appear on Insights, not just a generic "Automation" label',
+        );
         note(
           `Insights display-name regression check: "${AGENT_AUTO_NAME}" shown=${hasAgentAutoName}, deleted "${TEMPLATE_HEALTH}" still shown by name=${hasHealthCheckName}.`,
         );
@@ -760,7 +906,11 @@ async function main() {
       'failed-run-rendering',
       'A deliberately-throwing automation -> run viewer renders the failure state legibly (data-status="fail", visible error, no blank panel)',
       async () => {
-        await scaffoldCustomAutomation({ id: FAIL_AUTO_ID, name: FAIL_AUTO_NAME, handlerJs: FAIL_HANDLER_JS });
+        await scaffoldCustomAutomation({
+          id: FAIL_AUTO_ID,
+          name: FAIL_AUTO_NAME,
+          handlerJs: FAIL_HANDLER_JS,
+        });
         await openAutomationView(FAIL_AUTO_NAME);
         await shot('15-fail-demo-view-before-run');
         await runNowFromViewScreen();
@@ -779,15 +929,26 @@ async function main() {
         }
         console.log(`[auto03] fail-demo final timeline node data-status: ${finalStatus}`);
         await shot('17-fail-demo-run-view-settled');
-        assert(finalStatus === 'fail', `expected the deliberately-throwing handler to resolve data-status="fail", got ${finalStatus}`);
+        assert(
+          finalStatus === 'fail',
+          `expected the deliberately-throwing handler to resolve data-status="fail", got ${finalStatus}`,
+        );
 
         const bodyTxt = await bodyText();
         const hasRunFailed = /run failed/i.test(bodyTxt);
         const hasErrorText = /deliberate e2e failure/i.test(bodyTxt);
-        console.log(`[auto03] "Run failed" text visible: ${hasRunFailed}; deliberate error message visible: ${hasErrorText}`);
-        assert(hasRunFailed, 'expected "Run failed" text visible on the run viewer for a failed run');
+        console.log(
+          `[auto03] "Run failed" text visible: ${hasRunFailed}; deliberate error message visible: ${hasErrorText}`,
+        );
+        assert(
+          hasRunFailed,
+          'expected "Run failed" text visible on the run viewer for a failed run',
+        );
         const panelEmpty = bodyTxt.trim().length < 40;
-        assert(!panelEmpty, `run viewer looks blank for a failed run (body text length ${bodyTxt.trim().length})`);
+        assert(
+          !panelEmpty,
+          `run viewer looks blank for a failed run (body text length ${bodyTxt.trim().length})`,
+        );
         note(
           `failed-run rendering: data-status="fail" ✓, "Run failed" text visible=${hasRunFailed}, the actual thrown error message surfaced in the UI=${hasErrorText}.`,
         );
@@ -797,11 +958,18 @@ async function main() {
     // -----------------------------------------------------------------
     // FLOW: console-sweep
     // -----------------------------------------------------------------
-    await step('console-sweep', 'Zero unexpected console errors across the whole suite', async () => {
-      const allErrors = consoleMessages.filter((m) => m.type === 'error');
-      for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
-      assert(allErrors.length === 0, `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`);
-    });
+    await step(
+      'console-sweep',
+      'Zero unexpected console errors across the whole suite',
+      async () => {
+        const allErrors = consoleMessages.filter((m) => m.type === 'error');
+        for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
+        assert(
+          allErrors.length === 0,
+          `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`,
+        );
+      },
+    );
 
     // -----------------------------------------------------------------
     // Report

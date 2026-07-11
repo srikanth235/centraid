@@ -28,7 +28,9 @@ describe('appearance prefs', () => {
   });
 
   it('rejects invalid union values', () => {
-    expect(pickAppearance({ density: 'huge', cards: 'shiny', accentKey: 'chartreuse' })).toEqual({});
+    expect(pickAppearance({ density: 'huge', cards: 'shiny', accentKey: 'chartreuse' })).toEqual(
+      {},
+    );
   });
 
   it('falls back to the legacy `accent` key when `accentKey` is absent', () => {

@@ -91,7 +91,12 @@ export default function RunViewRoute({
           if (stopped) return;
           if (finalRun) run = finalRun;
           else if (run)
-            run = { ...run, ok: ev.ok, endedAt: Date.now(), ...(ev.error ? { error: ev.error } : {}) };
+            run = {
+              ...run,
+              ok: ev.ok,
+              endedAt: Date.now(),
+              ...(ev.error ? { error: ev.error } : {}),
+            };
           if (finalNodes.length > 0) {
             nodesByOrdinal.clear();
             for (const n of finalNodes) nodesByOrdinal.set(n.ordinal, n);
@@ -101,7 +106,10 @@ export default function RunViewRoute({
       } else if (ev.type === 'node.delta') {
         const inner = ev.event as { type?: string; delta?: string };
         if (inner?.type === 'assistant.delta' && typeof inner.delta === 'string') {
-          liveTextByOrdinal.set(ev.ordinal, (liveTextByOrdinal.get(ev.ordinal) ?? '') + inner.delta);
+          liveTextByOrdinal.set(
+            ev.ordinal,
+            (liveTextByOrdinal.get(ev.ordinal) ?? '') + inner.delta,
+          );
           rerender();
         }
       }

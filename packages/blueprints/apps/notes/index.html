@@ -63,7 +63,12 @@
             <div class="nt-brand-name">Notes</div>
             <div class="nt-brand-tag">a projection of your vault</div>
           </div>
-          <button type="button" class="kit-icon-btn nt-side-close" id="sideClose" aria-label="Close menu">
+          <button
+            type="button"
+            class="kit-icon-btn nt-side-close"
+            id="sideClose"
+            aria-label="Close menu"
+          >
             <svg
               width="18"
               height="18"
@@ -139,7 +144,13 @@
               aria-label="Search notes"
               autocomplete="off"
             />
-            <button type="button" id="searchClear" class="nt-search-clear" aria-label="Clear search" hidden>
+            <button
+              type="button"
+              id="searchClear"
+              class="nt-search-clear"
+              aria-label="Clear search"
+              hidden
+            >
               <svg
                 width="15"
                 height="15"
@@ -187,16 +198,29 @@
                 </svg>
               </button>
             </div>
-            <button type="button" class="kit-icon-btn" id="themeBtn" aria-label="Toggle light/dark"></button>
+            <button
+              type="button"
+              class="kit-icon-btn"
+              id="themeBtn"
+              aria-label="Toggle light/dark"
+            ></button>
             <div class="nt-ask-mount" data-ask-mount></div>
           </div>
         </div>
 
         <div id="consentBanner" class="kit-banner nt-banner" hidden>
           <strong>No vault access yet.</strong>
-          <span id="consentDetail">Ask the owner to approve this app's requested scopes in vault settings.</span>
+          <span id="consentDetail"
+            >Ask the owner to approve this app's requested scopes in vault settings.</span
+          >
         </div>
-        <div id="noticeBanner" class="kit-banner notice nt-banner" role="status" aria-live="polite" hidden></div>
+        <div
+          id="noticeBanner"
+          class="kit-banner notice nt-banner"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
 
         <div id="toolbar" aria-label="Active scope"></div>
 
@@ -221,7 +245,11 @@
         placeholder: 'Ask your notes…',
         intro:
           'Ask me to write, find, summarise or file a note. New notes show for your approval before they touch the vault.',
-        suggest: ['Summarise my Q3 roadmap note', 'New note from this', 'What did I note about the offline story?'],
+        suggest: [
+          'Summarise my Q3 roadmap note',
+          'New note from this',
+          'What did I note about the offline story?',
+        ],
       };
     </script>
     <script type="module" src="./app.jsx"></script>

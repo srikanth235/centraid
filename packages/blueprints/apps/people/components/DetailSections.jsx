@@ -41,9 +41,16 @@ function SectionLabel({ text, addKey, open, onToggle, extra }) {
 
 function DebtsSection({ dp, adders, onToggleAdder, onAddDebt, onSettleDebt }) {
   const debts = dp.debts ?? [];
-  const net = debts.reduce((a, b) => a + (b.direction === 'owed' ? b.amount_minor : -b.amount_minor), 0);
+  const net = debts.reduce(
+    (a, b) => a + (b.direction === 'owed' ? b.amount_minor : -b.amount_minor),
+    0,
+  );
   const netLabel =
-    net === 0 ? 'settled' : net > 0 ? `net owes you ${fmtMoney(net, 'USD')}` : `net you owe ${fmtMoney(-net, 'USD')}`;
+    net === 0
+      ? 'settled'
+      : net > 0
+        ? `net owes you ${fmtMoney(net, 'USD')}`
+        : `net you owe ${fmtMoney(-net, 'USD')}`;
   const netEl =
     debts.length > 0 ? (
       <span
@@ -75,10 +82,24 @@ function DebtsSection({ dp, adders, onToggleAdder, onAddDebt, onSettleDebt }) {
             return (
               <div className="d-kv-row" key={b.debt_id}>
                 <span style={{ flex: 1 }}>
-                  <span style={{ display: 'block', font: 'var(--t-body)', fontWeight: 500, color: owe ? 'var(--ink)' : 'var(--ok)' }}>
+                  <span
+                    style={{
+                      display: 'block',
+                      font: 'var(--t-body)',
+                      fontWeight: 500,
+                      color: owe ? 'var(--ink)' : 'var(--ok)',
+                    }}
+                  >
                     {(owe ? 'You owe ' : 'Owes you ') + amount}
                   </span>
-                  <span style={{ display: 'block', font: 'var(--t-small)', fontSize: '12px', color: 'var(--ink-3)' }}>
+                  <span
+                    style={{
+                      display: 'block',
+                      font: 'var(--t-small)',
+                      fontSize: '12px',
+                      color: 'var(--ink-3)',
+                    }}
+                  >
                     {b.reason || ''}
                   </span>
                 </span>
@@ -158,11 +179,21 @@ export function Sections({
       >
         <div>
           <div style={{ font: 'var(--t-strong)', fontSize: '13px' }}>Keep in touch</div>
-          <div style={{ font: 'var(--t-small)', fontSize: '12px', color: 'var(--ink-2)', marginTop: '2px' }}>
+          <div
+            style={{
+              font: 'var(--t-small)',
+              fontSize: '12px',
+              color: 'var(--ink-2)',
+              marginTop: '2px',
+            }}
+          >
             {cadence(dp.cadence_days ?? 30)} · last {fmt(days)}
           </div>
         </div>
-        <span className="kit-chip quiet d-chip-sm" style={{ borderColor: st.color, color: st.color }}>
+        <span
+          className="kit-chip quiet d-chip-sm"
+          style={{ borderColor: st.color, color: st.color }}
+        >
           {st.label}
         </span>
       </div>
@@ -170,7 +201,9 @@ export function Sections({
       {dp.met ? (
         <>
           <div className="d-detail-label">How you met</div>
-          <p style={{ margin: 0, font: 'var(--t-body)', color: 'var(--ink-2)', lineHeight: 1.5 }}>{dp.met}</p>
+          <p style={{ margin: 0, font: 'var(--t-body)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+            {dp.met}
+          </p>
         </>
       ) : null}
 
@@ -189,28 +222,51 @@ export function Sections({
         </>
       ) : null}
 
-      <SectionLabel text="Relationships" addKey="rel" open={!!adders.rel} onToggle={() => onToggleAdder('rel')} />
+      <SectionLabel
+        text="Relationships"
+        addKey="rel"
+        open={!!adders.rel}
+        onToggle={() => onToggleAdder('rel')}
+      />
       {rels.length > 0 ? (
         <div>
           {rels.map((r, i) => (
             <div className="d-rel" key={i}>
-              <span className="d-rel-badge">{r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·'}</span>
+              <span className="d-rel-badge">
+                {r.pet === 'cat' ? '🐱' : r.pet === 'dog' ? '🐶' : r.name?.[0] || '·'}
+              </span>
               <span style={{ flex: 1, font: 'var(--t-body)', fontWeight: 500 }}>{r.name}</span>
-              <span style={{ font: 'var(--t-small)', fontSize: '11.5px', color: 'var(--ink-3)' }}>{r.kind}</span>
+              <span style={{ font: 'var(--t-small)', fontSize: '11.5px', color: 'var(--ink-3)' }}>
+                {r.kind}
+              </span>
             </div>
           ))}
         </div>
       ) : null}
       {adders.rel ? <RelationshipAddRow onSubmit={(fields) => onAddRelationship(fields)} /> : null}
 
-      <SectionLabel text="Important dates" addKey="date" open={!!adders.date} onToggle={() => onToggleAdder('date')} />
+      <SectionLabel
+        text="Important dates"
+        addKey="date"
+        open={!!adders.date}
+        onToggle={() => onToggleAdder('date')}
+      />
       {dates.length > 0 ? (
         <div className="d-kv">
           {dates.map((d) => (
             <div className="d-kv-row" key={d.date_id}>
               <span style={{ flex: 1 }}>
-                <span style={{ display: 'block', font: 'var(--t-body)', fontWeight: 500 }}>{d.label}</span>
-                <span style={{ display: 'block', font: 'var(--t-small)', fontSize: '12px', color: 'var(--ink-3)' }}>
+                <span style={{ display: 'block', font: 'var(--t-body)', fontWeight: 500 }}>
+                  {d.label}
+                </span>
+                <span
+                  style={{
+                    display: 'block',
+                    font: 'var(--t-small)',
+                    fontSize: '12px',
+                    color: 'var(--ink-3)',
+                  }}
+                >
                   {fmtMonthDay(d.month_day)} · {inFmt(daysUntilAnnual(d.month_day))}
                 </span>
               </span>
@@ -234,7 +290,12 @@ export function Sections({
       ) : null}
       {adders.date ? <DateAddRow onSubmit={(fields) => onAddDate(fields)} /> : null}
 
-      <SectionLabel text="Tasks" addKey="task" open={!!adders.task} onToggle={() => onToggleAdder('task')} />
+      <SectionLabel
+        text="Tasks"
+        addKey="task"
+        open={!!adders.task}
+        onToggle={() => onToggleAdder('task')}
+      />
       {tasks.length > 0 ? (
         <div>
           {tasks.map((t) => (
@@ -274,7 +335,12 @@ export function Sections({
         <NoteAddRow onSubmit={(fields) => onAddNote(fields)} />
       </div>
 
-      <SectionLabel text="Gift ideas" addKey="gift" open={!!adders.gift} onToggle={() => onToggleAdder('gift')} />
+      <SectionLabel
+        text="Gift ideas"
+        addKey="gift"
+        open={!!adders.gift}
+        onToggle={() => onToggleAdder('gift')}
+      />
       {gifts.length > 0 ? (
         <div>
           {gifts.map((g) => {
@@ -315,7 +381,13 @@ export function Sections({
       ) : null}
       {adders.gift ? <GiftAddRow onSubmit={(fields) => onAddGift(fields)} /> : null}
 
-      <DebtsSection dp={dp} adders={adders} onToggleAdder={onToggleAdder} onAddDebt={onAddDebt} onSettleDebt={onSettleDebt} />
+      <DebtsSection
+        dp={dp}
+        adders={adders}
+        onToggleAdder={onToggleAdder}
+        onAddDebt={onAddDebt}
+        onSettleDebt={onSettleDebt}
+      />
 
       {interactions.length > 0 ? (
         <>
@@ -336,7 +408,14 @@ export function Sections({
                       {fmt(daysSinceIso(t.occurred_at))}
                     </span>
                   </div>
-                  <div style={{ marginTop: '2px', font: 'var(--t-body)', fontSize: '13.5px', color: 'var(--ink-2)' }}>
+                  <div
+                    style={{
+                      marginTop: '2px',
+                      font: 'var(--t-body)',
+                      fontSize: '13.5px',
+                      color: 'var(--ink-2)',
+                    }}
+                  >
                     {t.text || ''}
                   </div>
                 </div>

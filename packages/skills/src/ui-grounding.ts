@@ -267,7 +267,7 @@ function renderExemplarsBlock(): string {
     '- `@centraid/blueprints/apps/tasks/` — the tightest list/board example. Use this as the visual baseline for list-style apps. Notice the inline live-settings `<script>` at the top of `<head>`, the kit.css primitives (`.kit-btn`, `.kit-chip`, `.kit-banner`), the `#consentBanner` denied-state pattern, and how it never hardcodes a color.',
     '- `@centraid/blueprints/apps/notes/` — a richer "compose + browse" surface (editor, list, autosave). Use for any app with that rhythm.',
     '',
-    'The scaffolded `app.jsx` a new app starts from is the canonical shape: createRoot at the bottom, one App component owning the loading/error/denied triad, `window.centraid.onChange(refresh)` in an effect, kit.css classes via `className=`. The kit\'s own custom elements (`kit-avatar`, etc., from `./elements.js`) are dependency-free vanilla Web Components and drop straight into JSX as lowercase tags.',
+    "The scaffolded `app.jsx` a new app starts from is the canonical shape: createRoot at the bottom, one App component owning the loading/error/denied triad, `window.centraid.onChange(refresh)` in an effect, kit.css classes via `className=`. The kit's own custom elements (`kit-avatar`, etc., from `./elements.js`) are dependency-free vanilla Web Components and drop straight into JSX as lowercase tags.",
     '',
     "You can read the blueprints directly via the bash tool, e.g. `cat ../../packages/blueprints/apps/tasks/app.css` from an app root that lives under the same workspace. If you can't reach them (paths vary by environment), the component primitives block above captures the load-bearing pieces.",
   ].join('\n');

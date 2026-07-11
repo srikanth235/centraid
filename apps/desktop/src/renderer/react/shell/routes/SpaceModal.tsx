@@ -63,7 +63,15 @@ export interface SpaceModalProps {
   onDelete?: () => void;
 }
 
-function Avatar({ icon, color, size }: { icon: IconName; color: string; size: number }): JSX.Element {
+function Avatar({
+  icon,
+  color,
+  size,
+}: {
+  icon: IconName;
+  color: string;
+  size: number;
+}): JSX.Element {
   return (
     <span
       style={{ background: color, width: size, height: size } as CSSProperties}
@@ -72,7 +80,13 @@ function Avatar({ icon, color, size }: { icon: IconName; color: string; size: nu
   );
 }
 
-export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete }: SpaceModalProps): JSX.Element {
+export default function SpaceModal({
+  mode,
+  initial,
+  onCancel,
+  onCommit,
+  onDelete,
+}: SpaceModalProps): JSX.Element {
   const [name, setName] = useState(initial.name ?? '');
   const [icon, setIcon] = useState<IconName>(initial.icon ?? DEFAULT_SPACE_ICON);
   const [color, setColor] = useState(initial.color ?? PROFILE_COLORS[0]!);
@@ -118,7 +132,9 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
             className={styles.profModalHeadIcon}
             dangerouslySetInnerHTML={{ __html: iconSvg('Users', 14) }}
           />
-          <h2 className={styles.profModalTitle}>{mode === 'add' ? 'New profile' : 'Edit profile'}</h2>
+          <h2 className={styles.profModalTitle}>
+            {mode === 'add' ? 'New profile' : 'Edit profile'}
+          </h2>
           <button
             type="button"
             className={cx(controlsCss.iconBtn, styles.profModalClose)}
@@ -210,7 +226,11 @@ export default function SpaceModal({ mode, initial, onCancel, onCommit, onDelete
         </div>
         <div className={styles.profModalFoot}>
           {onDelete ? (
-            <button type="button" className={cx(controlsCss.chip, styles.profModalDelete)} onClick={onDelete}>
+            <button
+              type="button"
+              className={cx(controlsCss.chip, styles.profModalDelete)}
+              onClick={onDelete}
+            >
               <span dangerouslySetInnerHTML={{ __html: iconSvg('Trash', 12) }} />
               Delete
             </button>

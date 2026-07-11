@@ -172,9 +172,7 @@ export function buildVaultProps(
       return {
         demo: demoApps.find((d) => d.appId === appId),
         grants: apps.find((a) => a.name === appId)?.grants ?? [],
-        parked: allParked.filter(
-          (p) => p.callerKind === 'app' && p.callerId === enrolledAppId,
-        ),
+        parked: allParked.filter((p) => p.callerKind === 'app' && p.callerId === enrolledAppId),
         vaultName: s.name,
       };
     },

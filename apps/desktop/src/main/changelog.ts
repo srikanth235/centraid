@@ -14,7 +14,11 @@
  */
 
 import { app } from 'electron';
-import { normalizeReleases, type ChangelogRelease, type ChangelogResult } from './changelog-core.js';
+import {
+  normalizeReleases,
+  type ChangelogRelease,
+  type ChangelogResult,
+} from './changelog-core.js';
 
 /**
  * The repo the release notes come from. Hardcoded (no `repository` field in

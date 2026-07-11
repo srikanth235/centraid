@@ -45,7 +45,11 @@ const consoleMessages = [];
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -59,7 +63,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-verify-appr-${id}.png`) });
@@ -124,7 +134,10 @@ async function scaffoldCustomAutomation({ id, name, handlerJs }) {
   });
   assert(createRes.status === 201, `automation scaffold failed: ${JSON.stringify(createRes)}`);
   const sessionId = createRes.json?.sessionId;
-  assert(Boolean(sessionId), `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`);
+  assert(
+    Boolean(sessionId),
+    `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`,
+  );
 
   const putRes = await putDraftFile(id, sessionId, `automations/${id}/handler.js`, handlerJs);
   assert(putRes.status === 200, `handler.js draft write failed: ${JSON.stringify(putRes)}`);
@@ -146,18 +159,27 @@ async function approveAgentGrant(appId, scopes) {
     method: 'POST',
     body: { purpose: PURPOSE, scopes },
   });
-  assert(res.status === 200 && res.json?.grantId, `agent grant approval failed: ${JSON.stringify(res)}`);
+  assert(
+    res.status === 200 && res.json?.grantId,
+    `agent grant approval failed: ${JSON.stringify(res)}`,
+  );
   return res.json.grantId;
 }
 
 async function openAutomationView(name) {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
-  const row = page.getByRole('button', { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) }).first();
+  const row = page
+    .getByRole('button', { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')) })
+    .first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -165,7 +187,10 @@ async function openLocker() {
   const sidebarItem = page.getByRole('button', { name: 'Locker', exact: true }).first();
   await sidebarItem.waitFor({ state: 'visible', timeout: 15_000 });
   await sidebarItem.click();
-  await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+  await page.waitForSelector('iframe[data-centraid-app="1"]', {
+    state: 'attached',
+    timeout: 20_000,
+  });
   const fl = frameLoc(page);
   await fl.locator('.v-newbtn').waitFor({ state: 'visible', timeout: 15_000 });
   return fl;
@@ -249,126 +274,190 @@ async function main() {
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
 
-    await step('install-and-park-app-caller', 'Install Locker, grant access, park a purge_item under the APP caller identity', async () => {
-      await navTo(page, 'Discover');
-      const lockerCard = page.locator('button[data-kind="app"]', { hasText: 'Locker' }).first();
-      await lockerCard.waitFor({ state: 'visible', timeout: 20_000 });
-      await lockerCard.click();
-      const dialog = page.getByRole('dialog', { name: /^Preview Locker/ });
-      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-      await dialog.getByRole('button', { name: 'Use this template' }).click();
-      const toast = page.locator('[data-global-toast]');
-      await toast.waitFor({ state: 'visible', timeout: 10_000 });
+    await step(
+      'install-and-park-app-caller',
+      'Install Locker, grant access, park a purge_item under the APP caller identity',
+      async () => {
+        await navTo(page, 'Discover');
+        const lockerCard = page.locator('button[data-kind="app"]', { hasText: 'Locker' }).first();
+        await lockerCard.waitFor({ state: 'visible', timeout: 20_000 });
+        await lockerCard.click();
+        const dialog = page.getByRole('dialog', { name: /^Preview Locker/ });
+        await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+        await dialog.getByRole('button', { name: 'Use this template' }).click();
+        const toast = page.locator('[data-global-toast]');
+        await toast.waitFor({ state: 'visible', timeout: 10_000 });
 
-      const fl = await openLocker();
-      const consentVisible = await fl.locator('#consentBanner').isVisible().catch(() => false);
-      if (consentVisible) {
-        await page.locator('button[aria-label="App settings"]').click();
-        const settingsDialog = page.getByRole('dialog', { name: 'App settings' });
-        await settingsDialog.waitFor({ state: 'visible', timeout: 10_000 });
-        await settingsDialog.getByRole('button', { name: 'Vault' }).click();
-        await page.waitForTimeout(300);
-        const grantBtn = settingsDialog.getByRole('button', { name: 'Grant access' });
-        if ((await grantBtn.count()) > 0) {
-          await grantBtn.click();
-          await page.waitForTimeout(1200);
+        const fl = await openLocker();
+        const consentVisible = await fl
+          .locator('#consentBanner')
+          .isVisible()
+          .catch(() => false);
+        if (consentVisible) {
+          await page.locator('button[aria-label="App settings"]').click();
+          const settingsDialog = page.getByRole('dialog', { name: 'App settings' });
+          await settingsDialog.waitFor({ state: 'visible', timeout: 10_000 });
+          await settingsDialog.getByRole('button', { name: 'Vault' }).click();
+          await page.waitForTimeout(300);
+          const grantBtn = settingsDialog.getByRole('button', { name: 'Grant access' });
+          if ((await grantBtn.count()) > 0) {
+            await grantBtn.click();
+            await page.waitForTimeout(1200);
+          }
+          await page.keyboard.press('Escape');
+          await page.waitForTimeout(300);
         }
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(300);
-      }
 
-      const fl2 = await openLocker();
-      await createAndTrashLockerItem(fl2, APP_TARGET_TITLE);
-      await armAndConfirmDeleteForever(fl2, APP_TARGET_TITLE);
+        const fl2 = await openLocker();
+        await createAndTrashLockerItem(fl2, APP_TARGET_TITLE);
+        await armAndConfirmDeleteForever(fl2, APP_TARGET_TITLE);
 
-      const deadline = Date.now() + 15_000;
-      let parked = null;
-      while (Date.now() < deadline) {
-        const blocking = await gwFetch('/centraid/_vault/blocking');
-        parked = (blocking.json?.parked ?? []).find((p) => p.command === 'locker.purge_item');
-        if (parked) break;
-        await page.waitForTimeout(500);
-      }
-      assert(Boolean(parked), 'expected the app-caller purge_item to park within 15s');
-      assert(parked.callerKind === 'app', `expected callerKind "app", got ${JSON.stringify(parked.callerKind)}`);
-      console.log(`[verify-appr] app-caller parked entry: callerKind=${parked.callerKind} caller=${JSON.stringify(parked.caller)}`);
-    });
+        const deadline = Date.now() + 15_000;
+        let parked = null;
+        while (Date.now() < deadline) {
+          const blocking = await gwFetch('/centraid/_vault/blocking');
+          parked = (blocking.json?.parked ?? []).find((p) => p.command === 'locker.purge_item');
+          if (parked) break;
+          await page.waitForTimeout(500);
+        }
+        assert(Boolean(parked), 'expected the app-caller purge_item to park within 15s');
+        assert(
+          parked.callerKind === 'app',
+          `expected callerKind "app", got ${JSON.stringify(parked.callerKind)}`,
+        );
+        console.log(
+          `[verify-appr] app-caller parked entry: callerKind=${parked.callerKind} caller=${JSON.stringify(parked.caller)}`,
+        );
+      },
+    );
 
-    await step('scaffold-and-park-agent-caller', 'Scaffold an automation, grant its agent Locker access, Run now -> park a purge_item under the AGENT caller identity', async () => {
-      const fl = await openLocker();
-      await createAndTrashLockerItem(fl, AGENT_TARGET_TITLE);
+    await step(
+      'scaffold-and-park-agent-caller',
+      'Scaffold an automation, grant its agent Locker access, Run now -> park a purge_item under the AGENT caller identity',
+      async () => {
+        const fl = await openLocker();
+        await createAndTrashLockerItem(fl, AGENT_TARGET_TITLE);
 
-      await scaffoldCustomAutomation({ id: AGENT_AUTO_ID, name: AGENT_AUTO_NAME, handlerJs: AGENT_PURGE_HANDLER_JS });
-      const grantId = await approveAgentGrant(AGENT_AUTO_ID, [{ schema: 'locker', verbs: 'read+act' }]);
-      console.log(`[verify-appr] approved agent grant ${grantId} for "${AGENT_AUTO_ID}"`);
+        await scaffoldCustomAutomation({
+          id: AGENT_AUTO_ID,
+          name: AGENT_AUTO_NAME,
+          handlerJs: AGENT_PURGE_HANDLER_JS,
+        });
+        const grantId = await approveAgentGrant(AGENT_AUTO_ID, [
+          { schema: 'locker', verbs: 'read+act' },
+        ]);
+        console.log(`[verify-appr] approved agent grant ${grantId} for "${AGENT_AUTO_ID}"`);
 
-      const agentsRes = await gwFetch('/centraid/_vault/agents');
-      const agentRow = (agentsRes.json?.agents ?? []).find((a) => a.agentId && a.grants?.some((g) => g.grantId === grantId));
-      console.log(`[verify-appr] enrolled agent row after grant: ${JSON.stringify(agentRow)}`);
-      assert(Boolean(agentRow), 'expected to find the newly-enrolled agent row by its grant id');
-      // THE FIX, asserted directly against the enrollment row: the agent's
-      // display name must no longer be the raw id slug.
-      assert(agentRow.name !== AGENT_AUTO_ID, `expected the enrolled agent's display name to NOT be the raw slug "${AGENT_AUTO_ID}", got ${JSON.stringify(agentRow.name)}`);
-      console.log(`[verify-appr] enrolled agent display name: ${JSON.stringify(agentRow.name)} (raw slug was "${AGENT_AUTO_ID}")`);
+        const agentsRes = await gwFetch('/centraid/_vault/agents');
+        const agentRow = (agentsRes.json?.agents ?? []).find(
+          (a) => a.agentId && a.grants?.some((g) => g.grantId === grantId),
+        );
+        console.log(`[verify-appr] enrolled agent row after grant: ${JSON.stringify(agentRow)}`);
+        assert(Boolean(agentRow), 'expected to find the newly-enrolled agent row by its grant id');
+        // THE FIX, asserted directly against the enrollment row: the agent's
+        // display name must no longer be the raw id slug.
+        assert(
+          agentRow.name !== AGENT_AUTO_ID,
+          `expected the enrolled agent's display name to NOT be the raw slug "${AGENT_AUTO_ID}", got ${JSON.stringify(agentRow.name)}`,
+        );
+        console.log(
+          `[verify-appr] enrolled agent display name: ${JSON.stringify(agentRow.name)} (raw slug was "${AGENT_AUTO_ID}")`,
+        );
 
-      await openAutomationView(AGENT_AUTO_NAME);
-      const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
-      await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
-      await runBtn.click();
+        await openAutomationView(AGENT_AUTO_NAME);
+        const runBtn = page.getByRole('button', { name: /Run now|Starting…/ });
+        await runBtn.waitFor({ state: 'visible', timeout: 5_000 });
+        await runBtn.click();
 
-      const deadline = Date.now() + 30_000;
-      let parked = null;
-      while (Date.now() < deadline) {
-        const blocking = await gwFetch('/centraid/_vault/blocking');
-        parked = (blocking.json?.parked ?? []).find((p) => p.command === 'locker.purge_item' && p.callerKind !== 'app');
-        if (parked) break;
-        await page.waitForTimeout(700);
-      }
-      assert(Boolean(parked), 'expected the agent-caller purge_item to park within 30s of Run now');
-      assert(parked.callerKind === 'agent', `expected callerKind "agent", got ${JSON.stringify(parked.callerKind)}`);
-      assert(parked.caller !== AGENT_AUTO_ID, `expected the parked caller display name to NOT be the raw slug "${AGENT_AUTO_ID}", got ${JSON.stringify(parked.caller)}`);
-      console.log(`[verify-appr] agent-caller parked entry: callerKind=${parked.callerKind} caller=${JSON.stringify(parked.caller)}`);
-    });
+        const deadline = Date.now() + 30_000;
+        let parked = null;
+        while (Date.now() < deadline) {
+          const blocking = await gwFetch('/centraid/_vault/blocking');
+          parked = (blocking.json?.parked ?? []).find(
+            (p) => p.command === 'locker.purge_item' && p.callerKind !== 'app',
+          );
+          if (parked) break;
+          await page.waitForTimeout(700);
+        }
+        assert(
+          Boolean(parked),
+          'expected the agent-caller purge_item to park within 30s of Run now',
+        );
+        assert(
+          parked.callerKind === 'agent',
+          `expected callerKind "agent", got ${JSON.stringify(parked.callerKind)}`,
+        );
+        assert(
+          parked.caller !== AGENT_AUTO_ID,
+          `expected the parked caller display name to NOT be the raw slug "${AGENT_AUTO_ID}", got ${JSON.stringify(parked.caller)}`,
+        );
+        console.log(
+          `[verify-appr] agent-caller parked entry: callerKind=${parked.callerKind} caller=${JSON.stringify(parked.caller)}`,
+        );
+      },
+    );
 
-    await step('approvals-shows-identity', 'Approvals screen: both parked rows show a display name (not a raw slug) + the right caller-kind chip', async () => {
-      await page.getByRole('button', { name: /^Approvals/ }).first().click();
-      await page.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
-      const parkedHead = page.locator('h2', { hasText: 'Parked' });
-      await parkedHead.waitFor({ state: 'visible', timeout: 10_000 });
-      await shot('01-approvals-two-parked-rows');
+    await step(
+      'approvals-shows-identity',
+      'Approvals screen: both parked rows show a display name (not a raw slug) + the right caller-kind chip',
+      async () => {
+        await page
+          .getByRole('button', { name: /^Approvals/ })
+          .first()
+          .click();
+        await page
+          .getByRole('heading', { name: 'Approvals', level: 1 })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        const parkedHead = page.locator('h2', { hasText: 'Parked' });
+        await parkedHead.waitFor({ state: 'visible', timeout: 10_000 });
+        await shot('01-approvals-two-parked-rows');
 
-      const rows = page.locator('button', { hasText: 'locker.purge_item' });
-      const rowCount = await rows.count();
-      assert(rowCount === 2, `expected 2 parked locker.purge_item rows, got ${rowCount}`);
+        const rows = page.locator('button', { hasText: 'locker.purge_item' });
+        const rowCount = await rows.count();
+        assert(rowCount === 2, `expected 2 parked locker.purge_item rows, got ${rowCount}`);
 
-      const rowTexts = [];
-      for (let i = 0; i < rowCount; i++) {
-        rowTexts.push((await rows.nth(i).innerText()).replace(/\n/g, ' | '));
-      }
-      console.log(`[verify-appr] parked row texts: ${JSON.stringify(rowTexts)}`);
+        const rowTexts = [];
+        for (let i = 0; i < rowCount; i++) {
+          rowTexts.push((await rows.nth(i).innerText()).replace(/\n/g, ' | '));
+        }
+        console.log(`[verify-appr] parked row texts: ${JSON.stringify(rowTexts)}`);
 
-      const hasRawSlug = rowTexts.some((t) => t.toLowerCase().includes(AGENT_AUTO_ID.toLowerCase()));
-      assert(!hasRawSlug, `a parked row still shows the raw automation slug "${AGENT_AUTO_ID}": ${JSON.stringify(rowTexts)}`);
+        const hasRawSlug = rowTexts.some((t) =>
+          t.toLowerCase().includes(AGENT_AUTO_ID.toLowerCase()),
+        );
+        assert(
+          !hasRawSlug,
+          `a parked row still shows the raw automation slug "${AGENT_AUTO_ID}": ${JSON.stringify(rowTexts)}`,
+        );
 
-      // ParkedRow's chip is CSS text-transform:uppercase (KindBadge) --
-      // innerText reflects the rendered (uppercased) text, not the DOM
-      // literal "App"/"Automation", so match case-insensitively.
-      const hasAppChip = rowTexts.some((t) => /\bapp\b/i.test(t) && /Locker/i.test(t));
-      const hasAutomationChip = rowTexts.some((t) => /\bautomation\b/i.test(t));
-      console.log(`[verify-appr] an "App" chip + "Locker" present on some row: ${hasAppChip}; an "Automation" chip present on some row: ${hasAutomationChip}`);
-      assert(hasAppChip, `expected one parked row to show an "App" chip next to "Locker": ${JSON.stringify(rowTexts)}`);
-      assert(hasAutomationChip, `expected one parked row to show an "Automation" chip: ${JSON.stringify(rowTexts)}`);
+        // ParkedRow's chip is CSS text-transform:uppercase (KindBadge) --
+        // innerText reflects the rendered (uppercased) text, not the DOM
+        // literal "App"/"Automation", so match case-insensitively.
+        const hasAppChip = rowTexts.some((t) => /\bapp\b/i.test(t) && /Locker/i.test(t));
+        const hasAutomationChip = rowTexts.some((t) => /\bautomation\b/i.test(t));
+        console.log(
+          `[verify-appr] an "App" chip + "Locker" present on some row: ${hasAppChip}; an "Automation" chip present on some row: ${hasAutomationChip}`,
+        );
+        assert(
+          hasAppChip,
+          `expected one parked row to show an "App" chip next to "Locker": ${JSON.stringify(rowTexts)}`,
+        );
+        assert(
+          hasAutomationChip,
+          `expected one parked row to show an "Automation" chip: ${JSON.stringify(rowTexts)}`,
+        );
 
-      // Expand each row for a close-up screenshot of the badge + name.
-      await rows.nth(0).click();
-      await page.waitForTimeout(200);
-      await shot('02-approvals-row1-expanded');
-      await rows.nth(0).click();
-      await page.waitForTimeout(150);
-      await rows.nth(1).click();
-      await page.waitForTimeout(200);
-      await shot('03-approvals-row2-expanded');
-    });
+        // Expand each row for a close-up screenshot of the badge + name.
+        await rows.nth(0).click();
+        await page.waitForTimeout(200);
+        await shot('02-approvals-row1-expanded');
+        await rows.nth(0).click();
+        await page.waitForTimeout(150);
+        await rows.nth(1).click();
+        await page.waitForTimeout(200);
+        await shot('03-approvals-row2-expanded');
+      },
+    );
 
     // ---- Report ----
     const consoleErrors = consoleMessages.filter((m) => m.type === 'error');

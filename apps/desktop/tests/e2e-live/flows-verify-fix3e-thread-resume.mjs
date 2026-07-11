@@ -42,7 +42,9 @@ async function main() {
   const page = session.page;
   const consoleMessages = [];
   page.on('console', (msg) => consoleMessages.push({ text: msg.text(), type: msg.type() }));
-  page.on('pageerror', (err) => consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error' }));
+  page.on('pageerror', (err) =>
+    consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error' }),
+  );
   console.log(`[fix3e] launched + Home ready in ${Date.now() - t0}ms`);
 
   const dbPath = await findJournalDb();
@@ -96,7 +98,9 @@ async function main() {
     // single thread, not two) — proves this was a true thread-resume, not
     // an accidental new conversation per send.
     const threadTitles = await page.locator('button:has-text("' + uniqueTag + '")').count();
-    console.log(`[fix3e] sidebar entries containing our unique tag: ${threadTitles} (expect 1 — same thread reused for both sends)`);
+    console.log(
+      `[fix3e] sidebar entries containing our unique tag: ${threadTitles} (expect 1 — same thread reused for both sends)`,
+    );
 
     const turnsAfterB = await sqlite(
       dbPath,
@@ -108,17 +112,34 @@ async function main() {
     const b = rows[0]?.trim().split(/\s{2,}/);
     const a = rows[1]?.trim().split(/\s{2,}/);
     assert(a && b, `expected 2 interactive turns, got:\n${turnsAfterB}`);
-    const turnA = { id: a[0], inTok: Number(a[2]), outTok: Number(a[3]), cacheTok: Number(a[4]), cost: a[5] };
-    const turnB = { id: b[0], inTok: Number(b[2]), outTok: Number(b[3]), cacheTok: Number(b[4]), cost: b[5] };
+    const turnA = {
+      id: a[0],
+      inTok: Number(a[2]),
+      outTok: Number(a[3]),
+      cacheTok: Number(a[4]),
+      cost: a[5],
+    };
+    const turnB = {
+      id: b[0],
+      inTok: Number(b[2]),
+      outTok: Number(b[3]),
+      cacheTok: Number(b[4]),
+      cost: b[5],
+    };
     console.log(`[fix3e] SIDE BY SIDE (same thread) — turnA: ${JSON.stringify(turnA)}`);
     console.log(`[fix3e] SIDE BY SIDE (same thread) — turnB: ${JSON.stringify(turnB)}`);
 
-    assert(turnA.id !== turnB.id, 'turn B has the same id as turn A — no new turn recorded for the 2nd send');
+    assert(
+      turnA.id !== turnB.id,
+      'turn B has the same id as turn A — no new turn recorded for the 2nd send',
+    );
     const totalA = turnA.inTok + turnA.outTok + turnA.cacheTok;
     const totalB = turnB.inTok + turnB.outTok + turnB.cacheTok;
     assert(totalB > 0, `turn B has all-zero tokens: ${JSON.stringify(turnB)}`);
     const ratio = totalB / totalA;
-    console.log(`[fix3e] turnB/turnA total-token ratio = ${ratio.toFixed(2)} (thread-resume case; expect roughly ~1x-ish, NOT ~2x cumulative doubling)`);
+    console.log(
+      `[fix3e] turnB/turnA total-token ratio = ${ratio.toFixed(2)} (thread-resume case; expect roughly ~1x-ish, NOT ~2x cumulative doubling)`,
+    );
 
     // Also fetch the newest step item to confirm model resolved correctly
     // for the resumed-thread turn.
@@ -133,16 +154,24 @@ async function main() {
     for (const e of consoleErrors) console.log(`  ERROR: ${e.text}`);
 
     if (ratio >= 1.6) {
-      console.error(`[fix3e] FAIL — turn B looks cumulative (ratio ${ratio.toFixed(2)}x) — thread-resume diffing may be broken`);
+      console.error(
+        `[fix3e] FAIL — turn B looks cumulative (ratio ${ratio.toFixed(2)}x) — thread-resume diffing may be broken`,
+      );
       process.exitCode = 1;
     } else if (threadTitles !== 1) {
-      console.error(`[fix3e] FAIL — expected exactly 1 conversation with our unique tag, found ${threadTitles} (test methodology issue, not necessarily a product bug — needs manual check)`);
+      console.error(
+        `[fix3e] FAIL — expected exactly 1 conversation with our unique tag, found ${threadTitles} (test methodology issue, not necessarily a product bug — needs manual check)`,
+      );
       process.exitCode = 1;
     } else {
-      console.log('[fix3e] PASS — thread-resume path records per-turn usage correctly, not cumulative.');
+      console.log(
+        '[fix3e] PASS — thread-resume path records per-turn usage correctly, not cumulative.',
+      );
     }
   } catch (err) {
-    await page.screenshot({ path: path.join(OUT_DIR, 'fix3e-resume-FAILURE.png') }).catch(() => undefined);
+    await page
+      .screenshot({ path: path.join(OUT_DIR, 'fix3e-resume-FAILURE.png') })
+      .catch(() => undefined);
     console.error('[fix3e] FATAL:', err);
     process.exitCode = 1;
   } finally {

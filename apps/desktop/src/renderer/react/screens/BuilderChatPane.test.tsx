@@ -205,9 +205,9 @@ describe('BuilderChatPane', () => {
     expect(props.onMountHistory).toHaveBeenCalledTimes(1);
     expect(props.onMountHistory).toHaveBeenCalledWith(expect.any(HTMLElement));
     act(() =>
-      (el.querySelector('.chatpaneHead button[aria-label="Back to chat"]') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
-      ),
+      (
+        el.querySelector('.chatpaneHead button[aria-label="Back to chat"]') as HTMLButtonElement
+      ).dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
     expect(props.onSetView).toHaveBeenCalledWith('chat');
   });

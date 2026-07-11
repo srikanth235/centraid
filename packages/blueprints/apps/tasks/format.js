@@ -185,7 +185,5 @@ export function highlightSegments(text, term) {
 /** Split a vault FTS `⟦hit⟧`-marked snippet into `[{ text, hit }]` segments. */
 export function snippetSegments(snippet) {
   const parts = String(snippet ?? '').split(/[⟦⟧]/);
-  return parts
-    .map((text, i) => ({ text, hit: i % 2 === 1 }))
-    .filter((s) => s.text !== '');
+  return parts.map((text, i) => ({ text, hit: i % 2 === 1 })).filter((s) => s.text !== '');
 }

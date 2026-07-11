@@ -219,7 +219,9 @@ export function CircleList({
           onRenameCancel={onRenameCancel}
         />
       ))}
-      {creatingCircle ? <CircleCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} /> : null}
+      {creatingCircle ? (
+        <CircleCreateEdit onCommit={onCreateCommit} onCancel={onCreateCancel} />
+      ) : null}
     </>
   );
 }

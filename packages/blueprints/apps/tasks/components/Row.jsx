@@ -13,7 +13,15 @@ function Highlighted({ text, term }) {
   return segments.map((s, i) => (s.hit ? <mark key={i}>{s.text}</mark> : s.text));
 }
 
-export function Row({ task, closed = false, pending = false, search = '', snippet, onOpen, onToggle }) {
+export function Row({
+  task,
+  closed = false,
+  pending = false,
+  search = '',
+  snippet,
+  onOpen,
+  onToggle,
+}) {
   const [completing, setCompleting] = useState(false);
   const isOpen = task.status === 'needs-action' || task.status === 'in-process';
   const cancelled = task.status === 'cancelled';
@@ -56,7 +64,9 @@ export function Row({ task, closed = false, pending = false, search = '', snippe
           <span className={isDone ? 'tk-row-title done' : 'tk-row-title'}>
             <Highlighted text={task.title} term={search} />
           </span>
-          {task.status === 'in-process' ? <span className="tk-badge doing">in progress</span> : null}
+          {task.status === 'in-process' ? (
+            <span className="tk-badge doing">in progress</span>
+          ) : null}
           {task.rrule ? (
             <span className="tk-recur" aria-hidden="true">
               ↻

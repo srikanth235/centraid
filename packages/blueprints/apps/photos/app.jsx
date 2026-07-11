@@ -184,7 +184,9 @@ function buildMemories() {
     .map((album) => {
       const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
       if (members.length === 0) return null;
-      const newest = members.reduce((a, b) => (String(a.taken_at ?? '') > String(b.taken_at ?? '') ? a : b));
+      const newest = members.reduce((a, b) =>
+        String(a.taken_at ?? '') > String(b.taken_at ?? '') ? a : b,
+      );
       return {
         key: album.album_id,
         title: album.title ?? 'Album',
@@ -221,12 +223,17 @@ function toolbarTitleSub() {
   const n = visibleAssets().length;
   const q = searchQuery.trim();
   if (selectedAlbum === ALBUMS) {
-    return { title: 'Albums', sub: `${albums.length} album${albums.length === 1 ? '' : 's'} · covers pulled from your library` };
+    return {
+      title: 'Albums',
+      sub: `${albums.length} album${albums.length === 1 ? '' : 's'} · covers pulled from your library`,
+    };
   }
   if (selectedAlbum === DUPLICATES) {
     return { title: 'Duplicates', sub: 'Near-duplicate clusters in your library' };
   }
-  const countSub = q ? `${n} match${n === 1 ? '' : 'es'} “${q}”` : `${n} photo${n === 1 ? '' : 's'}`;
+  const countSub = q
+    ? `${n} match${n === 1 ? '' : 'es'} “${q}”`
+    : `${n} photo${n === 1 ? '' : 's'}`;
   if (selectedAlbum === TRASH) {
     return { title: 'Trash', sub: q ? countSub : `${n} in trash · auto-purge after 30 days` };
   }
@@ -252,7 +259,9 @@ function renderToolbarBar() {
       onNewAlbum={() => sidebar.openNewAlbum()}
       showAddPhotos={inAlbum}
       onAddPhotos={openPicker}
-      showSelect={selectedAlbum !== TRASH && selectedAlbum !== DUPLICATES && selectedAlbum !== ALBUMS}
+      showSelect={
+        selectedAlbum !== TRASH && selectedAlbum !== DUPLICATES && selectedAlbum !== ALBUMS
+      }
       selectMode={selectMode}
       onToggleSelect={() => (selectMode ? exitSelectMode() : enterSelectMode())}
     />,
@@ -275,9 +284,19 @@ function renderMain() {
     empty.hidden = true;
     const enriched = albums.map((album) => {
       const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
-      return { ...album, count: members.length, coverUri: members[0]?.thumb_uri ?? members[0]?.content_uri ?? null };
+      return {
+        ...album,
+        count: members.length,
+        coverUri: members[0]?.thumb_uri ?? members[0]?.content_uri ?? null,
+      };
     });
-    mainRoot.render(<AlbumGridView albums={enriched} onOpen={navigateTo} onNewAlbum={() => sidebar.openNewAlbum()} />);
+    mainRoot.render(
+      <AlbumGridView
+        albums={enriched}
+        onOpen={navigateTo}
+        onNewAlbum={() => sidebar.openNewAlbum()}
+      />,
+    );
     return;
   }
 

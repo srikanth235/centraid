@@ -88,7 +88,10 @@ function Tile({
           aria-label="Remove from album"
           onClick={async (e) => {
             e.stopPropagation();
-            const outcome = await act('remove-from-album', { album_id: albumId, asset_id: asset.asset_id });
+            const outcome = await act('remove-from-album', {
+              album_id: albumId,
+              asset_id: asset.asset_id,
+            });
             if (narrate(outcome)) await refresh();
           }}
         >
@@ -126,7 +129,14 @@ function Row({ tiles, selectedIds, ...rest }) {
   return (
     <div className="ph-row">
       {tiles.map((t) => (
-        <Tile key={t.asset.asset_id} asset={t.asset} width={t.width} height={t.height} selected={selectedIds.has(t.asset.asset_id)} {...rest} />
+        <Tile
+          key={t.asset.asset_id}
+          asset={t.asset}
+          width={t.width}
+          height={t.height}
+          selected={selectedIds.has(t.asset.asset_id)}
+          {...rest}
+        />
       ))}
     </div>
   );
@@ -154,7 +164,9 @@ export function TimelineBody({
   // A stable newest-first order regardless of the caller's source sort (the
   // trash shelf's own query sorts by deleted_at, not taken_at) — otherwise
   // bucketing by month/day below could scatter months out of order.
-  const ordered = [...assets].sort((a, b) => String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')));
+  const ordered = [...assets].sort((a, b) =>
+    String(b.taken_at ?? '').localeCompare(String(a.taken_at ?? '')),
+  );
   const months = new Map();
   for (const asset of ordered) {
     const dk = dayKey(asset.taken_at);
@@ -164,7 +176,17 @@ export function TimelineBody({
     if (!days.has(dk)) days.set(dk, []);
     days.get(dk).push(asset);
   }
-  const rowProps = { inAlbum, albumId, isTrash, refresh, selectMode, selectedIds, onEnterSelectMode, onToggleSelect, onOpen };
+  const rowProps = {
+    inAlbum,
+    albumId,
+    isTrash,
+    refresh,
+    selectMode,
+    selectedIds,
+    onEnterSelectMode,
+    onToggleSelect,
+    onOpen,
+  };
   return (
     <>
       {[...months].map(([mk, days]) => (

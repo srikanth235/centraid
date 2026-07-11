@@ -59,21 +59,46 @@ describe('vaultSwitcher', () => {
 
   it('closes on backdrop click and fires onClose', () => {
     const onClose = vi.fn();
-    openVaultSwitcher({ anchor, vaults, activeVaultId: 'a', onSwitch: () => {}, onManage: () => {}, onClose });
+    openVaultSwitcher({
+      anchor,
+      vaults,
+      activeVaultId: 'a',
+      onSwitch: () => {},
+      onManage: () => {},
+      onClose,
+    });
     (document.querySelector('.scrim') as HTMLElement).click();
     expect(isVaultSwitcherOpen()).toBe(false);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('closes on Escape', () => {
-    openVaultSwitcher({ anchor, vaults, activeVaultId: 'a', onSwitch: () => {}, onManage: () => {} });
+    openVaultSwitcher({
+      anchor,
+      vaults,
+      activeVaultId: 'a',
+      onSwitch: () => {},
+      onManage: () => {},
+    });
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(isVaultSwitcherOpen()).toBe(false);
   });
 
   it('replaces an open popover rather than stacking', () => {
-    openVaultSwitcher({ anchor, vaults, activeVaultId: 'a', onSwitch: () => {}, onManage: () => {} });
-    openVaultSwitcher({ anchor, vaults, activeVaultId: 'b', onSwitch: () => {}, onManage: () => {} });
+    openVaultSwitcher({
+      anchor,
+      vaults,
+      activeVaultId: 'a',
+      onSwitch: () => {},
+      onManage: () => {},
+    });
+    openVaultSwitcher({
+      anchor,
+      vaults,
+      activeVaultId: 'b',
+      onSwitch: () => {},
+      onManage: () => {},
+    });
     expect(document.querySelectorAll('.pop')).toHaveLength(1);
   });
 });

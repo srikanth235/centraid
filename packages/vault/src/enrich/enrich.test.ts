@@ -703,9 +703,7 @@ describe('enrich settings', () => {
       where: [{ column: 'domain', op: 'eq', value: 'photos' }],
       purpose: 'dpv:ServiceProvision',
     });
-    expect(read.rows).toEqual([
-      expect.objectContaining({ domain: 'photos', tier: 'model' }),
-    ]);
+    expect(read.rows).toEqual([expect.objectContaining({ domain: 'photos', tier: 'model' })]);
   });
 });
 

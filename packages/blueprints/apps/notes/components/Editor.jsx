@@ -126,7 +126,11 @@ function Blocks({ body, onToggleCheck, onEnter }) {
         }
         if (b.kind === 'check') {
           return (
-            <div key={b.line} className={b.checked ? 'nt-check-line done' : 'nt-check-line'} data-line={b.line}>
+            <div
+              key={b.line}
+              className={b.checked ? 'nt-check-line done' : 'nt-check-line'}
+              data-line={b.line}
+            >
               <button
                 type="button"
                 className="nt-check-box"
@@ -199,7 +203,8 @@ export function Editor({
       if (snapTitle === prev.title && snapBody === prev.body) return;
       const nextDerived = deriveTitle(snapTitle, snapBody);
       const patch = {};
-      if (nextDerived && nextDerived !== deriveTitle(prev.title, prev.body)) patch.title = nextDerived;
+      if (nextDerived && nextDerived !== deriveTitle(prev.title, prev.body))
+        patch.title = nextDerived;
       if (snapBody.trim() && snapBody !== prev.body) patch.body_text = snapBody;
       if (!patch.title && !patch.body_text) {
         lastSavedRef.current = { title: snapTitle, body: snapBody };
@@ -273,7 +278,9 @@ export function Editor({
   function toggleCheck(lineIndex) {
     const lines = bodyRef.current.split('\n');
     if (lines[lineIndex] == null) return;
-    lines[lineIndex] = lines[lineIndex].replace(/\[( |x|X)\]/, (m) => (/x/i.test(m) ? '[ ]' : '[x]'));
+    lines[lineIndex] = lines[lineIndex].replace(/\[( |x|X)\]/, (m) =>
+      /x/i.test(m) ? '[ ]' : '[x]',
+    );
     saveBodyNow(lines.join('\n'));
   }
 
@@ -452,7 +459,11 @@ export function Editor({
 
           <div className="nt-eyebrow-label">Attachments</div>
           <AttachStrip note={note} onRemove={onRemoveAttachment} />
-          <button type="button" className="kit-btn nt-attach-btn" onClick={() => onAttach(note.note_id)}>
+          <button
+            type="button"
+            className="kit-btn nt-attach-btn"
+            onClick={() => onAttach(note.note_id)}
+          >
             Attach a file
           </button>
         </div>

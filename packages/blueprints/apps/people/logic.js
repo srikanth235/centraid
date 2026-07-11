@@ -10,12 +10,29 @@
 // returned here is then wired into app.jsx's render functions and JSX props,
 // exactly like any other value flowing down. Same factory pattern as
 // tasks/logic.js and notes/logic.js.
-import { closePopover, h, openPopover, outcomeMessage, popItem, runBulk as runBulkBase, toast } from './kit.js';
+import {
+  closePopover,
+  h,
+  openPopover,
+  outcomeMessage,
+  popItem,
+  runBulk as runBulkBase,
+  toast,
+} from './kit.js';
 import { PALETTE, circleColor, daysSince, daysUntilAnnual, statusOf } from './format.js';
 
 const $ = (id) => document.getElementById(id);
 
-export function createLogic({ state, data, render, refresh, renderRows, renderDetails, renderModal, renderNewMenu }) {
+export function createLogic({
+  state,
+  data,
+  render,
+  refresh,
+  renderRows,
+  renderDetails,
+  renderModal,
+  renderNewMenu,
+}) {
   function notice(text) {
     const b = $('noticeBanner');
     b.textContent = text || '';
@@ -51,10 +68,12 @@ export function createLogic({ state, data, render, refresh, renderRows, renderDe
       base = state.searchResults ?? [];
     } else {
       base = data.people.slice();
-      if (nav.kind === 'reconnect') base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
+      if (nav.kind === 'reconnect')
+        base = base.filter((p) => daysSince(p) >= (p.cadence_days ?? 30));
       else if (nav.kind === 'upcoming') base = base.filter((p) => (p.reminders || []).length > 0);
       else if (nav.kind === 'starred') base = base.filter((p) => p.starred);
-      else if (nav.kind === 'circle') base = base.filter((p) => (p.circle_id ?? null) === nav.circleId);
+      else if (nav.kind === 'circle')
+        base = base.filter((p) => (p.circle_id ?? null) === nav.circleId);
     }
     if (chip !== 'all') base = base.filter((p) => statusOf(p).key === chip);
 
@@ -62,10 +81,13 @@ export function createLogic({ state, data, render, refresh, renderRows, renderDe
     if (nav.kind === 'reconnect') {
       return base
         .slice()
-        .sort((a, b) => daysSince(b) - (b.cadence_days ?? 30) - (daysSince(a) - (a.cadence_days ?? 30)));
+        .sort(
+          (a, b) => daysSince(b) - (b.cadence_days ?? 30) - (daysSince(a) - (a.cadence_days ?? 30)),
+        );
     }
     if (nav.kind === 'upcoming') {
-      const near = (p) => Math.min(...(p.reminders || []).map((d) => daysUntilAnnual(d.month_day)), 999);
+      const near = (p) =>
+        Math.min(...(p.reminders || []).map((d) => daysUntilAnnual(d.month_day)), 999);
       return base.slice().sort((a, b) => near(a) - near(b));
     }
     const dir = state.sortDir;
@@ -149,7 +171,9 @@ export function createLogic({ state, data, render, refresh, renderRows, renderDe
   }
 
   async function toggleStar(p) {
-    const outcome = await act(p.starred ? 'unstar-person' : 'star-person', { party_id: p.party_id });
+    const outcome = await act(p.starred ? 'unstar-person' : 'star-person', {
+      party_id: p.party_id,
+    });
     if (!narrate(outcome)) return;
     toast(p.starred ? 'Favorite removed · receipted.' : 'Favorited · receipted.');
     await refresh();
@@ -215,7 +239,8 @@ export function createLogic({ state, data, render, refresh, renderRows, renderDe
   async function deleteCircle(circle) {
     const outcome = await act('delete-circle', { circle_id: circle.circle_id });
     if (narrate(outcome)) {
-      if (state.nav.kind === 'circle' && state.nav.circleId === circle.circle_id) state.nav = { kind: 'all' };
+      if (state.nav.kind === 'circle' && state.nav.circleId === circle.circle_id)
+        state.nav = { kind: 'all' };
       toast('Circle deleted · receipted.');
       await refresh();
     }

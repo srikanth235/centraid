@@ -101,7 +101,12 @@ describe('AssistantScreen', () => {
             label: '1 query · 12ms',
             calls: [{ tool: 'vault_sql', sql: 'SELECT 1', state: 'ok', meta: '3 rows · 12ms' }],
           },
-          { kind: 'ai', streaming: false, html: '<p class="cd-asst-p">You spent <strong>$412</strong>.</p>', error: false },
+          {
+            kind: 'ai',
+            streaming: false,
+            html: '<p class="cd-asst-p">You spent <strong>$412</strong>.</p>',
+            error: false,
+          },
         ],
       }),
     );
@@ -118,7 +123,14 @@ describe('AssistantScreen', () => {
     push(
       emptySnap({
         empty: false,
-        messages: [{ kind: 'ai', streaming: false, html: '<p>See <button class="cd-asst-ref">x</button></p>', error: false }],
+        messages: [
+          {
+            kind: 'ai',
+            streaming: false,
+            html: '<p>See <button class="cd-asst-ref">x</button></p>',
+            error: false,
+          },
+        ],
       }),
     );
     expect(props.hydrateRefs).toHaveBeenCalled();
@@ -145,9 +157,7 @@ describe('AssistantScreen', () => {
     push(emptySnap());
     const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, 'When is my next event?');
-    act(() =>
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
-    );
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(props.onSend).toHaveBeenCalledWith('When is my next event?');
     expect(input.value).toBe('');
   });

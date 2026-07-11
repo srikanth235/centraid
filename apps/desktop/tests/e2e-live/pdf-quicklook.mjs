@@ -131,27 +131,37 @@ async function main() {
   let docsFrameLoc;
 
   await step('1', 'Fresh boot -> Home renders', async () => {
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible' });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible' });
   });
 
-  await step('2', 'Discover -> install Docs template (fresh snapshot of current source)', async () => {
-    await navTo(page, 'Discover');
-    const docsCard = page.locator('button[data-kind="app"]', { hasText: 'Docs' }).first();
-    await docsCard.waitFor({ state: 'visible', timeout: 15_000 });
-    await docsCard.click();
-    const dialog = page.getByRole('dialog', { name: /^Preview Docs/ });
-    await dialog.waitFor({ state: 'visible', timeout: 10_000 });
-    await dialog.getByRole('button', { name: 'Use this template' }).click();
-    const toast = page.locator('[data-global-toast]');
-    await toast.waitFor({ state: 'visible', timeout: 10_000 });
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
-  });
+  await step(
+    '2',
+    'Discover -> install Docs template (fresh snapshot of current source)',
+    async () => {
+      await navTo(page, 'Discover');
+      const docsCard = page.locator('button[data-kind="app"]', { hasText: 'Docs' }).first();
+      await docsCard.waitFor({ state: 'visible', timeout: 15_000 });
+      await docsCard.click();
+      const dialog = page.getByRole('dialog', { name: /^Preview Docs/ });
+      await dialog.waitFor({ state: 'visible', timeout: 10_000 });
+      await dialog.getByRole('button', { name: 'Use this template' }).click();
+      const toast = page.locator('[data-global-toast]');
+      await toast.waitFor({ state: 'visible', timeout: 10_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+    },
+  );
 
   await step('3', 'Open Docs app', async () => {
     const tile = page.locator('[data-app-id="docs"]');
     await tile.waitFor({ state: 'visible', timeout: 10_000 });
     await tile.getByTestId('app-tile').click();
-    const frameEl = await page.waitForSelector('iframe[data-centraid-app="1"]', { timeout: 15_000 });
+    const frameEl = await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      timeout: 15_000,
+    });
     docsFrameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     // Wait for the app's own DOM to paint (upload input present).
     await docsFrameLoc.locator('#uploadInput').waitFor({ state: 'attached', timeout: 15_000 });
@@ -162,10 +172,7 @@ async function main() {
   await step('4', 'Upload real PDF + zip via real file input', async () => {
     const fileInput = docsFrameLoc.locator('#uploadInput');
     await fileInput.setInputFiles([fixtures.pdfPath, fixtures.zipPath]);
-    await docsFrameLoc
-      .locator('.d-card')
-      .nth(1)
-      .waitFor({ state: 'visible', timeout: 15_000 });
+    await docsFrameLoc.locator('.d-card').nth(1).waitFor({ state: 'visible', timeout: 15_000 });
     await page.waitForTimeout(300);
     const cardCount = await docsFrameLoc.locator('.d-card').count();
     assert(cardCount >= 2, `expected >= 2 cards after upload, got ${cardCount}`);
@@ -210,12 +217,21 @@ async function main() {
       // nested INSIDE the app's iframe. Grab its frame and confirm it
       // actually loaded a PDF document (not a CSP error page / blank).
       const innerFrameHandle = await docsFrameLoc.locator('iframe.d-quick-frame').elementHandle();
-      assert(innerFrameHandle, 'no iframe.d-quick-frame present for a PDF doc — stage fell through to the generic mock-page branch');
+      assert(
+        innerFrameHandle,
+        'no iframe.d-quick-frame present for a PDF doc — stage fell through to the generic mock-page branch',
+      );
       const innerFrame = await innerFrameHandle.contentFrame();
-      assert(innerFrame, 'iframe.d-quick-frame has no accessible contentFrame (cross-origin or navigation blocked)');
+      assert(
+        innerFrame,
+        'iframe.d-quick-frame has no accessible contentFrame (cross-origin or navigation blocked)',
+      );
       const innerUrl = innerFrame.url();
       console.log(`[7] inner PDF iframe src resolved to: ${innerUrl}`);
-      assert(/_vault\/blobs\//.test(innerUrl), `inner iframe src not a vault blob URL: ${innerUrl}`);
+      assert(
+        /_vault\/blobs\//.test(innerUrl),
+        `inner iframe src not a vault blob URL: ${innerUrl}`,
+      );
     } finally {
       // Always close, even on assertion failure, so later steps aren't
       // blocked by a stuck modal intercepting pointer events.
@@ -224,32 +240,43 @@ async function main() {
     }
   });
 
-  await step('8', 'Non-previewable type (.zip) shows honest fallback, not a broken embed', async () => {
-    await zipCard.locator('.d-thumb').click();
-    const quick = docsFrameLoc.locator('[aria-label="Quick look"]');
-    await quick.waitFor({ state: 'visible', timeout: 10_000 });
-    await shot('05-zip-quicklook-fallback');
-    const hasFrame = (await docsFrameLoc.locator('iframe.d-quick-frame').count()) > 0;
-    assert(!hasFrame, 'zip should NOT render as an iframe PDF stage');
-    const hasImg = (await docsFrameLoc.locator('img.d-quick-image').count()) > 0;
-    assert(!hasImg, 'zip should NOT render as an image stage');
-    const hasMock = (await docsFrameLoc.locator('.d-quick-page').count()) > 0;
-    assert(hasMock, 'zip should show the generic document-mock fallback (.d-quick-page)');
-    assert(await quick.getByText('Download').isVisible(), 'zip quick-look missing Download control');
-    await quick.getByRole('button', { name: 'Close' }).click();
-    await quick.waitFor({ state: 'hidden', timeout: 5_000 });
-  });
+  await step(
+    '8',
+    'Non-previewable type (.zip) shows honest fallback, not a broken embed',
+    async () => {
+      await zipCard.locator('.d-thumb').click();
+      const quick = docsFrameLoc.locator('[aria-label="Quick look"]');
+      await quick.waitFor({ state: 'visible', timeout: 10_000 });
+      await shot('05-zip-quicklook-fallback');
+      const hasFrame = (await docsFrameLoc.locator('iframe.d-quick-frame').count()) > 0;
+      assert(!hasFrame, 'zip should NOT render as an iframe PDF stage');
+      const hasImg = (await docsFrameLoc.locator('img.d-quick-image').count()) > 0;
+      assert(!hasImg, 'zip should NOT render as an image stage');
+      const hasMock = (await docsFrameLoc.locator('.d-quick-page').count()) > 0;
+      assert(hasMock, 'zip should show the generic document-mock fallback (.d-quick-page)');
+      assert(
+        await quick.getByText('Download').isVisible(),
+        'zip quick-look missing Download control',
+      );
+      await quick.getByRole('button', { name: 'Close' }).click();
+      await quick.waitFor({ state: 'hidden', timeout: 5_000 });
+    },
+  );
 
-  await step('9', 'Download link for the PDF resolves same-origin (no navigation error)', async () => {
-    await pdfCard.locator('.d-thumb').click();
-    const quick = docsFrameLoc.locator('[aria-label="Quick look"]');
-    await quick.waitFor({ state: 'visible', timeout: 10_000 });
-    const downloadLink = quick.locator('a.d-quick-btn');
-    const href = await downloadLink.getAttribute('href');
-    console.log(`[9] download href: ${href}`);
-    assert(href && /_vault\/blobs\//.test(href), `download href not a vault blob URL: ${href}`);
-    await quick.getByRole('button', { name: 'Close' }).click();
-  });
+  await step(
+    '9',
+    'Download link for the PDF resolves same-origin (no navigation error)',
+    async () => {
+      await pdfCard.locator('.d-thumb').click();
+      const quick = docsFrameLoc.locator('[aria-label="Quick look"]');
+      await quick.waitFor({ state: 'visible', timeout: 10_000 });
+      const downloadLink = quick.locator('a.d-quick-btn');
+      const href = await downloadLink.getAttribute('href');
+      console.log(`[9] download href: ${href}`);
+      assert(href && /_vault\/blobs\//.test(href), `download href not a vault blob URL: ${href}`);
+      await quick.getByRole('button', { name: 'Close' }).click();
+    },
+  );
 
   console.log('\n--- CSP / console violations captured ---');
   console.log(cspViolations.length === 0 ? '(none)' : JSON.stringify(cspViolations, null, 2));
@@ -265,7 +292,9 @@ async function main() {
   console.log('\n--- SUMMARY ---');
   let failed = false;
   for (const r of results) {
-    console.log(`[${r.verdict.toUpperCase()}] ${r.id} ${r.label} (${r.ms}ms)${r.error ? `\n  ${r.error}` : ''}`);
+    console.log(
+      `[${r.verdict.toUpperCase()}] ${r.id} ${r.label} (${r.ms}ms)${r.error ? `\n  ${r.error}` : ''}`,
+    );
     if (r.verdict === 'fail') failed = true;
   }
   if (cspViolations.length > 0) failed = true;

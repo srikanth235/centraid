@@ -391,7 +391,19 @@ export async function runFlow(slug, fn) {
       'apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq iptables >/dev/null 2>&1',
     ]);
     const insertRule = async (src, dst) => {
-      const deleteArgs = ['exec', fwName, 'iptables', '-D', 'DOCKER-USER', '-s', src, '-d', dst, '-j', 'DROP'];
+      const deleteArgs = [
+        'exec',
+        fwName,
+        'iptables',
+        '-D',
+        'DOCKER-USER',
+        '-s',
+        src,
+        '-d',
+        dst,
+        '-j',
+        'DROP',
+      ];
       await sh('docker', [
         'exec',
         fwName,

@@ -18,7 +18,13 @@ export function SearchResults({ viewData, search, currency, onOpenDetail }) {
   return (
     <div className="s-explist">
       {results.map((row) => (
-        <ExpenseRow key={row.expense_id} row={row} currency={currency} groupSuffix onOpen={onOpenDetail} />
+        <ExpenseRow
+          key={row.expense_id}
+          row={row}
+          currency={currency}
+          groupSuffix
+          onOpen={onOpenDetail}
+        />
       ))}
     </div>
   );

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { AppKnobDTO, AppSettingsBridgeProps, AppSettingsSnapshot } from '../screen-contracts.js';
+import type {
+  AppKnobDTO,
+  AppSettingsBridgeProps,
+  AppSettingsSnapshot,
+} from '../screen-contracts.js';
 import styles from './AppSettingsPanel.module.css';
 import { cx } from '../ui/cx.js';
 import segCss from '../styles/seg.module.css';
@@ -43,7 +47,11 @@ function KnobControl({
   };
   if (knob.type === 'swatch') {
     return (
-      <div className={cx(swatchCss.swatches, styles.paneSwatches)} role="radiogroup" aria-label={knob.label}>
+      <div
+        className={cx(swatchCss.swatches, styles.paneSwatches)}
+        role="radiogroup"
+        aria-label={knob.label}
+      >
         {knob.options.map((o) => (
           <button
             key={o.value}
@@ -321,7 +329,9 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                 ))}
               </div>
             ) : (
-              <div className={appSettingsCss.appSettingsNote}>No appearance options for this app.</div>
+              <div className={appSettingsCss.appSettingsNote}>
+                No appearance options for this app.
+              </div>
             )}
           </div>
         </div>
@@ -329,9 +339,13 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
         <div className={styles.settingsPane} hidden={tab !== 'automations'}>
           <div className={styles.settingsSectionHost}>
             {snap.orders.length === 0 ? (
-              <div className={appSettingsCss.appSettingsNote}>No automations linked to this app yet.</div>
+              <div className={appSettingsCss.appSettingsNote}>
+                No automations linked to this app yet.
+              </div>
             ) : (
-              <div className={cx(appSettingsCss.appSettingsSection, styles.paneSection, styles.orders)}>
+              <div
+                className={cx(appSettingsCss.appSettingsSection, styles.paneSection, styles.orders)}
+              >
                 <div className={cx(styles.settingsSectionLabel, styles.ordersLabel)}>
                   Standing orders
                 </div>

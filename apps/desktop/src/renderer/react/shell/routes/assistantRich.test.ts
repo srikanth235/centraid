@@ -36,10 +36,14 @@ describe('richAnswerHtml', () => {
   });
 
   it('renders a stat block and a chart block', () => {
-    const stat = richAnswerHtml('```block:stat\n' + JSON.stringify({ value: '42', label: 'Total' }) + '\n```');
+    const stat = richAnswerHtml(
+      '```block:stat\n' + JSON.stringify({ value: '42', label: 'Total' }) + '\n```',
+    );
     expect(stat).toContain('asstStatValue');
     const chart = richAnswerHtml(
-      '```block:chart\n' + JSON.stringify({ type: 'bar', x: ['a', 'b'], series: [{ values: [1, 2] }] }) + '\n```',
+      '```block:chart\n' +
+        JSON.stringify({ type: 'bar', x: ['a', 'b'], series: [{ values: [1, 2] }] }) +
+        '\n```',
     );
     expect(chart).toContain('asstChart');
     expect(chart).toContain('<rect');

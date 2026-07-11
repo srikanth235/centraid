@@ -169,11 +169,15 @@ export default async ({ input, ctx }) => {
     const tagsByNote = new Map();
     for (const t of tagRows) {
       if (!tagsByNote.has(t.target_id)) tagsByNote.set(t.target_id, []);
-      tagsByNote
-        .get(t.target_id)
-        .push({ tag_id: t.tag_id, concept_id: t.concept_id, label: labelByConcept.get(t.concept_id) ?? '?' });
+      tagsByNote.get(t.target_id).push({
+        tag_id: t.tag_id,
+        concept_id: t.concept_id,
+        label: labelByConcept.get(t.concept_id) ?? '?',
+      });
     }
-    const allTags = [...new Map((concepts.rows ?? []).map((c) => [c.concept_id, c.pref_label])).entries()]
+    const allTags = [
+      ...new Map((concepts.rows ?? []).map((c) => [c.concept_id, c.pref_label])).entries(),
+    ]
       .map(([concept_id, label]) => ({ concept_id, label }))
       .toSorted((a, b) => a.label.localeCompare(b.label));
 

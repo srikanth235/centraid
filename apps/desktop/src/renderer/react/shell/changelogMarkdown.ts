@@ -13,8 +13,7 @@
  * so nothing here needs the hashed class names.
  */
 
-const escapeHtml = (s: string): string =>
-  s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const escapeHtml = (s: string): string => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Inline spans: `**bold**`, `*italic*`/`_italic_`, `` `code` ``, `[t](url)`. */
 function inline(raw: string): string {

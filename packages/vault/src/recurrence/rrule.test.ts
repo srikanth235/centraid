@@ -62,7 +62,11 @@ test('expandRrule respects UNTIL', () => {
     '2026-01-01T00:00:00.000Z',
     '2026-01-10T00:00:00.000Z',
   );
-  expect(hits).toEqual(['2026-01-01T09:00:00.000Z', '2026-01-02T09:00:00.000Z', '2026-01-03T09:00:00.000Z']);
+  expect(hits).toEqual([
+    '2026-01-01T09:00:00.000Z',
+    '2026-01-02T09:00:00.000Z',
+    '2026-01-03T09:00:00.000Z',
+  ]);
 });
 
 test('expandRrule MONTHLY clamps day-of-month into shorter months', () => {
@@ -72,19 +76,34 @@ test('expandRrule MONTHLY clamps day-of-month into shorter months', () => {
     '2026-01-01T00:00:00.000Z',
     '2026-06-01T00:00:00.000Z',
   );
-  expect(hits.map((h) => h.slice(0, 10))).toEqual(['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']);
+  expect(hits.map((h) => h.slice(0, 10))).toEqual([
+    '2026-01-31',
+    '2026-02-28',
+    '2026-03-31',
+    '2026-04-30',
+  ]);
 });
 
 test('nextOccurrence finds the next hit strictly after the given date', () => {
-  const next = nextOccurrence('FREQ=WEEKLY', '2026-01-01T09:00:00.000Z', '2026-01-01T09:00:00.000Z');
+  const next = nextOccurrence(
+    'FREQ=WEEKLY',
+    '2026-01-01T09:00:00.000Z',
+    '2026-01-01T09:00:00.000Z',
+  );
   expect(next).toBe('2026-01-08T09:00:00.000Z');
 });
 
 test('nextOccurrence returns null once COUNT is exhausted', () => {
-  const next = nextOccurrence('FREQ=DAILY;COUNT=1', '2026-01-01T09:00:00.000Z', '2026-01-01T09:00:00.000Z');
+  const next = nextOccurrence(
+    'FREQ=DAILY;COUNT=1',
+    '2026-01-01T09:00:00.000Z',
+    '2026-01-01T09:00:00.000Z',
+  );
   expect(next).toBeNull();
 });
 
 test('nextOccurrence returns null for an unparseable rule', () => {
-  expect(nextOccurrence('garbage', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')).toBeNull();
+  expect(
+    nextOccurrence('garbage', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'),
+  ).toBeNull();
 });

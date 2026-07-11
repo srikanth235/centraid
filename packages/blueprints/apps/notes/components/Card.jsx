@@ -53,7 +53,9 @@ export function Card({ note, search, pending, onOpen, onTogglePin }) {
           <div className="nt-progress-track">
             <div
               className="nt-progress-bar"
-              style={{ width: `${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}%` }}
+              style={{
+                width: `${stats.total ? Math.round((stats.done / stats.total) * 100) : 0}%`,
+              }}
             />
           </div>
           <span className="nt-progress-label">

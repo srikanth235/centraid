@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
-import type { BuilderChatBridgeProps, BuilderChatSnapshot, BuilderMsgDTO } from '../screen-contracts.js';
+import type {
+  BuilderChatBridgeProps,
+  BuilderChatSnapshot,
+  BuilderMsgDTO,
+} from '../screen-contracts.js';
 import styles from './BuilderChatPane.module.css';
 import buttonCss from '../ui/Button.module.css';
 import { cx } from '../ui/cx.js';
@@ -11,21 +15,48 @@ import chatCss from '../styles/chatMessage.module.css';
 // in builder.ts), as small components so the React pane paints identically.
 function BoltGlyph(): JSX.Element {
   return (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M13 2L4 14h7l-1 8 9-12h-7l1-8z" />
     </svg>
   );
 }
 function ChevronDownGlyph(): JSX.Element {
   return (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={13}
+      height={13}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }
 function FileEditGlyph(): JSX.Element {
   return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" />
       <polyline points="14 3 14 9 20 9" />
       <path d="M18 13l3 3-5 5h-3v-3z" />
@@ -34,7 +65,16 @@ function FileEditGlyph(): JSX.Element {
 }
 function PaperclipGlyph(): JSX.Element {
   return (
-    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
     </svg>
   );
@@ -121,7 +161,11 @@ function Message({
       return (
         <div className={styles.chatStatusRow}>
           <span className={chatCss.status}>
-            {m.spinning ? <span className={chatCss.pulse} /> : <Icon name="Check" size={12} strokeWidth={2.5} />}
+            {m.spinning ? (
+              <span className={chatCss.pulse} />
+            ) : (
+              <Icon name="Check" size={12} strokeWidth={2.5} />
+            )}
             {' ' + m.text}
           </span>
         </div>
@@ -238,7 +282,11 @@ export default function BuilderChatPane({
           <Message key={i} m={m} onToggleGroup={onToggleGroup} />
         ))}
         {snap.generating && snap.progress && (
-          <div className={styles.abProgress} role="status" aria-label={`${snap.progress.verb} — running`}>
+          <div
+            className={styles.abProgress}
+            role="status"
+            aria-label={`${snap.progress.verb} — running`}
+          >
             <span className={styles.abProgressDots} aria-hidden="true">
               {[0, 1, 2, 3].map((i) => (
                 <i key={i} data-on={i < snap.progress!.filled ? 'true' : undefined} />
@@ -247,7 +295,9 @@ export default function BuilderChatPane({
             <div className={styles.abProgressMain}>
               <div className={styles.abProgressLine}>
                 <span className={styles.abProgressVerb}>{snap.progress.verb}</span>
-                {snap.progress.file && <code className={styles.abProgressFile}>{snap.progress.file}</code>}
+                {snap.progress.file && (
+                  <code className={styles.abProgressFile}>{snap.progress.file}</code>
+                )}
               </div>
               <div className={styles.abProgressSub}>{snap.progress.sub}</div>
             </div>
@@ -263,7 +313,12 @@ export default function BuilderChatPane({
             <div className={styles.promptStartersLabel}>Suggested next moves</div>
             <div className={styles.promptStarters}>
               {snap.suggestions.map((s) => (
-                <button key={s} type="button" className={styles.promptStarter} onClick={() => setDraft(s)}>
+                <button
+                  key={s}
+                  type="button"
+                  className={styles.promptStarter}
+                  onClick={() => setDraft(s)}
+                >
                   {s}
                 </button>
               ))}
@@ -284,7 +339,12 @@ export default function BuilderChatPane({
             }}
           />
           <div className={styles.chatInputControls}>
-            <button type="button" className={cx(styles.inputPill, styles.inputPillIcon)} aria-label="Attach" title="Attach">
+            <button
+              type="button"
+              className={cx(styles.inputPill, styles.inputPillIcon)}
+              aria-label="Attach"
+              title="Attach"
+            >
               <PaperclipGlyph />
             </button>
             <div className={styles.spacer} />
