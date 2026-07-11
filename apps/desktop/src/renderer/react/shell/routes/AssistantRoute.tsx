@@ -272,7 +272,7 @@ export default function AssistantRoute(): JSX.Element {
       model.disposed = true;
       model.abort?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once thread load, deliberately []
   }, []);
 
   return (

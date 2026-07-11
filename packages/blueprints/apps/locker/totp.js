@@ -112,7 +112,7 @@ export function useTotp(seed) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `tick` is the
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#339) `tick` is the
     // once-a-second re-check; the effect intentionally re-runs on every tick
     // to notice a fresh 30s step, not just when `seed` changes.
   }, [seed, tick]);

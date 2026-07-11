@@ -39,14 +39,14 @@ function Row({
             boxShadow: row.tile.boxShadow,
             color: row.tile.glyphColor,
           }}
-          // eslint-disable-next-line react/no-danger -- icon markup comes from the trusted vanilla Icon set
+          // eslint-disable-next-line react/no-danger -- (#325) icon markup comes from the trusted vanilla Icon set
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
       ) : (
         <span
           className={styles.rowIcon}
           data-accent={row.accent ? 'true' : undefined}
-          // eslint-disable-next-line react/no-danger -- icon markup comes from the trusted vanilla Icon set
+          // eslint-disable-next-line react/no-danger -- (#325) icon markup comes from the trusted vanilla Icon set
           dangerouslySetInnerHTML={{ __html: row.iconHtml }}
         />
       )}

@@ -183,7 +183,7 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
       {open ? (
         <ol className={styles.setupList}>
           {steps.map((s, i) => (
-            // eslint-disable-next-line react/no-array-index-key
+            // eslint-disable-next-line react/no-array-index-key -- (#330) static step list, no reorder/insert
             <li key={i}>{s}</li>
           ))}
         </ol>
@@ -216,7 +216,7 @@ function AddConnectionWizard({
   useEffect(() => {
     const first = provider?.connectors[0]?.kind ?? '';
     setConnectorKind(first);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) intentionally re-seeds only on providerId change
   }, [providerId]);
   useEffect(() => {
     if (provider && connector) {
@@ -225,7 +225,7 @@ function AddConnectionWizard({
         provider.connectors.length > 1 ? `${providerName} · ${connectorLabel(connector.kind)}` : providerName,
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) intentionally re-seeds only on providerId/connectorKind change
   }, [providerId, connectorKind]);
 
   if (!provider || !connector) {
@@ -377,7 +377,7 @@ export default function SettingsConnectionsScreen({
         .then(setRows)
         .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) refresh() identity is meant to track loadConnections only
     [loadConnections],
   );
 
@@ -386,7 +386,7 @@ export default function SettingsConnectionsScreen({
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) refresh() is stable via useMemo, re-run only on loadConnections
   }, [loadConnections]);
 
   const openWizard = (): void => {

@@ -132,7 +132,7 @@ export function PanelBody({ asset, albums: albumList, setInfoRef, refresh, onClo
     // confirm/reject loop. Loaded async so an empty vault costs nothing; the
     // section only appears when regions exist.
     renderFaces(facesHostRef.current, asset.asset_id, noteRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- this component
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#332) this component
     // remounts fresh on every renderLightbox() call (keyed by renderSeq), so
     // "run once per mount" already means "run once per asset+refresh pass".
   }, []);

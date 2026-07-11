@@ -88,7 +88,7 @@ export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps):
     if (focusQuery) setQuery(focusQuery.text);
     // Only the nonce identifies a fresh jump request — a repeat click with
     // the same text still needs to reapply (and re-focus the search box).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#350) nonce-only dep is intentional, see comment above
   }, [focusQuery?.nonce]);
 
   // The stream's resume cursor + the follow flag live in refs so the

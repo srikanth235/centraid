@@ -110,7 +110,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) listener re-bound only on chatEligible, toggleChat is stable
   }, [chatEligible]);
 
   const finish = window.CentraidTokens.tileFinish(vm.projColor, 'gradient');

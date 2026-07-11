@@ -240,7 +240,7 @@ export function Editor({
   useEffect(() => {
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#336) mount-once flush registration, deliberately []
   }, []);
 
   useEffect(() => {

@@ -112,7 +112,7 @@ export default function BuilderPreview({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) re-resolve only on appId/device/reloadNonce
   }, [appId, device, reloadNonce]);
 
   if (!resolved) {

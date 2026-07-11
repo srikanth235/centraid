@@ -143,7 +143,7 @@ export default function App(): JSX.Element {
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeVaultSwitcher();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once shim/listener wiring, deliberately []
   }, []);
 
   // Auto-open "What's new" once per version, matching Claude Code. On boot,

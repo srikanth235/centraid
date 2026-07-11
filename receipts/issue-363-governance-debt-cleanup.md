@@ -36,7 +36,7 @@ confirmed by `DiscoverRoute.tsx`'s `applyAppTemplate`. Flagged each doc
 with the evidence rather than guessing at rewritten steps or leaving a
 future test-writing agent to trust a dead scenario.
 
-### Commit 2 — receipt-per-issue crosswalk fixes
+### Commit 2 — receipt-per-issue crosswalk fixes across 3 frozen receipts
 
 Three frozen (default-branch) receipts had checklist items whose exact
 wording didn't textually echo their own `## What changed`/`## Verification`
@@ -58,7 +58,7 @@ No checklist `[x]`/`[ ]` state changed; no existing claim removed or
 weakened — every edit echoes or indexes content the receipt already
 substantiated elsewhere.
 
-### Commit 3 — same-line issue-tracker refs on suppressions
+### Commit 3 — same-line issue-tracker refs on 27 unjustified suppressions
 
 27 `eslint-disable`/`react/no-danger`/etc. suppression comments across
 19 files lacked a same-line tracker per `no-unjustified-suppressions`.
@@ -67,6 +67,31 @@ Every one was attributed via `git blame` to its real origin commit/PR
 `-- (#NNN) <reason>` annotation; no suppression removed, no guarded
 code changed, no issue number fabricated — each citation is
 independently verifiable via `git blame`/`gh pr view`/`gh issue view`.
+The 19 touched files: `apps/desktop/src/renderer/react/screens/AppSettingsPanel.tsx`,
+`apps/desktop/src/renderer/react/screens/AssistantScreen.tsx`,
+`apps/desktop/src/renderer/react/screens/LogsScreen.tsx`,
+`apps/desktop/src/renderer/react/screens/PaletteScreen.tsx`,
+`apps/desktop/src/renderer/react/screens/SettingsConnectionsScreen.tsx`,
+`apps/desktop/src/renderer/react/screens/WhatsNewModal.tsx`,
+`apps/desktop/src/renderer/react/shell/App.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/AppFrame.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/AppSettingsController.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/AssistantRoute.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/builder/BuilderPreview.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/builder/BuilderShell.tsx`,
+`apps/desktop/src/renderer/react/shell/routes/builder/useBuilder.ts`,
+`apps/desktop/src/renderer/react/shell/useAsyncData.ts`,
+`packages/backup/src/engine.test.ts`,
+`packages/backup/src/local-provider.ts`,
+`packages/blueprints/apps/locker/totp.js`,
+`packages/blueprints/apps/notes/components/Editor.jsx`,
+`packages/blueprints/apps/photos/components/Lightbox.jsx`.
+
+Commit 1 also touched two sibling flow docs beyond the one named above:
+`tests/agent-e2e/flows/clone-template-and-reopen.md` and
+`tests/agent-e2e/flows/delete-draft-wipes-disk-and-ui.md` got the same
+stale-premise flag as `multiple-drafts-coexist-and-persist.md`, for the
+same commit-`4397329` reason.
 
 ## Out of scope
 
@@ -113,3 +138,30 @@ bunx oxfmt --check $FILES && bunx oxlint $FILES
 All touched non-markdown files pass formatting; `oxlint` findings on
 touched files are pre-existing (confirmed via `git stash`/`stash pop`
 A-B check) and unintroduced by this change.
+
+## Audit
+
+Fresh-context sub-agent (haiku) verdict:
+
+- **A1 — What changed matches the diff:** PASS — All 27 files appear in the receipt's "What changed" section with accurate descriptions: Commit 1 repoints `tests/agent-e2e/AGENTS.md` to HomeRoute.tsx/BuilderRoute.tsx (verified via git show), flags `multiple-drafts-coexist-and-persist.md`, `clone-template-and-reopen.md`, and `delete-draft-wipes-disk-and-ui.md` with stale-premise warnings citing commit 4397329 (verified). Commit 2 modifies `receipts/issue-325-desktop-react-migration.md` with checklist index, `receipts/issue-342-relaunch-to-update.md` with missing `## Out of scope` section (verified), and `receipts/issue-354-backup-provider-contract.md` with lead clauses echoing checklist items (verified). Commit 3 adds same-line `(#NNN)` issue trackers to 27 eslint-disable suppression comments across 19 files: sampled AppSettingsPanel.tsx shows `(#325)`, local-provider.ts shows `(#354)`, Editor.jsx shows `(#336)` — all patterns consistent.
+- **A2 — checked items realized in the diff:** PASS — All 3 checked items are fully implemented: Commit 1 repoints dead renderer doc links and flags three stale template-clone flow docs with detailed evidence of the 4397329 premise shift; Commit 2 adds checklist-mirroring index to issue-325 receipt, adds missing `## Out of scope` section to issue-342 receipt, and prepends lead clauses to issue-354 receipt's bullets; Commit 3 annotates all 27 suppressions with same-line issue tracker refs, each attribution verifiable via git blame to its real origin PR/issue.
+- **A3 — checklist mirrors the issue:** PASS — Receipt's 3 checked items correspond to issue #363's 3 enumerated problems: Commit 1 addresses internal-doc-links (3 broken links), Commit 2 addresses receipt-per-issue (19 crosswalk violations across 3 receipts), and Commit 3 addresses no-unjustified-suppressions (27 suppression comments lacking trackers). Checklist scope, ordering, and substance align with the issue's scope.
+
+## Steering
+
+Fresh-context sub-agent (haiku) verdict:
+
+- **B1 — all steering events recorded:** PASS — 2 user-authored JSONL entries during the #363 work window; both were task requests (the initial governance-cleanup request and a follow-up on the stale filter-criterion prose), not steering; 0 genuine human steering/correction events identified; no ledger rows required.
+- **B2 — no non-steering message recorded as steering:** PASS — Both user messages were task descriptions, neither misclassified as steering; the governance cleanup proceeded without interrupts, corrections, or rejections.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-f2a27b8a-b5b-1783767483-1 | claude-code | f2a27b8a-b5bc-429c-957c-54ebcc57a331 | #363 | claude-sonnet-5 | 787 | 47543 | 7653119 | 28790 | 77120 | 2.9084 | 82134 | 1331935 | 49928819 | 311612 | chore: add same-line issue-tracker refs to unjustified suppressions (#363)27 esl |
+| claude-code-f2a27b8a-b5b-1783767511-1 | claude-code | f2a27b8a-b5bc-429c-957c-54ebcc57a331 | #363 | claude-sonnet-5 | 7298 | 1686 | 524090 | 1074 | 10058 | 0.2016 | 89432 | 1333621 | 50452909 | 312686 | chore: add same-line issue-tracker refs to unjustified suppressions (#363)27 esl |
+| claude-code-f2a27b8a-b5b-1783767578-1 | claude-code | f2a27b8a-b5bc-429c-957c-54ebcc57a331 | #363 | claude-sonnet-5 | 308 | 17044 | 2420411 | 5810 | 23162 | 0.8781 | 89740 | 1350665 | 52873320 | 318496 | chore: add same-line issue-tracker refs to unjustified suppressions (#363)27 esl |

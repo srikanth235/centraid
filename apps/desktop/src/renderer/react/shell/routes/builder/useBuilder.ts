@@ -397,7 +397,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
       }
     }
     bump();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once load, deliberately []
   }, []);
 
   const handleToggleEnabled = useCallback(async (): Promise<void> => {
@@ -549,7 +549,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
     return () => {
       agentAbort.current?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once chat kickoff, deliberately []
   }, []);
 
   // ── View actions ──────────────────────────────────────────────────────────

@@ -58,7 +58,7 @@ function ReleaseSection({
       {notesHtml ? (
         <div
           className={styles.notes}
-          // eslint-disable-next-line react/no-danger -- notes are HTML-escaped in changelogNotesToHtml; only our own tags are emitted
+          // eslint-disable-next-line react/no-danger -- (#348) notes are HTML-escaped in changelogNotesToHtml; only our own tags are emitted
           dangerouslySetInnerHTML={{ __html: notesHtml }}
         />
       ) : (

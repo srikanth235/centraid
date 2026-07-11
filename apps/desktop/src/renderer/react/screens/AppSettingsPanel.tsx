@@ -258,7 +258,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
           <span
             className={styles.settingsIcon}
             style={iconStyle}
-            // eslint-disable-next-line react/no-danger -- trusted glyph SVG from the vanilla icon set
+            // eslint-disable-next-line react/no-danger -- (#325) trusted glyph SVG from the vanilla icon set
             dangerouslySetInnerHTML={{ __html: snap.iconSvg }}
           />
           <div className={styles.settingsHeaderText}>
@@ -295,7 +295,7 @@ export default function AppSettingsPanel(props: AppSettingsBridgeProps): JSX.Ele
                 >
                   <span
                     className={styles.settingsTabGlyph}
-                    // eslint-disable-next-line react/no-danger -- static inline glyph
+                    // eslint-disable-next-line react/no-danger -- (#325) static inline glyph
                     dangerouslySetInnerHTML={{ __html: TAB_GLYPH[t.id] }}
                   />
                   <span className={styles.settingsTabLabel}>{t.label}</span>
