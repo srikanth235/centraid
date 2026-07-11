@@ -5,8 +5,8 @@
 // `packages/design-tokens/wall.css` → `kit/wall.css` byte-verbatim, so the
 // kit can serve both as shared assets (see SHARED_ASSET_FILES in
 // packages/app-engine/src/http/static-server.ts) the same way it already
-// serves kit.js/kit.css/elements.js/lit-core.min.js/react-core.min.js
-// (vendor-lit.mjs, vendor-react.mjs). An app folder with its own local copy
+// serves kit.js/kit.css/elements.js/react-core.min.js
+// (vendor-react.mjs). An app folder with its own local copy
 // of either file still wins over the shared one (app-folder precedence in
 // serveStatic) — this is what preserves e.g. apps/people/wall.css's
 // deliberate light-branch override.

@@ -110,12 +110,14 @@ describe('React + kit custom elements coexist in one tree', () => {
     // React 19 sets `name` as a JS *property* on the custom element instance
     // (host.name === 'Ada Lovelace'), not merely as an HTML attribute —
     // custom-element props whose key already exists on the element instance
-    // (kit-avatar's Lit `static properties` accessor defines `name` on the
-    // prototype) are assigned via property set, same as DOM-known props like
-    // `value` on <input>. Lit's own attribute reflection is a secondary path
-    // here: it doesn't matter which carried the value in this case because
-    // the property accessor is what actually re-renders the element, and
-    // React went through the property setter directly.
+    // (kit-avatar's `static properties` manifest has elements.js install a
+    // `name` accessor on the prototype, former-Lit-shaped but now vanilla —
+    // see elements.js's REACTIVITY CONTRACT header) are assigned via property
+    // set, same as DOM-known props like `value` on <input>. Attribute
+    // reflection is a secondary path here: it doesn't matter which carried
+    // the value in this case because the property accessor is what actually
+    // re-renders the element, and React went through the property setter
+    // directly.
     expect(host.name).toBe('Ada Lovelace');
 
     const span = host.querySelector('.kit-avatar');

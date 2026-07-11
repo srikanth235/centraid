@@ -1,7 +1,6 @@
 // Regenerates `kit/react-core.min.js` — the runtime-only React bundle the kit
 // serves so builder-generated apps can be written in React with NO build
-// step, mirroring how `vendor-lit.mjs` vendors Lit for the kit's native Web
-// Components (issue #327). The kit is served as-is, so it needs React as a
+// step. The kit is served as-is, so it needs React as a
 // single self-contained, browser-loadable ESM file rather than the npm
 // packages' bare-specifier module graph (`react`, `react-dom/client`,
 // `react-dom`, `react/jsx-runtime` all resolve to separate CJS files that
@@ -10,7 +9,7 @@
 // workspace-pinned `react` / `react-dom` devDependencies (see
 // packages/blueprints/package.json), in production mode (dev-mode warnings
 // stripped by dead-code elimination once `process.env.NODE_ENV` is inlined —
-// unlike Lit, React's package.json has no dedicated "production" export
+// React's package.json has no dedicated "production" export
 // condition, so the NODE_ENV env var at build time is what actually matters).
 // Run it after bumping the `react` / `react-dom` versions:
 //

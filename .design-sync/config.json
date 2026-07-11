@@ -4,7 +4,6 @@
   "buildCmd": "node .design-sync/ds-src/build.mjs",
   "manifest": ".design-sync/ds-src/manifest.json",
   "source": ".design-sync/ds-src/components/elements.js",
-  "runtime": ".design-sync/ds-src/components/lit-core.min.js",
   "previews": ".design-sync/ds-src/previews",
   "cssEntry": "styles/bundle.css",
   "readmeHeader": ".design-sync/conventions.md"
