@@ -75,7 +75,17 @@ export function LockerList({
       </div>
       <div className="v-items">
         {pool.length === 0 ? (
-          <div className="v-list-empty">{search.trim() ? 'No matches.' : 'Nothing here.'}</div>
+          <div className="v-list-empty">
+            <div className="ic">
+              <Icon name={search.trim() ? 'search' : 'lock'} sw={1.6} size={20} />
+            </div>
+            <div className="v-list-empty-title">{search.trim() ? 'No matches' : 'Nothing here'}</div>
+            <div className="v-list-empty-sub">
+              {search.trim()
+                ? 'Try a different search term.'
+                : 'Add a login, card, or note to get started.'}
+            </div>
+          </div>
         ) : (
           pool.map((item) => (
             <ListRow key={item.item_id} item={item} selectedId={selectedId} onSelect={onSelect} />
