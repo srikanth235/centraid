@@ -103,3 +103,37 @@ test('an emptied vault map is dropped, not persisted empty', () => {
   );
   expect(next.activeVaultByGateway).toBeUndefined();
 });
+
+test('gateway alert fields preserve-or-set, clamping the threshold on write', () => {
+  // Unrelated save carries both fields through.
+  const carried = mergePersistedSettings(
+    { activeGatewayId: 'local', gatewayAlertSeconds: 300, gatewayAlertsEnabled: false },
+    { chatModelByRunner: { codex: 'gpt-5.5' } },
+  );
+  expect(carried.gatewayAlertSeconds).toBe(300);
+  expect(carried.gatewayAlertsEnabled).toBe(false);
+
+  // A patch sets them; out-of-range thresholds clamp to [15, 3600].
+  const set = mergePersistedSettings(
+    { activeGatewayId: 'local' },
+    { gatewayAlertSeconds: 5, gatewayAlertsEnabled: true },
+  );
+  expect(set.gatewayAlertSeconds).toBe(15);
+  expect(set.gatewayAlertsEnabled).toBe(true);
+  expect(
+    mergePersistedSettings({ activeGatewayId: 'local' }, { gatewayAlertSeconds: 99_999 })
+      .gatewayAlertSeconds,
+  ).toBe(3600);
+
+  // A garbage threshold falls back to the current value.
+  const garbage = mergePersistedSettings(
+    { activeGatewayId: 'local', gatewayAlertSeconds: 120 },
+    { gatewayAlertSeconds: Number.NaN },
+  );
+  expect(garbage.gatewayAlertSeconds).toBe(120);
+
+  // Absent everywhere → the fields are dropped, not persisted as defaults.
+  const absent = mergePersistedSettings({ activeGatewayId: 'local' }, {});
+  expect(absent.gatewayAlertSeconds).toBeUndefined();
+  expect(absent.gatewayAlertsEnabled).toBeUndefined();
+});
