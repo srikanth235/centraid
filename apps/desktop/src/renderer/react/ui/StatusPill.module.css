@@ -23,6 +23,10 @@
 .status[data-tone='live'] {
   color: var(--success);
 }
+/* Gateway heartbeat pill (sidebar): unreachable. */
+.status[data-tone='down'] {
+  color: var(--danger);
+}
 /* Tighter tracking for dense contexts (card footers). */
 .tight {
   letter-spacing: 0.06em;

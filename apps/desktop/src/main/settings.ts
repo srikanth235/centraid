@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { clampAlertSeconds } from './gateway-monitor-core.js';
 import { gatewayTemplatesCacheDir, LOCAL_GATEWAY_ID } from './gateway-paths.js';
 import { ensureLocalGateway, listGateways, resolveGateway } from './gateway-store.js';
 import { mergePersistedSettings } from './settings-merge.js';
@@ -62,6 +63,15 @@ export interface PersistedSettings {
    * the auto-created placeholder to ever read as "user has personalized".
    */
   onboardingCompletedAt?: string;
+  /**
+   * Gateway down-alert threshold in seconds (gateway-monitor.ts): notify
+   * once the active gateway has been continuously unreachable this long.
+   * Absent → {@link DEFAULT_ALERT_SECONDS} (2 minutes). Clamped to
+   * [MIN_ALERT_SECONDS, MAX_ALERT_SECONDS] on read and write.
+   */
+  gatewayAlertSeconds?: number;
+  /** Master switch for the gateway down alert. Absent → enabled. */
+  gatewayAlertsEnabled?: boolean;
 }
 
 export interface DesktopSettings {
@@ -116,6 +126,10 @@ export interface DesktopSettings {
    * before home.
    */
   onboardingCompletedAt?: string;
+  /** Gateway down-alert threshold in seconds (absent → 2-minute default). */
+  gatewayAlertSeconds?: number;
+  /** Master switch for the gateway down alert (absent → enabled). */
+  gatewayAlertsEnabled?: boolean;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -169,6 +183,13 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     ...sanitizeVaultMap(raw.activeVaultByGateway),
     ...(typeof raw.onboardingCompletedAt === 'string'
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
+      : {}),
+    ...(() => {
+      const clamped = clampAlertSeconds(raw.gatewayAlertSeconds);
+      return clamped !== undefined ? { gatewayAlertSeconds: clamped } : {};
+    })(),
+    ...(typeof raw.gatewayAlertsEnabled === 'boolean'
+      ? { gatewayAlertsEnabled: raw.gatewayAlertsEnabled }
       : {}),
   };
 }
@@ -258,6 +279,10 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     ...(p.chatModelByRunner !== undefined ? { chatModelByRunner: p.chatModelByRunner } : {}),
     ...(p.onboardingCompletedAt !== undefined
       ? { onboardingCompletedAt: p.onboardingCompletedAt }
+      : {}),
+    ...(p.gatewayAlertSeconds !== undefined ? { gatewayAlertSeconds: p.gatewayAlertSeconds } : {}),
+    ...(p.gatewayAlertsEnabled !== undefined
+      ? { gatewayAlertsEnabled: p.gatewayAlertsEnabled }
       : {}),
   };
 }

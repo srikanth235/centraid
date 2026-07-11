@@ -17,6 +17,7 @@ import {
   updateProfileMetadata,
   type GatewayProfile,
 } from './gateway-store.js';
+import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
@@ -28,6 +29,7 @@ import {
   phoneLinkStatus,
   revokePhoneDevice,
 } from './phone-link.js';
+import { getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -97,6 +99,13 @@ export const Channel = {
   // the single point where it crosses to the renderer.
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
+  // Gateway runtime watch (gateway-monitor.ts): main polls the active
+  // gateway's `/_gateway/info` heartbeat, keeps the per-launch sample/outage
+  // history, and fires the OS down-alert. GET serves the latest snapshot;
+  // EVENT pushes one per poll so the Gateway page live-updates.
+  GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
+  GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
+
   // Phone link (issue #263): the iroh tunnel that lets the mobile app reach
   // this desktop's loopback gateway from anywhere. Pairing is a one-time
   // QR code; paired devices are EndpointId-keyed and revocable.
@@ -105,6 +114,13 @@ export const Channel = {
   PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
   PHONE_REVOKE: 'centraid:phone:revoke',
   PHONE_PAIRED: 'centraid:phone:paired',
+
+  // Relaunch-to-update: the dist watcher (main/update-watcher.ts) notices a
+  // new build on disk and broadcasts UPDATE_AVAILABLE (channel string owned
+  // by that module); the sidebar pill reads the snapshot and triggers the
+  // relaunch through these two.
+  UPDATE_STATUS: 'centraid:update:status',
+  UPDATE_RELAUNCH: 'centraid:update:relaunch',
 
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
@@ -198,6 +214,9 @@ export function registerIpcHandlers(): void {
     // live in the gateway store), but the active gateway pointer can
     // change through here — invalidate caches the same way.
     await invalidateGatewayCaches();
+    // Alert-threshold/toggle changes ride this surface too — re-broadcast
+    // the runtime snapshot now so the Gateway page reflects them instantly.
+    nudgeGatewayMonitor();
     return next;
   });
 
@@ -327,6 +346,9 @@ export function registerIpcHandlers(): void {
       );
       await invalidateGatewayCaches();
       broadcastGatewayChanged(next);
+      // Reset runtime tracking against the new gateway immediately (the
+      // monitor re-keys on activeGatewayId per tick; don't wait one out).
+      nudgeGatewayMonitor();
       return next;
     },
   );
@@ -449,6 +471,11 @@ export function registerIpcHandlers(): void {
   // bearer token for the renderer's direct HTTP client. The token lives
   // in keychain-backed settings; this is the only path it crosses to the
   // renderer, and it's re-fetched whenever the active gateway flips.
+  // Latest gateway-runtime snapshot (heartbeat status + sample strip +
+  // outage log + alert config). Pushed on every poll via
+  // GATEWAY_RUNTIME_EVENT; this read covers the first paint.
+  ipcMain.handle(Channel.GATEWAY_RUNTIME_GET, async () => getGatewayRuntimeSnapshot());
+
   ipcMain.handle(
     Channel.GATEWAY_AUTH_GET,
     async (): Promise<{ baseUrl: string; token?: string; vaultId?: string }> => {
@@ -483,6 +510,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PHONE_REVOKE, async (_e, input: { deviceId: string }) => {
     const removed = revokePhoneDevice(input.deviceId);
     return { removed: Boolean(removed) };
+  });
+
+  // ----- Relaunch to update -----
+  // Status snapshot for windows that mount after the UPDATE_AVAILABLE
+  // broadcast; relaunch restarts the process so it loads the new dist.
+  ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
+  ipcMain.handle(Channel.UPDATE_RELAUNCH, async () => {
+    relaunchToUpdate();
+    return { ok: true as const };
   });
 
   // ----- Templates -----

@@ -1,0 +1,163 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Live/reconnecting status — same three-state dot read as the
+   Connections rows, at toolbar scale. */
+.statusDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--log-status, var(--ink-3));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--log-status, var(--ink-3)) 16%, transparent);
+}
+.statusDot[data-status='live'] {
+  --log-status: var(--success);
+}
+.statusDot[data-status='connecting'],
+.statusDot[data-status='reconnecting'] {
+  --log-status: var(--icon-amber);
+}
+.statusLabel {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--log-status, var(--ink-3));
+}
+.statusLabel[data-status='live'] {
+  --log-status: var(--success);
+}
+.statusLabel[data-status='connecting'],
+.statusLabel[data-status='reconnecting'] {
+  --log-status: var(--icon-amber);
+}
+.countLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-right: auto;
+}
+
+.filters {
+  display: inline-flex;
+  gap: 6px;
+}
+.chipActive {
+  background: color-mix(in oklab, var(--ink) 10%, transparent);
+  color: var(--ink);
+  border-color: transparent;
+}
+
+.search {
+  width: 180px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  outline: none;
+}
+.search:focus {
+  border-color: color-mix(in oklab, var(--ink) 30%, transparent);
+}
+.search::placeholder {
+  color: var(--ink-3);
+}
+
+.logPanel {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+/* The settings content column is the page scroller; the log panel keeps
+   its own inner scroll region so "follow" pins to the newest line
+   without fighting the outer scroller. */
+.logScroll {
+  height: min(58vh, 640px);
+  overflow-y: auto;
+  padding: 10px 0;
+}
+
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 2px 14px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+.line[data-level='error'] {
+  background: color-mix(in oklab, var(--danger) 7%, transparent);
+}
+.line[data-level='warn'] {
+  background: color-mix(in oklab, var(--icon-amber) 6%, transparent);
+}
+.lineTime {
+  flex: none;
+  color: var(--ink-3);
+}
+.lineLevel {
+  flex: none;
+  width: 44px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.lineLevel[data-level='warn'] {
+  color: var(--icon-amber);
+}
+.lineLevel[data-level='error'] {
+  color: var(--danger);
+}
+.lineMsg {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.line[data-level='error'] .lineMsg {
+  color: var(--ink);
+}
+
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.jumpBtn {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+.jumpBtn:hover {
+  background: color-mix(in oklab, var(--ink) 8%, var(--bg-elev));
+}

@@ -6,7 +6,10 @@
  * gateway: software version + schema epoch (exact-match or refuse in v0)
  * and, for device-scoped transports, which vaults the calling device may
  * address (the composed handler already resolved that; this route is behind
- * it). Static JSON — health polling hits it every few seconds.
+ * it). Health polling hits it every few seconds, so it also carries the
+ * server-reported runtime clock (`startedAt` / `uptimeMs`) — the desktop's
+ * gateway-runtime page trusts the gateway's own account of how long it has
+ * been up rather than inferring it from probe history.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -17,6 +20,9 @@ import { sendJson } from './route-helpers.js';
 const INFO_PATH = '/centraid/_gateway/info';
 
 export function makeGatewayInfoRouteHandler(): RouteHandler {
+  // The factory runs once inside buildGateway, so this IS process start
+  // for the serving gateway.
+  const startedAt = Date.now();
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = new URL(req.url ?? '/', 'http://gateway.local');
     if (url.pathname !== INFO_PATH) return false;
@@ -26,6 +32,8 @@ export function makeGatewayInfoRouteHandler(): RouteHandler {
     return sendJson(res, 200, {
       version: GATEWAY_VERSION,
       schemaEpoch: GATEWAY_SCHEMA_EPOCH,
+      startedAt,
+      uptimeMs: Date.now() - startedAt,
     });
   };
 }

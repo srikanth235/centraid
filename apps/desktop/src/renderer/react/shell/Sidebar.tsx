@@ -1,9 +1,11 @@
 import type { JSX, ReactNode } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import Icon from '../ui/Icon.js';
+import Logo from '../ui/Logo.js';
 import StatusPill from '../ui/StatusPill.js';
 import chrome from './chrome.module.css';
 import {
+  ArrowRightGlyph,
   HomeGlyph,
   PlusGlyph,
   SearchGlyph,
@@ -34,6 +36,7 @@ export type SidebarPage =
   | 'starred'
   | 'automations'
   | 'approvals'
+  | 'gateway'
   | 'settings';
 
 export interface SidebarApp {
@@ -63,9 +66,19 @@ export interface SidebarProps {
   onApprovals?: () => void;
   /** Count badge next to "Approvals" — omitted (no live count source yet) shows no badge. */
   approvalsCount?: number;
+  onGateway?: () => void;
+  /** Live heartbeat status pill next to "Gateway" — omitted shows no pill. */
+  gatewayStatus?: 'up' | 'down' | 'unknown';
   onAppClick: (id: string) => void;
   onAppContext?: (id: string, anchor: ShellMenuAnchor) => void;
   onSettings: () => void;
+  /**
+   * A newer build is on disk (main's dist watcher): the version a relaunch
+   * would load. Set alongside onRelaunchToUpdate to show the pill above
+   * Settings; omitted = no update, no pill.
+   */
+  updateVersion?: string;
+  onRelaunchToUpdate?: () => void;
 }
 
 function SbItem(props: {
@@ -102,12 +115,7 @@ function SbSection({ label, onAction }: { label: string; onAction?: () => void }
       <span>{label}</span>
       {onAction ? (
         <span className={chrome.sbSectionActions}>
-          <button
-            className={chrome.sbSectionBtn}
-            type="button"
-            aria-label="Add"
-            onClick={onAction}
-          >
+          <button className={chrome.sbSectionBtn} type="button" aria-label="Add" onClick={onAction}>
             <PlusGlyph />
           </button>
         </span>
@@ -232,6 +240,20 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         disabled={!props.onApprovals}
         onClick={props.onApprovals}
       />
+      <SbItem
+        icon={<Icon name="Cellular" size={15} />}
+        label="Gateway"
+        active={props.activePage === 'gateway'}
+        disabled={!props.onGateway}
+        onClick={props.onGateway}
+        trailing={
+          props.gatewayStatus && props.gatewayStatus !== 'unknown' ? (
+            <StatusPill tone={props.gatewayStatus === 'up' ? 'live' : 'down'}>
+              {props.gatewayStatus}
+            </StatusPill>
+          ) : undefined
+        }
+      />
 
       <SbSection label={`Apps · ${appList.length}`} onAction={props.onNewApp} />
       {appList.length > 0 ? (
@@ -252,6 +274,16 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       <SbItem icon={<SparkleGlyph />} label="No saved chats yet" disabled />
 
       <span style={{ flex: '1', minHeight: '12px' }} />
+      {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
+        <button className={chrome.sbUpdate} type="button" onClick={props.onRelaunchToUpdate}>
+          <Logo size={26} />
+          <span className={chrome.sbUpdateBody}>
+            <span className={chrome.sbUpdateTitle}>Relaunch to update</span>
+            <span className={chrome.sbUpdateVersion}>v{props.updateVersion}</span>
+          </span>
+          <ArrowRightGlyph />
+        </button>
+      ) : null}
       <SbItem
         icon={<SettingsGlyph />}
         label="Settings"
