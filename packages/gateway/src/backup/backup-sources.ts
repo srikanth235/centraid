@@ -10,7 +10,7 @@
 import { existsSync } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { sealKeyFileFor, stageVaultDbs } from '@centraid/vault';
+import { readSealKeyFingerprint, sealKeyFileFor, stageVaultDbs } from '@centraid/vault';
 import type { EngineLogger, SourceEntry } from '@centraid/backup';
 import { GitError, run } from '../worktree-store/git.js';
 import type { VaultPlane } from '../serve/vault-plane.js';
@@ -75,8 +75,26 @@ async function bundleCodeStore(
   }
 }
 
-/** The vault's sealed-columns DEK file (`keys/<vaultId>.sealkey`, sibling of the vault dir). */
+/**
+ * The vault's sealed-columns DEK file (`keys/<vaultId>.sealkey`, sibling of
+ * the vault dir) — included ONLY when this vault has actually sealed a
+ * value.
+ *
+ * `openVaultDb` (`resolveSealKey`) mints the key FILE eagerly on every
+ * on-disk vault's first open, whether or not anything is ever sealed — so
+ * `existsSync(keyFile)` alone is true for essentially every real vault and
+ * does not mean "this vault has secrets" (a bug caught while writing this
+ * module's first real test, `backup-sources.test.ts`). The vault only
+ * STAMPS a fingerprint into `core_vault.settings_json` the first time it
+ * seals something (`stampSealKeyFingerprint`, schema/sealed.ts) — that
+ * stamp, not raw file existence, is "has this vault ever sealed a value",
+ * matching this function's doc comment and FORMAT.md's framing ("a snapshot
+ * without it restores sealed columns as permanent ciphertext"). Backing up
+ * an unused, never-referenced key file needlessly widens what a snapshot
+ * carries, so we gate on the stamp.
+ */
 function sealKeyEntry(plane: VaultPlane): SourceEntry | undefined {
+  if (readSealKeyFingerprint(plane.db.vault) === null) return undefined;
   const keyFile = sealKeyFileFor(plane.dir);
   if (!existsSync(keyFile)) return undefined;
   return { path: 'seal.key', kind: 'seal-key', absolutePath: keyFile };

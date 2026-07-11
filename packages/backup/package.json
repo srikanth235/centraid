@@ -16,6 +16,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "test": "vitest run",
+    "test:interop": "CLAWGNITION_INTEROP=1 vitest run src/interop-clawgnition.test.ts",
     "clean": "rm -rf dist"
   },
   "devDependencies": {
