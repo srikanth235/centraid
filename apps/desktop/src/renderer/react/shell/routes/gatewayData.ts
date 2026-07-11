@@ -75,7 +75,7 @@ export function buildOutageRows(snapshot: GatewayRuntimeSnapshot, now: number): 
     return {
       id: `outage-${o.startedAt}`,
       startedLabel: formatClock(o.startedAt),
-      durationLabel: formatDuration((ongoing ? now : o.endedAt ?? now) - o.startedAt),
+      durationLabel: formatDuration((ongoing ? now : (o.endedAt ?? now)) - o.startedAt),
       ongoing,
       alerted: o.alertedAt !== undefined,
     };
@@ -97,4 +97,22 @@ export function thresholdLabel(seconds: number): string {
   const preset = ALERT_PRESETS.find((p) => p.seconds === seconds);
   if (preset) return preset.label;
   return seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`;
+}
+
+/** The Overview orb's status once the heartbeat and component-health probes
+ *  are merged — the reorg's fix for the two checks silently disagreeing
+ *  (heartbeat says "up" while a component says "error"). */
+export type ReconciledStatus = 'up' | 'degraded' | 'down' | 'unknown';
+
+/** Heartbeat wins when the process itself is down or hasn't answered yet —
+ *  component health can't be trusted if we can't reach the gateway at all.
+ *  Only once the heartbeat is up does a non-`ok` component pull the overall
+ *  status down to `degraded`. */
+export function reconcileStatus(
+  heartbeat: GatewayRuntimeSnapshot['status'],
+  health: { status: 'ok' | 'degraded' | 'error' } | null | undefined,
+): ReconciledStatus {
+  if (heartbeat !== 'up') return heartbeat;
+  if (!health || health.status === 'ok') return 'up';
+  return 'degraded';
 }
