@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
 import { type JSX, useMemo, useState } from 'react';
 import Icon from '../ui/Icon.js';
 import Button from '../ui/Button.js';
@@ -347,6 +348,8 @@ function parkedKindBadge(kind: ApprovalsParkedRowDTO['callerKind']): JSX.Element
       return <KindBadge kind="automation">Automation</KindBadge>;
     case 'assistant':
       return <KindBadge kind="assistant">Assistant</KindBadge>;
+    case 'owner-device':
+      return null;
     default:
       return null;
   }

@@ -251,6 +251,17 @@ export default function AssistantRoute(): JSX.Element {
           push();
           break;
         }
+        case 'assistant.start':
+        case 'reasoning.delta':
+        case 'phase':
+        case 'aborted':
+        case 'usage':
+        case 'webhooks':
+          // No UI surface for these yet (start/phase/usage are informational,
+          // reasoning traces aren't rendered, webhook minting is a builder-chat
+          // concern handled elsewhere). The outer stream's `finally` already
+          // clears the streaming indicator regardless of how the turn ends.
+          break;
       }
     };
 

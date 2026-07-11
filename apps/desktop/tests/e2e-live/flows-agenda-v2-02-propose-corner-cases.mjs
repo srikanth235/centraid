@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Agenda v2 QA Suite 2: regular propose flow + view rendering, plus corner
 // cases -- all-day, overnight-spanning, long/emoji/special-char titles,
 // past events, same-calendar AND cross-calendar overlap/conflict handling,
@@ -15,7 +16,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { launchApp, navTo } from './driver.mjs';
+import { launchApp } from './driver.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out', 'agenda-v2');

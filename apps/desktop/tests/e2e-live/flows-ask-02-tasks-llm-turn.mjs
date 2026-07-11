@@ -16,10 +16,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-ask-02');
 
-function assert(cond, msg) {
-  if (!cond) throw new Error(`assertion failed: ${msg}`);
-}
-
 let page;
 const consoleMessages = [];
 function wireConsole(p) {

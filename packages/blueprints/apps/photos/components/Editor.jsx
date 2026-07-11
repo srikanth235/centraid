@@ -76,13 +76,13 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot load; the rotation-driven redraw is the effect below
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) one-shot load; the rotation-driven redraw is the effect below
   }, []);
 
   useEffect(() => {
     draw();
     setCrop(null); // a rectangle drawn against the OLD orientation no longer lines up
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw() closes over the current rotation/refs each render
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) draw() closes over the current rotation/refs each render
   }, [rotation]);
 
   function fractionAt(e) {

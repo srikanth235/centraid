@@ -112,7 +112,7 @@ async function main() {
           assert(!errorToast, `error toast visible on ${s.label}`);
           // Body should not be visually empty: check the main content area has
           // some rendered text/height beyond the sidebar.
-          const bodyText = await page.locator('body').innerText();
+          const bodyText = await page.locator('body').textContent();
           assert(bodyText.trim().length > 20, `page looks empty on ${s.label}`);
           await shot(`screen-${s.label.toLowerCase()}`);
         },
@@ -188,6 +188,7 @@ async function main() {
         const windowState = await page
           .locator('[data-sidebar]')
           .first()
+          // oxlint-disable-next-line unicorn/prefer-dom-node-dataset -- (#363) this is a Playwright Locator, not a DOM node; Locator has no .dataset
           .getAttribute('data-sidebar')
           .catch(() => null);
         console.log(`[chrome] data-sidebar after collapse: ${windowState}`);
@@ -201,6 +202,7 @@ async function main() {
         const windowState2 = await page
           .locator('[data-sidebar]')
           .first()
+          // oxlint-disable-next-line unicorn/prefer-dom-node-dataset -- (#363) this is a Playwright Locator, not a DOM node; Locator has no .dataset
           .getAttribute('data-sidebar')
           .catch(() => null);
         console.log(`[chrome] data-sidebar after expand: ${windowState2}`);

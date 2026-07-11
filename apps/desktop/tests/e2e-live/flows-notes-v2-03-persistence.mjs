@@ -204,7 +204,7 @@ async function main() {
       'Fully close and relaunch the app with the same userDataDir',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 600));
+        await new Promise((resolve) => setTimeout(resolve, 600));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

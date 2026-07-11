@@ -121,9 +121,6 @@ async function main() {
         );
 
         // 2) Inside the app iframe's own document, same check.
-        const appFrame = page
-          .frames()
-          .find((f) => f.url().includes('notes') || f !== page.mainFrame());
         const frameOverflow = await frame.locator('body').evaluate(() => {
           const de = document.documentElement;
           return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };

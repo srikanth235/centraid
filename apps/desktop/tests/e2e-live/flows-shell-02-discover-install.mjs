@@ -222,7 +222,7 @@ async function main() {
       'Corner case: relaunch (same userDataDir) -> Notes still installed with note persisted',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

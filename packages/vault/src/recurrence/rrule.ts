@@ -44,13 +44,13 @@ export function parseRrule(rrule: string): ParsedRrule | null {
 }
 
 function addDays(d: Date, n: number): Date {
-  const next = new Date(d.getTime());
+  const next = new Date(d);
   next.setUTCDate(next.getUTCDate() + n);
   return next;
 }
 
 function addMonths(d: Date, n: number): Date {
-  const next = new Date(d.getTime());
+  const next = new Date(d);
   const day = next.getUTCDate();
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);

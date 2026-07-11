@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) blueprint apps ship a single app.jsx entry per the kit's convention (see sibling docs/photos/tally); splitting would break the served-as-one-module contract static-server.ts assumes
 // People — your circle, remembered. A pure projection over the personal
 // vault. Every row is a core.party; circles are collections, cadence and
 // stars are judgments the vault holds, notes/tasks/gifts/debts/dates hang

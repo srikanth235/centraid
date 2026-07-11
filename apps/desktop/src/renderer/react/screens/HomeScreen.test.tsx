@@ -115,7 +115,7 @@ describe('HomeScreen', () => {
     expect(send.disabled).toBe(true);
     typeInto(el.querySelector('.composerInput') as HTMLTextAreaElement, 'a todo app');
     expect((el.querySelector('.composerSend') as HTMLButtonElement).disabled).toBe(false);
-    act(() =>
+    void act(() =>
       (el.querySelector('.composerSend') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -127,11 +127,11 @@ describe('HomeScreen', () => {
     const props = makeProps();
     const el = mount(props);
     const cards = [...el.querySelectorAll('.card[data-kind="app"]')] as HTMLButtonElement[];
-    act(() => cards[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => cards[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onOpenApp).toHaveBeenCalledWith('todos');
-    act(() => cards[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => cards[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onEnterDraft).toHaveBeenCalledWith('draft1');
-    act(() =>
+    void act(() =>
       cards[0]?.dispatchEvent(
         new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 6 }),
       ),
@@ -144,13 +144,13 @@ describe('HomeScreen', () => {
     const autoTab = [...el.querySelectorAll('.discSegB')].find(
       (b) => (b as HTMLElement).dataset.k === 'automation',
     ) as HTMLButtonElement;
-    act(() => autoTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => autoTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.wrap').length).toBe(1);
     expect(el.querySelector('[data-kind="app"]')).toBeNull();
     const rowsBtn = [...el.querySelectorAll('.libLayoutBtn')].find(
       (b) => (b as HTMLElement).dataset.layout === 'rows',
     ) as HTMLButtonElement;
-    act(() => rowsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => rowsBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect((el.querySelector('.appsGrid') as HTMLElement).dataset.layout).toBe('rows');
   });
 
@@ -158,10 +158,10 @@ describe('HomeScreen', () => {
     const props = makeProps();
     const el = mount(props);
     const autoCard = el.querySelector('.card[data-kind="automation"]') as HTMLButtonElement;
-    act(() => autoCard.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => autoCard.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onOpenAutomation).toHaveBeenCalledWith('a@1');
     const autoWrap = autoCard.closest('.wrap') as HTMLElement;
-    act(() =>
+    void act(() =>
       (
         autoWrap.querySelector('button[aria-label="More actions"]') as HTMLButtonElement
       ).dispatchEvent(new MouseEvent('click', { bubbles: true })),
@@ -170,7 +170,7 @@ describe('HomeScreen', () => {
       'a@1',
       expect.objectContaining({ kind: 'rect' }),
     );
-    act(() =>
+    void act(() =>
       (el.querySelector('.hsecBrowse') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),

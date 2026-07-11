@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations CORNER CASES + consent-interplay QA suite: a confirm-gated
 // Locker command (`purge_item`) invoked under a REAL automation's enrolled
 // vault agent -> parks in Approvals just like an app caller; approve it and
@@ -128,7 +129,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -570,7 +571,7 @@ async function main() {
 
         const row = parkedRowToggle(page, 'locker.purge_item', 0);
         await row.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowText = await row.innerText();
+        const rowText = await row.textContent();
         console.log(
           `[auto03] Parked row text (what the owner actually sees): ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
         );
@@ -837,7 +838,7 @@ async function main() {
         if (orphanCount > 0) {
           const rowText = await orphanRuns
             .first()
-            .innerText()
+            .textContent()
             .catch(() => '');
           console.log(
             `[auto03] first recent-run row text after delete: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,

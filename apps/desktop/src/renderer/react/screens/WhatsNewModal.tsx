@@ -102,7 +102,7 @@ export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX
 
   return (
     <>
-      <div className={styles.backdrop} onClick={onClose} />
+      <div className={styles.backdrop} role="presentation" onClick={onClose} />
       <div className={styles.card} role="dialog" aria-modal="true" aria-label="What's new">
         <header className={styles.head}>
           <h2 className={styles.heading}>What&rsquo;s new</h2>

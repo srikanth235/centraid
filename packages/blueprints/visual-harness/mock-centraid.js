@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) mock fixture data for every blueprint app's queries/actions, never shipped — see the header below
 // MOCK window.centraid — visual-verification harness only, never shipped.
 //
 // Replaces the runtime's real change-bridge `window.centraid.read/write` (which

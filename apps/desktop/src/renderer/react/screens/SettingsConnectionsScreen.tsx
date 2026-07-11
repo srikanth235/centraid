@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connections settings surface; splitting would fragment one visual unit
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import { relativeTime } from '../format.js';

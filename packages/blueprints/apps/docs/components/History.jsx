@@ -78,7 +78,7 @@ export function History({ documentId, readOnly, loadVersions, onRestoreVersion }
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) loadVersions/documentId read once at mount; Details.jsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
   }, []);
 
   if (versions === null) return <div className="d-version-status">Loading history…</div>;

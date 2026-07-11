@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations GRANTS + RENAME suite: this session added real-manifest-name
 // enrollment for automation agents (reconcileScheduler -> enrollAutomationAgent
 // AND approveAgentGrant -> resolveAutomationName, packages/gateway/src/serve/
@@ -178,7 +179,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -730,7 +731,7 @@ async function main() {
         await shot('11-approvals-parked-before-rename');
         const rowBefore = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowBefore.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextBefore = await rowBefore.innerText();
+        const rowTextBefore = await rowBefore.textContent();
         console.log(
           `[auto05] Approvals row text BEFORE rename: ${JSON.stringify(rowTextBefore.replace(/\n/g, ' | '))}`,
         );
@@ -776,7 +777,7 @@ async function main() {
         await shot('12-approvals-parked-after-rename-left-open');
         const rowLeftOpen = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowLeftOpen.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextLeftOpen = await rowLeftOpen.innerText();
+        const rowTextLeftOpen = await rowLeftOpen.textContent();
         console.log(
           `[auto05] Approvals row text, LEFT OPEN across the rename (no renav, no decision): ${JSON.stringify(rowTextLeftOpen.replace(/\n/g, ' | '))}`,
         );
@@ -802,7 +803,7 @@ async function main() {
         await shot('13-approvals-parked-after-rename-fresh-look');
         const rowAfter = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowAfter.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextAfter = await rowAfter.innerText();
+        const rowTextAfter = await rowAfter.textContent();
         console.log(
           `[auto05] Approvals row text AFTER rename, FRESH LOOK (navigated away + back): ${JSON.stringify(rowTextAfter.replace(/\n/g, ' | '))}`,
         );

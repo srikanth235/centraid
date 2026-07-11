@@ -418,6 +418,7 @@ async function main() {
 
         const rowTexts = [];
         for (let i = 0; i < rowCount; i++) {
+          // oxlint-disable-next-line unicorn/prefer-dom-node-text-content -- (#363) innerText is intentional here: it reflects the rendered (CSS text-transform'd) text and inserts newlines at block boundaries, both relied on below; textContent would not
           rowTexts.push((await rows.nth(i).innerText()).replace(/\n/g, ' | '));
         }
         console.log(`[verify-appr] parked row texts: ${JSON.stringify(rowTexts)}`);

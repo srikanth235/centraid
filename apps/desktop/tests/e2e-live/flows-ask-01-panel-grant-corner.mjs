@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Ask QA Suite 1: kit-ask panel mechanics on the Tasks app —
 //   Flow 1: pre-grant panel + grant chip + 3 close methods (Escape / X / click-outside)
 //   Flow 2: grant vault access + demo data, grant-chip staleness (same-session reopen
@@ -514,7 +515,7 @@ async function main() {
           `unexpected Locker placeholder: ${lockerPlaceholder}`,
         );
         assert(
-          lockerChips.length > 0 && lockerChips.some((c) => /password|login|card/i.test(c)),
+          lockerChips.some((c) => /password|login|card/i.test(c)),
           `Locker suggestions don't look locker-specific: ${JSON.stringify(lockerChips)}`,
         );
       },

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Apps v2 QA — People. Regular flow: install, empty state, add person (with
 // circle + cadence), circle create/rename/delete, star + Favorites nav,
 // search, drawer "+ add" affordances (note/task/date/gift/debt/relationship),

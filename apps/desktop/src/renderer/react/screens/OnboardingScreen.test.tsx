@@ -49,7 +49,7 @@ describe('OnboardingScreen', () => {
   it('selects a swatch on click', () => {
     const el = mount({ onComplete: vi.fn() });
     const swatch = el.querySelectorAll('.swatch')[3] as HTMLButtonElement;
-    act(() => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(swatch.dataset.selected).toBe('true');
     expect(el.querySelectorAll('[data-selected="true"]').length).toBe(1);
   });
@@ -59,9 +59,9 @@ describe('OnboardingScreen', () => {
     const el = mount({ onComplete });
     typeName(el.querySelector('.input') as HTMLInputElement, '  Grace  ');
     const swatch = el.querySelectorAll('.swatch')[2] as HTMLButtonElement;
-    act(() => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => swatch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     const cta = el.querySelector('.cta') as HTMLButtonElement;
-    act(() => cta.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => cta.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(onComplete).toHaveBeenCalledWith({ displayName: 'Grace', avatarColor: '#E36AD2' });
   });
 

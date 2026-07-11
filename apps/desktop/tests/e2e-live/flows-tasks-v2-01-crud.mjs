@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Tasks v2 QA Suite 1: core CRUD + views/sections/counts + detail drawer edits
 // + subtasks + status transitions + search, against the REAL desktop app
 // (real gateway, real dev vault, no mocks).

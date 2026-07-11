@@ -29,6 +29,12 @@ export default function RunViewRoute({
   const { navigate, showToast } = useShellActions();
   const rowRef = useRef<CentraidAutomationRow | null>(null);
   const updateRef = useRef<((s: RunViewSnapshot | null) => void) | null>(null);
+  // `navigate`/`showToast` come from context and get a new identity on every
+  // App re-render; refs let the effect below use the latest without
+  // restarting the run stream (which the fresh functions would trigger if
+  // they were in its dependency array).
+  const actionsRef = useRef({ navigate, showToast });
+  actionsRef.current = { navigate, showToast };
 
   useEffect(() => {
     let stopped = false;
@@ -132,8 +138,10 @@ export default function RunViewRoute({
         // nothing recoverable to show. Bounce back to the overview (the only
         // place this run id could have been clicked from) instead of
         // stranding the user on a permanent loading screen.
-        navigate({ kind: 'automations' });
-        showToast('That automation was deleted, and its run history is gone too.');
+        actionsRef.current.navigate({ kind: 'automations' });
+        actionsRef.current.showToast(
+          'That automation was deleted, and its run history is gone too.',
+        );
         return;
       }
       if (!run) {

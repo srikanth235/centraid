@@ -9,15 +9,15 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-title: var(--font-sans);
   --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
-  --accent: #4e68dd;
-  --c-amber: #e89a3c;
-  --c-forest: #5c8a4e;
-  --c-indigo: #4e68dd;
-  --c-ochre: #b47b3f;
-  --c-rose: #e55772;
-  --c-slate: #5c677d;
-  --c-teal: #2ea098;
-  --c-violet: #7c5bd9;
+  --accent: #4E68DD;
+  --c-amber: #E89A3C;
+  --c-forest: #5C8A4E;
+  --c-indigo: #4E68DD;
+  --c-ochre: #B47B3F;
+  --c-rose: #E55772;
+  --c-slate: #5C677D;
+  --c-teal: #2EA098;
+  --c-violet: #7C5BD9;
   --on-accent: #ffffff;
   --_accent: var(--app-color, var(--accent));
   --accent-soft: color-mix(in oklab, var(--_accent) 12%, transparent);
@@ -46,9 +46,7 @@
   --radius-sm: 0.5rem;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
   --shadow-sm: 0 0 0 0.5px var(--line-strong);
-  --shadow-md:
-    0 10px 26px -14px hsl(var(--app-hue) 30% 9% / 0.27),
-    0 2px 6px -3px hsl(var(--app-hue) 30% 9% / 0.11);
+  --shadow-md: 0 10px 26px -14px hsl(var(--app-hue) 30% 9% / 0.27), 0 2px 6px -3px hsl(var(--app-hue) 30% 9% / 0.11);
   --shadow-lg: 0 26px 60px -24px hsl(var(--app-hue) 30% 9% / 0.39);
   --tracking-body: 0;
   --tracking-h: -0.01em;

@@ -58,7 +58,7 @@ function push(s: BuilderChatSnapshot): void {
 function setValue(el: HTMLTextAreaElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(el, value);
-  act(() => el.dispatchEvent(new Event('input', { bubbles: true })));
+  void act(() => el.dispatchEvent(new Event('input', { bubbles: true })));
 }
 
 describe('BuilderChatPane', () => {
@@ -106,7 +106,7 @@ describe('BuilderChatPane', () => {
     expect(el.querySelector('.tgCardTitle')?.textContent).toContain('2 files updated');
     expect(el.querySelector('.tgCardVersion')?.textContent).toContain('v3');
     expect(el.querySelector('.list')).toBeNull();
-    act(() =>
+    void act(() =>
       (el.querySelector('.groupPill') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -152,7 +152,7 @@ describe('BuilderChatPane', () => {
     expect(el.querySelector('.abProgressVerb')?.textContent).toBe('Writing');
     expect(el.querySelector('.abProgressFile')?.textContent).toBe('app.js');
     expect(el.querySelectorAll('.abProgressDots i[data-on]').length).toBe(3);
-    act(() =>
+    void act(() =>
       (el.querySelector('.abProgressCancel') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -166,7 +166,7 @@ describe('BuilderChatPane', () => {
     push(snap());
     const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
     setValue(ta, 'Add a footer');
-    act(() => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    void act(() => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
     expect(props.onSend).toHaveBeenCalledWith('Add a footer');
     expect(ta.value).toBe('');
   });
@@ -177,7 +177,7 @@ describe('BuilderChatPane', () => {
     push(snap({ composerDisabled: true }));
     const ta = el.querySelector('.chatInput textarea') as HTMLTextAreaElement;
     setValue(ta, 'hi');
-    act(() =>
+    void act(() =>
       (el.querySelector('.sendBtn') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -191,7 +191,7 @@ describe('BuilderChatPane', () => {
     const chip = [...el.querySelectorAll<HTMLButtonElement>('.promptStarter')].find(
       (b) => b.textContent === 'Prepare to publish',
     )!;
-    act(() => chip.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => chip.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect((el.querySelector('.chatInput textarea') as HTMLTextAreaElement).value).toBe(
       'Prepare to publish',
     );
@@ -204,7 +204,7 @@ describe('BuilderChatPane', () => {
     expect(el.querySelector('.chatpaneHeadTitle')?.textContent).toBe('Version history');
     expect(props.onMountHistory).toHaveBeenCalledTimes(1);
     expect(props.onMountHistory).toHaveBeenCalledWith(expect.any(HTMLElement));
-    act(() =>
+    void act(() =>
       (
         el.querySelector('.chatpaneHead button[aria-label="Back to chat"]') as HTMLButtonElement
       ).dispatchEvent(new MouseEvent('click', { bubbles: true })),

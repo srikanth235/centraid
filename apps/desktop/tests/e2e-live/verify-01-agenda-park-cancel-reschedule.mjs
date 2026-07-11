@@ -265,7 +265,7 @@ async function main() {
         const scheduleRows = await page
           .locator('text=/schedule\\.(cancel_event|cancel-event)/i')
           .count();
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         const mentionsAlpha = /Verify Alpha/i.test(bodyText);
         console.log(
           `[v01] Approvals schedule.cancel_event rows: ${scheduleRows}, mentions "Verify Alpha": ${mentionsAlpha}`,
@@ -383,7 +383,7 @@ async function main() {
         );
         const activityText = await drawer2
           .locator('.ag-activity, [class*="activity"]')
-          .innerText()
+          .textContent()
           .catch(() => '');
         console.log(
           `[v01] activity log mentions parked move: ${/parked for the owner/i.test(activityText)}`,

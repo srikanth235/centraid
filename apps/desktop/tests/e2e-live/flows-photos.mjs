@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Photos blueprint app end-to-end flows against the REAL desktop shell — see
 // apps/desktop/tests/e2e-live/README.md for the rig. Own userData dir (does
 // NOT collide with sibling agents testing shell/docs concurrently). Run with:
@@ -374,7 +375,6 @@ async function main() {
       await frameLoc3.locator('.kit-chip', { hasText: 'All' }).click();
       await page.waitForTimeout(300);
       const tilesForLightbox = frameLoc3.locator('.tile-wrap');
-      const total = await tilesForLightbox.count();
       await tilesForLightbox.nth(1).locator('.tile').click(); // middle-ish tile so both arrows may be enabled
       const lightbox = frameLoc3.locator('#lightbox');
       await lightbox.waitFor({ state: 'visible', timeout: 10_000 });

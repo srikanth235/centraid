@@ -80,18 +80,20 @@ describe('PaletteScreen', () => {
   it('moves the active row with ArrowDown and runs it on Enter', () => {
     const el = mount(makeProps());
     const input = el.querySelector('.input') as HTMLInputElement;
-    act(() =>
+    void act(() =>
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })),
     );
     expect(rows(el)[1]?.dataset.active).toBe('true');
-    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    void act(() =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
     expect(browseRun).toHaveBeenCalledTimes(1);
     expect(buildRun).not.toHaveBeenCalled();
   });
 
   it('runs a row on click', () => {
     const el = mount(makeProps());
-    act(() => rows(el)[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => rows(el)[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(appRun).toHaveBeenCalledTimes(1);
   });
 
@@ -115,10 +117,12 @@ describe('PaletteScreen', () => {
     const props = makeProps();
     const el = mount(props);
     const input = el.querySelector('.input') as HTMLInputElement;
-    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    void act(() =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+    );
     expect(props.onClose).toHaveBeenCalledTimes(1);
     const backdrop = el.querySelector('.backdrop') as HTMLElement;
-    act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => backdrop.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onClose).toHaveBeenCalledTimes(2);
   });
 });

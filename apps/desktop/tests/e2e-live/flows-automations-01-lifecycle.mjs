@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations lifecycle QA suite: adopt-from-template, view screen, run-now +
 // timeline, run history (3 runs, open an older one), enable/disable, "New
 // automation" from scratch, edit-in-builder, delete (cancel then confirm),
@@ -84,7 +85,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 /** Out-of-band gateway fetch, same pattern as flows-approvals-02-corner-cases.mjs
@@ -666,7 +667,7 @@ async function main() {
         assert(runsBefore.length >= 1, 'expected at least 1 recorded run before relaunch');
 
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

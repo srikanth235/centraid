@@ -52,11 +52,9 @@ const BLOB_PREFIX = '/centraid/_vault/blobs';
 // no other seam to intercept the body it produces.
 // ---------------------------------------------------------------------
 class CaptureResponse {
-  constructor() {
-    this.statusCode = 200;
-    this.headers = {};
-    this.body = Buffer.alloc(0);
-  }
+  statusCode = 200;
+  headers = {};
+  body = Buffer.alloc(0);
   setHeader(name, value) {
     this.headers[name] = value;
   }

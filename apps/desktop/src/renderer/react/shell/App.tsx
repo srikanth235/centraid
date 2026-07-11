@@ -71,6 +71,14 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'gateway':
     case 'settings':
       return route.kind;
+    case 'app':
+    case 'builder':
+    case 'run-view':
+    case 'automation-view':
+    case 'automation-builder':
+    case 'templates':
+      // Detail routes with no corresponding sidebar nav item — nothing to highlight.
+      return undefined;
     default:
       return undefined;
   }

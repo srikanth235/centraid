@@ -61,7 +61,7 @@ async function shot(name) {
 async function assertNotesNotDraft(label) {
   const tile = page.locator('[data-app-id="notes"]');
   await tile.waitFor({ state: 'visible', timeout: 15_000 });
-  const tileText = (await tile.innerText().catch(() => '')).toLowerCase();
+  const tileText = (await tile.textContent().catch(() => '')).toLowerCase();
   console.log(`[v08] (${label}) Notes tile text: ${JSON.stringify(tileText)}`);
   assert(
     !tileText.includes('draft'),

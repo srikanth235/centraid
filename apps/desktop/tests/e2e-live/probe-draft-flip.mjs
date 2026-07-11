@@ -26,7 +26,7 @@ async function dumpApps(page, label) {
 
 async function badgeState(page, label) {
   const tile = page.locator('[data-app-id="notes"]');
-  const text = await tile.innerText().catch(() => '(no tile)');
+  const text = await tile.textContent().catch(() => '(no tile)');
   console.log(`[probe] tile text ${label}: ${JSON.stringify(text)}`);
 }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations TRIGGERS QA suite: cron real-fire through the actual
 // InProcessScheduler (packages/automation/src/fire/in-process-scheduler.ts),
 // cron disable → no-fire, a cron hero-text UTC→local cross-check, webhook
@@ -124,7 +125,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 /** Out-of-band gateway fetch, using the app's own auth (same pattern as
@@ -757,7 +758,7 @@ async function main() {
           `expected >=1 run row under the Cron filter, got ${cronRowCount}`,
         );
 
-        const rowText = await cronRows.first().innerText();
+        const rowText = await cronRows.first().textContent();
         console.log(
           `[auto02] first cron-filtered run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
         );
@@ -940,7 +941,7 @@ async function main() {
         // 404 (Not Found)") -- match against frameUrl, not text.
         const isExpectedWebhookProbeNoise = (e) =>
           /Failed to load resource/.test(e.text) &&
-          (/_centraid-hook\//.test(e.frameUrl) || /\/centraid\/_automations$/.test(e.frameUrl));
+          (/_centraid-hook\//.test(e.frameUrl) || e.frameUrl.endsWith('/centraid/_automations'));
         const consoleErrors = allErrors.filter((e) => !isExpectedWebhookProbeNoise(e));
         console.log(
           `[auto02] total console 'error' messages across the suite: ${allErrors.length} (${allErrors.length - consoleErrors.length} filtered as expected webhook-probe/coercion-reject noise)`,

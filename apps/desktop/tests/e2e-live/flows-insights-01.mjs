@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Insights QA suite: empty state, LLM-free population via the System health
 // check automation (3 runs), real-LLM turn (if a runner is present), corner
 // cases (nav races, resize, relaunch persistence).
@@ -69,7 +70,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 async function checkNoJunkNumbers(label) {
@@ -174,7 +175,6 @@ async function main() {
       },
     );
 
-    let automationUrl = null;
     await step(
       'flow2-run-now-1',
       'Open Automations screen, find it, click "Run now" (1st run)',
@@ -206,7 +206,6 @@ async function main() {
         // App navigates to run-view on successful start.
         await page.waitForTimeout(1500);
         await shot('02-run-view-after-click');
-        automationUrl = page.url();
         timings.flow2Run1 = Date.now() - t;
       },
     );
@@ -388,7 +387,7 @@ async function main() {
         await openInsights();
         await checkNoJunkNumbers('flow5a');
         const bodyTxt = await bodyText();
-        const usdMatches = [...bodyTxt.matchAll(/\$[\d.]+|\<\$0\.01/g)].map((m) => m[0]);
+        const usdMatches = [...bodyTxt.matchAll(/\$[\d.]+|<\$0\.01/g)].map((m) => m[0]);
         console.log(`[ins] USD-looking tokens on page: ${JSON.stringify(usdMatches)}`);
         for (const u of usdMatches) {
           assert(!/\$NaN|\$undefined|\$Infinity/.test(u), `malformed USD token: ${u}`);
@@ -446,7 +445,7 @@ async function main() {
       'Relaunch (same userDataDir) -> Insights still shows persisted runs',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

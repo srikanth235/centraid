@@ -62,7 +62,7 @@ export function Editor({ doc, registerFlush, onClose, onSave }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) doc is read once at mount by design (see file header): app.jsx keys this component by document_id, so re-firing when doc's content_uri changes mid-edit would reload over an in-flight draft instead of leaving the autosave in control
   }, []);
 
   useEffect(() => {
@@ -108,7 +108,7 @@ export function Editor({ doc, registerFlush, onClose, onSave }) {
   useEffect(() => {
     registerFlush?.(flush);
     return () => clearTimeout(saveTimerRef.current);
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) registered once; this component remounts on document_id change (see file header), so the closed-over doc/onSave props flush() reads can never go stale without a fresh registration
   }, []);
 
   function setBody(v) {

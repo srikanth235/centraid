@@ -108,7 +108,7 @@ describe('SettingsProfilesScreen', () => {
     expect(props.onEdit).toHaveBeenCalledWith('work');
     click('.profRowDel');
     expect(props.onDelete).toHaveBeenCalledWith('work');
-    act(() =>
+    void act(() =>
       (el.querySelector('.profManageAdd') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -123,13 +123,13 @@ describe('SettingsProfilesScreen', () => {
     const remoteRow = [...connList.querySelectorAll('.profRow')].find((r) =>
       r.textContent?.includes('Cloud'),
     ) as HTMLElement;
-    act(() =>
+    void act(() =>
       (remoteRow.querySelector('.profRowSwitch') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
     expect(props.onConnect).toHaveBeenCalledWith('remote1');
-    act(() =>
+    void act(() =>
       (remoteRow.querySelector('.profRowDel') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),

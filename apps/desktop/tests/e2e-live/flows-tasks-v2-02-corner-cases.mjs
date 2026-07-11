@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Tasks v2 QA Suite 2: corner cases — empty/whitespace title, very long
 // titles, special chars/emoji/unicode/HTML, rapid double-clicks, Escape
 // mid-edit, completing an already-completed task, many tasks (demo data +
@@ -421,7 +422,7 @@ async function main() {
       'Corner case: close + relaunch with the SAME userDataDir -> tasks, statuses and view state all persisted',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

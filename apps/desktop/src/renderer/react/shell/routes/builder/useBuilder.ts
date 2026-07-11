@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single state/reducer hook for the whole builder surface; the actions and the state they mutate need to stay next to each other to review safely
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
   createApp,

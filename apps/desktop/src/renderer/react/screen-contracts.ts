@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single source of truth for every renderer screen's prop-type contract (issue #325); splitting would scatter one cohesive DTO surface across files that all need to change together
 // Screen prop-type contracts (issue #325).
 //
 // The DTOs below are the typed props each React screen renders against — the

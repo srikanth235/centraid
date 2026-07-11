@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Agenda v2 QA Suite 3: the crux of this pass.
 //
 // (A) Cancel-event "parks for owner confirmation" claim. app.json's own
@@ -454,6 +455,7 @@ async function main() {
           .locator('.ag-guest-row', { hasText: 'You' })
           .first()
           .getByRole('button', { name: 'Going' });
+        // oxlint-disable-next-line unicorn/prefer-dom-node-dataset -- (#363) activeGoing is a Playwright Locator, not a DOM node; Locator has no .dataset
         const activeState = await activeGoing.getAttribute('data-active').catch(() => null);
         console.log(
           `[agv2-3] "Going" control data-active after RSVP: ${JSON.stringify(activeState)}`,

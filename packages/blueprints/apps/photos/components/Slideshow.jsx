@@ -34,7 +34,7 @@ export function SlideshowView({ list, startAssetId, onClose }) {
     if (paused || photos.length <= 1) return undefined;
     timerRef.current = setTimeout(() => step(1), ADVANCE_MS);
     return () => clearTimeout(timerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) `step`/`photos.length` are stable for the component's lifetime (the list is a snapshot passed in at open time)
   }, [idx, paused]);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function SlideshowView({ list, startAssetId, onClose }) {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) `onClose`/`step` are stable for this mount (the whole tree remounts fresh on every openSlideshow() call)
   }, []);
 
   if (photos.length === 0) {

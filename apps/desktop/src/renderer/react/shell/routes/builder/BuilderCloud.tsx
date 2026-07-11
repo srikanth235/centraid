@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (cloud/publish surface); splitting would fragment one visual unit
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import {
   appLiveUrl,
@@ -415,9 +416,15 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
             automationsCache={automationsCache}
             automationsError={automationsError}
             runStates={runStates}
-            onToggle={onToggleAutomation}
-            onRun={onRunAutomation}
-            onDelete={onDeleteAutomation}
+            onToggle={(row, next) => {
+              void onToggleAutomation(row, next);
+            }}
+            onRun={(row) => {
+              void onRunAutomation(row);
+            }}
+            onDelete={(row) => {
+              void onDeleteAutomation(row);
+            }}
           />
         ) : (
           <div className={styles.empty}>

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single test file for RemoteBackupProvider covering its full request/retry/error surface against S3TestServer; splitting would fragment one provider's test coverage
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import { afterEach, describe, expect, test } from 'vitest';

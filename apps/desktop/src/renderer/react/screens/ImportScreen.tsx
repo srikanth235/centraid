@@ -254,7 +254,15 @@ export default function ImportScreen({
             the harness is signed into the wrong account.
           </Note>
           {live.map((c) => (
-            <ConnectionRow key={c.connectionId} c={c} onToggle={setConnectionStatus} />
+            <ConnectionRow
+              key={c.connectionId}
+              c={c}
+              onToggle={(id, next) => {
+                setConnectionStatus(id, next).catch((err: unknown) => {
+                  showToast?.(err instanceof Error ? err.message : 'Could not update connection');
+                });
+              }}
+            />
           ))}
         </div>
       ) : null}

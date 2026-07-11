@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Apps v2 QA — Locker. Regular flow: install, empty state, new login item
 // with a real TOTP seed (JBSWY3DPEHPK3PXP), verify the rendered 6-digit code
 // against a Node-computed RFC-6238 oracle, password reveal + strength meter,

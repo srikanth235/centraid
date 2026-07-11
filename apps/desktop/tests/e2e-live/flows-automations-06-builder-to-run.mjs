@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations BUILDER-TO-RUN suite: closes the gap flows-automations-01-
 // lifecycle.mjs's flow6 deliberately left open ("a full LLM build loop is
 // not required here"). This suite drives "New automation" -> a real chat
@@ -177,7 +178,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -316,7 +317,7 @@ async function lastAiMessageText() {
     // harness convention (never guess at a bare class name).
     const nodes = Array.from(document.querySelectorAll('[class*="aiText"]'));
     const last = nodes[nodes.length - 1];
-    return last ? last.innerText : null;
+    return last ? last.textContent : null;
   });
 }
 
@@ -333,7 +334,6 @@ async function main() {
   let automationAppId = null;
   let automationRef = null;
   let sessionId = null;
-  let stagedHandlerAfterTurn = null;
   let currentName = 'New automation';
 
   try {
@@ -449,7 +449,6 @@ async function main() {
           );
         }
 
-        stagedHandlerAfterTurn = stagedHandler.content;
         await shot('04-builder-config-tab-after-build');
 
         if (!result.finished) {

@@ -60,7 +60,7 @@ async function main() {
     await input.waitFor({ state: 'visible', timeout: 10_000 });
 
     const uniqueTag = `resume-test-${Date.now()}`;
-    async function send(text) {
+    const send = async function send(text) {
       await input.fill(text);
       await page.keyboard.press('Enter');
       await page.waitForTimeout(1000);
@@ -71,7 +71,7 @@ async function main() {
         await page.waitForTimeout(2000);
       }
       return false;
-    }
+    };
 
     console.log(`[fix3e] sending turn A: "say hi (${uniqueTag})"`);
     const okA = await send(`say hi (${uniqueTag})`);

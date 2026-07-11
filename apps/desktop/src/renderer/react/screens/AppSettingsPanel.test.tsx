@@ -70,7 +70,7 @@ function clickTab(el: HTMLElement, label: string): void {
   const btn = [...el.querySelectorAll<HTMLButtonElement>('.settingsTab')].find((b) =>
     b.textContent?.includes(label),
   )!;
-  act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+  void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 }
 
 describe('AppSettingsPanel', () => {
@@ -79,12 +79,12 @@ describe('AppSettingsPanel', () => {
     const el = mount(props);
     push(makeSnapshot());
     expect(el.querySelector('.settingsName')?.textContent).toBe('Locker');
-    act(() =>
+    void act(() =>
       (el.querySelector('.settingsClose') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
     );
-    act(() =>
+    void act(() =>
       (el.querySelector('.settingsBackdrop') as HTMLElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -129,7 +129,7 @@ describe('AppSettingsPanel', () => {
       (b) => b.textContent === 'Serif',
     )!;
     expect(serif.dataset.active).toBe('false');
-    act(() => serif.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => serif.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onKnobCommit).toHaveBeenCalledWith('appFont', 'serif');
     expect(serif.dataset.active).toBe('true');
   });
@@ -163,7 +163,7 @@ describe('AppSettingsPanel', () => {
     clickTab(el, 'Automations');
     expect(el.querySelector('.orderName')?.textContent).toBe('Daily digest');
     expect(el.querySelector('.orderSchedule')?.textContent).toBe('Every day at 8am');
-    act(() =>
+    void act(() =>
       (el.querySelector('.orderRun') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -171,7 +171,7 @@ describe('AppSettingsPanel', () => {
     expect(props.onRunOrder).toHaveBeenCalledWith('auto/a1');
     act(() => (el.querySelector('.orderToggle input') as HTMLInputElement).click());
     expect(props.onToggleOrder).toHaveBeenCalledWith('auto/a1', false);
-    act(() =>
+    void act(() =>
       (el.querySelector('.orderName') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -241,7 +241,7 @@ describe('AppSettingsPanel', () => {
     );
     clickTab(el, 'Automations');
     expect(props.onMountRuns).not.toHaveBeenCalled();
-    act(() =>
+    void act(() =>
       (el.querySelector('.orderRunsToggle') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -264,18 +264,18 @@ describe('AppSettingsPanel', () => {
     push(makeSnapshot());
     clickTab(el, 'Manage');
     const del = el.querySelector('.settingsDangerItem') as HTMLButtonElement;
-    act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onDelete).not.toHaveBeenCalled();
     expect(del.dataset.armed).toBe('true');
-    act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => del.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onDelete).toHaveBeenCalledTimes(1);
 
     const items = [...el.querySelectorAll<HTMLButtonElement>('.settingsManage .settingsMenuItem')];
-    act(() => items[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => items[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onRename).toHaveBeenCalled();
-    act(() => items[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => items[1]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onShare).toHaveBeenCalled();
-    act(() => items[2]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => items[2]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onReveal).toHaveBeenCalled();
   });
 
@@ -284,7 +284,7 @@ describe('AppSettingsPanel', () => {
     const el = mount(props);
     push(makeSnapshot());
     clickTab(el, 'Automations');
-    act(() =>
+    void act(() =>
       (el.querySelector('.settingsPaneLink') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),

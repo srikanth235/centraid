@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cross-repo interop suite against a real Clawgnition gateway (wrangler dev); the scenario is one coherent conformance run, not independently splittable cases
 /*
  * Cross-repo interop: `RemoteBackupProvider` (this package's real client)
  * against a REAL Clawgnition `centraid-backup-provider/1` gateway running
@@ -34,8 +35,7 @@
  */
 
 import { type ChildProcess, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { promises as fs } from 'node:fs';
+import { existsSync, readFileSync, promises as fs } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';

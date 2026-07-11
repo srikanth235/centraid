@@ -86,13 +86,6 @@ async function openSettingsPage(pageLabel) {
   }
 }
 
-async function goHome() {
-  await navTo(page, 'Home');
-  await page
-    .getByRole('heading', { name: 'What should we build?' })
-    .waitFor({ state: 'visible', timeout: 10_000 });
-}
-
 async function main() {
   await fs.mkdir(OUT_DIR, { recursive: true });
   await fs.rm(USER_DATA_DIR, { recursive: true, force: true });
@@ -154,7 +147,7 @@ async function main() {
           .first()
           .waitFor({ state: 'visible', timeout: 10_000 });
         await page.waitForTimeout(500);
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         assert(
           /No connections configured yet\./.test(bodyText),
           'expected empty-state copy "No connections configured yet."',
@@ -211,6 +204,7 @@ async function main() {
         const sidebarState = await page
           .locator('[data-sidebar]')
           .first()
+          // oxlint-disable-next-line unicorn/prefer-dom-node-dataset -- (#363) this is a Playwright Locator, not a DOM node; Locator has no .dataset
           .getAttribute('data-sidebar')
           .catch(() => null);
         console.log(`[v2-02] data-sidebar after toggle off: ${sidebarState}`);
@@ -222,6 +216,7 @@ async function main() {
         const restored = await page
           .locator('[data-sidebar]')
           .first()
+          // oxlint-disable-next-line unicorn/prefer-dom-node-dataset -- (#363) this is a Playwright Locator, not a DOM node; Locator has no .dataset
           .getAttribute('data-sidebar')
           .catch(() => null);
         assert(
@@ -263,14 +258,14 @@ async function main() {
           .waitFor({ state: 'visible', timeout: 20_000 });
         await page.waitForTimeout(1_000);
         await shot('07-home-after-switch-to-new-space');
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         assert(
           /Nothing here yet|No apps yet/.test(bodyText),
           'new space Home should show the empty state',
         );
         const notesTileCount = await page.locator('[data-app-id="notes"]').count();
         assert(notesTileCount === 0, 'Notes tile from the primary vault leaked into the new space');
-        const sidebarText = await page.locator('body').innerText();
+        const sidebarText = await page.locator('body').textContent();
         assert(
           /QA Second Space/.test(sidebarText),
           'sidebar head does not show the new space name',
@@ -356,7 +351,7 @@ async function main() {
       'Relaunch: Cool blue cast stays OFF (non-default); active vault + Notes intact',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);
@@ -379,7 +374,7 @@ async function main() {
         // Deleted space must not resurrect.
         await page.getByRole('button', { name: 'Spaces', exact: true }).click();
         await page.waitForTimeout(500);
-        const spacesText = await page.locator('body').innerText();
+        const spacesText = await page.locator('body').textContent();
         assert(!/QA Second Space/.test(spacesText), 'deleted space resurrected after relaunch');
       },
     );

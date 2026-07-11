@@ -119,7 +119,7 @@ async function main() {
         const input = page.getByLabel('Your name');
         await input.fill('QA Tester');
         await page.waitForTimeout(200);
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         assert(/QT/.test(bodyText), `avatar initials "QT" not found after typing "QA Tester"`);
         await shot('02-name-typed');
       },
@@ -168,7 +168,7 @@ async function main() {
         // name "Owner's vault"). The only surface that reads the profile
         // displayName back is Settings -> Spaces -> Connections (listGateways
         // threads gateway-store displayName). Verify it landed there.
-        const homeText = await page.locator('body').innerText();
+        const homeText = await page.locator('body').textContent();
         console.log(
           `[onb] name in main shell chrome: ${/QA Tester/.test(homeText)} (expected false — recorded as UX observation)`,
         );
@@ -186,7 +186,7 @@ async function main() {
           .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(600);
         await shot('05-settings-spaces-after-onboarding');
-        const spacesText = await page.locator('body').innerText();
+        const spacesText = await page.locator('body').textContent();
         const found = /QA Tester/.test(spacesText);
         console.log(`[onb] "QA Tester" visible in Settings -> Spaces: ${found}`);
         assert(
@@ -206,7 +206,7 @@ async function main() {
       'Relaunch (same profile) boots straight to Home, name intact',
       async () => {
         await app.close().catch(() => undefined);
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         ({ app, page } = await launchVirgin(userDataDir));
         wireConsole(page);
         await page.setViewportSize({ width: 1400, height: 900 });
@@ -230,7 +230,7 @@ async function main() {
           .waitFor({ state: 'visible', timeout: 15_000 });
         await page.getByRole('button', { name: 'Spaces', exact: true }).click();
         await page.waitForTimeout(600);
-        const spacesText = await page.locator('body').innerText();
+        const spacesText = await page.locator('body').textContent();
         assert(
           /QA Tester/.test(spacesText),
           'display name did not persist across relaunch (Settings -> Spaces)',

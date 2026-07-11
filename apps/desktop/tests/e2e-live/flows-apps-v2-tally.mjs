@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Apps v2 QA — Tally. Regular flow: install, welcome/empty dashboard,
 // add-expense blocked without a group, add friend, create group, add an
 // equal-split expense (verify derived balances against hand-computed math),

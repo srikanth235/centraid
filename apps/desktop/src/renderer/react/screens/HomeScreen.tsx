@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Home surface (apps grid + drafts + templates); splitting would fragment one visual unit
 import { useRef, useState, type JSX } from 'react';
 import { Icon, KindBadge, StatusPill } from '../ui/index.js';
 import type { IconName } from '@centraid/design-tokens';

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (code editor surface); splitting would fragment one visual unit
 import { type JSX, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { readAppFiles, writeAppFile } from '../../../../gateway-client.js';
 import {

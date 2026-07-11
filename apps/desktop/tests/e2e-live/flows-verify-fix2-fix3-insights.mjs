@@ -70,6 +70,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
+  // oxlint-disable-next-line unicorn/prefer-dom-node-text-content -- (#363) innerText is intentional: a later assertion here does a \b-bounded word match (/\bChat\b/) that relies on innerText's block-boundary newlines to separate adjacent elements; textContent concatenates with no separators and could glue words together
   return page.evaluate(() => document.body.innerText);
 }
 

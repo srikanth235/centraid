@@ -131,11 +131,10 @@ async function main() {
     const input = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
     const log = frameLoc.locator('.kit-ask-log');
 
-    async function askAndWaitForOutcome(message, timeoutMs) {
+    const askAndWaitForOutcome = async function askAndWaitForOutcome(message, timeoutMs) {
       await input.fill(message);
       await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
       const t0 = Date.now();
-      let outcome = null;
       let lastAi = -1;
       let stable = 0;
       while (Date.now() - t0 < timeoutMs) {
@@ -158,7 +157,7 @@ async function main() {
         await page.waitForTimeout(2000);
       }
       return 'timeout';
-    }
+    };
 
     console.log('[ask03] asking to permanently purge "Old GitHub Login" (attempt 1)…');
     let outcome = await askAndWaitForOutcome(

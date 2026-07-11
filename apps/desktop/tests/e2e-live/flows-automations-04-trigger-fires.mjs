@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations TRIGGER-FIRES suite: closes the two gaps left open by
 // flows-automations-02-triggers.mjs — a condition trigger that ACTUALLY
 // fires against a real matching vault row (not just documented via a
@@ -192,10 +193,6 @@ async function shot(name) {
   const p = path.join(OUT_DIR, `auto04-${name}.png`);
   await page.screenshot({ path: p });
   return p;
-}
-
-async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -505,7 +502,7 @@ async function main() {
       'condition-trigger-real-fire',
       'Clone renewal-reminders with every="* * * * *", publish, seed a real matching core.event row (app closed), reopen, wait for a real triggerOrigin:"condition" run',
       async () => {
-        const { appId, name } = await cloneAndSpeedUpTrigger(
+        const { appId: _appId, name } = await cloneAndSpeedUpTrigger(
           TEMPLATE_CONDITION_ID,
           CONDITION_AUTOMATION_SUBFOLDER,
           '* * * * *',
@@ -540,7 +537,7 @@ async function main() {
         // (see header comment). Same close+reopen shape flows-full.mjs's
         // S2-upload flow already uses for a persistence check.
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         const dbPath = await findVaultDb(USER_DATA_DIR);
         const seeded = await seedRenewalEvent(dbPath);
@@ -594,7 +591,7 @@ async function main() {
         console.log(`[auto04] run rows visible on the condition automation's view: ${rowCount}`);
         assert(rowCount >= 1, `expected >=1 run row, got ${rowCount}`);
 
-        const rowText = await runRows.first().innerText();
+        const rowText = await runRows.first().textContent();
         console.log(
           `[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
         );
@@ -628,7 +625,7 @@ async function main() {
       'data-trigger-bootstrap-no-fire',
       'Clone doc-text-extractor with every="* * * * *", publish, wait through >=1 tick -> confirm the bootstrap evaluate() sets the cursor WITHOUT firing (condition.ts:227 "the bootstrap pull intentionally never fires")',
       async () => {
-        const { appId, name } = await cloneAndSpeedUpTrigger(
+        const { appId: _appId, name } = await cloneAndSpeedUpTrigger(
           TEMPLATE_DATA_ID,
           DATA_AUTOMATION_SUBFOLDER,
           '* * * * *',
@@ -730,7 +727,7 @@ async function main() {
           rowCount >= 1,
           `expected >=1 run row on the data-trigger automation's view, got ${rowCount}`,
         );
-        const rowText = await runRows.first().innerText();
+        const rowText = await runRows.first().textContent();
         console.log(
           `[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
         );

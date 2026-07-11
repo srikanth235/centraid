@@ -61,7 +61,7 @@ describe('SettingsAppearanceScreen', () => {
     const other = THEME_PRESETS.find((p) => p.name !== 'light');
     if (!other) throw new Error('need a second preset');
     const card = el.querySelector(`.themeCard[data-name="${other.name}"]`) as HTMLButtonElement;
-    act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetTheme).toHaveBeenCalledWith(other.name);
     expect(card.dataset.active).toBe('true');
   });
@@ -72,13 +72,13 @@ describe('SettingsAppearanceScreen', () => {
     const violet = [...el.querySelectorAll('.swatch')].find(
       (b) => (b as HTMLElement).getAttribute('aria-label') === 'Violet',
     ) as HTMLButtonElement;
-    act(() => violet.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => violet.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetAccent).toHaveBeenCalledWith('violet');
 
     const gradient = [...el.querySelectorAll('.seg button')].find(
       (b) => b.textContent === 'gradient',
     ) as HTMLButtonElement;
-    act(() => gradient.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => gradient.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetTile).toHaveBeenCalledWith('gradient');
   });
 
@@ -88,11 +88,11 @@ describe('SettingsAppearanceScreen', () => {
     const matchBtn = [...el.querySelectorAll('.linkBtn')].find(
       (b) => b.textContent === 'Match system',
     ) as HTMLButtonElement;
-    act(() => matchBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => matchBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onMatchSystem).toHaveBeenCalledTimes(1);
 
     const sw = el.querySelector('.switch') as HTMLButtonElement;
-    act(() => sw.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => sw.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetCoolCast).toHaveBeenCalledWith(true);
   });
 });

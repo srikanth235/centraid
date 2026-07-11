@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Approvals QA Suite 2: approve/deny/cross-surface/badge-lag/stale-decision/
 // relaunch-persistence corner cases, exercised against REAL parked
 // invocations now that packages/vault/src/commands/locker.ts PURGE_ITEM
@@ -285,7 +286,7 @@ async function main() {
       'flow6-cross-surface-approve-from-app',
       'Approve from the app Vault tab -> Approvals no longer lists it; badge lags until focus',
       async () => {
-        const fl = await openLocker(page);
+        await openLocker(page);
         const badgeBeforeText = await page
           .getByRole('button', { name: /^Approvals/ })
           .first()
@@ -426,7 +427,7 @@ async function main() {
       'Relaunch (same userDataDir): does the parked "epsilon secret" invocation survive?',
       async () => {
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
         session = await launchApp({ userDataDir: USER_DATA_DIR });
         page = session.page;
         wireConsole(page);

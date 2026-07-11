@@ -224,7 +224,7 @@ async function main() {
           .getByRole('heading', { name: 'Starred', level: 1 })
           .waitFor({ state: 'visible', timeout: 10_000 });
         await page.waitForTimeout(300);
-        const bodyText = await page.locator('body').innerText();
+        const bodyText = await page.locator('body').textContent();
         console.log(`[s3] Starred page body text: ${JSON.stringify(bodyText.slice(0, 200))}`);
         await shot('07-starred-page');
         // NOTE (observation, not a hard failure): if this page shows an empty

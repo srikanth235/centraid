@@ -121,7 +121,7 @@ describe('AutomationTemplatesScreen', () => {
       (b) => (b as HTMLElement).dataset.k === 'data',
     ) as HTMLButtonElement;
     expect(dataTab.textContent).toBe('Data');
-    act(() => dataTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => dataTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.card').length).toBe(1);
     expect(el.textContent).toContain('Photo captions');
 
@@ -129,7 +129,7 @@ describe('AutomationTemplatesScreen', () => {
       (b) => (b as HTMLElement).dataset.k === 'condition',
     ) as HTMLButtonElement;
     expect(conditionTab.textContent).toBe('Condition');
-    act(() => conditionTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => conditionTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.card').length).toBe(1);
     expect(el.textContent).toContain('Renewal reminders');
   });
@@ -138,7 +138,7 @@ describe('AutomationTemplatesScreen', () => {
     const props = makeProps();
     const el = mount(props);
     const card = el.querySelector('.card') as HTMLButtonElement;
-    act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => card.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onPreview).toHaveBeenCalledTimes(1);
     const firstArg = (props.onPreview as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as
       | DiscoverTemplate
@@ -151,7 +151,7 @@ describe('AutomationTemplatesScreen', () => {
     const webhookTab = [...el.querySelectorAll('.segB')].find(
       (b) => (b as HTMLElement).dataset.k === 'webhook',
     ) as HTMLButtonElement;
-    act(() => webhookTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => webhookTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(el.querySelectorAll('.card').length).toBe(1);
     expect(el.textContent).toContain('Deploy Alert');
     expect(el.textContent).not.toContain('Daily Digest');
@@ -174,7 +174,7 @@ describe('AutomationTemplatesScreen', () => {
     });
     expect(el.textContent).toContain('No templates match');
     const scratch = el.querySelector('.auBtnPrimary') as HTMLButtonElement;
-    act(() => scratch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => scratch.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onStartFromScratch).toHaveBeenCalledTimes(1);
   });
 });

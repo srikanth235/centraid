@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Full end-user regression pass — Suite 1 (shell) + Suite 2 (docs deep pass) —
 // against the REAL desktop app (real embedded gateway, real dev vault).
 // Run with: node apps/desktop/tests/e2e-live/flows-full.mjs
@@ -344,7 +345,7 @@ async function main() {
     'Restart persistence — relaunch with SAME userData, installed apps still on Home',
     async () => {
       await session.close();
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       session = await launchApp({ userDataDir: USER_DATA_DIR });
       page = session.page;
       wireConsole(page);
@@ -356,11 +357,9 @@ async function main() {
     },
   );
 
-  let docsFirstOpenConsoleCountAtOpen = 0;
   await step('4', 'Open installed Docs app -> iframe renders; back+reopen still fine', async () => {
     const tile = page.locator('[data-app-id="docs"]');
     await tile.waitFor({ state: 'visible', timeout: 10_000 });
-    docsFirstOpenConsoleCountAtOpen = consoleMessages.length;
     await tile.getByTestId('app-tile').click();
     const iframe = page.locator('iframe[data-centraid-app="1"]');
     await iframe.waitFor({ state: 'attached', timeout: 20_000 });
@@ -647,7 +646,7 @@ async function main() {
 
       // Full app restart (reused userData) -> vault persistence.
       await session.close();
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       session = await launchApp({ userDataDir: USER_DATA_DIR });
       page = session.page;
       wireConsole(page);

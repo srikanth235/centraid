@@ -77,7 +77,6 @@ async function main() {
         await searchBtn.click();
         await page.waitForTimeout(400);
         await shot('02-palette-opened-via-search-button');
-        const paletteInput = page.locator('input[placeholder], [role="dialog"] input').first();
         const paletteVisible = await page
           .locator('[role="dialog"]')
           .first()

@@ -108,13 +108,17 @@ export default function DiscoverRoute({
               anchor,
               (id) => {
                 if (auto) {
-                  id === 'use'
-                    ? applyAutoTemplate(asEntry(t))
-                    : openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
+                  if (id === 'use') {
+                    applyAutoTemplate(asEntry(t));
+                  } else {
+                    openAutomationTemplatePreview(asEntry(t), applyAutoTemplate);
+                  }
                 } else {
-                  id === 'use'
-                    ? applyAppTemplate(asEntry(t))
-                    : openTemplatePreview(asEntry(t), applyAppTemplate);
+                  if (id === 'use') {
+                    applyAppTemplate(asEntry(t));
+                  } else {
+                    openTemplatePreview(asEntry(t), applyAppTemplate);
+                  }
                 }
               },
             );
