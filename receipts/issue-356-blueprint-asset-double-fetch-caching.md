@@ -14,7 +14,7 @@ the measurement probe that grounds the numbers.
 ## Checklist
 
 - [x] Commit 1 — depth-aware jsx-runtime rewrite + ETag/304 asset caching
-- [ ] Commit 2 — blueprints jsdom tier: depth-aware mirror + cwd-independent roots
+- [x] Commit 2 — blueprints jsdom tier: depth-aware mirror + cwd-independent roots
 - [ ] Commit 3 — open-waterfall measurement probe
 
 ## What changed

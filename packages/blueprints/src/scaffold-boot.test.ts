@@ -22,7 +22,10 @@ import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { scaffoldAppFiles } from './scaffold-files.js';
 
-const PKG = process.cwd();
+// Resolved from this module's own path, not process.cwd(): cwd differs
+// between a root-run vitest (repo root) and a package-run vitest (this
+// package's dir), but the file's own location never does.
+const PKG = path.resolve(import.meta.dirname, '..');
 // Inside the package (vite refuses dynamic imports outside the project root);
 // under .app-boot/ so the existing gitignore entry covers it.
 const DIR = path.join(PKG, '.app-boot', '_scaffold');
