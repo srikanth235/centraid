@@ -5,6 +5,7 @@ import { providerConformanceCases, type ConformanceHarness } from './conformance
 import { BackupProviderError } from './provider.js';
 import { RemoteBackupProvider } from './remote-provider.js';
 import { S3ObjectStore } from './s3-store.js';
+import { S3TestServer } from './testing/s3-test-server.js';
 
 /*
  * An in-process `node:http` fake that mirrors PROTOCOL.md's routes verbatim
@@ -12,9 +13,11 @@ import { S3ObjectStore } from './s3-store.js';
  * philosophy: a provider is graded by running against the exact same
  * `RemoteBackupProvider` client any real gateway would talk to). Every
  * handler below is commented with the PROTOCOL.md section it implements.
- * The fake ALSO exposes a crude path-style S3 endpoint on the same port —
- * real providers point credential grants at a genuine S3-compatible
- * service; this fake plays that role for the data-plane assertions.
+ * The control plane runs its own `node:http` server; the data plane is a
+ * separate `S3TestServer` instance (shared with interop-clawgnition.test.ts)
+ * — real providers point credential grants at a genuine, separately-hosted
+ * S3-compatible service, so splitting the two here mirrors that shape
+ * instead of quietly cheating by sharing one port.
  */
 
 const API_KEY = 'test-bearer-token';
@@ -45,16 +48,10 @@ interface FakeRow {
   prunedAt: number | null;
 }
 
-interface S3Request {
-  method: string;
-  path: string;
-  headers: http.IncomingHttpHeaders;
-}
-
 interface FakeGateway {
   url: string;
   apiKey: string;
-  s3Requests: S3Request[];
+  s3: S3TestServer;
   close: () => Promise<void>;
   /** Purge auth tier the fake enforces — always 'interactive' per PROTOCOL.md, exposed for clarity. */
   purgeAuthTier: 'interactive';
@@ -101,8 +98,9 @@ async function startFakeGateway(): Promise<FakeGateway> {
   const snapshots = new Map<string, FakeRow[]>();
   const idempotency = new Map<string, Map<string, FakeRow>>();
   const nextSeq = new Map<string, number>();
-  const s3Objects = new Map<string, Buffer>();
-  const s3Requests: S3Request[] = [];
+  // Small page size (2) — deliberately exercises S3ObjectStore.list's
+  // pagination, same as before this was extracted into S3TestServer.
+  const s3 = await S3TestServer.start({ listPageSize: 2 });
 
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -117,12 +115,6 @@ async function startFakeGateway(): Promise<FakeGateway> {
   async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const p = url.pathname;
-
-    // --- S3 data-plane emulation (path-style: /{bucket}/{key...}) ---
-    if (p === `/${BUCKET}` || p.startsWith(`/${BUCKET}/`)) {
-      s3Requests.push({ method: req.method ?? '', path: p + url.search, headers: req.headers });
-      return handleS3(req, res, url, s3Objects);
-    }
 
     // --- Control plane (PROTOCOL.md § Routes) — all require bearer auth ---
     const auth = req.headers.authorization;
@@ -179,7 +171,7 @@ async function startFakeGateway(): Promise<FakeGateway> {
         name: t.name,
         status: t.status,
         currentGeneration: t.currentGeneration,
-        usage: usageFor(t.id, s3Objects),
+        usage: usageFor(t.id),
       }));
       jsonBody(res, 200, { accountStatus: 'ok', vaults });
       return;
@@ -202,7 +194,7 @@ async function startFakeGateway(): Promise<FakeGateway> {
     if (req.method === 'POST' && rest === '/credentials') {
       const body = (await readJsonBody(req)) as { ttlSeconds: number; mode: 'read' | 'read-write' };
       jsonBody(res, 200, {
-        endpoint: `http://127.0.0.1:${(server.address() as { port: number }).port}`,
+        endpoint: s3.url,
         bucket: BUCKET,
         prefix: `vaults/${targetId}/`,
         accessKeyId: 'AKIAFAKETEST',
@@ -323,15 +315,13 @@ async function startFakeGateway(): Promise<FakeGateway> {
     errorBody(res, 404, 'not_found', `no route for ${req.method} ${p}`);
   }
 
-  function usageFor(targetId: string, objects: Map<string, Buffer>) {
-    const prefix = `${BUCKET}/vaults/${targetId}/`;
+  function usageFor(targetId: string) {
+    const prefix = `vaults/${targetId}/`;
     let storedBytes = 0;
     let objectCount = 0;
-    for (const [key, buf] of objects) {
-      if (key.startsWith(prefix)) {
-        storedBytes += buf.length;
-        objectCount++;
-      }
+    for (const key of s3.listDirect(BUCKET, prefix)) {
+      storedBytes += s3.getObjectDirect(BUCKET, key)?.length ?? 0;
+      objectCount++;
     }
     return {
       storedBytes,
@@ -346,99 +336,13 @@ async function startFakeGateway(): Promise<FakeGateway> {
   return {
     url: `http://127.0.0.1:${port}`,
     apiKey: API_KEY,
-    s3Requests,
+    s3,
     purgeAuthTier: 'interactive',
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    close: async () => {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await s3.close();
+    },
   };
-}
-
-/** Crude path-style S3: PUT/GET/HEAD/DELETE object, GET bucket = ListObjectsV2 (paginated, 2/page). */
-function handleS3(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  url: URL,
-  objects: Map<string, Buffer>,
-): void {
-  const key = decodeURIComponent(url.pathname.slice(1)); // "{bucket}/{key...}" or just "{bucket}"
-
-  if (req.method === 'GET' && url.searchParams.get('list-type') === '2') {
-    const prefix = url.searchParams.get('prefix') ?? '';
-    const bucketPrefix = `${key}/`; // key === bucket here (no trailing slash in pathname match)
-    const allMatching = [...objects.keys()]
-      .filter((k) => k.startsWith(bucketPrefix) && k.slice(bucketPrefix.length).startsWith(prefix))
-      .sort();
-    const pageSize = 2; // small on purpose — exercises pagination
-    const token = url.searchParams.get('continuation-token');
-    const startIndex = token ? Number.parseInt(token, 10) : 0;
-    const page = allMatching.slice(startIndex, startIndex + pageSize);
-    const isTruncated = startIndex + pageSize < allMatching.length;
-    const contents = page
-      .map((k) => {
-        const objKey = k.slice(bucketPrefix.length);
-        const size = objects.get(k)?.length ?? 0;
-        return `<Contents><Key>${escapeXml(objKey)}</Key><Size>${size}</Size></Contents>`;
-      })
-      .join('');
-    const xml =
-      `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult>${contents}` +
-      `<IsTruncated>${isTruncated}</IsTruncated>` +
-      (isTruncated
-        ? `<NextContinuationToken>${startIndex + pageSize}</NextContinuationToken>`
-        : '') +
-      `</ListBucketResult>`;
-    res.writeHead(200, { 'content-type': 'application/xml' });
-    res.end(xml);
-    return;
-  }
-
-  if (req.method === 'PUT') {
-    const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => {
-      objects.set(key, Buffer.concat(chunks));
-      res.writeHead(200, {});
-      res.end();
-    });
-    return;
-  }
-
-  if (req.method === 'GET') {
-    const obj = objects.get(key);
-    if (!obj) {
-      res.writeHead(404, {});
-      res.end();
-      return;
-    }
-    res.writeHead(200, { 'content-length': String(obj.length) });
-    res.end(obj);
-    return;
-  }
-
-  if (req.method === 'HEAD') {
-    const obj = objects.get(key);
-    if (!obj) {
-      res.writeHead(404, {});
-      res.end();
-      return;
-    }
-    res.writeHead(200, { 'content-length': String(obj.length) });
-    res.end();
-    return;
-  }
-
-  if (req.method === 'DELETE') {
-    objects.delete(key);
-    res.writeHead(204, {});
-    res.end();
-    return;
-  }
-
-  res.writeHead(405, {});
-  res.end();
-}
-
-function escapeXml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 const cleanups: Array<() => Promise<void>> = [];
@@ -530,8 +434,8 @@ describe('RemoteBackupProvider against the fake gateway', () => {
     await store.put('chunks/sigtest', new Uint8Array([1, 2, 3]));
     await store.get('chunks/sigtest');
 
-    const putReq = gateway.s3Requests.find((r) => r.method === 'PUT');
-    const getReq = gateway.s3Requests.find(
+    const putReq = gateway.s3.requests.find((r) => r.method === 'PUT');
+    const getReq = gateway.s3.requests.find(
       (r) => r.method === 'GET' && !r.path.includes('list-type'),
     );
     expect(putReq).toBeDefined();
@@ -554,7 +458,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
     const keys: string[] = [];
     for await (const obj of store.list('chunks/')) keys.push(obj.key);
     expect(keys.sort()).toEqual(['chunks/p0', 'chunks/p1', 'chunks/p2', 'chunks/p3', 'chunks/p4']);
-    void gateway; // used above for s3Requests in other tests; keep symmetry
+    void gateway; // used above for s3.requests in other tests; keep symmetry
   });
 
   test('purge: remote provider surfaces interactive_auth_required (403) from the fake', async () => {
@@ -570,7 +474,7 @@ describe('RemoteBackupProvider against the fake gateway', () => {
     const { gateway } = await fixture();
     let refreshCount = 0;
     const grant = {
-      endpoint: gateway.url,
+      endpoint: gateway.s3.url,
       bucket: BUCKET,
       prefix: 'vaults/manual-test/',
       accessKeyId: 'AKIAFAKETEST',
