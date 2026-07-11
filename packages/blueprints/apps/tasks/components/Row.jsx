@@ -69,6 +69,15 @@ export function Row({ task, closed = false, pending = false, search = '', snippe
         ) : note ? (
           <div className="tk-row-note">{note.split('\n')[0]}</div>
         ) : null}
+        {task.tags?.length ? (
+          <div className="tk-row-tags">
+            {task.tags.map((t) => (
+              <span className="tk-tag-chip tk-tag-chip-static" key={t.tag_id}>
+                #{t.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {!closed && task.children?.length ? (
