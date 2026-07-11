@@ -127,8 +127,7 @@ function fakeConversationStore(): {
 
 describe('SchedulerLedgerStore', () => {
   it('persists lastTickAt and accumulates missed entries under the reserved sentinel key', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const store = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const store = new SchedulerLedgerStore(fakeConversationStore());
     expect(store.load()).toEqual({ missed: [] });
 
     store.recordTick(at(8, 0));
@@ -148,8 +147,7 @@ describe('SchedulerLedgerStore', () => {
   });
 
   it('bounds the missed-entry ring buffer', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const store = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const store = new SchedulerLedgerStore(fakeConversationStore());
     const many: MissedWindowEntry[] = Array.from({ length: 250 }, (_, i) => ({
       automationRef: `a/${i}`,
       scheduledFor: at(8, 0).toISOString(),
@@ -164,8 +162,7 @@ describe('SchedulerLedgerStore', () => {
 
   it('uses the documented sentinel automation id + key (never collides with a real ref)', () => {
     const raw = fakeConversationStore();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const store = new SchedulerLedgerStore(raw as any);
+    const store = new SchedulerLedgerStore(raw);
     store.recordTick(at(8, 0));
     expect(raw.stateGet(SCHEDULER_LEDGER_AUTOMATION_ID, SCHEDULER_LEDGER_KEY)).toBeDefined();
     // Real refs are always `<appId>/<id>` — the sentinel deliberately has no slash.
@@ -177,8 +174,7 @@ describe('recordSchedulerTick', () => {
   const cron = (expr: string): readonly Trigger[] => [{ kind: 'cron', expr }];
 
   it('records nothing on the very first tick (no prior lastTickAt to compare against)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const ledger = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const ledger = new SchedulerLedgerStore(fakeConversationStore());
     const missed = recordSchedulerTick({
       ledger,
       now: at(8, 0),
@@ -189,16 +185,14 @@ describe('recordSchedulerTick', () => {
   });
 
   it('records nothing across ordinary consecutive ticks', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const ledger = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({ ledger, now: at(8, 0), automations: [] });
     const missed = recordSchedulerTick({ ledger, now: at(8, 1), automations: [] });
     expect(missed).toEqual([]);
   });
 
   it('detects a gap between two ticks and records one entry per enabled automation', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const ledger = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({
       ledger,
       now: at(8, 0),
@@ -225,8 +219,7 @@ describe('recordSchedulerTick', () => {
   });
 
   it('never records for a disabled-only registry even across a real gap', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake shares the KV shape only
-    const ledger = new SchedulerLedgerStore(fakeConversationStore() as any);
+    const ledger = new SchedulerLedgerStore(fakeConversationStore());
     recordSchedulerTick({
       ledger,
       now: at(8, 0),

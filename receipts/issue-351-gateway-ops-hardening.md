@@ -285,6 +285,10 @@
   one-class-per-file lint rule.
 - (wave 2) Version-skew alert fires immediately (no sustained window) —
   a build mismatch is a static fact, unlike transient component errors.
+- (wave 2) `SchedulerLedgerStore` depends on `SchedulerLedgerKv`, a narrow
+  structural subset of `ConversationStore` (just stateGet/stateSet) — the
+  test fake satisfies it without casts, so the initial `no-explicit-any`
+  suppressions were removed rather than justified.
 
 ## Out of scope (tracked in #351)
 

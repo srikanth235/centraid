@@ -42,7 +42,6 @@
  * ref — those always contain `/`) keys one JSON blob per vault.
  */
 
-import type { ConversationStore } from '@centraid/app-engine';
 import { cronMatches } from './cron-match.js';
 import { cronTriggersOf, type Trigger } from '../manifest/manifest.js';
 
@@ -93,9 +92,18 @@ export function parseSchedulerLedgerSnapshot(
   }
 }
 
+/**
+ * The two `automation_state` KV calls the ledger relies on — a structural
+ * subset of `ConversationStore` so tests can satisfy it without casts.
+ */
+export interface SchedulerLedgerKv {
+  stateGet(automationId: string, key: string): { valueJson: string } | undefined;
+  stateSet(automationId: string, key: string, valueJson: string, updatedAt: number): void;
+}
+
 /** `automation_state`-backed persistence for one vault's scheduler ledger. */
 export class SchedulerLedgerStore {
-  constructor(private readonly store: ConversationStore) {}
+  constructor(private readonly store: SchedulerLedgerKv) {}
 
   load(): SchedulerLedgerSnapshot {
     const entry = this.store.stateGet(SCHEDULER_LEDGER_AUTOMATION_ID, SCHEDULER_LEDGER_KEY);
