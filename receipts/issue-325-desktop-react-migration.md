@@ -80,6 +80,26 @@ stays the sole shared UI package — the genuinely cross-runtime one (mobile's
 
 ## What changed
 
+This section maps each shipped Checklist phase to where it's implemented below:
+
+- **Phase 0 — Scaffold + coexistence proof.** `packages/ui-core` +
+  `packages/desktop-ui` created and wired into the workspace; Vite+React+TS
+  added to the renderer build; a React island mounts the component gallery
+  inside the live vanilla renderer (`#ui-preview` hash), non-destructively —
+  see *`packages/ui-core`*, *`packages/desktop-ui`*, and the coexistence
+  island sections immediately below.
+- **Phase 1 — Port primitives.** `Icon`, `Button`, `Logo` (pixel-identical
+  to the vanilla output / mobile twins) + `AppCard` (React port of the real
+  `cd-app-card` composite), each with render tests — see *`packages/desktop-ui`*
+  below.
+- **Phase 2 — Preview surface for claude.ai/design.** A `Gallery` component
+  exported from `desktop-ui`, drawn from the real design tokens — the
+  no-shim, no-drift surface to sync (the actual sync run is a separate,
+  credentialed step) — see *`packages/desktop-ui`* below.
+- **Phase 3 — Screen-by-screen migration** (complete for every screen/route
+  the shell exposes) — sixteen screens converted via the `window.CentraidReact`
+  bridge; see the screen-by-screen sections below.
+
 ### `packages/ui-core` (new) — framework-neutral UI logic
 
 Zero-React, zero-DOM TS on top of `@centraid/design-tokens`. Holds the helpers
