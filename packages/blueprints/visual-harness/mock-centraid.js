@@ -1641,6 +1641,8 @@
           dtend: input.dtend,
           status: 'tentative',
           calendar_id: input.calendar_id,
+          rrule: input.rrule || null,
+          conferencing_uri: input.conferencing_uri || null,
           attachments: [],
           attendees: [],
         });
