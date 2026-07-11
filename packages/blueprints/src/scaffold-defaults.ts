@@ -242,7 +242,7 @@ Handlers are \`.js\` ES modules. There is no build step — the runtime loads
 them directly. Type-check via JSDoc annotations:
 
 \`\`\`js
-/** @type {import('@centraid/openclaw-plugin').QueryHandler} */
+/** @type {import('@centraid/app-engine').QueryHandler} */
 export default async ({ input, ctx }) => { /* ... */ };
 \`\`\`
 
@@ -296,7 +296,7 @@ viewport meta, \`env(safe-area-inset-*)\` body padding, the single 720px
 breakpoint, ≥ 44px hit targets, and the \`prefers-reduced-motion\` guard.
 Build on these; never strip them.
 
-See \`@centraid/openclaw-plugin\` for the full handler-arg types.
+See \`@centraid/app-engine\` for the full handler-arg types.
 `;
 
 /**
@@ -352,6 +352,6 @@ A plain \`.js\` ES module receiving \`{ ctx, log }\` only — no \`db\`, no
 \`body\`, no \`window\`. The \`prompt\` is canonical: re-prompting the
 builder regenerates the handler, so don't hand-edit it.
 
-See \`@centraid/openclaw-plugin\`'s \`AutomationHandler\` type for the
+See \`@centraid/automation\`'s \`AutomationHandler\` type for the
 full handler-arg shape.
 `;

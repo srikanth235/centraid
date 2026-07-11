@@ -2,7 +2,7 @@
  * Rename a folder through core.rename_folder. The drive's top level (the
  * scheme's root concept) refuses. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

@@ -14,7 +14,7 @@
  * star a favorited photo carries. Everything comes from the vault; this
  * app holds no rows of its own.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';

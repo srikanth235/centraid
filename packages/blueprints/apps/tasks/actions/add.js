@@ -5,7 +5,7 @@
  * command contract (additionalProperties: false) sees exactly what the
  * user set. Outcome passed through for the UI to narrate.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const raw = body ?? {};

@@ -3,7 +3,7 @@
  * folder_id moves it to the drive's top level. Filing is one folders-scheme
  * tag per document, so a move swaps the tag. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

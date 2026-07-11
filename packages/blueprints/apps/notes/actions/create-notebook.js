@@ -3,7 +3,7 @@
  * assigned by the vault (end of the list); nesting via parent_notebook_id
  * is supported by the model but this app keeps its chips flat for now.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

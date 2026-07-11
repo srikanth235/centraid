@@ -66,7 +66,7 @@ Rules for editing `automation.json`:
 A plain `.js` ES module. The same JS-only discipline as app handlers applies — no `import type`, no `x as Foo` casts, no `interface`, no generic call arguments. Use JSDoc `@type` / `@typedef` for types.
 
 ```js
-/** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
+/** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
   log.info('automation fired');
   // do work

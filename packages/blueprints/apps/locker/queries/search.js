@@ -6,7 +6,7 @@
  * leaving the vault in a list. Trashed items never match. A consent denial is
  * a first-class outcome the UI renders as the access state.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { decorate, readTags, readStarred, readWatchtower } from './items.js';

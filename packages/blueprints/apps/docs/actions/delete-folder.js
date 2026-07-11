@@ -3,7 +3,7 @@
  * vault refuses ('folder_is_empty') while any documents (trashed included)
  * or subfolders remain, so nothing is ever orphaned. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

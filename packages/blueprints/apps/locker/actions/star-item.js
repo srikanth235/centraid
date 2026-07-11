@@ -2,7 +2,7 @@
  * locker.star_item — see app.json for the contract. A consent denial or a
  * precondition refusal comes back as a first-class outcome the app narrates.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

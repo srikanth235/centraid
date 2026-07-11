@@ -3,7 +3,7 @@
  * row shape (with the group name folded in for context). Matching runs
  * server-side over the bounded expense window.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { loadTally, ledgerRow } from './dashboard.js';

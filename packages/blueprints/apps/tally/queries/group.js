@@ -4,7 +4,7 @@
  * stance and its per-person splits (so the detail popover needs no second
  * read). All balances come from the shared engine in dashboard.js.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { loadTally, groupNet, ledgerRow, personOf } from './dashboard.js';

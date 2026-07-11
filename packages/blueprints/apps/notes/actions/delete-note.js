@@ -4,7 +4,7 @@
  * canonical content item, so its bytes are only released when nothing else
  * shares them — the outcome reports body_released either way.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

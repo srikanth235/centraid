@@ -12,7 +12,7 @@
  * Everything comes from the vault — this app holds no rows of its own; a
  * consent denial is a first-class outcome the UI renders, receipt included.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 /**

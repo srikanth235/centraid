@@ -1,7 +1,7 @@
 /**
  * Rename a circle. Runs through people.rename_circle — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

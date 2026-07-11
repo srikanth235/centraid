@@ -5,7 +5,7 @@
  * the confirm picker. A consent denial is a first-class outcome the UI
  * renders as the ask-for-access state.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';

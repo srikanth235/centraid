@@ -4,7 +4,7 @@
  * and the bytes soft-delete only when nothing else references them —
  * re-uploading the same file restores the photo. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

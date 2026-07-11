@@ -3,7 +3,7 @@
  * item_id plus whichever fields the caller supplied; the command overwrites
  * only the columns the item's type owns and refuses a trashed item. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 
 const FIELDS = [

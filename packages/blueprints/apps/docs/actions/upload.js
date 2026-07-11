@@ -5,7 +5,7 @@
  * inline data: URI. Omit folder_id for the drive's top level; re-uploading
  * identical bytes restores them from trash and renames them. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

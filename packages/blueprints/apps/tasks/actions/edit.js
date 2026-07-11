@@ -4,7 +4,7 @@
  * is the explicit clear_due / clear_description intent, never an empty
  * string. Outcome passed through for the UI to narrate.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const raw = body ?? {};
