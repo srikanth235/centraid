@@ -118,6 +118,7 @@ import {
   type PickerHit,
   type PickerRequest,
 } from './vault-picker.js';
+import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
 
 export interface VaultPlaneOptions {
   /** Directory holding `vault.db` + `journal.db`. Created if absent. */
@@ -264,6 +265,13 @@ export class VaultPlane {
   readonly dir: string;
   /** Per-vault disposable cache dir (runner scratch), outside the vault tree. */
   readonly cacheDir: string;
+  /**
+   * Set when this vault's directory carried a `RESTORE_QUARANTINE.json`
+   * marker at mount (FORMAT.md restore rule 4) — `null` otherwise. See
+   * `vault-quarantine.ts` for exactly what got handled automatically
+   * (outbox parking) versus what still needs an operator (automations).
+   */
+  readonly quarantine: QuarantineStatus | null;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
   private sweepTimer: NodeJS.Timeout | undefined;
@@ -354,6 +362,11 @@ export class VaultPlane {
           'the conversation ledger folded into journal.db',
       );
     }
+    // FORMAT.md restore rule 4: a directory adopted from a backup restore
+    // carries RESTORE_QUARANTINE.json — park the outbox now, loudly flag
+    // the automations gap (see vault-quarantine.ts header for why that
+    // part stays manual).
+    this.quarantine = applyRestoreQuarantine(options.dir, this.db, this.logger);
   }
 
   /** The owner-device credential the host acts with (confirm/revoke/sweep). */

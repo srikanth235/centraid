@@ -26,12 +26,14 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { serve } from '../serve/serve.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
-import { loadConfigFile, validateConfig, type DaemonConfig, DaemonConfigError } from './config.js';
+import { type DaemonConfig } from './config.js';
+import { resolveDaemonConfig } from './resolve-config.js';
 import { readOrMintToken, readPersistedToken } from './token.js';
 import { seedRunnerPrefs } from './runner-prefs.js';
 import { commandVault } from './vault-admin.js';
 import { commandDevices, commandPair } from './device-admin.js';
 import { commandKey } from './key-admin.js';
+import { commandBackup } from './backup-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 
 const PKG_VERSION = '0.1.0';
@@ -66,6 +68,12 @@ function usage(): never {
       '  centraid-gateway key export  --data-dir <path> --vault <name-or-id> --out <file>',
       '  centraid-gateway key restore --data-dir <path> --vault <name-or-id> --from <file>',
       '  centraid-gateway key rotate  --data-dir <path> --vault <name-or-id>',
+      '  centraid-gateway backup status  [--config <path> | --data-dir <path>]',
+      '  centraid-gateway backup run     [--config <path> | --data-dir <path>] [--vault <id>]',
+      '  centraid-gateway backup list    [--config <path> | --data-dir <path>] [--vault <id>]',
+      '  centraid-gateway backup verify  [--config <path> | --data-dir <path>] [--vault <id>]',
+      '  centraid-gateway backup restore [--config <path> | --data-dir <path>] --vault <id> --dest <dir> [--seq <n>]',
+      '  centraid-gateway backup kit     [--config <path> | --data-dir <path>] --out <file>',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
       '',
@@ -75,6 +83,11 @@ function usage(): never {
       'ride HTTP. key export/restore are the recovery story for sealed',
       'secrets (issue #298): copying a vault directory carries ciphertext',
       'only; the key travels ONLY through these receipted gestures.',
+      '',
+      'backup is the offsite engine (PROTOCOL.md/FORMAT.md), config from the',
+      'same --config/--data-dir resolution `serve` uses (its JSON config',
+      'file\'s "backup" key). restore materializes into --dest — it never',
+      'swaps the live vault; kit emits live key material, store it offline.',
       '',
       'serve flags override the config file. --data-dir is required if no',
       '--config is supplied (the config file otherwise carries dataDir).',
@@ -129,21 +142,8 @@ function parseServeArgs(args: string[]): ParsedServe {
 }
 
 async function resolveConfig(parsed: ParsedServe): Promise<DaemonConfig> {
-  let cfg: DaemonConfig;
-  if (parsed.configPath) {
-    try {
-      cfg = await loadConfigFile(parsed.configPath);
-    } catch (err) {
-      if (err instanceof DaemonConfigError) fail(err.message, 2);
-      throw err;
-    }
-  } else if (parsed.dataDir) {
-    cfg = validateConfig({ dataDir: parsed.dataDir });
-  } else {
-    fail('one of --config or --data-dir is required', 2);
-  }
+  const cfg = await resolveDaemonConfig(parsed, fail);
   // CLI overrides
-  if (parsed.dataDir) cfg.dataDir = parsed.dataDir;
   if (parsed.host) cfg.host = parsed.host;
   if (parsed.port !== undefined) cfg.port = parsed.port;
   return cfg;
@@ -178,6 +178,7 @@ async function commandServe(args: string[]): Promise<void> {
     paths: layout,
     ...(config.host !== undefined ? { host: config.host } : {}),
     ...(config.port !== undefined ? { port: config.port } : {}),
+    ...(config.backup ? { backup: config.backup } : {}),
     token,
     logTag: 'centraid-gateway',
     deviceAccess: devicePlane.deviceAccess,
@@ -268,6 +269,9 @@ async function main(): Promise<void> {
       return;
     case 'key':
       await commandKey(rest, fail);
+      return;
+    case 'backup':
+      await commandBackup(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);

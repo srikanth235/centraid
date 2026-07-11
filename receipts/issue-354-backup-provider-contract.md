@@ -9,9 +9,9 @@
 - [x] `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `writeRecoveryKit` engine
 - [x] `providerConformanceCases` conformance kit
 - [x] `stageVaultDbs` receipted VACUUM INTO staging primitive (packages/vault)
-- [ ] `BackupService` scheduler + `'backups'` health component (staleness probe)
-- [ ] `centraid-gateway backup` CLI — status|run|list|verify|restore|kit
-- [ ] `RESTORE_QUARANTINE.json` handling at vault mount (outbox parked; automations flagged)
+- [x] `BackupService` scheduler + `'backups'` health component (staleness probe)
+- [x] `centraid-gateway backup` CLI — status|run|list|verify|restore|kit
+- [x] `RESTORE_QUARANTINE.json` handling at vault mount (outbox parked; automations flagged)
 - [ ] docs-site `backups` chapter
 - [ ] automations auto-pause on restored-vault mount (needs code-store session; manual review for now)
 - [ ] desktop Gateway page backup card (backup age / verify age / restore UX)

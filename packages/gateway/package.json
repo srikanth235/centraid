@@ -23,6 +23,7 @@
     "@centraid/agent-runtime": "workspace:*",
     "@centraid/app-engine": "workspace:*",
     "@centraid/automation": "workspace:*",
+    "@centraid/backup": "workspace:*",
     "@centraid/blueprints": "workspace:*",
     "@centraid/skills": "workspace:*",
     "@centraid/vault": "workspace:*"

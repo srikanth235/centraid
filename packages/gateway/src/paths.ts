@@ -79,4 +79,15 @@ export interface GatewayPaths {
    * supplies its own `runnerStatus`); there is no hardcoded default seed.
    */
   modelCatalogFile?: string;
+
+  /**
+   * Optional root for the offsite backup engine's own state
+   * (`keyring.json`, `state.json`, `staging/`) — kept OUTSIDE `vaultDir` so
+   * a raw copy of the vault tree never carries the backup keyring (the
+   * data-encryption key for every snapshot, FORMAT.md § Key custody).
+   * Required for `buildGateway` to construct a `BackupService` when
+   * `BuildGatewayOptions.backup?.enabled` — omit to default to a `backup`
+   * sibling of `vaultDir`.
+   */
+  backupDir?: string;
 }
