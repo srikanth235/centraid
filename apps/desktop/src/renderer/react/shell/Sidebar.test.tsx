@@ -104,4 +104,31 @@ describe('Sidebar', () => {
     expect(el.textContent).toContain('No apps yet');
     expect(el.textContent).toContain('Apps · 0');
   });
+
+  it('shows no relaunch pill by default', () => {
+    const el = render(<Sidebar {...base} />);
+    expect(el.querySelector('.sbUpdate')).toBeNull();
+    expect(el.textContent).not.toContain('Relaunch to update');
+  });
+
+  it('shows the relaunch pill with the new version and fires the handler', () => {
+    const onRelaunchToUpdate = vi.fn();
+    const el = render(
+      <Sidebar {...base} updateVersion="0.2.0" onRelaunchToUpdate={onRelaunchToUpdate} />,
+    );
+    const pill = el.querySelector('.sbUpdate') as HTMLButtonElement;
+    expect(pill.textContent).toContain('Relaunch to update');
+    expect(pill.textContent).toContain('v0.2.0');
+    act(() => pill.click());
+    expect(onRelaunchToUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the relaunch pill above Settings, below the stretch spacer', () => {
+    const el = render(<Sidebar {...base} updateVersion="0.2.0" onRelaunchToUpdate={() => {}} />);
+    const pill = el.querySelector('.sbUpdate')!;
+    const settings = [...el.querySelectorAll('.sbItem')].find((b) =>
+      b.textContent?.includes('Settings'),
+    )!;
+    expect(pill.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

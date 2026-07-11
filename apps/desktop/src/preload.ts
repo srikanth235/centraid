@@ -44,6 +44,11 @@ const Channel = {
   PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
   PHONE_REVOKE: 'centraid:phone:revoke',
   PHONE_PAIRED: 'centraid:phone:paired',
+
+  // Relaunch to update (dist watcher in main/update-watcher.ts)
+  UPDATE_STATUS: 'centraid:update:status',
+  UPDATE_RELAUNCH: 'centraid:update:relaunch',
+  UPDATE_AVAILABLE: 'centraid:update:available',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -208,5 +213,17 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     const handler = (_e: IpcRendererEvent, msg: unknown): void => cb(msg as { device: unknown });
     ipcRenderer.on(Channel.PHONE_PAIRED, handler);
     return () => ipcRenderer.off(Channel.PHONE_PAIRED, handler);
+  },
+
+  // Relaunch to update — the main process watches the built dist for a newer
+  // build landing while the app runs; the sidebar pill snapshots the status,
+  // subscribes to the broadcast, and triggers the relaunch.
+  getUpdateStatus: () => ipcRenderer.invoke(Channel.UPDATE_STATUS),
+  relaunchToUpdate: () => ipcRenderer.invoke(Channel.UPDATE_RELAUNCH),
+  onUpdateAvailable: (cb: (msg: { available: boolean; version: string }) => void) => {
+    const handler = (_e: IpcRendererEvent, msg: unknown): void =>
+      cb(msg as { available: boolean; version: string });
+    ipcRenderer.on(Channel.UPDATE_AVAILABLE, handler);
+    return () => ipcRenderer.off(Channel.UPDATE_AVAILABLE, handler);
   },
 });

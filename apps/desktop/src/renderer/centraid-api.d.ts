@@ -461,6 +461,18 @@ interface CentraidApi {
   /** Subscribe to pairing completions. Returns the unsubscribe. */
   onPhonePaired(cb: (msg: { device: CentraidPhoneDevice }) => void): () => void;
 
+  // ----- Relaunch to update -----
+  /**
+   * Snapshot of the dist watcher: whether a newer build than the running
+   * one is on disk, and the version a relaunch would load. Optional so
+   * test harnesses can mock a partial bridge.
+   */
+  getUpdateStatus?(): Promise<{ available: boolean; version: string }>;
+  /** Restart the app so it loads the new build (app.relaunch + exit). */
+  relaunchToUpdate?(): Promise<{ ok: true }>;
+  /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
+  onUpdateAvailable?(cb: (msg: { available: boolean; version: string }) => void): () => void;
+
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
    * of the active one, or explicit switch). Returns the unsubscribe.

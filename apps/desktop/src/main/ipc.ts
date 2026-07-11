@@ -28,6 +28,7 @@ import {
   phoneLinkStatus,
   revokePhoneDevice,
 } from './phone-link.js';
+import { getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -105,6 +106,13 @@ export const Channel = {
   PHONE_CANCEL_PAIRING: 'centraid:phone:cancel-pairing',
   PHONE_REVOKE: 'centraid:phone:revoke',
   PHONE_PAIRED: 'centraid:phone:paired',
+
+  // Relaunch-to-update: the dist watcher (main/update-watcher.ts) notices a
+  // new build on disk and broadcasts UPDATE_AVAILABLE (channel string owned
+  // by that module); the sidebar pill reads the snapshot and triggers the
+  // relaunch through these two.
+  UPDATE_STATUS: 'centraid:update:status',
+  UPDATE_RELAUNCH: 'centraid:update:relaunch',
 
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
@@ -483,6 +491,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(Channel.PHONE_REVOKE, async (_e, input: { deviceId: string }) => {
     const removed = revokePhoneDevice(input.deviceId);
     return { removed: Boolean(removed) };
+  });
+
+  // ----- Relaunch to update -----
+  // Status snapshot for windows that mount after the UPDATE_AVAILABLE
+  // broadcast; relaunch restarts the process so it loads the new dist.
+  ipcMain.handle(Channel.UPDATE_STATUS, async () => getUpdateStatus());
+  ipcMain.handle(Channel.UPDATE_RELAUNCH, async () => {
+    relaunchToUpdate();
+    return { ok: true as const };
   });
 
   // ----- Templates -----

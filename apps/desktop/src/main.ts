@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
 import { registerIpcHandlers } from './main/ipc.js';
 import { ensurePhoneLink } from './main/phone-link.js';
+import { startUpdateWatcher } from './main/update-watcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +67,9 @@ void app.whenReady().then(() => {
   void installAuthInjector();
   registerIpcHandlers();
   createWindow();
+  // Relaunch-to-update: watch the built dist for a newer build landing while
+  // the app runs; the sidebar shows a "Relaunch to update" pill when one does.
+  startUpdateWatcher();
   // Phone link (issue #263): bring the iroh endpoint up front so paired
   // phones reconnect without any UI open. Failures surface in the
   // Settings → Phone panel via PHONE_STATUS; they must not block launch.
