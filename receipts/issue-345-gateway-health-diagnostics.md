@@ -12,20 +12,11 @@ screen that renders it.
 
 ## Checklist
 
-- [x] `HealthRegistry` with push status (`reportOk`/`reportDegraded`/`reportError`),
-      a `loggerFor(component)` wrapper so existing `warn`/`error` calls join a
-      bounded structured event tail, and pull-based `registerProbe` for state
-      nobody pushes.
-- [x] Wire the registry through `buildGateway()`: probes for `vaults` and
-      `connections`; push instrumentation on the outbox drain, the automation
-      scheduler reconcile, automation run outcomes, and catalog warms.
-- [x] `GET /centraid/_gateway/health` route, mounted behind the existing
-      bearer auth, aggregating the registry into one JSON snapshot.
-- [x] Expose `BuiltGateway.health` / `GatewayServeHandle.health` so a host can
-      report components outside the gateway core; the desktop wires the iroh
-      phone tunnel through it.
-- [x] Desktop Settings → Gateway → Diagnostics screen rendering the snapshot,
-      with a Refresh action.
+- [x] HealthRegistry with push status
+- [x] Wire the registry through buildGateway(): probes for vaults
+- [x] GET /centraid/_gateway/health route, mounted behind the existing bearer auth
+- [x] expose BuiltGateway.health
+- [x] the Diagnostics screen: overall status banner with uptime + Refresh
 
 ## What changed
 
