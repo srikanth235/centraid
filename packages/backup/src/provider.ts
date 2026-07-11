@@ -1,13 +1,29 @@
 /*
- * The `centraid-backup-provider/1` seam (PROTOCOL.md): everything a client
- * (the engine in this package) needs from an offsite backup provider, and
+ * The `centraid-storage-provider/1` seam (PROTOCOL.md): everything a client
+ * (the engine in this package) needs from an offsite storage provider, and
  * nothing about how the provider is implemented. Field names below are
  * copied verbatim from PROTOCOL.md's JSON examples — this file IS the wire
  * contract in TypeScript, so drift between prose and types is a bug in one
  * of them.
+ *
+ * Layering (PROTOCOL.md): Layer 1 is account + grants — generic across
+ * store classes. Layer 2 is workload semantics layered on top, one per
+ * store class (`backup`, `cas`, growing additively). Types below are
+ * grouped the same way.
  */
 
-/** `GET /v1/backup/provider` response — everything a client adapts to. */
+// ---------------------------------------------------------------------------
+// Layer 1 — Account & grants
+// ---------------------------------------------------------------------------
+
+/** The two store classes this revision defines (PROTOCOL.md § Terminology). */
+export type StoreClass = 'backup' | 'cas';
+
+/** Discovery's `capabilities` array — additive; a provider declares only
+ *  what it actually offers. `usage` is a capability in its own right (a
+ *  provider can offer `backup` and/or `cas` without metering either). */
+export type ProviderCapabilityFlag = StoreClass | 'usage';
+
 export type Retention =
   | {
       kind: 'ladder';
@@ -22,10 +38,9 @@ export type Retention =
     }
   | { kind: 'none' };
 
-export interface ProviderCapabilities {
-  protocol: string[];
-  dataPlane: 's3';
-  maxCredentialTtlSeconds: number;
+/** `backup`-store-scoped fields of the discovery document — present iff
+ *  `capabilities` includes `"backup"` (PROTOCOL.md § Layer 2 — backup). */
+export interface BackupDiscovery {
   softDeleteWindowDays: number;
   retention: Retention;
   restoreCostClass: 'free-egress' | 'metered-egress';
@@ -33,12 +48,25 @@ export interface ProviderCapabilities {
   objectLock: boolean;
   /** Data plane honors If-None-Match. */
   conditionalWrites: boolean;
+}
+
+/** `GET /v1/backup/provider` response — everything a client adapts to. */
+export interface ProviderCapabilities {
+  protocol: string[];
+  dataPlane: 's3';
+  /** Additive capability flags — see `ProviderCapabilityFlag`. */
+  capabilities: ProviderCapabilityFlag[];
+  maxCredentialTtlSeconds: number;
   purgeAuthTier: 'api-key' | 'interactive';
+  /** Present iff `capabilities` includes `"backup"`. */
+  backup?: BackupDiscovery;
 }
 
 /** `accountStatus` on the target list — surfaced so backups don't stop silently. */
 export type AccountStatus = 'ok' | 'payment_due' | 'suspended';
 
+/** Backup store's per-target usage, embedded in the target list (Layer 2,
+ *  unchanged shape from `/1`'s original single-workload design). */
 export interface Usage {
   storedBytes: number;
   objectCount: number;
@@ -57,17 +85,45 @@ export interface TargetInfo {
   usage: Usage;
 }
 
-/** Short-lived, prefix-scoped S3 credentials for the data plane. */
+/** Short-lived, store-and-prefix-scoped S3 credentials for the data plane
+ *  (PROTOCOL.md § Credential grant). One target hosts one isolated prefix
+ *  per store class it's granted for — `u/{id}/backup/`, `u/{id}/cas/`. */
 export interface S3Grant {
   endpoint: string;
+  /** REQUIRED — the data plane's real SigV4 region. `"auto"` remains a
+   *  valid value (Cloudflare R2's profile); it is no longer a client-side
+   *  hardcode (see `s3-store.ts`). */
+  region: string;
   bucket: string;
   prefix: string;
+  /** Echoes the store class this grant was issued for. */
+  store: StoreClass;
   accessKeyId: string;
   secretAccessKey: string;
   sessionToken?: string;
   expiresAt: number;
   mode: 'read' | 'read-write';
 }
+
+/** Layer-1 optional `usage` capability — per-store-class report
+ *  (PROTOCOL.md § Usage). Distinct from `Usage` above, which is the
+ *  backup-store's own target-list-embedded figure. */
+export interface StoreUsageReport {
+  bytesStored: number;
+  objectCount: number;
+  /** Optional — provider-defined operation counters (e.g. `{"put": 12}`). */
+  opCounts?: Record<string, number>;
+  /** `null` = unmetered (no cap). */
+  quotaBytes: number | null;
+  /** Unix epoch seconds. */
+  period: { start: number; end: number };
+}
+
+export type UsageByStore = Partial<Record<StoreClass, StoreUsageReport>>;
+
+// ---------------------------------------------------------------------------
+// Layer 2 — backup store semantics
+// ---------------------------------------------------------------------------
 
 /** One registry row — the response of registration, and of listSnapshots/getSnapshot. */
 export interface SnapshotRow {
@@ -90,7 +146,7 @@ export interface SnapshotRow {
 export interface SnapshotRegistration {
   /** Provider MUST replay the prior result on retry. */
   idempotencyKey: string;
-  /** MUST fall under the target's prefix. */
+  /** MUST fall under the target's `backup` store prefix. */
   manifestKey: string;
   manifestHash: string;
   totalBytes: number;
@@ -100,6 +156,10 @@ export interface SnapshotRegistration {
   format: string;
   appMeta: Record<string, string>;
 }
+
+// ---------------------------------------------------------------------------
+// Errors (protocol-wide)
+// ---------------------------------------------------------------------------
 
 /** Reserved error codes (PROTOCOL.md § Error envelope) — providers MAY add others. */
 export type BackupProviderErrorCode =
@@ -162,6 +222,10 @@ export class BackupProviderError extends Error {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The provider seam
+// ---------------------------------------------------------------------------
+
 /**
  * The provider seam (PROTOCOL.md § Routes). One implementation per provider;
  * `local-provider.ts` and `remote-provider.ts` both implement this, and
@@ -176,16 +240,39 @@ export interface BackupProvider {
   /** Local provider supports it (api-key tier); remote MUST throw `interactive_auth_required`. */
   purgeTarget(targetId: string): Promise<void>;
 
+  /** Store-class-scoped data plane handle (PROTOCOL.md § Layer 1 — per-store
+   *  isolated prefixes). Every provider MUST support `"backup"`; `"cas"`
+   *  MUST be supported when `capabilities` declares it. */
   openDataPlane(
     targetId: string,
+    store: StoreClass,
     mode: 'read' | 'read-write',
   ): Promise<import('./object-store.js').ObjectStore>;
+
+  /**
+   * Layer-1 grant introspection (PROTOCOL.md § Credential grant) — OPTIONAL.
+   * Only providers with a literal wire-grant concept (a real S3-compatible
+   * data plane reached over HTTP, e.g. `RemoteBackupProvider`) implement
+   * this. A provider whose data plane IS the caller's own custody (e.g.
+   * `LocalBackupProvider`'s filesystem) has no grant to hand back and omits
+   * it; conformance skips the grant-shape assertions when absent.
+   */
+  requestGrant?(
+    targetId: string,
+    store: StoreClass,
+    mode: 'read' | 'read-write',
+    ttlSeconds?: number,
+  ): Promise<S3Grant>;
 
   registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow>;
   listSnapshots(targetId: string, opts?: { includePruned?: boolean }): Promise<SnapshotRow[]>;
   getSnapshot(targetId: string, seq: number): Promise<SnapshotRow>;
 
-  /** Includes `currentGeneration` and `usage`. */
+  /** Includes `currentGeneration` and the backup store's `usage`. */
   getTarget(targetId: string): Promise<TargetInfo>;
   usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }>;
+
+  /** Layer-1 optional `usage` capability (PROTOCOL.md § Usage) — per-store-class
+   *  report. OPTIONAL; present iff `capabilities` includes `"usage"`. */
+  usageReport?(targetId: string): Promise<UsageByStore>;
 }

@@ -3,12 +3,9 @@
  * (PROTOCOL.md § Credential grant). A minimal SigV4 signer using only
  * `fetch` + `node:crypto` — no AWS SDK, per the zero-new-dependencies rule.
  *
- * Region: `S3Grant` (PROTOCOL.md) carries no region field — every example
- * endpoint in the spec is Cloudflare R2, whose SigV4 profile is region
- * `"auto"`. This store hardcodes `"auto"`; a future provider needing a real
- * AWS region would need PROTOCOL.md to grow a field for it (out of scope
- * here — the reserved codes and grant shape are the seam, and region isn't
- * declared there).
+ * Region: `S3Grant.region` (PROTOCOL.md) is REQUIRED — the provider states
+ * its own SigV4 region. Cloudflare R2's profile is `"auto"`, which remains a
+ * valid value; it is no longer hardcoded here.
  */
 
 import { createHash, createHmac } from 'node:crypto';
@@ -16,7 +13,6 @@ import type { ObjectStore } from './object-store.js';
 import { assertSafeKey } from './object-store.js';
 import type { S3Grant } from './provider.js';
 
-const REGION = 'auto';
 const SERVICE = 's3';
 const REFRESH_SLACK_SECONDS = 60;
 
@@ -97,7 +93,7 @@ function signRequest(opts: {
     payloadHash,
   ].join('\n');
 
-  const credentialScope = `${dateStamp}/${REGION}/${SERVICE}/aws4_request`;
+  const credentialScope = `${dateStamp}/${grant.region}/${SERVICE}/aws4_request`;
   const stringToSign = [
     'AWS4-HMAC-SHA256',
     amzDate,
@@ -106,7 +102,7 @@ function signRequest(opts: {
   ].join('\n');
 
   const kDate = hmac(Buffer.from(`AWS4${grant.secretAccessKey}`, 'utf8'), dateStamp);
-  const kRegion = hmac(kDate, REGION);
+  const kRegion = hmac(kDate, grant.region);
   const kService = hmac(kRegion, SERVICE);
   const kSigning = hmac(kService, 'aws4_request');
   const signature = hmac(kSigning, stringToSign).toString('hex');

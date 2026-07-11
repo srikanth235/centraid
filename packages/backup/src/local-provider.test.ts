@@ -85,7 +85,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
   test('purge removes all objects and snapshot rows for the target', async () => {
     const provider = new LocalBackupProvider({ rootDir: await tempDir() });
     const { targetId } = await provider.createTarget({ label: 't' });
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     await store.put('chunks/abc', new Uint8Array([1, 2, 3]));
     await provider.registerSnapshot(targetId, {
       idempotencyKey: 'k',
@@ -100,7 +100,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
     await provider.purgeTarget(targetId);
     const rows = await provider.listSnapshots(targetId, { includePruned: true });
     expect(rows).toEqual([]);
-    const roAfterPurge = await provider.openDataPlane(targetId, 'read').catch((e: unknown) => e);
+    const roAfterPurge = await provider.openDataPlane(targetId, 'backup', 'read').catch((e: unknown) => e);
     expect(roAfterPurge).toBeInstanceOf(BackupProviderError);
   });
 
@@ -156,7 +156,7 @@ describe('LocalBackupProvider lifecycle edge cases', () => {
   test('usage sweeps real object bytes on disk', async () => {
     const provider = new LocalBackupProvider({ rootDir: await tempDir() });
     const { targetId } = await provider.createTarget({ label: 't' });
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     await store.put('chunks/a', new Uint8Array(10));
     await store.put('chunks/b', new Uint8Array(20));
     const { usage } = await provider.usage(targetId);

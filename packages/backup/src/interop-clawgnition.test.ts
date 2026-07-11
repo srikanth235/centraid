@@ -514,7 +514,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // with these particular static dev credentials, which carry no IAM
     // policy). `S3ObjectStore.put` refuses locally based on `grant.mode`
     // before ever making the request — that's what this asserts.
-    const readStore = await provider.openDataPlane(targetId, 'read');
+    const readStore = await provider.openDataPlane(targetId, 'backup', 'read');
     await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/i);
   }, 30_000);
 
