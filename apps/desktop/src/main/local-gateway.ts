@@ -1,10 +1,22 @@
 import { serve, type GatewayServeHandle } from '@centraid/gateway';
 import { invalidatePreflightCache } from '@centraid/agent-runtime';
-import { gatewayModelCatalogFile, gatewayPrefsFile, gatewayVaultDir } from './gateway-paths.js';
+import path from 'node:path';
+import {
+  gatewayDir,
+  gatewayModelCatalogFile,
+  gatewayPrefsFile,
+  gatewayVaultDir,
+} from './gateway-paths.js';
 import { setLocalGatewayInfoProvider } from './gateway-store.js';
 import { desktopSessionIdFor } from './app-sessions.js';
 import { loadPersistedSettings, templatesCacheDir } from './settings.js';
 import { phoneLinkStatus } from './phone-link.js';
+import {
+  backoffForAttempt,
+  initialSupervisorState,
+  recordFailure,
+  type SupervisorState,
+} from './gateway-supervisor-core.js';
 
 /**
  * Electron-flavored wrapper around `@centraid/gateway`'s `serve()`.
@@ -27,10 +39,39 @@ import { phoneLinkStatus } from './phone-link.js';
  * also stops that gateway's in-process cron scheduler (issue #149/#150):
  * the gateway owns scheduling internally now, so its automations only
  * fire while the gateway runs — no OS scheduler, no backfill.
+ *
+ * Supervision (issue #351): a failed `serve()` used to be retried
+ * immediately and unconditionally on the very next caller (every settings
+ * read), which surfaced a real boot failure as silent retry-storming with
+ * no user-visible signal. `gateway-supervisor-core.ts` now tracks failures
+ * per gateway id: each one schedules a single backed-off retry, and
+ * `ensureLocalGateway` itself fails fast (no new attempt) while a backoff
+ * is pending or after the crash-loop threshold trips — see
+ * `getLocalGatewaySupervisorState` / `restartLocalGateway`.
  */
 
 const handles = new Map<string, GatewayServeHandle>();
 const starting = new Map<string, Promise<GatewayServeHandle>>();
+const restarting = new Map<string, Promise<void>>();
+/** Per-gateway backoff/crash-loop bookkeeping (issue #351). */
+const supervisor = new Map<string, SupervisorState>();
+/** Epoch ms before which `ensureLocalGateway` refuses a new attempt. */
+const nextAttemptAt = new Map<string, number>();
+/**
+ * Set once the app is quitting (main.ts's `before-quit` handler) so a
+ * scheduled auto-retry timer that fires mid-teardown doesn't resurrect a
+ * gateway we just told to close.
+ */
+let disposed = false;
+
+export function markLocalGatewaysDisposed(): void {
+  disposed = true;
+}
+
+/** Supervision snapshot for gateway `gatewayId` — empty state if it has never failed. */
+export function getLocalGatewaySupervisorState(gatewayId: string): SupervisorState {
+  return supervisor.get(gatewayId) ?? initialSupervisorState();
+}
 
 // Per-gateway info provider is registered with gateway-store once on
 // module load — the closure reads `handles` at lookup time, so future
@@ -51,6 +92,26 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
   if (ready) return ready;
   const inFlight = starting.get(gatewayId);
   if (inFlight) return inFlight;
+
+  // Supervision guard (issue #351): fail fast instead of hammering `serve()`
+  // again on every caller. `restartLocalGateway` (manual restart) clears
+  // both maps first, so a deliberate user action is never blocked by this.
+  const sup = supervisor.get(gatewayId);
+  if (sup?.loopBroken) {
+    throw new Error(
+      `local gateway "${gatewayId}" failed to start repeatedly and stopped retrying` +
+        (sup.lastError ? ` (last error: ${sup.lastError})` : '') +
+        ' — use Settings → Gateway → Restart to try again.',
+    );
+  }
+  const waitUntil = nextAttemptAt.get(gatewayId);
+  if (waitUntil !== undefined && Date.now() < waitUntil) {
+    throw new Error(
+      `local gateway "${gatewayId}" is backing off after a failed start; retrying automatically` +
+        (sup?.lastError ? ` (last error: ${sup.lastError})` : ''),
+    );
+  }
+
   const p = (async () => {
     // The gateway owns the template catalog AND its remote refresh now
     // (issue #141, Phase 5), so pass the optional remote manifest URL down
@@ -86,6 +147,10 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
         // `GET /centraid/_templates` route resolves bundle-or-cache from
         // this per-gateway cache dir, matching the old desktop IPC.
         templatesCacheDir: templatesCacheDir(gatewayId),
+        // Persist gateway logs (issue #351) so the Logs page and the
+        // diagnostics bundle survive a crash/restart — without this the
+        // log store is an in-memory ring that dies with the process.
+        logsDir: path.join(gatewayDir(gatewayId), 'gateway-logs'),
         ...(settings.remoteTemplatesUrl ? { remoteTemplatesUrl: settings.remoteTemplatesUrl } : {}),
       },
       // Inject the desktop's draft-session scheme so the gateway's unified
@@ -116,9 +181,43 @@ export async function ensureLocalGateway(gatewayId: string): Promise<GatewayServ
     });
     handles.set(gatewayId, handle);
     return handle;
-  })().finally(() => {
-    starting.delete(gatewayId);
-  });
+  })()
+    .then((handle) => {
+      // A clean start clears any backoff/crash-loop history — a gateway
+      // that's up again deserves a fresh supervision window, not one that
+      // remembers failures from an hour ago.
+      supervisor.delete(gatewayId);
+      nextAttemptAt.delete(gatewayId);
+      return handle;
+    })
+    .catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      const prev = supervisor.get(gatewayId) ?? initialSupervisorState();
+      const next = recordFailure(prev, Date.now(), message);
+      supervisor.set(gatewayId, next);
+      if (!next.loopBroken) {
+        const delay = backoffForAttempt(next.attempt);
+        nextAttemptAt.set(gatewayId, Date.now() + delay);
+        // Auto-retry in the background so a transient startup failure heals
+        // itself without requiring the user to trigger another settings
+        // read or manually restart. `disposed` guards against a retry
+        // firing after the app has already started quitting.
+        const timer = setTimeout(() => {
+          if (disposed) return;
+          ensureLocalGateway(gatewayId).catch(() => {
+            // Already recorded above (recursively, via this same catch) —
+            // nothing further to do here.
+          });
+        }, delay);
+        timer.unref?.();
+      } else {
+        nextAttemptAt.delete(gatewayId);
+      }
+      throw err;
+    })
+    .finally(() => {
+      starting.delete(gatewayId);
+    });
   starting.set(gatewayId, p);
   return p;
 }
@@ -141,11 +240,43 @@ export async function shutdownLocalGateway(gatewayId: string): Promise<void> {
  * Stop every running local gateway except `exceptId` (if provided).
  * Used by the gateway-switch IPC to tear down stale HTTP servers when
  * the user activates a different gateway, so we don't accumulate
- * dormant ports across switches.
+ * dormant ports across switches. Called with no argument at app quit
+ * (main.ts's `before-quit` handler) to close everything.
  */
 export async function shutdownAllLocalGatewaysExcept(exceptId?: string): Promise<void> {
   const ids = Array.from(handles.keys()).filter((id) => id !== exceptId);
   await Promise.all(ids.map((id) => shutdownLocalGateway(id)));
+}
+
+/**
+ * Restart a local gateway: graceful stop (WAL checkpoint + close, via
+ * `shutdownLocalGateway`) then a fresh `ensureLocalGateway` — serialized so
+ * concurrent restart requests (e.g. a double-click on the Settings button)
+ * collapse onto one in-flight attempt rather than racing two `serve()`
+ * calls. A manual restart always clears supervision bookkeeping first, so
+ * it isn't refused by crash-loop/backoff state left over from earlier
+ * automatic-retry failures — this is the one path that resets the loop
+ * breaker short of the app relaunching.
+ *
+ * `serve()` mints a fresh per-launch bearer token when the caller doesn't
+ * pass one (true here, same as first boot), so every caller MUST also
+ * invalidate the renderer's HTTP-client auth caches and re-broadcast the
+ * active-gateway auth after this resolves — see the `GATEWAY_RESTART` IPC
+ * handler in ipc.ts, which does exactly that.
+ */
+export async function restartLocalGateway(gatewayId: string): Promise<void> {
+  const inFlight = restarting.get(gatewayId);
+  if (inFlight) return inFlight;
+  const p = (async () => {
+    supervisor.delete(gatewayId);
+    nextAttemptAt.delete(gatewayId);
+    await shutdownLocalGateway(gatewayId);
+    await ensureLocalGateway(gatewayId);
+  })().finally(() => {
+    restarting.delete(gatewayId);
+  });
+  restarting.set(gatewayId, p);
+  return p;
 }
 
 /**

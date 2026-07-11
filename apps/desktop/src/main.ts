@@ -1,14 +1,22 @@
-import { app, BrowserWindow, nativeImage, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installAuthInjector } from './main/auth-injector.js';
-import { startGatewayMonitor } from './main/gateway-monitor.js';
+import { installCrashHandlers } from './main/crash-log.js';
+import { startGatewayMonitor, stopGatewayMonitor } from './main/gateway-monitor.js';
 import { registerIpcHandlers } from './main/ipc.js';
-import { ensurePhoneLink } from './main/phone-link.js';
-import { startReminderMonitor } from './main/reminder-monitor.js';
+import { markLocalGatewaysDisposed, shutdownAllLocalGatewaysExcept } from './main/local-gateway.js';
+import { ensurePhoneLink, shutdownPhoneLink } from './main/phone-link.js';
+import { startReminderMonitor, stopReminderMonitor } from './main/reminder-monitor.js';
+import { loadSettings } from './main/settings.js';
 import { startUpdateWatcher } from './main/update-watcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Installed before `app.whenReady()` so even an early-boot failure (module
+// init, a settings read that runs ahead of the window) gets captured.
+// Deliberate log-and-continue posture — see crash-log.ts's doc comment.
+installCrashHandlers();
 
 // Icon lives at the package root (../../icon.png from dist/main.js); used
 // for the BrowserWindow on Windows/Linux and the macOS dock during dev.
@@ -62,12 +70,30 @@ function createWindow(): void {
   });
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.setIcon(nativeImage.createFromPath(ICON_PATH));
   }
   void installAuthInjector();
   registerIpcHandlers();
+  // Boot the active gateway before showing the window (issue #351). Before
+  // this, a `serve()` failure during lazy startup only surfaced as a failed
+  // IPC invoke the FIRST time the renderer called `getSettings()` — no
+  // dialog, and (pre-supervision) every subsequent settings read just
+  // retried the same failing start immediately. `loadSettings()` resolves
+  // the active gateway (starting the embedded local runtime when it's the
+  // active one) and local-gateway.ts's supervisor now owns backed-off
+  // background retries — this is just the "tell the user something's
+  // wrong" surface for a launch-time failure, not itself a retry loop.
+  try {
+    await loadSettings();
+  } catch (err) {
+    dialog.showErrorBox(
+      'Centraid gateway failed to start',
+      `The embedded gateway could not start:\n\n${err instanceof Error ? err.message : String(err)}\n\n` +
+        'Centraid will keep retrying automatically in the background.',
+    );
+  }
   createWindow();
   // Relaunch-to-update: watch the built dist for a newer build landing while
   // the app runs; the sidebar shows a "Relaunch to update" pill when one does.
@@ -105,4 +131,48 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+/**
+ * Graceful quit (issue #351). Before this, quitting the app never closed
+ * the embedded gateway's SQLite handles — `gateway.stop()` (WAL checkpoint
+ * + `db.close()`, wired through `GatewayServeHandle.close()`) only ran on
+ * an explicit gateway *switch*. Every normal quit was, from SQLite's
+ * perspective, a crash.
+ *
+ * `before-quit` is cancelable, so we intercept the first one, run the
+ * async teardown, then call `app.quit()` ourselves — which re-fires
+ * `before-quit`; the `quitting` guard lets that second pass through
+ * instead of looping. A hard cap bounds the wait so a wedged gateway
+ * can't hang the whole app on quit.
+ */
+const QUIT_TEARDOWN_TIMEOUT_MS = 5000;
+let quitting = false;
+
+app.on('before-quit', (event) => {
+  if (quitting) return;
+  quitting = true;
+  event.preventDefault();
+
+  // Stop taking on new supervised-restart work first — a scheduled
+  // auto-retry firing mid-teardown would otherwise resurrect a gateway we
+  // just told to close.
+  markLocalGatewaysDisposed();
+  stopGatewayMonitor();
+  stopReminderMonitor();
+
+  const teardown = Promise.allSettled([
+    // Every local gateway — WAL checkpoint + close (issue #1 above).
+    shutdownAllLocalGatewaysExcept(),
+    // The iroh phone tunnel holds its own endpoint + device store.
+    shutdownPhoneLink(),
+  ]);
+  const timeout = new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, QUIT_TEARDOWN_TIMEOUT_MS);
+    t.unref?.();
+  });
+
+  void Promise.race([teardown, timeout]).finally(() => {
+    app.quit();
+  });
 });

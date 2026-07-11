@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyComponentAlerts,
   applyProbe,
   clampAlertSeconds,
   DEFAULT_ALERT_SECONDS,
+  DEFAULT_COMPONENT_ALERT_SECONDS,
+  DEGRADED_LATENCY_MS,
   evaluateAlert,
   formatDurationMs,
   initialRuntimeState,
@@ -10,6 +13,8 @@ import {
   MIN_ALERT_SECONDS,
   OUTAGE_CAP,
   SAMPLE_CAP,
+  SUSTAINED_LATENCY_SAMPLE_COUNT,
+  type GatewayComponentIssue,
   type GatewayProbe,
   type GatewayRuntimeState,
 } from './gateway-monitor-core.js';
@@ -154,5 +159,184 @@ describe('formatDurationMs', () => {
     expect(formatDurationMs(200_000)).toBe('3m 20s');
     expect(formatDurationMs(7_500_000)).toBe('2h 05m');
     expect(formatDurationMs(100_800_000)).toBe('1d 4h');
+  });
+});
+
+describe('applyProbe: health reconciliation', () => {
+  it('carries the health probe status straight through when latency is fine', () => {
+    const state = run([ok(T0, { healthStatus: 'ok' })]);
+    expect(state.healthStatus).toBe('ok');
+    expect(state.latencyDegraded).toBe(false);
+  });
+
+  it('an error component wins outright, even if the probe itself is fast', () => {
+    const state = run([
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [{ component: 'vaults', status: 'error' }],
+      }),
+    ]);
+    expect(state.healthStatus).toBe('error');
+    expect(state.componentIssues).toEqual([{ component: 'vaults', status: 'error' }]);
+  });
+
+  it('a degraded component reads as degraded', () => {
+    const state = run([
+      ok(T0, {
+        healthStatus: 'degraded',
+        componentIssues: [{ component: 'outbox', status: 'degraded' }],
+      }),
+    ]);
+    expect(state.healthStatus).toBe('degraded');
+  });
+
+  it('sustained high latency downgrades an otherwise-ok probe to degraded', () => {
+    const slow = (at: number): GatewayProbe =>
+      ok(at, { healthStatus: 'ok', latencyMs: DEGRADED_LATENCY_MS + 500 });
+    expect(SUSTAINED_LATENCY_SAMPLE_COUNT).toBeGreaterThan(1);
+    // One slow probe alone isn't "sustained".
+    const one = run([slow(T0)]);
+    expect(one.latencyDegraded).toBe(false);
+    expect(one.healthStatus).toBe('ok');
+    // A full run of consecutive slow, successful probes is.
+    const probes = Array.from({ length: SUSTAINED_LATENCY_SAMPLE_COUNT }, (_, i) =>
+      slow(T0 + i * 1000),
+    );
+    const sustained = run(probes);
+    expect(sustained.latencyDegraded).toBe(true);
+    expect(sustained.healthStatus).toBe('degraded');
+  });
+
+  it('a single fast probe breaks a latency streak', () => {
+    const slow = (at: number): GatewayProbe =>
+      ok(at, { healthStatus: 'ok', latencyMs: DEGRADED_LATENCY_MS + 500 });
+    const fast = (at: number): GatewayProbe => ok(at, { healthStatus: 'ok', latencyMs: 10 });
+    const probes = [
+      ...Array.from({ length: SUSTAINED_LATENCY_SAMPLE_COUNT }, (_, i) => slow(T0 + i * 1000)),
+      fast(T0 + SUSTAINED_LATENCY_SAMPLE_COUNT * 1000),
+    ];
+    const state = run(probes);
+    expect(state.latencyDegraded).toBe(false);
+    expect(state.healthStatus).toBe('ok');
+  });
+
+  it('keeps the last-known healthStatus while the gateway is unreachable or the probe falls back to /info', () => {
+    const withHealth = run([ok(T0, { healthStatus: 'ok' })]);
+    const stillOk = applyProbe(withHealth, fail(T0 + 5000));
+    expect(stillOk.healthStatus).toBe('ok');
+    // A probe that reached the gateway via the /info fallback (no healthStatus
+    // opinion) doesn't clobber the last-known health reconciliation either.
+    const infoFallback = applyProbe(
+      withHealth,
+      ok(T0 + 10_000, { healthStatus: undefined, componentIssues: undefined }),
+    );
+    expect(infoFallback.healthStatus).toBe('ok');
+  });
+
+  it('starts undefined before any health-capable probe has landed', () => {
+    const state = run([ok(T0)]);
+    expect(state.healthStatus).toBeUndefined();
+  });
+});
+
+describe('applyComponentAlerts', () => {
+  const config = { enabled: true, thresholdSeconds: DEFAULT_COMPONENT_ALERT_SECONDS };
+  const errorIssue = (component: string, message?: string): GatewayComponentIssue => ({
+    component,
+    status: 'error',
+    ...(message ? { message } : {}),
+  });
+
+  it('tracks a newly-erroring component but stays quiet before the threshold', () => {
+    let state = run([
+      ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults', 'boom')] }),
+    ]);
+    // First observation (same tick as the probe, T0) creates the record;
+    // a later tick, still erroring but short of the threshold, stays quiet.
+    ({ state } = applyComponentAlerts(state, T0, config));
+    const { state: next, actions } = applyComponentAlerts(state, T0 + 60_000, config);
+    expect(actions).toEqual([]);
+    expect(next.componentAlerts).toEqual([{ component: 'vaults', sinceAt: T0, message: 'boom' }]);
+  });
+
+  it('fires once the component has been erroring past the threshold, exactly once', () => {
+    let state = run([
+      ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults', 'boom')] }),
+    ]);
+    ({ state } = applyComponentAlerts(state, T0, config));
+    const first = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, config);
+    expect(first.actions).toEqual([
+      { component: 'vaults', message: 'boom', downForMs: DEFAULT_COMPONENT_ALERT_SECONDS * 1000 },
+    ]);
+    const second = applyComponentAlerts(
+      first.state,
+      T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000 + 5000,
+      config,
+    );
+    expect(second.actions).toEqual([]);
+  });
+
+  it('drops the record on recovery, re-arming the alert for a later re-error', () => {
+    let state = run([ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] })]);
+    ({ state } = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, config));
+    expect(state.componentAlerts).toHaveLength(1);
+
+    // Recovers — the record is dropped.
+    state = applyProbe(state, ok(T0 + 500_000, { healthStatus: 'ok', componentIssues: [] }));
+    ({ state } = applyComponentAlerts(state, T0 + 500_000, config));
+    expect(state.componentAlerts).toEqual([]);
+
+    // Re-errors — starts a fresh window, doesn't immediately re-fire.
+    state = applyProbe(
+      state,
+      ok(T0 + 501_000, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] }),
+    );
+    const reErrored = applyComponentAlerts(state, T0 + 501_000, config);
+    expect(reErrored.actions).toEqual([]);
+    expect(reErrored.state.componentAlerts).toEqual([
+      { component: 'vaults', sinceAt: T0 + 501_000 },
+    ]);
+  });
+
+  it('does not fire when alerts are disabled', () => {
+    const state = run([ok(T0, { healthStatus: 'error', componentIssues: [errorIssue('vaults')] })]);
+    const { actions } = applyComponentAlerts(state, T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000, {
+      ...config,
+      enabled: false,
+    });
+    expect(actions).toEqual([]);
+  });
+
+  it('tracks multiple components independently', () => {
+    let state = run([
+      ok(T0, {
+        healthStatus: 'error',
+        componentIssues: [errorIssue('vaults'), errorIssue('outbox')],
+      }),
+    ]);
+    ({ state } = applyComponentAlerts(state, T0, config));
+    const { actions, state: next } = applyComponentAlerts(
+      state,
+      T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000,
+      config,
+    );
+    expect(actions.map((a) => a.component).sort()).toEqual(['outbox', 'vaults']);
+    expect(next.componentAlerts).toHaveLength(2);
+  });
+
+  it('does not alert on a degraded (non-error) component', () => {
+    const state = run([
+      ok(T0, {
+        healthStatus: 'degraded',
+        componentIssues: [{ component: 'outbox', status: 'degraded' }],
+      }),
+    ]);
+    const { actions, state: next } = applyComponentAlerts(
+      state,
+      T0 + DEFAULT_COMPONENT_ALERT_SECONDS * 1000,
+      config,
+    );
+    expect(actions).toEqual([]);
+    expect(next.componentAlerts).toEqual([]);
   });
 });

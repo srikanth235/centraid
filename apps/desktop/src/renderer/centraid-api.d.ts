@@ -178,6 +178,19 @@ export interface CentraidGatewayRuntime {
   outages: CentraidGatewayOutage[];
   alert: { enabled: boolean; thresholdSeconds: number };
   pollIntervalMs: number;
+  /**
+   * Reconciled health signal (issue #351): folds `/centraid/_gateway/health`'s
+   * component statuses plus a sustained-high-latency check into one badge —
+   * a "listening but hung" gateway reads as `'degraded'`, not `'up'`. Absent
+   * until the first probe reaches `/health` (or for a gateway old enough to
+   * only answer `/info`); persists at its last value while unreachable, same
+   * posture as `version`.
+   */
+  healthStatus?: 'ok' | 'degraded' | 'error';
+  /** Non-'ok' components from the most recent `/health` snapshot. */
+  componentIssues?: { component: string; status: string; message?: string }[];
+  /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
+  latencyDegraded?: boolean;
 }
 
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */
@@ -528,6 +541,20 @@ interface CentraidApi {
    * after settings writes and gateway switches). Returns the unsubscribe.
    */
   onGatewayRuntime(cb: (snapshot: CentraidGatewayRuntime) => void): () => void;
+  /**
+   * Restart the local embedded gateway (issue #351): graceful stop (WAL
+   * checkpoint + close) then relaunch. Refused for remote gateways —
+   * `ok: false` with an explanatory error.
+   */
+  restartGateway(): Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
+   * it through a native save dialog (issue #351). `canceled` when the user
+   * dismissed the dialog.
+   */
+  exportGatewayDiagnostics(): Promise<
+    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+  >;
   /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:

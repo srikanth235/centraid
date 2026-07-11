@@ -4,16 +4,16 @@
 
 - [x] vault schema downgrade guard (`VaultSchemaAheadError`)
 - [x] `PRAGMA synchronous = FULL` on file-backed vault DBs
-- [ ] graceful gateway stop on desktop quit
-- [ ] crash capture (`uncaughtException`/`unhandledRejection`) to a rotated crash log
-- [ ] supervised gateway restart with backoff + crash-loop detection
+- [x] graceful gateway stop on desktop quit
+- [x] crash capture (`uncaughtException`/`unhandledRejection`) to a rotated crash log
+- [x] supervised gateway restart with backoff + crash-loop detection
 - [ ] manual "Restart gateway" action (IPC + Gateway page button)
-- [ ] boot-failure dialog instead of a blank screen
+- [x] boot-failure dialog instead of a blank screen
 - [x] rotated JSONL log persistence with boot tail-load
-- [ ] diagnostics bundle endpoint + save-dialog export
-- [ ] heartbeat monitor polls `/centraid/_gateway/health`
-- [ ] degraded-latency threshold (hung-but-listening reads as degraded)
-- [ ] component-error OS alerts with de-dupe
+- [x] diagnostics bundle endpoint + save-dialog export
+- [x] heartbeat monitor polls `/centraid/_gateway/health`
+- [x] degraded-latency threshold (hung-but-listening reads as degraded)
+- [x] component-error OS alerts with de-dupe
 - [x] vault mount failures surfaced + retried (no permanent silent skip)
 - [x] `vaults` probe does a real SQLite read per mounted plane
 - [x] `disk` health component with free-space watermarks
