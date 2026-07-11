@@ -30,6 +30,7 @@ import {
   revokePhoneDevice,
 } from './phone-link.js';
 import { getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
+import { getChangelog } from './changelog.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -121,6 +122,12 @@ export const Channel = {
   // relaunch through these two.
   UPDATE_STATUS: 'centraid:update:status',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
+
+  // "What's new" changelog: main fetches the project's GitHub Releases (there
+  // is no bundled CHANGELOG — each release's notes are the changelog) and
+  // hands the renderer modal the running version + the release list. Cached in
+  // main so reopening / the auto-open probe doesn't hammer GitHub's rate limit.
+  CHANGELOG_GET: 'centraid:changelog:get',
 
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP
   // client — the gateway owns the catalog + clone (`POST /_apps/_clone`).
@@ -520,6 +527,9 @@ export function registerIpcHandlers(): void {
     relaunchToUpdate();
     return { ok: true as const };
   });
+
+  // ----- "What's new" changelog -----
+  ipcMain.handle(Channel.CHANGELOG_GET, async () => getChangelog());
 
   // ----- Templates -----
   // TEMPLATES_LIST + TEMPLATES_CLONE moved to the renderer's direct HTTP

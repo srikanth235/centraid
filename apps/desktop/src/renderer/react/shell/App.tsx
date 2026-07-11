@@ -2,6 +2,7 @@ import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { ShellRoute } from '../../app-shell-context.js';
 import PaletteScreen from '../screens/PaletteScreen.js';
+import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
@@ -92,6 +93,7 @@ export default function App(): JSX.Element {
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
 
   // Document-level shortcuts + external re-scope, ported from the vanilla app.ts
   // boot block. Bound once against the live nav (navRef, fed by ShellApp). A
@@ -142,6 +144,35 @@ export default function App(): JSX.Element {
       closeVaultSwitcher();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-open "What's new" once per version, matching Claude Code. On boot,
+  // compare the running build's version (from the changelog read) against the
+  // version we last showed the modal for (persisted in settings). When they
+  // differ AND there are notes to show, open the modal and record the version
+  // so it won't re-open on the next launch. Skipped offline / on a cold error
+  // (no releases), and no-op if the bridge is stubbed (tests).
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const [settings, changelog] = await Promise.all([
+          window.CentraidApi.getSettings?.(),
+          window.CentraidApi.getChangelog?.(),
+        ]);
+        if (cancelled || !changelog) return;
+        const { currentVersion, releases } = changelog;
+        if (!currentVersion || releases.length === 0) return;
+        if (settings?.changelogSeenVersion === currentVersion) return;
+        setWhatsNewOpen(true);
+        await window.CentraidApi.saveSettings?.({ changelogSeenVersion: currentVersion });
+      } catch {
+        // Offline / bridge unavailable — no auto-open, no persisted version.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const renderSidebar = useCallback(
@@ -202,6 +233,7 @@ export default function App(): JSX.Element {
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
+          onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
             ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
             : {})}
@@ -335,6 +367,7 @@ export default function App(): JSX.Element {
           }
         />
       ) : null}
+      {whatsNewOpen ? <WhatsNewModal onClose={() => setWhatsNewOpen(false)} /> : null}
     </>
   );
 }

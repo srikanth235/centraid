@@ -42,6 +42,8 @@ export interface PersistedSettingsPatch {
   gatewayAlertSeconds?: number;
   /** Master switch for the gateway down alert. */
   gatewayAlertsEnabled?: boolean;
+  /** Changelog version last shown by "What's new" (preserve-or-set string). */
+  changelogSeenVersion?: string;
 }
 
 /**
@@ -109,5 +111,10 @@ export function mergePersistedSettings(
       : current.gatewayAlertsEnabled !== undefined
         ? { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
         : {}),
+    ...preserveOrSet(
+      'changelogSeenVersion',
+      patch.changelogSeenVersion,
+      current.changelogSeenVersion,
+    ),
   };
 }

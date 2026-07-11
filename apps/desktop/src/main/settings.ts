@@ -72,6 +72,13 @@ export interface PersistedSettings {
   gatewayAlertSeconds?: number;
   /** Master switch for the gateway down alert. Absent → enabled. */
   gatewayAlertsEnabled?: boolean;
+  /**
+   * The changelog version the user has already seen — the running build's
+   * version at the last time the "What's new" modal auto-opened. The renderer
+   * auto-opens the modal once whenever `app.getVersion()` differs from this,
+   * then writes the new version back. Absent = never seen (fresh install).
+   */
+  changelogSeenVersion?: string;
 }
 
 export interface DesktopSettings {
@@ -130,6 +137,8 @@ export interface DesktopSettings {
   gatewayAlertSeconds?: number;
   /** Master switch for the gateway down alert (absent → enabled). */
   gatewayAlertsEnabled?: boolean;
+  /** Changelog version last shown by the "What's new" auto-open (absent → never). */
+  changelogSeenVersion?: string;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -190,6 +199,9 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     })(),
     ...(typeof raw.gatewayAlertsEnabled === 'boolean'
       ? { gatewayAlertsEnabled: raw.gatewayAlertsEnabled }
+      : {}),
+    ...(typeof raw.changelogSeenVersion === 'string'
+      ? { changelogSeenVersion: raw.changelogSeenVersion }
       : {}),
   };
 }
@@ -283,6 +295,9 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     ...(p.gatewayAlertSeconds !== undefined ? { gatewayAlertSeconds: p.gatewayAlertSeconds } : {}),
     ...(p.gatewayAlertsEnabled !== undefined
       ? { gatewayAlertsEnabled: p.gatewayAlertsEnabled }
+      : {}),
+    ...(p.changelogSeenVersion !== undefined
+      ? { changelogSeenVersion: p.changelogSeenVersion }
       : {}),
   };
 }

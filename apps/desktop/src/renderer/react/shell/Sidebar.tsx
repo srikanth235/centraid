@@ -79,6 +79,8 @@ export interface SidebarProps {
    */
   updateVersion?: string;
   onRelaunchToUpdate?: () => void;
+  /** Open the "What's new" changelog modal. Omitted = the item is hidden. */
+  onWhatsNew?: () => void;
 }
 
 function SbItem(props: {
@@ -274,6 +276,13 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
       <SbItem icon={<SparkleGlyph />} label="No saved chats yet" disabled />
 
       <span style={{ flex: '1', minHeight: '12px' }} />
+      {props.onWhatsNew ? (
+        <SbItem
+          icon={<Icon name="Gift" size={15} />}
+          label="What's new"
+          onClick={props.onWhatsNew}
+        />
+      ) : null}
       {props.updateVersion !== undefined && props.onRelaunchToUpdate ? (
         <button className={chrome.sbUpdate} type="button" onClick={props.onRelaunchToUpdate}>
           <Logo size={26} />
