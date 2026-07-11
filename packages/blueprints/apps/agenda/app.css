@@ -94,7 +94,7 @@ button {
 }
 mark {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -258,7 +258,7 @@ mark {
 }
 .ag-mini-day[data-selected='true'] {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 .ag-mini-day[data-today='true'] {
   background: var(--accent-deep);
@@ -273,7 +273,7 @@ mark {
   width: 3px;
   height: 3px;
   border-radius: 999px;
-  background: var(--accent-deep);
+  background: var(--accent-deep-fg);
 }
 .ag-mini-day[data-today='true'] .ag-mini-dot {
   background: #fff;
@@ -347,7 +347,7 @@ mark {
   color: var(--ink-3);
 }
 .ag-consent-line svg {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   flex-shrink: 0;
 }
 .ag-consent-line span {
@@ -567,7 +567,7 @@ mark {
 }
 .ag-more:hover {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 
 @media (max-width: 480px) {
@@ -839,7 +839,7 @@ mark {
   color: var(--ink);
 }
 .ag-sched-num[data-today='true'] {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 .ag-sched-dow {
   font-family: var(--mono);
@@ -1001,7 +1001,7 @@ mark {
   font-size: 10px;
   border-radius: 5px;
   padding: 2px 8px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   background: var(--accent-soft);
 }
 .ag-badge[data-tone='muted'] {
@@ -1041,7 +1041,7 @@ mark {
   height: 26px;
   border-radius: 999px;
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
@@ -1078,7 +1078,7 @@ mark {
 .ag-guest-opt[data-active='true'] {
   border-color: var(--selb);
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 .ag-guest-stat {
   flex-shrink: 0;
@@ -1090,7 +1090,7 @@ mark {
   background: var(--bg-sunken);
 }
 .ag-guest-stat[data-stat='accepted'] {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   background: var(--accent-soft);
 }
 .ag-guest-stat[data-stat='declined'] {
@@ -1161,7 +1161,7 @@ mark {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: var(--accent-deep);
+  background: var(--accent-deep-fg);
   margin-top: 5px;
   flex-shrink: 0;
 }
@@ -1183,7 +1183,7 @@ mark {
 .ag-receipt-chip {
   font-family: var(--mono);
   font-size: 9px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 4px;

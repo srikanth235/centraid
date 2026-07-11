@@ -23,13 +23,22 @@
      accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
      --ink-faint/--radius aliases) comes from tokens.css. */
   --warn: #b06a12;
+
+  /* --accent-deep is tuned for background+white-text buttons (dark in both
+     themes). Nav-active labels/chips/tags that show accent-deep AS
+     foreground on top of --accent-soft need the opposite move in dark
+     mode — this alias is the escape hatch; light mode just mirrors
+     accent-deep. */
+  --accent-deep-fg: var(--accent-deep);
 }
 :root[data-theme='dark'] {
   --warn: #e0a13c;
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
     --warn: #e0a13c;
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
   }
 }
 
@@ -191,7 +200,7 @@ button {
 }
 .tk-nav-item[aria-current='true'] {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   font-weight: 600;
 }
 .tk-nav-count {
@@ -246,7 +255,7 @@ button {
   color: var(--ink-3);
 }
 .tk-consent-line svg {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   flex-shrink: 0;
 }
 .tk-consent-line span {
@@ -407,7 +416,7 @@ button {
   margin-left: auto;
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 
 /* ---------- Section headers (ledger eyebrows) ---------- */
@@ -432,7 +441,7 @@ button {
   color: var(--danger);
 }
 .tk-eyebrow.tone-accent {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
 }
 .tk-eyebrow-count {
   font-family: var(--mono);
@@ -539,7 +548,7 @@ button {
 .tk-row-title mark,
 .tk-row-note mark {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -559,7 +568,7 @@ button {
   font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   background: var(--accent-soft);
   border-radius: 5px;
   padding: 1px 6px;
@@ -784,7 +793,7 @@ button {
 .tk-receipt-chip {
   font-family: var(--mono);
   font-size: 9px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 4px;
@@ -813,7 +822,7 @@ button {
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   background: var(--accent-soft);
   border-radius: 999px;
   padding: 3px 6px 3px 10px;
