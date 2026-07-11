@@ -33,7 +33,7 @@
   --bg-sunken: hsl(43 16% 94.5%);
 
   /* Everything else (ink ramp, --line*, --danger, radii, --ease, tracking,
-     the --t-* type scale, --font-*/--mono, --sel/--selb, --_accent and its
+     the --t-* type scale, --font-* / --mono, --sel/--selb, --_accent and its
      accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
      --ink-faint/--radius aliases) now comes from tokens.css. */
 
