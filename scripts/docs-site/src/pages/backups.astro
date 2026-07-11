@@ -1,0 +1,88 @@
+---
+import DocsLayout from '../layouts/DocsLayout.astro';
+import content from '../content/backups.html?raw';
+
+const rail = [
+  {
+    "href": "#why",
+    "no": "§01",
+    "label": "Why",
+    "current": true
+  },
+  {
+    "href": "#setup",
+    "no": "§02",
+    "label": "Setup",
+    "current": false
+  },
+  {
+    "href": "#kit",
+    "no": "§03",
+    "label": "Recovery kit",
+    "current": false
+  },
+  {
+    "href": "#restore",
+    "no": "§04",
+    "label": "Restore",
+    "current": false
+  },
+  {
+    "href": "#health",
+    "no": "§05",
+    "label": "Health",
+    "current": false
+  },
+  {
+    "href": "#providers",
+    "no": "§06",
+    "label": "Provider ecosystem",
+    "current": false
+  },
+  {
+    "href": "#caveats",
+    "no": "§07",
+    "label": "Honest caveats",
+    "current": false
+  }
+];
+const footer = {
+  "manifesto": "An outage is an inconvenience. <em>A loss is forever — that's the whole difference backups buy.</em>",
+  "links": [
+    {
+      "href": "https://centraid.dev",
+      "label": "centraid.dev",
+      "external": false
+    },
+    {
+      "href": "../start/",
+      "label": "start",
+      "external": false
+    },
+    {
+      "href": "../data/",
+      "label": "data",
+      "external": false
+    },
+    {
+      "href": "../devices/",
+      "label": "devices",
+      "external": false
+    }
+  ]
+};
+---
+
+<DocsLayout
+  title="Centraid Backups: Client-Encrypted Offsite Vault Backup"
+  description="How Centraid backs up your vault offsite: client-side encryption, the recovery kit, quarantined restores, generation fencing, and the open backup provider protocol."
+  current="backups"
+  canonicalPath="backups/"
+  searchLabel="Backups"
+  searchKeywords="backup offsite recovery kit keyring encryption restore quarantine generation fencing provider clawgnition retention verification"
+  bodyClass="has-rail"
+  rail={rail}
+  footer={footer}
+>
+  <Fragment set:html={content} />
+</DocsLayout>

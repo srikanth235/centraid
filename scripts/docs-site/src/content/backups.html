@@ -1,0 +1,301 @@
+<section class="ch-hero wrap">
+        <div class="ghost" aria-hidden="true">B</div>
+        <p class="eyebrow r">Chapter 4 · backups</p>
+        <h1 class="r" style="--d: 0.1s">One home for your data. <em>One copy that isn't there.</em></h1>
+        <p class="lede r" style="--d: 0.22s">
+          The gateway being the single, sovereign home of your data is the whole point — and also
+          the whole risk. A dead disk, a stolen laptop, a bad <code>rm</code> don't ask permission.
+          Offsite backup is the difference between an outage and a loss: the same vault, encrypted
+          on your machine before a single byte leaves it, held by a provider who can see storage
+          but never content.
+        </p>
+      </section>
+
+      <!-- §01 WHY -->
+      <section class="sec wrap" id="why">
+        <p class="eyebrow r">§01 · why</p>
+        <h2 class="r" style="--d: 0.06s">A snapshot is <em>everything, sealed.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            A backup only counts if restoring it gives you back the thing you actually had — not a
+            database with no apps, or a Locker full of ciphertext nobody can open. A Centraid
+            snapshot takes that literally:
+          </p>
+        </div>
+        <div class="dt-scroll r" style="--d: 0.18s; margin-top: 24px">
+          <table class="dt">
+            <thead>
+              <tr>
+                <th>What's in it</th>
+                <th>Source</th>
+                <th>Why it has to be there</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The vault</td>
+                <td><code>vault.db</code> + <code>journal.db</code>, staged point-in-time</td>
+                <td>Every row, every receipt — the record itself.</td>
+              </tr>
+              <tr>
+                <td>Attachments</td>
+                <td>every object in the blob store (content-addressed)</td>
+                <td>Photos, documents, receipts — a vault with no attachments is a vault with holes.</td>
+              </tr>
+              <tr>
+                <td>Installed apps</td>
+                <td>a bundle of the gateway's app code store</td>
+                <td>A restored vault with no apps installed is data with no way to see it.</td>
+              </tr>
+              <tr>
+                <td>The sealing key</td>
+                <td>the vault's sealed-columns key, which normally lives outside the vault directory</td>
+                <td>
+                  Without it, a restore brings back Locker's passwords as permanent ciphertext — a
+                  backup that looks complete and isn't. This is the entry that makes it a backup and
+                  not a placebo.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="aside r" style="--d: 0.24s">
+          And what never leaves your machine unencrypted: everything. Chunking, encryption and the
+          manifest all happen before a byte reaches the network — a provider stores opaque,
+          content-addressed ciphertext, never plaintext, never a key. Full format:
+          <code>packages/backup/FORMAT.md</code>.
+        </p>
+      </section>
+
+      <!-- §02 SETUP -->
+      <section class="dark" id="setup">
+        <div class="wrap">
+          <p class="eyebrow r">§02 · setup</p>
+          <h2 class="r" style="--d: 0.06s">Turn it on. <em>Pick where it goes.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Backups are a gateway config block, same discipline as everything else here — declared,
+            not discovered:
+          </p>
+          <div class="artifact tilt-l r" style="--d: 0.16s; max-width: 640px; margin-top: 8px">
+            <div class="artifact-head">
+              <span>gateway config</span><span class="tag">backup</span>
+            </div>
+            <div class="artifact-body" style="white-space: pre-wrap">
+backup: {
+  enabled: true,
+  intervalHours: 24,
+  verifyEveryDays: 7,
+  keyringPath: "~/.centraid/backup-keyring.json",
+  provider: { kind: "local", dir: "/Volumes/backup-drive" }
+  // or: { kind: "remote", endpoint: "https://api.clawgnition.com", apiKey: "…" }
+}</div>
+          </div>
+          <p class="prose r" style="--d: 0.2s; margin-top: 18px">
+            The same shape covers both cases the config supports: a <b>local-folder provider</b> —
+            an external drive or a mounted network share, the zero-setup default — and a
+            <b>remote provider</b> speaking the open backup protocol, where <code>endpoint</code> and
+            <code>apiKey</code> are all the gateway needs to know. <b>Clawgnition</b> is the first
+            commercial one: client-side encryption (the same as the local case — Clawgnition never
+            gets a key), S3-direct writes straight to Cloudflare R2, zero-egress restores.
+          </p>
+          <div class="term r" style="--d: 0.26s; margin-top: 22px; max-width: 720px">
+            <div class="term-bar"><span>backup CLI · admin shell</span></div>
+            <div class="term-body">
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway backup status --data-dir ~/centraid-data --vault Local</code>
+              </div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway backup run --data-dir ~/centraid-data --vault Local</code>
+              </div>
+              <div class="ln">
+                <span class="p">$</span>
+                <code>centraid-gateway backup list --data-dir ~/centraid-data --vault Local</code>
+              </div>
+              <div class="cm"># status / run / list / verify / restore / kit — one verb per concern</div>
+            </div>
+          </div>
+          <p class="note r" style="--d: 0.3s; margin-top: 16px">
+            The keyring (<code>keyringPath</code>) is the one file in this whole setup that isn't
+            just convenience: it holds the key material that makes every snapshot readable. It's
+            covered on its own, next.
+          </p>
+        </div>
+      </section>
+
+      <!-- §03 RECOVERY KIT -->
+      <section class="sec wrap" id="kit">
+        <p class="eyebrow r">§03 · the recovery kit</p>
+        <h2 class="r" style="--d: 0.06s">Export it now. <em>Not when you need it.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The keyring is a small JSON file holding your key material as a set of
+            <b>epochs</b> — the active encryption key plus every prior one still needed to read old
+            snapshots. Rotating the key (say, after a suspected compromise) mints a new epoch rather
+            than discarding the old one, so nothing already backed up becomes unreadable.
+          </p>
+          <p>
+            <code>centraid-gateway backup kit</code> exports a <b>recovery kit</b>: the full keyring
+            plus enough provider metadata (endpoint, target id, a label — never the provider api-key,
+            which is rotatable server-side and re-issued by logging in) to restore
+            <b>from nothing but this one file</b> on a blank machine. That's the acceptance test for
+            the whole feature: kit in hand, no other state, full restore.
+          </p>
+        </div>
+        <p class="aside r" style="--d: 0.2s">
+          Export it the day you turn backups on, store it offline — printed, a hardware key, a
+          safety-deposit box, anywhere that isn't the disk it's protecting — and treat it exactly
+          like the credential it is. <b>Losing every key epoch means losing the backups. By design.</b>
+          A provider that could recover your key for you is a provider that can read your data.
+        </p>
+      </section>
+
+      <!-- §04 RESTORE -->
+      <section class="dark" id="restore">
+        <div class="wrap">
+          <p class="eyebrow r">§04 · restore</p>
+          <h2 class="r" style="--d: 0.06s">
+            Never onto the live vault. <em>Never a silent resend.</em>
+          </h2>
+          <p class="lede r" style="--d: 0.12s">
+            <code>centraid-gateway backup restore</code> materializes a snapshot into a
+            <b>fresh directory</b> — it never touches, never overwrites, a running vault. Before it
+            downloads a single chunk it gates on compatibility: an unknown format, or a snapshot
+            written by a newer ontology or vault schema than the running gateway understands, is
+            refused outright. This is v0 — there is no migration path, only "update the gateway
+            first."
+          </p>
+          <div class="steps r" style="--d: 0.18s; max-width: 860px">
+            <div class="step">
+              <span class="dot">1</span>
+              <div>
+                <h3>The quarantine</h3>
+                <p>
+                  A restored vault comes back holding <i>yesterday's</i> world — including an outbox
+                  full of drafts and automations ready to fire the instant they mount. Restoring a
+                  backup must never re-send an email, so the engine marks the restore and the gateway,
+                  on first mount, parks every outbox row, disables every automation, and flags every
+                  connection for re-auth review. You re-arm each one deliberately, not by accident of
+                  timing.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <span class="dot">2</span>
+              <div>
+                <h3>Takeover, loudly</h3>
+                <p>
+                  Restoring onto a new machine and resuming backups from there is a
+                  <b>takeover</b>: the new gateway reads the provider's current generation counter and
+                  registers its next snapshot one ahead of it. If the old machine is still running and
+                  tries to back up again, its registration is refused — and it's required to surface
+                  "another machine has taken over this vault" and stop, never silently retry with a
+                  bumped number. Split-brain becomes a notification, not a silent fork.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- §05 HEALTH -->
+      <section class="sec wrap" id="health">
+        <p class="eyebrow r">§05 · health</p>
+        <h2 class="r" style="--d: 0.06s">Two ages, <em>on the Gateway page.</em></h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            The desktop's Gateway page carries a <b>backups</b> health component alongside the
+            others, surfacing two numbers: how long since the last successful backup, and how long
+            since the last successful <b>verification</b>.
+          </p>
+          <p>
+            Verification is the one the protocol insists on, because the provider contract is
+            explicit that providers verify nothing on your behalf — no chunk-existence check at
+            commit, no manifest parsing, no server-side integrity sweep. That is the deliberate
+            division of labor: the provider owns durability and lifecycle bookkeeping, the client
+            owns knowing whether the bytes are actually still good. On <code>verifyEveryDays</code>,
+            the gateway HEADs every object the newest manifest references and downloads + decrypts a
+            random sample, recomputing their keyed ids. A backup you've never verified is a backup
+            you're only assuming works.
+          </p>
+        </div>
+      </section>
+
+      <!-- §06 PROVIDER ECOSYSTEM -->
+      <section class="dark" id="providers">
+        <div class="wrap">
+          <p class="eyebrow r">§06 · provider ecosystem</p>
+          <h2 class="r" style="--d: 0.06s">The seam is <em>open, on purpose.</em></h2>
+          <p class="lede r" style="--d: 0.12s">
+            Backups follow the same anti-lock-in instinct as connections and connectors: the wire
+            contract between a gateway and a provider — <code>centraid-backup-provider/1</code> — is
+            a published, versioned protocol, not a Clawgnition implementation detail. Any operator
+            fronting S3-compatible storage can implement it: discovery and capabilities, two auth
+            tiers, target lifecycle, generation fencing, the GC min-age rule. A reference
+            <b>conformance kit</b> runs the same assertions against any implementation; passing it is
+            what "certified provider" means.
+          </p>
+          <p class="prose r" style="--d: 0.18s">
+            What differs between providers is declared, not guessed: retention (how aggressively
+            older snapshots get pruned into a ladder — keep-all, then daily, then weekly) and
+            restore cost class (free-egress vs. metered) are both part of the discovery document a
+            client reads before you commit to a plan, and both are things the gateway shows you —
+            not fine print you find out about during a 300&nbsp;GB restore.
+          </p>
+          <p class="aside r" style="--d: 0.24s">
+            Normative text lives in the protocol source, not here: <code>packages/backup/PROTOCOL.md</code>
+            (the provider seam) and <code>packages/backup/FORMAT.md</code> (the snapshot format
+            itself). This chapter is the tour; those are the spec.
+          </p>
+        </div>
+      </section>
+
+      <!-- §07 CAVEATS -->
+      <section class="sec wrap" id="caveats">
+        <p class="eyebrow r">§07 · honest caveats</p>
+        <h2 class="r" style="--d: 0.06s">What backups <em>don't</em> smooth over.</h2>
+        <div class="prose r" style="--d: 0.12s">
+          <p>
+            A few things worth knowing before they surprise you:
+          </p>
+        </div>
+        <div class="grid cols-3" style="margin-top: 26px">
+          <div class="card r" style="--d: 0.1s">
+            <p class="c-no">irreversible</p>
+            <h3>Purge means purge</h3>
+            <p>
+              Deleting a target is soft and undoable within a declared window. <b>Purge</b> is not —
+              it's a one-way erasure that permanently blocks undelete, and the protocol requires it
+              to run through the provider's own interactive session, never an api-key call. A
+              compromised gateway credential cannot destroy your backup history; only you, logged in
+              directly, can.
+            </p>
+          </div>
+          <div class="card r" style="--d: 0.18s">
+            <p class="c-no">retention</p>
+            <h3>History gets pruned</h3>
+            <p>
+              A provider's retention ladder means old snapshots don't live forever — the newest is
+              always protected, but the daily-then-weekly thinning is real. If you need a specific
+              point in time kept indefinitely, that's a provider policy question, not a gateway
+              setting.
+            </p>
+          </div>
+          <div class="card r" style="--d: 0.26s">
+            <p class="c-no">first upload</p>
+            <h3>Seeding takes time and disk</h3>
+            <p>
+              The first backup of a vault with hundreds of gigabytes of photos and documents is a
+              full upload — hours, not minutes, depending on your connection — and staging that much
+              content for chunking needs real headroom on local disk before it ever reaches the
+              network. Budget for both.
+            </p>
+          </div>
+        </div>
+
+        <div class="chapter-next r" style="margin-top: 40px">
+          <a href="../devices/">← previous: devices</a>
+          <a href="../ontology/">deep-dive: the ontology →</a>
+        </div>
+      </section>

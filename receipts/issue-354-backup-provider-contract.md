@@ -12,7 +12,7 @@
 - [x] `BackupService` scheduler + `'backups'` health component (staleness probe)
 - [x] `centraid-gateway backup` CLI — status|run|list|verify|restore|kit
 - [x] `RESTORE_QUARANTINE.json` handling at vault mount (outbox parked; automations flagged)
-- [ ] docs-site `backups` chapter
+- [x] docs-site `backups` chapter
 - [ ] automations auto-pause on restored-vault mount (needs code-store session; manual review for now)
 - [ ] desktop Gateway page backup card (backup age / verify age / restore UX)
 - [ ] grade Clawgnition's live endpoint with the conformance kit (needs deployed endpoint)
