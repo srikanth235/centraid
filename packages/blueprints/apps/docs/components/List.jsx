@@ -2,7 +2,7 @@
 // children) and the truncation footer (#windowFoot root).
 import { fmtBytes, fmtDate, isImage, purgeCountdown, tintBg, typeMeta } from '../format.js';
 import { I } from '../icons.js';
-import { Checkbox, Icon, Snippet } from './Shared.jsx';
+import { Checkbox, CustodyDot, Icon, Snippet } from './Shared.jsx';
 
 export function ListRow({
   doc,
@@ -87,6 +87,7 @@ export function ListRow({
       <span className="d-cell size">{fmtBytes(doc.byte_size)}</span>
       <span className={`d-cell added${trashed ? ' purge' : ''}`}>
         {trashed ? purgeCountdown(doc.purge_at) : fmtDate(doc.created_at)}
+        <CustodyDot state={doc.custody_state} />
       </span>
       <div className="d-row-end">
         {trashed ? (

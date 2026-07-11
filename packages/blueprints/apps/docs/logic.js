@@ -12,6 +12,7 @@
 // functions as props/callbacks, exactly like any other value flowing down.
 import { outcomeMessage, runBulk as runBulkBase, stageFileBytes, toast } from './kit.js';
 import { fmtBytes, typeMeta } from './format.js';
+import { createMetadata } from './metadata.js';
 import { createPopovers } from './popovers.js';
 import { createVersions } from './versions.js';
 
@@ -111,9 +112,10 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     return r * state.sortDir;
   }
 
-  // The rows for the current view: nav (or search) → type filter → sort.
+  // The rows for the current view: nav (or search) → type filter → tag
+  // filter → sort.
   function currentRows() {
-    const { nav, type, search } = state;
+    const { nav, type, tag, search } = state;
     let list;
     if (search.trim()) {
       list = state.searchResults ?? []; // flat vault FTS matches across every folder
@@ -125,6 +127,10 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
       if (nav.kind === 'folder') list = list.filter((f) => (f.folder_id ?? null) === nav.folderId);
     }
     if (type !== 'all') list = list.filter((f) => typeMeta(f.media_type).cat === type);
+    // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
+    // and same idiom as the type chips above, alongside them rather than
+    // replacing them (a document can be one type AND carry several labels).
+    if (tag && tag !== 'all') list = list.filter((f) => (f.tags ?? []).includes(tag));
     if (search.trim()) return list; // keep the vault's rank order for search
     if (nav.kind === 'recent') {
       return [...list]
@@ -377,6 +383,11 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     notice,
   });
 
+  // ---------- Metadata (tags + real activity) ----------
+  // Another file-size split (metadata.js) — closes over this factory's own
+  // act/narrate/refresh rather than re-implementing them.
+  const { addTag, removeTag, loadActivity } = createMetadata({ refresh, act, narrate });
+
   // ---------- Popovers (kebab + move) ----------
   // Another file-size split (popovers.js) — closes over data.folders plus
   // the document-write functions just above, passed in rather than
@@ -427,5 +438,8 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     replaceDocument,
     restoreVersion,
     loadHistory,
+    addTag,
+    removeTag,
+    loadActivity,
   };
 }

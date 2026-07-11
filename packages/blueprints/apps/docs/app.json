@@ -28,7 +28,11 @@
       { "schema": "core", "table": "restore_document_version", "verbs": "act" },
       { "schema": "core", "table": "create_folder", "verbs": "act" },
       { "schema": "core", "table": "rename_folder", "verbs": "act" },
-      { "schema": "core", "table": "delete_folder", "verbs": "act" }
+      { "schema": "core", "table": "delete_folder", "verbs": "act" },
+      { "schema": "core", "table": "tag_entity", "verbs": "act" },
+      { "schema": "core", "table": "untag_entity", "verbs": "act" },
+      { "schema": "consent", "table": "provenance", "verbs": "read" },
+      { "schema": "blob", "table": "custody_state", "verbs": "read" }
     ]
   },
   "actions": [
@@ -179,6 +183,52 @@
           "document_id": { "type": "string", "minLength": 1 }
         },
         "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "tag",
+      "description": "Add a free-form label to a document through core.tag_entity (issue #352 phase 4) — additive and idempotent over the owner \"Labels\" concept scheme; tagging the same label twice just dedupes onto the one tag row.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "untag",
+      "description": "Remove one free-form label from a document through core.untag_entity — the other half of tag's additive gesture.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id", "label"],
         "additionalProperties": false
       },
       "output": {
@@ -389,6 +439,25 @@
         "type": "object",
         "properties": {
           "versions": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "activity",
+      "description": "A document's real activity trail — the app-plane read over consent.provenance (journal.db's actual audit trail, one row per command write), scoped to exactly this document. Never a synthesized guess from created_at/updated_at. An empty list is honest: no activity has been recorded yet (e.g. a freshly recreated schema), not an error.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "events": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

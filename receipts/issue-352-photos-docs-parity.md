@@ -10,7 +10,7 @@ https://github.com/srikanth235/centraid/issues/352
 - [x] photos search exif slideshow duplicates
 - [x] vault plumbing geo tags activity sync faces
 - [x] photos wave-3 ui
-- [ ] docs wave-3 ui
+- [x] docs wave-3 ui
 
 ## Decisions
 
@@ -97,6 +97,16 @@ Built over the vault plumbing surfaces: a crop/rotate editor that saves as a new
 - Two server-side gaps found and reported rather than faked: (1) no `media`-domain edit-in-place command exists (only 10 commands in `media.ts`, none touch bytes post-upload) — crop/rotate is client-side canvas work re-uploaded as a new asset, consistent with "own the meaning, rent the bytes"; (2) `media.set_asset_place` only accepts an existing `place_id`, there's no command to mint a new `core.place` row from freehand text — built a picker over EXIF-auto-linked places instead of the free-text editor originally scoped, with an honest empty state.
 - `manifest.json`/`mock-centraid.js` regeneration deferred to the following commit (docs wave-3), since both apps' fixtures/manifest entries land in the same shared files and a single final regen after both waves land is cleaner than two partial ones.
 
+### docs wave-3 ui
+
+Free-form tags (Details drawer editor + sidebar filter chip row, mirroring photos), a real Activity panel reading `consent.provenance` (replaces the old panel that synthesized events purely from `created_at`/`updated_at`), and custody-state badges (Grid dot, List dot, Details chip) across all four states. `manifest.json` and `visual-harness/mock-centraid.js` got their final regeneration/merge here, folding in both this wave's and the prior photos-wave-3 commit's fixtures — file counts now match the filesystem exactly for both apps (56 photos files, 46 docs files).
+
+- New: `packages/blueprints/apps/docs/actions/{tag,untag}.js`, `queries/{activity,_shared}.js`, `metadata.js`, `components/{Tags,Activity}.jsx`
+- Modified: `app.json`, `app.jsx`, `app.css`, `index.html`, `logic.js`, `nav.js`, `format.js`, `queries/{drive,search}.js`, `components/{Details,Grid,List,Shared,Toolbar}.jsx`
+- Real finding: `core.tag_entity`/`untag_entity` write provenance against `entity_type: 'core.tag'`, not the tagged entity — so tag/untag actions never surface in a document's own Activity trail. This is genuine vault behavior (confirmed against `packages/vault/src/commands/tags.ts`), not a query bug; documented rather than worked around.
+- Custody badge intentionally renders nothing (not a guessed state) for inline `data:`-URI documents or any document the blob sweep hasn't reached yet yet — matches the convention the photos app already established.
+- A concurrency hazard surfaced and was caught: this agent's first pass at `mock-centraid.js` was clobbered by the concurrently-running photos-wave-3 agent's own `Write`-based overwrite of the same file; detected via a live probe returning no `tags` field, diagnosed against `git diff`, and reapplied. Verified post-hoc (this review) that the final file contains both apps' fixtures completely — see Verification.
+
 ## Out of scope
 
 Sharing, collaboration, comments. On-device face detection models. Smart albums / memories / scene recognition. Data migrations (pre-release v0: dev vaults recreate; ONTOLOGY_VERSION equality-enforced).
@@ -121,6 +131,24 @@ packages/vault: bunx vitest run src/enrich/enrich.test.ts → 14/14 passed
 packages/vault: bunx vitest run                           → 427/427 passed (41 files)
 packages/vault: tsc (tsconfig.json + tsconfig.test.json)  → clean
 bunx oxlint enrich-publishers.ts documents.ts enrich.test.ts → 0 warnings, 0 errors
+```
+
+docs wave-3 ui (includes the deferred manifest/mock final regeneration, independently re-verified after landing — see below):
+
+```
+node packages/blueprints/scripts/lint-apps.mjs → 0 problems (144 files)
+esbuild --loader:.jsx=jsx on all changed/created docs files → no syntax errors
+packages/blueprints: bunx vitest run src/app-manifests.test.ts src/app-boot → 82/82 passed (9 files, all 8 apps + manifest)
+node --check mock-centraid.js → valid syntax
+manifest.json file counts vs actual directory listing: photos 56/56, docs 46/46 — exact match
+mock-centraid.js: both apps' fixture markers present post-merge (place/tags/
+  custody_state/cluster_id for photos; tags/custody_state/__versions/activity
+  for docs) — confirmed neither wave's concurrent edit clobbered the other's
+  final state
+visual harness live-browser pass: add/remove tag + toolbar filter chip,
+  filtering narrows row count, real Activity rows (You/This app/An AI agent
+  with receipt chips), custody badges in all four tones, dark theme, 375px
+  mobile — zero console errors
 ```
 
 photos wave-3 ui:

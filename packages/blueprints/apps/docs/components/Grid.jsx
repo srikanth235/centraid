@@ -1,6 +1,6 @@
 // Grid view row (#grid root's mapped children).
 import { fmtBytes, fmtDate, isImage, tintBg, typeMeta } from '../format.js';
-import { Checkbox } from './Shared.jsx';
+import { Checkbox, CustodyDot } from './Shared.jsx';
 
 export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, onToggleSelect }) {
   const m = typeMeta(doc.media_type);
@@ -57,6 +57,7 @@ export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, 
         </div>
         <div className="d-card-meta">
           {fmtBytes(doc.byte_size)} · {fmtDate(doc.created_at)}
+          <CustodyDot state={doc.custody_state} />
         </div>
       </div>
     </div>

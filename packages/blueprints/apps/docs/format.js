@@ -171,6 +171,65 @@ export function emptyStateFor(state, hasActiveFiles) {
   return { icon: I.allDocs, title: 'Nothing here', sub: 'No documents to show.' };
 }
 
+// The blob custody projection (issue #352 phase 4, blob/custody.ts) in
+// owner-facing words + a tone the CSS keys off (custody-ok/custody-warn/
+// custody-danger) — mirrors the photos app's own custodyMeta exactly.
+// Returns null for a custody-less row (an inline `data:` document whose
+// bytes never left vault.db, or the standing sweep hasn't run yet) — the
+// caller renders nothing rather than claim a state the vault never
+// asserted.
+const CUSTODY_META = {
+  'local-only': { label: 'On this device only', tone: 'warn' },
+  replicated: { label: 'Backed up', tone: 'ok' },
+  'remote-only': { label: 'Only in the cloud', tone: 'warn' },
+  missing: { label: 'Missing — needs attention', tone: 'danger' },
+};
+
+export function custodyMeta(state) {
+  return CUSTODY_META[state] ?? null;
+}
+
+// Real activity (issue #352 phase 4, queries/activity.js): consent.provenance
+// stamps `prov_activity` as `command.<command name>` (execution.ts) — this is
+// the owner-facing gloss for every command documents.ts registers. An
+// unrecognized activity (a future command this map hasn't caught up with
+// yet) still renders honestly instead of vanishing: its raw name, cleaned up.
+const ACTIVITY_LABELS = {
+  'command.core.add_document': 'Uploaded',
+  'command.core.rename_document': 'Renamed',
+  'command.core.move_document': 'Moved to a different folder',
+  'command.core.trash_document': 'Moved to trash',
+  'command.core.restore_document': 'Restored from trash',
+  'command.core.star_document': 'Starred',
+  'command.core.unstar_document': 'Star removed',
+  'command.core.edit_document': 'Edited',
+  'command.core.replace_document_content': 'Replaced with a new file',
+  'command.core.restore_document_version': 'Restored an earlier version',
+};
+
+export function activityLabel(activity) {
+  const known = ACTIVITY_LABELS[activity];
+  if (known) return known;
+  const cleaned = String(activity ?? '')
+    .replace(/^command\.core\./, '')
+    .replace(/_/g, ' ')
+    .trim();
+  return cleaned || 'Activity';
+}
+
+// `agent_kind` (consent.provenance, W3C PROV agent class) in the same
+// owner/agent framing the rest of the app uses for who acted.
+const AGENT_KIND_LABELS = {
+  owner: 'You',
+  app: 'This app',
+  ai_agent: 'An AI agent',
+  import: 'An import',
+};
+
+export function actorLabel(agentKind) {
+  return AGENT_KIND_LABELS[agentKind] ?? 'Someone';
+}
+
 export function extOf(doc) {
   const t = String(doc.title ?? '');
   const dot = t.lastIndexOf('.');

@@ -17,8 +17,16 @@
  * are a separate read (the history query), never shipped here. Everything
  * comes from the vault; this app holds no rows of its own.
  *
+ * Phase 4 (issue #352) adds two more bounded joins, factored into
+ * ./_shared.js since search.js needs the identical pair: `tags` (free-form
+ * labels over the owner "Labels" scheme, core.tag_entity/untag_entity) and
+ * `custody_state` (the blob custody projection, local-only/replicated/
+ * remote-only/missing/absent) keyed off each row's current_content_id.
+ *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
+
+import { readCustodyByContent, readLabelsByDocument } from './_shared.js';
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
@@ -91,11 +99,12 @@ export default async ({ input, ctx }) => {
 
     // The wrapper join is `in`-bounded by the windowed tags — only the
     // documents in the window ever ride the RPC, never every wrapper in the
-    // vault.
-    const [documentsRes, starTags] = await Promise.all([
+    // vault. Free-form labels (issue #352 phase 4) ride the same window.
+    const windowedIds = [...folderByDoc.keys()];
+    const [documentsRes, starTags, tagsByDoc] = await Promise.all([
       ctx.vault.read({
         entity: 'core.document',
-        where: [{ column: 'document_id', op: 'in', value: [...folderByDoc.keys()] }],
+        where: [{ column: 'document_id', op: 'in', value: windowedIds }],
         purpose,
       }),
       starredConcept
@@ -104,27 +113,37 @@ export default async ({ input, ctx }) => {
             where: [
               { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
               { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
-              { column: 'target_id', op: 'in', value: [...folderByDoc.keys()] },
+              { column: 'target_id', op: 'in', value: windowedIds },
             ],
             purpose,
           })
         : { rows: [] },
+      readLabelsByDocument({
+        ctx,
+        purpose,
+        documentIds: windowedIds,
+        schemes: schemes.rows ?? [],
+        concepts: concepts.rows ?? [],
+      }),
     ]);
     const starredIds = new Set((starTags.rows ?? []).map((t) => t.target_id));
 
     // The current content join is bounded by the windowed wrappers' own
     // current_content_id set — media_type/byte_size come from whichever
     // content item is canonical right now, never the whole content table.
+    // Custody (issue #352 phase 4) rides the same content id set.
     const documentRows = documentsRes.rows ?? [];
     const contentIds = [...new Set(documentRows.map((d) => d.current_content_id))];
-    const contents =
+    const [contents, custodyByContent] = await Promise.all([
       contentIds.length > 0
-        ? await ctx.vault.read({
+        ? ctx.vault.read({
             entity: 'core.content_item',
             where: [{ column: 'content_id', op: 'in', value: contentIds }],
             purpose,
           })
-        : { rows: [] };
+        : { rows: [] },
+      readCustodyByContent({ ctx, purpose, contentIds }),
+    ]);
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
 
     // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
@@ -156,6 +175,8 @@ export default async ({ input, ctx }) => {
           starred: starredIds.has(d.document_id),
           trashed: d.deleted_at != null,
           purge_at: d.purge_at ?? null,
+          tags: tagsByDoc.get(d.document_id) ?? [],
+          custody_state: custodyByContent.get(d.current_content_id) ?? null,
         };
       })
       .toSorted((a, b) => String(b.created_at).localeCompare(String(a.created_at)));

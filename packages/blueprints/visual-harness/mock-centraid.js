@@ -228,6 +228,26 @@
       packingDoc,
     ];
 
+    // Free-form labels + the blob custody projection (issue #352 phase 4) —
+    // see packages/blueprints/apps/docs/queries/{drive,search}.js for the
+    // real per-document shape. Custody cycles through all four states (the
+    // same trick the photos fixture uses) so every badge tone renders
+    // somewhere; a handful of docs also carry hand-picked labels so the
+    // toolbar's tag-filter chips have something real to show.
+    var tagsByDoc = {
+      'doc-1': ['lease', '2024'],
+      'doc-3': ['taxes'],
+      'doc-4': ['taxes', 'receipts'],
+      'doc-6': ['taxes'],
+      'doc-9': ['travel'],
+      'doc-16': ['travel'],
+    };
+    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    documents.forEach(function (d, i) {
+      d.tags = tagsByDoc[d.document_id] || [];
+      d.custody_state = custodyStates[i % custodyStates.length];
+    });
+
     return { folders: folders, documents: documents };
   }
 
@@ -273,6 +293,52 @@
         };
       });
       return { versions: versions };
+    }
+    if (query === 'activity') {
+      // Synthesizes what queries/activity.js's real consent.provenance read
+      // would return — see that file's own header for the exact row shape
+      // (`activity`/`agent_kind`/`occurred_at`). Not stored on the fixture
+      // doc itself (unlike tags/__versions): derived fresh from whatever the
+      // doc looks like right now, newest first, so a mock write (star, edit,
+      // tag…) that ran during this session shows up here too.
+      var ad = docsStore.documents.find(function (d) {
+        return d.document_id === input.document_id;
+      });
+      if (!ad) return { events: [] };
+      var events = [{ activity: 'command.core.add_document', agent_kind: 'owner', occurred_at: ad.created_at }];
+      if (ad.folder_id) {
+        events.push({
+          activity: 'command.core.move_document',
+          agent_kind: 'app',
+          occurred_at: ad.created_at,
+        });
+      }
+      if (ad.starred) {
+        events.push({
+          activity: 'command.core.star_document',
+          agent_kind: 'ai_agent',
+          occurred_at: ad.updated_at,
+        });
+      }
+      // One edit/replace event per version beyond the original upload (every
+      // __versions entry except the LAST — newest-first, the last is the
+      // original add_document upload, already covered above), dated by that
+      // version's own asserted_at (mirroring the real vault's revises-link
+      // ordering, queries/history.js's header comment).
+      var editedVersions = (ad.__versions || []).slice(0, -1);
+      editedVersions.forEach(function (v) {
+        events.push({
+          activity: /^text\//i.test(ad.media_type || '')
+            ? 'command.core.edit_document'
+            : 'command.core.replace_document_content',
+          agent_kind: 'owner',
+          occurred_at: v.asserted_at,
+        });
+      });
+      events.sort(function (a, b) {
+        return String(b.occurred_at || '').localeCompare(String(a.occurred_at || ''));
+      });
+      return { events: events };
     }
     console.warn('[mock-centraid] docs: unmapped query', query);
     return {};
@@ -347,6 +413,8 @@
           starred: false,
           trashed: false,
           purge_at: null,
+          tags: [],
+          custody_state: 'local-only',
         };
         newDoc.__versions = [
           {
@@ -453,6 +521,24 @@
         });
         return ok({ document_id: d9.document_id, content_id: restored9.content_id });
       }
+      case 'tag': {
+        var dTag = findDoc(input.document_id);
+        if (!dTag) return refuse('not_found');
+        var label = String(input.label || '').trim().toLowerCase();
+        if (!label) return refuse('label_not_blank');
+        if (!dTag.tags) dTag.tags = [];
+        if (dTag.tags.indexOf(label) === -1) dTag.tags.push(label);
+        return ok({ document_id: dTag.document_id });
+      }
+      case 'untag': {
+        var dUntag = findDoc(input.document_id);
+        if (!dUntag) return refuse('not_found');
+        var label2 = String(input.label || '').trim().toLowerCase();
+        dUntag.tags = (dUntag.tags || []).filter(function (t) {
+          return t !== label2;
+        });
+        return ok({ document_id: dUntag.document_id });
+      }
       case 'create-folder': {
         var parentId = input.parent_folder_id != null ? String(input.parent_folder_id) : null;
         var name = String(input.name);
@@ -502,7 +588,18 @@
   // queries/faces.js for the face-region shape.
   // ---------------------------------------------------------------------
   function buildPhotosStore() {
-    if (EMPTY_MODE) return { assets: [], trash: [], albums: [], faceRegions: [], people: [] };
+    if (EMPTY_MODE) {
+      return {
+        assets: [],
+        trash: [],
+        albums: [],
+        faceRegions: [],
+        people: [],
+        places: [],
+        phash: [],
+        enrichmentTier: 'local',
+      };
+    }
 
     var people = [
       { party_id: 'party-mia', name: 'Mia' },
@@ -516,6 +613,23 @@
     ];
     var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17'];
     var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12'];
+
+    // Issue #352 phase 3/4 fixtures — geolocation, free-form tags, custody.
+    var places = [
+      { place_id: 'place-cafe', name: 'Blue Bottle Cafe' },
+      { place_id: 'place-park', name: 'Golden Gate Park' },
+    ];
+    var placeByAsset = { 'asset-2': places[0], 'asset-5': places[1], 'asset-9': places[0] };
+    var tagsByAsset = {
+      'asset-2': ['beach', 'family'],
+      'asset-5': ['hike'],
+      'asset-8': ['family'],
+      'asset-11': ['beach'],
+      'asset-14': ['sunset'],
+    };
+    // Cycles through all four custody states so every badge tone renders
+    // somewhere in the fixture.
+    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
 
     var assets = [];
     for (var i = 1; i <= 22; i += 1) {
@@ -553,6 +667,9 @@
         }),
         deleted_at: null,
         purge_at: null,
+        place: placeByAsset[id] || null,
+        tags: tagsByAsset[id] || [],
+        custody_state: custodyStates[i % custodyStates.length],
       });
     }
 
@@ -627,7 +744,29 @@
       },
     ];
 
-    return { assets: assets, trash: trash, albums: albums, faceRegions: faceRegions, people: people };
+    // Phash near-duplicate clusters (issue #352 phase 3/4): a 2-way and a
+    // 3-way cluster among the live assets, mirroring
+    // media_asset_phash.cluster_id's shape (asset_id -> cluster_id, the
+    // group's lowest asset_id by convention — not load-bearing for the
+    // mock, just documentary).
+    var phash = [
+      { asset_id: 'asset-3', cluster_id: 'asset-3' },
+      { asset_id: 'asset-7', cluster_id: 'asset-3' },
+      { asset_id: 'asset-10', cluster_id: 'asset-10' },
+      { asset_id: 'asset-15', cluster_id: 'asset-10' },
+      { asset_id: 'asset-19', cluster_id: 'asset-10' },
+    ];
+
+    return {
+      assets: assets,
+      trash: trash,
+      albums: albums,
+      faceRegions: faceRegions,
+      people: people,
+      places: places,
+      phash: phash,
+      enrichmentTier: 'local',
+    };
   }
 
   var photosStore = appId === 'photos' ? buildPhotosStore() : null;
@@ -644,10 +783,46 @@
       return {
         assets: live.slice(0, limit),
         albums: photosStore.albums,
+        places: photosStore.places,
         trash: trash,
         truncated: live.length > limit,
         window: limit,
       };
+    }
+    if (query === 'search') {
+      var term2 = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term2) return { assets: [] };
+      var matches = photosStore.assets.filter(function (a) {
+        return String(a.title || '').toLowerCase().indexOf(term2) !== -1;
+      });
+      return { assets: matches };
+    }
+    if (query === 'duplicates') {
+      var byCluster = {};
+      photosStore.phash.forEach(function (p) {
+        var asset = photosStore.assets.find(function (a) {
+          return a.asset_id === p.asset_id;
+        });
+        if (!asset) return; // trashed/missing members drop out, same as the real query
+        if (!byCluster[p.cluster_id]) byCluster[p.cluster_id] = [];
+        byCluster[p.cluster_id].push(asset);
+      });
+      var clusters = Object.keys(byCluster)
+        .map(function (key) {
+          return { key: key, tier: 'phash', assets: byCluster[key] };
+        })
+        .filter(function (c) {
+          return c.assets.length >= 2;
+        });
+      clusters.sort(function (a, b) {
+        return b.assets.length - a.assets.length;
+      });
+      return { clusters: clusters };
+    }
+    if (query === 'enrichment-status') {
+      return { tier: photosStore.enrichmentTier };
     }
     if (query === 'faces') {
       var assetId = String(input.asset_id || '');
@@ -845,6 +1020,42 @@
         });
         if (photosStore.faceRegions.length === before) return refuse('not_found');
         return ok({});
+      }
+      case 'set-place': {
+        var a4 = findAsset(input.asset_id);
+        if (!a4) return refuse('not_found');
+        if (input.place_id) {
+          var place = photosStore.places.find(function (p) {
+            return p.place_id === input.place_id;
+          });
+          if (!place) return refuse('place_not_found');
+          a4.place = place;
+        } else {
+          a4.place = null;
+        }
+        return ok({ asset_id: a4.asset_id, place_id: a4.place ? a4.place.place_id : null });
+      }
+      case 'tag-asset': {
+        var a5 = findAsset(input.asset_id);
+        if (!a5) return refuse('not_found');
+        var label = String(input.label || '').trim().toLowerCase();
+        if (!label) return refuse('label_not_blank');
+        if (!a5.tags) a5.tags = [];
+        if (a5.tags.indexOf(label) === -1) a5.tags.push(label);
+        return ok({ asset_id: a5.asset_id });
+      }
+      case 'untag-asset': {
+        var a6 = findAsset(input.asset_id);
+        if (!a6) return refuse('not_found');
+        var label2 = String(input.label || '').trim().toLowerCase();
+        a6.tags = (a6.tags || []).filter(function (t) {
+          return t !== label2;
+        });
+        return ok({ asset_id: a6.asset_id });
+      }
+      case 'request-enrichment': {
+        if (photosStore.enrichmentTier === 'off') return refuse('enrichment_off');
+        return ok({ request_id: uid('req') });
       }
       default:
         return null; // unmapped — caller logs + returns {}

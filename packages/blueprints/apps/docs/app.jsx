@@ -50,7 +50,7 @@ import { ListHead, ListRow, WindowFoot } from './components/List.jsx';
 import { NewMenu } from './components/NewMenu.jsx';
 import { QuickLook } from './components/QuickLook.jsx';
 import { FolderList, SmartNav, Storage } from './components/Sidebar.jsx';
-import { TypeChips } from './components/Toolbar.jsx';
+import { TagChips, TypeChips } from './components/Toolbar.jsx';
 
 const $ = (id) => document.getElementById(id);
 
@@ -64,6 +64,7 @@ const state = {
   sortKey: 'added', // added | name | size
   sortDir: -1,
   type: 'all', // all | pdf | image | doc | sheet
+  tag: 'all', // 'all' | a free-form label (issue #352 phase 4)
   search: '',
   searchResults: null,
   searchSeq: 0,
@@ -125,6 +126,9 @@ const {
   replaceDocument,
   restoreVersion,
   loadHistory,
+  addTag,
+  removeTag,
+  loadActivity,
 } = logic;
 const {
   openDetails,
@@ -137,6 +141,7 @@ const {
   triggerUpload,
   startCreateFolder,
   selectType,
+  selectTag,
   selectNav,
   showMoreDocs,
 } = nav;
@@ -181,6 +186,7 @@ function renderSidebar() {
 // ---------- Toolbar render ----------
 
 let typeChipsRoot;
+let tagChipsRoot;
 
 function renderToolbar() {
   const rows = state.visibleRows;
@@ -200,6 +206,11 @@ function renderToolbar() {
   $('activeSub').textContent = sub;
 
   typeChipsRoot.render(<TypeChips type={state.type} onSelect={selectType} />);
+  // Distinct labels across the WHOLE loaded drive (issue #352 phase 4) —
+  // never scoped to the current folder/nav, mirroring the photos app's own
+  // tag-chip derivation (toolbar.jsx's renderChips).
+  const tagOptions = [...new Set(activeFiles().flatMap((f) => f.tags ?? []))].sort();
+  tagChipsRoot.render(<TagChips tags={tagOptions} active={state.tag} onSelect={selectTag} />);
 
   const sortNames = { added: 'Date', name: 'Name', size: 'Size' };
   $('sortLabel').textContent = `${sortNames[state.sortKey]} ${state.sortDir === 1 ? '↑' : '↓'}`;
@@ -356,6 +367,9 @@ function renderDetails() {
         onReplace={replaceDocument}
         loadHistory={loadHistory}
         onRestoreVersion={restoreVersion}
+        onAddTag={addTag}
+        onRemoveTag={removeTag}
+        loadActivity={loadActivity}
       />
     ) : null,
   );
@@ -532,6 +546,7 @@ smartNavRoot = createRoot($('smartNav'));
 folderListRoot = createRoot($('folderList'));
 storageRoot = createRoot($('storage'));
 typeChipsRoot = createRoot($('typeChips'));
+tagChipsRoot = createRoot($('tagChips'));
 bulkBarRoot = createRoot($('bulkBar'));
 gridRoot = createRoot($('grid'));
 listRoot = createRoot($('list'));

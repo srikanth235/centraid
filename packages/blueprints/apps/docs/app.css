@@ -799,7 +799,13 @@ button {
   width: 88px;
   font-family: var(--mono);
   font-size: 11px;
-  text-align: right;
+  /* Flex (not the shared .d-cell's plain nowrap+ellipsis) so the trailing
+     custody dot (issue #352 phase 4) sits beside the date instead of
+     getting clipped by the cell's own text-overflow. */
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 .d-cell.purge {
   color: var(--danger);
@@ -891,6 +897,69 @@ button {
   text-align: center;
   margin-top: 3px;
 }
+
+/* ---------- Custody badge + tags (issue #352 phase 4) ---------- */
+
+.d-detail-custody {
+  display: flex;
+  justify-content: center;
+  margin-top: 9px;
+}
+/* Same tone vocabulary as .kit-chip.quiet's selected state, just with an
+   owner-facing tone (ok/warn/danger) instead of the generic accent —
+   mirrors the photos app's own .custody-chip exactly. */
+.custody-chip {
+  cursor: default;
+}
+.custody-chip:hover {
+  border-color: var(--line); /* not interactive — suppress kit-chip's hover cue */
+}
+.custody-chip.custody-ok {
+  color: var(--accent-deep);
+  border-color: color-mix(in oklab, var(--_accent) 35%, var(--line));
+}
+.custody-chip.custody-warn {
+  color: #9a6b1f;
+  border-color: color-mix(in oklab, #c9922e 35%, var(--line));
+}
+.custody-chip.custody-danger {
+  color: var(--danger);
+  border-color: color-mix(in oklab, var(--danger) 35%, var(--line));
+}
+/* The compact Grid/List dot version of the same three tones. */
+.d-custody-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.d-custody-dot.custody-ok {
+  background: var(--accent-deep);
+}
+.d-custody-dot.custody-warn {
+  background: #c9922e;
+}
+.d-custody-dot.custody-danger {
+  background: var(--danger);
+}
+.d-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 18px;
+}
+.d-tag-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.d-tag-input {
+  min-width: 6rem;
+  flex: 0 1 8rem;
+}
+
 .d-detail-actions {
   display: flex;
   flex-wrap: wrap;
@@ -980,6 +1049,13 @@ button {
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 4px;
+}
+/* The real activity panel's (issue #352 phase 4) loading/denied/empty
+   line — same treatment as .d-version-status, its sibling panel. */
+.d-activity-status {
+  font: var(--t-small);
+  color: var(--ink-3);
+  padding: 4px 0 10px;
 }
 .d-details-foot {
   display: flex;

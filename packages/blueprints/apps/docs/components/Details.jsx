@@ -2,6 +2,7 @@
 import { useRef, useState } from '../react-core.min.js';
 import { armConfirm } from '../kit.js';
 import {
+  custodyMeta,
   extOf,
   fmtBytes,
   fmtFull,
@@ -12,8 +13,10 @@ import {
   typeMeta,
 } from '../format.js';
 import { I, RENAME_ICON } from '../icons.js';
+import { Activity } from './Activity.jsx';
 import { History } from './History.jsx';
 import { Icon } from './Shared.jsx';
+import { Tags } from './Tags.jsx';
 
 // A hidden file input, self-contained: click-through-to-picker plus the
 // change handler live entirely inside this button, so Details.jsx and
@@ -59,18 +62,17 @@ export function Details({
   onReplace,
   loadHistory,
   onRestoreVersion,
+  onAddTag,
+  onRemoveTag,
+  loadActivity,
 }) {
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
   const [historyOpen, setHistoryOpen] = useState(false);
-
-  // Activity — only what the projection can honestly derive: this document was
-  // uploaded (created_at) and filed into its folder. Each is a real receipted
-  // vault write, so it wears a receipt chip.
-  const events = [];
-  if (doc.folder_id != null)
-    events.push({ text: `Filed in ${folderName(doc.folder_id)}`, date: fmtFull(doc.created_at) });
-  events.push({ text: 'Uploaded to your vault', date: fmtFull(doc.created_at) });
+  // The blob custody projection (issue #352 phase 4) — null for an inline
+  // document or one the standing sweep hasn't reached yet, rendered as
+  // nothing rather than a guess.
+  const custody = custodyMeta(doc.custody_state);
 
   return (
     <>
@@ -94,6 +96,15 @@ export function Details({
           <div className="d-detail-ext">
             {extOf(doc)} · {fmtBytes(doc.byte_size)}
           </div>
+          {custody ? (
+            <div className="d-detail-custody">
+              <span className={`kit-chip custody-chip custody-${custody.tone}`} title="Backup status">
+                {custody.label}
+              </span>
+            </div>
+          ) : null}
+          <div className="d-detail-label">Tags</div>
+          <Tags doc={doc} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
           <div className="d-detail-actions">
             <button
               type="button"
@@ -143,23 +154,7 @@ export function Details({
             <dd>{trashed ? purgeCountdown(doc.purge_at) : fmtFull(doc.created_at)}</dd>
           </dl>
           <div className="d-detail-label">Activity</div>
-          <div>
-            {events.map((ev, i) => (
-              <div className="d-activity-item" key={i}>
-                <div className="d-activity-rail">
-                  <span className="d-activity-dot"></span>
-                  {i < events.length - 1 ? <span className="d-activity-line"></span> : null}
-                </div>
-                <div>
-                  <div className="d-activity-text">{ev.text}</div>
-                  <div className="d-activity-meta">
-                    <span className="d-activity-date">{ev.date}</span>
-                    <span className="d-receipt-chip">receipt</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Activity key={doc.document_id} documentId={doc.document_id} loadActivity={loadActivity} />
           <button
             type="button"
             className="d-detail-label d-version-toggle"

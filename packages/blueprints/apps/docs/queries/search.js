@@ -13,8 +13,15 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state.
  *
+ * Phase 4 (issue #352) decorates matches with the same `tags`/`custody_state`
+ * joins drive.js makes (factored into ./_shared.js) — so a tag filter or a
+ * custody badge reads identically whether the row arrived via browse or
+ * search.
+ *
  * @type {import('@centraid/openclaw-plugin').QueryHandler}
  */
+
+import { readCustodyByContent, readLabelsByDocument } from './_shared.js';
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
@@ -46,6 +53,16 @@ export default async ({ input, ctx }) => {
       ctx.vault.read({ entity: 'core.concept', purpose }),
       ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
     ]);
+    // Free-form labels (issue #352 phase 4) share ./_shared.js's helper with
+    // drive.js — a small extra bounded read over the same matched ids rather
+    // than re-deriving from the folder/starred-scoped `tags` read above.
+    const tagsByDoc = await readLabelsByDocument({
+      ctx,
+      purpose,
+      documentIds,
+      schemes: schemes.rows ?? [],
+      concepts: concepts.rows ?? [],
+    });
 
     const scheme = (schemes.rows ?? []).find((s) => s.uri === FOLDER_SCHEME_URI);
     const schemeConcepts = (concepts.rows ?? []).filter(
@@ -75,16 +92,18 @@ export default async ({ input, ctx }) => {
     );
 
     // The current content join, bounded by the matched wrappers' own
-    // current_content_id set.
+    // current_content_id set. Custody (issue #352 phase 4) rides the same set.
     const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
-    const contents =
+    const [contents, custodyByContent] = await Promise.all([
       contentIds.length > 0
-        ? await ctx.vault.read({
+        ? ctx.vault.read({
             entity: 'core.content_item',
             where: [{ column: 'content_id', op: 'in', value: contentIds }],
             purpose,
           })
-        : { rows: [] };
+        : { rows: [] },
+      readCustodyByContent({ ctx, purpose, contentIds }),
+    ]);
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
 
     // Blob-backed bytes serve as same-origin URLs (issue #296).
@@ -113,6 +132,8 @@ export default async ({ input, ctx }) => {
           trashed: d.deleted_at != null,
           purge_at: d.purge_at ?? null,
           snippet: typeof d._snippet === 'string' ? d._snippet : '',
+          tags: tagsByDoc.get(d.document_id) ?? [],
+          custody_state: custodyByContent.get(d.current_content_id) ?? null,
         };
       });
     return { documents };

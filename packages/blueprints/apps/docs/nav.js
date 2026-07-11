@@ -73,6 +73,15 @@ export function createNav({
     render();
   }
 
+  // Free-form label filter (issue #352 phase 4) — same shape as selectType,
+  // toggling off when the same tag is clicked again (a chip row's usual
+  // idiom) rather than requiring a separate "All" chip of its own.
+  function selectTag(key) {
+    state.tag = state.tag === key ? 'all' : key;
+    clearSelection();
+    render();
+  }
+
   function selectNav(nav) {
     state.nav = nav;
     clearSelection();
@@ -104,6 +113,7 @@ export function createNav({
     triggerUpload,
     startCreateFolder,
     selectType,
+    selectTag,
     selectNav,
     showMoreDocs,
   };
