@@ -65,6 +65,8 @@ export function buildOutboxRow(item: OutboxItem): ApprovalsOutboxRowDTO {
     note: item.note,
     canEdit: item.canEdit,
     artifact,
+    caller: item.actor ?? item.actorKind,
+    callerKind: item.actorKind,
   };
 }
 
