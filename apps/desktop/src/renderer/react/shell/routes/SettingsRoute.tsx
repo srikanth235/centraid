@@ -7,6 +7,7 @@ import LogsScreen from '../../screens/LogsScreen.js';
 import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
+import SettingsDiagnosticsScreen from '../../screens/SettingsDiagnosticsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
 import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
@@ -30,6 +31,7 @@ import SpaceModal, {
   type SpaceModalInitial,
 } from './SpaceModal.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
+import { loadDiagnosticsData } from './settingsDiagnosticsData.js';
 import { streamGatewayLogs } from '../../../gateway-client.js';
 import styles from './SettingsRoute.module.css';
 
@@ -48,6 +50,7 @@ type SettingsPageId =
   | 'import'
   | 'connections'
   | 'providers'
+  | 'diagnostics'
   | 'logs';
 
 interface PageDef {
@@ -118,6 +121,14 @@ const PAGES: readonly PageDef[] = [
     icon: 'Sparkle',
     subtitle:
       'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
+  },
+  {
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    section: 'Gateway',
+    icon: 'Sliders',
+    subtitle:
+      'Component-level health of the gateway — vaults, schedulers, outbox, connections — with each subsystem’s last error and the recent warning log.',
   },
   {
     id: 'logs',
@@ -293,6 +304,8 @@ export default function SettingsRoute({
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
               />
+            ) : page === 'diagnostics' ? (
+              <SettingsDiagnosticsScreen loadHealth={loadDiagnosticsData} />
             ) : page === 'logs' ? (
               <LogsScreen streamLogs={streamGatewayLogs} />
             ) : page === 'phone' ? (

@@ -472,6 +472,21 @@ export async function getInsightsSummary(input?: {
   return readJson<CentraidInsightsSummary>(res, 'insights summary');
 }
 
+/**
+ * Component-level gateway health (`GET /centraid/_gateway/health`):
+ * per-subsystem status (vaults, schedulers, outbox, connections, …), each
+ * component's last error, and the gateway's recent structured warn/error
+ * tail. Backs Settings → Diagnostics.
+ */
+export async function getGatewayHealth(): Promise<CentraidGatewayHealth> {
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(baseUrl, '/centraid/_gateway/health', {
+    method: 'GET',
+    headers: authHeaders(token),
+  });
+  return readJson<CentraidGatewayHealth>(res, 'gateway health');
+}
+
 // ───────────────────────── editing + lifecycle ─────────────────────
 // The app-editing (sessions / files / publish) + lifecycle (create / clone
 // / meta / automation CRUD) surface lives in `gateway-client-editing.ts`

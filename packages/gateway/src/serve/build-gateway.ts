@@ -98,6 +98,8 @@ import { makeAssistantRouteHandler } from '../routes/assistant-routes.js';
 import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
+import { makeHealthRouteHandler } from '../routes/health-routes.js';
+import { HealthRegistry } from './health-registry.js';
 import { makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
@@ -216,6 +218,15 @@ interface VaultHost {
 export interface BuiltGateway {
   /** The constructed runtime (handles, dispatcher, change bus). */
   runtime: Runtime;
+  /**
+   * Component-level health, served at `GET /centraid/_gateway/health`.
+   * Hosts report components the gateway can't see from inside (the
+   * desktop's iroh tunnel, a daemon's disk watermark) via
+   * `health.reportOk/reportDegraded/reportError`, and wrap host-side
+   * loggers with `health.loggerFor(component, logger)` so their errors
+   * join the same structured tail.
+   */
+  health: HealthRegistry;
   /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
   prefs: PrefsStore;
   /** Run-summary rollup over the current request's journal.db. */
@@ -304,6 +315,13 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const logStore = new GatewayLogStore();
   const logger = logStore.wrap(options.logger ?? defaultLogger(options.logTag));
 
+  // Component-level health (observability for self-hosters): subsystems
+  // report ok/error at their own success/failure points, warns/errors land
+  // in a structured ring buffer, and `GET /centraid/_gateway/health`
+  // aggregates it all. Hosts push externally-owned components (e.g. the
+  // desktop's iroh tunnel) through `BuiltGateway.health`.
+  const health = new HealthRegistry();
+
   // Vault registry (duaility §12, #289): the gateway is a landlord hosting
   // N sovereign vaults — one plane per vault under the root, every request
   // addressed to exactly one of them. Required: post-#280 the whole app
@@ -314,7 +332,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Disposable runner cache lives outside the vault tree (defaults to a
     // `-cache` sibling of `vaultDir` when the host doesn't pin one).
     ...(paths.cacheDir ? { cacheRootDir: paths.cacheDir } : {}),
-    logger,
+    logger: health.loggerFor('vaults', logger),
+  });
+
+  // Vault mounts are pull-checked at snapshot time — nothing pushes when a
+  // plane silently fails to open, so the probe asks the registry directly.
+  health.registerProbe('vaults', async () => {
+    const count = vaultRegistry.planesList().length;
+    return count > 0
+      ? { status: 'ok', detail: `${count} vault${count === 1 ? '' : 's'} mounted` }
+      : { status: 'error', detail: 'no vaults mounted' };
+  });
+
+  // Connection health lives in each vault's DB (`needs-auth` flips there,
+  // not in broker memory) — surface "N connections need re-auth" so a dead
+  // OAuth token shows up here instead of as silent connector failures.
+  health.registerProbe('connections', async () => {
+    let total = 0;
+    let needsAuth = 0;
+    for (const plane of vaultRegistry.planesList()) {
+      const rows = plane.db.vault
+        .prepare(`SELECT status, COUNT(*) AS n FROM sync_connection GROUP BY status`)
+        .all() as Array<{ status: string; n: number }>;
+      for (const row of rows) {
+        total += row.n;
+        if (row.status === 'needs-auth') needsAuth += row.n;
+      }
+    }
+    if (needsAuth > 0) {
+      return {
+        status: 'degraded',
+        detail: `${needsAuth} of ${total} connection${total === 1 ? '' : 's'} need re-auth`,
+      };
+    }
+    return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
   });
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
@@ -361,6 +412,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // tools).
   const toolProbeCwd = process.cwd();
   const catalogPath = paths.modelCatalogFile;
+  // Catalog warms are best-effort; failures record as tagged warn events
+  // (visible in `_gateway/health`) without flipping any component red.
+  const catalogLogger = health.loggerFor('catalog', logger);
   const warmer = catalogPath
     ? new CatalogWarmer({
         catalogPath,
@@ -421,7 +475,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       if (!runnerPrefs) return;
       await warmer.warm(runnerPrefs.kind, 'tools');
     })().catch((err: unknown) => {
-      logger.warn(
+      catalogLogger.warn(
         `tool-catalog invalidation failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
@@ -466,11 +520,16 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // `allowWrites` lane, draining owner-approved / grant-matched items. It
   // runs OUTSIDE the fire loop — kicked after owner approvals, after each
   // fire (grant-matched items a connector just staged), and on a slow clock.
-  const outboxExecutor = new OutboxExecutor(connectionBroker, logger);
+  const outboxExecutor = new OutboxExecutor(connectionBroker, health.loggerFor('outbox', logger));
   const drainOutbox = (plane: VaultPlane): void => {
-    void outboxExecutor.drain(plane).catch((err) => {
-      logger.warn(`outbox drain failed: ${err instanceof Error ? err.message : String(err)}`);
-    });
+    void outboxExecutor
+      .drain(plane)
+      .then(() => health.reportOk('outbox'))
+      .catch((err) => {
+        const message = `outbox drain failed: ${err instanceof Error ? err.message : String(err)}`;
+        health.reportError('outbox', message);
+        logger.warn(message);
+      });
   };
 
   // Install-time scopes (issue #306 decision 2): enrolling an app grants the
@@ -539,10 +598,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           // Grant-matched outbox items the fire just staged drain now, not
           // on the next clock tick (issue #306 phase 3).
           drainOutbox(vaultRegistry.current());
+          health.reportOk('automation-runs');
         })().catch((err) => {
           const message = err instanceof Error ? err.message : String(err);
           // Failed before the ledger opened: close off the bus or the viewer hangs.
           runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+          health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
           logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
         });
       };
@@ -745,10 +806,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               ),
             evaluate: (ref, triggerIndex) =>
               runWithVaultContext({ vaultId }, () => evaluateCondition(ref, triggerIndex)),
-            onError: (err, ref) =>
-              logger.warn(
-                `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err)),
-              ),
+            onError: (err, ref) => {
+              const message =
+                `scheduled ${ref} failed: ` + (err instanceof Error ? err.message : String(err));
+              health.reportError('automation-runs', message);
+              logger.warn(message);
+            },
           });
     schedulers.set(vaultId, created);
     if (schedulersStarted) created.start();
@@ -809,11 +872,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         }
       } while (settled.dirty);
     })
-      .catch((err) =>
-        logger.warn(
-          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err)),
+      .then(() =>
+        health.reportOk(
+          'automations',
+          `scheduler${schedulers.size === 1 ? '' : 's'} running for ${schedulers.size} vault${schedulers.size === 1 ? '' : 's'}`,
         ),
       )
+      .catch((err) => {
+        const message =
+          `scheduler reconcile failed: ` + (err instanceof Error ? err.message : String(err));
+        health.reportError('automations', message);
+        logger.warn(message);
+      })
       .finally(() => {
         settled.inFlight = false;
       });
@@ -1105,6 +1175,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
     makeGatewayInfoRouteHandler(),
+    // Component-level health + structured error tail. `_gateway/info`
+    // is the liveness probe; this is the "what's actually wrong" surface.
+    makeHealthRouteHandler(health),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
     makeLogsRouteHandler(logStore),
@@ -1292,7 +1365,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
                 activeWarmer
                   .warm(c.kind, surface)
                   .catch((err) =>
-                    logger.warn(
+                    catalogLogger.warn(
                       `catalog warm (${c.kind}/${surface}) failed: ` +
                         (err instanceof Error ? err.message : String(err)),
                     ),
@@ -1313,6 +1386,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   return {
     runtime,
+    health,
     prefs,
     analyticsStore,
     conversationHistoryStore,
