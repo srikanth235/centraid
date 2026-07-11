@@ -37,6 +37,21 @@ async function withProvider(
   }
 }
 
+/**
+ * `manifestKey` MUST fall under the target's prefix (PROTOCOL.md "Snapshot
+ * registration" — the same `vaults/{id}/` the credential grant's own
+ * `prefix` uses; see `engine.ts`'s `createSnapshot`). A bare `manifests/…`
+ * key is protocol-invalid input — a real provider (Clawgnition, confirmed
+ * against a live gateway) 400s it with `invalid_manifest_key` — so every
+ * case below that registers a snapshot must build a key shaped like this,
+ * not a bare one, to stay a valid grading input for ANY conformant
+ * provider rather than only the two reference ones in this package (which
+ * happen not to enforce the prefix).
+ */
+function manifestKeyFor(targetId: string, name: string): string {
+  return `vaults/${targetId}/manifests/${name}`;
+}
+
 async function expectError(fn: () => Promise<unknown>): Promise<BackupProviderError> {
   try {
     await fn();
@@ -129,7 +144,7 @@ export function providerConformanceCases(
           const { targetId } = await provider.createTarget({ label: 'idem' });
           const reg = {
             idempotencyKey: 'idem-key-1',
-            manifestKey: 'manifests/1-aaaaaaaa.json',
+            manifestKey: manifestKeyFor(targetId, '1-aaaaaaaa.json'),
             manifestHash: 'a'.repeat(64),
             totalBytes: 100,
             objectCount: 1,
@@ -143,7 +158,7 @@ export function providerConformanceCases(
           assert.equal(first.prunedAt, null);
           const replay = await provider.registerSnapshot(targetId, {
             ...reg,
-            manifestKey: 'manifests/DIFFERENT.json', // provider must ignore this and replay `first`
+            manifestKey: manifestKeyFor(targetId, 'DIFFERENT.json'), // provider must ignore this and replay `first`
           });
           assert.deepEqual(
             replay,
@@ -168,7 +183,7 @@ export function providerConformanceCases(
           const r1 = await provider.registerSnapshot(targetId, {
             ...base,
             idempotencyKey: 'g2',
-            manifestKey: 'manifests/g2.json',
+            manifestKey: manifestKeyFor(targetId, 'g2.json'),
             generation: 2,
           });
           assert.equal(r1.generation, 2);
@@ -177,7 +192,7 @@ export function providerConformanceCases(
             provider.registerSnapshot(targetId, {
               ...base,
               idempotencyKey: 'g1-stale',
-              manifestKey: 'manifests/g1.json',
+              manifestKey: manifestKeyFor(targetId, 'g1.json'),
               generation: 1,
             }),
           );
@@ -187,7 +202,7 @@ export function providerConformanceCases(
           const r2 = await provider.registerSnapshot(targetId, {
             ...base,
             idempotencyKey: 'g2-equal',
-            manifestKey: 'manifests/g2b.json',
+            manifestKey: manifestKeyFor(targetId, 'g2b.json'),
             generation: 2,
           });
           assert.equal(
@@ -199,7 +214,7 @@ export function providerConformanceCases(
           const r3 = await provider.registerSnapshot(targetId, {
             ...base,
             idempotencyKey: 'g5-higher',
-            manifestKey: 'manifests/g5.json',
+            manifestKey: manifestKeyFor(targetId, 'g5.json'),
             generation: 5,
           });
           assert.equal(
@@ -219,7 +234,7 @@ export function providerConformanceCases(
           for (let i = 0; i < 3; i++) {
             const row = await provider.registerSnapshot(targetId, {
               idempotencyKey: `seq-${i}`,
-              manifestKey: `manifests/seq-${i}.json`,
+              manifestKey: manifestKeyFor(targetId, `seq-${i}.json`),
               manifestHash: `${i}`.repeat(64).slice(0, 64),
               totalBytes: 1,
               objectCount: 1,
@@ -252,7 +267,7 @@ export function providerConformanceCases(
           const { targetId } = await provider.createTarget({ label: 'get1' });
           const row = await provider.registerSnapshot(targetId, {
             idempotencyKey: 'get1-k',
-            manifestKey: 'manifests/get1.json',
+            manifestKey: manifestKeyFor(targetId, 'get1.json'),
             manifestHash: 'c'.repeat(64),
             totalBytes: 1,
             objectCount: 1,
