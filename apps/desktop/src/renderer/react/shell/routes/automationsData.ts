@@ -8,6 +8,7 @@ import {
   fmtRetention,
   fmtTokens,
   formatDuration,
+  formatWhereClauses,
   relativeRunLabel,
   relativeTime,
   triggersSummary,
@@ -40,6 +41,38 @@ const AU_STATUS_LABEL: Record<AuStatusKind, string> = {
   failed: 'Failed',
 };
 
+/** Title-Case trigger-origin icon + label for a run row — shared by the
+ *  overview feed's `metaLabel` and the single-view's run rows, so a run never
+ *  surfaces the raw lowercase `triggerOrigin`/`triggerKind` enum ("data" ·
+ *  1.2s) to a user. */
+function triggerOriginLabel(run: CentraidAutomationRunRecord): { icon: string; label: string } {
+  return run.triggerOrigin === 'webhook'
+    ? { icon: 'Webhook', label: 'Webhook' }
+    : run.triggerOrigin === 'data'
+      ? { icon: 'Clock', label: 'Data' }
+      : run.triggerOrigin === 'condition'
+        ? { icon: 'Clock', label: 'Condition' }
+        : run.triggerKind === 'manual'
+          ? { icon: 'Play', label: 'Manual' }
+          : { icon: 'Clock', label: 'Cron' };
+}
+
+/** Render a `where` condition clause readably — a plain string passes
+ *  through, a structured `{column, op, value?}` array renders the same
+ *  compact `column op value` lines the builder shows (formatWhereClauses),
+ *  and any other shape falls back to pretty-printed JSON. */
+function formatWhereClause(where: unknown): string {
+  if (where === undefined || where === null) return '—';
+  if (typeof where === 'string') return where;
+  const compact = formatWhereClauses(where);
+  if (compact !== null) return compact;
+  try {
+    return JSON.stringify(where, null, 2);
+  } catch {
+    return String(where);
+  }
+}
+
 /** Fetch the automation rows + their recent run feed (vanilla collectAutomationRuns). */
 export async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
   let autos: CentraidAutomationRow[] = [];
@@ -52,8 +85,10 @@ export async function collectAutomationRuns(): Promise<AutomationFeedEntry[]> {
   const nameByRef = new Map(autos.map((a) => [a.ref, a.name]));
   return runs.map((run) => ({
     automationId: run.automationId ?? '',
+    // Live automation name → the run's own last-known name (carried on the
+    // run record even after the automation is deleted) → the raw ref.
     automationName: run.automationId
-      ? (nameByRef.get(run.automationId) ?? run.automationId)
+      ? (nameByRef.get(run.automationId) ?? run.automationName ?? run.automationId)
       : 'Automation',
     run,
   }));
@@ -117,7 +152,7 @@ export function buildOverviewData(
       const dur = run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : '—';
       return {
         automationId,
-        metaLabel: `${run.triggerOrigin ?? run.triggerKind} · ${dur} · ${fmtTokens(tokens)}`,
+        metaLabel: `${triggerOriginLabel(run).label} · ${dur} · ${fmtTokens(tokens)}`,
         name: automationName,
         ok: run.ok,
         runId: run.runId,
@@ -188,6 +223,29 @@ export function buildAutomationViewData(
         : { pending: false, url: new URL(`/_centraid-hook/${wh.id}`, gatewayOrigin).toString() };
   }
 
+  // Data/condition triggers get the same hero-level treatment as cron/webhook
+  // — a user must be able to see WHAT a condition checks without opening raw
+  // JSON (the manifest's `where` is `unknown`; a structured value is
+  // pretty-printed, a plain string passes through).
+  const dataTrig = row.triggers.find(
+    (t): t is { kind: 'data'; entities: readonly string[]; every?: string } => t.kind === 'data',
+  );
+  const dataDetail: AutomationViewData['dataDetail'] = dataTrig
+    ? { entities: [...dataTrig.entities], everyLabel: dataTrig.every ? `Every ${dataTrig.every}` : null }
+    : null;
+
+  const condTrig = row.triggers.find(
+    (t): t is { kind: 'condition'; entity: string; where?: unknown; every?: string } =>
+      t.kind === 'condition',
+  );
+  const conditionDetail: AutomationViewData['conditionDetail'] = condTrig
+    ? {
+        entity: condTrig.entity,
+        everyLabel: condTrig.every ? `Every ${condTrig.every}` : null,
+        whereText: formatWhereClause(condTrig.where),
+      }
+    : null;
+
   const statusKind = auStatusForRow(row.enabled, hasRun) as AuStatusKind;
   const now = Date.now();
   const life = automationLifetime(runs.filter((r) => now - r.startedAt <= 30 * 86_400_000));
@@ -199,7 +257,9 @@ export function buildAutomationViewData(
       model: row.manifest.requires.model ?? row.manifest.costEstimate?.model ?? 'Default',
       onFailure: row.manifest.onFailure ? `Run "${row.manifest.onFailure}"` : 'Stop',
     },
+    conditionDetail,
     cronExprs,
+    dataDetail,
     description: row.manifest.description ?? null,
     enabled: row.enabled,
     glyphIcon: glyphForId(row.id),
@@ -226,16 +286,7 @@ export function buildAutomationViewData(
       const tokens = (run.totalInputTokens ?? 0) + (run.totalOutputTokens ?? 0);
       const dur =
         run.endedAt !== undefined ? formatDuration(run.endedAt - run.startedAt) : 'running';
-      const trig =
-        run.triggerOrigin === 'webhook'
-          ? { icon: 'Webhook', label: 'Webhook' }
-          : run.triggerOrigin === 'data'
-            ? { icon: 'Clock', label: 'Data' }
-            : run.triggerOrigin === 'condition'
-              ? { icon: 'Clock', label: 'Condition' }
-              : run.triggerKind === 'manual'
-                ? { icon: 'Play', label: 'Manual' }
-                : { icon: 'Clock', label: 'Cron' };
+      const trig = triggerOriginLabel(run);
       const filterKey: 'cron' | 'webhook' | 'manual' | 'other' =
         run.triggerOrigin === 'webhook'
           ? 'webhook'

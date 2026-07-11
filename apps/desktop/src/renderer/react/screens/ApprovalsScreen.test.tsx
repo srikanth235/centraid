@@ -28,6 +28,8 @@ const outboxRow: ApprovalsOutboxRowDTO = {
   note: null,
   canEdit: false,
   artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' },
+  caller: 'gmail-send',
+  callerKind: 'agent',
 };
 
 const editableOutboxRow: ApprovalsOutboxRowDTO = {
@@ -175,6 +177,36 @@ describe('ApprovalsScreen', () => {
       findButton(el, 'Deny').click();
     });
     expect(onDenyOutbox).toHaveBeenCalledWith('item1');
+  });
+
+  it('shows an Automation badge and the display name for an agent-kind outbox caller', () => {
+    const el = mount(makeProps({ outbox: [outboxRow] }));
+    expect(el.textContent).toContain('Automation');
+    expect(el.textContent).toContain('gmail-send');
+  });
+
+  it('shows an Assistant badge for an assistant-kind outbox caller', () => {
+    const el = mount(
+      makeProps({ outbox: [{ ...outboxRow, caller: 'Assistant', callerKind: 'assistant' }] }),
+    );
+    expect(el.textContent).toContain('Assistant');
+  });
+
+  it('shows an App badge for an app-kind outbox caller', () => {
+    const el = mount(
+      makeProps({ outbox: [{ ...outboxRow, caller: 'Briefing', callerKind: 'app' }] }),
+    );
+    expect(el.textContent).toContain('App');
+    expect(el.textContent).toContain('Briefing');
+  });
+
+  it('shows no kind badge for an owner-staged outbox item, but still shows the caller name', () => {
+    const el = mount(
+      makeProps({ outbox: [{ ...outboxRow, caller: 'owner', callerKind: 'owner' }] }),
+    );
+    expect(el.querySelector('[data-kind]')).toBeNull();
+    expect(el.textContent).not.toContain('Automation');
+    expect(el.textContent).toContain('owner');
   });
 
   it('routes needs-auth reconnection through onOpenSettings', () => {

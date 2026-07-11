@@ -19,7 +19,7 @@ function outboxItem(overrides: Partial<OutboxItem> = {}): OutboxItem {
     itemId: 'item1',
     connection: { kind: 'pull.gmail', label: 'personal' },
     actor: 'gmail-send',
-    actorKind: 'ai_agent',
+    actorKind: 'agent',
     verb: 'gmail.send',
     target: 'ravi@example.com',
     artifact: { to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' },
@@ -51,6 +51,14 @@ describe('buildOutboxRow', () => {
     );
     expect(row.canEdit).toBe(false);
     expect(row.artifact).toEqual({ to: 'ravi@example.com', subject: 'Hi', body: 'See you at 6.' });
+    expect(row.caller).toBe('gmail-send');
+    expect(row.callerKind).toBe('agent');
+  });
+
+  it('falls back to the actor kind when the actor display name is null', () => {
+    const row = buildOutboxRow(outboxItem({ actor: null, actorKind: 'app' }));
+    expect(row.caller).toBe('app');
+    expect(row.callerKind).toBe('app');
   });
 
   it('carries `canEdit` through from the wire item', () => {

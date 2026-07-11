@@ -41,7 +41,10 @@ export default function RunViewRoute({
       [...nodesByOrdinal.values()].sort((a, b) => a.ordinal - b.ordinal);
 
     const rerender = (): void => {
-      if (stopped || !row || !run || !updateRef.current) return;
+      // `row` may be null — the automation was deleted but its run history
+      // survives (the Automations overview keeps those runs visible too);
+      // buildRunSnapshot degrades gracefully rather than requiring a row.
+      if (stopped || !run || !updateRef.current) return;
       updateRef.current(buildRunSnapshot(row, run, sortedNodes(), liveTextByOrdinal));
     };
 
@@ -113,8 +116,18 @@ export default function RunViewRoute({
       } catch {
         return;
       }
-      if (stopped || !row) return;
-      rowRef.current = row;
+      if (stopped) return;
+      if (row) {
+        rowRef.current = row;
+      } else if (!run) {
+        // Automation deleted and no run record survived either — there is
+        // nothing recoverable to show. Bounce back to the overview (the only
+        // place this run id could have been clicked from) instead of
+        // stranding the user on a permanent loading screen.
+        navigate({ kind: 'automations' });
+        showToast('That automation was deleted, and its run history is gone too.');
+        return;
+      }
       if (!run) {
         run = {
           runId,

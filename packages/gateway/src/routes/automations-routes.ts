@@ -89,6 +89,8 @@ interface RunRecordJson {
   runId: string;
   kind: RunKind;
   automationId?: string;
+  /** The automation's last-known display name — see `RunSummary.automationName`. */
+  automationName?: string;
   triggerKind: AutomationTriggerKind;
   triggerOrigin?: AutomationTriggerOrigin;
   parentRunId?: string;
@@ -142,6 +144,7 @@ function summaryToRunRow(s: RunSummary): RunRecordJson {
     runId: s.runId,
     kind: s.kind,
     ...(s.automationRef !== undefined ? { automationId: s.automationRef } : {}),
+    ...(s.automationName !== undefined ? { automationName: s.automationName } : {}),
     triggerKind: s.trigger as AutomationTriggerKind,
     ...(s.triggerOrigin !== undefined
       ? { triggerOrigin: s.triggerOrigin as AutomationTriggerOrigin }
@@ -176,15 +179,21 @@ function turnToRunRecord(
   summary: RunSummary | undefined,
   inputJson: string | undefined,
   automationRef: string | undefined,
+  conversationTitle: string | undefined,
 ): RunRecordJson {
   // Prefer the analytics summary's ref; fall back to the owning execution
   // conversation's `automation_id` (the conversation id is no longer the ref —
   // each fire is its own conversation).
   const ref = summary?.automationRef ?? automationRef;
+  // Same fallback for the display name: the analytics view only covers
+  // finished runs, so an in-flight run's name comes straight off its own
+  // conversation's `title` (set once at `createAutomationRun`).
+  const name = summary?.automationName ?? (conversationTitle || undefined);
   return {
     runId: turn.turnId,
     kind: summary?.kind ?? 'automation',
     ...(ref !== undefined ? { automationId: ref } : {}),
+    ...(name !== undefined ? { automationName: name } : {}),
     triggerKind: turn.triggerKind,
     ...(turn.triggerOrigin !== undefined ? { triggerOrigin: turn.triggerOrigin } : {}),
     ...(turn.parentTurnId !== undefined ? { parentRunId: turn.parentTurnId } : {}),
@@ -404,11 +413,13 @@ export function makeAutomationsRouteHandler(
         const store = runsStoreForRunId(runId);
         const turn = store?.getTurn(runId);
         if (!store || !turn) return sendJson(res, 200, { run: null });
+        const conversation = store.getConversation(turn.conversationId);
         const record = turnToRunRecord(
           turn,
           opts.analytics.getSummary(runId),
           store.messageInText(runId),
-          store.getConversation(turn.conversationId)?.automationId,
+          conversation?.automationId,
+          conversation?.title,
         );
         return sendJson(res, 200, { run: record });
       }

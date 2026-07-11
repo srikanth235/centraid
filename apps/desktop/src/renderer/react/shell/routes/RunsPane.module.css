@@ -26,13 +26,13 @@
   height: 7px;
   margin-top: 5px;
   border-radius: 50%;
-  background: var(--accent, #0a84ff);
+  background: var(--accent);
 }
 .run[data-ok='true'] .status {
-  background: #34c759;
+  background: var(--success);
 }
 .run[data-ok='false'] .status {
-  background: #ff453a;
+  background: var(--danger);
 }
 
 .body {
@@ -86,5 +86,5 @@
   color: color-mix(in oklab, var(--ink) 55%, transparent);
 }
 .pin[data-pinned='true'] {
-  color: var(--accent, #0a84ff);
+  color: var(--accent);
 }

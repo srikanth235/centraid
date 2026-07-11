@@ -323,13 +323,28 @@ export async function deleteApp(input: { id: string }): Promise<{ ok: true }> {
   return { ok: true };
 }
 
+/**
+ * A create-time trigger spec. `condition`/`data` are validated gateway-side
+ * against the real manifest schema (issue #141 follow-up: the create route
+ * used to 400 on anything but cron/webhook) and require a paired `vault`
+ * block on the request — the consented read they gate on has to run under
+ * some requested grant, or there is nothing for the trigger to evaluate.
+ */
+export type CentraidCreateTrigger =
+  | { kind: 'cron'; expr: string }
+  | { kind: 'webhook' }
+  | { kind: 'condition'; entity: string; where?: unknown; every?: string }
+  | { kind: 'data'; entities: string[]; every?: string };
+
 /** Scaffold a new automation app; mints a webhook secret when requested. */
 export async function createAutomation(input: {
   id: string;
   name?: string;
   description?: string;
   prompt?: string;
-  triggers?: Array<{ kind: 'cron'; expr: string } | { kind: 'webhook' }>;
+  triggers?: CentraidCreateTrigger[];
+  /** Requested vault access — required when `triggers` has a condition/data entry. */
+  vault?: { purpose: string; why?: string; scopes: Array<{ schema: string; table?: string; verbs: string }> };
   apps?: string[];
   model?: string;
   historyKeep?: { count: number } | { days: number } | 'all' | 'errors';
@@ -372,6 +387,37 @@ export async function setAutomationEnabled(input: {
   );
   await readJson(res, 'set automation enabled');
   return { ok: true };
+}
+
+/**
+ * Rotate a webhook-triggered automation's shared secret and publish. The
+ * original secret is shown once at mint time (create/clone); an owner who
+ * missed that one-time reveal has no other way to recover it — this mints
+ * a fresh one over the SAME route id (any already-configured caller URL
+ * keeps working) and returns it once, exactly like `createAutomation`'s
+ * `webhook` field. 404s when `automationId` doesn't exist, 400s when it has
+ * no webhook trigger to rotate.
+ */
+export async function rotateAutomationWebhookSecret(input: {
+  automationId: string;
+}): Promise<{ webhook: { id: string; secret: string; url: string } }> {
+  const appId = input.automationId.split('/')[0] ?? '';
+  const sessionId = await ensureAppSession(appId);
+  const { baseUrl, token } = await auth();
+  const res = await doFetch(
+    baseUrl,
+    `/centraid/_automations/rotate-webhook?ref=${enc(input.automationId)}`,
+    {
+      method: 'POST',
+      headers: authHeaders(token, 'application/json'),
+      body: JSON.stringify({ sessionId, publish: true }),
+    },
+  );
+  const out = await readJson<{ webhook: { id: string; secret: string; url: string } }>(
+    res,
+    'rotate automation webhook secret',
+  );
+  return { webhook: out.webhook };
 }
 
 /** Remove an automation (whole app or in-app subdir), then publish. */

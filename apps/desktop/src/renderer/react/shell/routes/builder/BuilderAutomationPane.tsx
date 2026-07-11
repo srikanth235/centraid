@@ -1,4 +1,4 @@
-import { type JSX, useEffect, useState } from 'react';
+import { type JSX, type ReactNode, useEffect, useState } from 'react';
 import { cronNextRuns, describeCron } from '../../../../cron.js';
 import {
   listAutomationRuns,
@@ -6,17 +6,27 @@ import {
   runAutomationNow,
 } from '../../../../gateway-client.js';
 import { iconSvg } from '../../iconSvg.js';
+import { formatWhereClauses } from './BuilderAutomationTriggers.js';
+import {
+  Glyph,
+  fmtRetention,
+  fmtNextRun,
+  relTime,
+  runOriginLabel,
+} from './BuilderAutomationPaneShared.js';
+import ConfigView from './BuilderAutomationConfigView.js';
 import styles from './BuilderAutomationPane.module.css';
 import buttonCss from '../../../ui/Button.module.css';
 import { cx } from '../../../ui/cx.js';
 
 // React port of the vanilla builder's automation-mode right-pane views —
 // Config / Flow / Runs / Code (see builder.ts `renderConfig` /
-// `renderAutomationFlow` / `renderRuns` / `renderAutomationCode`). Config,
-// Flow and Code are pure renders of the latest `automation.json` snapshot the
-// shell re-reads after each agent turn; Runs owns its own fetch + run-now.
-// Every class name matches the vanilla markup so the existing global styles in
-// styles.css apply unchanged.
+// `renderAutomationFlow` / `renderRuns` / `renderAutomationCode`). Flow and
+// Code are pure renders of the latest `automation.json` snapshot the shell
+// re-reads after each agent turn; Config (BuilderAutomationConfigView.tsx)
+// also owns the trigger add/edit/remove UI (GAP 1); Runs owns its own fetch
+// + run-now. Every class name matches the vanilla markup so the existing
+// global styles in styles.css apply unchanged.
 
 export interface BuilderAutomationPaneProps {
   tab: 'config' | 'flow' | 'runs' | 'code';
@@ -27,216 +37,16 @@ export interface BuilderAutomationPaneProps {
   flashSections: ReadonlySet<string>;
 }
 
-// ---- helpers ported verbatim from builder.ts ----
-
-// Relative "Nd ago" from an epoch-ms timestamp (builder.ts `relTime`).
-function relTime(ts: number): string {
-  const diff = Math.max(0, Date.now() - ts);
-  if (diff < 60_000) return 'just now';
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-// Human retention label from the manifest's history.keep (builder.ts `fmtRetention`).
-function fmtRetention(keep: CentraidAutomationManifest['history']['keep']): string {
-  if (keep === 'all') return 'Keep all runs';
-  if (keep === 'errors') return 'Keep failed runs only';
-  if (typeof keep === 'object' && 'count' in keep) return `Last ${keep.count} runs`;
-  if (typeof keep === 'object' && 'days' in keep) return `Last ${keep.days} days`;
-  return '—';
-}
-
-function fmtNextRun(d: Date): string {
-  return d.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 // Icon SVG strings — the exact glyphs + sizes the vanilla panes drew. Injected
 // via dangerouslySetInnerHTML (the only sanctioned use here).
-const svgCheck11 = iconSvg('Check', 11);
-const svgHistory14 = iconSvg('History', 14);
-const svgGlobe14 = iconSvg('Globe', 14);
 const svgChevronDown14 = iconSvg('ChevronDown', 14);
 const svgPlay12 = iconSvg('Play', 12);
-
-/** Inline glyph span carrying a raw icon SVG string. */
-function Glyph({ svg, className }: { svg: string; className?: string }): JSX.Element {
-  return (
-    <span
-      className={className}
-      aria-hidden="true"
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
-  );
-}
 
 const LOADING = (wrapClass: string | undefined): JSX.Element => (
   <div className={wrapClass}>
     <p className={cx(styles.muted, styles.configLoading)}>Loading automation…</p>
   </div>
 );
-
-// ---------- Config view ----------
-
-type ConfigSectionKey = 'what' | 'when' | 'behavior' | 'apps';
-
-function ConfigView({
-  automationRow,
-  flashSections,
-}: {
-  automationRow: CentraidAutomationRow;
-  flashSections: ReadonlySet<string>;
-}): JSX.Element {
-  const m = automationRow.manifest;
-  const enabled = automationRow.enabled === true;
-
-  // A titled section that flashes a one-shot diff ribbon when the latest chat
-  // turn changed it. The shell owns/clears `flashSections`; we only read it.
-  const Section = (key: ConfigSectionKey, label: string, body: JSX.Element): JSX.Element => {
-    const flash = flashSections.has(key);
-    return (
-      <div
-        key={key}
-        className={flash ? cx(styles.section, styles.sectionFlash) : styles.section}
-        data-section={key}
-      >
-        <div className={styles.sectionLabel}>
-          <span>{label}</span>
-          {flash ? (
-            <span className={styles.diffRibbon}>
-              <Glyph svg={svgCheck11} />
-              Updated
-            </span>
-          ) : null}
-        </div>
-        {body}
-      </div>
-    );
-  };
-
-  const triggersBody =
-    m.triggers.length === 0 ? (
-      <div className={styles.triggers}>
-        <p className={styles.muted}>Manual runs only — no schedule.</p>
-      </div>
-    ) : (
-      <div className={styles.triggers}>
-        {m.triggers.map((t, i) => {
-          if (t.kind === 'cron') {
-            const next = cronNextRuns(t.expr, 3);
-            return (
-              <div className={styles.trigger} key={i}>
-                <div className={styles.triggerMain}>
-                  <Glyph svg={svgHistory14} className={styles.triggerIcon} />
-                  <span className={styles.triggerDesc}>{describeCron(t.expr)}</span>
-                  <code className={styles.triggerExpr}>{t.expr}</code>
-                </div>
-                {next.length > 0 ? (
-                  <div className={styles.nextruns}>
-                    <span className={styles.muted}>Next: </span>
-                    {next.map((d, j) => (
-                      <span className={styles.nextrun} key={j}>
-                        {fmtNextRun(d)}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            );
-          }
-          // Data / condition triggers — journal-feed or vault-read watchers.
-          if (t.kind === 'data' || t.kind === 'condition') {
-            const desc =
-              t.kind === 'data'
-                ? `Fires on changes to ${t.entities.join(', ')}`
-                : `Fires when ${t.entity} matches its condition`;
-            return (
-              <div className={styles.trigger} key={i}>
-                <div className={styles.triggerMain}>
-                  <Glyph svg={svgHistory14} className={styles.triggerIcon} />
-                  <span className={styles.triggerDesc}>{desc}</span>
-                  {t.every ? <code className={styles.triggerExpr}>{t.every}</code> : null}
-                </div>
-              </div>
-            );
-          }
-          // Webhook trigger — provisioned (has a minted route id) or pending.
-          const pending = t.id === undefined;
-          return (
-            <div className={styles.trigger} key={i}>
-              <div className={styles.triggerMain}>
-                <Glyph svg={svgGlobe14} className={styles.triggerIcon} />
-                <span className={styles.triggerDesc}>
-                  {pending ? 'Webhook trigger — provisioning…' : 'Webhook trigger'}
-                </span>
-                {pending ? null : <code className={styles.triggerExpr}>{`/${t.id}`}</code>}
-              </div>
-              {pending ? (
-                <div className={styles.nextruns}>
-                  <span className={styles.muted}>A URL + secret are minted server-side.</span>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    );
-
-  const tools = m.requires.tools ?? [];
-  const apps = m.apps ?? [];
-
-  const cfgRow = (label: string, value: string): JSX.Element => (
-    <div className={styles.row} key={label}>
-      <span className={styles.rowLabel}>{label}</span>
-      <span className={styles.rowValue}>{value}</span>
-    </div>
-  );
-
-  const behaviorBody = (
-    <div className={styles.rows}>
-      {cfgRow('Model', m.requires.model || 'Workspace default')}
-      {cfgRow('Run history', fmtRetention(m.history.keep))}
-      {m.onFailure ? cfgRow('On failure', `Run "${m.onFailure}"`) : null}
-      {tools.length > 0 ? cfgRow('Tools', tools.join(', ')) : null}
-    </div>
-  );
-
-  const appsBody =
-    apps.length > 0 ? (
-      <div className={styles.tags}>
-        {apps.map((a) => (
-          <span className={styles.tag} key={a}>
-            {a}
-          </span>
-        ))}
-      </div>
-    ) : (
-      <p className={styles.muted}>Not linked to any app.</p>
-    );
-
-  return (
-    <div className={styles.config}>
-      <div className={styles.configHead}>
-        <div className={styles.configTitle}>{m.name || automationRow.id}</div>
-        <span className={styles.chip} data-on={String(enabled)}>
-          {enabled ? 'Enabled' : 'Draft'}
-        </span>
-      </div>
-      {Section('what', 'What it does', <p className={styles.prompt}>{m.prompt || 'Not described yet.'}</p>)}
-      {Section('when', 'When it runs', triggersBody)}
-      {Section('behavior', 'Behavior', behaviorBody)}
-      {Section('apps', 'Connected apps', appsBody)}
-      <div className={styles.hint}>
-        This view is filled in by the chat. Describe any change in the conversation.
-      </div>
-    </div>
-  );
-}
 
 // ---------- Code view ----------
 
@@ -263,7 +73,9 @@ function FlowNode({
   svg: string;
   kind: string;
   title: string;
-  sub?: string | null;
+  // ReactNode (not just string) so the condition trigger's `where` clause can
+  // render as a monospace block (GAP 2) instead of being flattened into text.
+  sub?: ReactNode;
 }): JSX.Element {
   return (
     <div className={styles.flowNode}>
@@ -290,7 +102,7 @@ interface FlowStage {
   svg: string;
   kind: string;
   title: string;
-  sub?: string | null;
+  sub?: ReactNode;
 }
 
 function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): JSX.Element {
@@ -301,7 +113,7 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
   const t0 = (m.triggers ?? [])[0];
   let trigSvg = iconSvg('Play', 16);
   let trigTitle = 'Manual only';
-  let trigSub: string | null = 'Runs only when you fire it.';
+  let trigSub: ReactNode = 'Runs only when you fire it.';
   if (t0) {
     if (t0.kind === 'cron') {
       trigSvg = iconSvg('Clock', 16);
@@ -315,7 +127,14 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
     } else if (t0.kind === 'condition') {
       trigSvg = iconSvg('Clock', 16);
       trigTitle = 'Condition trigger';
-      trigSub = `Fires when ${t0.entity} matches its condition`;
+      // GAP 2: render the actual `where` clause instead of hiding it.
+      const whereText = formatWhereClauses(t0.where);
+      trigSub = (
+        <>
+          <span>Fires when {t0.entity} matches its condition</span>
+          {whereText ? <pre className={styles.whereBlock}>{whereText}</pre> : null}
+        </>
+      );
     } else {
       trigSvg = iconSvg('Webhook', 16);
       trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';
@@ -449,7 +268,7 @@ function RunsView({ appId }: { appId: string }): JSX.Element {
                   <span className={styles.runSummary}>
                     {r.summary || r.error || (r.ok ? 'Completed' : 'Failed')}
                   </span>
-                  <span className={styles.runTrigger}>{r.triggerKind}</span>
+                  <span className={styles.runTrigger}>{runOriginLabel(r)}</span>
                   <span className={styles.runMeta}>{`${dur} · ${relTime(r.startedAt)}`}</span>
                 </div>
               );

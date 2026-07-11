@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildAutomationViewData,
   buildOverviewData,
+  collectAutomationRuns,
   type AutomationFeedEntry,
 } from './automationsData.js';
+import { listAutomationRuns, listAutomations } from '../../../gateway-client.js';
 
 // buildOverviewData is pure; stub the gateway module so importing it doesn't
 // run gateway-client-core's load-time window.CentraidApi side-effect. `vi.mock`
@@ -80,6 +82,33 @@ describe('buildOverviewData', () => {
     expect(data.subtitle).toContain('1 active');
     expect(data.subtitle).toContain('0 paused');
     expect(data.subtitle).toContain('1 drafts');
+  });
+
+  it('Title-Cases the trigger origin in a run\'s metaLabel instead of the raw enum', () => {
+    const dataRun = buildOverviewData(
+      [row()],
+      [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never)],
+    );
+    expect(dataRun.runs[0]?.metaLabel).toMatch(/^Data · /);
+    expect(dataRun.runs[0]?.metaLabel).not.toContain('data ·');
+
+    const webhookRun = buildOverviewData(
+      [row()],
+      [entry({ triggerKind: 'scheduled', triggerOrigin: 'webhook' } as never)],
+    );
+    expect(webhookRun.runs[0]?.metaLabel).toMatch(/^Webhook · /);
+
+    const manualRun = buildOverviewData(
+      [row()],
+      [entry({ triggerKind: 'manual', triggerOrigin: undefined } as never)],
+    );
+    expect(manualRun.runs[0]?.metaLabel).toMatch(/^Manual · /);
+
+    const cronRun = buildOverviewData(
+      [row()],
+      [entry({ triggerKind: 'scheduled', triggerOrigin: undefined } as never)],
+    );
+    expect(cronRun.runs[0]?.metaLabel).toMatch(/^Cron · /);
   });
 });
 
@@ -164,5 +193,129 @@ describe('buildAutomationViewData', () => {
       GATEWAY_ORIGIN,
     );
     expect(data?.runs[0]?.trigLabel).toBe('Data');
+  });
+
+  it('derives dataDetail (entities + cadence) for a data trigger', () => {
+    const withEvery = buildAutomationViewData(
+      viewRow({
+        triggers: [{ kind: 'data', entities: ['core.content_derivative', 'core.event'], every: '5m' } as never],
+      }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(withEvery?.dataDetail).toEqual({
+      entities: ['core.content_derivative', 'core.event'],
+      everyLabel: 'Every 5m',
+    });
+    expect(withEvery?.conditionDetail).toBeNull();
+
+    const withoutEvery = buildAutomationViewData(
+      viewRow({ triggers: [{ kind: 'data', entities: ['core.event'] } as never] }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(withoutEvery?.dataDetail).toEqual({ entities: ['core.event'], everyLabel: null });
+  });
+
+  it('derives conditionDetail with a readable where clause for a structured condition', () => {
+    const data = buildAutomationViewData(
+      viewRow({
+        triggers: [
+          {
+            kind: 'condition',
+            entity: 'core.event',
+            where: { status: 'overdue' },
+            every: '1h',
+          } as never,
+        ],
+      }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(data?.conditionDetail).toEqual({
+      entity: 'core.event',
+      whereText: JSON.stringify({ status: 'overdue' }, null, 2),
+      everyLabel: 'Every 1h',
+    });
+    expect(data?.dataDetail).toBeNull();
+  });
+
+  it('passes a plain-string where clause through unchanged', () => {
+    const data = buildAutomationViewData(
+      viewRow({
+        triggers: [{ kind: 'condition', entity: 'core.event', where: 'status = overdue' } as never],
+      }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(data?.conditionDetail?.whereText).toBe('status = overdue');
+  });
+
+  it('renders a structured where clause array as compact "column op value" lines, matching the builder', () => {
+    const data = buildAutomationViewData(
+      viewRow({
+        triggers: [
+          {
+            kind: 'condition',
+            entity: 'core.event',
+            where: [
+              { column: 'status', op: 'eq', value: 'open' },
+              { column: 'days_left', op: 'within-days', value: 3 },
+            ],
+          } as never,
+        ],
+      }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(data?.conditionDetail?.whereText).toBe('status eq "open"\ndays_left within-days 3');
+  });
+
+  it('is null for both dataDetail and conditionDetail on a cron automation', () => {
+    const data = buildAutomationViewData(viewRow(), [], GATEWAY_ORIGIN);
+    expect(data?.dataDetail).toBeNull();
+    expect(data?.conditionDetail).toBeNull();
+  });
+});
+
+describe('collectAutomationRuns', () => {
+  it('prefers the live automation name over the run-recorded name over the raw ref', async () => {
+    vi.mocked(listAutomations).mockResolvedValue([row()] as unknown as CentraidAutomationRow[]);
+    vi.mocked(listAutomationRuns).mockResolvedValue([
+      entry({ automationId: 'digest/main' }).run,
+    ] as unknown as CentraidAutomationRunRecord[]);
+    const entries = await collectAutomationRuns();
+    expect(entries[0]?.automationName).toBe('Daily Digest');
+  });
+
+  it('falls back to the run-recorded name when the automation was deleted', async () => {
+    vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
+    vi.mocked(listAutomationRuns).mockResolvedValue([
+      {
+        runId: 'r1',
+        automationId: 'gone-app/gone-auto',
+        automationName: 'Gone Automation',
+        startedAt: 1000,
+        ok: true,
+        triggerKind: 'cron',
+      },
+    ] as unknown as CentraidAutomationRunRecord[]);
+    const entries = await collectAutomationRuns();
+    expect(entries[0]?.automationName).toBe('Gone Automation');
+  });
+
+  it('falls back to the raw ref when neither the automation nor a recorded name exists', async () => {
+    vi.mocked(listAutomations).mockResolvedValue([] as unknown as CentraidAutomationRow[]);
+    vi.mocked(listAutomationRuns).mockResolvedValue([
+      {
+        runId: 'r1',
+        automationId: 'gone-app/gone-auto',
+        startedAt: 1000,
+        ok: true,
+        triggerKind: 'cron',
+      },
+    ] as unknown as CentraidAutomationRunRecord[]);
+    const entries = await collectAutomationRuns();
+    expect(entries[0]?.automationName).toBe('gone-app/gone-auto');
   });
 });

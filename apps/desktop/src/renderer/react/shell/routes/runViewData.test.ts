@@ -57,6 +57,66 @@ describe('buildRunSnapshot', () => {
     expect(snap.nodes[0]?.name).toBe('fetch');
   });
 
+  it('labels a data-originated run honestly instead of falling back to cron', () => {
+    const snap = buildRunSnapshot(row(), run({ triggerOrigin: 'data' }), [], new Map());
+    expect(snap.logKpi.triggerLabel).toBe('Data');
+    expect(snap.logKpi.triggerIcon).toBe('Clock');
+    expect(snap.logRows[0]?.label).toBe('Run started by data trigger');
+  });
+
+  it('labels a condition-originated run honestly instead of falling back to cron', () => {
+    const snap = buildRunSnapshot(row(), run({ triggerOrigin: 'condition' }), [], new Map());
+    expect(snap.logKpi.triggerLabel).toBe('Condition');
+    expect(snap.logKpi.triggerIcon).toBe('Clock');
+    expect(snap.logRows[0]?.label).toBe('Run started by condition trigger');
+  });
+
+  it('degrades gracefully to a raw-ref identity when the parent automation was deleted', () => {
+    const snap = buildRunSnapshot(
+      null,
+      run({ endedAt: Date.now(), ok: true, automationId: 'digest/main' }),
+      [],
+      new Map(),
+    );
+    expect(snap.deleted).toBe(true);
+    expect(snap.crumbName).toBe('digest/main');
+    expect(snap.headerName).toBe('digest/main');
+    expect(snap.promptInstr).toContain('deleted');
+    expect(snap.triggersSummary).toBe('Trigger configuration unavailable');
+  });
+
+  it('falls back to the run id when a deleted run has no recorded automationId', () => {
+    const snap = buildRunSnapshot(
+      null,
+      run({ endedAt: Date.now(), ok: true, automationId: undefined, runId: 'r9' }),
+      [],
+      new Map(),
+    );
+    expect(snap.crumbName).toBe('r9');
+  });
+
+  it('prefers the run-recorded automation name over the raw ref when the parent was deleted', () => {
+    const snap = buildRunSnapshot(
+      null,
+      run({
+        endedAt: Date.now(),
+        ok: true,
+        automationId: 'digest/main',
+        automationName: 'Daily Digest',
+      } as never),
+      [],
+      new Map(),
+    );
+    expect(snap.deleted).toBe(true);
+    expect(snap.crumbName).toBe('Daily Digest');
+    expect(snap.headerName).toBe('Daily Digest');
+  });
+
+  it('marks a live snapshot as not deleted when the row is present', () => {
+    const snap = buildRunSnapshot(row(), run(), [], new Map());
+    expect(snap.deleted).toBe(false);
+  });
+
   it('surfaces streamed live text on an in-flight agent node', () => {
     const nodes = [
       { runId: 'r1', ordinal: 2, kind: 'agent', startedAt: Date.now(), ok: true },

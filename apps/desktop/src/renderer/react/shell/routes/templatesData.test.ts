@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { installAppTemplate, loadAppTemplates, loadAutomationTemplates } from './templatesData.js';
+import {
+  installAppTemplate,
+  loadAppTemplates,
+  loadAutomationTemplates,
+  surfaceMintedWebhook,
+} from './templatesData.js';
 
 // `vi.hoisted` lifts these mock fns above the hoisted `vi.mock` factory so it can
 // close over them without a TDZ error, keeping the real imports first.
@@ -31,6 +36,14 @@ describe('templatesData', () => {
     expect((await loadAutomationTemplates()).map((t) => t.id)).toEqual(['digest']);
   });
 
+  it('loadAutomationTemplates passes data/condition triggerKind through unchanged', async () => {
+    const dataAuto = { ...auto, id: 'photo-captioner', triggerKind: 'data' };
+    const conditionAuto = { ...auto, id: 'renewal-reminders', triggerKind: 'condition' };
+    listTemplates.mockResolvedValue([app, dataAuto, conditionAuto]);
+    const result = await loadAutomationTemplates();
+    expect(result.map((t) => t.triggerKind)).toEqual(['data', 'condition']);
+  });
+
   it('returns [] when the catalog fetch fails', async () => {
     listTemplates.mockRejectedValue(new Error('offline'));
     expect(await loadAppTemplates()).toEqual([]);
@@ -59,5 +72,15 @@ describe('templatesData', () => {
     gwCloneTemplate.mockResolvedValue({ app: { id: 'x' }, template: { name: 'Fallback' } });
     const pin = await installAppTemplate(app as never);
     expect(pin.name).toBe('Fallback');
+  });
+
+  it('surfaceMintedWebhook logs the URL + plaintext secret as a dev-console fallback', () => {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    surfaceMintedWebhook({ url: 'https://gw.example/_centraid-hook/abc', secret: 'shh' });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [line] = spy.mock.calls[0] as [string];
+    expect(line).toContain('https://gw.example/_centraid-hook/abc');
+    expect(line).toContain('shh');
+    spy.mockRestore();
   });
 });

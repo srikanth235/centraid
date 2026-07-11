@@ -812,7 +812,7 @@ export class VaultPlane {
       itemId: r.item_id,
       connection: { kind: r.kind, label: r.label },
       actor: this.actorName(r.actor_id, r.actor_kind),
-      actorKind: r.actor_kind,
+      actorKind: this.refineActorKind(r.actor_id, r.actor_kind),
       verb: r.verb,
       target: r.target,
       artifact: JSON.parse(r.artifact_json) as Record<string, unknown>,
@@ -1070,6 +1070,19 @@ export class VaultPlane {
             confirm: r.requires_confirmation === 1,
           }));
     return { scopes, highlights };
+  }
+
+  /**
+   * Refines a stored `ai_agent` actor into `assistant` vs `agent` the same
+   * way `Gateway.callerKind` does for parked rows (`host_key '_assistant'`),
+   * so the Approvals surface badges assistant-staged sends honestly.
+   */
+  private refineActorKind(actorId: string, actorKind: string): string {
+    if (actorKind !== 'ai_agent') return actorKind;
+    const row = this.db.vault
+      .prepare('SELECT host_key FROM agent_agent WHERE agent_id = ?')
+      .get(actorId) as { host_key: string } | undefined;
+    return row?.host_key === '_assistant' ? 'assistant' : 'agent';
   }
 
   /** Display name for an outbox actor row id (agent party / app name). */

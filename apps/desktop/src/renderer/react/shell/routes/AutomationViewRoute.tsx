@@ -4,6 +4,7 @@ import {
   deleteAutomation,
   listAutomationRuns,
   readAutomation,
+  rotateAutomationWebhookSecret,
   runAutomationNow,
   setAutomationEnabled,
 } from '../../../gateway-client.js';
@@ -11,6 +12,7 @@ import { triggersSummary } from '../../../app-format.js';
 import AutomationViewScreen from '../../screens/AutomationViewScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
+import { openWebhookReveal } from '../webhookReveal.js';
 import { buildAutomationViewData } from './automationsData.js';
 
 // React-owned automation single-view — replaces the vanilla renderAutomationView
@@ -93,6 +95,35 @@ export default function AutomationViewRoute({
           } catch (err) {
             showToast(
               `Could not ${next ? 'enable' : 'disable'} ${row.name}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return false;
+          }
+        }}
+        onRegenerateWebhookSecret={async () => {
+          const row = rowRef.current;
+          if (!row) return false;
+          const ok = await confirm({
+            confirmLabel: 'Regenerate',
+            danger: true,
+            message:
+              'This invalidates the current secret — any caller using it starts failing until updated. The webhook URL stays the same.',
+            title: 'Regenerate webhook secret?',
+          });
+          if (!ok) return false;
+          try {
+            const { webhook } = await rotateAutomationWebhookSecret({ automationId: row.ref });
+            console.info(
+              `[centraid] Webhook secret rotated for ${webhook.url}\n  Bearer secret (shown once, only its hash is stored): ${webhook.secret}`,
+            );
+            await openWebhookReveal(webhook, {
+              note: "This secret is shown once. Update your caller now — you won't see it again.",
+              title: 'New webhook secret',
+            });
+            showToast('Webhook secret regenerated');
+            return true;
+          } catch (err) {
+            showToast(
+              `Could not regenerate secret: ${err instanceof Error ? err.message : String(err)}`,
             );
             return false;
           }

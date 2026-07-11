@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cronToHuman } from './app-format.js';
+import { cronToHuman, formatWhereClauses } from './app-format.js';
 
 // cron digits are UTC; the display promises the user's local wall-clock time.
 // process.env.TZ swaps the local zone at runtime (POSIX), letting the tests
@@ -47,5 +47,29 @@ describe('cronToHuman UTC→local conversion', () => {
     expect(cronToHuman('*/5 * * * *')).toBe('Every 5 minutes');
     expect(cronToHuman('0 * * * *')).toBe('Hourly');
     expect(cronToHuman('not a cron')).toBe('not a cron');
+  });
+});
+
+// Shared by the builder's trigger form (BuilderAutomationTriggers, which
+// re-exports this) and the automation view screen's condition-detail
+// rendering (automationsData.ts) — one formatter, one compact shape.
+describe('formatWhereClauses', () => {
+  it('returns null for an empty/absent where', () => {
+    expect(formatWhereClauses(undefined)).toBeNull();
+    expect(formatWhereClauses([])).toBeNull();
+  });
+
+  it('pretty-prints one clause per line, quoting non-numeric values', () => {
+    const out = formatWhereClauses([
+      { column: 'status', op: 'eq', value: 'open' },
+      { column: 'days_left', op: 'within-days', value: 3 },
+      { column: 'archived_at', op: 'is-null' },
+    ]);
+    expect(out).toBe('status eq "open"\ndays_left within-days 3\narchived_at is-null');
+  });
+
+  it('falls back to raw JSON for a shape it cannot structurally print', () => {
+    const weird = [{ nope: true }];
+    expect(formatWhereClauses(weird)).toBe(JSON.stringify(weird, null, 2));
   });
 });

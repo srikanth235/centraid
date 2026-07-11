@@ -27,6 +27,7 @@ import {
   type Manifest,
   type Trigger,
   type HistoryKeep,
+  type ManifestVault,
 } from '../manifest/manifest.js';
 import { isValidAppId } from '@centraid/app-engine';
 import { AppScaffoldError, type ScaffoldFile, type AppInfo } from '@centraid/blueprints';
@@ -56,6 +57,14 @@ export interface ScaffoldOptions {
   historyKeep?: HistoryKeep;
   /** Automation to fire when this one fails — a `<appId>/<id>` handle. */
   onFailure?: string;
+  /**
+   * Requested vault access a `condition`/`data` trigger's consented read
+   * runs under (duaility §12). `validateManifest` requires this block
+   * whenever `triggers` carries a condition/data entry — omitting it while
+   * declaring one of those triggers fails validation loudly rather than
+   * scaffolding an automation that can never evaluate its own trigger.
+   */
+  vault?: ManifestVault;
   /**
    * Initial `enabled` flag. Defaults to `true`. The conversational
    * builder scaffolds a *draft* (`false`) so the cron does not start
@@ -180,6 +189,7 @@ function starterManifest(name: string, opts: ScaffoldOptions): Manifest {
   if (opts.description?.trim()) raw.description = opts.description.trim();
   if (opts.apps && opts.apps.length > 0) raw.apps = [...opts.apps];
   if (opts.onFailure?.trim()) raw.onFailure = opts.onFailure.trim();
+  if (opts.vault) raw.vault = opts.vault;
   // Round-trip through the validator so a scaffold can never write a
   // manifest the runtime would later reject.
   return validateManifest(raw);

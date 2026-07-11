@@ -36,6 +36,30 @@ const automationTemplates: DiscoverTemplate[] = [
     triggerKind: 'cron',
     integrations: ['Gmail', 'Slack'],
   },
+  {
+    id: 'photo-captioner',
+    name: 'Photo captions',
+    desc: 'Captions new photos.',
+    colorKey: 'ochre',
+    iconKey: 'Sparkle',
+    version: '1',
+    kind: 'automation',
+    category: 'Enrichment',
+    triggerKind: 'data',
+    integrations: [],
+  },
+  {
+    id: 'renewal-reminders',
+    name: 'Renewal reminders',
+    desc: 'Watches deadlines.',
+    colorKey: 'indigo',
+    iconKey: 'Sparkle',
+    version: '1',
+    kind: 'automation',
+    category: 'Enrichment',
+    triggerKind: 'condition',
+    integrations: [],
+  },
 ];
 
 const noop = (): void => {};
@@ -62,7 +86,7 @@ describe('DiscoverScreen', () => {
 
   it('lists every template as a card in the default All view, apps first', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
-    expect(count(html, 'class="card"')).toBe(3);
+    expect(count(html, 'class="card"')).toBe(5);
     expect(html.indexOf('Todos')).toBeLessThan(html.indexOf('Daily Digest'));
     expect(html).toContain('Todos');
     expect(html).toContain('Journal');
@@ -73,6 +97,7 @@ describe('DiscoverScreen', () => {
     const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
     expect(html).toContain('>Apps<');
     expect(html).toContain('>Inbox<');
+    expect(html).toContain('>Enrichment<');
     // count badge is zero-padded
     expect(html).toContain('>02<');
     expect(html).toContain('>01<');
@@ -84,6 +109,12 @@ describe('DiscoverScreen', () => {
     expect(html).toContain('>Cron<');
     expect(count(html, 'auOvDot"')).toBe(2);
     expect(html).toContain('class="badge"');
+  });
+
+  it('labels data and condition triggers honestly instead of falling back to Cron', () => {
+    const html = renderToStaticMarkup(<DiscoverScreen {...baseProps()} />);
+    expect(html).toContain('>Data<');
+    expect(html).toContain('>Condition<');
   });
 
   it('shows the empty state when no templates match', () => {

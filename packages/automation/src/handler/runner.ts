@@ -128,6 +128,12 @@ export interface DispatchContext {
 export interface RunHandlerOptions {
   /** Id of the automation app (its directory name). */
   automationId: string;
+  /**
+   * The automation's display name (manifest `name`), recorded on the
+   * execution conversation's `title` so a later-deleted automation's runs
+   * still carry their last-known name instead of just the raw ref.
+   */
+  automationName?: string;
   /** The automation app directory — handler logs are written here. */
   automationDir: string;
   /** Absolute path to the generated `handler.js`. */
@@ -531,7 +537,7 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = randomUUID();
-  audit.store.createAutomationRun(execConversationId, audit.automationId, appId);
+  audit.store.createAutomationRun(execConversationId, audit.automationId, appId, opts.automationName);
   const startedAt = Date.now();
   audit.store.insertTurn({
     turnId: audit.runId,

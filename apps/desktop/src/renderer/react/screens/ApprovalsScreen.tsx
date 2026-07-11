@@ -35,6 +35,17 @@ export interface ApprovalsOutboxRowDTO {
   stagedAgo: string;
   note: string | null;
   /**
+   * WHO staged this write — the sibling gap to the parked-row requester-
+   * identity fix (issue: parked-invocation trust legibility applies just as
+   * much to an outbound external send, arguably more). Never null: falls
+   * back to the raw kind string when no display name is known. The gateway
+   * refines the stored `ai_agent` into `'agent' | 'assistant'` on the wire
+   * (VaultPlane.refineActorKind, matching the parked plane's vocabulary), so
+   * the badge distinguishes App vs Automation vs Assistant like parked rows.
+   */
+  caller: string;
+  callerKind: string;
+  /**
    * Whether the gateway has a request rebuilder for this item's verb
    * (issue #308 A5 UI slice) — gates the "Edit" affordance. `false` keeps
    * the honest "can't be edited yet" copy.
@@ -132,6 +143,20 @@ function wantsTextarea(key: string, value: string): boolean {
   return key.toLowerCase().includes('body') || value.includes('\n') || value.length > 120;
 }
 
+/** The requester badge an outbox row shows next to its actor name — mirrors `parkedKindBadge`. */
+function outboxKindBadge(kind: string): JSX.Element | null {
+  switch (kind) {
+    case 'app':
+      return <KindBadge kind="app">App</KindBadge>;
+    case 'agent':
+      return <KindBadge kind="automation">Automation</KindBadge>;
+    case 'assistant':
+      return <KindBadge kind="assistant">Assistant</KindBadge>;
+    default:
+      return null;
+  }
+}
+
 function OutboxRow({
   row,
   busy,
@@ -192,6 +217,10 @@ function OutboxRow({
           <span className={styles.rowTitle}>{row.subject ?? row.target}</span>
           <span className={styles.rowSub}>
             {row.recipient} · {row.connectionLabel}
+          </span>
+          <span className={cx(styles.rowSub, styles.rowSubCaller)}>
+            {outboxKindBadge(row.callerKind)}
+            <span>{row.caller}</span>
           </span>
         </span>
         <span className={styles.rowMeta}>{row.stagedAgo}</span>
@@ -412,6 +441,10 @@ function ScopeRequestRow({
   );
 }
 
+// No kind badge here: `OutboxGrant` (gateway-client-outbox.ts) carries
+// `actor`/`actorId` but no `actorKind` — the wire data this screen would
+// need to mirror the App/Automation badge treatment doesn't exist yet for
+// standing grants. Left as plain text rather than guessing at a kind.
 function GrantRow({
   row,
   busy,

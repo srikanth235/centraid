@@ -669,6 +669,9 @@ export interface CentraidInsightsAutomationRow {
   runs: number;
   tokens: number;
   costUsd: number;
+  /** Last-known display name recorded on the automation's runs — set even
+   *  after the automation itself is deleted. */
+  automationName?: string;
 }
 
 /** One row of the "by model" breakdown. */
@@ -687,6 +690,8 @@ export interface CentraidInsightsActivityRow {
   /** `<appId>/<id>` handle for automation runs — the desktop resolves the
    *  display name from the automation list. */
   automationRef?: string;
+  /** Last-known display name recorded on the run — see `CentraidInsightsAutomationRow.automationName`. */
+  automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
@@ -710,6 +715,9 @@ export interface CentraidAutomationRunRecord {
   kind: 'automation' | 'chat' | 'build';
   /** Set for `kind: 'automation'` — the automation app id. */
   automationId?: string;
+  /** The automation's last-known display name, recorded on the run itself —
+   *  survives the automation being deleted (falls back to `automationId`). */
+  automationName?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
   triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
@@ -1009,6 +1017,7 @@ declare global {
     runId: string;
     kind: 'automation' | 'chat' | 'build';
     automationId?: string;
+    automationName?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
     triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
     parentRunId?: string;
@@ -1075,6 +1084,7 @@ declare global {
     runs: number;
     tokens: number;
     costUsd: number;
+    automationName?: string;
   }
   interface CentraidInsightsModelRow {
     model: string;
@@ -1087,6 +1097,7 @@ declare global {
     kind: string;
     label: string;
     automationRef?: string;
+    automationName?: string;
     ok: boolean;
     startedAt: number;
     tokens: number;
