@@ -52,6 +52,9 @@ const Channel = {
   UPDATE_STATUS: 'centraid:update:status',
   UPDATE_RELAUNCH: 'centraid:update:relaunch',
   UPDATE_AVAILABLE: 'centraid:update:available',
+
+  // "What's new" changelog (main/changelog.ts) — GitHub Releases fetch, cached.
+  CHANGELOG_GET: 'centraid:changelog:get',
 } as const;
 
 // `tokens.toCss()` is pure and stable for the lifetime of the package
@@ -237,4 +240,8 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.on(Channel.UPDATE_AVAILABLE, handler);
     return () => ipcRenderer.off(Channel.UPDATE_AVAILABLE, handler);
   },
+
+  // "What's new" changelog — main fetches the project's GitHub Releases
+  // (cached) and returns the running build's version plus the release list.
+  getChangelog: () => ipcRenderer.invoke(Channel.CHANGELOG_GET),
 });

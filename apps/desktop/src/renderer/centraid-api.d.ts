@@ -98,6 +98,38 @@ export interface CentraidSettings {
   gatewayAlertSeconds?: number;
   /** Master switch for the gateway down alert. Absent → enabled. */
   gatewayAlertsEnabled?: boolean;
+  /**
+   * Changelog version the "What's new" modal last auto-opened for. The shell
+   * auto-opens once whenever the running build's version differs from this,
+   * then writes the new version back via `saveSettings`. Absent → never seen.
+   */
+  changelogSeenVersion?: string;
+}
+
+/** A single published release shown in the "What's new" modal. */
+export interface CentraidChangelogRelease {
+  /** Release tag (e.g. `v0.2.0`) — stable identity + the version chip. */
+  version: string;
+  /** Human title (GitHub release `name`), falling back to the tag. */
+  title: string;
+  /** Raw release notes (GitHub-flavored markdown), rendered md-lite client-side. */
+  notes: string;
+  /** ISO 8601 publish timestamp, or `null` if GitHub omitted it. */
+  publishedAt: string | null;
+  /** Canonical GitHub URL for the release. */
+  url: string;
+  /** Pre-release flag — the modal tags these as not-yet-stable. */
+  prerelease: boolean;
+}
+
+/** The changelog read: running build version + the release list. */
+export interface CentraidChangelogResult {
+  /** Version of the running build — the auto-open version gate reads this. */
+  currentVersion: string;
+  /** Published releases, newest-first. Empty when none (or on a cold error). */
+  releases: CentraidChangelogRelease[];
+  /** Present only when the fetch failed AND nothing was cached to serve. */
+  error?: string;
 }
 
 /** One heartbeat probe in the runtime sample strip. */
@@ -539,6 +571,14 @@ interface CentraidApi {
   relaunchToUpdate?(): Promise<{ ok: true }>;
   /** Subscribe to "a new build landed on disk". Returns the unsubscribe. */
   onUpdateAvailable?(cb: (msg: { available: boolean; version: string }) => void): () => void;
+
+  // ----- "What's new" changelog -----
+  /**
+   * Fetch the project's GitHub release notes (main-side, cached) plus the
+   * running build version. Optional so test harnesses can mock a partial
+   * bridge (the modal shows an error/empty state when it's absent).
+   */
+  getChangelog?(): Promise<CentraidChangelogResult>;
 
   /**
    * Subscribe to active-gateway changes (any cause — add/remove/rename
