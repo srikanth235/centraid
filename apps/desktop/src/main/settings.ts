@@ -79,6 +79,17 @@ export interface PersistedSettings {
    * then writes the new version back. Absent = never seen (fresh install).
    */
   changelogSeenVersion?: string;
+  /**
+   * Launch Centraid automatically at OS login (issue #351, tier 4 — the
+   * cheap 80% fix for "always-on": the desktop-hosted gateway still dies
+   * when the app quits, and there's deliberately no OS scheduler, but the
+   * app can at least come back up after a reboot/login without the user
+   * remembering to open it). Applied via `app.setLoginItemSettings` — see
+   * `login-item.ts`. Absent → disabled (opt-in; a fresh install never
+   * silently adds itself to login items). No-op on Linux — Electron
+   * doesn't implement `setLoginItemSettings` there.
+   */
+  launchAtLogin?: boolean;
 }
 
 export interface DesktopSettings {
@@ -139,6 +150,8 @@ export interface DesktopSettings {
   gatewayAlertsEnabled?: boolean;
   /** Changelog version last shown by the "What's new" auto-open (absent → never). */
   changelogSeenVersion?: string;
+  /** Launch Centraid at OS login (absent → disabled). See `PersistedSettings.launchAtLogin`. */
+  launchAtLogin?: boolean;
 }
 
 const FILE_NAME = 'centraid-settings.json';
@@ -203,6 +216,7 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     ...(typeof raw.changelogSeenVersion === 'string'
       ? { changelogSeenVersion: raw.changelogSeenVersion }
       : {}),
+    ...(typeof raw.launchAtLogin === 'boolean' ? { launchAtLogin: raw.launchAtLogin } : {}),
   };
 }
 
@@ -299,6 +313,7 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     ...(p.changelogSeenVersion !== undefined
       ? { changelogSeenVersion: p.changelogSeenVersion }
       : {}),
+    ...(p.launchAtLogin !== undefined ? { launchAtLogin: p.launchAtLogin } : {}),
   };
 }
 

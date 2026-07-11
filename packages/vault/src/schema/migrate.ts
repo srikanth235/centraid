@@ -90,9 +90,32 @@ function currentVersion(db: DatabaseSync): number {
   return row.user_version;
 }
 
+/**
+ * Thrown when a file's `PRAGMA user_version` is ahead of what this build's
+ * migration ladder knows how to reach — a newer-software backup restored
+ * onto older software, or the app itself downgraded. The old loop was
+ * forward-only and would silently no-op in this case, leaving the gateway
+ * to open (and write into) a schema shape it doesn't understand. Callers
+ * must let this propagate; opening the file anyway risks silent corruption.
+ */
+export class VaultSchemaAheadError extends Error {
+  constructor(
+    readonly fileVersion: number,
+    readonly knownVersion: number,
+  ) {
+    super(
+      `this vault was written by a newer version of Centraid (schema v${fileVersion}, this build understands v${knownVersion}) — refusing to open; upgrade the app instead`,
+    );
+    this.name = 'VaultSchemaAheadError';
+  }
+}
+
 /** Apply every migration past user_version, each in its own transaction. */
 export function migrate(db: DatabaseSync, migrations: readonly string[]): void {
   let version = currentVersion(db);
+  if (version > migrations.length) {
+    throw new VaultSchemaAheadError(version, migrations.length);
+  }
   while (version < migrations.length) {
     const ddl = migrations[version];
     if (ddl === undefined) break;

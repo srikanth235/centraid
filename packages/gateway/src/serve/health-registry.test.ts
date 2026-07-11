@@ -134,4 +134,38 @@ describe('HealthRegistry', () => {
     expect(snap.startedAt).toBe(new Date(10_000).toISOString());
     expect(snap.uptimeMs).toBe(15_000);
   });
+
+  describe('metrics (issue #351 tier 3)', () => {
+    it('always includes rssBytes + uptimeMs, with outboxPending defaulting to 0, unwired', async () => {
+      const registry = new HealthRegistry();
+      const snap = await registry.snapshot();
+      expect(snap.metrics.rssBytes).toBeGreaterThan(0);
+      expect(snap.metrics.outboxPending).toBe(0);
+      expect(snap.metrics.uptimeMs).toBe(snap.uptimeMs);
+      expect(snap.metrics.sseClients).toBeUndefined();
+    });
+
+    it('pulls outboxPending/sseClients from the injected source at snapshot time', async () => {
+      const registry = new HealthRegistry();
+      let pending = 3;
+      registry.setMetricsSource(() => ({ outboxPending: pending, sseClients: 2 }));
+
+      let snap = await registry.snapshot();
+      expect(snap.metrics.outboxPending).toBe(3);
+      expect(snap.metrics.sseClients).toBe(2);
+
+      // Re-read on every call — not cached from registration time.
+      pending = 7;
+      snap = await registry.snapshot();
+      expect(snap.metrics.outboxPending).toBe(7);
+    });
+
+    it('omits sseClients when the source leaves it unset', async () => {
+      const registry = new HealthRegistry();
+      registry.setMetricsSource(() => ({ outboxPending: 1 }));
+      const snap = await registry.snapshot();
+      expect(snap.metrics.outboxPending).toBe(1);
+      expect('sseClients' in snap.metrics).toBe(false);
+    });
+  });
 });

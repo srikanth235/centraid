@@ -48,6 +48,16 @@ function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
 const noop = (): void => {};
 const noLoadHealth = (): Promise<GatewayHealthDTO> => Promise.resolve(makeHealth());
 const noStreamLogs = (): Promise<void> => new Promise<void>(() => {}); // never resolves — no lines, "live" shell only
+// Never-resolving stubs for the ops props (Backup card / restart / export)
+// — tests that don't exercise them just need the Overview render to be
+// stable (BackupCard parks on "Checking backup status…", etc.).
+const noLoadBackupStatus = (): Promise<{ configured: boolean; vaults: never[] }> =>
+  new Promise(() => {});
+const noRunBackupNow = (): Promise<{ accepted: boolean }> => new Promise(() => {});
+const noRestartGateway = (): Promise<{ ok: boolean; error?: string }> => new Promise(() => {});
+const noExportDiagnostics = (): Promise<
+  { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+> => new Promise(() => {});
 
 const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | null = null): string =>
   renderToStaticMarkup(
@@ -59,6 +69,10 @@ const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | nul
       health={health}
       loadHealth={noLoadHealth}
       streamLogs={noStreamLogs}
+      loadBackupStatus={noLoadBackupStatus}
+      onRunBackupNow={noRunBackupNow}
+      onRestartGateway={noRestartGateway}
+      onExportDiagnostics={noExportDiagnostics}
     />,
   );
 
@@ -164,6 +178,10 @@ describe('GatewayScreen interactions', () => {
           })}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -186,6 +204,10 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -218,6 +240,10 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={loadHealth}
           streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -240,6 +266,10 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={noLoadHealth}
           streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -272,6 +302,10 @@ describe('GatewayScreen interactions', () => {
           health={null}
           loadHealth={loadHealth}
           streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
         />,
       );
     });
@@ -288,5 +322,163 @@ describe('GatewayScreen interactions', () => {
     // Landed on the Logs tab, search box seeded with the component id.
     const search = host.querySelector<HTMLInputElement>('input[type="search"]');
     expect(search?.value).toBe('connections');
+  });
+
+  it('mounts the Backup card on Overview, wired to loadBackupStatus', async () => {
+    const loadBackupStatus = vi.fn().mockResolvedValue({ configured: false, vaults: [] });
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+          loadBackupStatus={loadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loadBackupStatus).toHaveBeenCalled();
+    expect(host.textContent).toContain('Backups');
+    expect(host.textContent).toContain('Backups aren’t set up for this gateway');
+    // The seal-key nudge is a permanent fixture, not gated on configured.
+    expect(host.textContent).toContain('centraid-gateway backup kit');
+  });
+
+  it('restarts the gateway and clears back to idle on success', async () => {
+    const onRestartGateway = vi.fn().mockResolvedValue({ ok: true });
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={onRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
+        />,
+      );
+    });
+    const restartBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Restart gateway'),
+    ) as HTMLButtonElement;
+    expect(restartBtn).toBeDefined();
+    await act(async () => {
+      restartBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onRestartGateway).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('Restart gateway'); // back to idle label
+  });
+
+  it('surfaces a refused restart (remote gateway) inline without throwing', async () => {
+    const onRestartGateway = vi
+      .fn()
+      .mockResolvedValue({ ok: false, error: 'restart is only available for a local gateway' });
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={onRestartGateway}
+          onExportDiagnostics={noExportDiagnostics}
+        />,
+      );
+    });
+    const restartBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Restart gateway'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      restartBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain('restart is only available for a local gateway');
+  });
+
+  it('exports diagnostics from the Logs tab toolbar and shows the saved path', async () => {
+    const onExportDiagnostics = vi.fn().mockResolvedValue({ ok: true, path: '/tmp/diag.json' });
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={onExportDiagnostics}
+        />,
+      );
+    });
+    await clickTab('Logs');
+    const exportBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Export diagnostics'),
+    ) as HTMLButtonElement;
+    expect(exportBtn).toBeDefined();
+    await act(async () => {
+      exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(onExportDiagnostics).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('/tmp/diag.json');
+  });
+
+  it('shows nothing extra when the export dialog is canceled, and surfaces a real failure inline', async () => {
+    const onExportDiagnostics = vi.fn().mockResolvedValue({ ok: false, canceled: true });
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+          loadBackupStatus={noLoadBackupStatus}
+          onRunBackupNow={noRunBackupNow}
+          onRestartGateway={noRestartGateway}
+          onExportDiagnostics={onExportDiagnostics}
+        />,
+      );
+    });
+    await clickTab('Logs');
+    const exportBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Export diagnostics'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      exportBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(host.textContent).not.toContain('Saved to');
+    expect(exportBtn.textContent).toContain('Export diagnostics'); // back to idle label
   });
 });

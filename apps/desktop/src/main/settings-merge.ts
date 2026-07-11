@@ -44,6 +44,8 @@ export interface PersistedSettingsPatch {
   gatewayAlertsEnabled?: boolean;
   /** Changelog version last shown by "What's new" (preserve-or-set string). */
   changelogSeenVersion?: string;
+  /** Launch Centraid at OS login (issue #351). Preserve-or-set boolean. */
+  launchAtLogin?: boolean;
 }
 
 /**
@@ -116,5 +118,10 @@ export function mergePersistedSettings(
       patch.changelogSeenVersion,
       current.changelogSeenVersion,
     ),
+    ...(patch.launchAtLogin !== undefined
+      ? { launchAtLogin: patch.launchAtLogin }
+      : current.launchAtLogin !== undefined
+        ? { launchAtLogin: current.launchAtLogin }
+        : {}),
   };
 }

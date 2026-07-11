@@ -19,6 +19,9 @@
  *     backup/               — offsite backup engine state (keyring, per-vault
  *                              targets, staging) — kept OUTSIDE vault/ so a
  *                              raw vault-dir copy never carries the keyring
+ *     gateway-logs/         — rotated JSONL persistence of the log ring
+ *                              (issue #351), so a crash/restart doesn't
+ *                              lose the lines a post-mortem needs
  *     devices.json          — device enrollments: device key ↔ vault (#289)
  *     pairing-tickets.json  — one-time pairing tickets, secret hashes only (#289)
  *     endpoint-key.bin      — the gateway's persistent iroh secret key (#289)
@@ -56,6 +59,7 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     // post-#280, each vault's whole app world.
     vaultDir: path.join(abs, 'vault'),
     backupDir: path.join(abs, 'backup'),
+    logsDir: path.join(abs, 'gateway-logs'),
     devicesFile: path.join(abs, 'devices.json'),
     pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
     endpointKeyFile: path.join(abs, 'endpoint-key.bin'),

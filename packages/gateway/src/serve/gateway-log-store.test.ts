@@ -1,11 +1,31 @@
 /*
  * GatewayLogStore: ring buffer + fan-out + the RuntimeLogger tee that
- * feeds the realtime Logs surface.
+ * feeds the realtime Logs surface, plus the optional JSONL persistence
+ * (issue #351): rotation, boot-tail reload, and the dropped-writes
+ * counter for an unwritable dir.
  */
 
-import { expect, test } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, expect, test } from 'vitest';
 import type { RuntimeLogger } from '@centraid/app-engine';
 import { GatewayLogStore, type GatewayLogEntry } from './gateway-log-store.ts';
+
+const tmpDirs: string[] = [];
+
+function makeTmpDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gateway-log-store-'));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  while (tmpDirs.length > 0) {
+    const dir = tmpDirs.pop();
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('append assigns monotonic seqs and snapshot honors after', () => {
   const store = new GatewayLogStore();
@@ -81,4 +101,90 @@ test('wrap tees into the store and forwards to the inner logger', () => {
     'warn:b',
     'error:c',
   ]);
+});
+
+test('with no dir configured, no filesystem activity happens', () => {
+  const store = new GatewayLogStore();
+  store.append('info', 'one');
+  expect(store.droppedWriteCount()).toBe(0);
+});
+
+test('with a dir configured, each append is persisted as one JSONL line', () => {
+  const dir = makeTmpDir();
+  const store = new GatewayLogStore(2000, { dir });
+  store.append('info', 'one');
+  store.append('warn', 'two');
+
+  const raw = fs.readFileSync(path.join(dir, 'gateway.jsonl'), 'utf8');
+  const lines = raw.split('\n').filter(Boolean);
+  expect(lines).toHaveLength(2);
+  expect(JSON.parse(lines[0]!)).toMatchObject({ level: 'info', message: 'one' });
+  expect(JSON.parse(lines[1]!)).toMatchObject({ level: 'warn', message: 'two' });
+  expect(store.droppedWriteCount()).toBe(0);
+});
+
+test('rotation: writing past ~4 MiB rotates generations and keeps 3', () => {
+  const dir = makeTmpDir();
+  const store = new GatewayLogStore(100_000, { dir });
+  // Each line is ~1 KiB of message; ~4200 lines pushes well past a single
+  // 4 MiB file, forcing several rotations.
+  const bigMessage = 'x'.repeat(1000);
+  for (let i = 0; i < 4200; i++) store.append('info', bigMessage);
+
+  expect(fs.existsSync(path.join(dir, 'gateway.jsonl'))).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'gateway.1.jsonl'))).toBe(true);
+  // At most 3 rotated generations are kept — no gateway.4.jsonl.
+  expect(fs.existsSync(path.join(dir, 'gateway.4.jsonl'))).toBe(false);
+  const files = fs.readdirSync(dir).filter((f) => f.startsWith('gateway.'));
+  expect(files.length).toBeLessThanOrEqual(4); // current + up to 3 rotated
+});
+
+test('boot-tail load: a new store on an existing dir sees prior entries', () => {
+  const dir = makeTmpDir();
+  const first = new GatewayLogStore(2000, { dir });
+  first.append('info', 'before restart 1');
+  first.append('warn', 'before restart 2');
+  first.append('error', 'before restart 3');
+
+  const second = new GatewayLogStore(2000, { dir });
+  const tail = second.snapshot();
+  expect(tail.map((e) => e.message)).toEqual([
+    'before restart 1',
+    'before restart 2',
+    'before restart 3',
+  ]);
+  // Original timestamps + seqs are preserved, not reassigned.
+  expect(tail.map((e) => e.seq)).toEqual([1, 2, 3]);
+
+  // The resumed store continues the seq sequence rather than restarting
+  // at 1, so a client's `?after=` cursor never collides with old data.
+  const appended = second.append('info', 'after restart');
+  expect(appended.seq).toBe(4);
+});
+
+test('boot-tail load respects ring capacity — only the newest lines are kept', () => {
+  const dir = makeTmpDir();
+  const first = new GatewayLogStore(3, { dir });
+  for (let i = 1; i <= 5; i++) first.append('info', `line ${i}`);
+
+  const second = new GatewayLogStore(3, { dir });
+  expect(second.snapshot().map((e) => e.message)).toEqual(['line 3', 'line 4', 'line 5']);
+});
+
+test('dropped-writes counter increments on an unwritable dir, never throws', () => {
+  // Point the store's "directory" at a path that is actually a FILE — every
+  // mkdir/append underneath it fails, but construction and append() must
+  // not throw.
+  const parent = makeTmpDir();
+  const blocker = path.join(parent, 'blocker');
+  fs.writeFileSync(blocker, 'not a directory');
+  const dir = path.join(blocker, 'gateway-logs');
+
+  const store = new GatewayLogStore(2000, { dir });
+  expect(() => store.append('error', 'should not throw')).not.toThrow();
+  store.append('error', 'another');
+
+  expect(store.droppedWriteCount()).toBeGreaterThan(0);
+  // In-memory behavior is unaffected by the persistence failure.
+  expect(store.snapshot().map((e) => e.message)).toEqual(['should not throw', 'another']);
 });

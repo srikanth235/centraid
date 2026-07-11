@@ -18,6 +18,7 @@ import {
   type GatewayProfile,
 } from './gateway-store.js';
 import { getGatewayRuntimeSnapshot, nudgeGatewayMonitor } from './gateway-monitor.js';
+import { applyLaunchAtLogin } from './login-item.js';
 import { refreshAuthInjector } from './auth-injector.js';
 import { resetConversationHistoryAuthCache } from './conversation-history-client.js';
 import { resetUserPrefsAuthCache } from './user-prefs-client.js';
@@ -101,11 +102,16 @@ export const Channel = {
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
 
   // Gateway runtime watch (gateway-monitor.ts): main polls the active
-  // gateway's `/_gateway/info` heartbeat, keeps the per-launch sample/outage
-  // history, and fires the OS down-alert. GET serves the latest snapshot;
-  // EVENT pushes one per poll so the Gateway page live-updates.
+  // gateway's `/_gateway/health` heartbeat (falling back to `/_gateway/info`
+  // for older gateways), keeps the per-launch sample/outage history, and
+  // fires the OS down-alert. GET serves the latest snapshot; EVENT pushes
+  // one per poll so the Gateway page live-updates.
   GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
   GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
+  // Gateway ops (issue #351): manual restart of the local embedded gateway
+  // + save-dialog export of the gateway's diagnostics bundle.
+  GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
+  GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
 
   // Phone link (issue #263): the iroh tunnel that lets the mobile app reach
   // this desktop's loopback gateway from anywhere. Pairing is a one-time
@@ -224,6 +230,9 @@ export function registerIpcHandlers(): void {
     // Alert-threshold/toggle changes ride this surface too — re-broadcast
     // the runtime snapshot now so the Gateway page reflects them instantly.
     nudgeGatewayMonitor();
+    // launchAtLogin (issue #351) rides this same generic surface — apply it
+    // to the OS immediately rather than waiting for next launch.
+    if ('launchAtLogin' in patch) applyLaunchAtLogin(next.launchAtLogin);
     return next;
   });
 
@@ -482,6 +491,39 @@ export function registerIpcHandlers(): void {
   // outage log + alert config). Pushed on every poll via
   // GATEWAY_RUNTIME_EVENT; this read covers the first paint.
   ipcMain.handle(Channel.GATEWAY_RUNTIME_GET, async () => getGatewayRuntimeSnapshot());
+
+  // Manual restart of the embedded LOCAL gateway (issue #351): refused for
+  // a remote gateway (nothing here to restart — that's the server's job).
+  // `restartLocalGateway` always mints a fresh per-launch bearer token
+  // (same as first boot, since no `token` option is passed to `serve()`),
+  // so on success this invalidates the renderer's HTTP-client auth caches
+  // and re-broadcasts the active gateway — the same plumbing a gateway
+  // switch runs, just without an id change.
+  ipcMain.handle(Channel.GATEWAY_RESTART, async (): Promise<{ ok: boolean; error?: string }> => {
+    const settings = await loadSettings();
+    if (settings.activeGatewayKind !== 'local') {
+      return { ok: false, error: 'remote gateways restart server-side' };
+    }
+    try {
+      const { restartLocalGateway } = await import('./local-gateway.js');
+      await restartLocalGateway(settings.activeGatewayId);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+    await invalidateGatewayCaches();
+    const next = await loadSettings();
+    broadcastGatewayChanged(next);
+    nudgeGatewayMonitor();
+    return { ok: true };
+  });
+
+  // Fetch the active gateway's diagnostics bundle and save it via a native
+  // dialog (issue #351). Pure orchestration lives in gateway-ops-core.ts;
+  // gateway-ops.ts wires in the real dialog/fs/settings.
+  ipcMain.handle(Channel.GATEWAY_DIAGNOSTICS_EXPORT, async () => {
+    const { exportActiveGatewayDiagnostics } = await import('./gateway-ops.js');
+    return exportActiveGatewayDiagnostics();
+  });
 
   ipcMain.handle(
     Channel.GATEWAY_AUTH_GET,

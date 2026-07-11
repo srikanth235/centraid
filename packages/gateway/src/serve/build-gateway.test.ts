@@ -171,3 +171,44 @@ test('serves component health through the composed chain', async () => {
     await srv.close();
   }
 });
+
+test('the disk component reports free space on the vault volume', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    const body = (await (await fetch(`${srv.url}/centraid/_gateway/health`)).json()) as {
+      components: Array<{ component: string; status: string; detail?: string }>;
+    };
+    const disk = body.components.find((c) => c.component === 'disk');
+    expect(disk?.status).toBe('ok');
+    expect(disk?.detail).toContain('free of');
+  } finally {
+    await srv.close();
+  }
+});
+
+test('the vaults probe proves readability — a broken DB handle flips it to error, named by vault id (#351)', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  const plane = gateway.vaults.current();
+  const vaultId = plane.boot.vaultId;
+  // Simulate the file becoming unreadable underneath the process (disk
+  // failure, external corruption) WITHOUT actually closing the handle —
+  // that would double-close on teardown. The plane object stays "mounted"
+  // in memory; only the trivial read the probe runs now fails.
+  (plane.db.vault as unknown as { prepare: () => never }).prepare = () => {
+    throw new Error('database disk image is malformed');
+  };
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    const body = (await (await fetch(`${srv.url}/centraid/_gateway/health`)).json()) as {
+      status: string;
+      components: Array<{ component: string; status: string; detail?: string }>;
+    };
+    const vaults = body.components.find((c) => c.component === 'vaults');
+    expect(vaults?.status).toBe('error');
+    expect(vaults?.detail).toContain(vaultId);
+    expect(body.status).toBe('error');
+  } finally {
+    await srv.close();
+  }
+});

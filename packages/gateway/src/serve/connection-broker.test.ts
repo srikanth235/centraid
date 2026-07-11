@@ -39,6 +39,25 @@ interface TokenServer {
   ) => void;
 }
 
+/** A token endpoint that accepts the connection but never answers — simulates a wedged IdP. */
+async function startHangingTokenServer(): Promise<{ url: string }> {
+  const sockets = new Set<import('node:net').Socket>();
+  const server = http.createServer(() => {
+    /* never respond */
+  });
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  cleanups.push(async () => {
+    for (const s of sockets) s.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  const port = (server.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${port}/token` };
+}
+
 /** A scriptable token endpoint: push one response per expected request. */
 async function startTokenServer(): Promise<TokenServer> {
   const responses: Array<{ status: number; body: Record<string, unknown> }> = [];
@@ -266,6 +285,23 @@ test('a 5xx token endpoint is transient: the fire skips but the connection does 
   expect(tokens.requests).toHaveLength(2);
   expect(connectionRow(plane, connectionId).status).toBe('active');
 });
+
+test('a hung token endpoint times out; treated as transient (retried, no flip) — issue #351', async () => {
+  const plane = openPlane(await tempDir());
+  const hung = await startHangingTokenServer();
+  const connectionId = configureOauth(plane, hung.url);
+  storeTokens(plane, connectionId, {
+    access_token: 'ya29.stale',
+    refresh_token: '1//fine',
+    expires_at: new Date(Date.now() - 1000).toISOString(),
+  });
+  // A short token timeout so the test doesn't wait out the real 30s default.
+  const broker = new ConnectionBroker(() => plane, 30);
+  const auth = await broker.resolveForFire({ kind: 'pull.gmail', label: 'personal' });
+  expect(auth && 'refused' in auth ? auth.refused : undefined).toMatch(/transient/);
+  // Same outcome as the 5xx-transient case: no flip, connection stays active.
+  expect(connectionRow(plane, connectionId).status).toBe('active');
+}, 10_000);
 
 test('force refresh (the 401 lane) refreshes even an unexpired token', async () => {
   const plane = openPlane(await tempDir());

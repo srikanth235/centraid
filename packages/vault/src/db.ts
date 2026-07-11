@@ -75,6 +75,11 @@ function openFile(location: string): DatabaseSync {
   db.exec('PRAGMA foreign_keys = ON');
   if (location !== ':memory:') {
     db.exec('PRAGMA journal_mode = WAL');
+    // This is a personal-data vault with a low write rate — durability of
+    // each commit matters more than write throughput, so fsync on every
+    // transaction (WAL's default NORMAL can drop the last commit(s) on
+    // power loss; FULL fsyncs the WAL on every commit).
+    db.exec('PRAGMA synchronous = FULL');
     // journal.db also carries the conversation-ledger band (the old
     // transcripts.db folded in), which worker subprocesses open by path —
     // wait for their locks instead of failing immediately.

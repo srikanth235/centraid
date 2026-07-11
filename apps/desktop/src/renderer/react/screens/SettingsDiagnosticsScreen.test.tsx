@@ -137,4 +137,20 @@ describe('SettingsDiagnosticsScreen', () => {
       false,
     );
   });
+
+  it('renders a long multi-item detail string (disk/vaults) in full, with a title fallback', async () => {
+    // The `disk`/`vaults` components (issue #351) bake everything into one
+    // detail string — long enough that the row used to ellipsis-clip it.
+    const longDetail =
+      'vault 019f5079-vault-one: 42.3 MB (vault.db 30.1 MB, journal.db 12.2 MB); ' +
+      'vault 019f5079-vault-two: 118.7 MB (vault.db 90.0 MB, journal.db 28.7 MB); ' +
+      'disk free 12.4 GB of 500.0 GB (2.5% free) on /Users/owner/Library/Application Support/Centraid';
+    const health = makeHealth({
+      components: [{ component: 'disk', status: 'ok', detail: longDetail, errorCount: 0 }],
+    });
+    const el = await mount({ loadHealth: vi.fn().mockResolvedValue(health) });
+    expect(el.textContent).toContain(longDetail);
+    const sub = el.querySelector('[title]');
+    expect(sub?.getAttribute('title')).toBe(longDetail);
+  });
 });

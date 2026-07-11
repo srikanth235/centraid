@@ -10,6 +10,12 @@
  * server-reported runtime clock (`startedAt` / `uptimeMs`) — the desktop's
  * gateway-runtime page trusts the gateway's own account of how long it has
  * been up rather than inferring it from probe history.
+ *
+ * `instanceId` (issue #351) is the per-PROCESS uuid `GatewayInstanceLease`
+ * mints at construction — additive, existing consumers (`version-handshake.ts`
+ * only reads `version`/`schemaEpoch`) are unaffected. It lets a client notice
+ * a gateway swap-under-it (restart, or a second instance winning a lease
+ * fight) even when version/schemaEpoch stay identical across the swap.
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -19,7 +25,12 @@ import { sendJson } from './route-helpers.js';
 
 const INFO_PATH = '/centraid/_gateway/info';
 
-export function makeGatewayInfoRouteHandler(): RouteHandler {
+export interface GatewayInfoRouteOptions {
+  /** This process's `GatewayInstanceLease.instanceId` (issue #351). */
+  instanceId: string;
+}
+
+export function makeGatewayInfoRouteHandler(options: GatewayInfoRouteOptions): RouteHandler {
   // The factory runs once inside buildGateway, so this IS process start
   // for the serving gateway.
   const startedAt = Date.now();
@@ -34,6 +45,7 @@ export function makeGatewayInfoRouteHandler(): RouteHandler {
       schemaEpoch: GATEWAY_SCHEMA_EPOCH,
       startedAt,
       uptimeMs: Date.now() - startedAt,
+      instanceId: options.instanceId,
     });
   };
 }
