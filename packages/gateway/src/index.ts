@@ -28,6 +28,11 @@ export {
   type FireAutomationFactory,
 } from './serve/build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
+export {
+  GatewayLogStore,
+  type GatewayLogEntry,
+  type GatewayLogLevel,
+} from './serve/gateway-log-store.js';
 export type { GatewayPaths } from './paths.js';
 export { readAgentsStatus, type AgentsStatus } from './routes/agents-routes.js';
 export {
