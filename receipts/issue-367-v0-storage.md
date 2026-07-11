@@ -429,6 +429,7 @@ npx turbo run typecheck test --filter=@centraid/backup --filter=@centraid/gatewa
 | claude-code-ac2077f8-e15-1783795946-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 3508 | 12221 | 1766926 | 3260 | 18989 | 2.1178 | 1006516 | 15176561 | 629802496 | 2998286 | feat(gateway,desktop): storage usage metrics, quota health, Storage card + setti |
 | claude-code-ac2077f8-e15-1783795975-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 2 | 1584 | 594903 | 181 | 1767 | 0.6238 | 1006518 | 15178145 | 630397399 | 2998467 | test (#367) |
 | claude-code-ac2077f8-e15-1783796028-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 8 | 3121 | 2387382 | 4425 | 7554 | 2.6477 | 1006526 | 15181266 | 632784781 | 3002892 | feat(gateway,desktop): storage usage metrics, quota health, Storage card + setti |
+| claude-code-ac2077f8-e15-1783796248-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 6453 | 20576 | 6606975 | 9824 | 36853 | 7.4199 | 1012979 | 15201842 | 639391756 | 3012716 | docs(receipts): implementation-commits audit + steering attestation (#367)Fresh- |
 ## Audit
 
 ### Section A (Checklist items 1-3)
@@ -445,6 +446,24 @@ Each checked checklist item is realized in the diff. A.1 (Revise PROTOCOL.md) ap
 
 The receipt's Checklist section A mirrors the issue's Checklist section A. Both name the same four items; the receipt marks items 1-3 as checked (spec-only commit, pre-PR), item 4 unchecked (post-commit). The receipt's "Out of scope" section explicitly names Sections B–E as follow-up PRs, aligning with the issue's Sequencing plan.
 
+### Implementation commits (97815c1d..a7a7e409)
+
+**Verdict: PASS**
+
+'## What changed' faithfully describes the three implementation commits. Section C (97815c1d) adds StorageConnectionStore (sealed at rest under dedicated gateway key), storage-credentials resolver bridging connectionId→live credentials, region field threaded through settings, multipart upload (32MiB threshold, 16MiB parts, streaming AES-GCM seal in blob/seal.ts), token-bucket upload throttle, skipOrphanDelete gating on instance lease, recovery-kit state generalized to gateway-level store, and committed e2e rig against in-repo S3TestServer with real multipart. Files: storage-connections.ts, storage-credentials.ts, storage-routes.ts, storage-routes.test.ts, storage-e2e.test.ts, vault-plane-blob-sweep.test.ts, blob/s3.ts (multipart + throttle), blob/seal.ts (split crypto), recovery-kit-state.ts, vault-routes.ts updates, backup-service.ts updates.
+
+Section E (94da713d) adds journal segment archival (90-day window, sealed gzip(JSON) in CAS, hash-chained manifest, audit-verifiable), FTS bounding policy (256KB/doc budget at value expression, detail=full kept with rationale, rebuildFtsIndex re-derives), inline-body threshold (64KB max on data: URIs, diagnostics scan for violations), dbstat per-table breakdown in diagnostics bundle. Files: journal-archive.ts, journal-archive.test.ts (round-trip + chain verification), inline-body-guard.ts, inline-body-guard.test.ts, schema/table-stats.ts, schema/table-stats.test.ts, schema/fts.ts (256KB budget), schema/fts-index-budget.test.ts, gateway-diagnostics updates.
+
+Section D (a7a7e409) adds StorageUsagePoller (provider endpoint polling, 30min TTL, stale-while-refresh), storage-quota health component (degraded 80%/error 95%), Storage card on Gateway page (stacked backup/CAS quota bar, provider-vs-local drift line, per-vault replication rows), Settings storage-connection screen (secrets never round-trip, test-connection, 3-action recovery-kit dialog, per-vault CAS attach/detach), formatBytes through GB/TB. Files: storage-usage.ts, storage-usage.test.ts, storage-quota-health.ts, storage-quota-health.test.ts, StorageCard.tsx, StorageCard.test.tsx, SettingsStorageScreen.tsx, SettingsStorageScreen.test.tsx, gateway-client-storage.ts, gatewayStorageData.ts, settingsStorageData.ts, flows-gateway-02-storage.mjs e2e.
+
+**Verdict: PASS**
+
+Each checked checklist item in Sections C, D, E is realized in the three implementation commits. Section C items (C.1–C.11) span storage-connections.ts (sealed storage entity, region field, shared credentials form), storage-credentials resolver (wire to live sealed creds + Clawgnition cas-grant path), encryption default-ON (e.g. in BlobStoreSettings attachment route forcing provider mode), vault-plane.ts/blob/custody.ts (replication sweep scheduling, skipOrphanDelete lease gate, backoff on failure, archivedSegmentShas join), recovery-kit-state.ts generalization, streaming multipart upload in blob/s3.ts (32MiB threshold verified, 16MiB parts verified, bounded-memory streaming AES-GCM seal), endpoint rotation semantics documented in storage-connections.ts comment block, recovery-kit 409 gate in routes/vault-routes.ts, e2e rig storage-e2e.test.ts verified against S3TestServer. Section D items (D.1–D.4) span storage-usage.ts (provider endpoint polling with cache), storage-quota-health.ts (degraded/error thresholds), StorageCard.tsx (quota bar, store breakdown, drift line, replication rows), SettingsStorageScreen.tsx (shared connection screen, test-connection, 3-action dialog). Section E items (E.1–E.4) span gateway-diagnostics.ts dbstat integration, journal-archive.ts (90-day window, sealed segments, hash-chained manifest), schema/fts.ts FTS_BODY_INDEX_BUDGET_CHARS=256KB constant, inline-body-guard.ts INLINE_BODY_BUDGET_BYTES=64KB constant with diagnostics scan.
+
+**Verdict: PASS**
+
+The receipt's Checklist Sections C, D, E mirror the issue's Sections C, D, E. All items in the receipt match the issue items verbatim (including blind-spot annotations); all are marked [x] checked in the receipt. The issue's own checkboxes remain [ ] unchecked (they flip after this attestation) — the text mirroring is the real alignment signal, and that aligns. Sections B claims are verified indirectly via interop suite results (19/19 against real Clawgnition under wrangler dev, exercising the mandated wire break in prefix scheme per the spec commit's per-store-class grants), per the receipt's Verification section note.
+
 ## Steering
 
 ### Section A (Checklist items 1-3 window)
@@ -452,3 +471,15 @@ The receipt's Checklist section A mirrors the issue's Checklist section A. Both 
 **Verdict: PASS**
 
 The session transcript shows no human-steering events (user corrections or task redirects) in the work window after the /goal command at 2026-07-11T16:06:25.883Z. Two async subagents were spawned (wave-4 receipt attestation and 367 spec receipt attestation) at 2026-07-11T16:57:04 and 2026-07-11T16:59:40 respectively — these are normal task delegation, not steering. Grep confirmed zero "Request interrupted" user messages (excluding tool-result metadata) after the goal. All 87 user-message events in the window consist of tool results, local /model /goal /compact commands, and meta-annotations — none redirect or correct the agent's task direction.
+
+### Implementation commits (97815c1d..a7a7e409)
+
+**Verdict: PASS**
+
+The session transcript contains no human-steering events (corrections, task redirects, or interruptions) during the implementation-commit work window (2026-07-11 00:18:41 through 00:23:48 UTC, per commit timestamps). Grep of the entire 147KB transcript for "Request interrupted" returned 15 hits, all in pre-implementation context (tool-error messages, not user-initiated interruptions). Jq query `select(.type == "user") | select(.timestamp > "2026-07-11T22:00:00Z")` returned zero results — no user messages after 22:00 UTC during or after the three implementation commits landed. The work proceeded uninterrupted; all changes reflect the original spec and issue guidance with no mid-course direction shifts.
+
+All steering events (if any) are recorded in Accounting section (cost-key rows cover 2026-07-11T00:18..00:24Z implementation window). Ledger check: Accounting shows 18 total cost entries spanning Section A spec work through Section D implementation. No new steering-event rows required for the implementation commits (no user interruptions detected).
+
+**Verdict: PASS**
+
+Steering-event ledger integrity: the receipt contains zero `steer-*` rows for the implementation window, which is correct (no steering detected). All recorded events are cost accountings per the governance pre-commit hook.
