@@ -19,6 +19,28 @@
   flex-direction: column;
   gap: 18px;
 }
+.config {
+  max-width: 820px;
+}
+/* Wide windows (esp. with the chat column collapsed) left a single 820px
+   read-width column stranded in a sea of empty space to its right. Past
+   this width, pair sections into a 2-col grid instead — "What it does" and
+   "Connected apps" stay full-width hero/footer cards (`.sectionFull`); the
+   rest pair up via DOM order (see BuilderAutomationConfigView.tsx's header
+   comment for the exact pairing). */
+@media (min-width: 1400px) {
+  .config {
+    max-width: 1180px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px 20px;
+  }
+  .configHead,
+  .sectionFull,
+  .config > .hint {
+    grid-column: 1 / -1;
+  }
+}
 .configLoading {
   margin: 0;
 }
@@ -100,6 +122,7 @@
   flex-direction: column;
   gap: 10px;
   padding: 4px 2px;
+  max-width: 820px;
 }
 .codeHead {
   display: flex;
@@ -139,6 +162,7 @@
   flex-direction: column;
   align-items: stretch;
   padding: 4px 2px;
+  max-width: 820px;
 }
 .flowNode {
   display: flex;
@@ -230,6 +254,7 @@
 }
 .triggerMain {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   font-size: 13px;
@@ -240,10 +265,14 @@
   color: var(--accent);
 }
 .triggerDesc {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 550;
 }
 .triggerExpr {
+  flex: none;
   margin-left: auto;
+  white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11.5px;
   color: var(--ink-3);
@@ -263,6 +292,147 @@
   background: var(--bg-sunken);
   border-radius: var(--r-sm);
   padding: 2px 7px;
+}
+/* Pretty-printed `where` clause (GAP 2) — monospace, one clause per line. */
+.whereBlock {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--ink-3);
+  background: var(--bg-sunken);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.triggerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  margin-left: auto;
+}
+.triggerActionBtn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  color: var(--ink-4);
+  background: transparent;
+}
+.triggerActionBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-2);
+}
+.triggerActionBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.addTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 7px 11px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+}
+.addTriggerBtn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.addTriggerBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Trigger add/edit form (GAP 1). */
+.triggerForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.triggerKindPicker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.triggerKindBtn {
+  padding: 6px 11px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--ink-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.triggerKindBtn[data-active='true'] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.triggerKindBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.formLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.formInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 11px;
+  background: var(--bg-sunken);
+  border: 0.5px solid var(--line);
+  border-radius: var(--r-sm);
+  font-size: 12.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink);
+  outline: none;
+}
+.formInput:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.formTextarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.5;
+}
+.formHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink-4);
+}
+.formError {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--r-sm);
+  padding: 7px 10px;
+}
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .rows {
   display: flex;
@@ -296,6 +466,9 @@
   gap: 6px;
 }
 .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   padding: 3px 9px;
   border-radius: var(--r-sm);
@@ -303,12 +476,69 @@
   color: var(--ink-2);
   border: 1px solid var(--line);
 }
+/* "When it runs"'s at-a-glance pair: next scheduled fire + the last run's
+   outcome, so a schedule isn't just an expression — it's grounded in what
+   actually happened. */
+.activity {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.activityRow {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 13px;
+  font-size: 13px;
+}
+.activityRow + .activityRow {
+  border-top: 1px solid var(--line);
+}
+.activityLast {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.activityLast > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Requested vault access (ManifestVault) — previously invisible in the
+   builder even though the trigger editor already gates data/condition
+   triggers on it existing. */
+.vaultBody {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.vaultWhy {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.vaultVerb {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--ink-4);
+}
 .hint {
   margin-top: auto;
   font-size: 11.5px;
   color: var(--ink-4);
   border-top: 1px solid var(--line);
   padding-top: 12px;
+}
+/* In the Config view the pane stretches to the full window height, so an
+   auto top-margin here would strand the hint far below the last card,
+   leaving a hollow gap. Let it follow the last section at the same rhythm
+   as every other inter-section gap instead. */
+.config > .hint {
+  margin-top: 0;
 }
 .runsHead {
   display: flex;
