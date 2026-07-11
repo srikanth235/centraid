@@ -153,7 +153,8 @@ CREATE TABLE schedule_task (
   completed_at   TEXT,
   effort_min     INTEGER CHECK (effort_min > 0),
   parent_task_id TEXT REFERENCES schedule_task(task_id),
-  rrule          TEXT
+  rrule          TEXT,
+  remind_before_min INTEGER CHECK (remind_before_min >= 0)
 ) STRICT;
 
 CREATE TABLE schedule_availability_rule (
