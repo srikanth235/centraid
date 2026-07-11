@@ -14,12 +14,16 @@
 // Inserts:
 //   - two schedule_calendar rows ("Personal" private, "Work" shared)
 //   - one extra core_party ("Dana Kim") for attendee/RSVP testing
-//   - one core_event + schedule_event_ext + schedule_attendee row, tagged
-//     "[SEEDED]", solely so suite 3 can drive schedule.respond_rsvp via a
-//     direct window.centraid.write() call and observe a REAL executed
-//     outcome (the Agenda UI itself can never reach this: upcoming.js/
-//     search.js never join schedule_attendee, so Guests never render --
-//     see EventDrawer.jsx's own header comment admitting this).
+//   - two core_event + schedule_event_ext + schedule_attendee sets, both
+//     tagged "[SEEDED]":
+//       * "RSVP probe meeting" invites Dana (a non-owner) -- suite 3 drives
+//         schedule.respond_rsvp against it via a direct window.centraid.write()
+//         and also confirms the Guests section now renders her (needs-action)
+//         through the real UI now that upcoming.js/search.js join
+//         schedule_attendee (issue #337).
+//       * "Your RSVP event" invites the OWNER, so the drawer's "You" row and
+//         its Going/Maybe/Decline RSVP controls are reachable and clickable
+//         end to end -- the crux of issue #337's point 4.
 //
 // Run with: node tests/e2e-live/seed-agenda-calendars.mjs <userDataDir>
 import { DatabaseSync } from 'node:sqlite';
@@ -51,18 +55,23 @@ export async function seedAgendaCalendars(userDataDir) {
     if (!ownerRow) throw new Error('no core_vault row -- vault never bootstrapped?');
     const ownerPartyId = ownerRow.owner_party_id;
 
-    const personalId = uuidv7ish();
-    const workId = uuidv7ish();
     const now = new Date().toISOString();
 
-    db.prepare(
-      `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
-       VALUES (?, ?, 'Personal', '#4285f4', 'America/Los_Angeles', 'private', NULL)`,
-    ).run(personalId, ownerPartyId);
-    db.prepare(
-      `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
-       VALUES (?, ?, 'Work', '#0b8043', 'America/Los_Angeles', 'shared', NULL)`,
-    ).run(workId, ownerPartyId);
+    // A fresh dev vault now bootstraps with a default "Personal" calendar, so
+    // find-or-create by name to avoid a duplicate chip (an ambiguous
+    // `.ag-cal-chip` selector) in the later suites. "Work" is still ours to add.
+    const findOrCreateCalendar = (name, color, visibility) => {
+      const existing = db.prepare('SELECT calendar_id FROM schedule_calendar WHERE name = ?').get(name);
+      if (existing) return existing.calendar_id;
+      const id = uuidv7ish();
+      db.prepare(
+        `INSERT INTO schedule_calendar (calendar_id, owner_party_id, name, color, default_tz, visibility, external_uri)
+         VALUES (?, ?, ?, ?, 'America/Los_Angeles', ?, NULL)`,
+      ).run(id, ownerPartyId, name, color, visibility);
+      return id;
+    };
+    const personalId = findOrCreateCalendar('Personal', '#4285f4', 'private');
+    const workId = findOrCreateCalendar('Work', '#0b8043', 'shared');
 
     const danaId = uuidv7ish();
     db.prepare(
@@ -91,12 +100,46 @@ export async function seedAgendaCalendars(userDataDir) {
        VALUES (?, ?, ?, 'required', 'needs-action', NULL)`,
     ).run(attendeeId, seededEventId, danaId);
 
+    // A second seeded event that invites the OWNER, so the drawer's "You" row
+    // + RSVP controls (which only render for the is_you attendee) are
+    // reachable through the real UI (issue #337 point 4). Kept a distinct
+    // event from the Dana one so suite 3's "owner is NOT invited here"
+    // negative probe against the first event stays valid.
+    const seededOwnerEventId = uuidv7ish();
+    const ownerStart = new Date(Date.now() + 4 * 86400000).toISOString();
+    const ownerEnd = new Date(Date.now() + 4 * 86400000 + 3600000).toISOString();
+    db.prepare(
+      `INSERT INTO core_event
+         (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
+          location_place_id, organizer_party_id, sequence, created_at, updated_at)
+       VALUES (?, NULL, '[SEEDED] Your RSVP event', 'test-rig seeded row; the owner is an invited attendee', ?, ?, NULL, NULL, 'confirmed', NULL, ?, 0, ?, ?)`,
+    ).run(seededOwnerEventId, ownerStart, ownerEnd, danaId, now, now);
+    db.prepare(
+      `INSERT INTO schedule_event_ext (event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, travel_buffer_min)
+       VALUES (?, ?, ?, 'busy', NULL, NULL, NULL)`,
+    ).run(uuidv7ish(), seededOwnerEventId, personalId);
+    const ownerAttendeeId = uuidv7ish();
+    db.prepare(
+      `INSERT INTO schedule_attendee (attendee_id, event_id, party_id, role, partstat, responded_at)
+       VALUES (?, ?, ?, 'required', 'needs-action', NULL)`,
+    ).run(ownerAttendeeId, seededOwnerEventId, ownerPartyId);
+
     console.log(`[seed] vault: ${dbPath}`);
     console.log(`[seed] owner_party_id=${ownerPartyId}`);
     console.log(`[seed] calendars: Personal=${personalId} Work=${workId}`);
     console.log(`[seed] extra party: Dana Kim=${danaId}`);
-    console.log(`[seed] seeded RSVP-probe event=${seededEventId} attendee=${attendeeId}`);
-    const ids = { ownerPartyId, personalId, workId, danaId, seededEventId, attendeeId };
+    console.log(`[seed] seeded RSVP-probe event=${seededEventId} attendee=${attendeeId} (Dana)`);
+    console.log(`[seed] seeded owner-RSVP event=${seededOwnerEventId} attendee=${ownerAttendeeId} (You)`);
+    const ids = {
+      ownerPartyId,
+      personalId,
+      workId,
+      danaId,
+      seededEventId,
+      attendeeId,
+      seededOwnerEventId,
+      ownerAttendeeId,
+    };
     // Persist alongside the standard out/agenda-v2 screenshot dir so later
     // suites (3+) can read these ids back without re-deriving them.
     const idsPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'out', 'agenda-v2', 'seed-ids.json');
