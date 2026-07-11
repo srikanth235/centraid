@@ -15,7 +15,7 @@ the measurement probe that grounds the numbers.
 
 - [x] Commit 1 — depth-aware jsx-runtime rewrite + ETag/304 asset caching
 - [x] Commit 2 — blueprints jsdom tier: depth-aware mirror + cwd-independent roots
-- [ ] Commit 3 — open-waterfall measurement probe
+- [x] Commit 3 — open-waterfall measurement probe
 
 ## What changed
 
@@ -119,6 +119,21 @@ receipt.
   strictly harm.
 - **HTML `no-store`:** per-response CSP nonce + baked settings make
   every HTML response unique; a validator would never hit.
+
+## Audit
+
+Fresh-context sub-agent (haiku) verdict:
+
+- **A1 — What changed matches the diff:** PASS — All files named in the receipt's "What changed" appear in the diff with accurate descriptions: `static-server.ts` includes `jsxRuntimeClimb()` computing depth from the request path, cache key `${file}\0${depth}`, fallback guarded root-level-only, `computeEtag()` via sha256, `ifNoneMatchHits()` handling `*` and comma-lists, bodyless 304 on match, HTML `no-store` with no validator, non-HTML `private, no-cache` + ETag. Tests updated with `mockReq()`, depth-rewrite, cache-isolation, nested-404, and 13 ETag/conditional tests. `runtime.ts` passes `req` at both call sites. Commit 2's four blueprints files all carry the cwd-independent `PKG` derivation; the harness applies the same depth-aware transform with root-only symlinks. The probe was audited as the named to-be-committed file.
+- **A2 — checked items realized in the diff:** PASS — Commit 1 (depth-aware climb + ETag/304) and Commit 2 (mirror + cwd fix) are fully realized in the committed hunks; the probe file was verified present for Commit 3.
+- **A3 — checklist mirrors the issue:** PASS — Issue #356's "Suggested starting point" proposes (1) fixing the depth-unaware specifier rewrite and (2) adding cache headers; both land in Commit 1, the probe grounds the measurements, and Tier 3/4 are deferred by the issue's own language, matching the receipt's Out of scope.
+
+## Steering
+
+Fresh-context sub-agent (haiku) verdict:
+
+- **B1 — all steering events recorded:** PASS — 67 total user-type JSONL entries analyzed: 1 initial `/goal` command (the task request, not steering), 58 system heartbeats, 8 task-completion/hook notifications (system-generated), 0 genuine human-authored steering messages. Zero steering events occurred; no ledger rows were needed or appended.
+- **B2 — no non-steering message recorded as steering:** PASS — No confirmation, notification, or system message was mis-classified as a correction; the steering ledger holds no rows for this session, which is correct given zero steering events.
 
 ## Verification
 
