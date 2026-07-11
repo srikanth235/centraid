@@ -30,6 +30,7 @@ export {
   MANIFEST_FILE,
   parseManifest,
   validateManifest,
+  webhookTriggerOf,
   type Manifest,
   type ManifestRequires,
   type ManifestVault,

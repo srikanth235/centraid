@@ -54,6 +54,18 @@ export interface RuntimeHttpServerOptions {
    * prefix — a public path must never accidentally widen.
    */
   publicPaths?: readonly string[];
+  /**
+   * Path PREFIXES served WITHOUT the bearer check (issue #96). The
+   * intended tenant is the webhook-trigger route (`/_centraid-hook/<id>`,
+   * variable per automation) — the shared secret carried in the request
+   * itself IS the auth, checked by the route handler; requiring the
+   * gateway owner's bearer too would defeat the point of a webhook (the
+   * caller is a third-party service, not the owner). Unlike `publicPaths`
+   * this is a `startsWith` match, so a prefix here bypasses auth for its
+   * whole subtree — reserve it for routes whose handler enforces its own
+   * credential on every request.
+   */
+  publicPathPrefixes?: readonly string[];
 }
 
 export interface RuntimeHttpServerHandle {
@@ -142,7 +154,9 @@ export async function startRuntimeHttpServer(
       return;
     }
     const pathname = (req.url ?? '/').split('?')[0] ?? '/';
-    const isPublic = (opts.publicPaths ?? []).includes(pathname);
+    const isPublic =
+      (opts.publicPaths ?? []).includes(pathname) ||
+      (opts.publicPathPrefixes ?? []).some((prefix) => pathname.startsWith(prefix));
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
     if (!isPublic && (!raw || !timingSafeEqual(raw, token))) {
       res.statusCode = 401;

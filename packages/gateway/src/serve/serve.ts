@@ -18,6 +18,7 @@
  */
 
 import { startRuntimeHttpServer } from '@centraid/app-engine';
+import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
 import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
 
@@ -36,7 +37,7 @@ export interface ServeOptions extends BuildGatewayOptions {
 
 export interface GatewayServeHandle extends Omit<
   BuiltGateway,
-  'extraHandlers' | 'composedHandler' | 'start' | 'stop'
+  'extraHandlers' | 'composedHandler' | 'webhookHandler' | 'start' | 'stop'
 > {
   /** Bound base URL — `http://<host>:<port>`. */
   url: string;
@@ -52,16 +53,24 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
   // The composed handler owns the whole post-auth chain — including the
   // conversation/prefs routes `startRuntimeHttpServer` would otherwise
   // mount itself — because the request's vault scope (#289) must wrap
-  // every one of them.
+  // every one of them. The webhook handler is tried FIRST and stands
+  // outside that per-request vault scope (it resolves its own owning
+  // vault across all of them); it falls through (`false`) for any other
+  // URL, so `composedHandler` still sees everything else.
   const serverOptions: Parameters<typeof startRuntimeHttpServer>[0] = {
     runtime: gateway.runtime,
-    extraHandlers: [gateway.composedHandler],
+    extraHandlers: [gateway.webhookHandler, gateway.composedHandler],
     exposeUserStoreRoute: false,
     exposeConversationRoute: false,
     // The OAuth consent callback (issue #304) is the one bearer-free path:
     // a provider redirects the owner's browser here; the route authenticates
-    // by its single-use `state` capability instead.
+    // by its single-use `state` capability instead. The webhook route
+    // (issue #96) is bearer-free too — the shared secret in the request IS
+    // the auth, checked by `webhookHandler` itself; requiring the gateway
+    // owner's bearer as well would defeat the point of a webhook (the
+    // caller is a third-party service, not the owner).
     publicPaths: [OAUTH_CALLBACK_PATH],
+    publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
