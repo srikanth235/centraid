@@ -55,6 +55,7 @@ import {
   updateVaultPresentation,
   type VaultPresentation,
   registerAttachmentCommands,
+  registerTagCommands,
   registerBusinessCommands,
   registerDocumentCommands,
   registerEnrichCommands,
@@ -325,6 +326,7 @@ export class VaultPlane {
     registerKnowledgeCommands(this.gateway);
     registerBusinessCommands(this.gateway);
     registerAttachmentCommands(this.gateway);
+    registerTagCommands(this.gateway);
     registerLinkCommands(this.gateway);
     registerPartyCommands(this.gateway);
     registerMediaCommands(this.gateway);

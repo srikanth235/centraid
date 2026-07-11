@@ -99,6 +99,7 @@ import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
+import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
@@ -1178,6 +1179,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     makeHealthRouteHandler(health),
+    // Due task/event reminders, computed live — the desktop main process
+    // polls this to fire OS notifications (issue: Tasks/Agenda comparison
+    // flagged "no time-based alerts, anywhere").
+    makeRemindersRouteHandler(vaultRegistry),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
     makeLogsRouteHandler(logStore),
