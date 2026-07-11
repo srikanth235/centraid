@@ -2,9 +2,8 @@
  * Build the app-context system prompt fragment the app-engine injects
  * into chat turns before delegating to the host's `ConversationRunner`.
  *
- * Both adapters splice this verbatim into their own system-prompt mechanism:
- *   - OpenClaw runner → `extraSystemPrompt` on `runEmbeddedAgent`
- *   - codex/claude-code adapters → CLI system-prompt flag
+ * The codex/claude-code adapters splice this verbatim into their own CLI
+ * system-prompt flag.
  *
  * Lives in app-engine so all hosts see identical app context. The runner
  * never assembles app-specific content itself.

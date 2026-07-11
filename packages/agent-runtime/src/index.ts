@@ -19,10 +19,8 @@
  *   - `makeConversationRunner` is the chat-side adapter (see ./conversation-adapter.ts)
  *     that wraps `runTurn` into a `ConversationRunner` the gateway's
  *     `/_turn` route can inject. It's one of two `ConversationRunner`
- *     implementations in the repo — the other lives in
- *     `@centraid/openclaw-plugin` and drives an in-process openclaw
- *     agent. Desktop's embedded runtime injects this one; openclaw
- *     injects its own.
+ *     implementations in the repo — the other is the gateway's
+ *     `makeUnifiedConversationRunner`.
  *
  * The package also ships a tiny `centraid` CLI bin (subcommands:
  * `sql describe/read/write`, `preview snapshot`) that agent shell tools
@@ -56,9 +54,7 @@ export {
 } from './runtime.js';
 
 // The backend-neutral vault-register tool specs (name / description /
-// inputSchema). Both coding-agent backends declare their tools from these,
-// and the in-process OpenClaw plugin reuses the same names + descriptions so
-// its embedded-turn tools stay identical to the CLI ones (issue #319).
+// inputSchema). Both coding-agent backends declare their tools from these.
 export { VAULT_SQL_TOOL, VAULT_INVOKE_TOOL, VAULT_CONTENT_TOOL } from './vault-sql-tool.js';
 
 export {
@@ -105,9 +101,8 @@ export { enumerateRunnerModels } from './models/enumerators.js';
 // tools the host runtime actually exposes (issue #80 follow-up).
 export { enumerateHostTools, type HostTool } from './host-tools.js';
 
-// Mock-LLM server (issue #70) now lives in `@centraid/automation` so
-// both the CLI host (here) and the in-process host (openclaw-plugin) share one
-// persistent-session runtime (issue #166). Re-exported here for back-compat.
+// Mock-LLM server (issue #70) now lives in `@centraid/automation`
+// (issue #166). Re-exported here for back-compat.
 export {
   startMockLlmServer,
   type MockLlmServerHandle,

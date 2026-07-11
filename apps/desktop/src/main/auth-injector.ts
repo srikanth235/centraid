@@ -1,5 +1,5 @@
 // Wire two interceptors on the renderer's session for traffic going to the
-// openclaw gateway:
+// remote gateway:
 //
 //   1. Outgoing: inject `Authorization: Bearer <gatewayToken>` so the iframe
 //      can load `<gatewayUrl>/centraid/<id>/` when the gateway is configured

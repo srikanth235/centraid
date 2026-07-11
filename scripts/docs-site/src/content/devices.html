@@ -20,10 +20,10 @@
             The gateway is the sole holder of vault connections — apps, agents, phones and laptops
             never touch a database file. That single fact buys the consent story (one door to
             check), the audit story (one place receipts mint), and the sync story (there is nothing
-            to reconcile, because there is one writer). The same gateway core runs in three homes:
+            to reconcile, because there is one writer). The same gateway core runs in two homes:
           </p>
         </div>
-        <div class="grid cols-3" style="margin-top: 26px">
+        <div class="grid cols-2" style="margin-top: 26px">
           <div class="card r" style="--d: 0.1s">
             <p class="c-no">home 1</p>
             <h3>Inside the desktop shell</h3>
@@ -38,14 +38,6 @@
             <p>
               <code>centraid-gateway serve</code> on a spare machine or home server. Token persists,
               scheduler always ticking — the long-term home.
-            </p>
-          </div>
-          <div class="card r" style="--d: 0.26s">
-            <p class="c-no">home 3</p>
-            <h3>Inside another host</h3>
-            <p>
-              The gateway is a mountable core: the OpenClaw plugin mounts it on OpenClaw's own HTTP
-              surface and injects OpenClaw as the agent brain.
             </p>
           </div>
         </div>
@@ -241,9 +233,9 @@
           <h2 class="r" style="--d: 0.06s">Bring your own <em>brain.</em></h2>
           <p class="lede r" style="--d: 0.12s">
             Chat turns, builder sessions and automation fires all run through one injected turn
-            contract — the gateway doesn't care which agent runtime satisfies it. Three do today:
+            contract — the gateway doesn't care which agent runtime satisfies it. Two do today:
           </p>
-          <div class="grid cols-3" style="margin-top: 26px">
+          <div class="grid cols-2" style="margin-top: 26px">
             <div class="card r" style="--d: 0.1s">
               <p class="c-no">in-process</p>
               <h3>Claude Code</h3>
@@ -258,14 +250,6 @@
               <p>
                 Spawned as <code>codex app-server</code> over JSON-RPC stdio — an on-device runner
                 with the same turn contract.
-              </p>
-            </div>
-            <div class="card r" style="--d: 0.26s">
-              <p class="c-no">host-native</p>
-              <h3>OpenClaw</h3>
-              <p>
-                When the gateway mounts inside OpenClaw, the plugin injects OpenClaw's own agent as
-                the runner and enumerates its models.
               </p>
             </div>
           </div>

@@ -75,10 +75,10 @@
  * gone — the vault owner IS the user (`core_vault.owner_party_id`), and
  * device-level prefs live in a plain JSON file (see `prefs-store.ts`).
  *
- * Each opener gets one connection per file. The OpenClaw plugin's worker
- * subprocesses (which construct the runtime in every context but only the
- * gateway worker serves HTTP) never open a file unless they actually serve a
- * route, because providers open lazily. A worker connection coexists with the
+ * Each opener gets one connection per file. A host's worker subprocesses
+ * (which may construct the runtime in every context but only the gateway
+ * worker serves HTTP) never open a file unless they actually serve a route,
+ * because providers open lazily. A worker connection coexists with the
  * gateway's own journal handle via WAL + busy_timeout.
  */
 
@@ -89,7 +89,7 @@ import { DatabaseSync } from 'node:sqlite';
  * their first method invocation; the provider opens the file (and ensures
  * the ledger band) on first call and caches the handle.
  *
- * Lazy because the OpenClaw plugin's `register()` runs in every worker
+ * Lazy because a host's registration code may run in every worker
  * subprocess — only the gateway worker actually serves the HTTP routes
  * that touch this state, so deferring file open keeps stray DB handles
  * out of workers that never read or write.

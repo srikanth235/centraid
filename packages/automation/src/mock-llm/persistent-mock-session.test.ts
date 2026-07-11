@@ -5,9 +5,8 @@
  * mock's Anthropic Messages wire over real HTTP: it parks on the initial
  * request until a turn is staged, executes each staged tool, posts the
  * tool_result back, and loops until the driver stages `end_turn`. This is the
- * exact shape a real host driver (a `codex exec` subprocess, or OpenClaw's
- * `runEmbeddedAgent`) takes — so this proves the shared session works for ANY
- * host without a real agent binary.
+ * exact shape a real host driver (a `codex exec` subprocess) takes — so this
+ * proves the shared session works without a real agent binary.
  */
 
 import { describe, expect, it } from 'vitest';

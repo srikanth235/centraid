@@ -7,7 +7,7 @@ import atomsCss from '../../styles/atoms.module.css';
 
 // The sandboxed user-app iframe host — ports the vanilla mountUserApp
 // (app-appview.ts). Every Centraid app (published or draft) is served by the
-// openclaw plugin and hosted in an iframe that fills the pane edge-to-edge; the
+// gateway and hosted in an iframe that fills the pane edge-to-edge; the
 // app supplies its own chrome. The global theme rides in both the query string
 // (server-side settings injection) and the hash (the inline pre-paint bridge).
 // Tagged `data-centraid-app` so a global theme change can postMessage every

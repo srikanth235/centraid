@@ -35,7 +35,7 @@ export interface ConversationSummary {
   /** Owner of the session — the gateway-side user UUID from `UserStore`. */
   userId: string;
   title: string;
-  /** Runner kind that owns `adapterSessionId` (codex | claude-code | openclaw). */
+  /** Runner kind that owns `adapterSessionId` (codex | claude-code). */
   adapterKind: string | null;
   /** Opaque per-runner resume handle; `null` until the first turn lands. */
   adapterSessionId: string | null;

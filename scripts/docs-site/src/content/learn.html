@@ -516,8 +516,8 @@
             Centraid's agent runs in-process against exactly <b>three tools</b>, served over an
             in-process MCP server: <code>vault_sql</code> (consent-checked reads),
             <code>vault_invoke</code> (typed commands) and <code>vault_content</code> (bytes).
-            That surface is identical whether the model behind it is Claude, Codex, or the
-            OpenClaw plugin. Every vault command is MCP-shaped — a JSON-Schema input/output
+            That surface is identical whether the model behind it is Claude or Codex.
+            Every vault command is MCP-shaped — a JSON-Schema input/output
             contract plus declared pre/postconditions — but Centraid's twist is durability: a tool
             call isn't an ephemeral protocol message, it's a row. Every invocation is checked,
             receipted and auditable after the fact, and SSE streams both chat turns and automation

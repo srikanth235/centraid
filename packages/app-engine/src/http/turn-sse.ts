@@ -226,9 +226,7 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
   req.on('error', onClientClose);
 
   // Runner-owned scratch file in the central scratch dir. Make sure the
-  // parent dir exists before any runner writes — the OpenClaw runner hands
-  // this path to `runEmbeddedAgent` as its session file and silently no-ops
-  // if the parent dir is missing.
+  // parent dir exists before any runner writes to it.
   const sessionFile = path.join(opts.conversationRunnerSessionDir, `${conversationId}.jsonl`);
   await fs.mkdir(opts.conversationRunnerSessionDir, { recursive: true }).catch(() => undefined);
 
@@ -321,8 +319,7 @@ export async function driveTurnOverSse(opts: DriveTurnOptions): Promise<void> {
         }
         // Persist the runner-resume handle. The resume-handle update only
         // happens when the runner reported an `adapterKind` (codex /
-        // claude-code; the OpenClaw runner resumes via `sessionFile` and
-        // returns void).
+        // claude-code).
         try {
           conversationStore.noteTurn(
             appId,

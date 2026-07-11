@@ -1,9 +1,7 @@
 /*
- * Webhook-trigger route on the CORE gateway (issue #96 parity with the
- * OpenClaw plugin's `/_centraid-hook` mount, `packages/openclaw-plugin/src/index.ts`).
- * The desktop/daemon gateway (`serve()`) IS the always-on host for
- * desktop-only users — a `webhook` trigger must fire there too, not only
- * when an OpenClaw host happens to be fronting it. This boots a real
+ * Webhook-trigger route on the CORE gateway (issue #96). The desktop/daemon
+ * gateway (`serve()`) IS the always-on host for desktop-only users — a
+ * `webhook` trigger must fire there directly. This boots a real
  * gateway, creates a webhook-triggered automation over the lifecycle HTTP
  * API (the desktop's real path — see `lifecycle-over-http.test.ts` for the
  * create-side assertions), then drives `/_centraid-hook/<id>` itself:

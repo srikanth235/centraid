@@ -5,12 +5,11 @@
  * actual model turn to a host-injected `ConversationRunner`. Two implementations
  * exist today:
  *
- *   - `openclaw-plugin/lib/openclaw-conversation-runner.ts` — wraps
- *     `api.runtime.agent.runEmbeddedAgent`. OpenClaw owns the loop and
- *     dispatches plugin-registered tools server-side.
  *   - `@centraid/agent-runtime`'s `makeConversationRunner` — drives codex
  *     app-server / Claude SDK locally; hosts thread the vault-register
  *     tools (`vault_sql` / `vault_invoke`) in per turn.
+ *   - the gateway's `makeUnifiedConversationRunner` — the same core, plus
+ *     draft-worktree file tools for builder chat.
  *
  * Either way, the route handler in app-engine never implements a model
  * loop itself; it just translates the runner's `TurnStreamEvent`s into SSE
@@ -107,9 +106,8 @@ export interface ConversationTurnInput {
   /**
    * Absolute path to a runner-owned scratch session file (under the central
    * `conversationRunnerSessionDir`, named `<conversationId>.jsonl`). The runner is free to
-   * use this for its own session-resume mechanism (e.g. the OpenClaw runner
-   * hands it to `runEmbeddedAgent` as its session-resume file). It is NOT the
-   * chat transcript — the transcript lives in the gateway DB.
+   * use this for its own file-based session-resume mechanism, if it has one.
+   * It is NOT the chat transcript — the transcript lives in the gateway DB.
    */
   sessionFile: string;
   message: string;
@@ -130,8 +128,7 @@ export interface ConversationTurnInput {
   attachments?: TurnAttachment[];
   /**
    * App-context prompt the app-engine builds (app name, description,
-   * live schema). Adapters splice this into their own `extraSystemPrompt`
-   * (OpenClaw) or system-prompt flag (CLI adapters).
+   * live schema). Adapters splice this into their own system-prompt flag.
    */
   extraSystemPrompt: string;
   model?: string;
@@ -158,8 +155,8 @@ export interface ConversationTurnResult {
   /**
    * Resumable session id assigned by the adapter (codex thread id,
    * claude-code session id). Omitted by adapters whose resume happens via
-   * the on-disk `sessionFile` (OpenClaw runner). The route handler persists
-   * this to the session's `conversations` row so the next turn can resume.
+   * the on-disk `sessionFile` instead. The route handler persists this to
+   * the session's `conversations` row so the next turn can resume.
    */
   adapterSessionId?: string;
   /** Adapter kind that wrote `adapterSessionId`. */

@@ -42,12 +42,11 @@ It is **backend-agnostic by construction**: execution (`openDispatch`) and
 scheduling (the `Host`'s `fire`) are injected callbacks, so this package never
 imports an agent backend. `@centraid/agent-runtime` supplies the local
 codex/claude backend (`runAutomation`, which builds the `openDispatch`
-closure); `@centraid/openclaw-plugin` is the cloud host; `@centraid/gateway`
-wires them together.
+closure); `@centraid/gateway` wires it together.
 
 ```
 agent-runtime ─▶ @centraid/automation ─▶ app-engine
-gateway / openclaw-plugin ─▶ @centraid/automation ─▶ app-engine
+gateway ─▶ @centraid/automation ─▶ app-engine
 ```
 
 No cycles: `@centraid/automation` never imports `agent-runtime`.

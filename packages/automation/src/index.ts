@@ -17,13 +17,13 @@
  * package depends on `@centraid/app-engine` (the per-app engine, the shared
  * agent-run ledger, and the turn-driver contract) but never on any agent
  * backend. `agent-runtime` provides the local codex/claude backend;
- * `openclaw-plugin` the cloud host; `gateway` wires them.
+ * `gateway` wires it.
  */
 
 // Manifest — the source of truth for an automation app, shared between
 // producers (scaffolding / re-prompt) and consumers (the local automation
-// runner in `@centraid/agent-runtime`, the openclaw plugin's
-// reconciliation pass, and the desktop UI). See issue #91.
+// runner in `@centraid/agent-runtime`, the gateway's reconciliation pass,
+// and the desktop UI). See issue #91.
 export {
   ManifestError,
   HANDLER_FILE,
@@ -78,8 +78,7 @@ export {
 } from './scaffold/app.js';
 
 // The host interface every "thing that fires automations on a schedule"
-// implements — the local in-process scheduler (gateway) and the cloud
-// openclaw cron host both satisfy it.
+// implements — the local in-process scheduler (gateway) satisfies it.
 export type { Host, ReconcileResult } from './fire/host.js';
 
 // In-process cron scheduler (issue #149, n8n semantics): the gateway-owned

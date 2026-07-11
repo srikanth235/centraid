@@ -12,9 +12,6 @@
  *     `<userData>/gateways/<id>/`).
  *   - The `centraid-gateway` CLI in this package runs it as a standalone
  *     daemon (paths under a config-file `dataDir`).
- *
- * A third host (the OpenClaw plugin) mounts `buildGateway()`'s
- * `composedHandler` directly instead, owning auth itself.
  */
 
 import { startRuntimeHttpServer } from '@centraid/app-engine';

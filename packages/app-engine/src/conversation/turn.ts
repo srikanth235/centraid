@@ -5,9 +5,9 @@
  * These types used to live in `@centraid/agent-runtime` (the local
  * codex/claude backend). They moved down here so the backend-agnostic run
  * engine (`makeConversationRunnerCore`, the automation fire spine) can speak the
- * turn contract without depending on any agent backend — agent-runtime,
- * the gateway, and openclaw all inject a concrete `RunTurnFn` that satisfies
- * it. The interface lives here next to `ConversationRunner`; the codex/claude
+ * turn contract without depending on any agent backend — agent-runtime and
+ * the gateway both inject a concrete `RunTurnFn` that satisfies it. The
+ * interface lives here next to `ConversationRunner`; the codex/claude
  * implementation (`runTurn`) stays in agent-runtime.
  */
 

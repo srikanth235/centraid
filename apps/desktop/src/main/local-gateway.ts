@@ -21,7 +21,7 @@ import { phoneLinkStatus } from './phone-link.js';
  * Auth: a per-launch random bearer token is minted by `serve()`. The
  * token is handed back to the renderer as the effective `gatewayToken`
  * so the renderer's HTTP client uses it on every request — same wire
- * format as remote OpenClaw mode.
+ * format as remote gateway mode.
  *
  * Switching the active local gateway tears down its HTTP server, which
  * also stops that gateway's in-process cron scheduler (issue #149/#150):
