@@ -12,7 +12,6 @@ export default defineConfig({
       'packages/automation',
       'packages/blueprints',
       'packages/gateway',
-      'packages/openclaw-plugin',
       'packages/skills',
       'packages/tunnel',
       'packages/vault',

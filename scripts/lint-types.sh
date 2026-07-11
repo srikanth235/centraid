@@ -37,7 +37,6 @@ TARGETS=(
   packages/automation
   packages/blueprints
   packages/gateway
-  packages/openclaw-plugin
   packages/skills
   packages/tunnel
   apps/desktop
