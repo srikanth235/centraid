@@ -21,10 +21,43 @@
 
 import { mkdirSync, readdirSync, rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
-import { uuidv7 } from '@centraid/vault';
+import { uuidv7, VaultSchemaAheadError } from '@centraid/vault';
 import type { RuntimeLogger, VaultBridge, VaultWorkspace } from '@centraid/app-engine';
 import { openVaultPlane, VaultPlane } from './vault-plane.js';
 import { vaultContext } from './vault-context.js';
+
+/**
+ * Minimum time between retry attempts for a directory whose mount failed
+ * (issue #351): `scan()` now runs on every `vaults` health probe tick (the
+ * desktop polls `_gateway/health` every 15s — see `useGatewayHealth.ts`), so
+ * without a backoff a permanently-broken directory would reopen its corrupt
+ * SQLite file on every single poll forever. This caps that to roughly once
+ * per backoff window; it is deliberately a flat window, not exponential —
+ * v0 has no evidence a broken vault needs anything fancier.
+ */
+const MOUNT_RETRY_BACKOFF_MS = 30_000;
+
+/** One directory the registry failed to mount, kept until it mounts clean or the dir goes away. */
+export interface FailedMount {
+  dir: string;
+  /** The mount error's message, UNPREFIXED — this is shown to the owner verbatim (e.g. `VaultSchemaAheadError`'s upgrade-the-app copy). */
+  message: string;
+  /** ISO timestamp of the most recent failed attempt. */
+  at: string;
+  /**
+   * Set when the failure was a `VaultSchemaAheadError` — a newer-software
+   * backup restored onto older software. Callers may want to special-case
+   * this (e.g. an "upgrade the app" affordance) rather than treat it as a
+   * generic corruption error.
+   */
+  schemaAhead?: boolean;
+}
+
+interface FailedMountState {
+  message: string;
+  atMs: number;
+  schemaAhead: boolean;
+}
 
 export interface VaultRegistryOptions {
   /** Root directory: one subdirectory per vault. */
@@ -74,8 +107,10 @@ export class VaultRegistry {
   private readonly ownerName: string | undefined;
   private readonly sweepIntervalMs: number | undefined;
   private readonly planes = new Map<string, VaultPlane>();
-  /** Directories already mounted (or skipped) — lets `scan()` re-run cheaply. */
+  /** Directories already MOUNTED — lets `scan()` skip them cheaply on rescan. */
   private readonly scannedDirs = new Set<string>();
+  /** Directories that failed to mount, keyed by dir (issue #351 — never silently dropped). */
+  private readonly failedMountsByDir = new Map<string, FailedMountState>();
   private started = false;
 
   constructor(options: VaultRegistryOptions) {
@@ -104,33 +139,66 @@ export class VaultRegistry {
   /**
    * Mount every `<root>/<dir>/vault.db` found on disk. Re-runnable: a vault
    * created by the admin CLI while the daemon is up is picked up on the
-   * first request that names it (see `get()`).
+   * first request that names it (see `get()`), and the `vaults` health
+   * probe calls this on every tick so a directory that failed to mount
+   * (corrupt file, transient FS error) gets retried instead of vanishing
+   * forever — see `MOUNT_RETRY_BACKOFF_MS` for why that retry is throttled.
+   *
+   * A dir is skipped only once it has a MOUNTED plane (`scannedDirs`); a
+   * failed dir stays eligible for retry on every call, subject to backoff.
    */
   private scan(): void {
+    const nowMs = Date.now();
     for (const entry of readdirSync(this.rootDir, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const dir = path.join(this.rootDir, entry.name);
       if (this.scannedDirs.has(dir)) continue;
       if (!existsSync(path.join(dir, 'vault.db'))) continue;
-      this.scannedDirs.add(dir);
+      const priorFailure = this.failedMountsByDir.get(dir);
+      if (priorFailure && nowMs - priorFailure.atMs < MOUNT_RETRY_BACKOFF_MS) continue;
       try {
         const plane = this.openPlane(dir, {});
         if (this.planes.has(plane.boot.vaultId)) {
-          this.logger.warn(
-            `vault registry: duplicate vault id ${plane.boot.vaultId} at ${dir} — skipped`,
-          );
+          // A real conflict (two directories claiming the same vault id),
+          // not a transient mount failure — record it so it surfaces in
+          // `failedMounts()` too, but retrying won't fix it without an
+          // operator moving/removing one of the directories.
+          const message = `duplicate vault id ${plane.boot.vaultId} at ${dir} — skipped`;
+          this.logger.warn(`vault registry: ${message}`);
+          this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead: false });
           plane.stop();
           continue;
         }
         this.planes.set(plane.boot.vaultId, plane);
+        this.scannedDirs.add(dir);
+        this.failedMountsByDir.delete(dir);
         if (this.started) plane.start();
       } catch (err) {
-        this.logger.warn(
-          `vault registry: could not mount vault at ${dir}: ` +
-            (err instanceof Error ? err.message : String(err)),
-        );
+        const message = err instanceof Error ? err.message : String(err);
+        const schemaAhead =
+          err instanceof VaultSchemaAheadError ||
+          (err instanceof Error && err.name === 'VaultSchemaAheadError');
+        this.failedMountsByDir.set(dir, { message, atMs: nowMs, schemaAhead });
+        this.logger.warn(`vault registry: could not mount vault at ${dir}: ${message}`);
       }
     }
+  }
+
+  /** Directories the registry could not mount, most recently failed first (issue #351). */
+  failedMounts(): FailedMount[] {
+    return [...this.failedMountsByDir.entries()]
+      .sort((a, b) => b[1].atMs - a[1].atMs)
+      .map(([dir, state]) => ({
+        dir,
+        message: state.message,
+        at: new Date(state.atMs).toISOString(),
+        ...(state.schemaAhead ? { schemaAhead: true } : {}),
+      }));
+  }
+
+  /** Re-scan the vault root now — retries any previously-failed mount past its backoff window. */
+  rescan(): void {
+    this.scan();
   }
 
   private openPlane(dir: string, boot: { vaultId?: string; vaultName?: string }): VaultPlane {
@@ -278,6 +346,7 @@ export class VaultRegistry {
     plane.stop();
     this.planes.delete(vaultId);
     this.scannedDirs.delete(plane.dir);
+    this.failedMountsByDir.delete(plane.dir);
     rmSync(plane.dir, { recursive: true, force: true });
     // Drop the vault's disposable runner cache too (it lives outside the
     // vault dir, so the rmSync above doesn't reach it).

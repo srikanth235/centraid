@@ -68,6 +68,7 @@ import {
 } from '@centraid/agent-runtime';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
+import { createDiskHealthProbe } from './disk-health.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
@@ -83,6 +84,9 @@ import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
 import { GatewayLogStore } from './gateway-log-store.js';
+import { buildDiagnosticsBundle } from './gateway-diagnostics.js';
+import { makeDiagnosticsRouteHandler } from '../routes/diagnostics-routes.js';
+import { makeBackupRouteHandler } from '../routes/backup-routes.js';
 import { makeLifecycleRouteHandler } from '../routes/lifecycle-routes.js';
 import { makeUnifiedConversationRunner } from '../runs/unified-conversation-runner.js';
 import {
@@ -285,7 +289,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const { paths } = options;
   // Every log line tees through the gateway log store (realtime Logs
   // surface) before reaching the console/host logger — see logs-routes.ts.
-  const logStore = new GatewayLogStore();
+  // Persistence (issue #351) is opt-in via `paths.logsDir` — omitted, this
+  // is exactly the prior in-memory-only store (tests, disposable embeds).
+  const logStore = new GatewayLogStore(undefined, paths.logsDir ? { dir: paths.logsDir } : {});
   const logger = logStore.wrap(options.logger ?? defaultLogger(options.logTag));
 
   // Component-level health (observability for self-hosters): subsystems
@@ -310,13 +316,43 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
+  // `rescan()` here is what turns a failed mount from "gone until process
+  // restart" into "retried on the next health tick" (issue #351) — the
+  // backoff that keeps that cheap lives in `VaultRegistry` itself.
   // A mounted plane whose directory carried a restore-quarantine marker
   // (FORMAT.md restore rule 4) stays flagged here until an operator
   // resolves it — outbox is auto-parked (vault-quarantine.ts), automations
   // are NOT, deliberately (see that module's header).
+  //
+  // "ok" here used to mean only "the plane object is in memory" — it never
+  // proved the SQLite file behind it was still readable (issue #351). Each
+  // tick now runs one trivial statement against every mounted plane's
+  // `vault.db` handle; a plane whose file was corrupted or closed out from
+  // under the process (disk failure, external `rm`) fails this and flips
+  // the component red by vault id instead of staying silently "ok".
   health.registerProbe('vaults', async () => {
+    vaultRegistry.rescan();
     const planes = vaultRegistry.planesList();
+    const failed = vaultRegistry.failedMounts();
+    const unreadable: string[] = [];
+    for (const plane of planes) {
+      try {
+        plane.db.vault.prepare('PRAGMA user_version').get();
+      } catch (err) {
+        unreadable.push(
+          `${plane.boot.vaultId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     const quarantined = planes.filter((p) => p.quarantine !== null);
+
+    if (failed.length > 0 || unreadable.length > 0) {
+      const notes = [
+        ...failed.map((f) => `${f.dir}: ${f.message} (since ${f.at})`),
+        ...unreadable.map((u) => `${u} — vault.db unreadable`),
+      ];
+      return { status: 'error', detail: notes.join('; ') };
+    }
     if (quarantined.length > 0) {
       const detail = quarantined
         .map((p) => `${p.boot.vaultId} (source seq ${p.quarantine?.sourceSeq}) needs review`)
@@ -327,6 +363,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
       : { status: 'error', detail: 'no vaults mounted' };
   });
+
+  // Disk watermark (issue #351): free space on the vault volume, plus a
+  // cheap per-vault DB size so "which vault is eating the disk" doesn't
+  // need a shell. Thresholds live in disk-health.ts.
+  health.registerProbe(
+    'disk',
+    createDiskHealthProbe({
+      rootDir: paths.vaultDir,
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, dir: p.dir })),
+    }),
+  );
 
   // Connection health lives in each vault's DB (`needs-auth` flips there,
   // not in broker memory) — surface "N connections need re-auth" so a dead
@@ -1154,6 +1202,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     },
   });
 
+  // Diagnostics bundle assembly (issue #351): a closure so the route
+  // handler (`diagnostics-routes.ts`) stays thin wiring. `config` is
+  // whatever's useful for support — paths, the backup config, whether
+  // device access is enforced — and is redacted (secret-shaped keys,
+  // e.g. the remote backup provider's `apiKey`) inside
+  // `buildDiagnosticsBundle` before it ever reaches the response.
+  const buildDiagnostics = () =>
+    buildDiagnosticsBundle({
+      health,
+      logs: logStore,
+      vaults: vaultRegistry,
+      config: { paths, backup: options.backup, deviceAccessEnabled: Boolean(options.deviceAccess) },
+    });
+
   // ── Route chain ───────────────────────────────────────────────────────
   const extraHandlers: RouteHandler[] = [
     // Gateway identity + version handshake (issue #289): cheap static
@@ -1162,6 +1224,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     makeHealthRouteHandler(health),
+    // A single JSON document a user can save + hand to support: version,
+    // health snapshot, log tail, vault sizes, and a redacted config
+    // summary. Mounted right after health — same bearer gate, same
+    // "owner-facing diagnostics" family.
+    makeDiagnosticsRouteHandler(buildDiagnostics),
+    // Backup status + manual "run now" (issue #351): thin wiring over
+    // `BackupService`. `backupService` is `undefined` when
+    // `options.backup?.enabled` is false — the handler answers
+    // `{configured: false}` rather than 404 in that case. Same bearer
+    // gate, same owner-facing-diagnostics family as health/diagnostics.
+    makeBackupRouteHandler({ vaults: vaultRegistry, ...(backupService ? { backupService } : {}) }),
     // Due task/event reminders, computed live — the desktop main process
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").

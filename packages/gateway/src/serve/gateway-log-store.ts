@@ -14,8 +14,24 @@
  * or a host-injected one) — console output is unchanged. Entries carry a
  * monotonic `seq` so clients resume (`?after=`) and dedupe across
  * reconnects.
+ *
+ * Persistence (issue #351, Tier 3 — "logs don't survive restart, exactly
+ * when you want a post-mortem") is OPTIONAL: pass `{ dir }` and every
+ * appended entry is also appended as one JSON line to
+ * `<dir>/gateway.jsonl`, rotated at ~4 MiB with 3 generations kept
+ * (`gateway.1.jsonl` … `gateway.3.jsonl`, oldest deleted). Omitting `dir`
+ * is exactly today's in-memory-only behavior — tests and disposable
+ * embeds construct the store with no options and see no filesystem
+ * activity. Appends are `appendFileSync` — this store sees human-rate
+ * traffic (boot mounts, scheduler ticks, turn lifecycle), not a hot
+ * request path, so there is no batching/flush timer to reason about: a
+ * crash loses at most the in-flight line. Write failures (unwritable
+ * dir, full disk) are swallowed and counted (`droppedWrites`) — logging
+ * must never itself crash or recurse into logging.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { RuntimeLogger } from '@centraid/app-engine';
 
 export type GatewayLogLevel = 'info' | 'warn' | 'error';
@@ -31,28 +47,66 @@ export interface GatewayLogEntry {
 
 export type GatewayLogListener = (entry: GatewayLogEntry) => void;
 
+export interface GatewayLogStoreOptions {
+  /**
+   * Optional on-disk directory for rotated JSONL persistence. Omit for
+   * pure in-memory operation (today's behavior). When set, the
+   * directory is created lazily and the ring is seeded from the
+   * persisted tail on construction, so a restart after a crash still
+   * shows the pre-restart lines.
+   */
+  dir?: string;
+}
+
 /** Ring capacity: enough to hold a session's worth of gateway chatter
  *  (boot mounts + scheduler + outbox) without unbounded growth. */
 const DEFAULT_CAPACITY = 2000;
+
+/** Rotate the current file once it reaches ~4 MiB. */
+const ROTATE_BYTES = 4 * 1024 * 1024;
+/** Generations kept beyond the current file: `gateway.1.jsonl` … `gateway.<N>.jsonl`. */
+const MAX_ROTATED_FILES = 3;
+const CURRENT_FILE_NAME = 'gateway.jsonl';
+
+function rotatedFileName(n: number): string {
+  return `gateway.${n}.jsonl`;
+}
 
 export class GatewayLogStore {
   private readonly capacity: number;
   private readonly entries: GatewayLogEntry[] = [];
   private readonly listeners = new Set<GatewayLogListener>();
   private nextSeq = 1;
+  private readonly dir: string | undefined;
+  private readonly currentFile: string | undefined;
+  private droppedWrites = 0;
 
-  constructor(capacity: number = DEFAULT_CAPACITY) {
+  constructor(capacity: number = DEFAULT_CAPACITY, options: GatewayLogStoreOptions = {}) {
     this.capacity = Math.max(1, capacity);
+    this.dir = options.dir;
+    if (this.dir) {
+      this.currentFile = path.join(this.dir, CURRENT_FILE_NAME);
+      try {
+        fs.mkdirSync(this.dir, { recursive: true });
+      } catch {
+        // Directory creation failed (permissions, not-a-directory, …) — every
+        // subsequent append() attempt will fail the same way and count as a
+        // dropped write; persistence degrades to a no-op, never a crash.
+      }
+      this.loadTail();
+    }
   }
 
-  /** Record one line: buffer it (evicting the oldest past capacity) and
-   *  fan it out to every live subscriber. */
+  /** Record one line: buffer it (evicting the oldest past capacity),
+   *  persist it (best-effort, if a dir was configured), and fan it out
+   *  to every live subscriber. */
   append(level: GatewayLogLevel, message: string): GatewayLogEntry {
     const entry: GatewayLogEntry = { seq: this.nextSeq++, ts: Date.now(), level, message };
     this.entries.push(entry);
     if (this.entries.length > this.capacity) {
       this.entries.splice(0, this.entries.length - this.capacity);
     }
+    this.persist(entry);
     // Snapshot: a listener may unsubscribe itself mid-fanout.
     for (const fn of Array.from(this.listeners)) {
       try {
@@ -83,6 +137,14 @@ export class GatewayLogStore {
     return this.listeners.size;
   }
 
+  /** Count of appends whose on-disk write failed (unwritable dir, full
+   *  disk, …). Zero when no `dir` was configured. Diagnostic surface for
+   *  the health/diagnostics routes, not a functional gate — the ring +
+   *  live fan-out are unaffected by a persistence failure. */
+  droppedWriteCount(): number {
+    return this.droppedWrites;
+  }
+
   /** Tee a `RuntimeLogger`: capture into this store, then forward to
    *  `inner` so console/host output is unchanged. */
   wrap(inner: RuntimeLogger): RuntimeLogger {
@@ -100,5 +162,105 @@ export class GatewayLogStore {
         inner.error(m);
       },
     };
+  }
+
+  private persist(entry: GatewayLogEntry): void {
+    if (!this.dir || !this.currentFile) return;
+    try {
+      fs.appendFileSync(this.currentFile, `${JSON.stringify(entry)}\n`);
+      this.rotateIfNeeded();
+    } catch {
+      this.droppedWrites += 1;
+    }
+  }
+
+  /** Size-based rotation: current file exceeds `ROTATE_BYTES` → shift
+   *  every generation up one slot, dropping the oldest. Best-effort —
+   *  a failed rotation just means the current file keeps growing past
+   *  the target size, not a crash. */
+  private rotateIfNeeded(): void {
+    if (!this.dir || !this.currentFile) return;
+    let size: number;
+    try {
+      size = fs.statSync(this.currentFile).size;
+    } catch {
+      return;
+    }
+    if (size < ROTATE_BYTES) return;
+    try {
+      for (let n = MAX_ROTATED_FILES; n >= 2; n--) {
+        const dest = path.join(this.dir, rotatedFileName(n));
+        const src = path.join(this.dir, rotatedFileName(n - 1));
+        try {
+          fs.rmSync(dest, { force: true });
+        } catch {
+          /* dest may not exist yet — fine */
+        }
+        try {
+          fs.renameSync(src, dest);
+        } catch {
+          /* src may not exist yet — fine */
+        }
+      }
+      fs.renameSync(this.currentFile, path.join(this.dir, rotatedFileName(1)));
+    } catch {
+      this.droppedWrites += 1;
+    }
+  }
+
+  /** Boot-time load: concatenate every generation oldest-to-newest, take
+   *  the last `capacity` lines, and seed the ring with them so a
+   *  restarted gateway's Logs page + SSE snapshot still show pre-restart
+   *  lines. Entries keep their original `seq`/`ts` — `nextSeq` resumes
+   *  from the highest persisted seq so post-restart entries never
+   *  collide with (or duplicate) a seq a client already saw. */
+  private loadTail(): void {
+    if (!this.dir || !this.currentFile) return;
+    const files = [
+      ...Array.from({ length: MAX_ROTATED_FILES }, (_, i) =>
+        path.join(this.dir as string, rotatedFileName(MAX_ROTATED_FILES - i)),
+      ),
+      this.currentFile,
+    ];
+    const lines: string[] = [];
+    for (const file of files) {
+      try {
+        const raw = fs.readFileSync(file, 'utf8');
+        for (const line of raw.split('\n')) {
+          if (line.length > 0) lines.push(line);
+        }
+      } catch {
+        /* generation absent — fine, most gateways have fewer than MAX */
+      }
+    }
+    const tail = lines.slice(-this.capacity);
+    let maxSeq = 0;
+    for (const line of tail) {
+      const entry = parseLogLine(line);
+      if (!entry) continue;
+      this.entries.push(entry);
+      if (entry.seq > maxSeq) maxSeq = entry.seq;
+    }
+    if (this.entries.length > this.capacity) {
+      this.entries.splice(0, this.entries.length - this.capacity);
+    }
+    if (maxSeq > 0) this.nextSeq = maxSeq + 1;
+  }
+}
+
+function parseLogLine(line: string): GatewayLogEntry | undefined {
+  try {
+    const parsed = JSON.parse(line) as Partial<GatewayLogEntry>;
+    if (
+      typeof parsed.seq === 'number' &&
+      typeof parsed.ts === 'number' &&
+      typeof parsed.message === 'string' &&
+      (parsed.level === 'info' || parsed.level === 'warn' || parsed.level === 'error')
+    ) {
+      return { seq: parsed.seq, ts: parsed.ts, level: parsed.level, message: parsed.message };
+    }
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
