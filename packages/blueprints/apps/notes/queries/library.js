@@ -113,14 +113,14 @@ export default async ({ input, ctx }) => {
       .toSorted((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     const windowed = [...byId.values()];
     if (windowed.length === 0) {
-      return { notes: [], notebooks: books, truncated: false, window };
+      return { notes: [], notebooks: books, tags: [], truncated: false, window };
     }
     const noteIds = windowed.map((n) => n.note_id);
 
     // Joins are `in`-bounded by the window — placements, attachment edges,
     // live outbound links (issue #272), then one content pull covering both
     // bodies and attachment bytes.
-    const [placements, attachments, links] = await Promise.all([
+    const [placements, attachments, links, tags] = await Promise.all([
       ctx.vault.read({
         entity: 'core.collection_entry',
         where: [
@@ -146,7 +146,36 @@ export default async ({ input, ctx }) => {
         ],
         purpose,
       }),
+      ctx.vault.read({
+        entity: 'core.tag',
+        where: [
+          { column: 'target_type', op: 'eq', value: 'knowledge.note' },
+          { column: 'target_id', op: 'in', value: noteIds },
+        ],
+        purpose,
+      }),
     ]);
+    const tagRows = tags.rows ?? [];
+    const conceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
+    const concepts =
+      conceptIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.concept',
+            where: [{ column: 'concept_id', op: 'in', value: conceptIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const labelByConcept = new Map((concepts.rows ?? []).map((c) => [c.concept_id, c.pref_label]));
+    const tagsByNote = new Map();
+    for (const t of tagRows) {
+      if (!tagsByNote.has(t.target_id)) tagsByNote.set(t.target_id, []);
+      tagsByNote
+        .get(t.target_id)
+        .push({ tag_id: t.tag_id, concept_id: t.concept_id, label: labelByConcept.get(t.concept_id) ?? '?' });
+    }
+    const allTags = [...new Map((concepts.rows ?? []).map((c) => [c.concept_id, c.pref_label])).entries()]
+      .map(([concept_id, label]) => ({ concept_id, label }))
+      .toSorted((a, b) => a.label.localeCompare(b.label));
 
     // Cross-domain reference cards: the resolver renders what the owner
     // linked in (resolvable-if-linked) — this app holds no media/finance/…
@@ -235,6 +264,7 @@ export default async ({ input, ctx }) => {
           notebook_names: notebookIds.map((id) => nameByNotebook.get(id) ?? 'Notebook'),
           attachments: attByNote.get(n.note_id) ?? [],
           references: referencesByNote.get(n.note_id) ?? [],
+          tags: tagsByNote.get(n.note_id) ?? [],
         };
       })
       .toSorted(
@@ -246,7 +276,7 @@ export default async ({ input, ctx }) => {
     // A full window means there may be older notes beyond it — the UI
     // offers "Show more" (a re-read with a larger window) and search.
     const truncated = (recent.rows ?? []).length >= window;
-    return { notes: rows, notebooks: books, truncated, window };
+    return { notes: rows, notebooks: books, tags: allTags, truncated, window };
   } catch (err) {
     return { notes: [], notebooks: [], vaultDenied: { code: err.code, message: err.message } };
   }

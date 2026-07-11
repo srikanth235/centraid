@@ -45,7 +45,7 @@ function DayGroup({ dayKey, segs, colorFor, pendingCancelIds, onEventOpen }) {
       <div className="ag-sched-items">
         {segs.map((seg) => (
           <EventCard
-            key={seg.ev.event_id}
+            key={seg.ev.instance_key ?? seg.ev.event_id}
             seg={seg}
             colorFor={colorFor}
             pending={pendingCancelIds.has(seg.ev.event_id)}

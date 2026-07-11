@@ -23,6 +23,57 @@ const EFFORT_CHIPS = [
   { value: 30, label: '30m' },
   { value: 60, label: '1h' },
 ];
+const REPEAT_CHIPS = [
+  { value: null, label: '—' },
+  { value: 'FREQ=DAILY', label: 'Daily' },
+  { value: 'FREQ=WEEKLY', label: 'Weekly' },
+  { value: 'FREQ=MONTHLY', label: 'Monthly' },
+];
+const REMIND_CHIPS = [
+  { value: null, label: '—' },
+  { value: 0, label: 'At time' },
+  { value: 15, label: '15m' },
+  { value: 60, label: '1h' },
+  { value: 1440, label: '1 day' },
+];
+
+function TagStrip({ task, onAddTag, onRemoveTag }) {
+  const [draft, setDraft] = useState('');
+  const submit = (e) => {
+    e.preventDefault();
+    const label = draft.trim();
+    if (!label) return;
+    onAddTag(task.task_id, label);
+    setDraft('');
+  };
+  return (
+    <div className="tk-tag-strip">
+      {(task.tags ?? []).map((t) => (
+        <span className="tk-tag-chip" key={t.tag_id}>
+          #{t.label}
+          <button
+            type="button"
+            className="tk-tag-remove"
+            aria-label={`Remove tag ${t.label}`}
+            onClick={() => onRemoveTag(t.tag_id)}
+          >
+            <Icon svg={I.close} />
+          </button>
+        </span>
+      ))}
+      <form className="tk-tag-add" onSubmit={submit}>
+        <input
+          type="text"
+          className="tk-tag-input"
+          placeholder="Add a tag…"
+          aria-label="Add a tag"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </form>
+    </div>
+  );
+}
 
 function AttachStrip({ task, onRemove }) {
   const ref = useRef(null);
@@ -44,10 +95,14 @@ export function Detail({
   onPickDue,
   onPickPriority,
   onPickEffort,
+  onPickRepeat,
+  onPickRemind,
   onToggleSubtask,
   onAddSubtask,
   onAttach,
   onRemoveAttachment,
+  onAddTag,
+  onRemoveTag,
   onToggleProcess,
   onCancel,
 }) {
@@ -211,6 +266,59 @@ export function Detail({
               </div>
             </div>
           </div>
+
+          <div className="tk-detail-cols">
+            <div>
+              <div className="tk-eyebrow-label">Repeat</div>
+              <div className="kit-seg tk-detail-seg">
+                {REPEAT_CHIPS.map((c) => (
+                  <button
+                    key={c.label}
+                    type="button"
+                    className={task.rrule === c.value ? 'on' : ''}
+                    aria-pressed={String(task.rrule === c.value)}
+                    disabled={!task.due_at}
+                    onClick={() =>
+                      onPickRepeat(task.task_id, c.value ? { rrule: c.value } : { clear_rrule: true })
+                    }
+                  >
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="tk-eyebrow-label">Remind</div>
+              <div className="kit-seg tk-detail-seg">
+                {REMIND_CHIPS.map((c) => {
+                  const active = c.value === null ? task.remind_before_min == null : task.remind_before_min === c.value;
+                  return (
+                    <button
+                      key={c.label}
+                      type="button"
+                      className={active ? 'on' : ''}
+                      aria-pressed={String(active)}
+                      disabled={!task.due_at}
+                      onClick={() =>
+                        onPickRemind(
+                          task.task_id,
+                          c.value == null ? { clear_remind: true } : { remind_before_min: c.value },
+                        )
+                      }
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {!task.due_at ? (
+            <p className="muted small tk-detail-hint">Set a due date to repeat or remind on this task.</p>
+          ) : null}
+
+          <div className="tk-eyebrow-label">Tags</div>
+          <TagStrip task={task} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
 
           <div className="tk-eyebrow-label">
             Subtasks{children.length ? ` · ${doneChildren}/${children.length}` : ''}

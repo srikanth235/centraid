@@ -62,7 +62,7 @@ function DayCell({ date, outside, isToday, segs, colorFor, onCreate, onEventOpen
       <span className="ag-day-num">{date.getDate()}</span>
       <div className="ag-day-pills">
         {segs.slice(0, MAX_PILLS).map((seg) => (
-          <Pill key={seg.ev.event_id} seg={seg} colorFor={colorFor} onEventOpen={onEventOpen} />
+          <Pill key={seg.ev.instance_key ?? seg.ev.event_id} seg={seg} colorFor={colorFor} onEventOpen={onEventOpen} />
         ))}
         {overflow ? (
           <button

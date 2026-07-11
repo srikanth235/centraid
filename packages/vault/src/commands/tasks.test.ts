@@ -118,6 +118,180 @@ test('set_task_status on an unknown task is refused by precondition', () => {
   if (outcome.status === 'failed') expect(outcome.predicate).toContain('task_exists');
 });
 
+test('add_task with an rrule but no due_at is refused', () => {
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.add_task',
+    input: { title: 'Water the plants', rrule: 'FREQ=WEEKLY' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('failed');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('needs a due date to repeat');
+});
+
+test('completing a repeating task spawns its next occurrence', () => {
+  const taskId = addTask({
+    title: 'Water the plants',
+    due_at: '2026-07-06T09:00:00.000Z',
+    priority: 3,
+    rrule: 'FREQ=WEEKLY',
+  });
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.set_task_status',
+    input: { task_id: taskId, status: 'completed' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  const output = (outcome as { output: { next_task_id?: string; next_due_at?: string } }).output;
+  expect(output.next_task_id).toBeTruthy();
+  expect(output.next_due_at).toBe('2026-07-13T09:00:00.000Z');
+  const original = db.vault
+    .prepare('SELECT status, completed_at FROM schedule_task WHERE task_id = ?')
+    .get(taskId) as { status: string; completed_at: string | null };
+  expect(original.status).toBe('completed');
+  expect(original.completed_at).not.toBeNull();
+  const next = db.vault
+    .prepare('SELECT title, priority, status, due_at, rrule, completed_at FROM schedule_task WHERE task_id = ?')
+    .get(output.next_task_id as string) as {
+    title: string;
+    priority: number;
+    status: string;
+    due_at: string;
+    rrule: string;
+    completed_at: string | null;
+  };
+  expect(next).toMatchObject({
+    title: 'Water the plants',
+    priority: 3,
+    status: 'needs-action',
+    due_at: '2026-07-13T09:00:00.000Z',
+    rrule: 'FREQ=WEEKLY',
+    completed_at: null,
+  });
+});
+
+test('completing a non-repeating task spawns nothing', () => {
+  const taskId = addTask({ title: 'One-off errand', due_at: '2026-07-06' });
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.set_task_status',
+    input: { task_id: taskId, status: 'completed' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  const output = (outcome as { output: { next_task_id?: string } }).output;
+  expect(output.next_task_id).toBeUndefined();
+});
+
+test('completing the last occurrence of a bounded series spawns nothing', () => {
+  const taskId = addTask({
+    title: 'Last check-in',
+    due_at: '2026-07-06T09:00:00.000Z',
+    rrule: 'FREQ=WEEKLY;COUNT=1',
+  });
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.set_task_status',
+    input: { task_id: taskId, status: 'completed' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('executed');
+  const output = (outcome as { output: { next_task_id?: string } }).output;
+  expect(output.next_task_id).toBeUndefined();
+});
+
+test('add_task with a reminder but no due_at is refused', () => {
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.add_task',
+    input: { title: 'Call the dentist', remind_before_min: 30 },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(outcome.status).toBe('failed');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('needs a due date to count back');
+});
+
+test('edit_task sets and clears rrule; setting it on a task with no due_at is refused', () => {
+  const withDue = addTask({ title: 'Weekly review', due_at: '2026-07-06T09:00:00.000Z' });
+  const set = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: withDue, rrule: 'FREQ=WEEKLY' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(set.status).toBe('executed');
+  let row = db.vault.prepare('SELECT rrule FROM schedule_task WHERE task_id = ?').get(withDue) as {
+    rrule: string | null;
+  };
+  expect(row.rrule).toBe('FREQ=WEEKLY');
+
+  const cleared = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: withDue, clear_rrule: true },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(cleared.status).toBe('executed');
+  row = db.vault.prepare('SELECT rrule FROM schedule_task WHERE task_id = ?').get(withDue) as {
+    rrule: string | null;
+  };
+  expect(row.rrule).toBeNull();
+
+  const noDue = addTask({ title: 'Someday task' });
+  const refused = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: noDue, rrule: 'FREQ=DAILY' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(refused.status).toBe('failed');
+  if (refused.status === 'failed') expect(refused.predicate).toContain('needs a due date to repeat');
+});
+
+test('edit_task sets and clears remind_before_min; sending both is refused', () => {
+  const taskId = addTask({ title: 'Call the dentist', due_at: '2026-07-10T09:00:00.000Z' });
+  const set = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, remind_before_min: 15 },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(set.status).toBe('executed');
+  let row = db.vault
+    .prepare('SELECT remind_before_min FROM schedule_task WHERE task_id = ?')
+    .get(taskId) as { remind_before_min: number | null };
+  expect(row.remind_before_min).toBe(15);
+
+  const both = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, remind_before_min: 5, clear_remind: true },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(both.status).toBe('failed');
+
+  const cleared = gw.invoke(owner, {
+    command: 'schedule.edit_task',
+    input: { task_id: taskId, clear_remind: true },
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(cleared.status).toBe('executed');
+  row = db.vault
+    .prepare('SELECT remind_before_min FROM schedule_task WHERE task_id = ?')
+    .get(taskId) as { remind_before_min: number | null };
+  expect(row.remind_before_min).toBeNull();
+});
+
+test('a recurring task carries its reminder forward to the next occurrence', () => {
+  const taskId = addTask({
+    title: 'Water the plants',
+    due_at: '2026-07-06T09:00:00.000Z',
+    rrule: 'FREQ=WEEKLY',
+    remind_before_min: 20,
+  });
+  const outcome = gw.invoke(owner, {
+    command: 'schedule.set_task_status',
+    input: { task_id: taskId, status: 'completed' },
+    purpose: 'dpv:ServiceProvision',
+  });
+  const nextId = (outcome as { output: { next_task_id?: string } }).output.next_task_id;
+  const next = db.vault
+    .prepare('SELECT remind_before_min FROM schedule_task WHERE task_id = ?')
+    .get(nextId as string) as { remind_before_min: number | null };
+  expect(next.remind_before_min).toBe(20);
+});
+
 test('edit_task updates only the fields sent and reads them back', () => {
   const taskId = addTask({ title: 'Draft the proposal', due_at: '2026-07-10', priority: 5 });
   const outcome = gw.invoke(owner, {

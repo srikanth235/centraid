@@ -5,6 +5,7 @@ import { installAuthInjector } from './main/auth-injector.js';
 import { startGatewayMonitor } from './main/gateway-monitor.js';
 import { registerIpcHandlers } from './main/ipc.js';
 import { ensurePhoneLink } from './main/phone-link.js';
+import { startReminderMonitor } from './main/reminder-monitor.js';
 import { startUpdateWatcher } from './main/update-watcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -75,6 +76,10 @@ void app.whenReady().then(() => {
   // per-launch uptime history, and fire the OS down-alert. Lives in main
   // so it survives navigation and alerts land while backgrounded.
   startGatewayMonitor();
+  // Task/event reminder watch: poll due `remind_before_min`/`reminders_json`
+  // alerts and fire an OS notification for each new one. Same "lives in
+  // main so it survives backgrounding" posture as the gateway monitor above.
+  startReminderMonitor();
   // Phone link (issue #263): bring the iroh endpoint up front so paired
   // phones reconnect without any UI open. Failures surface in the
   // Settings → Phone panel via PHONE_STATUS; they must not block launch.

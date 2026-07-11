@@ -22,6 +22,20 @@ const PROPOSE_EVENT: CommandDefinition = {
       calendar_id: { type: 'string', minLength: 1 },
       location_place_id: { type: 'string' },
       attendee_party_ids: { type: 'array', items: { type: 'string' } },
+      // RFC 5545 §3.3.10 subset (DAILY/WEEKLY/MONTHLY/YEARLY — see
+      // recurrence/rrule.ts); the series repeats from this event's own
+      // dtstart, so no separate anchor field.
+      rrule: { type: 'string', minLength: 1 },
+      conferencing_uri: { type: 'string', minLength: 1 },
+      reminders: {
+        type: 'array',
+        items: {
+          type: 'object',
+          required: ['minutes_before'],
+          additionalProperties: false,
+          properties: { minutes_before: { type: 'integer', minimum: 0 } },
+        },
+      },
     },
   },
   outputSchema: {
@@ -57,6 +71,16 @@ const PROPOSE_EVENT: CommandDefinition = {
       message: 'An event must end after it starts.',
       value: 1,
     },
+    {
+      // Full RFC 5545 parsing happens read-side (recurrence/rrule.ts); this
+      // is only a fast, cheap reject of obvious garbage before it's stored.
+      name: 'rrule_looks_valid',
+      sql: "SELECT (:rrule IS NULL OR :rrule LIKE 'FREQ=%') AS n",
+      column: 'n',
+      op: 'eq',
+      value: 1,
+      message: 'That repeat rule is not recognized.',
+    },
   ],
   postconditions: [
     {
@@ -89,6 +113,9 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
     calendar_id: string;
     location_place_id?: string;
     attendee_party_ids?: string[];
+    rrule?: string;
+    conferencing_uri?: string;
+    reminders?: { minutes_before: number }[];
   };
   const eventId = ctx.newId();
   ctx.db
@@ -96,7 +123,7 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       `INSERT INTO core_event
          (event_id, ical_uid, summary, description, dtstart, dtend, start_tz, rrule, status,
           location_place_id, organizer_party_id, sequence, created_at, updated_at)
-       VALUES (?, NULL, ?, ?, ?, ?, ?, NULL, 'tentative', ?, ?, 0, ?, ?)`,
+       VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'tentative', ?, ?, 0, ?, ?)`,
     )
     .run(
       eventId,
@@ -105,19 +132,22 @@ function proposeEvent(ctx: HandlerCtx): Record<string, unknown> {
       input.dtstart,
       input.dtend,
       input.start_tz ?? null,
+      input.rrule ?? null,
       input.location_place_id ?? null,
       ctx.identity.partyId,
       ctx.now,
       ctx.now,
     );
   ctx.wrote('core.event', eventId);
+  const remindersJson =
+    input.reminders && input.reminders.length > 0 ? JSON.stringify(input.reminders) : null;
   ctx.db
     .prepare(
       `INSERT INTO schedule_event_ext
          (event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, travel_buffer_min)
-       VALUES (?, ?, ?, 'busy', NULL, NULL, NULL)`,
+       VALUES (?, ?, ?, 'busy', ?, ?, NULL)`,
     )
-    .run(ctx.newId(), eventId, input.calendar_id);
+    .run(ctx.newId(), eventId, input.calendar_id, input.conferencing_uri ?? null, remindersJson);
   ctx.wrote('schedule.event_ext', eventId);
   const attendees = input.attendee_party_ids ?? [];
   for (const partyId of attendees) {

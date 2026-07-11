@@ -15,6 +15,8 @@ export default async ({ body, ctx }) => {
   if (raw.priority) input.priority = Number(raw.priority);
   if (raw.effort_min) input.effort_min = Number(raw.effort_min);
   if (raw.parent_task_id) input.parent_task_id = String(raw.parent_task_id);
+  if (raw.rrule) input.rrule = String(raw.rrule);
+  if (raw.remind_before_min != null) input.remind_before_min = Number(raw.remind_before_min);
   try {
     const outcome = await ctx.vault.invoke({
       command: 'schedule.add_task',

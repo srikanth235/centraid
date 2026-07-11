@@ -16,7 +16,7 @@
 // functions of props.
 import { createRoot } from './react-core.min.js';
 import { readFailed, showSkeleton, wireAttachInput } from './kit.js';
-import { buildWall, createLogic, notebookNoteCounts, sidebarCounts } from './logic.js';
+import { buildWall, createLogic, notebookNoteCounts, sidebarCounts, tagNoteCounts } from './logic.js';
 import { wireChrome } from './chrome.js';
 import { SidebarFoot, SidebarNav } from './components/Sidebar.jsx';
 import { Toolbar } from './components/Toolbar.jsx';
@@ -30,7 +30,7 @@ const $ = (id) => document.getElementById(id);
 // logic.js's closure over it stays valid) and all client-side presentation
 // state, which is never persisted and never sent to the vault.
 
-const data = { notes: [], notebooks: [], window: 200 };
+const data = { notes: [], notebooks: [], tags: [], window: 200 };
 
 const validViews = new Set(['masonry', 'list']);
 const knobView = document.documentElement.getAttribute('data-app-default-view');
@@ -107,6 +107,8 @@ function renderEditor() {
           $('attachInput').click();
         }}
         onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
+        onAddTag={(noteId, label) => logic.addTag(noteId, label)}
+        onRemoveTag={(tagId) => logic.removeTag(tagId)}
       />
     ) : null,
   );
@@ -115,12 +117,15 @@ function renderEditor() {
 function render() {
   const counts = sidebarCounts(data);
   const nbCounts = notebookNoteCounts(data);
+  const tgCounts = tagNoteCounts(data);
   sidebarNavRoot.render(
     <SidebarNav
       nav={state.nav}
       counts={counts}
       notebooks={data.notebooks}
       notebookCounts={nbCounts}
+      tags={data.tags}
+      tagCounts={tgCounts}
       creatingNotebook={state.creatingNotebook}
       pendingNotebookIds={state.pendingNotebookIds}
       onSelect={(nav) => logic.selectNav(nav)}
@@ -142,7 +147,11 @@ function render() {
   const rows = wall.pinned.length + wall.others.length;
   const titles = { all: 'All notes', pinned: 'Pinned' };
   const activeTitle =
-    state.nav.kind === 'notebook' ? logic.notebookName(state.nav.notebookId) : (titles[state.nav.kind] ?? 'All notes');
+    state.nav.kind === 'notebook'
+      ? logic.notebookName(state.nav.notebookId)
+      : state.nav.kind === 'tag'
+        ? `#${(data.tags ?? []).find((t) => t.concept_id === state.nav.conceptId)?.label ?? 'tag'}`
+        : (titles[state.nav.kind] ?? 'All notes');
   const activeSub = q
     ? `${rows} match${rows === 1 ? '' : 'es'} “${q}”`
     : `${rows} ${rows === 1 ? 'note' : 'notes'}`;
@@ -229,16 +238,21 @@ async function refresh() {
     $('consentDetail').textContent = denied.message ?? '';
     data.notes = [];
     data.notebooks = [];
+    data.tags = [];
     state.editorId = null;
     render();
     return;
   }
   data.notes = res?.notes ?? [];
   data.notebooks = res?.notebooks ?? [];
+  data.tags = res?.tags ?? [];
   data.window = res?.window ?? state.libraryWindow;
   state.libraryTruncated = Boolean(res?.truncated);
   if (state.nav.kind === 'notebook' && !data.notebooks.some((nb) => nb.notebook_id === state.nav.notebookId)) {
     state.nav = { kind: 'all' }; // active notebook deleted elsewhere
+  }
+  if (state.nav.kind === 'tag' && !data.tags.some((t) => t.concept_id === state.nav.conceptId)) {
+    state.nav = { kind: 'all' }; // last note carrying this tag lost it, or aged out of the window
   }
   if (state.editingNotebookId && !data.notebooks.some((nb) => nb.notebook_id === state.editingNotebookId)) {
     state.editingNotebookId = null;

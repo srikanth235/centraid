@@ -195,6 +195,7 @@ export { registerHealthCommands } from './commands/health.js';
 export { registerKnowledgeCommands } from './commands/knowledge.js';
 export { registerBusinessCommands } from './commands/business.js';
 export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
+export { registerTagCommands, TAGGABLE_SUBJECTS } from './commands/tags.js';
 export { registerLinkCommands, RELATIONS_SCHEME_URI } from './commands/links.js';
 export { registerPartyCommands } from './commands/parties.js';
 export { registerMediaCommands } from './commands/media.js';

@@ -1,0 +1,10 @@
+{
+  "manifestVersion": 1,
+  "id": "google-calendar-invite-send",
+  "name": "Calendar invite send",
+  "kind": "automation",
+  "description": "Carries Agenda's event invites out through the outbox (issue #306, extending #304's write half to calendar): each needs-action guest with an email address gets an ICS invite staged as a reviewable artifact, approved by you (or a standing grant), and sent by the gateway's executor through your own Gmail OAuth client.",
+  "version": "0.1.0",
+  "actions": [],
+  "queries": []
+}

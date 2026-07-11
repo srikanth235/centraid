@@ -7,6 +7,7 @@
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
+import { nextOccurrence } from '../recurrence/rrule.js';
 
 const ADD_TASK: CommandDefinition = {
   name: 'schedule.add_task',
@@ -23,6 +24,9 @@ const ADD_TASK: CommandDefinition = {
       effort_min: { type: 'integer', minimum: 1 },
       parent_task_id: { type: 'string', minLength: 1 },
       rrule: { type: 'string', minLength: 1 },
+      // Minutes before due_at the reminder scheduler should fire — meaningless
+      // without a due_at, same posture as rrule.
+      remind_before_min: { type: 'integer', minimum: 0 },
     },
   },
   outputSchema: {
@@ -45,6 +49,25 @@ const ADD_TASK: CommandDefinition = {
       column: 'n',
       op: 'eq',
       value: 1,
+    },
+    {
+      // A recurring task needs an anchor date — rrule advances due_at on
+      // completion, so a rule with nothing to advance is refused up front
+      // rather than silently never recurring.
+      name: 'rrule_requires_due_at',
+      sql: 'SELECT (:rrule IS NULL OR :due_at IS NOT NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+      message: 'A repeating task needs a due date to repeat from.',
+    },
+    {
+      name: 'reminder_requires_due_at',
+      sql: 'SELECT (:remind_before_min IS NULL OR :due_at IS NOT NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+      message: 'A reminder needs a due date to count back from.',
     },
   ],
   postconditions: [
@@ -71,6 +94,7 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
     effort_min?: number;
     parent_task_id?: string;
     rrule?: string;
+    remind_before_min?: number;
   };
   const owner = ctx.db.prepare('SELECT owner_party_id FROM core_vault LIMIT 1').get() as
     | { owner_party_id: string | null }
@@ -80,8 +104,8 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
   ctx.db
     .prepare(
       `INSERT INTO schedule_task
-         (task_id, owner_party_id, title, description, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule)
-       VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?)`,
+         (task_id, owner_party_id, title, description, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule, remind_before_min)
+       VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?)`,
     )
     .run(
       taskId,
@@ -93,6 +117,7 @@ function addTask(ctx: HandlerCtx): Record<string, unknown> {
       input.effort_min ?? null,
       input.parent_task_id ?? null,
       input.rrule ?? null,
+      input.remind_before_min ?? null,
     );
   ctx.wrote('schedule.task', taskId);
   return { task_id: taskId };
@@ -118,7 +143,14 @@ const SET_TASK_STATUS: CommandDefinition = {
   outputSchema: {
     type: 'object',
     required: ['task_id', 'status'],
-    properties: { task_id: { type: 'string' }, status: { type: 'string' } },
+    properties: {
+      task_id: { type: 'string' },
+      status: { type: 'string' },
+      // Only present when completing a task whose rrule still has a next
+      // hit — the freshly spawned sibling occurrence.
+      next_task_id: { type: 'string' },
+      next_due_at: { type: 'string' },
+    },
   },
   preconditions: [
     {
@@ -141,6 +173,20 @@ const SET_TASK_STATUS: CommandDefinition = {
       op: 'eq',
       value: 1,
     },
+    {
+      // Optional binding, same idiom as edit_task: wasn't asked for (no
+      // next occurrence spawned) passes trivially; asked for means the
+      // sibling really exists, open, due exactly where the rule put it.
+      name: 'next_occurrence_spawned_open',
+      sql: `SELECT CASE WHEN :next_task_id IS NULL THEN 1
+                   ELSE (SELECT count(*) FROM schedule_task
+                          WHERE task_id = :next_task_id AND status = 'needs-action'
+                            AND completed_at IS NULL AND due_at = :next_due_at)
+              END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
   ],
   idempotency: 'idempotent',
   risk: 'low',
@@ -150,8 +196,23 @@ const SET_TASK_STATUS: CommandDefinition = {
 function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
   const input = ctx.input as { task_id: string; status: string };
   const previous = ctx.db
-    .prepare('SELECT status FROM schedule_task WHERE task_id = ?')
-    .get(input.task_id) as { status: string } | undefined;
+    .prepare(
+      'SELECT status, owner_party_id, title, description, priority, due_at, effort_min, parent_task_id, rrule, remind_before_min FROM schedule_task WHERE task_id = ?',
+    )
+    .get(input.task_id) as
+    | {
+        status: string;
+        owner_party_id: string;
+        title: string;
+        description: string | null;
+        priority: number;
+        due_at: string | null;
+        effort_min: number | null;
+        parent_task_id: string | null;
+        rrule: string | null;
+        remind_before_min: number | null;
+      }
+    | undefined;
   if (!previous) throw new Error('task vanished between check and execute');
   ctx.db
     .prepare('UPDATE schedule_task SET status = ?, completed_at = ? WHERE task_id = ?')
@@ -162,7 +223,44 @@ function setTaskStatus(ctx: HandlerCtx): Record<string, unknown> {
     entityType: 'schedule.task',
     entityId: input.task_id,
   });
-  return { task_id: input.task_id, status: input.status };
+  const output: Record<string, unknown> = { task_id: input.task_id, status: input.status };
+  // Completing a repeating task spawns its next occurrence in the same
+  // motion — Things/Todoist behavior: the series never needs a second
+  // "add" from the owner. A non-completion move (reopen, cancel) never
+  // spawns; only the completed→next edge does.
+  if (input.status === 'completed' && previous.rrule && previous.due_at) {
+    const nextDue = nextOccurrence(previous.rrule, previous.due_at, previous.due_at);
+    if (nextDue) {
+      const nextTaskId = ctx.newId();
+      ctx.db
+        .prepare(
+          `INSERT INTO schedule_task
+             (task_id, owner_party_id, title, description, status, priority, due_at, completed_at, effort_min, parent_task_id, rrule, remind_before_min)
+           VALUES (?, ?, ?, ?, 'needs-action', ?, ?, NULL, ?, ?, ?, ?)`,
+        )
+        .run(
+          nextTaskId,
+          previous.owner_party_id,
+          previous.title,
+          previous.description,
+          previous.priority,
+          nextDue,
+          previous.effort_min,
+          previous.parent_task_id,
+          previous.rrule,
+          previous.remind_before_min,
+        );
+      ctx.wrote('schedule.task', nextTaskId);
+      ctx.cite({
+        claim: `next occurrence of "${previous.title}" spawned at ${nextDue} (${previous.rrule})`,
+        entityType: 'schedule.task',
+        entityId: nextTaskId,
+      });
+      output.next_task_id = nextTaskId;
+      output.next_due_at = nextDue;
+    }
+  }
+  return output;
 }
 
 const EDIT_TASK: CommandDefinition = {
@@ -185,6 +283,12 @@ const EDIT_TASK: CommandDefinition = {
       clear_due: { type: 'boolean', const: true },
       priority: { type: 'integer', minimum: 0, maximum: 9 },
       effort_min: { type: 'integer', minimum: 1 },
+      remind_before_min: { type: 'integer', minimum: 0 },
+      // Same set/clear-are-exclusive idiom as due_at.
+      clear_remind: { type: 'boolean', const: true },
+      rrule: { type: 'string', minLength: 1 },
+      // Same idiom again: rrule sets, clear_rrule stops the series.
+      clear_rrule: { type: 'boolean', const: true },
     },
   },
   outputSchema: {
@@ -213,6 +317,35 @@ const EDIT_TASK: CommandDefinition = {
       column: 'n',
       op: 'eq',
       value: 1,
+    },
+    {
+      name: 'remind_set_and_clear_are_exclusive',
+      sql: 'SELECT (:remind_before_min IS NULL OR :clear_remind IS NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      name: 'rrule_set_and_clear_are_exclusive',
+      sql: 'SELECT (:rrule IS NULL OR :clear_rrule IS NULL) AS n',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+    {
+      // A repeating task still needs its due_at once the edit lands — either
+      // it already had one, or this same call is setting one (or clearing
+      // the reminder that would otherwise depend on it too).
+      name: 'rrule_edit_keeps_a_due_at',
+      sql: `SELECT CASE WHEN :rrule IS NULL THEN 1
+                   ELSE (SELECT CASE WHEN :due_at IS NOT NULL THEN 1
+                              ELSE (SELECT count(*) FROM schedule_task
+                                     WHERE task_id = :task_id AND due_at IS NOT NULL) END)
+              END AS n`,
+      column: 'n',
+      op: 'eq',
+      value: 1,
+      message: 'A repeating task needs a due date to repeat from.',
     },
   ],
   postconditions: [
@@ -250,6 +383,10 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
     clear_due?: boolean;
     priority?: number;
     effort_min?: number;
+    remind_before_min?: number;
+    clear_remind?: boolean;
+    rrule?: string;
+    clear_rrule?: boolean;
   };
   const sets: string[] = [];
   const values: (string | number | null)[] = [];
@@ -280,6 +417,22 @@ function editTask(ctx: HandlerCtx): Record<string, unknown> {
   if (input.effort_min !== undefined) {
     sets.push('effort_min = ?');
     values.push(input.effort_min);
+  }
+  if (input.remind_before_min !== undefined) {
+    sets.push('remind_before_min = ?');
+    values.push(input.remind_before_min);
+  }
+  if (input.clear_remind) {
+    sets.push('remind_before_min = ?');
+    values.push(null);
+  }
+  if (input.rrule !== undefined) {
+    sets.push('rrule = ?');
+    values.push(input.rrule);
+  }
+  if (input.clear_rrule) {
+    sets.push('rrule = ?');
+    values.push(null);
   }
   if (sets.length > 0) {
     ctx.db

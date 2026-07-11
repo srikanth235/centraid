@@ -10,6 +10,16 @@ import { colorForCalendar, initials, nextHalfHour, toIsoUtc, toLocalInput } from
 import { I } from '../icons.js';
 import { CalDot, Icon } from './Shared.jsx';
 
+// Repeat picker → RFC 5545 subset the vault's recurrence engine understands
+// (see @centraid/vault recurrence/rrule.ts). "None" sends no rrule at all.
+const REPEAT_OPTIONS = [
+  { value: 'none', label: 'Does not repeat' },
+  { value: 'FREQ=DAILY', label: 'Daily' },
+  { value: 'FREQ=WEEKLY', label: 'Weekly' },
+  { value: 'FREQ=MONTHLY', label: 'Monthly' },
+  { value: 'FREQ=YEARLY', label: 'Yearly' },
+];
+
 export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
   const start0 = prefill?.start ?? nextHalfHour();
   const end0 = prefill?.end ?? new Date(start0.getTime() + 3600000);
@@ -18,6 +28,8 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
   const [endVal, setEndVal] = useState(toLocalInput(end0));
   const [calendarId, setCalendarId] = useState(calendars[0]?.calendar_id ?? '');
   const [description, setDescription] = useState('');
+  const [repeat, setRepeat] = useState('none');
+  const [conferencingUri, setConferencingUri] = useState('');
   // The invite directory (parties query), and the party ids currently invited.
   const [people, setPeople] = useState([]);
   const [invited, setInvited] = useState(() => new Set());
@@ -89,13 +101,22 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
       return;
     }
     setBusy(true);
+    let startTz;
+    try {
+      startTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      startTz = undefined;
+    }
     const outcome = await onSubmit({
       summary: title,
       dtstart,
       dtend,
       calendar_id: calendarId,
+      ...(startTz ? { start_tz: startTz } : {}),
       ...(description.trim() ? { description: description.trim() } : {}),
       ...(invited.size ? { attendee_party_ids: [...invited] } : {}),
+      ...(repeat !== 'none' ? { rrule: repeat } : {}),
+      ...(conferencingUri.trim() ? { conferencing_uri: conferencingUri.trim() } : {}),
     });
     setBusy(false);
     if (outcome?.status === 'executed' || outcome?.status === 'denied') {
@@ -139,6 +160,16 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
             <label className="ag-field-row">
               <span>End</span>
               <input type="datetime-local" value={endVal} onChange={(e) => setEndVal(e.target.value)} />
+            </label>
+            <label className="ag-field-row">
+              <span>Repeat</span>
+              <select value={repeat} onChange={(e) => setRepeat(e.target.value)} aria-label="Repeat">
+                {REPEAT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
           <div>
@@ -186,6 +217,16 @@ export function CreateModal({ calendars, prefill, onClose, onSubmit }) {
               </div>
             </div>
           ) : null}
+          <label className="ag-field-row">
+            <span>Video call</span>
+            <input
+              type="url"
+              placeholder="Paste a meeting link"
+              aria-label="Video call link"
+              value={conferencingUri}
+              onChange={(e) => setConferencingUri(e.target.value)}
+            />
+          </label>
           <textarea
             className="ag-create-desc"
             placeholder="Add a description"

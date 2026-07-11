@@ -56,6 +56,8 @@ export function SidebarNav({
   counts,
   notebooks,
   notebookCounts,
+  tags,
+  tagCounts,
   creatingNotebook,
   pendingNotebookIds,
   onSelect,
@@ -113,6 +115,28 @@ export function SidebarNav({
         ))}
         {creatingNotebook ? <NewNotebookForm onSubmit={onSubmitCreate} onCancel={onCancelCreate} /> : null}
       </div>
+
+      {tags?.length ? (
+        <>
+          <div className="nt-nb-head">
+            <span className="nt-eyebrow-label">Tags</span>
+          </div>
+          <div className="nt-nav">
+            {tags.map((t) => (
+              <button
+                key={t.concept_id}
+                type="button"
+                className="nt-nav-item"
+                aria-current={String(nav.kind === 'tag' && nav.conceptId === t.concept_id)}
+                onClick={() => onSelect({ kind: 'tag', conceptId: t.concept_id })}
+              >
+                <span className="nt-nb-name">#{t.label}</span>
+                <span className="nt-nav-count">{tagCounts.get(t.concept_id) ?? 0}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
     </>
   );
 }

@@ -11,6 +11,19 @@ import { fmtRange, initials, toIsoUtc, toLocalInput } from '../format.js';
 import { I } from '../icons.js';
 import { CalDot, Icon } from './Shared.jsx';
 
+const REPEAT_LABEL = {
+  DAILY: 'Repeats daily',
+  WEEKLY: 'Repeats weekly',
+  MONTHLY: 'Repeats monthly',
+  YEARLY: 'Repeats yearly',
+};
+
+/** A short human label for a stored rrule's FREQ — "Repeats weekly" etc. */
+function repeatLabel(rrule) {
+  const match = /FREQ=([A-Z]+)/.exec(String(rrule ?? ''));
+  return match ? (REPEAT_LABEL[match[1]] ?? 'Repeats') : null;
+}
+
 const RSVP_OPTIONS = [
   ['accepted', 'Going', I.check],
   ['tentative', 'Maybe', I.maybe],
@@ -127,6 +140,7 @@ export function EventDrawer({
 
   const statusLabel = pendingCancel ? 'Cancel pending' : ev.status === 'tentative' ? 'Tentative' : 'Confirmed';
   const attendees = ev.attendees ?? [];
+  const repeats = repeatLabel(ev.rrule);
 
   return (
     <div
@@ -153,10 +167,26 @@ export function EventDrawer({
           <span className="ag-badge" data-tone={pendingCancel ? 'warn' : ev.status === 'tentative' ? 'muted' : 'accent'}>
             {statusLabel}
           </span>
+          {repeats ? (
+            <span className="ag-badge" data-tone="muted" title={ev.rrule}>
+              <Icon svg={I.repeat} /> {repeats}
+            </span>
+          ) : null}
         </div>
 
         <div className="ag-drawer-body">
           {ev.description ? <p className="ag-drawer-desc">{ev.description}</p> : null}
+
+          {ev.conferencing_uri ? (
+            <a
+              className="kit-btn primary ag-flex ag-join-btn"
+              href={ev.conferencing_uri}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              <Icon svg={I.video} /> Join video call
+            </a>
+          ) : null}
 
           {attendees.length ? (
             <>
@@ -170,6 +200,9 @@ export function EventDrawer({
           ) : null}
 
           <div className="ag-eyebrow-label">Reschedule</div>
+          {ev.rrule ? (
+            <p className="muted small">Moving a repeating event shifts the whole series, not just this occurrence.</p>
+          ) : null}
           <div className="ag-reschedule">
             <label className="ag-field-row">
               <span>Start</span>

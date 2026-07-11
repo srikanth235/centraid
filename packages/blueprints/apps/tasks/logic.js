@@ -217,6 +217,24 @@ export function createLogic({ state, data, render, refresh }) {
     return outcome;
   }
 
+  // ---------- Tags ----------
+
+  async function addTag(taskId, label) {
+    const l = String(label ?? '').trim();
+    if (!l) return undefined;
+    const outcome = await act('add-tag', { task_id: taskId, label: l });
+    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    else render();
+    return outcome;
+  }
+
+  async function removeTag(tagId) {
+    const outcome = await act('remove-tag', { tag_id: tagId });
+    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    else render();
+    return outcome;
+  }
+
   // ---------- Search ----------
 
   let searchSeq = 0;
@@ -265,6 +283,8 @@ export function createLogic({ state, data, render, refresh }) {
     setAttachTarget,
     getAttachTarget,
     removeAttachment,
+    addTag,
+    removeTag,
     applySearchInput,
     clearSearch,
     clearPending,
