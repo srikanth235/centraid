@@ -17,6 +17,7 @@
  * able to drop a previously-pinned concrete model for that runner alone.
  */
 
+import { clampAlertSeconds } from './gateway-monitor-core.js';
 import type { PersistedSettings } from './settings.js';
 
 /** The persistable subset of a settings patch. */
@@ -37,6 +38,10 @@ export interface PersistedSettingsPatch {
    */
   activeVaultByGateway?: Record<string, string>;
   onboardingCompletedAt?: string;
+  /** Gateway down-alert threshold in seconds — clamped on write. */
+  gatewayAlertSeconds?: number;
+  /** Master switch for the gateway down alert. */
+  gatewayAlertsEnabled?: boolean;
 }
 
 /**
@@ -93,5 +98,16 @@ export function mergePersistedSettings(
       patch.onboardingCompletedAt,
       current.onboardingCompletedAt,
     ),
+    ...(() => {
+      // Preserve-or-set with write-time clamping; a garbage patch value
+      // (NaN, wrong type) falls back to the current value.
+      const next = clampAlertSeconds(patch.gatewayAlertSeconds) ?? current.gatewayAlertSeconds;
+      return next !== undefined ? { gatewayAlertSeconds: next } : {};
+    })(),
+    ...(patch.gatewayAlertsEnabled !== undefined
+      ? { gatewayAlertsEnabled: patch.gatewayAlertsEnabled }
+      : current.gatewayAlertsEnabled !== undefined
+        ? { gatewayAlertsEnabled: current.gatewayAlertsEnabled }
+        : {}),
   };
 }

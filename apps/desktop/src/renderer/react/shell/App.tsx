@@ -14,6 +14,7 @@ import { PageEmpty } from './status.js';
 import { useActiveVault } from './useActiveVault.js';
 import { useAppearance } from './useAppearance.js';
 import { useBlockingCount } from './useBlockingCount.js';
+import { useGatewayRuntime } from './useGatewayRuntime.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
 import { closeVaultSwitcher, openVaultSwitcher } from './vaultSwitcher.js';
@@ -24,6 +25,7 @@ import AutomationsRoute from './routes/AutomationsRoute.js';
 import AutomationViewRoute from './routes/AutomationViewRoute.js';
 import BuilderRoute from './routes/BuilderRoute.js';
 import DiscoverRoute from './routes/DiscoverRoute.js';
+import GatewayRoute from './routes/GatewayRoute.js';
 import HomeRoute from './routes/HomeRoute.js';
 import InsightsRoute from './routes/InsightsRoute.js';
 import RunViewRoute from './routes/RunViewRoute.js';
@@ -64,6 +66,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'starred':
     case 'automations':
     case 'approvals':
+    case 'gateway':
     case 'settings':
       return route.kind;
     default:
@@ -83,6 +86,7 @@ export default function App(): JSX.Element {
   const { isStarred, toggleStar } = useStarred();
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
+  const gatewayStatus = useGatewayRuntime()?.status;
   const navRef = useRef<ShellNav | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = useState(false);
@@ -191,13 +195,15 @@ export default function App(): JSX.Element {
           onAutomations={go({ kind: 'automations' })}
           onApprovals={go({ kind: 'approvals' })}
           approvalsCount={blockingCount}
+          onGateway={go({ kind: 'gateway' })}
+          gatewayStatus={gatewayStatus}
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
         />
       );
     },
-    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount],
+    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount, gatewayStatus],
   );
 
   const renderRoute = useCallback(
@@ -222,6 +228,8 @@ export default function App(): JSX.Element {
           return <AutomationsRoute />;
         case 'approvals':
           return <ApprovalsRoute />;
+        case 'gateway':
+          return <GatewayRoute />;
         case 'automation-view':
           return <AutomationViewRoute automationId={nav.route.automationId} />;
         case 'run-view':
