@@ -8,6 +8,12 @@
  * Proposals land through the face-region publisher, which refuses to touch
  * confirmed rows; external ids are `<asset_id>:face:<n>` so a re-run diffs
  * instead of duplicating.
+ *
+ * The on-demand queue drains FIRST (issue #352 phase 3/4, mirroring
+ * photo-captioner): an owner clicking "detect faces" on a specific photo in
+ * Photos calls `enrich.request_enrichment` with entity_type
+ * `media.media_asset` and that asset's id — those jump the cursor-ordered
+ * backlog below regardless of where the sweep currently is.
  */
 
 const BATCH = 8;
@@ -39,6 +45,33 @@ const FACES_SCHEMA = {
 
 export default async ({ ctx, log }) => {
   const cursor = (await ctx.state.get('cursor')) ?? '';
+  // The on-demand queue drains FIRST (issue #352 phase 3/4) — see header.
+  const requested = await ctx.vault.read({
+    entity: 'enrich.request',
+    where: [
+      { column: 'entity_type', op: 'eq', value: 'media.media_asset' },
+      { column: 'entity_id', op: 'not-null' },
+      { column: 'drained_at', op: 'is-null' },
+    ],
+    orderBy: { column: 'request_id', dir: 'asc' },
+    limit: 5,
+    purpose: PURPOSE,
+  });
+  const requests = requested.rows ?? [];
+  const requestedAssets = [];
+  for (const request of requests) {
+    const hit = await ctx.vault.read({
+      entity: 'media.media_asset',
+      where: [
+        { column: 'asset_id', op: 'eq', value: request.entity_id },
+        { column: 'deleted_at', op: 'is-null' },
+      ],
+      limit: 1,
+      purpose: PURPOSE,
+    });
+    if (hit.rows?.[0]) requestedAssets.push(hit.rows[0]);
+  }
+
   const read = await ctx.vault.read({
     entity: 'media.media_asset',
     where: [
@@ -49,14 +82,16 @@ export default async ({ ctx, log }) => {
     limit: BATCH,
     purpose: PURPOSE,
   });
-  const assets = read.rows ?? [];
+  const fresh = read.rows ?? [];
+  const seen = new Set(requestedAssets.map((a) => a.asset_id));
+  const assets = [...requestedAssets, ...fresh.filter((a) => !seen.has(a.asset_id))];
   if (assets.length === 0) return { summary: 'no new photos to scan for faces' };
 
   const rows = [];
   let proposed = 0;
   let lastSeen = cursor;
   for (const asset of assets) {
-    lastSeen = asset.asset_id;
+    if (fresh.includes(asset)) lastSeen = asset.asset_id > lastSeen ? asset.asset_id : lastSeen;
     if (asset.kind !== 'photo') continue;
     const derivatives = await ctx.vault.read({
       entity: 'core.content_derivative',
@@ -101,6 +136,13 @@ export default async ({ ctx, log }) => {
       purpose: PURPOSE,
     });
     log.info(`${rows.length} face region(s) proposed across ${proposed} photo(s)`);
+  }
+  if (requests.length > 0) {
+    await ctx.vault.invoke({
+      command: 'enrich.mark_requests_drained',
+      input: { request_ids: requests.map((r) => r.request_id) },
+      purpose: PURPOSE,
+    });
   }
   await ctx.state.set('cursor', lastSeen);
   return {

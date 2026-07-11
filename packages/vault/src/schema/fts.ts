@@ -65,12 +65,16 @@ const SPECS: readonly FtsEntitySpec[] = [
     deletedColumn: 'deleted_at',
   },
   {
-    // Canonical bytes double as the documents surface: title + text bodies.
-    entity: 'core.content_item',
-    idColumn: 'content_id',
+    // Documents are searched under their OWN identity, not the raw content
+    // item (issue #352): title lives on core_document, body decodes through
+    // whichever content item is current. blob.ts overrides this spec's
+    // triggers to be derivative-aware (extracted PDF/scan text wins over the
+    // raw decode), same as it always did for the parent row.
+    entity: 'core.document',
+    idColumn: 'document_id',
     columns: [
       { name: 'title', kind: 'column' },
-      { name: 'body', kind: 'self-content' },
+      { name: 'body', kind: 'content', fk: 'current_content_id' },
     ],
     deletedColumn: 'deleted_at',
   },

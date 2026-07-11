@@ -14,11 +14,12 @@
   "requires": {},
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Reads new photos' preview/thumb derivatives, detects face regions, and stages unconfirmed proposals for the owner's confirm loop in Photos (issue #299 phase 3).",
+    "why": "Reads new photos' preview/thumb derivatives, detects face regions, and stages unconfirmed proposals for the owner's confirm loop in Photos (issue #299 phase 3). Also drains the on-demand enrichment queue (issue #352 phase 3/4) so a 'detect faces now' ask from the app jumps the backlog.",
     "scopes": [
       { "schema": "media", "verbs": "read" },
       { "schema": "core", "verbs": "read" },
-      { "schema": "sync", "verbs": "read+act" }
+      { "schema": "sync", "verbs": "read+act" },
+      { "schema": "enrich", "verbs": "read+act" }
     ]
   },
   "history": {

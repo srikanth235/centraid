@@ -119,6 +119,22 @@ CREATE TABLE core_content_item (
   created_at       TEXT NOT NULL
 ) STRICT;
 
+-- A document's identity is separate from its bytes (issue #352): the
+-- wrapper is the row apps and links address; current_content_id repoints on
+-- edit exactly like knowledge_note.body_content_id. NOT UNIQUE — two
+-- documents may legitimately share identical bytes (a template re-used
+-- twice). Version lineage is a 'revises' core.link between content items,
+-- never a column here — content_item is the version, core.link is history.
+CREATE TABLE core_document (
+  document_id         TEXT PRIMARY KEY,
+  title               TEXT NOT NULL,
+  current_content_id  TEXT NOT NULL REFERENCES core_content_item(content_id),
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL,
+  deleted_at          TEXT,
+  purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
+) STRICT;
+
 CREATE TABLE core_attachment (
   attachment_id TEXT PRIMARY KEY,
   subject_type  TEXT NOT NULL,

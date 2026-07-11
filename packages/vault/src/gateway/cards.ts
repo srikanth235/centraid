@@ -70,6 +70,11 @@ const CARD_SQL: Record<string, string> = {
                                CASE WHEN media_type LIKE 'image/%' THEN content_id END AS thumb,
                                (deleted_at IS NOT NULL) AS trashed
                           FROM core_content_item WHERE content_id = ?`,
+  'core.document': `SELECT d.title AS title, c.media_type AS subtitle,
+                            CASE WHEN c.media_type LIKE 'image/%' THEN c.content_id END AS thumb,
+                            (d.deleted_at IS NOT NULL) AS trashed
+                       FROM core_document d JOIN core_content_item c ON c.content_id = d.current_content_id
+                      WHERE d.document_id = ?`,
   'schedule.task': `SELECT title, status AS subtitle, NULL AS thumb, 0 AS trashed
                       FROM schedule_task WHERE task_id = ?`,
   'knowledge.note': `SELECT title, NULL AS subtitle, NULL AS thumb, 0 AS trashed
@@ -109,6 +114,7 @@ export const CARD_PK: Readonly<Record<string, string>> = {
   'core.event': 'event_id',
   'core.transaction': 'txn_id',
   'core.content_item': 'content_id',
+  'core.document': 'document_id',
   'schedule.task': 'task_id',
   'knowledge.note': 'note_id',
   'core.collection': 'collection_id',

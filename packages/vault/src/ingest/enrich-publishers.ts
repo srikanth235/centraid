@@ -17,7 +17,7 @@
 
 import type { DatabaseSync } from 'node:sqlite';
 import { uuidv7 } from '../ids.js';
-import { FOLDER_SCHEME_URI } from '../commands/documents.js';
+import { DOCUMENT_TARGET_TYPE, FOLDER_SCHEME_URI } from '../commands/documents.js';
 import { VISION_SCHEME_URI } from '../schema/enrich.js';
 import type { Publisher, PublishedWrite } from './staging.js';
 
@@ -335,10 +335,25 @@ const filingPublisher: Publisher = {
   update(vault, entityId, payload, now) {
     const p = payload as unknown as FilingPayload;
     const wrote: PublishedWrite[] = [];
+    // A wrapped content item's display title and folder tag live on its
+    // core_document (issue #352) — the content item is the HEAD revision,
+    // not the document's identity. Only the exact current head resolves;
+    // filing never mints a document (create() above still throws), so a
+    // proposal against a superseded revision or a still-unwrapped content
+    // item falls back to tagging/renaming the content item directly.
+    const doc = vault
+      .prepare('SELECT document_id FROM core_document WHERE current_content_id = ?')
+      .get(entityId) as { document_id: string } | undefined;
+    const targetType = doc ? DOCUMENT_TARGET_TYPE : 'core.content_item';
+    const targetId = doc ? doc.document_id : entityId;
     if (p.title) {
       vault
-        .prepare('UPDATE core_content_item SET title = ? WHERE content_id = ?')
-        .run(p.title, entityId);
+        .prepare(
+          doc
+            ? 'UPDATE core_document SET title = ? WHERE document_id = ?'
+            : 'UPDATE core_content_item SET title = ? WHERE content_id = ?',
+        )
+        .run(p.title, targetId);
     }
     if (p.folder) {
       const schemeId = ensureScheme(vault, FOLDER_SCHEME_URI, 'Folders');
@@ -352,17 +367,17 @@ const filingPublisher: Publisher = {
       vault
         .prepare(
           `DELETE FROM core_tag
-            WHERE target_type = 'core.content_item' AND target_id = ?
+            WHERE target_type = ? AND target_id = ?
               AND concept_id IN (SELECT c.concept_id FROM core_concept c WHERE c.scheme_id = ?)`,
         )
-        .run(entityId, schemeId);
+        .run(targetType, targetId, schemeId);
       const tagId = uuidv7();
       vault
         .prepare(
           `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
-           VALUES (?, 'core.content_item', ?, ?, NULL, NULL, ?)`,
+           VALUES (?, ?, ?, ?, NULL, NULL, ?)`,
         )
-        .run(tagId, entityId, conceptId, now);
+        .run(tagId, targetType, targetId, conceptId, now);
       wrote.push({ type: 'core.tag', id: tagId });
     }
     return { wrote };

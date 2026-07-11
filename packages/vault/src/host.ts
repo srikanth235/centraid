@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit pre-existing debt (553 lines before issue #352 touched it for enrich-policy mirroring); splitting is a separate cleanup, not bundled into this feature change
 // Host-integration helpers (§12): what an embedding process — the Centraid
 // gateway — needs to run a vault across restarts without keeping credential
 // state of its own. Identity is v0 key-equality, so the host (which owns the
@@ -11,6 +12,7 @@ import {
   type BootstrapResult,
   type BootstrapVaultOptions,
 } from './bootstrap.js';
+import { nowIso } from './ids.js';
 import type { Risk } from './gateway/types.js';
 
 export interface HostBootstrap extends BootstrapResult {
@@ -211,7 +213,20 @@ export function updateEnrichSettings(
   }
   settings.enrich = current;
   db.vault.prepare('UPDATE core_vault SET settings_json = ?').run(JSON.stringify(settings));
-  return readEnrichSettings(db);
+  const resolved = readEnrichSettings(db);
+  // Mirror into `enrich_policy` (issue #352 phase 3/4): the JSON settings bag
+  // stays owner-only, but apps read this one column of it through the normal
+  // consent-checked table read — see schema/enrich.ts's header.
+  const now = nowIso();
+  for (const domain of ['photos', 'docs'] as const) {
+    db.vault
+      .prepare(
+        `INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT (domain) DO UPDATE SET tier = excluded.tier, updated_at = excluded.updated_at`,
+      )
+      .run(domain, resolved[domain], now);
+  }
+  return resolved;
 }
 
 export interface EnrolledApp {

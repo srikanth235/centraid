@@ -16,16 +16,27 @@
  * the standard soft-delete pair — the shelf empties even when the bytes
  * stay rented elsewhere).
  *
+ * Issue #352 phase 3/4 additions, each a bounded join over the SAME
+ * windowed rows (see queries/_shared.js): every asset row now also carries
+ * `place` (the linked core.place, or null), `tags` (free-form labels, an
+ * array of strings) and `custody_state` (the blob custody projection).
+ * `places` rides as a top-level array too (like `albums`) — the full known
+ * place list, which the lightbox's place picker offers (there is no
+ * app-plane command to mint a brand-new place, only to point an asset at
+ * an existing one or clear it).
+ *
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
  * @type {import('@centraid/app-engine').QueryHandler}
  */
+import { readAssetJoins, readPlaces, srcOf } from './_shared.js';
+
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   const window = Math.min(Math.max(Number(input?.limit) || 500, 20), 2000);
   try {
-    const [liveAssets, trashedAssets, albums] = await Promise.all([
+    const [liveAssets, trashedAssets, albums, places] = await Promise.all([
       // The live window, newest capture first. SQLite ORDER BY … DESC puts
       // NULLs last, so camera-dated photos lead and undated imports trail
       // the window — acceptable semantics for a recency slice.
@@ -48,6 +59,7 @@ export default async ({ input, ctx }) => {
       }),
       // Albums are collections (issue #274) — the one curation mechanism.
       ctx.vault.read({ entity: 'core.collection', purpose }),
+      readPlaces({ ctx, purpose }),
     ]);
 
     // Joins are `in`-bounded by the windows — THIS is the point of the
@@ -56,7 +68,7 @@ export default async ({ input, ctx }) => {
     const windowed = [...(liveAssets.rows ?? []), ...(trashedAssets.rows ?? [])];
     const assetIds = windowed.map((a) => a.asset_id);
     const contentIds = [...new Set(windowed.map((a) => a.content_id))].filter(Boolean);
-    const [entries, contents] = await Promise.all([
+    const [entries, contents, joins] = await Promise.all([
       assetIds.length > 0
         ? ctx.vault.read({
             entity: 'core.collection_entry',
@@ -74,38 +86,12 @@ export default async ({ input, ctx }) => {
             purpose,
           })
         : { rows: [] },
+      readAssetJoins({ ctx, purpose, assetIds, contentIds }),
     ]);
 
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+    const { starredIds, tagsByAsset, custodyByContent } = joins;
 
-    // Favorite is a flags-scheme starred tag on the canonical content item
-    // (issue #274) — one bounded read over the windowed content ids, the
-    // same star the drive's Starred section reads.
-    const [flagSchemes, flagConcepts] = await Promise.all([
-      ctx.vault.read({ entity: 'core.concept_scheme', purpose }),
-      ctx.vault.read({ entity: 'core.concept', purpose }),
-    ]);
-    const flagsScheme = (flagSchemes.rows ?? []).find(
-      (sch) => sch.uri === 'https://centraid.dev/schemes/flags',
-    );
-    const starredConcept = flagsScheme
-      ? (flagConcepts.rows ?? []).find(
-          (c) => c.scheme_id === flagsScheme.scheme_id && c.notation === 'starred',
-        )
-      : undefined;
-    const starredIds = new Set();
-    if (starredConcept && contentIds.length > 0) {
-      const starTags = await ctx.vault.read({
-        entity: 'core.tag',
-        where: [
-          { column: 'concept_id', op: 'eq', value: starredConcept.concept_id },
-          { column: 'target_type', op: 'eq', value: 'core.content_item' },
-          { column: 'target_id', op: 'in', value: contentIds },
-        ],
-        purpose,
-      });
-      for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
-    }
     // Keep the app's album row shape over collection rows: a collection may
     // also hold notes and documents; this surface renders its photo side.
     const albumRows = (albums.rows ?? []).map((c) => ({
@@ -120,16 +106,9 @@ export default async ({ input, ctx }) => {
       albumIdsByAsset.get(entry.target_id).push(entry.collection_id);
     }
 
-    // Blob-backed bytes (issue #296) leave the row as `blob:` addresses —
-    // the client gets same-origin serve URLs instead (Range, immutable
-    // caching, server thumb variants); inline data: URIs pass through.
-    const BLOB_ROUTE = '/centraid/_vault/blobs';
-    const srcOf = (content) => {
-      const uri = content?.content_uri;
-      if (typeof uri !== 'string') return { src: null, thumb: null };
-      if (!uri.startsWith('blob:')) return { src: uri, thumb: null };
-      const src = `${BLOB_ROUTE}/${content.content_id}`;
-      return { src, thumb: `${src}?variant=thumb` };
+    const placeOf = (asset) => {
+      const place = asset.place_id ? places.byId.get(asset.place_id) : undefined;
+      return place ? { place_id: place.place_id, name: place.name } : null;
     };
 
     const join = (asset) => {
@@ -149,6 +128,9 @@ export default async ({ input, ctx }) => {
         taken_at: asset.captured_at ?? content?.created_at ?? null,
         album_ids: albumIds,
         album_titles: albumIds.map((id) => albumsById.get(id)?.title).filter((t) => t != null),
+        place: placeOf(asset),
+        tags: tagsByAsset.get(asset.asset_id) ?? [],
+        custody_state: custodyByContent.get(asset.content_id) ?? null,
       };
     };
 
@@ -182,6 +164,7 @@ export default async ({ input, ctx }) => {
     return {
       assets: live,
       albums: albumRows,
+      places: places.rows,
       trash,
       truncated,
       window,
@@ -190,6 +173,7 @@ export default async ({ input, ctx }) => {
     return {
       assets: [],
       albums: [],
+      places: [],
       trash: [],
       vaultDenied: { code: err.code, message: err.message },
     };

@@ -41,6 +41,14 @@
   function blobUri(id) {
     return BLOB_ROUTE + '/' + encodeURIComponent(id);
   }
+  // A real fetchable data: URI for a text version's bytes — unlike blobUri()
+  // above (whose GET route always returns a placeholder SVG, real bytes
+  // never persisted), so the docs app's in-place editor can genuinely
+  // `fetch(...).then(r => r.text())` its way to a version's actual content
+  // under the mock, not just an image.
+  function textDataUri(mediaType, text) {
+    return 'data:' + mediaType + ';charset=utf-8,' + encodeURIComponent(text);
+  }
   // Local YYYY-MM-DD day key (not a full ISO timestamp) — the shape tasks'
   // queries/board.js and app.jsx's format.js (localDayKey) both use for
   // due_at/completed_at.
@@ -84,10 +92,16 @@
   }
 
   // ---------------------------------------------------------------------
-  // Docs fixtures — see packages/blueprints/apps/docs/queries/drive.js for
-  // the row shape (content_id/title/media_type/byte_size/content_uri/
-  // created_at/folder_id/starred/trashed/purge_at) and app.json for the
-  // folders-scheme model (folder_id/name/parent_id, root implied by null).
+  // Docs fixtures — a document is a core.document WRAPPER around a content
+  // item (issue #352), so every fixture row carries both a document_id
+  // (identity — selection/details/quick-look key off this) and a content_id
+  // (the CURRENT version's bytes — blob/preview URLs key off this instead).
+  // Each fixture doc also keeps a private `__versions` array (newest
+  // first, `current: true` on entry 0) that queries/history.js's own
+  // walk-and-honestly-order-by-assertion-time shape mirrors — see
+  // packages/blueprints/apps/docs/queries/{drive,search,history}.js for the
+  // real row shapes and app.json for the folders-scheme model
+  // (folder_id/name/parent_id, root implied by null).
   // ---------------------------------------------------------------------
   function buildDocsStore() {
     if (EMPTY_MODE) return { folders: [], documents: [] };
@@ -101,20 +115,75 @@
     ];
 
     function doc(id, title, mediaType, folderId, days, bytes, extra) {
+      var contentId = id + '-c1';
+      var createdAt = isoDaysAgo(days);
       var base = {
-        content_id: id,
+        document_id: id,
+        content_id: contentId,
         title: title,
         media_type: mediaType,
         byte_size: bytes,
-        content_uri: blobUri(id),
-        created_at: isoDaysAgo(days),
+        content_uri: blobUri(contentId),
+        created_at: createdAt,
+        updated_at: createdAt,
         folder_id: folderId,
         starred: false,
         trashed: false,
         purge_at: null,
       };
-      return Object.assign(base, extra || {});
+      var merged = Object.assign(base, extra || {});
+      merged.__versions = [
+        {
+          content_id: merged.content_id,
+          media_type: merged.media_type,
+          byte_size: merged.byte_size,
+          content_uri: merged.content_uri,
+          asserted_at: merged.created_at,
+          current: true,
+        },
+      ];
+      return merged;
     }
+
+    // A text-editable document with real edit history — the one fixture the
+    // Edit affordance and the version-history panel both have something
+    // honest to show against (three real bodies, oldest to newest, each a
+    // fetchable data: URI so the editor's own `fetch(...).then(r=>r.text())`
+    // load actually works under the mock, not just the placeholder SVG the
+    // blob route serves for every other media type).
+    var packingBodies = [
+      ['doc-16-c1', 'Packing list\n- Passport\n- Chargers\n', 20],
+      ['doc-16-c2', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n', 8],
+      ['doc-16-c3', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n- Adapter\n', 1],
+    ];
+    var packingVersions = packingBodies
+      .map(function (row) {
+        var text = row[1];
+        return {
+          content_id: row[0],
+          media_type: 'text/plain',
+          byte_size: text.length,
+          content_uri: textDataUri('text/plain', text),
+          asserted_at: isoDaysAgo(row[2]),
+        };
+      })
+      .reverse(); // newest first, matching queries/history.js's own order
+    packingVersions[0].current = true;
+    var packingDoc = {
+      document_id: 'doc-16',
+      content_id: packingVersions[0].content_id,
+      title: 'Packing list.txt',
+      media_type: 'text/plain',
+      byte_size: packingVersions[0].byte_size,
+      content_uri: packingVersions[0].content_uri,
+      created_at: isoDaysAgo(20),
+      updated_at: isoDaysAgo(1),
+      folder_id: null,
+      starred: false,
+      trashed: false,
+      purge_at: null,
+      __versions: packingVersions,
+    };
 
     var documents = [
       doc('doc-1', 'Lease Agreement 2024.pdf', 'application/pdf', 'folder-leases', 20, 2_458_000, {
@@ -156,7 +225,35 @@
       }),
       doc('doc-14', 'backup.zip', 'application/zip', null, 2, 12_400_000),
       doc('doc-15', 'notes.bin', 'application/octet-stream', 'folder-taxes', 1, 4_000),
+      packingDoc,
     ];
+
+    // Free-form labels + the blob custody projection (issue #352 phase 4) —
+    // see packages/blueprints/apps/docs/queries/{drive,search}.js for the
+    // real per-document shape. Custody cycles through all four states (the
+    // same trick the photos fixture uses) so every badge tone renders
+    // somewhere; a handful of docs also carry hand-picked labels so the
+    // toolbar's tag-filter chips have something real to show.
+    // core.tag_item's edges carry a tag_id (untag.js removes by tag_id, not
+    // label) — each fixture label gets a stable synthetic id.
+    function docLabelTags(documentId, labels) {
+      return labels.map(function (label) {
+        return { tag_id: 'tag-' + documentId + '-' + label, label: label };
+      });
+    }
+    var tagsByDoc = {
+      'doc-1': docLabelTags('doc-1', ['lease', '2024']),
+      'doc-3': docLabelTags('doc-3', ['taxes']),
+      'doc-4': docLabelTags('doc-4', ['taxes', 'receipts']),
+      'doc-6': docLabelTags('doc-6', ['taxes']),
+      'doc-9': docLabelTags('doc-9', ['travel']),
+      'doc-16': docLabelTags('doc-16', ['travel']),
+    };
+    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    documents.forEach(function (d, i) {
+      d.tags = tagsByDoc[d.document_id] || [];
+      d.custody_state = custodyStates[i % custodyStates.length];
+    });
 
     return { folders: folders, documents: documents };
   }
@@ -187,6 +284,69 @@
         });
       return { documents: docs };
     }
+    if (query === 'history') {
+      var hd = docsStore.documents.find(function (d) {
+        return d.document_id === input.document_id;
+      });
+      if (!hd) return { versions: [] };
+      var versions = (hd.__versions || []).map(function (v, i) {
+        return {
+          content_id: v.content_id,
+          media_type: v.media_type,
+          byte_size: v.byte_size,
+          content_uri: v.content_uri,
+          current: i === 0,
+          asserted_at: v.asserted_at,
+        };
+      });
+      return { versions: versions };
+    }
+    if (query === 'activity') {
+      // Synthesizes what queries/activity.js's real consent.provenance read
+      // would return — see that file's own header for the exact row shape
+      // (`activity`/`agent_kind`/`occurred_at`). Not stored on the fixture
+      // doc itself (unlike tags/__versions): derived fresh from whatever the
+      // doc looks like right now, newest first, so a mock write (star, edit,
+      // tag…) that ran during this session shows up here too.
+      var ad = docsStore.documents.find(function (d) {
+        return d.document_id === input.document_id;
+      });
+      if (!ad) return { events: [] };
+      var events = [{ activity: 'command.core.add_document', agent_kind: 'owner', occurred_at: ad.created_at }];
+      if (ad.folder_id) {
+        events.push({
+          activity: 'command.core.move_document',
+          agent_kind: 'app',
+          occurred_at: ad.created_at,
+        });
+      }
+      if (ad.starred) {
+        events.push({
+          activity: 'command.core.star_document',
+          agent_kind: 'ai_agent',
+          occurred_at: ad.updated_at,
+        });
+      }
+      // One edit/replace event per version beyond the original upload (every
+      // __versions entry except the LAST — newest-first, the last is the
+      // original add_document upload, already covered above), dated by that
+      // version's own asserted_at (mirroring the real vault's revises-link
+      // ordering, queries/history.js's header comment).
+      var editedVersions = (ad.__versions || []).slice(0, -1);
+      editedVersions.forEach(function (v) {
+        events.push({
+          activity: /^text\//i.test(ad.media_type || '')
+            ? 'command.core.edit_document'
+            : 'command.core.replace_document_content',
+          agent_kind: 'owner',
+          occurred_at: v.asserted_at,
+        });
+      });
+      events.sort(function (a, b) {
+        return String(b.occurred_at || '').localeCompare(String(a.occurred_at || ''));
+      });
+      return { events: events };
+    }
     console.warn('[mock-centraid] docs: unmapped query', query);
     return {};
   }
@@ -196,7 +356,7 @@
     var folders = docsStore.folders;
     function findDoc(id) {
       return docs.find(function (d) {
-        return d.content_id === id;
+        return d.document_id === id;
       });
     }
     function findFolder(id) {
@@ -209,6 +369,22 @@
     }
     function refuse(predicate) {
       return { status: 'failed', predicate: predicate, reason: predicate };
+    }
+    // A new version, unshifted onto __versions (newest first) — the shared
+    // tail of edit/replace/restore-version below, mirroring how the real
+    // vault always repoints current_content_id AND records a fresh
+    // `revises` link, never mutating an existing one.
+    function pushVersion(d, version) {
+      (d.__versions || []).forEach(function (v) {
+        v.current = false;
+      });
+      version.current = true;
+      d.__versions = [version].concat(d.__versions || []);
+      d.content_id = version.content_id;
+      d.content_uri = version.content_uri;
+      d.media_type = version.media_type;
+      d.byte_size = version.byte_size;
+      d.updated_at = version.asserted_at;
     }
 
     switch (action) {
@@ -229,61 +405,154 @@
           pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         };
         var mediaType = mediaByExt[ext] || 'application/octet-stream';
+        var contentId = id + '-c1';
+        var nowIso = new Date().toISOString();
         var newDoc = {
-          content_id: id,
+          document_id: id,
+          content_id: contentId,
           title: title,
           media_type: mediaType,
           byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
-          content_uri: blobUri(id),
-          created_at: new Date().toISOString(),
+          content_uri: blobUri(contentId),
+          created_at: nowIso,
+          updated_at: nowIso,
           folder_id: input.folder_id != null ? String(input.folder_id) : null,
           starred: false,
           trashed: false,
           purge_at: null,
+          tags: [],
+          custody_state: 'local-only',
         };
+        newDoc.__versions = [
+          {
+            content_id: contentId,
+            media_type: mediaType,
+            byte_size: newDoc.byte_size,
+            content_uri: newDoc.content_uri,
+            asserted_at: nowIso,
+            current: true,
+          },
+        ];
         docs.unshift(newDoc);
-        return ok({ content_id: id, deduped: false });
+        return ok({ document_id: id, content_id: contentId, deduped: false });
       }
       case 'rename': {
-        var d1 = findDoc(input.content_id);
+        var d1 = findDoc(input.document_id);
         if (!d1) return refuse('not_found');
         if (d1.trashed) return refuse('document_trashed');
         d1.title = String(input.title);
-        return ok({ content_id: d1.content_id });
+        return ok({ document_id: d1.document_id });
       }
       case 'move': {
-        var d2 = findDoc(input.content_id);
+        var d2 = findDoc(input.document_id);
         if (!d2) return refuse('not_found');
         d2.folder_id = input.folder_id != null ? String(input.folder_id) : null;
-        return ok({ content_id: d2.content_id });
+        return ok({ document_id: d2.document_id });
       }
       case 'trash': {
-        var d3 = findDoc(input.content_id);
+        var d3 = findDoc(input.document_id);
         if (!d3) return refuse('not_found');
         d3.trashed = true;
         d3.purge_at = isoDaysFromNow(30);
-        return ok({ content_id: d3.content_id });
+        return ok({ document_id: d3.document_id, purge_at: d3.purge_at });
       }
       case 'restore': {
-        var d4 = findDoc(input.content_id);
+        var d4 = findDoc(input.document_id);
         if (!d4) return refuse('not_found');
         d4.trashed = false;
         d4.purge_at = null;
-        return ok({ content_id: d4.content_id });
+        return ok({ document_id: d4.document_id });
       }
       case 'star': {
-        var d5 = findDoc(input.content_id);
+        var d5 = findDoc(input.document_id);
         if (!d5) return refuse('not_found');
         if (d5.trashed) return refuse('document_trashed');
         d5.starred = true;
-        return ok({ content_id: d5.content_id });
+        return ok({ document_id: d5.document_id });
       }
       case 'unstar': {
-        var d6 = findDoc(input.content_id);
+        var d6 = findDoc(input.document_id);
         if (!d6) return refuse('not_found');
         if (d6.trashed) return refuse('document_trashed');
         d6.starred = false;
-        return ok({ content_id: d6.content_id });
+        return ok({ document_id: d6.document_id });
+      }
+      case 'edit': {
+        var d7 = findDoc(input.document_id);
+        if (!d7) return refuse('not_found');
+        if (d7.trashed) return refuse('document_trashed');
+        if (!/^text\//i.test(d7.media_type || '')) return refuse('current_content_is_text');
+        var bodyText = String(input.body_text || '');
+        var newContentId7 = d7.document_id + '-c' + ((d7.__versions || []).length + 1);
+        pushVersion(d7, {
+          content_id: newContentId7,
+          media_type: d7.media_type,
+          byte_size: bodyText.length,
+          content_uri: textDataUri(d7.media_type, bodyText),
+          asserted_at: new Date().toISOString(),
+        });
+        if (input.title != null) d7.title = String(input.title);
+        return ok({ document_id: d7.document_id, content_id: newContentId7 });
+      }
+      case 'replace': {
+        var d8 = findDoc(input.document_id);
+        if (!d8) return refuse('not_found');
+        if (d8.trashed) return refuse('document_trashed');
+        var newContentId8 = d8.document_id + '-c' + ((d8.__versions || []).length + 1);
+        pushVersion(d8, {
+          content_id: newContentId8,
+          media_type: d8.media_type,
+          byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
+          content_uri: blobUri(newContentId8),
+          asserted_at: new Date().toISOString(),
+        });
+        if (input.title != null) d8.title = String(input.title);
+        return ok({ document_id: d8.document_id, content_id: newContentId8 });
+      }
+      case 'restore-version': {
+        var d9 = findDoc(input.document_id);
+        if (!d9) return refuse('not_found');
+        var versions9 = d9.__versions || [];
+        var idx9 = versions9.findIndex(function (v) {
+          return v.content_id === input.content_id;
+        });
+        if (idx9 === -1) return refuse('target_in_chain');
+        if (idx9 === 0) return refuse('not_already_current');
+        var restored9 = versions9.splice(idx9, 1)[0];
+        pushVersion(d9, {
+          content_id: restored9.content_id,
+          media_type: restored9.media_type,
+          byte_size: restored9.byte_size,
+          content_uri: restored9.content_uri,
+          asserted_at: new Date().toISOString(),
+        });
+        return ok({ document_id: d9.document_id, content_id: restored9.content_id });
+      }
+      case 'tag': {
+        var dTag = findDoc(input.document_id);
+        if (!dTag) return refuse('not_found');
+        var label = String(input.label || '').trim().toLowerCase();
+        if (!label) return refuse('label_not_blank');
+        if (!dTag.tags) dTag.tags = [];
+        var existingTag = dTag.tags.find(function (t) {
+          return t.label === label;
+        });
+        if (!existingTag) dTag.tags.push({ tag_id: uid('tag'), label: label });
+        return ok({ document_id: dTag.document_id });
+      }
+      case 'untag': {
+        // core.untag_item removes by tag_id alone (no document_id sent) —
+        // find whichever document currently owns this edge.
+        var dUntag = docs.find(function (d) {
+          return (d.tags || []).some(function (t) {
+            return t.tag_id === input.tag_id;
+          });
+        });
+        if (!dUntag) return refuse('not_found');
+        dUntag.tags = dUntag.tags.filter(function (t) {
+          return t.tag_id !== input.tag_id;
+        });
+        return ok({ tag_id: input.tag_id });
       }
       case 'create-folder': {
         var parentId = input.parent_folder_id != null ? String(input.parent_folder_id) : null;
@@ -334,7 +603,18 @@
   // queries/faces.js for the face-region shape.
   // ---------------------------------------------------------------------
   function buildPhotosStore() {
-    if (EMPTY_MODE) return { assets: [], trash: [], albums: [], faceRegions: [], people: [] };
+    if (EMPTY_MODE) {
+      return {
+        assets: [],
+        trash: [],
+        albums: [],
+        faceRegions: [],
+        people: [],
+        places: [],
+        phash: [],
+        enrichmentTier: 'local',
+      };
+    }
 
     var people = [
       { party_id: 'party-mia', name: 'Mia' },
@@ -345,23 +625,80 @@
     var albums = [
       { album_id: 'album-trip', title: 'Summer Trip', cover_content_id: null },
       { album_id: 'album-family', title: 'Family', cover_content_id: null },
+      { album_id: 'album-studio', title: 'Studio work', cover_content_id: null },
     ];
-    var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17'];
-    var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12'];
+    var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17', 'asset-23', 'asset-31'];
+    var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12', 'asset-28', 'asset-40'];
+    var studioMembers = ['asset-45', 'asset-48', 'asset-52', 'asset-55'];
+
+    // Issue #352 phase 3/4 fixtures — geolocation, free-form tags, custody.
+    var places = [
+      { place_id: 'place-cafe', name: 'Blue Bottle Cafe' },
+      { place_id: 'place-park', name: 'Golden Gate Park' },
+      { place_id: 'place-coast', name: 'Half Moon Bay' },
+    ];
+    var placeByAsset = {
+      'asset-2': places[0],
+      'asset-5': places[1],
+      'asset-9': places[0],
+      'asset-23': places[2],
+      'asset-31': places[2],
+    };
+    // core.tag_item's edges carry a tag_id (untag-asset.js removes by
+    // tag_id, not label) — each fixture label gets a stable synthetic id.
+    function labelTags(assetId, labels) {
+      return labels.map(function (label) {
+        return { tag_id: 'tag-' + assetId + '-' + label, label: label };
+      });
+    }
+    var tagsByAsset = {
+      'asset-2': labelTags('asset-2', ['beach', 'family']),
+      'asset-5': labelTags('asset-5', ['hike']),
+      'asset-8': labelTags('asset-8', ['family']),
+      'asset-11': labelTags('asset-11', ['beach']),
+      'asset-14': labelTags('asset-14', ['sunset']),
+      'asset-23': labelTags('asset-23', ['coast', 'beach']),
+      'asset-45': labelTags('asset-45', ['work']),
+    };
+    // Cycles through all four custody states so every badge tone renders
+    // somewhere in the fixture.
+    var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    // A spread of real-ish aspect ratios (landscape 4:3, portrait 3:4,
+    // square, wide 16:9, ultra-wide panorama) so the justified timeline has
+    // genuinely varying row shapes to pack, not a rigid square grid —
+    // cycled per asset, independent of month/album/kind.
+    var aspects = [
+      { width: 1600, height: 1200 }, // 4:3 landscape
+      { width: 1200, height: 1600 }, // 3:4 portrait
+      { width: 1400, height: 1400 }, // square
+      { width: 1920, height: 1080 }, // 16:9 wide
+      { width: 2400, height: 1000 }, // panorama
+      { width: 1000, height: 1500 }, // tall portrait
+    ];
 
     var assets = [];
-    for (var i = 1; i <= 22; i += 1) {
-      var monthsBack = i % 3; // 3 distinct months
+    var ASSET_COUNT = 58;
+    for (var i = 1; i <= ASSET_COUNT; i += 1) {
+      var monthsBack = i % 6; // 6 distinct months
       var day = ((i * 3) % 27) + 1;
       var d = new Date();
       d.setMonth(d.getMonth() - monthsBack);
       d.setDate(day);
       d.setHours(9 + (i % 10), (i * 7) % 60, 0, 0);
-      var isVideo = i % 9 === 0;
+      var isVideo = i % 11 === 0;
       var id = 'asset-' + i;
       var albumIds = [];
       if (tripMembers.indexOf(id) !== -1) albumIds.push('album-trip');
       if (familyMembers.indexOf(id) !== -1) albumIds.push('album-family');
+      if (studioMembers.indexOf(id) !== -1) albumIds.push('album-studio');
+      // A multiplicative hash (not a plain `% aspects.length`) decorrelates
+      // the aspect pick from the day-bucket arithmetic above — day/month
+      // both derive from `i` via small-modulus formulas, so any linear
+      // function of `i` stays periodic with them and every asset on the
+      // same day ends up with the same aspect, defeating the point of a
+      // justified (not rigid-grid) timeline.
+      var aspectIdx = ((i * 2654435761) >>> 0) % aspects.length;
+      var dims = isVideo ? { width: 1920, height: 1080 } : aspects[aspectIdx];
       assets.push({
         asset_id: id,
         content_id: 'content-' + id,
@@ -371,8 +708,8 @@
         content_uri: blobUri('content-' + id),
         thumb_uri: blobUri('content-' + id) + '?variant=thumb',
         byte_size: isVideo ? 24_000_000 : 2_400_000 + i * 10_000,
-        width: isVideo ? 1920 : 1600,
-        height: isVideo ? 1080 : 1200,
+        width: dims.width,
+        height: dims.height,
         duration_s: isVideo ? 42 : null,
         captured_at: d.toISOString(),
         taken_at: d.toISOString(),
@@ -385,14 +722,18 @@
         }),
         deleted_at: null,
         purge_at: null,
+        place: placeByAsset[id] || null,
+        tags: tagsByAsset[id] || [],
+        custody_state: custodyStates[i % custodyStates.length],
       });
     }
 
-    // Two trashed assets (ids 23/24), split out of the live window like the
+    // Two trashed assets (ids beyond the live range above so they never
+    // collide with a live asset_id), split out of the live window like the
     // real `library` query's separate `trash` array.
-    var trash = [23, 24].map(function (n) {
+    var trash = [ASSET_COUNT + 1, ASSET_COUNT + 2].map(function (n) {
       var id = 'asset-' + n;
-      var purgeInDays = n === 23 ? 20 : 25;
+      var purgeInDays = n === ASSET_COUNT + 1 ? 20 : 25;
       var d = new Date();
       d.setDate(d.getDate() - (30 - purgeInDays));
       return {
@@ -459,7 +800,29 @@
       },
     ];
 
-    return { assets: assets, trash: trash, albums: albums, faceRegions: faceRegions, people: people };
+    // Phash near-duplicate clusters (issue #352 phase 3/4): a 2-way and a
+    // 3-way cluster among the live assets, mirroring
+    // media_asset_phash.cluster_id's shape (asset_id -> cluster_id, the
+    // group's lowest asset_id by convention — not load-bearing for the
+    // mock, just documentary).
+    var phash = [
+      { asset_id: 'asset-3', cluster_id: 'asset-3' },
+      { asset_id: 'asset-7', cluster_id: 'asset-3' },
+      { asset_id: 'asset-10', cluster_id: 'asset-10' },
+      { asset_id: 'asset-15', cluster_id: 'asset-10' },
+      { asset_id: 'asset-19', cluster_id: 'asset-10' },
+    ];
+
+    return {
+      assets: assets,
+      trash: trash,
+      albums: albums,
+      faceRegions: faceRegions,
+      people: people,
+      places: places,
+      phash: phash,
+      enrichmentTier: 'local',
+    };
   }
 
   var photosStore = appId === 'photos' ? buildPhotosStore() : null;
@@ -476,10 +839,46 @@
       return {
         assets: live.slice(0, limit),
         albums: photosStore.albums,
+        places: photosStore.places,
         trash: trash,
         truncated: live.length > limit,
         window: limit,
       };
+    }
+    if (query === 'search') {
+      var term2 = String(input.term || '')
+        .trim()
+        .toLowerCase();
+      if (!term2) return { assets: [] };
+      var matches = photosStore.assets.filter(function (a) {
+        return String(a.title || '').toLowerCase().indexOf(term2) !== -1;
+      });
+      return { assets: matches };
+    }
+    if (query === 'duplicates') {
+      var byCluster = {};
+      photosStore.phash.forEach(function (p) {
+        var asset = photosStore.assets.find(function (a) {
+          return a.asset_id === p.asset_id;
+        });
+        if (!asset) return; // trashed/missing members drop out, same as the real query
+        if (!byCluster[p.cluster_id]) byCluster[p.cluster_id] = [];
+        byCluster[p.cluster_id].push(asset);
+      });
+      var clusters = Object.keys(byCluster)
+        .map(function (key) {
+          return { key: key, tier: 'phash', assets: byCluster[key] };
+        })
+        .filter(function (c) {
+          return c.assets.length >= 2;
+        });
+      clusters.sort(function (a, b) {
+        return b.assets.length - a.assets.length;
+      });
+      return { clusters: clusters };
+    }
+    if (query === 'enrichment-status') {
+      return { tier: photosStore.enrichmentTier };
     }
     if (query === 'faces') {
       var assetId = String(input.asset_id || '');
@@ -677,6 +1076,50 @@
         });
         if (photosStore.faceRegions.length === before) return refuse('not_found');
         return ok({});
+      }
+      case 'set-place': {
+        var a4 = findAsset(input.asset_id);
+        if (!a4) return refuse('not_found');
+        if (input.place_id) {
+          var place = photosStore.places.find(function (p) {
+            return p.place_id === input.place_id;
+          });
+          if (!place) return refuse('place_not_found');
+          a4.place = place;
+        } else {
+          a4.place = null;
+        }
+        return ok({ asset_id: a4.asset_id, place_id: a4.place ? a4.place.place_id : null });
+      }
+      case 'tag-asset': {
+        var a5 = findAsset(input.asset_id);
+        if (!a5) return refuse('not_found');
+        var label = String(input.label || '').trim().toLowerCase();
+        if (!label) return refuse('label_not_blank');
+        if (!a5.tags) a5.tags = [];
+        var existingAssetTag = a5.tags.find(function (t) {
+          return t.label === label;
+        });
+        if (!existingAssetTag) a5.tags.push({ tag_id: uid('tag'), label: label });
+        return ok({ asset_id: a5.asset_id });
+      }
+      case 'untag-asset': {
+        // core.untag_item removes by tag_id alone (no asset_id sent) — find
+        // whichever asset currently owns this edge.
+        var a6 = assets.find(function (a) {
+          return (a.tags || []).some(function (t) {
+            return t.tag_id === input.tag_id;
+          });
+        });
+        if (!a6) return refuse('not_found');
+        a6.tags = a6.tags.filter(function (t) {
+          return t.tag_id !== input.tag_id;
+        });
+        return ok({ tag_id: input.tag_id });
+      }
+      case 'request-enrichment': {
+        if (photosStore.enrichmentTier === 'off') return refuse('enrichment_off');
+        return ok({ request_id: uid('req') });
       }
       default:
         return null; // unmapped — caller logs + returns {}

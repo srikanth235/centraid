@@ -11,7 +11,7 @@ export default async ({ body, ctx }) => {
     const outcome = await ctx.vault.invoke({
       command: 'core.move_document',
       input: {
-        content_id: String(input.content_id ?? ''),
+        document_id: String(input.document_id ?? ''),
         ...(input.folder_id != null ? { folder_id: String(input.folder_id) } : {}),
       },
       purpose: 'dpv:ServiceProvision',

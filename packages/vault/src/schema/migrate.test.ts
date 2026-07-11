@@ -1,7 +1,11 @@
 import { expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
-import { VAULT_MIGRATIONS } from './migrate.js';
+import { ONTOLOGY_VERSION, VAULT_MIGRATIONS } from './migrate.js';
 import { listVaultEntities, resolveEntity } from './tables.js';
+
+test('ontology contract version stamps 1.3 (issue #352: core_document + revises lineage)', () => {
+  expect(ONTOLOGY_VERSION).toBe('1.3');
+});
 
 test('migrations create every table in the registry, in both files', () => {
   const db = openVaultDb();

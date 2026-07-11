@@ -396,12 +396,16 @@ describe('the enrichment staging path', () => {
     expect(entries.n).toBe(1); // deduped photo = one distinct asset
   });
 
-  test('filing proposals update title + folder tag and never mint documents', () => {
+  test('filing a WRAPPED content item retargets title + folder tag onto its core_document', () => {
+    // issue #352: core_document wraps content items, so a filing proposal
+    // against a content id that's already a document's current head must
+    // land on the document, not the (no-longer-read) content item — else
+    // the tag is silently invisible to every document-scoped read path.
     const staged = gw.stageBlob(owner, {
       bytes: Buffer.from('scan scan scan'),
       filename: 'scan_001.txt',
     });
-    const doc = output<{ content_id: string }>(
+    const doc = output<{ document_id: string; content_id: string }>(
       invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan_001' }),
     );
     const stagedBatch = invoke(owner, 'sync.stage_rows', {
@@ -429,26 +433,77 @@ describe('the enrichment staging path', () => {
       invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
     );
     expect(published.updated).toBe(1);
-    expect(published.failed).toBe(1); // the missing doc refused to create
+    expect(published.failed).toBe(1); // the missing content item refused to create
+    // never mints a document: the wrapper row count doesn't grow
+    const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      n: number;
+    };
+    expect(docCount.n).toBe(1);
+    const contentTitleUnchanged = db.vault
+      .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
+      .get(doc.content_id) as { title: string | null };
+    expect(contentTitleUnchanged.title).toBe('scan_001'); // untouched — the content item isn't the document's identity
+    const document = db.vault
+      .prepare('SELECT title FROM core_document WHERE document_id = ?')
+      .get(doc.document_id) as { title: string };
+    expect(document.title).toBe('Home insurance policy 2026');
+    const folder = db.vault
+      .prepare(
+        `SELECT c.pref_label FROM core_tag t
+           JOIN core_concept c ON c.concept_id = t.concept_id
+          WHERE t.target_id = ? AND t.target_type = 'core.document'`,
+      )
+      .get(doc.document_id) as { pref_label: string };
+    expect(folder.pref_label).toBe('Insurance');
+  });
+
+  test('filing an UNWRAPPED content item still tags the content item directly', () => {
+    // A content item that no core_document wraps yet (e.g. a media asset,
+    // or ingest that hasn't gone through core.add_document) keeps the
+    // original content-item-scoped filing behavior.
+    const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'loose.png' });
+    const asset = output<{ content_id: string }>(
+      invoke(owner, 'media.add_asset', { staged_sha: staged.sha256, kind: 'photo' }),
+    );
+    const stagedBatch = invoke(owner, 'sync.stage_rows', {
+      kind: 'enrichment.doctype',
+      label: 'docs',
+      rows: [
+        {
+          entity_type: 'core.content_item',
+          external_id: `${asset.content_id}:filing`,
+          payload: { content_id: asset.content_id, title: 'Loose scan', folder: 'Inbox' },
+        },
+      ],
+    });
+    const batchId = output<{ batch_id: string }>(stagedBatch).batch_id;
+    const published = output<{ updated: number }>(
+      invoke(owner, 'sync.publish_batch', { batch_id: batchId }),
+    );
+    expect(published.updated).toBe(1);
+    const docCount = db.vault.prepare('SELECT count(*) AS n FROM core_document').get() as {
+      n: number;
+    };
+    expect(docCount.n).toBe(0); // still never mints a document
     const item = db.vault
       .prepare('SELECT title FROM core_content_item WHERE content_id = ?')
-      .get(doc.content_id) as { title: string };
-    expect(item.title).toBe('Home insurance policy 2026');
+      .get(asset.content_id) as { title: string };
+    expect(item.title).toBe('Loose scan');
     const folder = db.vault
       .prepare(
         `SELECT c.pref_label FROM core_tag t
            JOIN core_concept c ON c.concept_id = t.concept_id
           WHERE t.target_id = ? AND t.target_type = 'core.content_item'`,
       )
-      .get(doc.content_id) as { pref_label: string };
-    expect(folder.pref_label).toBe('Insurance');
+      .get(asset.content_id) as { pref_label: string };
+    expect(folder.pref_label).toBe('Inbox');
   });
 });
 
 describe('core.set_extracted_text', () => {
-  test('writes the text derivative and the PARENT document becomes searchable', () => {
+  test('writes the text derivative and the OWNING document becomes searchable', () => {
     const staged = gw.stageBlob(owner, { bytes: PNG_BYTES, filename: 'scanned.png' });
-    const doc = output<{ content_id: string }>(
+    const doc = output<{ document_id: string; content_id: string }>(
       invoke(owner, 'core.add_document', { staged_sha: staged.sha256, title: 'scan' }),
     );
     const set = invoke(agent, 'core.set_extracted_text', {
@@ -457,7 +512,7 @@ describe('core.set_extracted_text', () => {
     });
     expect(set.status).toBe('executed');
     const hits = gw.search(owner, {
-      entity: 'core.content_item',
+      entity: 'core.document',
       query: 'espresso',
       purpose: 'dpv:ServiceProvision',
     }) as { rows: unknown[] };
@@ -622,6 +677,35 @@ describe('enrich settings', () => {
     expect(() => updateEnrichSettings(db, { docs: 'sometimes' as never })).toThrow(
       /must be one of/,
     );
+  });
+
+  // issue #352 phase 3/4: the settings bag itself is owner-only (GET/PATCH
+  // /centraid/_vault/enrich); `enrich_policy` mirrors the one column of it —
+  // "is this domain's model-tier enrichment on" — apps can actually reach
+  // through the normal consent-checked read path.
+  test('enrich_policy mirrors the settings bag, seeded local at bootstrap and readable via gw.read', () => {
+    const seeded = db.vault
+      .prepare('SELECT domain, tier FROM enrich_policy ORDER BY domain')
+      .all() as { domain: string; tier: string }[];
+    expect(seeded).toEqual([
+      { domain: 'docs', tier: 'local' },
+      { domain: 'photos', tier: 'local' },
+    ]);
+    updateEnrichSettings(db, { photos: 'model' });
+    const afterUpdate = db.vault
+      .prepare('SELECT tier FROM enrich_policy WHERE domain = ?')
+      .get('photos') as { tier: string };
+    expect(afterUpdate.tier).toBe('model');
+
+    // The exact surface an app reaches: ctx.vault.read({ entity: 'enrich.policy', ... }).
+    const read = gw.read(owner, {
+      entity: 'enrich.policy',
+      where: [{ column: 'domain', op: 'eq', value: 'photos' }],
+      purpose: 'dpv:ServiceProvision',
+    });
+    expect(read.rows).toEqual([
+      expect.objectContaining({ domain: 'photos', tier: 'model' }),
+    ]);
   });
 });
 

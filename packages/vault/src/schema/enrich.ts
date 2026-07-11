@@ -19,6 +19,25 @@
 //   - `enrich_request` — the on-demand priority queue (issue #299 phase 5):
 //     a search that found nothing, or an owner opening an unenriched item,
 //     records what was wanted; enrichers drain this queue before the backlog.
+//     `reason` widened with `manual` (issue #352 phase 3/4): an owner-driven
+//     "detect faces now" gesture from an app is neither a search miss nor a
+//     passive on-view — it is an explicit ask.
+//   - `media_asset_phash.cluster_id` (issue #352 phase 3/4): a rebuildable
+//     near-duplicate-cluster projection over the Tier-0 phash sidecar — the
+//     standing sweep (gateway/duties.ts via enrich/clusters.ts) groups LIVE
+//     assets whose phash hamming distance is <= 6 and stamps the group's
+//     lowest asset_id as a stable cluster_id; singletons carry NULL. Derived,
+//     never authored — a rebuild from `media_asset_phash` + `vault_hamming`
+//     alone reproduces it, so it is safe to recompute wholesale every sweep.
+//   - `enrich_policy` — a queryable MIRROR of the owner's per-domain
+//     enrichment tier (`core_vault.settings_json.enrich`, host.ts
+//     readEnrichSettings/updateEnrichSettings). The settings bag itself is
+//     owner-only (GET/PATCH /centraid/_vault/enrich); apps have no reach into
+//     JSON settings fields through the consent-checked read path, so this
+//     table is the one column of it apps may read — "is photos/docs
+//     enrichment allowed to leave the vault" — kept in sync by
+//     updateEnrichSettings on every owner change, seeded at bootstrap and
+//     backfilled below for vaults that predate this table.
 //   - the `vision` and `doctype` concept schemes — machine-tag vocabularies
 //     (issue #299 §4). Concepts are created on demand by the tag publisher.
 //     Fresh vaults seed the schemes at bootstrap; the guarded inserts below
@@ -30,8 +49,28 @@ export const ENRICH_DDL = `
 CREATE TABLE IF NOT EXISTS media_asset_phash (
   asset_id TEXT PRIMARY KEY REFERENCES media_media_asset(asset_id) ON DELETE CASCADE,
   phash    TEXT NOT NULL CHECK (length(phash) BETWEEN 4 AND 64),
+  -- Near-duplicate cluster projection (issue #352 phase 3/4) — see header.
+  cluster_id  TEXT,
   computed_at TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_media_asset_phash_cluster
+  ON media_asset_phash(cluster_id) WHERE cluster_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS enrich_policy (
+  domain     TEXT PRIMARY KEY CHECK (domain IN ('photos','docs')),
+  tier       TEXT NOT NULL CHECK (tier IN ('off','local','model')),
+  updated_at TEXT NOT NULL
+) STRICT;
+-- Backfill for vaults that predate this table (bootstrap seeds fresh ones);
+-- guarded the same way as the vision/doctype schemes below.
+INSERT INTO enrich_policy (domain, tier, updated_at)
+SELECT 'photos', 'local', datetime('now')
+ WHERE NOT EXISTS (SELECT 1 FROM enrich_policy WHERE domain = 'photos')
+   AND EXISTS (SELECT 1 FROM core_vault);
+INSERT INTO enrich_policy (domain, tier, updated_at)
+SELECT 'docs', 'local', datetime('now')
+ WHERE NOT EXISTS (SELECT 1 FROM enrich_policy WHERE domain = 'docs')
+   AND EXISTS (SELECT 1 FROM core_vault);
 
 CREATE TABLE IF NOT EXISTS enrich_embedding (
   embedding_id TEXT PRIMARY KEY,
@@ -50,7 +89,7 @@ CREATE TABLE IF NOT EXISTS enrich_request (
   request_id   TEXT PRIMARY KEY,
   entity_type  TEXT NOT NULL,
   entity_id    TEXT,
-  reason       TEXT NOT NULL CHECK (reason IN ('search-miss','on-view')),
+  reason       TEXT NOT NULL CHECK (reason IN ('search-miss','on-view','manual')),
   detail       TEXT,
   requested_at TEXT NOT NULL,
   drained_at   TEXT

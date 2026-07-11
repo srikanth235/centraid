@@ -30,11 +30,11 @@ import { SEED_DDL } from './seed.js';
 import { SYNC_CREDENTIAL_DDL, SYNC_DDL } from './sync.js';
 
 /**
- * Ontology contract version stamped on rows (rule R07). Bumped to 1.2 with
- * issue #310: the tally→finance bridge, outbox graph refs + publish-back,
- * locker anchoring, groups-as-circles, and the single-rung ladder.
+ * Ontology contract version stamped on rows (rule R07). Bumped to 1.3 with
+ * issue #352: core_document gives documents identity separate from their
+ * bytes, with `revises` core.link version lineage over content items.
  */
-export const ONTOLOGY_VERSION = '1.2';
+export const ONTOLOGY_VERSION = '1.3';
 
 // Composition order is dependency order:
 //   - CORE first (everything references the spine), anchors ride with it;
@@ -50,9 +50,9 @@ export const ONTOLOGY_VERSION = '1.2';
 //   - enrichment after media (the phash sidecar FKs the asset);
 //   - FTS_DDL near-last: generated triggers read every base table's final
 //     shape, and the backfill is a no-op on a fresh file;
-//   - BLOB_DDL dead last: it re-creates the content item's FTS sync with the
-//     derivative-aware body expression (extracted text feeds the parent row),
-//     overriding the generated triggers by name.
+//   - BLOB_DDL dead last: it re-creates the document's FTS sync with the
+//     derivative-aware body expression (extracted text feeds the owning
+//     document's row), overriding the generated triggers by name.
 export const VAULT_MIGRATIONS: readonly string[] = [
   [
     CORE_DDL,

@@ -12,14 +12,19 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { shaOfBlobUri } from './store.js';
 
-// Mirrors commands/documents.ts FOLDER_SCHEME_URI (imported by literal to
+// Mirrors commands/links.ts RELATIONS_SCHEME_URI (imported by literal to
 // keep blob/ free of command-layer imports; the scheme URI is contract).
-const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
+const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
 
 /**
  * Byte-renting edges, the serve-side twin of media.ts CONTENT_REFERENCES —
- * deliberately WITHOUT the live-rows-only clamp (trash must render), and
- * WITH the folder tag (a filed document's only edge is its tag).
+ * deliberately WITHOUT the live-rows-only clamp (trash must render). A
+ * document's CURRENT content is a direct edge (core_document.current_content
+ * _id); a SUPERSEDED revision serves through the `revises` chain instead —
+ * version history must render just as readily as the current page (issue
+ * #352). Both fold in regardless of the document's own trash state, matching
+ * the old folder-tag behaviour that survived trash (the tag was never
+ * removed) and never fully removed either (trash renders until purge).
  */
 const SERVE_REFERENCES: string[] = [
   'SELECT 1 FROM core_attachment WHERE content_id = i.content_id',
@@ -31,11 +36,17 @@ const SERVE_REFERENCES: string[] = [
   'SELECT 1 FROM home_maintenance_plan WHERE instructions_content_id = i.content_id',
   'SELECT 1 FROM media_media_asset WHERE content_id = i.content_id',
   'SELECT 1 FROM core_collection WHERE cover_content_id = i.content_id',
-  `SELECT 1 FROM core_tag t
-     JOIN core_concept c ON c.concept_id = t.concept_id
-     JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-    WHERE t.target_type = 'core.content_item' AND t.target_id = i.content_id
-      AND s.uri = '${FOLDER_SCHEME_URI}'`,
+  'SELECT 1 FROM core_document WHERE current_content_id = i.content_id',
+  `WITH RECURSIVE chain(content_id) AS (
+     SELECT current_content_id FROM core_document
+     UNION
+     SELECT l.to_id FROM core_link l JOIN chain ON l.from_id = chain.content_id
+      WHERE l.from_type = 'core.content_item' AND l.to_type = 'core.content_item' AND l.valid_to IS NULL
+        AND l.relation_concept_id = (SELECT c.concept_id FROM core_concept c
+             JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
+            WHERE s.uri = '${RELATIONS_SCHEME_URI}' AND c.notation = 'revises')
+   )
+   SELECT 1 FROM chain WHERE chain.content_id = i.content_id`,
 ];
 
 export interface ServableBlob {
@@ -67,7 +78,12 @@ export function resolveServableBlob(
 ): BlobResolveOutcome {
   const row = vault
     .prepare(
-      `SELECT i.content_id, i.content_uri, i.media_type, i.byte_size, i.title,
+      `SELECT i.content_id, i.content_uri, i.media_type, i.byte_size,
+              -- A document's title outranks the bare content item's — the
+              -- wrapper is what the owner renamed, current or superseded.
+              COALESCE(
+                (SELECT d.title FROM core_document d WHERE d.current_content_id = i.content_id LIMIT 1),
+                i.title) AS title,
               (${SERVE_REFERENCES.map((q) => `EXISTS(${q})`).join(' + ')}) AS refs
          FROM core_content_item i WHERE i.content_id = ?`,
     )

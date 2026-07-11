@@ -1476,6 +1476,7 @@ export class VaultPlane {
         result.sharesExpired +
         result.contentPurged +
         result.notesPurged +
+        result.documentsPurged +
         result.retentionDeleted +
         result.blobsReclaimed +
         result.stagingExpired;
@@ -1483,7 +1484,7 @@ export class VaultPlane {
         this.logger.info(
           `vault plane: sweep grantsExpired=${result.grantsExpired} sharesExpired=${result.sharesExpired} ` +
             `contentPurged=${result.contentPurged} notesPurged=${result.notesPurged} ` +
-            `retentionDeleted=${result.retentionDeleted} ` +
+            `documentsPurged=${result.documentsPurged} retentionDeleted=${result.retentionDeleted} ` +
             `blobsReclaimed=${result.blobsReclaimed} stagingExpired=${result.stagingExpired}`,
         );
       }

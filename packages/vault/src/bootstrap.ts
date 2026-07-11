@@ -51,6 +51,10 @@ const SEED_CONCEPTS: SeedConcept[] = [
   // vaults by the v3 migration, which must stay in step with these two.
   { scheme: 'relations', notation: 'references', label: 'References' },
   { scheme: 'relations', notation: 'attachment-of', label: 'Attachment of' },
+  // Version lineage (issue #352): a newer content item revises an older one —
+  // core.edit_document, core.replace_document_content,
+  // core.restore_document_version, and knowledge.edit_note all assert it.
+  { scheme: 'relations', notation: 'revises', label: 'Revises' },
   { scheme: 'activity-kinds', notation: 'meeting', label: 'Meeting' },
   { scheme: 'activity-kinds', notation: 'run', label: 'Run' },
   { scheme: 'activity-kinds', notation: 'sleep', label: 'Sleep' },
@@ -116,6 +120,14 @@ export function bootstrapVault(db: VaultDb, options: BootstrapVaultOptions): Boo
        VALUES (?, ?, ?, 'active', ?, '{}', ?)`,
     )
     .run(vaultId, ownerPartyId, displayName, options.baseCurrency ?? 'INR', now);
+  // The enrichment-policy mirror (issue #352 phase 3/4, host.ts
+  // readEnrichSettings/updateEnrichSettings): `local` is the default on both
+  // domains, same as the settings-bag default this table shadows.
+  for (const domain of ['photos', 'docs'] as const) {
+    db.vault
+      .prepare(`INSERT INTO enrich_policy (domain, tier, updated_at) VALUES (?, 'local', ?)`)
+      .run(domain, now);
+  }
   // Events require a calendar (schedule.propose_event's calendar_exists
   // precondition) but no vault command creates one — without a minted
   // default, a fresh vault can never hold a single event and Agenda's
