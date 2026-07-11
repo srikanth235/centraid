@@ -41,6 +41,14 @@
   function blobUri(id) {
     return BLOB_ROUTE + '/' + encodeURIComponent(id);
   }
+  // A real fetchable data: URI for a text version's bytes — unlike blobUri()
+  // above (whose GET route always returns a placeholder SVG, real bytes
+  // never persisted), so the docs app's in-place editor can genuinely
+  // `fetch(...).then(r => r.text())` its way to a version's actual content
+  // under the mock, not just an image.
+  function textDataUri(mediaType, text) {
+    return 'data:' + mediaType + ';charset=utf-8,' + encodeURIComponent(text);
+  }
   // Local YYYY-MM-DD day key (not a full ISO timestamp) — the shape tasks'
   // queries/board.js and app.jsx's format.js (localDayKey) both use for
   // due_at/completed_at.
@@ -84,10 +92,16 @@
   }
 
   // ---------------------------------------------------------------------
-  // Docs fixtures — see packages/blueprints/apps/docs/queries/drive.js for
-  // the row shape (content_id/title/media_type/byte_size/content_uri/
-  // created_at/folder_id/starred/trashed/purge_at) and app.json for the
-  // folders-scheme model (folder_id/name/parent_id, root implied by null).
+  // Docs fixtures — a document is a core.document WRAPPER around a content
+  // item (issue #352), so every fixture row carries both a document_id
+  // (identity — selection/details/quick-look key off this) and a content_id
+  // (the CURRENT version's bytes — blob/preview URLs key off this instead).
+  // Each fixture doc also keeps a private `__versions` array (newest
+  // first, `current: true` on entry 0) that queries/history.js's own
+  // walk-and-honestly-order-by-assertion-time shape mirrors — see
+  // packages/blueprints/apps/docs/queries/{drive,search,history}.js for the
+  // real row shapes and app.json for the folders-scheme model
+  // (folder_id/name/parent_id, root implied by null).
   // ---------------------------------------------------------------------
   function buildDocsStore() {
     if (EMPTY_MODE) return { folders: [], documents: [] };
@@ -101,20 +115,75 @@
     ];
 
     function doc(id, title, mediaType, folderId, days, bytes, extra) {
+      var contentId = id + '-c1';
+      var createdAt = isoDaysAgo(days);
       var base = {
-        content_id: id,
+        document_id: id,
+        content_id: contentId,
         title: title,
         media_type: mediaType,
         byte_size: bytes,
-        content_uri: blobUri(id),
-        created_at: isoDaysAgo(days),
+        content_uri: blobUri(contentId),
+        created_at: createdAt,
+        updated_at: createdAt,
         folder_id: folderId,
         starred: false,
         trashed: false,
         purge_at: null,
       };
-      return Object.assign(base, extra || {});
+      var merged = Object.assign(base, extra || {});
+      merged.__versions = [
+        {
+          content_id: merged.content_id,
+          media_type: merged.media_type,
+          byte_size: merged.byte_size,
+          content_uri: merged.content_uri,
+          asserted_at: merged.created_at,
+          current: true,
+        },
+      ];
+      return merged;
     }
+
+    // A text-editable document with real edit history — the one fixture the
+    // Edit affordance and the version-history panel both have something
+    // honest to show against (three real bodies, oldest to newest, each a
+    // fetchable data: URI so the editor's own `fetch(...).then(r=>r.text())`
+    // load actually works under the mock, not just the placeholder SVG the
+    // blob route serves for every other media type).
+    var packingBodies = [
+      ['doc-16-c1', 'Packing list\n- Passport\n- Chargers\n', 20],
+      ['doc-16-c2', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n', 8],
+      ['doc-16-c3', 'Packing list\n- Passport\n- Chargers\n- Sunscreen\n- Adapter\n', 1],
+    ];
+    var packingVersions = packingBodies
+      .map(function (row) {
+        var text = row[1];
+        return {
+          content_id: row[0],
+          media_type: 'text/plain',
+          byte_size: text.length,
+          content_uri: textDataUri('text/plain', text),
+          asserted_at: isoDaysAgo(row[2]),
+        };
+      })
+      .reverse(); // newest first, matching queries/history.js's own order
+    packingVersions[0].current = true;
+    var packingDoc = {
+      document_id: 'doc-16',
+      content_id: packingVersions[0].content_id,
+      title: 'Packing list.txt',
+      media_type: 'text/plain',
+      byte_size: packingVersions[0].byte_size,
+      content_uri: packingVersions[0].content_uri,
+      created_at: isoDaysAgo(20),
+      updated_at: isoDaysAgo(1),
+      folder_id: null,
+      starred: false,
+      trashed: false,
+      purge_at: null,
+      __versions: packingVersions,
+    };
 
     var documents = [
       doc('doc-1', 'Lease Agreement 2024.pdf', 'application/pdf', 'folder-leases', 20, 2_458_000, {
@@ -156,6 +225,7 @@
       }),
       doc('doc-14', 'backup.zip', 'application/zip', null, 2, 12_400_000),
       doc('doc-15', 'notes.bin', 'application/octet-stream', 'folder-taxes', 1, 4_000),
+      packingDoc,
     ];
 
     return { folders: folders, documents: documents };
@@ -187,6 +257,23 @@
         });
       return { documents: docs };
     }
+    if (query === 'history') {
+      var hd = docsStore.documents.find(function (d) {
+        return d.document_id === input.document_id;
+      });
+      if (!hd) return { versions: [] };
+      var versions = (hd.__versions || []).map(function (v, i) {
+        return {
+          content_id: v.content_id,
+          media_type: v.media_type,
+          byte_size: v.byte_size,
+          content_uri: v.content_uri,
+          current: i === 0,
+          asserted_at: v.asserted_at,
+        };
+      });
+      return { versions: versions };
+    }
     console.warn('[mock-centraid] docs: unmapped query', query);
     return {};
   }
@@ -196,7 +283,7 @@
     var folders = docsStore.folders;
     function findDoc(id) {
       return docs.find(function (d) {
-        return d.content_id === id;
+        return d.document_id === id;
       });
     }
     function findFolder(id) {
@@ -209,6 +296,22 @@
     }
     function refuse(predicate) {
       return { status: 'failed', predicate: predicate, reason: predicate };
+    }
+    // A new version, unshifted onto __versions (newest first) — the shared
+    // tail of edit/replace/restore-version below, mirroring how the real
+    // vault always repoints current_content_id AND records a fresh
+    // `revises` link, never mutating an existing one.
+    function pushVersion(d, version) {
+      (d.__versions || []).forEach(function (v) {
+        v.current = false;
+      });
+      version.current = true;
+      d.__versions = [version].concat(d.__versions || []);
+      d.content_id = version.content_id;
+      d.content_uri = version.content_uri;
+      d.media_type = version.media_type;
+      d.byte_size = version.byte_size;
+      d.updated_at = version.asserted_at;
     }
 
     switch (action) {
@@ -229,61 +332,126 @@
           pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         };
         var mediaType = mediaByExt[ext] || 'application/octet-stream';
+        var contentId = id + '-c1';
+        var nowIso = new Date().toISOString();
         var newDoc = {
-          content_id: id,
+          document_id: id,
+          content_id: contentId,
           title: title,
           media_type: mediaType,
           byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
-          content_uri: blobUri(id),
-          created_at: new Date().toISOString(),
+          content_uri: blobUri(contentId),
+          created_at: nowIso,
+          updated_at: nowIso,
           folder_id: input.folder_id != null ? String(input.folder_id) : null,
           starred: false,
           trashed: false,
           purge_at: null,
         };
+        newDoc.__versions = [
+          {
+            content_id: contentId,
+            media_type: mediaType,
+            byte_size: newDoc.byte_size,
+            content_uri: newDoc.content_uri,
+            asserted_at: nowIso,
+            current: true,
+          },
+        ];
         docs.unshift(newDoc);
-        return ok({ content_id: id, deduped: false });
+        return ok({ document_id: id, content_id: contentId, deduped: false });
       }
       case 'rename': {
-        var d1 = findDoc(input.content_id);
+        var d1 = findDoc(input.document_id);
         if (!d1) return refuse('not_found');
         if (d1.trashed) return refuse('document_trashed');
         d1.title = String(input.title);
-        return ok({ content_id: d1.content_id });
+        return ok({ document_id: d1.document_id });
       }
       case 'move': {
-        var d2 = findDoc(input.content_id);
+        var d2 = findDoc(input.document_id);
         if (!d2) return refuse('not_found');
         d2.folder_id = input.folder_id != null ? String(input.folder_id) : null;
-        return ok({ content_id: d2.content_id });
+        return ok({ document_id: d2.document_id });
       }
       case 'trash': {
-        var d3 = findDoc(input.content_id);
+        var d3 = findDoc(input.document_id);
         if (!d3) return refuse('not_found');
         d3.trashed = true;
         d3.purge_at = isoDaysFromNow(30);
-        return ok({ content_id: d3.content_id });
+        return ok({ document_id: d3.document_id, purge_at: d3.purge_at });
       }
       case 'restore': {
-        var d4 = findDoc(input.content_id);
+        var d4 = findDoc(input.document_id);
         if (!d4) return refuse('not_found');
         d4.trashed = false;
         d4.purge_at = null;
-        return ok({ content_id: d4.content_id });
+        return ok({ document_id: d4.document_id });
       }
       case 'star': {
-        var d5 = findDoc(input.content_id);
+        var d5 = findDoc(input.document_id);
         if (!d5) return refuse('not_found');
         if (d5.trashed) return refuse('document_trashed');
         d5.starred = true;
-        return ok({ content_id: d5.content_id });
+        return ok({ document_id: d5.document_id });
       }
       case 'unstar': {
-        var d6 = findDoc(input.content_id);
+        var d6 = findDoc(input.document_id);
         if (!d6) return refuse('not_found');
         if (d6.trashed) return refuse('document_trashed');
         d6.starred = false;
-        return ok({ content_id: d6.content_id });
+        return ok({ document_id: d6.document_id });
+      }
+      case 'edit': {
+        var d7 = findDoc(input.document_id);
+        if (!d7) return refuse('not_found');
+        if (d7.trashed) return refuse('document_trashed');
+        if (!/^text\//i.test(d7.media_type || '')) return refuse('current_content_is_text');
+        var bodyText = String(input.body_text || '');
+        var newContentId7 = d7.document_id + '-c' + ((d7.__versions || []).length + 1);
+        pushVersion(d7, {
+          content_id: newContentId7,
+          media_type: d7.media_type,
+          byte_size: bodyText.length,
+          content_uri: textDataUri(d7.media_type, bodyText),
+          asserted_at: new Date().toISOString(),
+        });
+        if (input.title != null) d7.title = String(input.title);
+        return ok({ document_id: d7.document_id, content_id: newContentId7 });
+      }
+      case 'replace': {
+        var d8 = findDoc(input.document_id);
+        if (!d8) return refuse('not_found');
+        if (d8.trashed) return refuse('document_trashed');
+        var newContentId8 = d8.document_id + '-c' + ((d8.__versions || []).length + 1);
+        pushVersion(d8, {
+          content_id: newContentId8,
+          media_type: d8.media_type,
+          byte_size: input.data_uri ? Math.round((input.data_uri.length * 3) / 4) : 256_000,
+          content_uri: blobUri(newContentId8),
+          asserted_at: new Date().toISOString(),
+        });
+        if (input.title != null) d8.title = String(input.title);
+        return ok({ document_id: d8.document_id, content_id: newContentId8 });
+      }
+      case 'restore-version': {
+        var d9 = findDoc(input.document_id);
+        if (!d9) return refuse('not_found');
+        var versions9 = d9.__versions || [];
+        var idx9 = versions9.findIndex(function (v) {
+          return v.content_id === input.content_id;
+        });
+        if (idx9 === -1) return refuse('target_in_chain');
+        if (idx9 === 0) return refuse('not_already_current');
+        var restored9 = versions9.splice(idx9, 1)[0];
+        pushVersion(d9, {
+          content_id: restored9.content_id,
+          media_type: restored9.media_type,
+          byte_size: restored9.byte_size,
+          content_uri: restored9.content_uri,
+          asserted_at: new Date().toISOString(),
+        });
+        return ok({ document_id: d9.document_id, content_id: restored9.content_id });
       }
       case 'create-folder': {
         var parentId = input.parent_folder_id != null ? String(input.parent_folder_id) : null;

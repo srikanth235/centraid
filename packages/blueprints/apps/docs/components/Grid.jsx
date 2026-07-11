@@ -4,14 +4,14 @@ import { Checkbox } from './Shared.jsx';
 
 export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, onToggleSelect }) {
   const m = typeMeta(doc.media_type);
-  const selected = selectedIds.has(doc.content_id);
+  const selected = selectedIds.has(doc.document_id);
   return (
     <div
       className="d-card"
       data-selected={String(selected)}
       onClick={(e) => {
         if (e.target.closest('button, a')) return;
-        onOpenDetails(doc.content_id);
+        onOpenDetails(doc.document_id);
       }}
     >
       <div
@@ -19,7 +19,7 @@ export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, 
         style={{ background: tintBg(m.cv, 15) }}
         onClick={(e) => {
           e.stopPropagation();
-          onOpenQuick(doc.content_id);
+          onOpenQuick(doc.document_id);
         }}
       >
         {isImage(doc) ? (
@@ -42,7 +42,7 @@ export function GridCard({ doc, index, selectedIds, onOpenDetails, onOpenQuick, 
         selected={selected}
         onClick={(e) => {
           e.stopPropagation();
-          onToggleSelect(doc.content_id, index, e.shiftKey);
+          onToggleSelect(doc.document_id, index, e.shiftKey);
         }}
         label={`Select ${doc.title ?? 'document'}`}
       />

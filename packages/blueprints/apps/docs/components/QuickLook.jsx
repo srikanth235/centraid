@@ -18,7 +18,7 @@ import { Icon } from './Shared.jsx';
 // (prev/next), and never otherwise.
 export function QuickLook({ doc, rows, folderName, onClose, onStep }) {
   const m = typeMeta(doc.media_type);
-  const idx = rows.findIndex((d) => d.content_id === doc.content_id);
+  const idx = rows.findIndex((d) => d.document_id === doc.document_id);
 
   let stage;
   if (isImage(doc)) {

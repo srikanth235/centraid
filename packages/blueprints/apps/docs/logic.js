@@ -10,18 +10,10 @@
 // and `refresh`, that only app.jsx can define (they touch the JSX-rendering
 // roots). Everything returned here is then wired into app.jsx's render
 // functions as props/callbacks, exactly like any other value flowing down.
-import {
-  armConfirm,
-  closePopover,
-  h,
-  openPopover,
-  outcomeMessage,
-  popItem,
-  runBulk as runBulkBase,
-  stageFileBytes,
-  toast,
-} from './kit.js';
+import { outcomeMessage, runBulk as runBulkBase, stageFileBytes, toast } from './kit.js';
 import { fmtBytes, typeMeta } from './format.js';
+import { createPopovers } from './popovers.js';
+import { createVersions } from './versions.js';
 
 const $ = (id) => document.getElementById(id);
 // Bytes stream to the blob staging route (issue #296) — no base64 through
@@ -149,7 +141,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     state.anchorIndex = null;
   }
   function selectedDocs() {
-    return data.documents.filter((d) => state.selected.has(d.content_id));
+    return data.documents.filter((d) => state.selected.has(d.document_id));
   }
   function toggleSelect(id, index, shift) {
     const sel = state.selected;
@@ -157,7 +149,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
       const [a, b] = [Math.min(state.anchorIndex, index), Math.max(state.anchorIndex, index)];
       const on = !sel.has(id);
       for (let i = a; i <= b; i += 1) {
-        const rid = state.visibleRows[i]?.content_id;
+        const rid = state.visibleRows[i]?.document_id;
         if (!rid) continue;
         if (on) sel.add(rid);
         else sel.delete(rid);
@@ -170,101 +162,22 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     render();
   }
   function toggleAllVisible(rows, allSelected) {
-    if (allSelected) for (const d of rows) state.selected.delete(d.content_id);
-    else for (const d of rows) state.selected.add(d.content_id);
+    if (allSelected) for (const d of rows) state.selected.delete(d.document_id);
+    else for (const d of rows) state.selected.add(d.document_id);
     state.anchorIndex = null;
     render();
-  }
-
-  // ---------- Popover (kebab + move) ----------
-
-  // One "Move to…" target row. `popItem` (kit.js) builds the real button
-  // node; these popovers stay plain DOM (built with `h()`/`popItem()`),
-  // exactly as before — the target list mixes a fixed depth-0 root with
-  // depth-1 folders, same as the vanilla builder always did.
-  function moveTargetBtn(folderId, name, depth, ids, single) {
-    const btn = popItem(name, async () => {
-      closePopover();
-      await moveDocs(ids, folderId, name);
-    });
-    btn.style.paddingLeft = `${0.7 + depth * 0.85}rem`;
-    if (single && (single.folder_id ?? null) === folderId) btn.disabled = true;
-    return btn;
-  }
-
-  // One shared "Move to…" tree for the kebab and the bulk toolbar.
-  function openMovePopover(anchor, docs) {
-    const ids = docs.map((d) => d.content_id);
-    const single = docs.length === 1 ? docs[0] : null;
-    openPopover(anchor, (box) => {
-      const head = h(
-        'p',
-        { class: 'kit-popover-head' },
-        single ? `Move “${single.title ?? 'document'}” to` : `Move ${docs.length} to`,
-      );
-      const scroll = h(
-        'div',
-        { class: 'kit-popover-scroll' },
-        moveTargetBtn(null, 'Documents', 0, ids, single),
-        ...data.folders.map((f) => moveTargetBtn(f.folder_id, f.name, 1, ids, single)),
-      );
-      box.append(head, scroll);
-    });
-  }
-
-  function openDocMenu(anchor, doc) {
-    closePopover();
-    openPopover(anchor, (box) => {
-      box.append(
-        popItem('Open', () => {
-          closePopover();
-          openQuick(doc.content_id);
-        }),
-        h(
-          'a',
-          {
-            class: 'kit-popover-item',
-            role: 'menuitem',
-            href: doc.content_uri,
-            download: doc.title ?? 'file',
-            onclick: closePopover,
-          },
-          'Download',
-        ),
-        popItem('Rename', () => {
-          closePopover();
-          startRenameDoc(doc);
-        }),
-        popItem(doc.starred ? 'Remove star' : 'Star', () => {
-          closePopover();
-          toggleStar(doc);
-        }),
-        popItem('Move to…', () => openMovePopover(anchor, [doc])),
-        h('div', { class: 'kit-popover-sep' }),
-        popItem(
-          'Trash',
-          async (e) => {
-            const btn = e.currentTarget;
-            if (!armConfirm(btn, { armedLabel: 'Trash — sure?' })) return;
-            closePopover();
-            await trashDoc(doc);
-          },
-          { danger: true },
-        ),
-      );
-    });
   }
 
   // ---------- Document writes ----------
 
   async function trashDoc(doc) {
-    const outcome = await act('trash', { content_id: doc.content_id });
+    const outcome = await act('trash', { document_id: doc.document_id });
     if (!narrate(outcome)) return;
-    if (state.detailsId === doc.content_id) state.detailsId = null;
+    if (state.detailsId === doc.document_id) state.detailsId = null;
     toast(`Moved to trash · receipted.`, {
       undoLabel: 'Undo',
       onUndo: async () => {
-        const back = await act('restore', { content_id: doc.content_id });
+        const back = await act('restore', { document_id: doc.document_id });
         if (narrate(back)) await refresh();
       },
     });
@@ -272,18 +185,18 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
   }
 
   async function restoreDoc(doc) {
-    const outcome = await act('restore', { content_id: doc.content_id });
+    const outcome = await act('restore', { document_id: doc.document_id });
     if (narrate(outcome)) {
       toast('Restored to its folder · receipted.');
       await refresh();
     }
   }
 
-  // One star across the vault: the flags-scheme tag on the canonical content
-  // item, so favorites from Photos and stars from here are the same
+  // One star across the vault: the flags-scheme tag on the document
+  // wrapper, so favorites from Photos and stars from here are the same
   // judgment.
   async function toggleStar(doc) {
-    const outcome = await act(doc.starred ? 'unstar' : 'star', { content_id: doc.content_id });
+    const outcome = await act(doc.starred ? 'unstar' : 'star', { document_id: doc.document_id });
     if (narrate(outcome)) {
       toast(doc.starred ? 'Star removed · receipted.' : 'Starred · receipted.');
       await refresh();
@@ -292,7 +205,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
 
   async function moveDocs(ids, folderId, name) {
     const input = (id) => ({
-      content_id: id,
+      document_id: id,
       ...(folderId == null ? {} : { folder_id: folderId }),
     });
     if (ids.length === 1) {
@@ -315,7 +228,7 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     if (title == null) return;
     const trimmed = title.trim();
     if (!trimmed || trimmed === doc.title) return;
-    const outcome = await act('rename', { content_id: doc.content_id, title: trimmed });
+    const outcome = await act('rename', { document_id: doc.document_id, title: trimmed });
     if (narrate(outcome)) {
       toast('Renamed · receipted.');
       await refresh();
@@ -337,13 +250,13 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     });
 
   function restoreSelected() {
-    return runBulk([...state.selected], (id) => act('restore', { content_id: id }), {
+    return runBulk([...state.selected], (id) => act('restore', { document_id: id }), {
       progress: 'Restoring',
       done: 'Restored',
     });
   }
   function trashSelected() {
-    return runBulk([...state.selected], (id) => act('trash', { content_id: id }), {
+    return runBulk([...state.selected], (id) => act('trash', { document_id: id }), {
       progress: 'Trashing',
       done: 'Trashed',
     });
@@ -451,6 +364,32 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     await refresh();
   }
 
+  // ---------- Content lifecycle (edit / replace / version history) ----------
+  // A separate module purely for file-size hygiene — see versions.js's own
+  // header for why. It closes over this factory's own act/narrate/notice
+  // rather than re-implementing them, so every outcome still narrates in
+  // this app's voice.
+  const { editDocument, replaceDocument, restoreVersion, loadHistory } = createVersions({
+    data,
+    refresh,
+    act,
+    narrate,
+    notice,
+  });
+
+  // ---------- Popovers (kebab + move) ----------
+  // Another file-size split (popovers.js) — closes over data.folders plus
+  // the document-write functions just above, passed in rather than
+  // re-implemented.
+  const { openMovePopover, openDocMenu } = createPopovers({
+    data,
+    openQuick,
+    moveDocs,
+    startRenameDoc,
+    toggleStar,
+    trashDoc,
+  });
+
   return {
     notice,
     narrate,
@@ -484,5 +423,9 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     cancelCreateFolder,
     cancelRenameFolder,
     uploadFiles,
+    editDocument,
+    replaceDocument,
+    restoreVersion,
+    loadHistory,
   };
 }

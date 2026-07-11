@@ -2,15 +2,17 @@
   "manifestVersion": 1,
   "id": "docs",
   "name": "Docs",
-  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. Every file's bytes are a sha256-deduped canonical content item; folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the same canonical item, so a photo favorited in Photos shows in Starred here. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
-  "version": "0.2.0",
+  "description": "A drive for your important documents — leases, IDs, warranties, tax forms — as a projection of the vault. A document is a core.document wrapper around a sha256-deduped canonical content item (issue #352): identity is separate from bytes, so text documents edit in place and any document's content can be replaced, each change a walkable version in its history. Folders are SKOS concepts in the owner's folders scheme, and filing is a single tag per document. Starring is a flags-scheme tag on the same wrapper, so a photo favorited in Photos shows in Starred here. Trash sets a purge date about 30 days out and keeps the folder tag (and the star), so a restored document lands right back where it was. Uploading, renaming, moving, editing, replacing, restoring a version, starring, trashing and folder management all run through typed vault commands — consent-checked and receipted. No data of its own — revoke the grant and the app goes dark.",
+  "version": "0.3.0",
   "iconKey": "Folder",
   "colorKey": "slate",
   "vault": {
     "purpose": "dpv:ServiceProvision",
-    "why": "Keeps your important documents filed, downloadable and restorable.",
+    "why": "Keeps your important documents filed, editable, downloadable and restorable — with a version history.",
     "scopes": [
+      { "schema": "core", "table": "document", "verbs": "read" },
       { "schema": "core", "table": "content_item", "verbs": "read" },
+      { "schema": "core", "table": "link", "verbs": "read" },
       { "schema": "core", "table": "tag", "verbs": "read" },
       { "schema": "core", "table": "concept", "verbs": "read" },
       { "schema": "core", "table": "concept_scheme", "verbs": "read" },
@@ -21,6 +23,9 @@
       { "schema": "core", "table": "restore_document", "verbs": "act" },
       { "schema": "core", "table": "star_document", "verbs": "act" },
       { "schema": "core", "table": "unstar_document", "verbs": "act" },
+      { "schema": "core", "table": "edit_document", "verbs": "act" },
+      { "schema": "core", "table": "replace_document_content", "verbs": "act" },
+      { "schema": "core", "table": "restore_document_version", "verbs": "act" },
       { "schema": "core", "table": "create_folder", "verbs": "act" },
       { "schema": "core", "table": "rename_folder", "verbs": "act" },
       { "schema": "core", "table": "delete_folder", "verbs": "act" }
@@ -29,7 +34,7 @@
   "actions": [
     {
       "name": "upload",
-      "description": "Add a document through core.add_document; the bytes become a deduped canonical content item filed into a folder (or the drive's top level). Re-uploading identical bytes restores them from trash and renames them.",
+      "description": "Add a document through core.add_document; the bytes become a deduped canonical content item wrapped in a fresh core.document, filed into a folder (or the drive's top level). Two documents may legitimately share identical bytes — dedup is on the bytes, never on document identity.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -54,15 +59,15 @@
     },
     {
       "name": "rename",
-      "description": "Rename a document through core.rename_document (refuses trashed documents).",
+      "description": "Rename a document through core.rename_document (refuses trashed documents). Renames the wrapper's title only — bytes and version history are untouched.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "content_id": { "type": "string", "minLength": 1 },
+          "document_id": { "type": "string", "minLength": 1 },
           "title": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id", "title"],
+        "required": ["document_id", "title"],
         "additionalProperties": false
       },
       "output": {
@@ -82,10 +87,10 @@
       "input": {
         "type": "object",
         "properties": {
-          "content_id": { "type": "string", "minLength": 1 },
+          "document_id": { "type": "string", "minLength": 1 },
           "folder_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id"],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -100,14 +105,14 @@
     },
     {
       "name": "trash",
-      "description": "Move a document to the trash through core.trash_document; it keeps its folder and auto-purges about 30 days later. Refused while the bytes are still in use elsewhere in the vault.",
+      "description": "Move a document to the trash through core.trash_document; it keeps its folder and auto-purges about 30 days later. Its current bytes AND every superseded version stay live until the document itself purges.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "content_id": { "type": "string", "minLength": 1 }
+          "document_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id"],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -127,9 +132,9 @@
       "input": {
         "type": "object",
         "properties": {
-          "content_id": { "type": "string", "minLength": 1 }
+          "document_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id"],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -144,14 +149,14 @@
     },
     {
       "name": "star",
-      "description": "Star a document through core.star_document — one flags-scheme tag on the canonical content item, the same star every other surface reads. Idempotent; refuses trashed documents.",
+      "description": "Star a document through core.star_document — one flags-scheme tag on the document wrapper, the same star every other surface reads. Idempotent; refuses trashed documents.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "content_id": { "type": "string", "minLength": 1 }
+          "document_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id"],
+        "required": ["document_id"],
         "additionalProperties": false
       },
       "output": {
@@ -171,9 +176,81 @@
       "input": {
         "type": "object",
         "properties": {
+          "document_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "edit",
+      "description": "Edit a text-editable document's body in place through core.edit_document (media_type text/* only — anything else refuses; use replace instead). Mints a new (or deduped) content item and records the revises link itself; title is an optional partial update.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
+          "body_text": { "type": "string" },
+          "title": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id", "body_text"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "replace",
+      "description": "Replace a document's bytes (any media type) through core.replace_document_content — the current door for scanned PDFs, images and anything else edit can't touch structurally. Mints a new content item, records the revises link, and repoints the wrapper's current version; title is an optional partial update. Refuses trashed documents.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
+          "data_uri": { "type": "string", "minLength": 6 },
+          "staged_sha": { "type": "string", "minLength": 64, "maxLength": 64 },
+          "title": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "restore-version",
+      "description": "Restore an older version through core.restore_document_version — history never rewrites (rule R3): this asserts a NEW forward revises link and repoints current_content_id at the chosen past content item, so the old chain stays exactly as it was and a restore-of-a-restore never loops.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 },
           "content_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["content_id"],
+        "required": ["document_id", "content_id"],
         "additionalProperties": false
       },
       "output": {
@@ -258,7 +335,7 @@
   "queries": [
     {
       "name": "drive",
-      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (content items carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the canonical item). truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them.",
+      "description": "The drive as a bounded recent window: every folder in the owner's folders scheme, plus the most recently filed documents (core.document wrappers carrying a folders-scheme tag) newest first — caller-sized via limit, default 200 — trashed ones included with their purge dates, each row decorated with starred (a flags-scheme tag on the wrapper) and the current content's media_type/byte_size joined by current_content_id. truncated=true means older documents exist beyond the window; grow limit or use the search query to reach them. Version history is a separate read (the history query) — this projection only ever ships the current version.",
       "input": {
         "type": "object",
         "properties": {
@@ -280,7 +357,7 @@
     },
     {
       "name": "search",
-      "description": "Full-text document search through the vault's FTS5 index (title + text body) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Only content items carrying a folders-scheme tag come back; trashed documents never match.",
+      "description": "Full-text document search through the vault's FTS5 index (title + the current version's decoded text body) — returns only the ranked matches in the drive's document row shape plus a hit snippet, never a whole-table pull. Only wrappers carrying a folders-scheme tag come back; trashed documents never match.",
       "input": {
         "type": "object",
         "properties": {
@@ -293,6 +370,25 @@
         "type": "object",
         "properties": {
           "documents": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "history",
+      "description": "A document's version chain, walked from its current content backward through live `revises` core.link edges — never a command, since core.link is already the durable history. Ordered newest-first by ASSERTION time (when a version stopped being current, or its own upload time for the oldest entry), not the content item's own created_at: restoring an old version reads as the newest entry even though its bytes are old.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["document_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "versions": { "type": "array" },
           "vaultDenied": { "type": "object" }
         }
       }

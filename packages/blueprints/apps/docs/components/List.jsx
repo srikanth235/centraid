@@ -19,14 +19,14 @@ export function ListRow({
   onRestore,
 }) {
   const m = typeMeta(doc.media_type);
-  const selected = selectedIds.has(doc.content_id);
+  const selected = selectedIds.has(doc.document_id);
   return (
     <div
       className="d-row"
       data-selected={String(selected)}
       onClick={(e) => {
         if (e.target.closest('button, a, input')) return;
-        onOpenDetails(doc.content_id);
+        onOpenDetails(doc.document_id);
       }}
     >
       <Checkbox
@@ -34,7 +34,7 @@ export function ListRow({
         selected={selected}
         onClick={(e) => {
           e.stopPropagation();
-          onToggleSelect(doc.content_id, index, e.shiftKey);
+          onToggleSelect(doc.document_id, index, e.shiftKey);
         }}
         label={`Select ${doc.title ?? 'document'}`}
       />
@@ -45,7 +45,7 @@ export function ListRow({
         aria-label={`Preview ${doc.title ?? 'document'}`}
         onClick={(e) => {
           e.stopPropagation();
-          onOpenQuick(doc.content_id);
+          onOpenQuick(doc.document_id);
         }}
       >
         {isImage(doc) ? (
@@ -60,7 +60,7 @@ export function ListRow({
           className="d-row-title"
           onClick={(e) => {
             e.stopPropagation();
-            onOpenQuick(doc.content_id);
+            onOpenQuick(doc.document_id);
           }}
         >
           {doc.title ?? 'Untitled'}
@@ -121,7 +121,7 @@ export function ListRow({
 }
 
 export function ListHead({ rows, selectedIds, onToggleAll }) {
-  const allSel = rows.length > 0 && rows.every((d) => selectedIds.has(d.content_id));
+  const allSel = rows.length > 0 && rows.every((d) => selectedIds.has(d.document_id));
   return (
     <>
       <Checkbox

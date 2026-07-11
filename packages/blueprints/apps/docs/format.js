@@ -72,6 +72,44 @@ export function typeMeta(mediaType) {
   return { label: 'FILE', name: 'File', cat: 'other', cv: '--ink-3' };
 }
 
+// The vault's own edit_document precondition (media_type LIKE 'text/%',
+// packages/vault/src/commands/documents.ts) — kept in exact lockstep so the
+// Edit affordance only ever shows where the command would actually accept
+// it. Anything else (including a scanned PDF or an image) takes the
+// Replace-file door instead.
+export function isTextEditable(doc) {
+  return /^text\//i.test(String(doc.media_type ?? ''));
+}
+
+// Decode a data: URI's text payload directly, without a network round trip.
+// The in-place editor (components/Editor.jsx) needs this for any document
+// whose bytes stayed inline (issue #296: small text bodies never rewrite to
+// a blob: route) — `fetch()`-ing a data: URI is blocked by the app's own
+// CSP (`connect-src` inherits `default-src 'self'`; only `img-src`
+// explicitly allows `data:`, which is why an `<img src="data:...">` works
+// but a fetch of the same URI does not), so this is the only door, not an
+// optimization. UTF-8 safe: base64 payloads decode through a real
+// TextDecoder rather than the classic (and multi-byte-unsafe) `atob()`
+// alone.
+export function decodeDataUri(uri) {
+  const s = String(uri ?? '');
+  if (!s.startsWith('data:')) return null;
+  const comma = s.indexOf(',');
+  if (comma < 0) return null;
+  const meta = s.slice(0, comma);
+  const payload = s.slice(comma + 1);
+  try {
+    if (meta.includes(';base64')) {
+      const binary = atob(payload);
+      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    }
+    return decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+}
+
 export function loadable(uri) {
   // Same-origin vault blob URLs (issue #296) render everywhere data: did —
   // and in iframes BETTER: `default-src 'self'` allows them where data:

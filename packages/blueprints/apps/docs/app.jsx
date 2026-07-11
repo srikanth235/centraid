@@ -1,16 +1,20 @@
-// Docs — the drive, reinvented, as a projection over the personal vault. Every
-// row is a core.content_item whose bytes are sha256-deduped; folders are SKOS
-// concepts in the owner's folders scheme and filing is one tag per document.
-// Trash sets a purge date ~30 days out and keeps the folder tag, so restore
-// lands a document back where it was. Every write is a typed vault command —
+// governance: allow-repo-hygiene file-size-limit blueprints are single-file by design (read wholesale by one agent, see tally/app.jsx's waiver) — docs is the entry/orchestrator for browse, details, quick-look, in-place edit and version history, so it is large by design.
+// Docs — the drive, reinvented, as a projection over the personal vault. A
+// document is a core.document WRAPPER around a canonical core.content_item
+// (issue #352): the document_id is the row's identity — selection, details,
+// quick-look and folders/star all key off it — while current_content_id
+// names the HEAD revision whose bytes render. Folders are SKOS concepts in
+// the owner's folders scheme and filing is one tag per document. Trash sets
+// a purge date ~30 days out and keeps the folder tag, so restore lands a
+// document back where it was. Every write is a typed vault command —
 // consent-checked and receipted, all risk low. The app stores nothing of its
 // own: revoke the grant and this page goes dark while the documents, history
 // and receipts remain the owner's.
 //
 // Starred is vault-canonical (issue #274): one flags-scheme tag on the
-// canonical content item, written through core.star_document/unstar_document
-// — the same star a favorited photo carries, so Starred here shows them too.
-// Sharing still has no vault signal, so there is honestly no sharing UI.
+// document, written through core.star_document/unstar_document — the same
+// star a favorited photo carries, so Starred here shows them too. Sharing
+// still has no vault signal, so there is honestly no sharing UI.
 //
 // React port (native web-components infra, see kit/react-core.min.js): the
 // static index.html body is unchanged, and this module owns one React root
@@ -40,6 +44,7 @@ import { createNav } from './nav.js';
 import { wireChrome } from './chrome.js';
 import { BulkBar } from './components/BulkBar.jsx';
 import { Details } from './components/Details.jsx';
+import { Editor } from './components/Editor.jsx';
 import { GridCard } from './components/Grid.jsx';
 import { ListHead, ListRow, WindowFoot } from './components/List.jsx';
 import { NewMenu } from './components/NewMenu.jsx';
@@ -66,6 +71,7 @@ const state = {
   anchorIndex: null,
   detailsId: null,
   quickId: null,
+  editingId: null,
   newMenuOpen: false,
   creatingFolder: false,
   renamingFolderId: null,
@@ -89,6 +95,7 @@ const nav = createNav({
   renderDetails,
   renderQuick,
   renderNewMenu,
+  renderEditor,
   clearSelection: () => logic.clearSelection(),
 });
 logic = createLogic({ state, data, render, refresh, openQuick: nav.openQuick });
@@ -114,6 +121,10 @@ const {
   moveSelected,
   clearSelected,
   uploadFiles,
+  editDocument,
+  replaceDocument,
+  restoreVersion,
+  loadHistory,
 } = logic;
 const {
   openDetails,
@@ -121,6 +132,8 @@ const {
   openQuick,
   closeQuick,
   quickStep,
+  openEditor,
+  closeEditor,
   triggerUpload,
   startCreateFolder,
   selectType,
@@ -274,7 +287,7 @@ function renderRows() {
       <>
         {rows.map((d, i) => (
           <GridCard
-            key={d.content_id}
+            key={d.document_id}
             doc={d}
             index={i}
             selectedIds={state.selected}
@@ -297,7 +310,7 @@ function renderRows() {
       <>
         {rows.map((d, i) => (
           <ListRow
-            key={d.content_id}
+            key={d.document_id}
             doc={d}
             index={i}
             selectedIds={state.selected}
@@ -327,7 +340,7 @@ function renderRows() {
 let detailsRootReact;
 
 function renderDetails() {
-  const doc = state.detailsId ? data.documents.find((d) => d.content_id === state.detailsId) : null;
+  const doc = state.detailsId ? data.documents.find((d) => d.document_id === state.detailsId) : null;
   detailsRootReact.render(
     doc ? (
       <Details
@@ -339,6 +352,10 @@ function renderDetails() {
         onMove={openMovePopover}
         onTrash={trashDoc}
         onRestore={restoreDoc}
+        onEdit={(d) => openEditor(d.document_id)}
+        onReplace={replaceDocument}
+        loadHistory={loadHistory}
+        onRestoreVersion={restoreVersion}
       />
     ) : null,
   );
@@ -349,7 +366,7 @@ function renderDetails() {
 let quickRootReact;
 
 function renderQuick() {
-  const doc = state.quickId ? data.documents.find((d) => d.content_id === state.quickId) : null;
+  const doc = state.quickId ? data.documents.find((d) => d.document_id === state.quickId) : null;
   quickRootReact.render(
     doc ? (
       <QuickLook
@@ -358,6 +375,46 @@ function renderQuick() {
         folderName={folderName}
         onClose={closeQuick}
         onStep={quickStep}
+      />
+    ) : null,
+  );
+}
+
+// ---------- In-place text editor ----------
+
+let editorRootReact;
+// The registerFlush idiom notes/components/Editor.jsx already established:
+// Editor.jsx registers its own pending-save flush here so every path that
+// closes the overlay (its own × button, a backdrop click, the global
+// Escape handler in chrome.js) awaits an in-flight/pending autosave first
+// instead of racing it — the debounce timer alone would otherwise drop the
+// last ~700ms of keystrokes on a fast Escape. Closing is also the one point
+// that pays for a real refresh() — versions.js's editDocument deliberately
+// leaves content_id/content_uri stale across the debounced autosaves (issue
+// #352: it cannot honestly guess whether the vault kept the new version
+// inline or moved it behind the blob route), so this is what corrects Grid/
+// Details/Quick Look once the user is actually done typing, not on every
+// keystroke's save.
+let flushEditor = null;
+async function closeEditorSafely() {
+  if (flushEditor) await flushEditor();
+  flushEditor = null;
+  await refresh();
+  closeEditor();
+}
+
+function renderEditor() {
+  const doc = state.editingId ? data.documents.find((d) => d.document_id === state.editingId) : null;
+  editorRootReact.render(
+    doc ? (
+      <Editor
+        key={doc.document_id}
+        doc={doc}
+        registerFlush={(fn) => {
+          flushEditor = fn;
+        }}
+        onClose={closeEditorSafely}
+        onSave={editDocument}
       />
     ) : null,
   );
@@ -451,12 +508,17 @@ async function refresh() {
   state.driveTruncated = Boolean(next?.truncated);
   // Drop selections and open surfaces for documents that no longer exist.
   state.selected = new Set(
-    [...state.selected].filter((id) => data.documents.some((d) => d.content_id === id)),
+    [...state.selected].filter((id) => data.documents.some((d) => d.document_id === id)),
   );
-  if (state.detailsId && !data.documents.some((d) => d.content_id === state.detailsId))
+  if (state.detailsId && !data.documents.some((d) => d.document_id === state.detailsId))
     state.detailsId = null;
-  if (state.quickId && !data.documents.some((d) => d.content_id === state.quickId))
+  if (state.quickId && !data.documents.some((d) => d.document_id === state.quickId))
     state.quickId = null;
+  // The editor overlay is deliberately left untouched by a background
+  // refresh (no renderEditor() call here) — it manages its own body state
+  // after its initial fetch, and a periodic window-focus refresh closing it
+  // out from under a typing user would drop their draft. It only ever
+  // closes through its own explicit close/Escape path.
   render();
   renderDetails();
   renderQuick();
@@ -477,6 +539,7 @@ listHeadRoot = createRoot($('listHead'));
 windowFootRoot = createRoot($('windowFoot'));
 detailsRootReact = createRoot($('detailsRoot'));
 quickRootReact = createRoot($('quickRoot'));
+editorRootReact = createRoot($('editorRoot'));
 newMenuRoot = createRoot($('newMenu'));
 
 $('root').classList.toggle('is-narrow', $('root').clientWidth < 860);
@@ -491,6 +554,7 @@ wireChrome({
   renderNewMenu,
   closeQuick,
   closeDetails,
+  closeEditor: closeEditorSafely,
   quickStep,
   applySearch,
   uploadFiles,

@@ -1,12 +1,13 @@
 /**
  * Document search as a vault projection: the FTS5 index inside the vault
- * does the matching (title + decoded text body), so the app never pulls the
- * whole core.content_item table to grep it — vault data has no upper bound.
- * Only the matched rows are joined with their folder tags, and a match is a
- * document only if it carries a folders-scheme tag — anything else (a note
- * body, a message attachment, an avatar…) is dropped, so search never
- * surfaces what the drive view wouldn't show. Trashed documents can't match
- * at all: soft-deleted rows fall out of the index. The rows mirror the drive
+ * matches against `core.document` (title + the current version's decoded
+ * text body, issue #352 — documents are searched under their own identity,
+ * not the raw content item), so the app never pulls the whole table to grep
+ * it — vault data has no upper bound. Only the matched rows are joined with
+ * their folder tags, and a match is a document only if it carries a
+ * folders-scheme tag — anything else is dropped, so search never surfaces
+ * what the drive view wouldn't show. Trashed documents can't match at all:
+ * soft-deleted rows fall out of the index. The rows mirror the drive
  * projection's document shape row-for-row, plus the vault's hit snippet.
  *
  * A consent denial is a first-class outcome, not an error: the UI renders
@@ -17,6 +18,7 @@
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
+const DOCUMENT_TARGET_TYPE = 'core.document';
 
 export default async ({ input, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
@@ -24,20 +26,20 @@ export default async ({ input, ctx }) => {
   if (!term) return { documents: [] };
   try {
     const matches = await ctx.vault.search({
-      entity: 'core.content_item',
+      entity: 'core.document',
       query: term,
       limit: 100,
       purpose,
     });
     const hits = matches.rows ?? [];
     if (hits.length === 0) return { documents: [] };
-    const contentIds = hits.map((c) => c.content_id);
+    const documentIds = hits.map((d) => d.document_id);
     const [tags, concepts, schemes] = await Promise.all([
       ctx.vault.read({
         entity: 'core.tag',
         where: [
-          { column: 'target_type', op: 'eq', value: 'core.content_item' },
-          { column: 'target_id', op: 'in', value: contentIds },
+          { column: 'target_type', op: 'eq', value: DOCUMENT_TARGET_TYPE },
+          { column: 'target_id', op: 'in', value: documentIds },
         ],
         purpose,
       }),
@@ -51,15 +53,15 @@ export default async ({ input, ctx }) => {
     );
     const rootFolderId = schemeConcepts.find((c) => c.notation === 'root')?.concept_id ?? null;
 
-    // A document is a content item tagged with a folders-scheme concept.
+    // A document is a wrapper tagged with a folders-scheme concept.
     const folderConceptIds = new Set(schemeConcepts.map((c) => c.concept_id));
-    const folderByContent = new Map();
+    const folderByDoc = new Map();
     for (const t of tags.rows ?? []) {
-      if (folderConceptIds.has(t.concept_id)) folderByContent.set(t.target_id, t.concept_id);
+      if (folderConceptIds.has(t.concept_id)) folderByDoc.set(t.target_id, t.concept_id);
     }
 
     // Starred rides the tag read already in hand (issue #274): the flags
-    // scheme's `starred` concept against the same matched content ids.
+    // scheme's `starred` concept against the same matched wrapper ids.
     const flagsScheme = (schemes.rows ?? []).find((s) => s.uri === FLAGS_SCHEME_URI);
     const starredConceptId = flagsScheme
       ? ((concepts.rows ?? []).find(
@@ -72,29 +74,45 @@ export default async ({ input, ctx }) => {
         .map((t) => t.target_id),
     );
 
+    // The current content join, bounded by the matched wrappers' own
+    // current_content_id set.
+    const contentIds = [...new Set(hits.map((d) => d.current_content_id))];
+    const contents =
+      contentIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.content_item',
+            where: [{ column: 'content_id', op: 'in', value: contentIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
+
     // Blob-backed bytes serve as same-origin URLs (issue #296).
     const srcOf = (c) =>
-      typeof c.content_uri === 'string' && c.content_uri.startsWith('blob:')
+      typeof c?.content_uri === 'string' && c.content_uri.startsWith('blob:')
         ? `/centraid/_vault/blobs/${c.content_id}`
-        : c.content_uri;
+        : c?.content_uri;
 
     // Vault order is rank order (best match first) — keep it.
     const documents = hits
-      .filter((c) => folderByContent.has(c.content_id))
-      .map((c) => {
-        const conceptId = folderByContent.get(c.content_id);
+      .filter((d) => folderByDoc.has(d.document_id))
+      .map((d) => {
+        const conceptId = folderByDoc.get(d.document_id);
+        const c = contentById.get(d.current_content_id);
         return {
-          content_id: c.content_id,
-          title: c.title,
-          media_type: c.media_type,
-          byte_size: c.byte_size,
+          document_id: d.document_id,
+          content_id: d.current_content_id,
+          title: d.title,
+          media_type: c?.media_type ?? null,
+          byte_size: c?.byte_size ?? null,
           content_uri: srcOf(c),
-          created_at: c.created_at,
+          created_at: d.created_at,
+          updated_at: d.updated_at,
           folder_id: conceptId === rootFolderId ? null : conceptId,
-          starred: starredIds.has(c.content_id),
-          trashed: c.deleted_at != null,
-          purge_at: c.purge_at ?? null,
-          snippet: typeof c._snippet === 'string' ? c._snippet : '',
+          starred: starredIds.has(d.document_id),
+          trashed: d.deleted_at != null,
+          purge_at: d.purge_at ?? null,
+          snippet: typeof d._snippet === 'string' ? d._snippet : '',
         };
       });
     return { documents };

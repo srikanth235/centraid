@@ -893,8 +893,15 @@ button {
 }
 .d-detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   margin: 18px 0;
+}
+.d-detail-actions .d-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 /* Drawer action/footer buttons are kit pills; d-detail-btn keeps only the
    row-fill layout + link reset (the Download button is an <a>). */
@@ -980,6 +987,181 @@ button {
   padding: 12px 18px;
   border-top: 1px solid var(--line);
   flex-shrink: 0;
+}
+
+/* ---------- Version history (issue #352) ---------- */
+
+.d-version-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: var(--t-tiny);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--ink-3);
+}
+.d-version-toggle svg {
+  width: 13px;
+  height: 13px;
+}
+.d-version-status {
+  font: var(--t-small);
+  color: var(--ink-3);
+  padding: 10px 0;
+}
+.d-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.d-version {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.d-version-current {
+  border-color: var(--accent-soft);
+}
+.d-version-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-elev);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.d-version-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+.d-version-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.d-version-date {
+  font: var(--t-small);
+  color: var(--ink);
+}
+.d-version-size {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.d-version-tag {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+.d-version-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+.d-version-preview {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--bg-sunken);
+}
+.d-version-preview-frame {
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* ---------- In-place editor (issue #352) ---------- */
+
+.d-editor-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in oklab, var(--ink) 30%, rgba(10, 12, 16, 0.55));
+  animation: kit-fade 0.2s ease;
+}
+.d-editor {
+  margin: auto;
+  width: min(760px, 94vw);
+  height: min(640px, 88vh);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.d-editor-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.d-editor-title {
+  font: var(--t-body-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-editor-save {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+.d-editor-body {
+  flex: 1;
+  min-height: 0;
+  padding: 16px 20px 20px;
+}
+.d-editor-status {
+  font: var(--t-small);
+  color: var(--ink-3);
+  padding: 12px 0;
+}
+.d-editor-textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  font: var(--t-body);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink);
+  background: none;
+  border: none;
+  outline: none;
 }
 
 /* ---------- Quick-look ---------- */
@@ -1184,4 +1366,17 @@ button {
 }
 .docs.is-narrow .d-list-head {
   display: none !important;
+}
+/* Full-bleed editor on a phone — same treatment notes/app.css's
+   .nt-shell.is-narrow .nt-editor gives its own centered modal. */
+.docs.is-narrow .d-editor-backdrop {
+  align-items: stretch;
+}
+.docs.is-narrow .d-editor {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
 }

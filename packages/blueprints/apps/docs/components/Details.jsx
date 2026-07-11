@@ -1,8 +1,50 @@
 // Details drawer (#detailsRoot root).
+import { useRef, useState } from '../react-core.min.js';
 import { armConfirm } from '../kit.js';
-import { extOf, fmtBytes, fmtFull, isImage, purgeCountdown, tintBg, typeMeta } from '../format.js';
-import { I } from '../icons.js';
+import {
+  extOf,
+  fmtBytes,
+  fmtFull,
+  isImage,
+  isTextEditable,
+  purgeCountdown,
+  tintBg,
+  typeMeta,
+} from '../format.js';
+import { I, RENAME_ICON } from '../icons.js';
+import { History } from './History.jsx';
 import { Icon } from './Shared.jsx';
+
+// A hidden file input, self-contained: click-through-to-picker plus the
+// change handler live entirely inside this button, so Details.jsx and
+// app.jsx never need a global replace-target/hidden-input pair the way
+// upload does (upload has no "which document" to remember; replace does,
+// and this keeps that fact local to the one place that needs it).
+function ReplaceButton({ doc, onReplace }) {
+  const inputRef = useRef(null);
+  return (
+    <>
+      <button
+        type="button"
+        className="kit-btn d-detail-btn"
+        onClick={() => inputRef.current?.click()}
+      >
+        Replace file…
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        hidden
+        aria-hidden="true"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (file) onReplace(doc, file);
+        }}
+      />
+    </>
+  );
+}
 
 export function Details({
   doc,
@@ -13,9 +55,14 @@ export function Details({
   onMove,
   onTrash,
   onRestore,
+  onEdit,
+  onReplace,
+  loadHistory,
+  onRestoreVersion,
 }) {
   const m = typeMeta(doc.media_type);
   const trashed = doc.trashed;
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Activity — only what the projection can honestly derive: this document was
   // uploaded (created_at) and filed into its folder. Each is a real receipted
@@ -51,7 +98,7 @@ export function Details({
             <button
               type="button"
               className="kit-btn d-detail-btn"
-              onClick={() => onOpenQuick(doc.content_id)}
+              onClick={() => onOpenQuick(doc.document_id)}
             >
               Open
             </button>
@@ -70,6 +117,18 @@ export function Details({
               >
                 {doc.starred ? '★ Starred' : '☆ Star'}
               </button>
+            )}
+            {trashed ? null : isTextEditable(doc) ? (
+              <button
+                type="button"
+                className="kit-btn d-detail-btn"
+                onClick={() => onEdit(doc)}
+              >
+                <Icon svg={RENAME_ICON} />
+                Edit
+              </button>
+            ) : (
+              <ReplaceButton doc={doc} onReplace={onReplace} />
             )}
           </div>
           <div className="d-detail-label">Details</div>
@@ -101,6 +160,24 @@ export function Details({
               </div>
             ))}
           </div>
+          <button
+            type="button"
+            className="d-detail-label d-version-toggle"
+            aria-expanded={String(historyOpen)}
+            onClick={() => setHistoryOpen((o) => !o)}
+          >
+            Version history
+            <Icon svg={historyOpen ? I.chevL : I.chevR} />
+          </button>
+          {historyOpen ? (
+            <History
+              key={doc.content_id}
+              documentId={doc.document_id}
+              readOnly={trashed}
+              loadVersions={loadHistory}
+              onRestoreVersion={(documentId, contentId) => onRestoreVersion(doc, contentId)}
+            />
+          ) : null}
         </div>
         <div className="d-details-foot">
           {trashed ? (
