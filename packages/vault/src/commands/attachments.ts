@@ -15,6 +15,7 @@
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
+import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 
 /**
  * The entities a projection may attach to, logical name → primary-key column.
@@ -169,6 +170,10 @@ function attach(ctx: HandlerCtx): Record<string, unknown> {
     mediaType = claimed.mediaType;
     byteSize = claimed.byteSize;
   } else if (input.data_uri !== undefined) {
+    // Binary payloads spill to the CAS unconditionally in mintContentFromDataUri;
+    // text/* cannot redirect (FTS reads content_uri in-transaction), so it
+    // gets the tighter inline budget here (issue #367 §E4).
+    assertInlineDataUriWithinBudget(input.data_uri);
     const minted = mintContentFromDataUri(ctx, input.data_uri, { title: input.title });
     contentId = minted.contentId;
     mediaType = minted.mediaType;

@@ -86,4 +86,35 @@ CREATE TABLE agent_explanation (
   summary        TEXT NOT NULL,
   generated_at   TEXT NOT NULL
 ) STRICT;
+
+-- Journal segment archival (issue #367 §E2): rows past the active window are
+-- sealed into a content-addressed segment (journal-archive.ts) written to
+-- the vault's blob CAS, and this manifest row is the ONLY thing that stays
+-- in journal.db for them afterward — audit-chain verifiability without
+-- keeping every row forever. chain_hash folds prev_manifest_id's own
+-- chain_hash into this row's, so verifying the newest manifest transitively
+-- attests every earlier archival run has not been reordered or dropped.
+-- Manifests are themselves append-only (never updated, never archived) —
+-- the archival trail is small by construction (one row per run, not per
+-- archived audit row).
+CREATE TABLE journal_archive_manifest (
+  manifest_id      TEXT PRIMARY KEY,
+  -- 'provenance' (consent_provenance) or 'invocation_cluster' (the mutually
+  -- FK-linked agent_command_invocation + consent_receipt +
+  -- agent_invocation_check + agent_evidence + agent_explanation rows for a
+  -- batch of invocations old enough, receipt included, to seal together —
+  -- see journal-archive.ts for why these archive as one unit).
+  stream           TEXT NOT NULL CHECK (stream IN ('provenance', 'invocation_cluster')),
+  from_id          TEXT,
+  to_id            TEXT,
+  from_time        TEXT NOT NULL,
+  to_time          TEXT NOT NULL,
+  row_count        INTEGER NOT NULL CHECK (row_count > 0),
+  segment_sha256   TEXT NOT NULL CHECK (length(segment_sha256) = 64),
+  segment_bytes    INTEGER NOT NULL CHECK (segment_bytes >= 0),
+  prev_manifest_id TEXT REFERENCES journal_archive_manifest(manifest_id),
+  chain_hash       TEXT NOT NULL,
+  created_at       TEXT NOT NULL
+) STRICT;
+CREATE INDEX idx_archive_manifest_stream_time ON journal_archive_manifest(stream, to_time);
 `;

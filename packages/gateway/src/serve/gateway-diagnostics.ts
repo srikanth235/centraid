@@ -9,19 +9,33 @@
  * support request: version/platform, the current `HealthRegistry`
  * snapshot, a bounded log tail, cheap on-disk vault sizing (statSync
  * only — this never walks the blob CAS, which can be arbitrarily large),
- * and a config/runtime summary. The config summary is REDACTED before
- * it is ever assembled into the response: any key that looks
- * secret-shaped (token, secret, password, credential, apiKey, …) is
- * blanked recursively, however deep it's nested. This is a blunt,
- * key-name-based filter rather than a schema-aware one — deliberately,
- * so a NEW secret-shaped field added to config later is caught by
- * naming convention instead of requiring someone to remember to extend
- * an allowlist.
+ * a per-table size breakdown, and a config/runtime summary. The config
+ * summary is REDACTED before it is ever assembled into the response: any
+ * key that looks secret-shaped (token, secret, password, credential,
+ * apiKey, …) is blanked recursively, however deep it's nested. This is a
+ * blunt, key-name-based filter rather than a schema-aware one —
+ * deliberately, so a NEW secret-shaped field added to config later is
+ * caught by naming convention instead of requiring someone to remember to
+ * extend an allowlist.
+ *
+ * `tableStats` (issue #367 §E1) is a SECOND, best-effort layer on top of
+ * the cheap file sizes: `dbSizeBreakdown` opens a `dbstat` query (or falls
+ * back to a row-count estimate) against the ALREADY-OPEN vault/journal
+ * handles the mounted `VaultPlane` holds — no extra file I/O, no CAS walk.
+ * It is wrapped in its own try/catch per vault so a stats query never turns
+ * a working diagnostics bundle into a failed one.
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  dbSizeBreakdown,
+  scanInlineBodyViolations,
+  type DbSizeBreakdown,
+  type InlineBodyViolationScan,
+  type VaultDb,
+} from '@centraid/vault';
 import type { GatewayLogEntry, GatewayLogStore } from './gateway-log-store.js';
 import type { HealthRegistry, HealthSnapshot } from './health-registry.js';
 import type { VaultRegistry } from './vault-registry.js';
@@ -38,10 +52,20 @@ export interface DiagnosticsVaultFileSizes {
   journalDbWalBytes: number | null;
 }
 
+/** Per-table size breakdown for one vault's two files (issue #367 §E1). */
+export interface DiagnosticsTableStats {
+  vaultDb: DbSizeBreakdown;
+  journalDb: DbSizeBreakdown;
+  /** Pre-existing inline text bodies already over the §E4 budget. */
+  inlineBodyViolations: InlineBodyViolationScan;
+}
+
 export interface DiagnosticsVaultInfo {
   vaultId: string;
   name: string;
   files: DiagnosticsVaultFileSizes;
+  /** Absent when the plane's live handles aren't available or the query failed. */
+  tableStats?: DiagnosticsTableStats;
 }
 
 export interface DiagnosticsBundle {
@@ -122,6 +146,26 @@ function vaultFileSizes(dir: string): DiagnosticsVaultFileSizes {
   };
 }
 
+/**
+ * Best-effort table stats off a mounted plane's ALREADY-OPEN handles.
+ * `undefined` (never throws) when the plane doesn't carry live handles —
+ * true for every unit-test stub in this file's own tests, and a safe
+ * degrade if a future caller ever hands this a plane mid-teardown.
+ */
+function tableStatsFor(plane: { db?: VaultDb }): DiagnosticsTableStats | undefined {
+  try {
+    const db = plane.db;
+    if (!db) return undefined;
+    return {
+      vaultDb: dbSizeBreakdown(db.vault),
+      journalDb: dbSizeBreakdown(db.journal),
+      inlineBodyViolations: scanInlineBodyViolations(db.vault),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Assemble the diagnostics bundle. Cheap: every vault size is a single
  *  `statSync` (no CAS walk), the log tail is a ring-buffer slice, and
  *  `health.snapshot()` only runs its registered probes (the same cost
@@ -134,11 +178,15 @@ export async function buildDiagnosticsBundle(
   const allLogs = options.logs.snapshot();
   const logs = allLogs.length > logLimit ? allLogs.slice(allLogs.length - logLimit) : allLogs;
 
-  const vaults: DiagnosticsVaultInfo[] = options.vaults.planesList().map((plane) => ({
-    vaultId: plane.boot.vaultId,
-    name: plane.name,
-    files: vaultFileSizes(plane.dir),
-  }));
+  const vaults: DiagnosticsVaultInfo[] = options.vaults.planesList().map((plane) => {
+    const tableStats = tableStatsFor(plane);
+    return {
+      vaultId: plane.boot.vaultId,
+      name: plane.name,
+      files: vaultFileSizes(plane.dir),
+      ...(tableStats ? { tableStats } : {}),
+    };
+  });
 
   return {
     generatedAt: new Date().toISOString(),

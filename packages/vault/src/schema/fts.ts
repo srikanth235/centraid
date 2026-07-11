@@ -214,14 +214,40 @@ export const SEARCHABLE: Readonly<Record<string, SearchableEntity>> = Object.fro
   ]),
 );
 
+/**
+ * Per-document index budget (issue #367 §E3): a body can be arbitrarily
+ * large (a pasted transcript, an imported email, an extracted PDF's text
+ * layer), but the FTS shadow tables are a SEARCH index, not a second copy
+ * of the canonical bytes — the canonical body/derivative stays complete and
+ * untruncated; only what feeds the index is capped. Generous by design
+ * (256KB covers the overwhelming majority of real bodies whole); anything
+ * past it is still searchable up to the cut, just not beyond it.
+ */
+export const FTS_BODY_INDEX_BUDGET_CHARS = 256 * 1024;
+
+const TRUNCATION_MARKER = ' ...(truncated for search index)';
+
+/**
+ * Wrap a body-text SQL expression so it never feeds more than `budgetChars`
+ * into the index. `expr` is inlined twice (length check + substr) — fine
+ * for a trigger that runs once per write, and keeps this a pure SQL
+ * expression with no bound parameters (trigger bodies are static DDL).
+ */
+export function truncateForIndex(expr: string, budgetChars: number = FTS_BODY_INDEX_BUDGET_CHARS): string {
+  return `(CASE WHEN ${expr} IS NULL THEN NULL
+                 WHEN length(${expr}) > ${budgetChars}
+                 THEN substr(${expr}, 1, ${budgetChars}) || '${TRUNCATION_MARKER}'
+                 ELSE ${expr} END)`;
+}
+
 /** Value expression for one indexed column, `prefix` = `new` or a base alias. */
 function valueExpr(column: FtsColumn, prefix: string): string {
   if (column.kind === 'column') return `${prefix}."${column.name}"`;
   if (column.kind === 'self-content') {
-    return `vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`;
+    return truncateForIndex(`vault_content_text(${prefix}."media_type", ${prefix}."content_uri")`);
   }
-  return `(SELECT vault_content_text(media_type, content_uri) FROM core_content_item
-            WHERE content_id = ${prefix}."${column.fk}")`;
+  return truncateForIndex(`(SELECT vault_content_text(media_type, content_uri) FROM core_content_item
+            WHERE content_id = ${prefix}."${column.fk}")`);
 }
 
 /**
@@ -242,23 +268,54 @@ export function assertNoSealedFtsColumns(spec: FtsEntitySpec): void {
   }
 }
 
+function insertColumnsOf(spec: FtsEntitySpec): string {
+  return ['rowid', spec.idColumn, ...spec.columns.map((c) => c.name)].join(', ');
+}
+
+function valuesOf(spec: FtsEntitySpec, prefix: string): string {
+  return [
+    `${prefix}.rowid`,
+    `${prefix}."${spec.idColumn}"`,
+    ...spec.columns.map((c) => valueExpr(c, prefix)),
+  ].join(', ');
+}
+
+/** Soft-deleted rows leave the index — the WHERE guard shared by every path that (re)builds it. */
+function liveGuardOf(spec: FtsEntitySpec, prefix: string): string {
+  return spec.deletedColumn ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL` : '';
+}
+
+/**
+ * The full-table backfill: every live row's current value, re-derived.
+ * Shared by the migration DDL (backfilling a pre-index vault) and
+ * `rebuildFtsIndex` (re-deriving after e.g. `FTS_BODY_INDEX_BUDGET_CHARS`
+ * changes) — same statement, same truncation policy, one definition.
+ */
+function backfillStatement(spec: FtsEntitySpec): string {
+  const base = physical(spec.entity);
+  const fts = `fts_${base}`;
+  return `INSERT INTO ${fts}(${insertColumnsOf(spec)})
+SELECT ${valuesOf(spec, 'b')} FROM ${base} b${liveGuardOf(spec, 'b')};`;
+}
+
 function entityDdl(spec: FtsEntitySpec): string {
   assertNoSealedFtsColumns(spec);
   const base = physical(spec.entity);
   const fts = `fts_${base}`;
   const ftsColumns = [`${spec.idColumn} UNINDEXED`, ...spec.columns.map((c) => c.name)];
-  const insertColumns = ['rowid', spec.idColumn, ...spec.columns.map((c) => c.name)].join(', ');
-  const values = (prefix: string) =>
-    [
-      `${prefix}.rowid`,
-      `${prefix}."${spec.idColumn}"`,
-      ...spec.columns.map((c) => valueExpr(c, prefix)),
-    ].join(', ');
-  // Soft-deleted rows leave the index; INSERT … SELECT … WHERE carries the
-  // guard for both the insert and update triggers.
-  const liveGuard = (prefix: string) =>
-    spec.deletedColumn ? ` WHERE ${prefix}."${spec.deletedColumn}" IS NULL` : '';
-  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${values('new')}${liveGuard('new')};`;
+  const insertColumns = insertColumnsOf(spec);
+  const insertRow = `INSERT INTO ${fts}(${insertColumns}) SELECT ${valuesOf(spec, 'new')}${liveGuardOf(spec, 'new')};`;
+  // detail= tuning (issue #367 §E3): left at the FTS5 default, detail=full.
+  // detail=column/none shrink the index by dropping per-term POSITION data,
+  // but snippet()/highlight() degrade to whole-column matches without it —
+  // the owner-facing search surface (issue #274) uses snippet() for match
+  // context, so that quality loss isn't free. The size problem detail=
+  // would address is now handled at the source instead: the per-document
+  // budget above bounds how much text ever reaches the index, and journal
+  // archival (journal-archive.ts) keeps the OTHER fast-growing file small —
+  // so detail=full's extra position data no longer has an unbounded body to
+  // multiply against. Revisit only with evidence the index itself (not the
+  // bodies feeding it) is the dominant cost.
   return `
 CREATE VIRTUAL TABLE ${fts} USING fts5(
   ${ftsColumns.join(', ')},
@@ -274,8 +331,7 @@ END;
 CREATE TRIGGER ${fts}_ad AFTER DELETE ON ${base} BEGIN
   DELETE FROM ${fts} WHERE rowid = old.rowid;
 END;
-INSERT INTO ${fts}(${insertColumns})
-SELECT ${values('b')} FROM ${base} b${liveGuard('b')};
+${backfillStatement(spec)}
 `;
 }
 
@@ -284,3 +340,31 @@ SELECT ${values('b')} FROM ${base} b${liveGuard('b')};
  * rows a pre-index vault already holds (a no-op on fresh files).
  */
 export const FTS_DDL: string = SPECS.map(entityDdl).join('\n');
+
+const SPEC_BY_ENTITY: ReadonlyMap<string, FtsEntitySpec> = new Map(SPECS.map((s) => [s.entity, s]));
+
+/**
+ * Rebuild path (issue #367 §E3): the index is derived and rebuildable — if
+ * `FTS_BODY_INDEX_BUDGET_CHARS` (or a spec) changes, existing indexed rows
+ * still carry the OLD truncation, since FTS5's own `('rebuild')` command
+ * only re-derives the internal index structures from what fts5 itself
+ * already stored, not from the base tables. This re-runs the real backfill
+ * (delete + re-derive from the base table) so a budget change actually
+ * reflows every live row.
+ *
+ * `core.document` is NOT covered here — schema/blob.ts overrides its
+ * triggers with a derivative-aware body expression (extracted text wins
+ * over the raw decode); use `rebuildDocumentFtsIndex` (blob.ts) for it.
+ */
+export function rebuildFtsIndex(vault: DatabaseSync, entity: string): void {
+  if (entity === 'core.document') {
+    throw new Error(
+      'core.document has a derivative-aware FTS rebuild — use rebuildDocumentFtsIndex from schema/blob.js',
+    );
+  }
+  const spec = SPEC_BY_ENTITY.get(entity);
+  if (!spec) throw new Error(`not a searchable entity: ${entity}`);
+  const fts = `fts_${physical(spec.entity)}`;
+  vault.exec(`DELETE FROM ${fts};`);
+  vault.exec(backfillStatement(spec));
+}

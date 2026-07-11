@@ -40,10 +40,10 @@
 
 ### E. vault.db runway (the v2 insurance — keeps the deferral safe)
 
-- [ ] `dbstat` per-table size breakdown in the diagnostics bundle — ship first; it decides whether the items below are needed per vault.
-- [ ] Journal segment archival: journal rows past an active window (e.g. 90 days) sealed into content-addressed segments → blob CAS (which now replicates them remotely for free); local manifest row (id range, time range, hash) preserves audit-chain verifiability; archived rows deleted + pages reclaimed.
-- [ ] FTS bounding policy: per-document index budget (full text for recent/pinned, truncated for old) + FTS5 `detail` tuning. Derived + rebuildable, so ship simple, tighten under pressure.
-- [ ] Inline-body threshold: enforce ~64KB max on `data:` URI bodies and oversized JSON columns at write time (redirect to CAS refs); diagnostics scan surfaces pre-existing violations.
+- [x] `dbstat` per-table size breakdown in the diagnostics bundle — ship first; it decides whether the items below are needed per vault.
+- [x] Journal segment archival: journal rows past an active window (e.g. 90 days) sealed into content-addressed segments → blob CAS (which now replicates them remotely for free); local manifest row (id range, time range, hash) preserves audit-chain verifiability; archived rows deleted + pages reclaimed.
+- [x] FTS bounding policy: per-document index budget (full text for recent/pinned, truncated for old) + FTS5 `detail` tuning. Derived + rebuildable, so ship simple, tighten under pressure.
+- [x] Inline-body threshold: enforce ~64KB max on `data:` URI bodies and oversized JSON columns at write time (redirect to CAS refs); diagnostics scan surfaces pre-existing violations.
 
 ## What changed
 
@@ -416,6 +416,10 @@ npx turbo run typecheck test --filter=@centraid/backup --filter=@centraid/gatewa
 | claude-code-ac2077f8-e15-1783795347-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 2 | 2278 | 560833 | 206 | 2486 | 0.5996 | 988660 | 15122093 | 607348714 | 2960857 | test (#367) |
 | claude-code-ac2077f8-e15-1783795674-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 7056 | 31012 | 14844633 | 24182 | 62250 | 16.5119 | 995716 | 15153105 | 622193347 | 2985039 | feat(vault,gateway): CAS remote tier — storage connections, streaming replicatio |
 | claude-code-ac2077f8-e15-1783795721-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 4 | 3798 | 1162754 | 2026 | 5828 | 1.3116 | 995720 | 15156903 | 623356101 | 2987065 | feat(vault,gateway): CAS remote tier — sealed connections, streaming replication |
+| claude-code-ac2077f8-e15-1783795771-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 4 | 2376 | 1166552 | 1988 | 4368 | 1.2957 | 995724 | 15159279 | 624522653 | 2989053 | feat(vault,gateway): vault.db runway — dbstat, journal archival, FTS budget, inl |
+| claude-code-ac2077f8-e15-1783795799-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 2 | 1109 | 584464 | 181 | 1292 | 0.6074 | 995726 | 15160388 | 625107117 | 2989234 | test (#367) |
+| claude-code-ac2077f8-e15-1783795841-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 6 | 882 | 1756719 | 3906 | 4794 | 1.9631 | 995732 | 15161270 | 626863836 | 2993140 | feat(vault,gateway): vault.db runway — dbstat, journal archival, FTS budget, inl |
+| claude-code-ac2077f8-e15-1783795881-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #367 | claude-fable-5 | 7276 | 3070 | 1171734 | 1886 | 12232 | 1.3772 | 1003008 | 15164340 | 628035570 | 2995026 | feat(vault,gateway): vault.db runway — dbstat, journal archival, FTS + body caps |
 ## Audit
 
 ### Section A (Checklist items 1-3)
