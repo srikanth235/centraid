@@ -592,8 +592,8 @@ export interface CentraidAutomationRunRecord {
   /** Set for `kind: 'automation'` — the automation app id. */
   automationId?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
-  /** Source that fired the run (`cron` / `webhook` / `manual`). */
-  triggerOrigin?: 'cron' | 'webhook' | 'manual';
+  /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
+  triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
   parentRunId?: string;
   inputJson?: string;
   startedAt: number;
@@ -653,6 +653,8 @@ export interface CentraidAutomationManifest {
   triggers: Array<
     | { kind: 'cron'; expr: string }
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
+    | { kind: 'data'; entities: readonly string[]; every?: string }
+    | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   >;
   requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
   /** App ids this automation is associated with. */
@@ -673,6 +675,8 @@ export interface CentraidAutomationRow {
   triggers: Array<
     | { kind: 'cron'; expr: string }
     | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
+    | { kind: 'data'; entities: readonly string[]; every?: string }
+    | { kind: 'condition'; entity: string; where?: unknown; every?: string }
   >;
   enabled: boolean;
   /** Id of the app folder this automation belongs to. */
@@ -819,6 +823,8 @@ declare global {
     triggers: Array<
       | { kind: 'cron'; expr: string }
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
+      | { kind: 'data'; entities: readonly string[]; every?: string }
+      | { kind: 'condition'; entity: string; where?: unknown; every?: string }
     >;
     requires: { mcps?: readonly string[]; tools?: readonly string[]; model?: string };
     apps?: readonly string[];
@@ -834,6 +840,8 @@ declare global {
     triggers: Array<
       | { kind: 'cron'; expr: string }
       | { kind: 'webhook'; id?: string; secretHash?: string; pending?: true }
+      | { kind: 'data'; entities: readonly string[]; every?: string }
+      | { kind: 'condition'; entity: string; where?: unknown; every?: string }
     >;
     enabled: boolean;
     ownerApp: string;
@@ -855,7 +863,7 @@ declare global {
     kind: 'automation' | 'chat' | 'build';
     automationId?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
-    triggerOrigin?: 'cron' | 'webhook' | 'manual';
+    triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
     parentRunId?: string;
     inputJson?: string;
     startedAt: number;

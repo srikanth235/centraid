@@ -8,7 +8,11 @@ import PageScroll from '../PageScroll.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
 import { scaffoldAutomationDraft } from './automationsData.js';
-import { cloneAutomationTemplate, loadAutomationTemplates } from './templatesData.js';
+import {
+  cloneAutomationTemplate,
+  loadAutomationTemplates,
+  surfaceMintedWebhook,
+} from './templatesData.js';
 
 // React-owned automation templates gallery — replaces the vanilla
 // renderAutomationTemplates (app-automations-templates.ts). Loads the automation
@@ -21,7 +25,7 @@ export default function TemplatesRoute(): JSX.Element {
   const useAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
       .then(({ automationId, webhooks }) => {
-        for (const w of webhooks) showToast(`Webhook URL: ${w.url} (secret shown once in console)`);
+        for (const w of webhooks) surfaceMintedWebhook(w, showToast);
         navigate({ kind: 'automation-builder', automationId });
       })
       .catch((err: unknown) =>

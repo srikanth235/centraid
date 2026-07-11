@@ -167,18 +167,24 @@ export function enrollDevice(
 
 export function enrollApp(
   db: VaultDb,
-  options: { name: string; origin?: 'installed' | 'generated'; riskCeiling?: Risk },
+  options: {
+    name: string;
+    origin?: 'installed' | 'generated';
+    riskCeiling?: Risk;
+    displayName?: string;
+  },
 ): { appId: string; signingKey: string } {
   const appId = uuidv7();
   const signingKey = randomBytes(32).toString('hex');
   db.vault
     .prepare(
-      `INSERT INTO consent_app (app_id, name, publisher, manifest_uri, signing_key, status, origin, risk_ceiling, installed_at)
-       VALUES (?, ?, NULL, NULL, ?, 'active', ?, ?, ?)`,
+      `INSERT INTO consent_app (app_id, name, display_name, publisher, manifest_uri, signing_key, status, origin, risk_ceiling, installed_at)
+       VALUES (?, ?, ?, NULL, NULL, ?, 'active', ?, ?, ?)`,
     )
     .run(
       appId,
       options.name,
+      options.displayName ?? null,
       signingKey,
       options.origin ?? 'installed',
       options.riskCeiling ?? 'low',
@@ -189,7 +195,7 @@ export function enrollApp(
 
 export function enrollAgent(
   db: VaultDb,
-  options: { name: string; modelRef: string; version?: string },
+  options: { name: string; modelRef: string; version?: string; displayName?: string },
 ): { agentId: string; partyId: string } {
   const now = nowIso();
   const partyId = uuidv7();
@@ -198,14 +204,14 @@ export function enrollAgent(
       `INSERT INTO core_party (party_id, kind, display_name, sort_name, birth_date, avatar_content_id, created_at, updated_at, ontology_version)
        VALUES (?, 'agent', ?, NULL, NULL, NULL, ?, ?, ?)`,
     )
-    .run(partyId, options.name, now, now, ONTOLOGY_VERSION);
+    .run(partyId, options.displayName ?? options.name, now, now, ONTOLOGY_VERSION);
   const agentId = uuidv7();
   db.vault
     .prepare(
-      `INSERT INTO agent_agent (agent_id, party_id, model_ref, version, enrolled_at, status)
-       VALUES (?, ?, ?, ?, ?, 'active')`,
+      `INSERT INTO agent_agent (agent_id, party_id, host_key, model_ref, version, enrolled_at, status)
+       VALUES (?, ?, ?, ?, ?, ?, 'active')`,
     )
-    .run(agentId, partyId, options.modelRef, options.version ?? '0', now);
+    .run(agentId, partyId, options.name, options.modelRef, options.version ?? '0', now);
   return { agentId, partyId };
 }
 

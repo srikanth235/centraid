@@ -443,8 +443,11 @@ export class VaultPlane {
    * app credential). Keyed by the Centraid app id, like `enrollApp`.
    * Identity only — authority still requires an owner-approved agent grant.
    */
-  enrollAutomationAgent(appId: string): void {
-    const enrolled = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+  enrollAutomationAgent(appId: string, displayName?: string): void {
+    const enrolled = ensureAgentEnrolled(this.db, appId, {
+      modelRef: 'centraid-automation',
+      ...(displayName ? { displayName } : {}),
+    });
     if (enrolled.created) this.logger.info(`vault plane: enrolled automation agent "${appId}"`);
   }
 
@@ -534,9 +537,21 @@ export class VaultPlane {
    * Owner approval of an automation's requested grant — the agent-plane
    * mirror of `approveGrant`. The grantee is the agent's party, so the
    * grant matches on `grantee_party_id` in consent evaluation.
+   *
+   * `displayName`, when supplied, is the automation's real manifest name
+   * (same value `reconcileScheduler` threads through `enrollAutomationAgent`
+   * — build-gateway.ts). A grant can be the FIRST touch an automation's
+   * agent gets (e.g. approved before any reconcile pass has run against it,
+   * as the desktop UI's "Grant access" flow does), so without this,
+   * `ensureAgentEnrolled` falls back to a bare `humanizeSlug(appId)` and the
+   * agent is stuck with that id-derived name until some later reconcile
+   * happens to touch it again.
    */
-  approveAgentGrant(appId: string, request: GrantRequest): string {
-    const agent = ensureAgentEnrolled(this.db, appId, { modelRef: 'centraid-automation' });
+  approveAgentGrant(appId: string, request: GrantRequest, displayName?: string): string {
+    const agent = ensureAgentEnrolled(this.db, appId, {
+      modelRef: 'centraid-automation',
+      ...(displayName ? { displayName } : {}),
+    });
     const purpose = purposeConceptId(this.db, request.purpose);
     if (!purpose) throw new Error(`unknown purpose notation "${request.purpose}"`);
     if (request.scopes.length === 0) throw new Error('a grant needs at least one scope');
@@ -1048,7 +1063,7 @@ export class VaultPlane {
     const row = this.db.vault
       .prepare(
         actorKind === 'app'
-          ? 'SELECT name FROM consent_app WHERE app_id = ?'
+          ? 'SELECT COALESCE(display_name, name) AS name FROM consent_app WHERE app_id = ?'
           : `SELECT p.display_name AS name FROM agent_agent a
                JOIN core_party p ON p.party_id = a.party_id WHERE a.agent_id = ?`,
       )
@@ -1082,7 +1097,10 @@ export class VaultPlane {
    * schemas until the owner explicitly re-approves them.
    */
   invokeAsAssistant(request: InvokeRequest): InvokeOutcome {
-    const agent = ensureAgentEnrolled(this.db, '_assistant', { modelRef: 'centraid-assistant' });
+    const agent = ensureAgentEnrolled(this.db, '_assistant', {
+      modelRef: 'centraid-assistant',
+      displayName: 'Assistant',
+    });
     // Self-healing standing grant: cover every command owner_schema not
     // already scoped by an active grant — a later-installed app's ext band
     // (a NEW schema namespace) joins the assistant's write surface without
@@ -1310,9 +1328,11 @@ export class VaultPlane {
           case 'parked':
             // The app's own parked invocations — the "my pending approvals"
             // surface blueprints used to fake session-locally (issue #260).
+            // Matched on `callerId` (the enrolled row id), not `caller` (a
+            // display name — no longer guaranteed to equal `appId`).
             return this.gateway
               .listParked()
-              .filter((p) => p.callerKind === 'app' && p.caller === appId);
+              .filter((p) => p.callerKind === 'app' && p.callerId === app.appId);
           case 'resolve':
             // Cross-domain reference cards (issue #272) — resolvable when a
             // live core.link ties the ref to something this app reads.
@@ -1381,10 +1401,12 @@ export class VaultPlane {
             return this.gateway.discover(cred);
           case 'parked':
             // This agent's own invocations awaiting the owner — the handler
-            // sees WHAT is pending, never another caller's business.
+            // sees WHAT is pending, never another caller's business. Matched
+            // on `callerId` (the enrolled row id), not `caller` (a display
+            // name — no longer guaranteed to equal `appId`).
             return this.gateway
               .listParked()
-              .filter((p) => p.callerKind === 'agent' && p.caller === appId);
+              .filter((p) => p.callerKind === 'agent' && p.callerId === agent.agentId);
           case 'resolve':
             return this.gateway.resolveRefs(cred, call.payload as unknown as RefRequest);
           case 'reveal':

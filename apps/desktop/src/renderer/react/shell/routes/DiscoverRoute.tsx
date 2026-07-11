@@ -15,6 +15,7 @@ import {
   installAppTemplate,
   loadAppTemplates,
   loadAutomationTemplates,
+  surfaceMintedWebhook,
 } from './templatesData.js';
 
 export interface DiscoverRouteProps {
@@ -66,7 +67,7 @@ export default function DiscoverRoute({
   const applyAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
       .then(({ automationId, webhooks }) => {
-        for (const w of webhooks) showToast(`Webhook URL: ${w.url} (secret shown once in console)`);
+        for (const w of webhooks) surfaceMintedWebhook(w, showToast);
         navigate({ kind: 'automation-builder', automationId });
       })
       .catch((err: unknown) =>

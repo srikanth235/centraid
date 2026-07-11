@@ -1,5 +1,6 @@
 import { type JSX, useRef } from 'react';
 import {
+  auth,
   deleteAutomation,
   listAutomationRuns,
   readAutomation,
@@ -28,12 +29,13 @@ export default function AutomationViewRoute({
     <PageScroll>
       <AutomationViewScreen
         loadData={async () => {
-          const [row, runs] = await Promise.all([
+          const [row, runs, { baseUrl }] = await Promise.all([
             readAutomation({ automationId }),
             listAutomationRuns({ automationId, limit: 40 }),
+            auth(),
           ]);
           rowRef.current = row;
-          return row ? buildAutomationViewData(row, runs) : null;
+          return row ? buildAutomationViewData(row, runs, baseUrl) : null;
         }}
         onBack={() => navigate({ kind: 'automations' })}
         onEdit={() => {

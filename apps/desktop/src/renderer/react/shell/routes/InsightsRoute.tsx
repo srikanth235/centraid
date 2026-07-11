@@ -12,8 +12,9 @@ import { useAsyncData } from '../useAsyncData.js';
 //
 // The store's summary carries automation REFS but no display names (the
 // manifests live on disk, not in journal.db — see InsightsStore) — this route
-// resolves them from the automation list, falling back to the store's generic
-// labels for automations that have since been deleted.
+// resolves them from the automation list. Deleted automations fall back to
+// their raw ref (matching the Automations overview's orphan-run labels)
+// rather than the store's indistinct "Automation" label.
 export default function InsightsRoute(): JSX.Element {
   const state = useAsyncData(async () => {
     const [summary, automations] = await Promise.all([
@@ -24,13 +25,13 @@ export default function InsightsRoute(): JSX.Element {
     return {
       ...summary,
       byAutomation: summary.byAutomation.map((row) =>
-        row.kind === 'automation' && nameByRef.has(row.key)
-          ? { ...row, label: nameByRef.get(row.key) as string }
+        row.kind === 'automation'
+          ? { ...row, label: nameByRef.get(row.key) ?? row.key }
           : row,
       ),
       recent: summary.recent.map((row) =>
-        row.automationRef && nameByRef.has(row.automationRef)
-          ? { ...row, label: nameByRef.get(row.automationRef) as string }
+        row.automationRef
+          ? { ...row, label: nameByRef.get(row.automationRef) ?? row.automationRef }
           : row,
       ),
     };

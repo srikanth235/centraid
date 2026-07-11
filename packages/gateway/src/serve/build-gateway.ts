@@ -267,6 +267,17 @@ export interface BuiltGateway {
    */
   composedHandler: RouteHandler;
   /**
+   * The `/_centraid-hook/<id>` webhook-trigger route (issue #96), mounted
+   * ahead of the bearer check (issue #304's `publicPathPrefixes`) — the
+   * shared secret in the request IS the auth. Resolves the slug to its
+   * OWNING vault across every mounted vault (webhook ids are globally
+   * unique), then blocks until the fire completes and answers with its
+   * outcome — the same contract the OpenClaw plugin's `_centraid-hook`
+   * mount honors. Returns `false` for any non-matching URL so the host can
+   * fall through to `composedHandler`.
+   */
+  webhookHandler: RouteHandler;
+  /**
    * Post-listener lifecycle. Call once the host has bound a socket,
    * passing the live origin so post-turn webhook minting can build
    * absolute `_centraid-hook` URLs. Mounts EVERY vault's workspace, then
@@ -754,9 +765,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         // and grant each automation's DECLARED scopes at the same moment
         // (issue #306 decision 2: installing was the consent).
         const plane = vaultRegistry.get(vaultId);
+        const nameByOwnerApp = new Map(rows.map((r) => [r.ownerApp, r.name]));
         for (const appId of new Set(rows.map((r) => r.ownerApp))) {
           try {
-            vaultRegistry.enrollAutomationAgent(appId);
+            vaultRegistry.enrollAutomationAgent(appId, nameByOwnerApp.get(appId));
           } catch (err) {
             logger.warn(
               `vault plane: agent enrollment for "${appId}" failed: ` +
@@ -863,6 +875,109 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         },
       });
     }
+  };
+
+  // ── Webhook trigger route (issue #96) ─────────────────────────────────
+  // Core-gateway parity with the OpenClaw plugin's `/_centraid-hook` mount:
+  // the desktop/daemon gateway IS the always-on host for desktop-only
+  // users, so it must answer webhook POSTs the same way OpenClaw does, not
+  // just when a cloud host happens to be in the loop. `makeWebhookRouteHandler`
+  // is single-apps-dir (it resolves against ONE `appsDir` closed over at
+  // construction), so one instance is built per vault, cached by id; a
+  // cheap pre-scan across every MOUNTED vault's `list()` (webhook ids are
+  // minted from 24 random bytes — cross-vault collision is not a realistic
+  // concern) resolves which vault owns the slug and delegates the WHOLE
+  // request to that vault's instance, so nothing `makeWebhookRouteHandler`
+  // already does (auth, rate limit, in-flight guard, body cap, response
+  // shape) is reimplemented here.
+  const webhookHandlers = new Map<string, RouteHandler>();
+
+  /**
+   * Blocking automation fire for the webhook route — unlike the
+   * fire-and-forget `fireAutomation` the scheduler/manual-run routes use
+   * (which streams progress over the SSE bus and returns immediately), a
+   * webhook POST awaits the run to completion and answers with its outcome,
+   * matching the contract `runOpenclawFire` satisfies for the OpenClaw
+   * mount and `makeWebhookRouteHandler` expects from its `fire` callback.
+   */
+  const webhookFire = async (
+    vaultId: string,
+    automationRef: string,
+    body: unknown,
+  ): Promise<automation.WebhookFireResult> => {
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) return { ok: false, error: `unknown vault "${vaultId}"` };
+    const host = settledHostFor(vaultId);
+    const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+    const runnerPrefs = await prefsLoader();
+    try {
+      const { outcome } = await runWithVaultContext({ vaultId }, () =>
+        runAutomation({
+          automationRef,
+          runId,
+          appsDir: plane.workspace.appsDir,
+          journalDbFile: plane.workspace.journalDbFile,
+          codeAppsDir: host.codeAppsDir(),
+          // Each fire's ctx.vault rides the automation's enrolled
+          // agent.agent credential, resolved per app id (duaility §12) —
+          // same as the default local fire path above.
+          vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
+          resolveConnection: connectionBroker.resolveForFire,
+          runner: runnerPrefs?.kind ?? 'codex',
+          triggerKind: 'scheduled',
+          triggerOrigin: 'webhook',
+          ...(body !== undefined ? { input: body } : {}),
+          onRunEvent: (ev) => runEventBus.publish(runId, ev),
+        }),
+      );
+      // Grant-matched outbox items the fire just staged drain now (issue
+      // #306 phase 3), same as the default local fire path.
+      drainOutbox(plane);
+      return { ok: outcome.ok, runId, ...(outcome.error ? { error: outcome.error } : {}) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+      return { ok: false, runId, error: message };
+    }
+  };
+
+  const webhookHandlerForVault = (vaultId: string): RouteHandler => {
+    const existing = webhookHandlers.get(vaultId);
+    if (existing) return existing;
+    const handler = automation.makeWebhookRouteHandler({
+      appsDir: settledHostFor(vaultId).codeAppsDir(),
+      fire: ({ automationRef, body }) => webhookFire(vaultId, automationRef, body),
+    });
+    webhookHandlers.set(vaultId, handler);
+    return handler;
+  };
+
+  const webhookHandler: RouteHandler = async (req, res) => {
+    if (!req.url || !req.url.startsWith(automation.WEBHOOK_ROUTE_PREFIX)) return false;
+    const url = new URL(req.url, 'http://x');
+    const slug = url.pathname
+      .slice(automation.WEBHOOK_ROUTE_PREFIX.length)
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+    // Mirror `makeWebhookRouteHandler`'s own POST + slug-shape gate so a
+    // malformed request short-circuits to the default vault's 404/405
+    // without paying for a scan across every vault.
+    const isPost = (req.method ?? 'GET').toUpperCase() === 'POST';
+    const looksLikeSlug = /^[A-Za-z0-9_-]+$/.test(slug);
+    let targetVaultId = vaultRegistry.defaultVaultId();
+    if (isPost && looksLikeSlug) {
+      for (const plane of vaultRegistry.planesList()) {
+        const vaultId = plane.boot.vaultId;
+        const host = settledHosts.get(vaultId);
+        if (!host) continue; // not yet mounted — nothing to match there
+        const { rows } = await automation.list(host.codeAppsDir());
+        if (rows.some((r) => automation.webhookTriggerOf(r.triggers)?.id === slug)) {
+          targetVaultId = vaultId;
+          break;
+        }
+      }
+    }
+    return webhookHandlerForVault(targetVaultId)(req, res);
   };
 
   // ── The runtime ───────────────────────────────────────────────────────
@@ -1011,6 +1126,14 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     makeVaultRouteHandler(vaultRegistry, {
       ...(options.deviceAccess ? { deviceAccess: options.deviceAccess } : {}),
       onOutboxDecided: drainOutbox,
+      // fix (this session): agent-grant approval can be the FIRST enrollment
+      // touch for an automation's agent — resolve its real manifest name
+      // the same way reconcileScheduler does, so `approveAgentGrant` never
+      // has to fall back to a bare id-derived name.
+      resolveAutomationName: async (appId) => {
+        const { rows } = await automation.list(currentSettledHost().codeAppsDir());
+        return rows.find((r) => r.ownerApp === appId)?.name;
+      },
     }),
     // Template catalog (issue #141): the gateway owns it, so the renderer
     // reads `GET /centraid/_templates` directly. Templates are SEEDS —
@@ -1184,6 +1307,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     syncApps,
     extraHandlers,
     composedHandler,
+    webhookHandler,
     start,
     stop,
   } satisfies BuiltGateway;

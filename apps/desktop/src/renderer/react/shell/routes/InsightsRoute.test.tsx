@@ -109,4 +109,36 @@ describe('InsightsRoute', () => {
     const hits = el.textContent?.match(/System health check/g) ?? [];
     expect(hits.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('falls back to the raw ref for deleted automations, matching the overview', async () => {
+    listAutomations.mockResolvedValue([]);
+    getInsightsSummary.mockResolvedValue({
+      ...(summary as object),
+      byAutomation: [
+        {
+          key: 'gone-app/gone-auto',
+          label: 'Automation',
+          kind: 'automation',
+          runs: 1,
+          tokens: 0,
+          costUsd: 0,
+        },
+      ],
+      recent: [
+        {
+          runId: 'r1',
+          kind: 'automation',
+          label: 'ok',
+          automationRef: 'gone-app/gone-auto',
+          ok: true,
+          startedAt: 1750000000000,
+          tokens: 0,
+          costUsd: 0,
+        },
+      ],
+    });
+    const el = await render();
+    const hits = el.textContent?.match(/gone-app\/gone-auto/g) ?? [];
+    expect(hits.length).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -151,6 +151,15 @@ button.rowMain:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Parked row's caller line: WHO is asking, badge + display name inline
+   (issue: parked-invocation trust legibility — a raw id slug with no
+   caller-kind indicator gave the owner no way to tell app vs automation
+   vs assistant apart before approving a destructive command). */
+.rowSubCaller {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .rowMeta {
   font-family: var(--font-mono);
   font-size: 10.5px;

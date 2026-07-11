@@ -66,12 +66,20 @@ export interface VaultAppEntry {
   grants: VaultGrant[];
 }
 
-/** An invocation parked for owner confirmation (risk above app ceiling). */
+/**
+ * An invocation parked for owner confirmation (risk above app ceiling).
+ * `callerKind` refines `'agent'` into `'assistant'` when the requester is
+ * the vault assistant's own identity, not an automation's — the Approvals
+ * row badge reads this to say WHO is asking (issue: parked-invocation
+ * trust legibility). `callerId` is the enrolled row id, stable even if the
+ * display name changes; `caller` is the display name shown to the owner.
+ */
 export interface VaultParkedEntry {
   invocationId: string;
   command: string;
   parkedAt: string;
-  callerKind: 'app' | 'agent' | 'owner-device';
+  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
+  callerId: string;
   caller: string | null;
   input: Record<string, unknown>;
 }

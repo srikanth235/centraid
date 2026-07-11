@@ -138,6 +138,29 @@ test('toggling an app-owned automation enabled flag over HTTP republishes the ma
   expect(manifest.enabled).toBe(true);
 });
 
+test('automation create rejects data/condition trigger kinds instead of coercing them to cron', async () => {
+  const res = await fetch(`${handle.url}/centraid/_automations`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: 'watcher',
+      triggers: [{ kind: 'data', entities: ['core.content_derivative'] }],
+    }),
+  });
+  expect(res.status).toBe(400);
+  const out = (await res.json()) as { error: string; message: string };
+  expect(out.error).toBe('bad_request');
+  expect(out.message).toContain('data');
+
+  // cron (explicit or default) and expr-only entries still scaffold fine.
+  const ok = await fetch(`${handle.url}/centraid/_automations`, {
+    method: 'POST',
+    headers: { ...auth(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 'minutely', triggers: [{ expr: '* * * * *' }] }),
+  });
+  expect(ok.status).toBe(201);
+});
+
 test('deleting an app-owned automation over HTTP removes the subdir but keeps the app', async () => {
   await openSession('s2');
   await putFiles('notes', 's2', uiAppWithAutomation(true));

@@ -77,6 +77,7 @@ export function buildParkedRow(row: VaultParkedEntry): ApprovalsParkedRowDTO {
     invocationId: row.invocationId,
     command: row.command,
     caller: row.caller ?? row.callerKind,
+    callerKind: row.callerKind,
     parkedAgo: relativeTime(row.parkedAt),
     inputPreview: JSON.stringify(row.input, null, 2),
   };

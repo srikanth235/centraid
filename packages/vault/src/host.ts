@@ -217,9 +217,29 @@ export function updateEnrichSettings(
 export interface EnrolledApp {
   appId: string;
   signingKey: string;
+  /**
+   * The host-side enrollment key (Centraid app id) — NOT the pretty name.
+   * A wide swath of the desktop renderer key-equates this to the app's
+   * slug (folder id, `appLiveUrl`, grant lookups); the pretty name a
+   * consent surface shows lives on `consent_app.display_name` instead,
+   * surfaced through `ParkedSummary.caller` (`gateway.ts#callerName`),
+   * never through this field.
+   */
   name: string;
   status: string;
   riskCeiling: Risk;
+}
+
+/**
+ * A raw host-side enrollment key ("locker", "e2e-agent-purge-demo") turned
+ * into a readable fallback ("Locker", "E2e Agent Purge Demo") — the
+ * self-heal target when no caller supplies a real app/automation name.
+ * Pure function of the key, so repeated enrollment never oscillates.
+ */
+export function humanizeSlug(slug: string): string {
+  const words = slug.split(/[-_]+/).filter((w) => w.length > 0);
+  if (words.length === 0) return slug;
+  return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 /** Find an active enrolled app by its host-side name (the Centraid app id). */
@@ -245,19 +265,34 @@ export function lookupAppByName(db: VaultDb, name: string): EnrolledApp | undefi
 /**
  * Enroll an app under its host-side name, once. Re-registering an already
  * active app returns the existing row — enrollment survives restarts and
- * republishes without minting a second identity.
+ * republishes without minting a second identity. `displayName` (the app's
+ * manifest/pretty name, when the caller has it — else a humanized `name`)
+ * self-heals onto `consent_app.display_name` whenever it has drifted, so
+ * the Approvals surface (`ParkedSummary.caller`) never shows a raw slug
+ * for long, without minting a second identity or disturbing the `name`
+ * key every OTHER surface matches on.
  */
 export function ensureAppEnrolled(
   db: VaultDb,
   name: string,
-  options?: { origin?: 'installed' | 'generated'; riskCeiling?: Risk },
+  options?: { origin?: 'installed' | 'generated'; riskCeiling?: Risk; displayName?: string },
 ): EnrolledApp & { created: boolean } {
+  const resolvedDisplayName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAppByName(db, name);
-  if (existing) return { ...existing, created: false };
+  if (existing) {
+    db.vault
+      .prepare(
+        `UPDATE consent_app SET display_name = ?
+          WHERE app_id = ? AND (display_name IS NULL OR display_name != ?)`,
+      )
+      .run(resolvedDisplayName, existing.appId, resolvedDisplayName);
+    return { ...existing, created: false };
+  }
   const enrolled = enrollApp(db, {
     name,
     origin: options?.origin ?? 'generated',
     riskCeiling: options?.riskCeiling ?? 'low',
+    displayName: resolvedDisplayName,
   });
   return {
     appId: enrolled.appId,
@@ -330,21 +365,24 @@ export function listActiveAgentGrants(db: VaultDb, partyId: string): GrantSummar
 export interface EnrolledAgent {
   agentId: string;
   partyId: string;
+  /** Display name — `core_party.display_name` (pretty, self-healing). */
   name: string;
   status: string;
 }
 
 /**
- * Find an active enrolled agent by its host-side name. Automations enroll
- * under their Centraid app id, the same way `lookupAppByName` keys apps —
- * the agent's `core.party` (kind=agent) carries the name.
+ * Find an active enrolled agent by its host-side key. Automations enroll
+ * under their Centraid app id, the same way `lookupAppByName` keys apps;
+ * the assistant enrolls under the literal `_assistant` key. The key lives
+ * on `agent_agent.host_key` — decoupled from `core_party.display_name`,
+ * which is free to hold a pretty name without breaking this lookup.
  */
 export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | undefined {
   const row = db.vault
     .prepare(
       `SELECT a.agent_id, a.party_id, p.display_name, a.status
          FROM agent_agent a JOIN core_party p ON p.party_id = a.party_id
-        WHERE p.display_name = ? AND p.kind = 'agent' AND a.status = 'active'
+        WHERE a.host_key = ? AND p.kind = 'agent' AND a.status = 'active'
         ORDER BY a.enrolled_at LIMIT 1`,
     )
     .get(name) as
@@ -360,27 +398,57 @@ export function lookupAgentByName(db: VaultDb, name: string): EnrolledAgent | un
 }
 
 /**
- * Enroll an agent under a host-side name, once (duaility §12: "the
+ * Enroll an agent under a host-side key, once (duaility §12: "the
  * conversation runner and automation fires act as an enrolled agent.agent").
- * Re-enrolling an active name returns the existing row. Identity only —
+ * Re-enrolling an active key returns the existing row. Identity only —
  * authority still requires an owner-approved grant on the agent's party.
+ *
+ * `displayName` (the automation/app's pretty name, when the caller has it)
+ * upserts onto `core_party.display_name` when it differs from what is
+ * stored — a raw-key display from before this fix (or a since-improved
+ * name) self-heals on the next enrollment touch, without minting a new
+ * agent identity (the key, and every grant/receipt against the party,
+ * survives).
  */
 export function ensureAgentEnrolled(
   db: VaultDb,
   name: string,
-  options?: { modelRef?: string; version?: string },
+  options?: { modelRef?: string; version?: string; displayName?: string },
 ): EnrolledAgent & { created: boolean } {
+  const resolvedName = options?.displayName ?? humanizeSlug(name);
   const existing = lookupAgentByName(db, name);
-  if (existing) return { ...existing, created: false };
+  if (existing) {
+    // Two kinds of touch land here: a caller that KNOWS the real manifest
+    // name (`options.displayName` set — reconcileScheduler, approveAgentGrant)
+    // and a caller that doesn't (name-less touches, e.g. a bare mount).
+    // Only the former may overwrite an existing name — a name-less touch
+    // must never regress an already-set real (or already-humanized) name
+    // back down to a fresh `humanizeSlug(name)` guess just because THIS
+    // particular caller raced ahead of the one that knew better (reconcile
+    // vs. grant-approval can land in either order around a publish). The
+    // ONE case a name-less touch may still self-heal is the literal legacy
+    // raw-slug display (`existing.name === name`, i.e. nobody has ever
+    // enrolled this agent with anything nicer) — that still upgrades to the
+    // humanized fallback, same as day one.
+    const mayOverwrite = options?.displayName !== undefined || existing.name === name;
+    if (mayOverwrite && existing.name !== resolvedName) {
+      db.vault
+        .prepare(`UPDATE core_party SET display_name = ? WHERE party_id = ?`)
+        .run(resolvedName, existing.partyId);
+      return { ...existing, name: resolvedName, created: false };
+    }
+    return { ...existing, created: false };
+  }
   const enrolled = enrollAgent(db, {
     name,
     modelRef: options?.modelRef ?? 'centraid-automation',
+    displayName: resolvedName,
     ...(options?.version ? { version: options.version } : {}),
   });
   return {
     agentId: enrolled.agentId,
     partyId: enrolled.partyId,
-    name,
+    name: resolvedName,
     status: 'active',
     created: true,
   };
@@ -455,7 +523,11 @@ export interface AppSummary {
   installedAt: string;
 }
 
-/** All active enrolled apps, without their signing keys. */
+/**
+ * All active enrolled apps, without their signing keys. `name` is the
+ * enrollment key (the desktop's own app-settings pane matches on it, e.g.
+ * `apps.find(a => a.name === appId)`) — see `EnrolledApp.name`'s note.
+ */
 export function listEnrolledApps(db: VaultDb): AppSummary[] {
   const rows = db.vault
     .prepare(

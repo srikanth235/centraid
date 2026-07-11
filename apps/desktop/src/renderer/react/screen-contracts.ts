@@ -121,7 +121,7 @@ export interface VaultParkedDTO {
   invocationId: string;
   command: string;
   parkedAt: string;
-  callerKind: 'app' | 'agent' | 'owner-device';
+  callerKind: 'app' | 'agent' | 'assistant' | 'owner-device';
   caller: string | null;
   input: Record<string, unknown>;
 }

@@ -1,12 +1,15 @@
 /**
  * Webhook trigger dispatch (issue #96).
  *
- * A `webhook` trigger fires an automation on an inbound HTTP POST. The
- * route is remote-gateway only — the desktop preserves the manifest
- * entry but never mounts a listener (it is a gateway *client*, not a
- * host). The openclaw plugin registers a single prefix route at
- * `/_centraid-hook` and hands every request to `makeWebhookRouteHandler`
- * built here; the desktop's embedded runtime never mounts it.
+ * A `webhook` trigger fires an automation on an inbound HTTP POST. Every
+ * host that can be someone's always-on gateway mounts a listener: the
+ * openclaw plugin registers a single prefix route at `/_centraid-hook`
+ * (`auth: 'plugin'`, no gateway bearer), and the core gateway
+ * (`packages/gateway/src/serve/build-gateway.ts`) mounts the equivalent
+ * ahead of its own bearer check — the desktop/daemon gateway IS the
+ * always-on gateway for desktop-only users (there is no separate remote
+ * host in that topology). Both mountings hand every request to
+ * `makeWebhookRouteHandler` built here.
  *
  * Auth copies the stock openclaw `webhooks` plugin recipe: a shared
  * secret carried as `Authorization: Bearer <secret>` or the

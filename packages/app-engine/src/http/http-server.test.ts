@@ -104,3 +104,30 @@ test('publicPaths serve without the bearer; everything else still 401s (issue #3
     await publicServer.close();
   }
 });
+
+test('publicPathPrefixes serve without the bearer for the whole subtree (issue #96)', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  const publicServer = await startRuntimeHttpServer({
+    runtime,
+    publicPathPrefixes: ['/_centraid-hook'],
+    extraHandlers: [
+      async (req, res) => {
+        if (!(req.url ?? '').startsWith('/_centraid-hook')) return false;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, url: req.url }));
+        return true;
+      },
+    ],
+  });
+  try {
+    // Any slug under the prefix answers with NO Authorization header.
+    const open = await fetch(`${publicServer.url}/_centraid-hook/abc123`, { method: 'POST' });
+    expect(open.status).toBe(200);
+    expect(await open.json()).toEqual({ ok: true, url: '/_centraid-hook/abc123' });
+    // A path outside the prefix still requires the bearer.
+    const other = await fetch(`${publicServer.url}/centraid/_apps`);
+    expect(other.status).toBe(401);
+  } finally {
+    await publicServer.close();
+  }
+});

@@ -149,6 +149,22 @@ function ConfigView({
               </div>
             );
           }
+          // Data / condition triggers — journal-feed or vault-read watchers.
+          if (t.kind === 'data' || t.kind === 'condition') {
+            const desc =
+              t.kind === 'data'
+                ? `Fires on changes to ${t.entities.join(', ')}`
+                : `Fires when ${t.entity} matches its condition`;
+            return (
+              <div className={styles.trigger} key={i}>
+                <div className={styles.triggerMain}>
+                  <Glyph svg={svgHistory14} className={styles.triggerIcon} />
+                  <span className={styles.triggerDesc}>{desc}</span>
+                  {t.every ? <code className={styles.triggerExpr}>{t.every}</code> : null}
+                </div>
+              </div>
+            );
+          }
           // Webhook trigger — provisioned (has a minted route id) or pending.
           const pending = t.id === undefined;
           return (
@@ -292,6 +308,14 @@ function FlowView({ automationRow }: { automationRow: CentraidAutomationRow }): 
       trigTitle = describeCron(t0.expr);
       const next = cronNextRuns(t0.expr, 1)[0];
       trigSub = next ? `Next: ${fmtNextRun(next)}` : t0.expr;
+    } else if (t0.kind === 'data') {
+      trigSvg = iconSvg('Clock', 16);
+      trigTitle = 'Data trigger';
+      trigSub = `Fires on changes to ${t0.entities.join(', ')}`;
+    } else if (t0.kind === 'condition') {
+      trigSvg = iconSvg('Clock', 16);
+      trigTitle = 'Condition trigger';
+      trigSub = `Fires when ${t0.entity} matches its condition`;
     } else {
       trigSvg = iconSvg('Webhook', 16);
       trigTitle = t0.id ? 'Webhook' : 'Webhook — provisioning…';
