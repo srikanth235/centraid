@@ -28,7 +28,14 @@ function ActivityItem({ a, onOpenDetails }) {
             {fmt(daysSinceIso(a.occurred_at))}
           </span>
         </div>
-        <p style={{ margin: '4px 0 14px', font: 'var(--t-body)', color: 'var(--ink-2)', lineHeight: 1.5 }}>
+        <p
+          style={{
+            margin: '4px 0 14px',
+            font: 'var(--t-body)',
+            color: 'var(--ink-2)',
+            lineHeight: 1.5,
+          }}
+        >
           {a.text || ''}
         </p>
       </div>
@@ -44,7 +51,9 @@ export function Activity({ recent, onOpenDetails }) {
           <Icon svg={I.activity} />
         </div>
         <div className="kit-empty-title">Nothing logged yet</div>
-        <div className="kit-empty-sub">Log a message or call from anyone’s profile and it shows up here.</div>
+        <div className="kit-empty-sub">
+          Log a message or call from anyone’s profile and it shows up here.
+        </div>
       </div>
     );
   }

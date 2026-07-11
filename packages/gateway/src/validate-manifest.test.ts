@@ -173,7 +173,7 @@ test('does not validate automation.json of a non-automation app', async () => {
   expect(await validateManifestAt(dir)).toBe(undefined);
 });
 
-test('missing automation.json is not this validator\'s concern', async () => {
+test("missing automation.json is not this validator's concern", async () => {
   await fs.writeFile(
     path.join(dir, 'app.json'),
     JSON.stringify({

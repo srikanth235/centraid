@@ -4,7 +4,15 @@ import { avatarColor, circleName, daysSince, shortFmt, statusOf } from '../forma
 import { I } from '../icons.js';
 import { Icon, Snippet } from './Shared.jsx';
 
-export function ListRow({ p, data, selectedIds, search, onOpenDetails, onToggleSelect, onOpenMenu }) {
+export function ListRow({
+  p,
+  data,
+  selectedIds,
+  search,
+  onOpenDetails,
+  onToggleSelect,
+  onOpenMenu,
+}) {
   const color = avatarColor(p);
   const st = statusOf(p);
   const selected = selectedIds.has(p.party_id);

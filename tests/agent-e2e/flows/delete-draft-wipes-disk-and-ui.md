@@ -1,5 +1,17 @@
 # Flow: Delete draft — disk + UI cleaned, persists across restart
 
+> **⚠️ Stale premise — verify before running.** This flow's setup ("Click
+> the Hydrate template → wait for builder → Back to home") describes app
+> templates cloning into a draft. Commit `4397329` ("'Use template' installs
+> app templates directly as published apps") removed that stage:
+> `installAppTemplate`
+> (`apps/desktop/src/renderer/react/shell/routes/templatesData.ts`) now
+> installs directly onto Home, never a `__draft`. Drafts still exist as a
+> concept in the shell (`DraftAppMeta`, `data-draft="true"`) — likely
+> reachable only via the chat/builder app-creation path now, not template
+> cloning — so this flow's delete-draft mechanics may still be valid once
+> re-pointed at a real draft source. Needs a live-rig rewrite before reuse.
+
 ## Goal
 Deleting a draft via the tile context menu must (a) remove the app
 directory from disk, (b) remove the draft tile from APPS, and (c) persist both

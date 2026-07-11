@@ -41,6 +41,15 @@ Commit 1 — desktop: relaunch-to-update pill backed by a dist watcher
   mono version line, trailing arrow) rendered only when `updateVersion` +
   `onRelaunchToUpdate` are set; `App.tsx` wires the hook to the props.
 
+## Out of scope
+
+- Packaged-build `electron-updater` integration — the app runs unpackaged
+  (`electron .`), so this ships the dist-watcher detection only; the issue
+  and the code both note the same IPC surface (status/relaunch) can later
+  swap in electron-updater for packaged/signed builds.
+- No changes to the build pipeline itself (`bun run build`) — this only
+  watches its output.
+
 ## Verification
 
 - `apps/desktop`: `npm test` — 73 files / 451 tests pass (28 new across

@@ -126,7 +126,7 @@ describe('RunViewScreen', () => {
     // The loading state must never strand the user without a way back.
     const crumbBtn = el.querySelector('.auCrumb button') as HTMLButtonElement;
     expect(crumbBtn).toBeTruthy();
-    act(() => crumbBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => crumbBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onBack).toHaveBeenCalled();
     push(makeSnapshot());
     expect(el.querySelector('.rv')).toBeTruthy();
@@ -155,7 +155,7 @@ describe('RunViewScreen', () => {
     );
     expect(runAgain).toBeUndefined();
     // Back navigation still works.
-    act(() =>
+    void act(() =>
       (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -180,7 +180,7 @@ describe('RunViewScreen', () => {
     push(makeSnapshot());
     const head = el.querySelector('.tlHead') as HTMLButtonElement;
     expect(head.getAttribute('aria-expanded')).toBe('false');
-    act(() => head.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => head.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(head.getAttribute('aria-expanded')).toBe('true');
     expect(el.querySelector('.tlBody')?.hasAttribute('hidden')).toBe(false);
   });
@@ -192,7 +192,7 @@ describe('RunViewScreen', () => {
     const logTab = [...el.querySelectorAll('.rvSegB')].find((b) =>
       b.textContent?.includes('Log'),
     ) as HTMLButtonElement;
-    act(() => logTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => logTab.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSetMode).toHaveBeenCalledWith('log');
     expect(el.querySelector('.log')).toBeTruthy();
     expect(el.querySelectorAll('.logRow').length).toBe(3);
@@ -232,7 +232,7 @@ describe('RunViewScreen', () => {
     const props = makeProps();
     const el = mount(props);
     push(makeSnapshot());
-    act(() =>
+    void act(() =>
       (el.querySelector('.auCrumb button') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),
@@ -241,7 +241,7 @@ describe('RunViewScreen', () => {
     const runAgain = [...el.querySelectorAll('.auBtn')].find((b) =>
       b.textContent?.includes('Run again'),
     ) as HTMLButtonElement;
-    act(() => runAgain.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => runAgain.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onRunAgain).toHaveBeenCalled();
   });
 });

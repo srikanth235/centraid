@@ -15,9 +15,12 @@ import { fmtBytes, fmtFull, loadable, typeMeta } from '../format.js';
 function VersionPreview({ v }) {
   const t = String(v.media_type ?? '');
   if (!loadable(v.content_uri)) return null;
-  if (t.startsWith('image/')) return <img className="d-version-preview" src={v.content_uri} alt="" />;
+  if (t.startsWith('image/'))
+    return <img className="d-version-preview" src={v.content_uri} alt="" />;
   if (t === 'application/pdf')
-    return <iframe className="d-version-preview-frame" src={v.content_uri} title="Version preview" />;
+    return (
+      <iframe className="d-version-preview-frame" src={v.content_uri} title="Version preview" />
+    );
   return (
     <a className="kit-btn d-detail-btn" href={v.content_uri} target="_blank" rel="noopener">
       Open in a new tab
@@ -75,11 +78,12 @@ export function History({ documentId, readOnly, loadVersions, onRestoreVersion }
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) loadVersions/documentId read once at mount; Details.jsx keys this component by content_id, so a real version change already remounts it fresh instead of re-running this effect
   }, []);
 
   if (versions === null) return <div className="d-version-status">Loading history…</div>;
-  if (denied) return <div className="d-version-status">Ask the owner to approve history access.</div>;
+  if (denied)
+    return <div className="d-version-status">Ask the owner to approve history access.</div>;
   if (versions.length <= 1) return <div className="d-version-status">No earlier versions yet.</div>;
 
   return (

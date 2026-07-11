@@ -48,7 +48,9 @@ async function main() {
   } catch (err) {
     failed = true;
     console.error('FAIL:', err);
-    await page.screenshot({ path: path.join(OUT_DIR, 'probe-x-close-FAILURE.png') }).catch(() => undefined);
+    await page
+      .screenshot({ path: path.join(OUT_DIR, 'probe-x-close-FAILURE.png') })
+      .catch(() => undefined);
   } finally {
     await session.close();
   }

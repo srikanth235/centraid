@@ -53,10 +53,7 @@ export default function ApprovalsRoute(): JSX.Element {
     }
   };
 
-  const reasonFor = (outcome: {
-    status: string;
-    reason?: string;
-  }): string | undefined =>
+  const reasonFor = (outcome: { status: string; reason?: string }): string | undefined =>
     outcome.status === 'executed' || outcome.status === 'replayed' ? undefined : outcome.reason;
 
   const handleApproveOutbox = (
@@ -141,7 +138,8 @@ export default function ApprovalsRoute(): JSX.Element {
   const handleRevokeGrant = (grantId: string): void => {
     void confirm({
       title: 'Revoke this standing grant?',
-      message: 'Future items like this park for your review again; anything already approved but undrained reparks too.',
+      message:
+        'Future items like this park for your review again; anything already approved but undrained reparks too.',
       confirmLabel: 'Revoke',
       danger: true,
     }).then((ok) => {

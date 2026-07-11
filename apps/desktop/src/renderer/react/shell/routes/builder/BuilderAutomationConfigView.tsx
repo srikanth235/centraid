@@ -42,8 +42,6 @@ const svgGlobe14 = iconSvg('Globe', 14);
 const svgPencil12 = iconSvg('Pencil', 12);
 const svgX12 = iconSvg('X', 12);
 const svgPlus12 = iconSvg('Plus', 12);
-const svgActivity14 = iconSvg('Activity', 14);
-const svgKey14 = iconSvg('Key', 14);
 
 type ConfigSectionKey = 'what' | 'when' | 'activity' | 'behavior' | 'vault' | 'apps';
 
@@ -70,7 +68,10 @@ function scheduleSummary(triggers: CentraidAutomationManifest['triggers']): stri
 }
 
 /** "What happened last" + "when it fires next" — the at-a-glance pairing for "When it runs". */
-function ActivityCard({ automationRef, triggers }: {
+function ActivityCard({
+  automationRef,
+  triggers,
+}: {
   automationRef: string;
   triggers: CentraidAutomationManifest['triggers'];
 }): JSX.Element {

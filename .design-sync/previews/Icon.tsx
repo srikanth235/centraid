@@ -14,12 +14,34 @@ const label: React.CSSProperties = { color: 'var(--ink-3)', fontSize: 10.5 };
 /** The line-icon set — one shared glyph vocabulary drawn by desktop + mobile. */
 export function Overview() {
   const names = [
-    'Home', 'Search', 'Compass', 'Sparkle', 'Bolt', 'Command',
-    'Plus', 'Check', 'Pencil', 'Trash', 'Send', 'Share',
-    'Star', 'Bell', 'Settings', 'History', 'Folder', 'Code',
+    'Home',
+    'Search',
+    'Compass',
+    'Sparkle',
+    'Bolt',
+    'Command',
+    'Plus',
+    'Check',
+    'Pencil',
+    'Trash',
+    'Send',
+    'Share',
+    'Star',
+    'Bell',
+    'Settings',
+    'History',
+    'Folder',
+    'Code',
   ] as const;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 18, color: 'var(--ink)' }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(6, 1fr)',
+        gap: 18,
+        color: 'var(--ink)',
+      }}
+    >
       {names.map((n) => (
         <div key={n} style={cell}>
           <Icon name={n} size={22} />

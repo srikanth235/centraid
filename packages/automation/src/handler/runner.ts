@@ -537,7 +537,12 @@ export async function runHandler(opts: RunHandlerOptions): Promise<HandlerOutcom
   const slash = audit.automationId.indexOf('/');
   const appId = slash > 0 ? audit.automationId.slice(0, slash) : undefined;
   const execConversationId = randomUUID();
-  audit.store.createAutomationRun(execConversationId, audit.automationId, appId, opts.automationName);
+  audit.store.createAutomationRun(
+    execConversationId,
+    audit.automationId,
+    appId,
+    opts.automationName,
+  );
   const startedAt = Date.now();
   audit.store.insertTurn({
     turnId: audit.runId,

@@ -129,7 +129,9 @@ export function bucketByDay(list) {
     if (Number.isNaN(start.getTime())) {
       const key = String(ev.dtstart).slice(0, 10);
       if (!map.has(key)) map.set(key, []);
-      map.get(key).push({ ev, segStart: 0, segEnd: 0, startsHere: true, endsHere: true, spansAll: false });
+      map
+        .get(key)
+        .push({ ev, segStart: 0, segEnd: 0, startsHere: true, endsHere: true, spansAll: false });
       continue;
     }
     let end = ev.dtend ? new Date(ev.dtend) : start;
@@ -214,7 +216,16 @@ export function layoutDay(items) {
 // ---------- Calendar colors ----------
 
 // GCal-adjacent palette used when a calendar has no color of its own.
-const PALETTE = ['#4285f4', '#0b8043', '#8e24aa', '#f4511e', '#f6bf26', '#039be5', '#d81b60', '#33b679'];
+const PALETTE = [
+  '#4285f4',
+  '#0b8043',
+  '#8e24aa',
+  '#f4511e',
+  '#f6bf26',
+  '#039be5',
+  '#d81b60',
+  '#33b679',
+];
 
 function hashStr(s) {
   let h = 0;

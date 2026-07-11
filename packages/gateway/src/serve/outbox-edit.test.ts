@@ -68,7 +68,12 @@ test('rebuildGmailSend refuses an empty recipient list', () => {
   expect(() => rebuild(stagedRequest, { to: '', subject: 'Hi', body: 'x' })).toThrow(/recipient/);
 });
 
-const stagedArtifact = { to: ['ravi@example.com'], subject: 'Hi', body: 'See you.', message_id: 'm1' };
+const stagedArtifact = {
+  to: ['ravi@example.com'],
+  subject: 'Hi',
+  body: 'See you.',
+  message_id: 'm1',
+};
 
 test('assertArtifactShapeUnchanged allows editing string and string[] fields in place', () => {
   expect(() =>

@@ -23,18 +23,23 @@
 
 ## What changed
 
-- Normative specs: `packages/backup/PROTOCOL.md` (centraid-backup-provider/1 —
-  dumb control plane + client-owned S3 data plane, discovery/capabilities,
-  api-key vs interactive auth tiers with interactive-only purge, reserved
-  error codes, generation fencing for split-brain detection, epoch-second
-  wire timestamps, GC min-age invariant) and `packages/backup/FORMAT.md`
-  (centraid-snapshot/1 — keyring with epochs, FastCDC, AES-256-GCM,
-  client-authored canonical-JSON manifest, the seal-key envelope inside the
-  snapshot, restore rules incl. side-effect quarantine, scheduled
-  verification, recovery kit). Protocol and format are versioned
-  independently; engines read format N and N-1.
-- `packages/backup` (new workspace package, zero new dependencies): the
-  `BackupProvider` seam, `LocalBackupProvider` (directory + atomic JSON
+- `packages/backup/PROTOCOL.md` — centraid-backup-provider/1 normative spec,
+  and `packages/backup/FORMAT.md` — centraid-snapshot/1 normative spec.
+  PROTOCOL.md (centraid-backup-provider/1) covers: dumb control plane +
+  client-owned S3 data plane, discovery/capabilities, api-key vs interactive
+  auth tiers with interactive-only purge, reserved error codes, generation
+  fencing for split-brain detection, epoch-second wire timestamps, GC
+  min-age invariant. FORMAT.md (centraid-snapshot/1) covers: keyring with
+  epochs, FastCDC, AES-256-GCM, client-authored canonical-JSON manifest, the
+  seal-key envelope inside the snapshot, restore rules incl. side-effect
+  quarantine, scheduled verification, recovery kit. Protocol and format are
+  versioned independently; engines read format N and N-1.
+- `packages/backup` (new workspace package, zero new dependencies) ships the
+  `BackupProvider` seam, `LocalBackupProvider`, `RemoteBackupProvider`,
+  `S3ObjectStore` (SigV4); `chunkStream` FastCDC chunker (frozen gear
+  table), keyring epochs, canonical-JSON manifest; and
+  `providerConformanceCases` conformance kit — in detail:
+  the `BackupProvider` seam, `LocalBackupProvider` (directory + atomic JSON
   registry), `RemoteBackupProvider` (protocol v1 HTTP client),
   `S3ObjectStore` (SigV4) with grant refresh, `chunkStream` FastCDC chunker
   with a frozen seeded gear table, keyring epochs + HKDF per-vault key
@@ -42,22 +47,35 @@
   `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `writeRecoveryKit`
   engine, and `providerConformanceCases` — the conformance kit that defines
   the protocol.
-- `packages/vault`: `stageVaultDbs` — receipted VACUUM INTO staging of the
-  two DB files only, so the engine references the immutable blob CAS in
-  place instead of `backupVault()`'s full CAS copy (untenable at 100+ GB).
-- `packages/gateway`: `BackupService` scheduler (hourly tick; per-vault
-  backup interval + verify cadence; `conflict_generation` surfaces a loud
-  "another machine has taken over this vault" health error and never
-  auto-bumps), the `'backups'` health component (push around runs plus a
-  staleness probe at 2× interval / 2× verify cadence), the
-  `centraid-gateway backup` CLI (status|run|list|verify|restore|kit; restore
-  materializes to a fresh directory, never the live vault), and
-  `RESTORE_QUARANTINE.json` handling at vault mount — outbox rows parked and
-  grants revoked; automations flagged for manual review via a persistent
-  health error.
+- `stageVaultDbs` receipted VACUUM INTO staging primitive (packages/vault):
+  `packages/vault`'s VACUUM INTO staging of the two DB files only, so the
+  engine references the immutable blob CAS in place instead of
+  `backupVault()`'s full CAS copy (untenable at 100+ GB).
+- `BackupService` scheduler + `'backups'` health component (staleness
+  probe); `centraid-gateway backup` CLI — status|run|list|verify|restore|kit;
+  `RESTORE_QUARANTINE.json` handling at vault mount (outbox parked;
+  automations flagged) — all three land in `packages/gateway`: the
+  `BackupService` scheduler (hourly tick; per-vault backup interval + verify
+  cadence; `conflict_generation` surfaces a loud "another machine has taken
+  over this vault" health error and never auto-bumps), the `'backups'`
+  health component (push around runs plus a staleness probe at 2× interval /
+  2× verify cadence), the `centraid-gateway backup` CLI
+  (status|run|list|verify|restore|kit; restore materializes to a fresh
+  directory, never the live vault), and `RESTORE_QUARANTINE.json` handling
+  at vault mount — outbox rows parked and grants revoked; automations
+  flagged for manual review via a persistent health error.
 - docs-site `backups` chapter (fourth chapter in the reading chain), wired
   into nav + smoke, cross-linked from start/data/devices/understand.
-- A follow-up honesty pass closed the gap between "unit tested" and
+- Bug fixes found during the follow-up honesty pass: fix cross-process
+  registry staleness in `LocalBackupProvider` (generation fencing was
+  silently broken across processes); fix `manifestKey` prefix bug + the
+  matching conformance-kit fixture bug (found by a real provider rejecting
+  it); fix seal-key-entry-on-every-vault bug in `backup-sources.ts` (found
+  by the first real test of that module) — plus grade Clawgnition's live
+  endpoint with the conformance kit (wrangler dev, real D1) and the
+  full-story E2E: seeded vault (real blobs/app/sealed value/outbox item) →
+  real backup → real CLI restore → adopted as a live vault. In detail: a
+  follow-up honesty pass closed the gap between "unit tested" and
   "end-to-end tested" the first round left: fixed `LocalBackupProvider`
   caching `registry.json` in memory (generation fencing silently could not
   work across processes — two independent provider instances on one

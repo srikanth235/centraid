@@ -66,6 +66,8 @@ async function ensureSettingsSeed(userDataDir) {
  *     on macOS (no headless mode either way) — present for parity with the
  *     stale suite's E2E_SHOW_WINDOW convention; unused today.
  * @returns {Promise<{ app: import('playwright').ElectronApplication, page: import('playwright').Page, userDataDir: string, close: () => Promise<void> }>}
+ *   The launched Electron app/page handles, the resolved userDataDir, and a
+ *   close() to tear the app down.
  */
 export async function launchApp(opts = {}) {
   const userDataDir =

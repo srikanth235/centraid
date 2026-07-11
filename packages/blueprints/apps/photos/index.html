@@ -45,10 +45,21 @@
 
       <main class="ph-main">
         <div class="ph-header">
-          <button id="hamburgerBtn" type="button" class="ph-header-icon-btn ph-hamburger" aria-label="Menu">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"
-              ><path d="M4 7h16M4 12h16M4 17h16" /></svg
+          <button
+            id="hamburgerBtn"
+            type="button"
+            class="ph-header-icon-btn ph-hamburger"
+            aria-label="Menu"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.75"
+              stroke-linecap="round"
             >
+              <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
           </button>
           <label class="kit-search ph-search" role="search">
             <svg
@@ -59,7 +70,10 @@
               stroke-width="1.75"
               stroke-linecap="round"
               stroke-linejoin="round"
-            ><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m21 21-4.3-4.3" />
+            </svg>
             <input
               id="searchInput"
               type="search"
@@ -79,15 +93,43 @@
           </label>
           <div class="ph-header-actions">
             <div class="ph-zoom" role="group" aria-label="Zoom">
-              <button id="zoomOutBtn" type="button" class="ph-header-icon-btn" aria-label="Smaller tiles">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
-                  ><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg
+              <button
+                id="zoomOutBtn"
+                type="button"
+                class="ph-header-icon-btn"
+                aria-label="Smaller tiles"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
               </button>
-              <button id="zoomInBtn" type="button" class="ph-header-icon-btn" aria-label="Larger tiles">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
-                  ><rect x="3" y="3" width="8" height="8" rx="1" /><rect x="13" y="13" width="8" height="8" rx="1" /></svg
+              <button
+                id="zoomInBtn"
+                type="button"
+                class="ph-header-icon-btn"
+                aria-label="Larger tiles"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
                 >
+                  <rect x="3" y="3" width="8" height="8" rx="1" />
+                  <rect x="13" y="13" width="8" height="8" rx="1" />
+                </svg>
               </button>
             </div>
             <!-- Face-proposer on-demand (issue #352): a self-contained React
@@ -96,8 +138,15 @@
             <!-- Desktop-only toolbar entry point for the slideshow (issue #352) —
                  CSS-gated to >=720px so the mobile header is untouched; the
                  lightbox's own Slideshow icon covers every width. -->
-            <button id="slideshowBtn" type="button" class="ph-header-icon-btn slideshow-toolbar-btn" aria-label="Slideshow">
-              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z" /></svg>
+            <button
+              id="slideshowBtn"
+              type="button"
+              class="ph-header-icon-btn slideshow-toolbar-btn"
+              aria-label="Slideshow"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <path d="M8 5v14l11-7z" />
+              </svg>
             </button>
             <div class="ph-ask-mount" data-ask-mount></div>
           </div>
@@ -142,14 +191,7 @@
       </main>
     </div>
 
-    <input
-      id="fileInput"
-      type="file"
-      accept="image/*,video/*"
-      multiple
-      hidden
-      aria-hidden="true"
-    />
+    <input id="fileInput" type="file" accept="image/*,video/*" multiple hidden aria-hidden="true" />
 
     <div id="lightbox" class="lightbox" hidden></div>
     <div

@@ -328,7 +328,8 @@ export function currentPool(state, data) {
   let pool = state.searchResults != null ? state.searchResults.slice() : data.items.slice();
   if (state.nav.kind === 'fav') pool = pool.filter((i) => i.favorite);
   else if (state.nav.kind === 'cat') pool = pool.filter((i) => i.type === state.nav.type);
-  else if (state.nav.kind === 'tag') pool = pool.filter((i) => (i.tags || []).includes(state.nav.tag));
+  else if (state.nav.kind === 'tag')
+    pool = pool.filter((i) => (i.tags || []).includes(state.nav.tag));
   return pool.sort(byTitle);
 }
 

@@ -29,7 +29,12 @@ const RSVP_OPTIONS = [
   ['tentative', 'Maybe', I.maybe],
   ['declined', 'Decline', I.decline],
 ];
-const PARTSTAT_LABEL = { accepted: 'Going', declined: 'No', tentative: 'Maybe', 'needs-action': 'Invited' };
+const PARTSTAT_LABEL = {
+  accepted: 'Going',
+  declined: 'No',
+  tentative: 'Maybe',
+  'needs-action': 'Invited',
+};
 
 function GuestRow({ attendee, onPick }) {
   if (attendee.is_you) {
@@ -103,7 +108,9 @@ export function EventDrawer({
     const next = new Date(nextStr);
     if (!Number.isNaN(next.getTime())) {
       const dur =
-        !Number.isNaN(prevStart.getTime()) && !Number.isNaN(prevEnd.getTime()) && prevEnd > prevStart
+        !Number.isNaN(prevStart.getTime()) &&
+        !Number.isNaN(prevEnd.getTime()) &&
+        prevEnd > prevStart
           ? prevEnd.getTime() - prevStart.getTime()
           : 3600000;
       setEndVal(toLocalInput(new Date(next.getTime() + dur)));
@@ -138,7 +145,11 @@ export function EventDrawer({
     onCancel(ev.event_id);
   };
 
-  const statusLabel = pendingCancel ? 'Cancel pending' : ev.status === 'tentative' ? 'Tentative' : 'Confirmed';
+  const statusLabel = pendingCancel
+    ? 'Cancel pending'
+    : ev.status === 'tentative'
+      ? 'Tentative'
+      : 'Confirmed';
   const attendees = ev.attendees ?? [];
   const repeats = repeatLabel(ev.rrule);
 
@@ -164,7 +175,10 @@ export function EventDrawer({
           <span className="ag-drawer-cal">
             <CalDot color={color} /> {calendarName ?? 'No calendar'}
           </span>
-          <span className="ag-badge" data-tone={pendingCancel ? 'warn' : ev.status === 'tentative' ? 'muted' : 'accent'}>
+          <span
+            className="ag-badge"
+            data-tone={pendingCancel ? 'warn' : ev.status === 'tentative' ? 'muted' : 'accent'}
+          >
             {statusLabel}
           </span>
           {repeats ? (
@@ -193,7 +207,11 @@ export function EventDrawer({
               <div className="ag-eyebrow-label">Guests</div>
               <div className="ag-guests">
                 {attendees.map((a) => (
-                  <GuestRow key={a.party_id} attendee={a} onPick={(partstat) => onRsvp(ev.event_id, a.party_id, partstat)} />
+                  <GuestRow
+                    key={a.party_id}
+                    attendee={a}
+                    onPick={(partstat) => onRsvp(ev.event_id, a.party_id, partstat)}
+                  />
                 ))}
               </div>
             </>
@@ -201,7 +219,9 @@ export function EventDrawer({
 
           <div className="ag-eyebrow-label">Reschedule</div>
           {ev.rrule ? (
-            <p className="muted small">Moving a repeating event shifts the whole series, not just this occurrence.</p>
+            <p className="muted small">
+              Moving a repeating event shifts the whole series, not just this occurrence.
+            </p>
           ) : null}
           <div className="ag-reschedule">
             <label className="ag-field-row">
@@ -210,9 +230,18 @@ export function EventDrawer({
             </label>
             <label className="ag-field-row">
               <span>End</span>
-              <input type="datetime-local" value={endVal} onChange={(e) => setEndVal(e.target.value)} />
+              <input
+                type="datetime-local"
+                value={endVal}
+                onChange={(e) => setEndVal(e.target.value)}
+              />
             </label>
-            <button type="button" className="kit-btn primary ag-reschedule-btn" disabled={saving} onClick={submitReschedule}>
+            <button
+              type="button"
+              className="kit-btn primary ag-reschedule-btn"
+              disabled={saving}
+              onClick={submitReschedule}
+            >
               Move event
             </button>
           </div>

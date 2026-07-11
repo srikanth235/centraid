@@ -4,7 +4,13 @@
 // prompt's visual system section). Every icon is a plain function component:
 // `stroke="currentColor"` so callers color them via CSS, no props needed
 // beyond an optional `size`.
-const base = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round' };
+const base = {
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.75,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+};
 
 function Svg({ size = 18, children, viewBox = '0 0 24 24', ...rest }) {
   return (

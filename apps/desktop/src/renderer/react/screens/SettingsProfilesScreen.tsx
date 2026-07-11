@@ -2,7 +2,11 @@ import type { CSSProperties, JSX } from 'react';
 import { tileFinish } from '@centraid/design-tokens';
 import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
-import type { ConnectionRowDTO, ProfileRowDTO, SettingsProfilesBridgeProps } from '../screen-contracts.js';
+import type {
+  ConnectionRowDTO,
+  ProfileRowDTO,
+  SettingsProfilesBridgeProps,
+} from '../screen-contracts.js';
 import styles from './SettingsProfilesScreen.module.css';
 import { cx } from '../ui/cx.js';
 import controlsCss from '../styles/controls.module.css';

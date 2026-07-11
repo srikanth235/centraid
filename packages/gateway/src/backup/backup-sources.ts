@@ -7,8 +7,7 @@
  * are extras never holes because the DB staging copy is taken first.
  */
 
-import { existsSync } from 'node:fs';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { readSealKeyFingerprint, sealKeyFileFor, stageVaultDbs } from '@centraid/vault';
 import type { EngineLogger, SourceEntry } from '@centraid/backup';

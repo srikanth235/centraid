@@ -1,10 +1,38 @@
 import { AppCard } from '@centraid/desktop-shell-ds';
 
 // Realistic resolved app metas (id + name + colorKey + iconKey + desc + color).
-const todos = { id: 'todos', name: 'Todos', colorKey: 'violet', iconKey: 'Todo', desc: 'Capture and clear small things.', color: '#7C5BD9' } as const;
-const focus = { id: 'focus', name: 'Focus', colorKey: 'teal', iconKey: 'Pomodoro', desc: '25-minute work blocks with breaks.', color: '#2EA098' } as const;
-const journal = { id: 'journal', name: 'Journal', colorKey: 'amber', iconKey: 'Journal', desc: 'A clean place to write each day.', color: '#E89A3C' } as const;
-const habits = { id: 'habits', name: 'Habits', colorKey: 'rose', iconKey: 'Habit', desc: 'A streak counter for daily things.', color: '#E55772' } as const;
+const todos = {
+  id: 'todos',
+  name: 'Todos',
+  colorKey: 'violet',
+  iconKey: 'Todo',
+  desc: 'Capture and clear small things.',
+  color: '#7C5BD9',
+} as const;
+const focus = {
+  id: 'focus',
+  name: 'Focus',
+  colorKey: 'teal',
+  iconKey: 'Pomodoro',
+  desc: '25-minute work blocks with breaks.',
+  color: '#2EA098',
+} as const;
+const journal = {
+  id: 'journal',
+  name: 'Journal',
+  colorKey: 'amber',
+  iconKey: 'Journal',
+  desc: 'A clean place to write each day.',
+  color: '#E89A3C',
+} as const;
+const habits = {
+  id: 'habits',
+  name: 'Habits',
+  colorKey: 'rose',
+  iconKey: 'Habit',
+  desc: 'A streak counter for daily things.',
+  color: '#E55772',
+} as const;
 
 const grid = (min = 220): React.CSSProperties => ({
   display: 'grid',

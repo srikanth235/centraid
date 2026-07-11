@@ -8,13 +8,29 @@
 // (sidebar.jsx, replacing toolbar.jsx).
 import { armConfirm } from '../kit.js';
 import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from '../constants.js';
-import { AlbumsIcon, CameraIcon, CloseIcon, DuplicatesIcon, GridIcon, HeartIcon, PlusIcon, RenameIcon, ShieldIcon, TrashIcon } from '../icons.jsx';
+import {
+  AlbumsIcon,
+  CameraIcon,
+  CloseIcon,
+  DuplicatesIcon,
+  GridIcon,
+  HeartIcon,
+  PlusIcon,
+  RenameIcon,
+  ShieldIcon,
+  TrashIcon,
+} from '../icons.jsx';
 import { Fragment } from '../react-core.min.js';
 import { InlineInput } from './InlineInput.jsx';
 
 function NavItem({ icon, label, count, active, onClick }) {
   return (
-    <button type="button" className="ph-nav-item" data-active={active ? 'true' : 'false'} onClick={onClick}>
+    <button
+      type="button"
+      className="ph-nav-item"
+      data-active={active ? 'true' : 'false'}
+      onClick={onClick}
+    >
       <span className="ph-nav-icon">{icon}</span>
       <span className="ph-nav-label">{label}</span>
       {count != null ? <span className="ph-nav-count">{count}</span> : null}
@@ -55,7 +71,10 @@ function AlbumRow({
         data-active={active ? 'true' : 'false'}
         onClick={onOpen}
       >
-        <span className="ph-album-cover" style={cover ? { backgroundImage: `url(${cover})` } : undefined} />
+        <span
+          className="ph-album-cover"
+          style={cover ? { backgroundImage: `url(${cover})` } : undefined}
+        />
         <span className="ph-nav-label">{album.title ?? 'Album'}</span>
         <span className="ph-nav-count">{album.count}</span>
       </button>
@@ -120,121 +139,126 @@ export function SidebarView({
             <div className="ph-brand-name">Photos</div>
             <div className="ph-brand-tag">a projection of your vault</div>
           </div>
-          <button type="button" className="kit-icon-btn ph-sidebar-close" aria-label="Close menu" onClick={onClose}>
+          <button
+            type="button"
+            className="kit-icon-btn ph-sidebar-close"
+            aria-label="Close menu"
+            onClick={onClose}
+          >
             <CloseIcon />
           </button>
         </div>
 
-      <button type="button" className="ph-upload-btn" id="uploadBtn" onClick={onUpload}>
-        <PlusIcon />
-        Add photos
-      </button>
+        <button type="button" className="ph-upload-btn" id="uploadBtn" onClick={onUpload}>
+          <PlusIcon />
+          Add photos
+        </button>
 
-      <nav className="ph-nav" aria-label="Library">
-        <NavItem
-          icon={<GridIcon />}
-          label="Photos"
-          count={counts.all}
-          active={selectedAlbum === null}
-          onClick={() => onSelect(null)}
-        />
-        <NavItem
-          icon={<HeartIcon />}
-          label="Favorites"
-          count={counts.favorites}
-          active={selectedAlbum === FAVORITES}
-          onClick={() => onSelect(FAVORITES)}
-        />
-        <NavItem
-          icon={<AlbumsIcon />}
-          label="Albums"
-          count={counts.albums}
-          active={selectedAlbum === ALBUMS}
-          onClick={() => onSelect(ALBUMS)}
-        />
-      </nav>
-
-      <div className="ph-section-label">Your albums</div>
-      <div className="ph-album-list">
-        {albums.map((album) => (
-          <AlbumRow
-            key={album.album_id}
-            album={album}
-            cover={album.coverUri}
-            active={selectedAlbum === album.album_id}
-            renaming={renamingAlbumForId === album.album_id}
-            onOpen={() => onSelect(album.album_id)}
-            onStartRename={onStartRename}
-            onRenameSubmit={onRenameSubmit}
-            onRenameCancel={onRenameCancel}
-            onDelete={onDeleteAlbum}
-          />
-        ))}
-        {newAlbumOpen ? (
-          <div className="ph-album-row ph-album-row-editing">
-            <InlineInput
-              className="kit-input bare"
-              placeholder="Album name"
-              label="New album name"
-              onSubmit={onSubmitNewAlbum}
-              onCancel={onCancelNewAlbum}
-            />
-          </div>
-        ) : (
-          <button type="button" className="ph-new-album" onClick={onStartNewAlbum}>
-            <PlusIcon size={14} />
-            New album
-          </button>
-        )}
-      </div>
-
-      {tagOptions.length > 0 ? (
-        <>
-          <div className="ph-section-label">Tags</div>
-          <div className="ph-tag-row">
-            {tagOptions.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                className="kit-chip ph-tag-chip"
-                data-active={selectedAlbum === `tag:${tag}` ? 'true' : 'false'}
-                onClick={() => onSelect(selectedAlbum === `tag:${tag}` ? null : `tag:${tag}`)}
-              >
-                #{tag}
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
-
-      <nav className="ph-nav ph-nav-shelves" aria-label="Shelves">
-        <NavItem
-          icon={<DuplicatesIcon />}
-          label="Duplicates"
-          active={selectedAlbum === DUPLICATES}
-          onClick={() => onSelect(DUPLICATES)}
-        />
-        {counts.trash > 0 ? (
+        <nav className="ph-nav" aria-label="Library">
           <NavItem
-            icon={<TrashIcon />}
-            label="Trash"
-            count={counts.trash}
-            active={selectedAlbum === TRASH}
-            onClick={() => onSelect(TRASH)}
+            icon={<GridIcon />}
+            label="Photos"
+            count={counts.all}
+            active={selectedAlbum === null}
+            onClick={() => onSelect(null)}
           />
-        ) : null}
-      </nav>
+          <NavItem
+            icon={<HeartIcon />}
+            label="Favorites"
+            count={counts.favorites}
+            active={selectedAlbum === FAVORITES}
+            onClick={() => onSelect(FAVORITES)}
+          />
+          <NavItem
+            icon={<AlbumsIcon />}
+            label="Albums"
+            count={counts.albums}
+            active={selectedAlbum === ALBUMS}
+            onClick={() => onSelect(ALBUMS)}
+          />
+        </nav>
 
-      <div className="ph-sidebar-foot">
-        <div className="ph-storage">
-          <div className="ph-storage-top">Storage</div>
-          <div className="ph-storage-label">{storageLabel}</div>
+        <div className="ph-section-label">Your albums</div>
+        <div className="ph-album-list">
+          {albums.map((album) => (
+            <AlbumRow
+              key={album.album_id}
+              album={album}
+              cover={album.coverUri}
+              active={selectedAlbum === album.album_id}
+              renaming={renamingAlbumForId === album.album_id}
+              onOpen={() => onSelect(album.album_id)}
+              onStartRename={onStartRename}
+              onRenameSubmit={onRenameSubmit}
+              onRenameCancel={onRenameCancel}
+              onDelete={onDeleteAlbum}
+            />
+          ))}
+          {newAlbumOpen ? (
+            <div className="ph-album-row ph-album-row-editing">
+              <InlineInput
+                className="kit-input bare"
+                placeholder="Album name"
+                label="New album name"
+                onSubmit={onSubmitNewAlbum}
+                onCancel={onCancelNewAlbum}
+              />
+            </div>
+          ) : (
+            <button type="button" className="ph-new-album" onClick={onStartNewAlbum}>
+              <PlusIcon size={14} />
+              New album
+            </button>
+          )}
         </div>
-        <div className="ph-trust-line">
-          <ShieldIcon size={14} />
-          <span>Every change is consent-checked &amp; receipted.</span>
+
+        {tagOptions.length > 0 ? (
+          <>
+            <div className="ph-section-label">Tags</div>
+            <div className="ph-tag-row">
+              {tagOptions.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="kit-chip ph-tag-chip"
+                  data-active={selectedAlbum === `tag:${tag}` ? 'true' : 'false'}
+                  onClick={() => onSelect(selectedAlbum === `tag:${tag}` ? null : `tag:${tag}`)}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        <nav className="ph-nav ph-nav-shelves" aria-label="Shelves">
+          <NavItem
+            icon={<DuplicatesIcon />}
+            label="Duplicates"
+            active={selectedAlbum === DUPLICATES}
+            onClick={() => onSelect(DUPLICATES)}
+          />
+          {counts.trash > 0 ? (
+            <NavItem
+              icon={<TrashIcon />}
+              label="Trash"
+              count={counts.trash}
+              active={selectedAlbum === TRASH}
+              onClick={() => onSelect(TRASH)}
+            />
+          ) : null}
+        </nav>
+
+        <div className="ph-sidebar-foot">
+          <div className="ph-storage">
+            <div className="ph-storage-top">Storage</div>
+            <div className="ph-storage-label">{storageLabel}</div>
+          </div>
+          <div className="ph-trust-line">
+            <ShieldIcon size={14} />
+            <span>Every change is consent-checked &amp; receipted.</span>
+          </div>
         </div>
-      </div>
       </aside>
     </Fragment>
   );

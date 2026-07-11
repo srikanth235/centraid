@@ -52,7 +52,14 @@ export function GroupModal({ ng, friends, onPatch, onClose, onSave }) {
                     onPatch({ members: next });
                   }}
                 >
-                  <span style={{ width: '9px', height: '9px', borderRadius: '999px', background: f.color }} />
+                  <span
+                    style={{
+                      width: '9px',
+                      height: '9px',
+                      borderRadius: '999px',
+                      background: f.color,
+                    }}
+                  />
                   {first(f.name)}
                 </button>
               );

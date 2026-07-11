@@ -16,9 +16,7 @@ import type {
 
 /** Titlecase a snake/dot-separated key for the detail panel's field labels. */
 function labelFor(key: string): string {
-  return key
-    .replace(/[_.]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/[_.]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 /** Render one artifact value readably — arrays join, objects pretty-print. */

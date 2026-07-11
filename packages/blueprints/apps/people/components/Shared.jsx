@@ -9,7 +9,13 @@ export function Icon({ svg }) {
 
 export function Checkbox({ cls, selected, onClick, label, checkSvg }) {
   return (
-    <button type="button" className={cls} aria-pressed={String(selected)} aria-label={label} onClick={onClick}>
+    <button
+      type="button"
+      className={cls}
+      aria-pressed={String(selected)}
+      aria-label={label}
+      onClick={onClick}
+    >
       {selected ? <Icon svg={checkSvg} /> : null}
     </button>
   );

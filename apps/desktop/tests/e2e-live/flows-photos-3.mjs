@@ -37,16 +37,27 @@ async function main() {
   const { app, page, close } = await launchApp({ userDataDir: USER_DATA_DIR });
   console.log(`[phase3] fresh launch in ${Date.now() - t0}ms`);
   // main-process output — to catch whatever closed the window in phase 2
-  app.process().stdout?.on('data', (d) => console.log(`[main-stdout] ${String(d).trim().slice(0, 500)}`));
-  app.process().stderr?.on('data', (d) => console.log(`[main-stderr] ${String(d).trim().slice(0, 500)}`));
-  page.on('console', (msg) => consoleLog.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' }));
-  page.on('pageerror', (err) => consoleLog.push({ text: `[pageerror] ${err.message}`, type: 'error', frameUrl: '' }));
+  app
+    .process()
+    .stdout?.on('data', (d) => console.log(`[main-stdout] ${String(d).trim().slice(0, 500)}`));
+  app
+    .process()
+    .stderr?.on('data', (d) => console.log(`[main-stderr] ${String(d).trim().slice(0, 500)}`));
+  page.on('console', (msg) =>
+    consoleLog.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' }),
+  );
+  page.on('pageerror', (err) =>
+    consoleLog.push({ text: `[pageerror] ${err.message}`, type: 'error', frameUrl: '' }),
+  );
   page.on('close', () => console.log('[phase3] !!! page closed'));
   await page.setViewportSize({ width: 1400, height: 900 });
 
   try {
     // install fresh
-    await page.getByRole('button', { name: /^Discover/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Discover/ })
+      .first()
+      .click();
     const photosCard = page.locator('button[data-kind="app"]', { hasText: 'Photos' });
     await photosCard.first().waitFor({ state: 'visible', timeout: 20_000 });
     await photosCard.first().click();
@@ -56,7 +67,10 @@ async function main() {
     const tile = page.locator('[data-app-id="photos"]');
     await tile.waitFor({ state: 'visible', timeout: 20_000 });
     await tile.getByTestId('app-tile').click();
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 30_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 30_000,
+    });
     const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     await frameLoc.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
     await page.waitForTimeout(400);
@@ -67,8 +81,11 @@ async function main() {
       const consentText = await frameLoc.locator('#consentBanner').textContent();
       const emptyVisible = await frameLoc.locator('#empty').isVisible();
       await shot(page, '50-first-open-consent-state');
-      record('12-consent-seam', 'pass',
-        `consentBannerHidden=${consentHidden} (text=${JSON.stringify(consentText?.trim().slice(0, 80))}) emptyStateShown=${emptyVisible} — data straight away, install-time grants`);
+      record(
+        '12-consent-seam',
+        'pass',
+        `consentBannerHidden=${consentHidden} (text=${JSON.stringify(consentText?.trim().slice(0, 80))}) emptyStateShown=${emptyVisible} — data straight away, install-time grants`,
+      );
     } catch (err) {
       record('12-consent-seam', 'fail-escalated', String(err?.message ?? err));
     }
@@ -84,7 +101,11 @@ async function main() {
           hasOldBlobPath: t.includes('createObjectURL'),
         };
       });
-      record('fix-served', probe.hasBitmapFix && !probe.hasOldBlobPath ? 'pass-after-fix' : 'fail-escalated', JSON.stringify(probe));
+      record(
+        'fix-served',
+        probe.hasBitmapFix && !probe.hasOldBlobPath ? 'pass-after-fix' : 'fail-escalated',
+        JSON.stringify(probe),
+      );
     } catch (err) {
       record('fix-served', 'fail-escalated', String(err?.message ?? err));
     }
@@ -92,16 +113,21 @@ async function main() {
     // ---------- FLOW 3c: upload with fix — zero blob CSP errors, thumbs stage ----------
     try {
       const errBefore = consoleLog.filter((c) => c.type === 'error').length;
-      await frameLoc.locator('#fileInput').setInputFiles([
-        path.join(FIXTURES_DIR, 'teal-800.png'),
-        path.join(FIXTURES_DIR, 'magenta-800.png'),
-        path.join(FIXTURES_DIR, 'red-100.png'),
-        path.join(FIXTURES_DIR, 'green-100.png'),
-      ]);
+      await frameLoc
+        .locator('#fileInput')
+        .setInputFiles([
+          path.join(FIXTURES_DIR, 'teal-800.png'),
+          path.join(FIXTURES_DIR, 'magenta-800.png'),
+          path.join(FIXTURES_DIR, 'red-100.png'),
+          path.join(FIXTURES_DIR, 'green-100.png'),
+        ]);
       await frameLoc.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 20_000 });
       await page.waitForTimeout(1200);
       const tiles = await frameLoc.locator('.tile-wrap').count();
-      const newErrs = consoleLog.filter((c) => c.type === 'error').slice(errBefore).map((e) => e.text.slice(0, 110));
+      const newErrs = consoleLog
+        .filter((c) => c.type === 'error')
+        .slice(errBefore)
+        .map((e) => e.text.slice(0, 110));
       const blobErrs = newErrs.filter((t) => t.includes('blob:'));
       // find the teal-800 tile via search, then probe its img src
       const probe = await frameLoc.locator('body').evaluate(async () => {
@@ -111,15 +137,24 @@ async function main() {
           if (!img) continue;
           const src = img.currentSrc || img.src;
           const r = await fetch(src);
-          out.push({ src: src.slice(src.indexOf('/centraid')), status: r.status, thumbVariant: src.includes('variant=thumb'), w: img.naturalWidth });
+          out.push({
+            src: src.slice(src.indexOf('/centraid')),
+            status: r.status,
+            thumbVariant: src.includes('variant=thumb'),
+            w: img.naturalWidth,
+          });
         }
         return out;
       });
       await shot(page, '51-upload-fixed');
       const thumbHits = probe.filter((p) => p.thumbVariant && p.status === 200);
-      record('3c-upload-thumb-fix-verified',
-        tiles === 4 && blobErrs.length === 0 && thumbHits.length >= 2 ? 'pass-after-fix' : 'fail-escalated',
-        `tiles=${tiles} blobCspErrors=${blobErrs.length} imgProbes=${JSON.stringify(probe)} otherNewErrors=${JSON.stringify(newErrs.filter((t) => !t.includes('blob:')))}`);
+      record(
+        '3c-upload-thumb-fix-verified',
+        tiles === 4 && blobErrs.length === 0 && thumbHits.length >= 2
+          ? 'pass-after-fix'
+          : 'fail-escalated',
+        `tiles=${tiles} blobCspErrors=${blobErrs.length} imgProbes=${JSON.stringify(probe)} otherNewErrors=${JSON.stringify(newErrs.filter((t) => !t.includes('blob:')))}`,
+      );
     } catch (err) {
       await shot(page, '51x-upload-fix-FAILURE');
       record('3c-upload-thumb-fix-verified', 'fail-escalated', String(err?.message ?? err));
@@ -145,8 +180,13 @@ async function main() {
       await page.waitForTimeout(300);
       const cleared = await frameLoc.locator('.tile-wrap').count();
       const clearHidden = await frameLoc.locator('#searchClear').isHidden();
-      record('9c-search', filtered === 1 && clearVisible && emptyOnMiss.tiles === 0 && cleared === 4 && clearHidden ? 'pass' : 'fail-escalated',
-        `filtered(teal)=${filtered} clearVisible=${clearVisible} noMatch=${JSON.stringify(emptyOnMiss)} afterClear=${cleared} clearBtnHiddenAfter=${clearHidden}`);
+      record(
+        '9c-search',
+        filtered === 1 && clearVisible && emptyOnMiss.tiles === 0 && cleared === 4 && clearHidden
+          ? 'pass'
+          : 'fail-escalated',
+        `filtered(teal)=${filtered} clearVisible=${clearVisible} noMatch=${JSON.stringify(emptyOnMiss)} afterClear=${cleared} clearBtnHiddenAfter=${clearHidden}`,
+      );
     } catch (err) {
       record('9c-search', 'fail-escalated', String(err?.message ?? err));
     }
@@ -164,7 +204,11 @@ async function main() {
       });
       for (let i = 0; i < 15 && !closedDuringTurn; i++) await page.waitForTimeout(1000);
       if (closedDuringTurn) {
-        record('1d-ask-real-turn', 'fail-escalated', 'Electron window CLOSED during the _turn send (reproduced phase-2 crash)');
+        record(
+          '1d-ask-real-turn',
+          'fail-escalated',
+          'Electron window CLOSED during the _turn send (reproduced phase-2 crash)',
+        );
       } else {
         const bubbles = await frameLoc.locator('.kit-msg').allTextContents();
         const typingLeft = await frameLoc.locator('.kit-ask-typing').count();
@@ -176,9 +220,14 @@ async function main() {
         await shot(page, '53-ask-turn-response');
         await frameLoc.locator('.kit-ask-x').click();
         await page.waitForTimeout(200);
-        const closed = await frameLoc.locator('#kitAskOverlay').evaluate((el) => getComputedStyle(el).display);
-        record('1d-ask-real-turn', closed === 'none' ? 'pass' : 'fail-escalated',
-          `bubbles=${JSON.stringify(bubbles).slice(0, 600)} typingIndicatorLeft=${typingLeft} grantChip=${JSON.stringify(grantChip)} vaultStatus=${JSON.stringify(statusProbe)} panelClosed=${closed === 'none'}`);
+        const closed = await frameLoc
+          .locator('#kitAskOverlay')
+          .evaluate((el) => getComputedStyle(el).display);
+        record(
+          '1d-ask-real-turn',
+          closed === 'none' ? 'pass' : 'fail-escalated',
+          `bubbles=${JSON.stringify(bubbles).slice(0, 600)} typingIndicatorLeft=${typingLeft} grantChip=${JSON.stringify(grantChip)} vaultStatus=${JSON.stringify(statusProbe)} panelClosed=${closed === 'none'}`,
+        );
       }
     } catch (err) {
       await shot(page, '53x-ask-FAILURE').catch(() => {});
@@ -188,29 +237,50 @@ async function main() {
     // ---------- FLOW 10b: shell theme flip -> iframe follows ----------
     try {
       const darkAttr = await frameLoc.locator('html').evaluate((el) => el.dataset.theme);
-      const darkBg = await frameLoc.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const darkBg = await frameLoc
+        .locator('body')
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
       await shot(page, '54-dark-default');
-      await page.getByRole('button', { name: /^Settings/ }).first().click();
+      await page
+        .getByRole('button', { name: /^Settings/ })
+        .first()
+        .click();
       const lightCard = page.locator('[data-name="light"]');
       await lightCard.waitFor({ state: 'visible', timeout: 10_000 });
       await lightCard.click();
       await page.waitForTimeout(600);
       // back to the app
       await page.getByRole('button', { name: /^Home/ }).first().click();
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+      await page
+        .getByRole('heading', { name: 'What should we build?' })
+        .waitFor({ state: 'visible', timeout: 15_000 });
       await page.locator('[data-app-id="photos"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       const fl2 = page.frameLocator('iframe[data-centraid-app="1"]');
       await fl2.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
       const lightAttr = await fl2.locator('html').evaluate((el) => el.dataset.theme);
-      const lightBg = await fl2.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor);
-      const h1Color = await fl2.locator('h1').first().evaluate((el) => getComputedStyle(el).color);
-      const accent = await fl2.locator('body').evaluate((el) => getComputedStyle(el).getPropertyValue('--accent'));
+      const lightBg = await fl2
+        .locator('body')
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
+      const h1Color = await fl2
+        .locator('h1')
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      const accent = await fl2
+        .locator('body')
+        .evaluate((el) => getComputedStyle(el).getPropertyValue('--accent'));
       await shot(page, '55-light-mode');
-      record('10b-theme-bridge',
-        darkAttr === 'dark' && lightAttr === 'light' && darkBg !== lightBg ? 'pass' : 'fail-escalated',
-        `dark: data-theme=${darkAttr} bg=${darkBg}; light: data-theme=${lightAttr} bg=${lightBg} h1=${h1Color} accent=${accent.trim()}`);
+      record(
+        '10b-theme-bridge',
+        darkAttr === 'dark' && lightAttr === 'light' && darkBg !== lightBg
+          ? 'pass'
+          : 'fail-escalated',
+        `dark: data-theme=${darkAttr} bg=${darkBg}; light: data-theme=${lightAttr} bg=${lightBg} h1=${h1Color} accent=${accent.trim()}`,
+      );
     } catch (err) {
       await shot(page, '54x-theme-FAILURE').catch(() => {});
       record('10b-theme-bridge', 'fail-escalated', String(err?.message ?? err));
@@ -234,7 +304,9 @@ async function main() {
   } finally {
     const errs = consoleLog.filter((c) => c.type === 'error');
     const warns = consoleLog.filter((c) => c.type === 'warning');
-    console.log(`\n[console-summary] total=${consoleLog.length} error=${errs.length} warning=${warns.length}`);
+    console.log(
+      `\n[console-summary] total=${consoleLog.length} error=${errs.length} warning=${warns.length}`,
+    );
     const uniq = new Map();
     for (const c of [...errs, ...warns]) {
       const key = c.text.slice(0, 100);
@@ -242,7 +314,8 @@ async function main() {
     }
     for (const [k, n] of uniq) console.log(`  x${n} ${k}`);
     console.log('\n[verdict-table]');
-    for (const r of results) console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
+    for (const r of results)
+      console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
     await close();
   }
 }

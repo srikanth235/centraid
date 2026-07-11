@@ -92,7 +92,12 @@ export function SidebarNav({
 
       <div className="nt-nb-head">
         <span className="nt-eyebrow-label">Notebooks</span>
-        <button type="button" className="nt-nb-add" onClick={onStartCreate} aria-label="New notebook">
+        <button
+          type="button"
+          className="nt-nb-add"
+          onClick={onStartCreate}
+          aria-label="New notebook"
+        >
           <Icon svg={I.plusSm} />
         </button>
       </div>
@@ -110,10 +115,14 @@ export function SidebarNav({
             <span className="nt-nb-dot" style={{ background: notebookColorVar(nb.notebook_id) }} />
             <span className="nt-nb-name">{nb.name ?? 'Notebook'}</span>
             <span className="nt-nav-count">{notebookCounts.get(nb.notebook_id) ?? 0}</span>
-            {pendingNotebookIds.has(nb.notebook_id) ? <span className="kit-pending-chip">pending</span> : null}
+            {pendingNotebookIds.has(nb.notebook_id) ? (
+              <span className="kit-pending-chip">pending</span>
+            ) : null}
           </button>
         ))}
-        {creatingNotebook ? <NewNotebookForm onSubmit={onSubmitCreate} onCancel={onCancelCreate} /> : null}
+        {creatingNotebook ? (
+          <NewNotebookForm onSubmit={onSubmitCreate} onCancel={onCancelCreate} />
+        ) : null}
       </div>
 
       {tags?.length ? (

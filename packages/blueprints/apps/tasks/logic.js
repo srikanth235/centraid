@@ -37,7 +37,9 @@ export function createLogic({ state, data, render, refresh }) {
   function markPending(action, input, outcome) {
     if (action === 'add') {
       state.pendingAdds.push({
-        key: outcome?.invocationId ?? `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        key:
+          outcome?.invocationId ??
+          `pending-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         title: input.title,
         due_at: input.due_at ?? null,
         priority: input.priority ?? 0,
@@ -130,7 +132,9 @@ export function createLogic({ state, data, render, refresh }) {
       // the logbook rather than erasing it, same as every other cancel).
       toast('Task added · receipt', {
         undoLabel: newId ? 'Undo' : undefined,
-        onUndo: newId ? () => write('set-status', { task_id: newId, status: 'cancelled' }) : undefined,
+        onUndo: newId
+          ? () => write('set-status', { task_id: newId, status: 'cancelled' })
+          : undefined,
       });
     }
     return outcome?.status === 'executed' || outcome?.status === 'parked';
@@ -155,7 +159,11 @@ export function createLogic({ state, data, render, refresh }) {
     const prevStatus = task.status;
     const outcome = await write('set-status', { task_id: task.task_id, status: nextStatus });
     if (outcome?.status === 'executed') {
-      logActivity(task.task_id, nextStatus === 'completed' ? 'Marked complete' : 'Reopened', outcome);
+      logActivity(
+        task.task_id,
+        nextStatus === 'completed' ? 'Marked complete' : 'Reopened',
+        outcome,
+      );
       if (nextStatus === 'completed') {
         toast(`Completed “${task.title}”`, {
           undoLabel: 'Undo',
@@ -256,7 +264,9 @@ export function createLogic({ state, data, render, refresh }) {
     }
     if (seq !== searchSeq) return;
     state.searchResults = rows;
-    state.searchSnippets = new Map(rows.filter((t) => t.snippet).map((t) => [t.task_id, t.snippet]));
+    state.searchSnippets = new Map(
+      rows.filter((t) => t.snippet).map((t) => [t.task_id, t.snippet]),
+    );
     render();
   }, 120);
 
@@ -342,13 +352,15 @@ export function buildSections(data, state) {
   for (const list of grouped.values()) list.sort(byUrgency);
 
   const tone = { overdue: 'danger', today: 'accent' };
-  const sections = BUCKETS.filter((b) => allow.has(b.key) && grouped.get(b.key).length).map((b) => ({
-    key: b.key,
-    label: b.label,
-    tone: tone[b.key] ?? 'muted',
-    count: grouped.get(b.key).length,
-    rows: grouped.get(b.key),
-  }));
+  const sections = BUCKETS.filter((b) => allow.has(b.key) && grouped.get(b.key).length).map(
+    (b) => ({
+      key: b.key,
+      label: b.label,
+      tone: tone[b.key] ?? 'muted',
+      count: grouped.get(b.key).length,
+      rows: grouped.get(b.key),
+    }),
+  );
   return { sections, isEmpty: sections.length === 0 };
 }
 
@@ -368,7 +380,8 @@ export function todayProgress(data) {
   const today = todayStr();
   const counts = sidebarCounts(data);
   const doneToday = (data.logbook ?? []).filter(
-    (t) => t.status === 'completed' && t.completed_at && String(t.completed_at).slice(0, 10) === today,
+    (t) =>
+      t.status === 'completed' && t.completed_at && String(t.completed_at).slice(0, 10) === today,
   ).length;
   const total = doneToday + counts.today;
   const pct = total ? Math.round((doneToday / total) * 100) : 0;

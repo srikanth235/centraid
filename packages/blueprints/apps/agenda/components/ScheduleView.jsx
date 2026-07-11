@@ -80,7 +80,9 @@ export function ScheduleView({ events, colorFor, pendingCancelIds, search, onEve
           <div className="kit-empty-icon">
             <Icon svg={I.empty} />
           </div>
-          <div className="kit-empty-title">{searching ? 'No matching events' : 'Nothing coming up'}</div>
+          <div className="kit-empty-title">
+            {searching ? 'No matching events' : 'Nothing coming up'}
+          </div>
           <div className="kit-empty-sub">
             {searching
               ? 'Try another title, or clear the search.'

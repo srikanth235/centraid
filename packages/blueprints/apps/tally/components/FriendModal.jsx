@@ -28,7 +28,15 @@ export function FriendModal({ af, onPatch, onClose, onSave }) {
                 aria-label="Colour"
                 onClick={() => onPatch({ color: c })}
               >
-                <span style={{ display: 'block', width: '18px', height: '18px', borderRadius: '999px', background: c }} />
+                <span
+                  style={{
+                    display: 'block',
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '999px',
+                    background: c,
+                  }}
+                />
               </button>
             ))}
           </div>
@@ -37,7 +45,12 @@ export function FriendModal({ af, onPatch, onClose, onSave }) {
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={!af.name.trim()} onClick={onSave}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={!af.name.trim()}
+            onClick={onSave}
+          >
             Add friend
           </button>
         </div>

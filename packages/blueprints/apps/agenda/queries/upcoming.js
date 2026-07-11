@@ -125,7 +125,9 @@ function addMonths(d, n) {
   const day = next.getUTCDate();
   next.setUTCDate(1);
   next.setUTCMonth(next.getUTCMonth() + n);
-  const daysInMonth = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  const daysInMonth = new Date(
+    Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0),
+  ).getUTCDate();
   next.setUTCDate(Math.min(day, daysInMonth));
   return next;
 }
@@ -159,7 +161,8 @@ function expandRrule(rrule, dtstartIso, rangeFrom, rangeTo, maxInstances = 200) 
         if (until && d.getTime() > until.getTime()) continue;
         if (parsed.count !== undefined && occurrenceIndex >= parsed.count) continue;
         occurrenceIndex += 1;
-        if (d.getTime() >= rangeFrom.getTime() && d.getTime() < rangeTo.getTime()) out.push(d.toISOString());
+        if (d.getTime() >= rangeFrom.getTime() && d.getTime() < rangeTo.getTime())
+          out.push(d.toISOString());
       }
       if (
         (parsed.count !== undefined && occurrenceIndex >= parsed.count) ||
@@ -205,9 +208,7 @@ function expandRecurringEvents(rows, rangeFrom, rangeTo) {
       out.push({ ...ev, is_recurrence_instance: false, instance_key: ev.event_id });
       continue;
     }
-    const durationMs = ev.dtend
-      ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime()
-      : 0;
+    const durationMs = ev.dtend ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime() : 0;
     const starts = expandRrule(ev.rrule, ev.dtstart, rangeFrom, rangeTo);
     if (starts.length === 0) continue;
     for (const startIso of starts) {

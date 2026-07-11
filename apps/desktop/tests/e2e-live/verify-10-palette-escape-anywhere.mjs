@@ -29,7 +29,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v10-${id}.png`) });
@@ -58,39 +64,58 @@ async function main() {
     await step('open-palette', 'Open the palette via Cmd+K', async () => {
       await page.keyboard.press('Meta+K');
       await page.waitForTimeout(400);
-      const dialogVisible = await page.locator('[role="dialog"]').first().isVisible().catch(() => false);
+      const dialogVisible = await page
+        .locator('[role="dialog"]')
+        .first()
+        .isVisible()
+        .catch(() => false);
       assert(dialogVisible, 'palette did not open via Cmd+K');
       await shot('01-palette-open');
     });
 
-    await step('escape-after-blurring-input', 'Click empty whitespace inside the palette (moves focus off the input), then Escape must still close it', async () => {
-      const dialog = page.locator('[role="dialog"]').first();
-      // Click the footer hint bar area -- not the input, not a result row --
-      // to move focus off the search input without triggering navigation.
-      const footer = dialog.locator('text=navigate').first();
-      const footerVisible = await footer.isVisible().catch(() => false);
-      if (footerVisible) {
-        await footer.click({ position: { x: 2, y: 2 } }).catch(() => undefined);
-      } else {
-        // Fallback: click the dialog's own empty padding area near an edge.
-        const box = await dialog.boundingBox();
-        if (box) await page.mouse.click(box.x + 5, box.y + box.height - 5);
-      }
-      await page.waitForTimeout(200);
+    await step(
+      'escape-after-blurring-input',
+      'Click empty whitespace inside the palette (moves focus off the input), then Escape must still close it',
+      async () => {
+        const dialog = page.locator('[role="dialog"]').first();
+        // Click the footer hint bar area -- not the input, not a result row --
+        // to move focus off the search input without triggering navigation.
+        const footer = dialog.locator('text=navigate').first();
+        const footerVisible = await footer.isVisible().catch(() => false);
+        if (footerVisible) {
+          await footer.click({ position: { x: 2, y: 2 } }).catch(() => undefined);
+        } else {
+          // Fallback: click the dialog's own empty padding area near an edge.
+          const box = await dialog.boundingBox();
+          if (box) await page.mouse.click(box.x + 5, box.y + box.height - 5);
+        }
+        await page.waitForTimeout(200);
 
-      const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
-      const activeIsInput = await page.evaluate(() => document.activeElement?.tagName === 'INPUT');
-      console.log(`[v10] active element after clicking whitespace: ${activeTag}, is the search input: ${activeIsInput}`);
-      await shot('02-focus-moved-off-input');
+        const activeTag = await page.evaluate(() => document.activeElement?.tagName ?? null);
+        const activeIsInput = await page.evaluate(
+          () => document.activeElement?.tagName === 'INPUT',
+        );
+        console.log(
+          `[v10] active element after clicking whitespace: ${activeTag}, is the search input: ${activeIsInput}`,
+        );
+        await shot('02-focus-moved-off-input');
 
-      await page.keyboard.press('Escape');
-      await page.waitForTimeout(400);
-      await shot('03-after-escape');
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(400);
+        await shot('03-after-escape');
 
-      const stillOpen = await page.locator('[role="dialog"]').first().isVisible().catch(() => false);
-      console.log(`[v10] palette still visible after Escape (blurred-input case): ${stillOpen}`);
-      assert(!stillOpen, 'palette did NOT close on Escape when focus was off the input -- fix #10 regressed or never worked');
-    });
+        const stillOpen = await page
+          .locator('[role="dialog"]')
+          .first()
+          .isVisible()
+          .catch(() => false);
+        console.log(`[v10] palette still visible after Escape (blurred-input case): ${stillOpen}`);
+        assert(
+          !stillOpen,
+          'palette did NOT close on Escape when focus was off the input -- fix #10 regressed or never worked',
+        );
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-10 VERDICT TABLE ================');

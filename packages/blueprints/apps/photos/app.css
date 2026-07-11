@@ -712,7 +712,9 @@ body.has-selection .kit-toasts {
   border-radius: var(--ph-tile-r);
   background: var(--bg-sunken);
   flex: 0 0 auto;
-  transition: transform 0.16s var(--ease), border-radius 0.16s var(--ease);
+  transition:
+    transform 0.16s var(--ease),
+    border-radius 0.16s var(--ease);
 }
 .ph-tile.is-selected {
   border-radius: var(--ph-tile-r-sel);
@@ -755,7 +757,13 @@ body.has-selection .kit-toasts {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.32), transparent 26%, transparent 72%, rgba(0, 0, 0, 0.28));
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.32),
+    transparent 26%,
+    transparent 72%,
+    rgba(0, 0, 0, 0.28)
+  );
   opacity: 0;
   transition: opacity 0.15s var(--ease);
 }

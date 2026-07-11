@@ -95,7 +95,9 @@ export function Board({
 
       {footer ? (
         <div className="kit-foot">
-          <span>Showing your newest {footer.windowSize} open tasks — the rest are a search away.</span>
+          <span>
+            Showing your newest {footer.windowSize} open tasks — the rest are a search away.
+          </span>
           <button type="button" className="kit-btn" onClick={onShowMore}>
             Show more
           </button>

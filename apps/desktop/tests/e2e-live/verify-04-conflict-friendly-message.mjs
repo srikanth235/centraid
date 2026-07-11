@@ -29,7 +29,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v04-${id}.png`) });
@@ -94,9 +100,14 @@ async function main() {
     let fl;
     await step('open-agenda', 'Open Agenda iframe', async () => {
       await page.locator('[data-app-id="agenda"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       fl = frameLoc(page);
-      await fl.locator('.ag-brand-name', { hasText: 'Agenda' }).waitFor({ state: 'visible', timeout: 15_000 });
+      await fl
+        .locator('.ag-brand-name', { hasText: 'Agenda' })
+        .waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(800);
     });
 
@@ -106,42 +117,64 @@ async function main() {
     const overlapStart = new Date(firstStart.getTime() + 30 * 60_000);
     const overlapEnd = new Date(overlapStart.getTime() + 3600_000);
 
-    await step('propose-first-event', 'Propose "Conflict base meeting" 2-3pm on Personal', async () => {
-      const modal = await openCreateModal(fl);
-      await fillAndSubmit(modal, { title: 'Conflict base meeting', start: firstStart, end: firstEnd, calendarName: 'Personal' });
-      await page.waitForTimeout(700);
-      await fl.locator('.ag-pill', { hasText: 'Conflict base meeting' }).waitFor({ state: 'visible', timeout: 10_000 });
-      await shot('01-base-meeting-proposed');
-    });
+    await step(
+      'propose-first-event',
+      'Propose "Conflict base meeting" 2-3pm on Personal',
+      async () => {
+        const modal = await openCreateModal(fl);
+        await fillAndSubmit(modal, {
+          title: 'Conflict base meeting',
+          start: firstStart,
+          end: firstEnd,
+          calendarName: 'Personal',
+        });
+        await page.waitForTimeout(700);
+        await fl
+          .locator('.ag-pill', { hasText: 'Conflict base meeting' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        await shot('01-base-meeting-proposed');
+      },
+    );
 
-    await step('propose-overlapping-friendly-refusal', 'Propose an OVERLAPPING event on the same calendar -- friendly sentence, not raw predicate', async () => {
-      const modal = await openCreateModal(fl);
-      await fillAndSubmit(modal, { title: 'Overlapping meeting', start: overlapStart, end: overlapEnd, calendarName: 'Personal' });
-      await page.waitForTimeout(700);
-      await shot('02-overlap-refused');
+    await step(
+      'propose-overlapping-friendly-refusal',
+      'Propose an OVERLAPPING event on the same calendar -- friendly sentence, not raw predicate',
+      async () => {
+        const modal = await openCreateModal(fl);
+        await fillAndSubmit(modal, {
+          title: 'Overlapping meeting',
+          start: overlapStart,
+          end: overlapEnd,
+          calendarName: 'Personal',
+        });
+        await page.waitForTimeout(700);
+        await shot('02-overlap-refused');
 
-      const notice = modal.locator('.ag-form-notice');
-      const noticeText = await notice.textContent().catch(() => '');
-      console.log(`[v04] conflict notice text: ${JSON.stringify(noticeText)}`);
+        const notice = modal.locator('.ag-form-notice');
+        const noticeText = await notice.textContent().catch(() => '');
+        console.log(`[v04] conflict notice text: ${JSON.stringify(noticeText)}`);
 
-      assert(
-        /this time conflicts with another event on your calendar/i.test(noticeText ?? ''),
-        `expected the friendly sentence "This time conflicts with another event on your calendar.", got: ${JSON.stringify(noticeText)}`,
-      );
-      assert(
-        !/no_busy_conflict/i.test(noticeText ?? '') && !/\beq\b/i.test(noticeText ?? ''),
-        `raw precondition string leaked into the UI: ${JSON.stringify(noticeText)}`,
-      );
+        assert(
+          /this time conflicts with another event on your calendar/i.test(noticeText ?? ''),
+          `expected the friendly sentence "This time conflicts with another event on your calendar.", got: ${JSON.stringify(noticeText)}`,
+        );
+        assert(
+          !/no_busy_conflict/i.test(noticeText ?? '') && !/\beq\b/i.test(noticeText ?? ''),
+          `raw precondition string leaked into the UI: ${JSON.stringify(noticeText)}`,
+        );
 
-      const stillOpen = await modal.isVisible();
-      assert(stillOpen, 'modal should remain open after a refused proposal');
-      await page.keyboard.press('Escape');
-      await modal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
+        const stillOpen = await modal.isVisible();
+        assert(stillOpen, 'modal should remain open after a refused proposal');
+        await page.keyboard.press('Escape');
+        await modal.waitFor({ state: 'hidden', timeout: 5000 }).catch(() => undefined);
 
-      // Confirm the overlapping event was NOT actually created.
-      const overlapCount = await fl.locator('.ag-pill', { hasText: 'Overlapping meeting' }).count();
-      assert(overlapCount === 0, 'the conflicting event must not have been created');
-    });
+        // Confirm the overlapping event was NOT actually created.
+        const overlapCount = await fl
+          .locator('.ag-pill', { hasText: 'Overlapping meeting' })
+          .count();
+        assert(overlapCount === 0, 'the conflicting event must not have been created');
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-04 VERDICT TABLE ================');

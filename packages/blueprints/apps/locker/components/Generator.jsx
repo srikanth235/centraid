@@ -18,7 +18,18 @@ function ToggleRow({ label, on, onClick, last = false }) {
   );
 }
 
-export function Generator({ genLen, genNum, genSym, genValue, onRegen, onSetLen, onToggleNum, onToggleSym, onClose, onUse }) {
+export function Generator({
+  genLen,
+  genNum,
+  genSym,
+  genValue,
+  onRegen,
+  onSetLen,
+  onToggleNum,
+  onToggleSym,
+  onClose,
+  onUse,
+}) {
   const st = strength(genValue);
   return (
     <div
@@ -39,7 +50,9 @@ export function Generator({ genLen, genNum, genSym, genValue, onRegen, onSetLen,
 
         <div className="v-strength">
           <kit-meter ratio={st.ratio} tone={st.tone}></kit-meter>
-          <span style={{ font: 'var(--t-mono)', fontSize: '10px', color: st.color }}>{st.label}</span>
+          <span style={{ font: 'var(--t-mono)', fontSize: '10px', color: st.color }}>
+            {st.label}
+          </span>
         </div>
 
         <div className="v-field-lg">

@@ -51,7 +51,11 @@ export function revisesConceptId(ctx: HandlerCtx): string {
  * asserts the history edge, so a no-op edit (dedup lands back on the same
  * content id) can skip the call entirely rather than link an id to itself.
  */
-export function recordRevision(ctx: HandlerCtx, newContentId: string, oldContentId: string): string {
+export function recordRevision(
+  ctx: HandlerCtx,
+  newContentId: string,
+  oldContentId: string,
+): string {
   const relationConceptId = revisesConceptId(ctx);
   const assertedBy =
     ctx.identity.kind === 'app' ? 'app' : ctx.identity.kind === 'agent' ? 'agent' : 'owner';

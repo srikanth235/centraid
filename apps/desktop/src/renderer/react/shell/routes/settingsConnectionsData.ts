@@ -47,7 +47,11 @@ function toProviderDTO(p: ConnectionProviderPreset): ProviderOptionDTO {
   return {
     allowedHosts: p.allowedHosts,
     authUrl: p.authUrl,
-    connectors: p.connectors.map((c) => ({ kind: c.kind, scope: c.scope, templateId: c.templateId })),
+    connectors: p.connectors.map((c) => ({
+      kind: c.kind,
+      scope: c.scope,
+      templateId: c.templateId,
+    })),
     credKind: p.credKind,
     id: p.id,
     name: p.name,

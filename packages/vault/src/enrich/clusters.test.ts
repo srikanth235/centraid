@@ -62,7 +62,11 @@ test('a trashed asset drops out of its cluster on recompute', () => {
   const a = addAssetVariant(0, 'aaaaaaaa');
   const b = addAssetVariant(1, 'aaaaaaab');
   recomputeDuplicateClusters(db.vault);
-  gw.invoke(owner, { command: 'media.delete_asset', input: { asset_id: a }, purpose: 'dpv:ServiceProvision' });
+  gw.invoke(owner, {
+    command: 'media.delete_asset',
+    input: { asset_id: a },
+    purpose: 'dpv:ServiceProvision',
+  });
   const result = recomputeDuplicateClusters(db.vault);
   expect(result.clusters).toBe(0);
   const row = db.vault

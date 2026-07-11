@@ -56,7 +56,12 @@ export function RelationshipAddRow({ onSubmit }) {
   };
   return (
     <AddRow canCommit={Boolean(name.trim() && kind.trim())} onCommit={commit}>
-      <input placeholder="Name" aria-label="Relationship name" value={name} onChange={(e) => setName(e.target.value)} />
+      <input
+        placeholder="Name"
+        aria-label="Relationship name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
       <input
         className="narrow"
         placeholder="Kind"
@@ -117,7 +122,12 @@ export function TaskAddRow({ onSubmit }) {
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
-      <input placeholder="Add a task…" aria-label="Task text" value={text} onChange={(e) => setText(e.target.value)} />
+      <input
+        placeholder="Add a task…"
+        aria-label="Task text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
     </AddRow>
   );
 }
@@ -132,7 +142,12 @@ export function NoteAddRow({ onSubmit }) {
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
-      <input placeholder="Add a note…" aria-label="Note text" value={text} onChange={(e) => setText(e.target.value)} />
+      <input
+        placeholder="Add a note…"
+        aria-label="Note text"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
     </AddRow>
   );
 }
@@ -147,7 +162,12 @@ export function GiftAddRow({ onSubmit }) {
   };
   return (
     <AddRow canCommit={Boolean(text.trim())} onCommit={commit}>
-      <input placeholder="A gift idea…" aria-label="Gift idea" value={text} onChange={(e) => setText(e.target.value)} />
+      <input
+        placeholder="A gift idea…"
+        aria-label="Gift idea"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
     </AddRow>
   );
 }
@@ -189,7 +209,12 @@ export function DebtAddRow({ onSubmit }) {
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
       />
-      <input placeholder="Reason" aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <input
+        placeholder="Reason"
+        aria-label="Reason"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
     </AddRow>
   );
 }

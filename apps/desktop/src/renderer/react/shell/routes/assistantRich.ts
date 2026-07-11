@@ -85,12 +85,26 @@ function tableBlock(spec: unknown): HTMLElement | null {
   if (!Array.isArray(s.columns) || !Array.isArray(s.rows)) return null;
   const table = el('table', { class: styles.asstTable });
   table.append(
-    el('thead', {}, el('tr', {}, s.columns.map((c) => el('th', {}, String(c))))),
+    el(
+      'thead',
+      {},
+      el(
+        'tr',
+        {},
+        s.columns.map((c) => el('th', {}, String(c))),
+      ),
+    ),
   );
   const body = el('tbody');
   for (const row of (s.rows as unknown[]).slice(0, 100)) {
     if (!Array.isArray(row)) continue;
-    body.append(el('tr', {}, row.map((v) => el('td', {}, v === null || v === undefined ? '—' : String(v)))));
+    body.append(
+      el(
+        'tr',
+        {},
+        row.map((v) => el('td', {}, v === null || v === undefined ? '—' : String(v))),
+      ),
+    );
   }
   table.append(body);
   const wrap = el('div', { class: cx(styles.asstBlock, styles.asstTableWrap) }, table);
@@ -162,16 +176,23 @@ function chartBlock(spec: unknown): HTMLElement | null {
     });
   }
   const svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="${styles.asstChartSvg}">${parts.join('')}</svg>`;
-  const labels = el('div', { class: styles.asstChartX }, s.x.slice(0, 12).map((v) => el('span', {}, String(v))));
+  const labels = el(
+    'div',
+    { class: styles.asstChartX },
+    s.x.slice(0, 12).map((v) => el('span', {}, String(v))),
+  );
   const wrap = el('div', { class: cx(styles.asstBlock, styles.asstChart) });
-  if (typeof s.title === 'string' && s.title) wrap.append(el('div', { class: styles.asstCaption }, s.title));
+  if (typeof s.title === 'string' && s.title)
+    wrap.append(el('div', { class: styles.asstCaption }, s.title));
   wrap.append(el('div', { class: styles.asstChartPlot, trustedHtml: svg }), labels);
   if (series.some((r) => r.label)) {
     wrap.append(
       el(
         'div',
         { class: styles.asstChartLegend },
-        series.map((r, si) => el('span', { style: { opacity: String(1 - si * 0.35) } }, r.label ?? `Series ${si + 1}`)),
+        series.map((r, si) =>
+          el('span', { style: { opacity: String(1 - si * 0.35) } }, r.label ?? `Series ${si + 1}`),
+        ),
       ),
     );
   }
@@ -197,7 +218,11 @@ export function richAnswerHtml(text: string): string {
       try {
         const spec: unknown = JSON.parse(payload);
         node =
-          tag === 'block:table' ? tableBlock(spec) : tag === 'block:chart' ? chartBlock(spec) : statBlock(spec);
+          tag === 'block:table'
+            ? tableBlock(spec)
+            : tag === 'block:chart'
+              ? chartBlock(spec)
+              : statBlock(spec);
       } catch {
         node = null;
       }

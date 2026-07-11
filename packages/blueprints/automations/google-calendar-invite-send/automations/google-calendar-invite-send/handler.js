@@ -58,7 +58,10 @@ async function emailOf(ctx, partyId) {
 function icsStamp(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+  return d
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z');
 }
 
 function icsEscape(text) {
@@ -69,7 +72,16 @@ function icsEscape(text) {
     .replace(/\n/g, '\\n');
 }
 
-function buildIcs({ eventId, summary, description, dtstart, dtend, organizerEmail, attendeeEmail, sequence }) {
+function buildIcs({
+  eventId,
+  summary,
+  description,
+  dtstart,
+  dtend,
+  organizerEmail,
+  attendeeEmail,
+  sequence,
+}) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',

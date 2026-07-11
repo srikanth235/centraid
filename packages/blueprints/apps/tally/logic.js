@@ -75,7 +75,9 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
     return map;
   }
   function personOf(pid) {
-    return directory().get(pid) || { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?' };
+    return (
+      directory().get(pid) || { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?' }
+    );
   }
   function displayName(pid) {
     return pid === dash.me ? 'You' : personOf(pid).name;
@@ -218,7 +220,8 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
     state.expense.groupId = groupId;
     await loadModalMembers(groupId);
     state.expense.include = new Set(state.modalMembers.map((m) => m.party_id));
-    if (!state.modalMembers.some((m) => m.party_id === state.expense.paidBy)) state.expense.paidBy = dash.me;
+    if (!state.modalMembers.some((m) => m.party_id === state.expense.paidBy))
+      state.expense.paidBy = dash.me;
     renderModals();
   }
 
@@ -236,7 +239,8 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
       splits,
     };
     let outcome;
-    if (exp.mode === 'edit') outcome = await act('edit-expense', { expense_id: exp.expense_id, ...base });
+    if (exp.mode === 'edit')
+      outcome = await act('edit-expense', { expense_id: exp.expense_id, ...base });
     else outcome = await act('add-expense', { group_id: exp.groupId, ...base });
     if (!narrate(outcome)) return;
     toast(exp.mode === 'edit' ? 'Expense updated · receipted.' : 'Expense added · receipted.');
@@ -302,7 +306,12 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
     const st = state.settle;
     const cents = toCents(st.amount);
     if (!(cents > 0) || st.from === st.to) return;
-    const input = { from_party: st.from, to_party: st.to, amount_minor: cents, paid_on: todayKey() };
+    const input = {
+      from_party: st.from,
+      to_party: st.to,
+      amount_minor: cents,
+      paid_on: todayKey(),
+    };
     if (st.groupId) input.group_id = st.groupId;
     const outcome = await act('settle-up', input);
     if (!narrate(outcome)) return;
@@ -353,7 +362,10 @@ export function createLogic({ state, dash, render, renderModals, loadView, refre
 
   function openAddFriend() {
     closeAllModals();
-    state.addFriend = { name: '', color: FRIEND_COLORS[dash.friends.length % FRIEND_COLORS.length] };
+    state.addFriend = {
+      name: '',
+      color: FRIEND_COLORS[dash.friends.length % FRIEND_COLORS.length],
+    };
     renderModals();
   }
   function closeAddFriend() {

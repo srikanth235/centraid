@@ -344,7 +344,11 @@ export async function createAutomation(input: {
   prompt?: string;
   triggers?: CentraidCreateTrigger[];
   /** Requested vault access — required when `triggers` has a condition/data entry. */
-  vault?: { purpose: string; why?: string; scopes: Array<{ schema: string; table?: string; verbs: string }> };
+  vault?: {
+    purpose: string;
+    why?: string;
+    scopes: Array<{ schema: string; table?: string; verbs: string }>;
+  };
   apps?: string[];
   model?: string;
   historyKeep?: { count: number } | { days: number } | 'all' | 'errors';

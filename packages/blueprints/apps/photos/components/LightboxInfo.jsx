@@ -53,7 +53,7 @@ export function LightboxInfo({ asset, albums: albumList, places, refresh, onClos
 
   useEffect(() => {
     renderFaces(facesHostRef.current, asset.asset_id, noteRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) this component remounts fresh per asset/refresh (keyed by renderSeq in the shell)
   }, []);
 
   return (
@@ -107,7 +107,9 @@ export function LightboxInfo({ asset, albums: albumList, places, refresh, onClos
               const placeId = e.currentTarget.value;
               const outcome = await act(
                 'set-place',
-                placeId ? { asset_id: asset.asset_id, place_id: placeId } : { asset_id: asset.asset_id },
+                placeId
+                  ? { asset_id: asset.asset_id, place_id: placeId }
+                  : { asset_id: asset.asset_id },
               );
               setPlaceEditorOpen(false);
               if (narrate(outcome, noteRef.current)) await refresh();
@@ -120,7 +122,12 @@ export function LightboxInfo({ asset, albums: albumList, places, refresh, onClos
               </option>
             ))}
           </select>
-          <button type="button" className="kit-icon-btn" aria-label="Cancel" onClick={() => setPlaceEditorOpen(false)}>
+          <button
+            type="button"
+            className="kit-icon-btn"
+            aria-label="Cancel"
+            onClick={() => setPlaceEditorOpen(false)}
+          >
             ×
           </button>
           {places.length === 0 ? (

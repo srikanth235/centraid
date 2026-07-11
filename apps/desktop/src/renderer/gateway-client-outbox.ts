@@ -111,7 +111,13 @@ export type OutboxOutcome =
   | { status: 'executed'; invocationId: string; receiptId: string; output: unknown }
   | { status: 'parked'; invocationId: string; reason: string }
   | { status: 'denied'; invocationId?: string; receiptId: string; reason: string }
-  | { status: 'failed'; invocationId: string; receiptId: string; reason: string; predicate?: string }
+  | {
+      status: 'failed';
+      invocationId: string;
+      receiptId: string;
+      reason: string;
+      predicate?: string;
+    }
   | { status: 'replayed'; invocationId: string; output: unknown };
 
 /** The `output` shape of an executed `outbox.decide` / `outbox.stage`. */

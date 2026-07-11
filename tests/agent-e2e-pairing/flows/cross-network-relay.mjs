@@ -90,7 +90,7 @@ await runFlow('cross-network-relay', async (ctx) => {
   if (!device.path) {
     throw new Error(
       'device reported no selected path — cannot confirm relay traversal; check ' +
-        'device-redeem.mjs\'s paths() call and its stdout JSON contract',
+        "device-redeem.mjs's paths() call and its stdout JSON contract",
     );
   }
   if (!device.path.isRelay) {

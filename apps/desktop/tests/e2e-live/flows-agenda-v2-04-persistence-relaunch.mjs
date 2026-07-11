@@ -28,7 +28,11 @@ const consoleMessages = [];
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -42,7 +46,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-agv2-4-${id}.png`) });
@@ -74,71 +84,102 @@ async function main() {
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
 
-    await step('flow1-tile-survives-relaunch', 'Agenda tile still pinned to Home after relaunch', async () => {
-      const tile = page.locator('[data-app-id="agenda"]');
-      await tile.waitFor({ state: 'visible', timeout: 20_000 });
-      await shot('01-home-after-relaunch');
-    });
+    await step(
+      'flow1-tile-survives-relaunch',
+      'Agenda tile still pinned to Home after relaunch',
+      async () => {
+        const tile = page.locator('[data-app-id="agenda"]');
+        await tile.waitFor({ state: 'visible', timeout: 20_000 });
+        await shot('01-home-after-relaunch');
+      },
+    );
 
-    await step('flow2-events-survive-relaunch', 'Previously-proposed events (Design review sync, All-day offsite, emoji title, etc.) still render after a cold restart', async () => {
-      const tile = page.locator('[data-app-id="agenda"]');
-      await tile.getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
-      const fl = frameLoc(page);
-      await fl.locator('.ag-brand-name', { hasText: 'Agenda' }).waitFor({ state: 'visible', timeout: 15_000 });
-      await page.waitForTimeout(800);
-      await fl.locator('.ag-today', { hasText: 'Today' }).click();
-      await page.waitForTimeout(400);
-      await shot('02-month-view-after-relaunch');
+    await step(
+      'flow2-events-survive-relaunch',
+      'Previously-proposed events (Design review sync, All-day offsite, emoji title, etc.) still render after a cold restart',
+      async () => {
+        const tile = page.locator('[data-app-id="agenda"]');
+        await tile.getByTestId('app-tile').click();
+        await page.waitForSelector('iframe[data-centraid-app="1"]', {
+          state: 'attached',
+          timeout: 20_000,
+        });
+        const fl = frameLoc(page);
+        await fl
+          .locator('.ag-brand-name', { hasText: 'Agenda' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(800);
+        await fl.locator('.ag-today', { hasText: 'Today' }).click();
+        await page.waitForTimeout(400);
+        await shot('02-month-view-after-relaunch');
 
-      const calRows = await fl.locator('.ag-cal-row').count();
-      assert(calRows === 2, `expected the 2 seeded calendars to persist, got ${calRows}`);
+        const calRows = await fl.locator('.ag-cal-row').count();
+        assert(calRows === 2, `expected the 2 seeded calendars to persist, got ${calRows}`);
 
-      const emojiPill = fl.locator('.ag-pill', { hasText: '🎉 Launch' });
-      const emojiCount = await emojiPill.count();
-      console.log(`[agv2-4] emoji-titled event still present after relaunch: ${emojiCount > 0}`);
-      assert(emojiCount >= 1, 'expected the emoji-titled event to survive a relaunch');
+        const emojiPill = fl.locator('.ag-pill', { hasText: '🎉 Launch' });
+        const emojiCount = await emojiPill.count();
+        console.log(`[agv2-4] emoji-titled event still present after relaunch: ${emojiCount > 0}`);
+        assert(emojiCount >= 1, 'expected the emoji-titled event to survive a relaunch');
 
-      const overnightCount = await fl.locator('.ag-pill', { hasText: 'Overnight watch shift' }).count();
-      console.log(`[agv2-4] overnight event occurrences after relaunch: ${overnightCount}`);
-      assert(overnightCount >= 1, 'expected the overnight event to survive a relaunch');
-    });
+        const overnightCount = await fl
+          .locator('.ag-pill', { hasText: 'Overnight watch shift' })
+          .count();
+        console.log(`[agv2-4] overnight event occurrences after relaunch: ${overnightCount}`);
+        assert(overnightCount >= 1, 'expected the overnight event to survive a relaunch');
+      },
+    );
 
-    await step('flow3-cancel-or-reschedule-state-consistent', 'Whatever suite 3 left cancel/reschedule in (parked vs executed) is CONSISTENT after relaunch -- no parked-state amnesia, no ghost re-appearance', async () => {
-      const fl = frameLoc(page);
-      let findings = {};
-      try {
-        findings = JSON.parse(await fs.readFile(path.join(OUT_DIR, 'suite3-findings.json'), 'utf8'));
-      } catch {
-        console.log('[agv2-4] no suite3-findings.json found -- skipping cross-check');
-        return;
-      }
-      console.log(`[agv2-4] suite 3 findings to cross-check: ${JSON.stringify(findings)}`);
-      if (findings.cancelExecutedEventGone) {
-        // Cancelled immediately in suite 3 -- must STAY gone after relaunch
-        // (status='cancelled' persisted to core_event, queries filter it).
-        const stillGone = (await fl.locator('.ag-pill', { hasText: 'All-day offsite' }).count()) === 0;
-        console.log(`[agv2-4] "All-day offsite" still absent after relaunch (consistent with immediate-cancel persisting): ${stillGone}`);
-        assert(stillGone, 'a cancelled event reappeared after relaunch -- persistence bug');
-      }
-      await navTo_or_skip();
+    await step(
+      'flow3-cancel-or-reschedule-state-consistent',
+      'Whatever suite 3 left cancel/reschedule in (parked vs executed) is CONSISTENT after relaunch -- no parked-state amnesia, no ghost re-appearance',
+      async () => {
+        const fl = frameLoc(page);
+        let findings = {};
+        try {
+          findings = JSON.parse(
+            await fs.readFile(path.join(OUT_DIR, 'suite3-findings.json'), 'utf8'),
+          );
+        } catch {
+          console.log('[agv2-4] no suite3-findings.json found -- skipping cross-check');
+          return;
+        }
+        console.log(`[agv2-4] suite 3 findings to cross-check: ${JSON.stringify(findings)}`);
+        if (findings.cancelExecutedEventGone) {
+          // Cancelled immediately in suite 3 -- must STAY gone after relaunch
+          // (status='cancelled' persisted to core_event, queries filter it).
+          const stillGone =
+            (await fl.locator('.ag-pill', { hasText: 'All-day offsite' }).count()) === 0;
+          console.log(
+            `[agv2-4] "All-day offsite" still absent after relaunch (consistent with immediate-cancel persisting): ${stillGone}`,
+          );
+          assert(stillGone, 'a cancelled event reappeared after relaunch -- persistence bug');
+        }
+        await navTo_or_skip();
 
-      async function navTo_or_skip() {
-        // Cross-check Approvals: if suite 3 found NOTHING parked, that must
-        // still be true post-relaunch too (nothing should have silently
-        // materialized once the gateway restarted from a persisted queue --
-        // recall the in-memory-only parked queue finding from the Locker
-        // QA pass, packages/vault/src/gateway/gateway.ts `private readonly
-        // parked = new Map(...)`: even IF something had parked, it would be
-        // gone after a real process restart anyway).
-        await page.getByRole('button', { name: /^Approvals/ }).first().click();
-        await page.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
-        await page.waitForTimeout(500);
-        await shot('03-approvals-after-relaunch');
-        const scheduleRows = await page.locator('text=/schedule\\.(cancel_event|reschedule_event)/').count();
-        console.log(`[agv2-4] Approvals schedule.* rows after relaunch: ${scheduleRows}`);
-      }
-    });
+        async function navTo_or_skip() {
+          // Cross-check Approvals: if suite 3 found NOTHING parked, that must
+          // still be true post-relaunch too (nothing should have silently
+          // materialized once the gateway restarted from a persisted queue --
+          // recall the in-memory-only parked queue finding from the Locker
+          // QA pass, packages/vault/src/gateway/gateway.ts `private readonly
+          // parked = new Map(...)`: even IF something had parked, it would be
+          // gone after a real process restart anyway).
+          await page
+            .getByRole('button', { name: /^Approvals/ })
+            .first()
+            .click();
+          await page
+            .getByRole('heading', { name: 'Approvals', level: 1 })
+            .waitFor({ state: 'visible', timeout: 10_000 });
+          await page.waitForTimeout(500);
+          await shot('03-approvals-after-relaunch');
+          const scheduleRows = await page
+            .locator('text=/schedule\\.(cancel_event|reschedule_event)/')
+            .count();
+          console.log(`[agv2-4] Approvals schedule.* rows after relaunch: ${scheduleRows}`);
+        }
+      },
+    );
 
     // ---- Report ----
     const consoleErrors = consoleMessages.filter((m) => m.type === 'error');

@@ -61,7 +61,9 @@ export async function seedAgendaCalendars(userDataDir) {
     // find-or-create by name to avoid a duplicate chip (an ambiguous
     // `.ag-cal-chip` selector) in the later suites. "Work" is still ours to add.
     const findOrCreateCalendar = (name, color, visibility) => {
-      const existing = db.prepare('SELECT calendar_id FROM schedule_calendar WHERE name = ?').get(name);
+      const existing = db
+        .prepare('SELECT calendar_id FROM schedule_calendar WHERE name = ?')
+        .get(name);
       if (existing) return existing.calendar_id;
       const id = uuidv7ish();
       db.prepare(
@@ -129,7 +131,9 @@ export async function seedAgendaCalendars(userDataDir) {
     console.log(`[seed] calendars: Personal=${personalId} Work=${workId}`);
     console.log(`[seed] extra party: Dana Kim=${danaId}`);
     console.log(`[seed] seeded RSVP-probe event=${seededEventId} attendee=${attendeeId} (Dana)`);
-    console.log(`[seed] seeded owner-RSVP event=${seededOwnerEventId} attendee=${ownerAttendeeId} (You)`);
+    console.log(
+      `[seed] seeded owner-RSVP event=${seededOwnerEventId} attendee=${ownerAttendeeId} (You)`,
+    );
     const ids = {
       ownerPartyId,
       personalId,
@@ -142,7 +146,12 @@ export async function seedAgendaCalendars(userDataDir) {
     };
     // Persist alongside the standard out/agenda-v2 screenshot dir so later
     // suites (3+) can read these ids back without re-deriving them.
-    const idsPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'out', 'agenda-v2', 'seed-ids.json');
+    const idsPath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      'out',
+      'agenda-v2',
+      'seed-ids.json',
+    );
     await fs.mkdir(path.dirname(idsPath), { recursive: true });
     await fs.writeFile(idsPath, JSON.stringify(ids, null, 2));
     return ids;

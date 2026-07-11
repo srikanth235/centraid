@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations GRANTS + RENAME suite: this session added real-manifest-name
 // enrollment for automation agents (reconcileScheduler -> enrollAutomationAgent
 // AND approveAgentGrant -> resolveAutomationName, packages/gateway/src/serve/
@@ -137,7 +138,11 @@ function note(msg) {
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -151,7 +156,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto05-${id}.png`) });
@@ -168,7 +179,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -215,11 +226,16 @@ async function putDraftFile(appId, sessionId, rel, content) {
 }
 
 async function getDraftFile(appId, sessionId, rel) {
-  const res = await gwFetch(`/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`);
+  const res = await gwFetch(
+    `/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`,
+  );
   assert(res.status === 200, `GET draft files for "${appId}" failed: ${JSON.stringify(res)}`);
   const files = res.json?.files ?? [];
   const file = files.find((f) => f.path === rel);
-  assert(Boolean(file), `draft file "${rel}" not found for "${appId}"; available: ${JSON.stringify(files.map((f) => f.path))}`);
+  assert(
+    Boolean(file),
+    `draft file "${rel}" not found for "${appId}"; available: ${JSON.stringify(files.map((f) => f.path))}`,
+  );
   return file.content;
 }
 
@@ -237,7 +253,10 @@ function splitRef(ref) {
  */
 async function renameAutomationViaFiles(ownerAppId, automationId, newName) {
   const sessionRes = await gwFetch('/centraid/_apps/_sessions', { method: 'POST', body: {} });
-  assert(sessionRes.status === 201 && sessionRes.json?.sessionId, `open session failed: ${JSON.stringify(sessionRes)}`);
+  assert(
+    sessionRes.status === 201 && sessionRes.json?.sessionId,
+    `open session failed: ${JSON.stringify(sessionRes)}`,
+  );
   const sessionId = sessionRes.json.sessionId;
 
   const rel = `automations/${automationId}/automation.json`;
@@ -253,7 +272,9 @@ async function renameAutomationViaFiles(ownerAppId, automationId, newName) {
     body: { sessionId, message: `e2e: rename "${oldName}" -> "${newName}"` },
   });
   assert(pubRes.status === 201, `publish rename failed: ${JSON.stringify(pubRes)}`);
-  console.log(`[auto05] renamed "${oldName}" -> "${newName}" (appId=${ownerAppId}, sessionId=${sessionId})`);
+  console.log(
+    `[auto05] renamed "${oldName}" -> "${newName}" (appId=${ownerAppId}, sessionId=${sessionId})`,
+  );
   return { oldName, sessionId };
 }
 
@@ -287,7 +308,10 @@ async function scaffoldCustomAutomation({ id, name, handlerJs }) {
   });
   assert(createRes.status === 201, `automation scaffold failed: ${JSON.stringify(createRes)}`);
   const sessionId = createRes.json?.sessionId;
-  assert(Boolean(sessionId), `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`);
+  assert(
+    Boolean(sessionId),
+    `expected a sessionId back from the staged scaffold, got ${JSON.stringify(createRes.json)}`,
+  );
 
   const putRes = await putDraftFile(id, sessionId, `automations/${id}/handler.js`, handlerJs);
   assert(putRes.status === 200, `handler.js draft write failed: ${JSON.stringify(putRes)}`);
@@ -306,13 +330,18 @@ async function approveAgentGrant(appId, scopes) {
     method: 'POST',
     body: { purpose: PURPOSE, scopes },
   });
-  assert(res.status === 200 && res.json?.grantId, `agent grant approval failed: ${JSON.stringify(res)}`);
+  assert(
+    res.status === 200 && res.json?.grantId,
+    `agent grant approval failed: ${JSON.stringify(res)}`,
+  );
   return res.json.grantId;
 }
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
@@ -321,7 +350,9 @@ async function openAutomationView(name) {
   const row = page.getByRole('button', { name: new RegExp(esc(name)) }).first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -346,8 +377,13 @@ async function openLocker(p) {
 }
 
 async function goApprovals(p) {
-  await p.getByRole('button', { name: /^Approvals/ }).first().click();
-  await p.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await p
+    .getByRole('button', { name: /^Approvals/ })
+    .first()
+    .click();
+  await p
+    .getByRole('heading', { name: 'Approvals', level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 /** ParkedRow's whole toggle surface is a <button> containing the command text. */
@@ -399,7 +435,10 @@ async function installLockerAndSeedTrashedItem() {
   await toast.waitFor({ state: 'visible', timeout: 10_000 });
 
   const fl = await openLocker(page);
-  const consentVisible = await fl.locator('#consentBanner').isVisible().catch(() => false);
+  const consentVisible = await fl
+    .locator('#consentBanner')
+    .isVisible()
+    .catch(() => false);
   if (consentVisible) {
     await page.locator('button[aria-label="App settings"]').click();
     const settingsDialog = page.getByRole('dialog', { name: 'App settings' });
@@ -464,25 +503,41 @@ async function main() {
         await navTo(page, 'Discover');
         await page.getByRole('tab', { name: /^Automations/ }).click();
         await page.waitForTimeout(200);
-        const card = page.locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH }).first();
+        const card = page
+          .locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH })
+          .first();
         await card.waitFor({ state: 'visible', timeout: 10_000 });
         await card.click();
         const adoptDialog = page.getByRole('dialog', { name: new RegExp(esc(TEMPLATE_HEALTH)) });
         await adoptDialog.waitFor({ state: 'visible', timeout: 10_000 });
         await adoptDialog.getByRole('button', { name: 'Use template' }).click();
-        await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('button', { name: 'Config' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
 
         // ---- BEFORE: original name visible on Home, Overview, View hero ----
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
-        const homeBefore = await page.locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH }).count();
-        assert(homeBefore >= 1, `expected "${TEMPLATE_HEALTH}" on Home before rename, found ${homeBefore}`);
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        const homeBefore = await page
+          .locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH })
+          .count();
+        assert(
+          homeBefore >= 1,
+          `expected "${TEMPLATE_HEALTH}" on Home before rename, found ${homeBefore}`,
+        );
         await shot('01-home-before-rename');
 
         await openAutomationsOverview();
-        const ovBefore = await page.getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) }).count();
-        assert(ovBefore >= 1, `expected "${TEMPLATE_HEALTH}" on the Overview before rename, found ${ovBefore}`);
+        const ovBefore = await page
+          .getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) })
+          .count();
+        assert(
+          ovBefore >= 1,
+          `expected "${TEMPLATE_HEALTH}" on the Overview before rename, found ${ovBefore}`,
+        );
         await shot('02-overview-before-rename');
 
         await openAutomationView(TEMPLATE_HEALTH);
@@ -493,12 +548,16 @@ async function main() {
         const ref = await gwFindRef(TEMPLATE_HEALTH);
         assert(Boolean(ref), `expected a gateway row for "${TEMPLATE_HEALTH}"`);
         const { appId, automationId } = splitRef(ref);
-        console.log(`[auto05] "${TEMPLATE_HEALTH}" ref=${ref} appId=${appId} automationId=${automationId}`);
+        console.log(
+          `[auto05] "${TEMPLATE_HEALTH}" ref=${ref} appId=${appId} automationId=${automationId}`,
+        );
 
         const deadline1 = Date.now() + 30_000;
         let settled = false;
         while (Date.now() < deadline1) {
-          const { json } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=5`);
+          const { json } = await gwFetch(
+            `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=5`,
+          );
           const runs = json?.runs ?? [];
           if (runs.some((r) => typeof r.endedAt === 'number')) {
             settled = true;
@@ -509,11 +568,15 @@ async function main() {
         assert(settled, 'expected the pre-rename run to settle within 30s');
 
         await navTo(page, 'Insights');
-        await page.getByRole('heading', { name: 'Insights', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('heading', { name: 'Insights', level: 1 })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(800);
         const insightsBefore = await bodyText();
         const hadOldNameInInsights = insightsBefore.includes(TEMPLATE_HEALTH);
-        console.log(`[auto05] Insights shows "${TEMPLATE_HEALTH}" by name BEFORE rename: ${hadOldNameInInsights}`);
+        console.log(
+          `[auto05] Insights shows "${TEMPLATE_HEALTH}" by name BEFORE rename: ${hadOldNameInInsights}`,
+        );
         await shot('04-insights-before-rename');
 
         // ---- RENAME ----
@@ -527,37 +590,76 @@ async function main() {
 
         // ---- AFTER: verify propagation on all 4 surfaces ----
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
-        const homeOldAfter = await page.locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH }).count();
-        const homeNewAfter = await page.locator('button[data-kind="automation"]', { hasText: RENAMED_HEALTH }).count();
-        console.log(`[auto05] Home AFTER rename: old-name count=${homeOldAfter}, new-name count=${homeNewAfter}`);
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        const homeOldAfter = await page
+          .locator('button[data-kind="automation"]', { hasText: TEMPLATE_HEALTH })
+          .count();
+        const homeNewAfter = await page
+          .locator('button[data-kind="automation"]', { hasText: RENAMED_HEALTH })
+          .count();
+        console.log(
+          `[auto05] Home AFTER rename: old-name count=${homeOldAfter}, new-name count=${homeNewAfter}`,
+        );
         await shot('05-home-after-rename');
-        assert(homeNewAfter >= 1, `expected "${RENAMED_HEALTH}" on Home after rename, found ${homeNewAfter}`);
-        assert(homeOldAfter === 0, `expected 0 stale "${TEMPLATE_HEALTH}" cards on Home after rename, found ${homeOldAfter}`);
+        assert(
+          homeNewAfter >= 1,
+          `expected "${RENAMED_HEALTH}" on Home after rename, found ${homeNewAfter}`,
+        );
+        assert(
+          homeOldAfter === 0,
+          `expected 0 stale "${TEMPLATE_HEALTH}" cards on Home after rename, found ${homeOldAfter}`,
+        );
 
         await openAutomationsOverview();
-        const ovOldAfter = await page.getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) }).count();
-        const ovNewAfter = await page.getByRole('button', { name: new RegExp(esc(RENAMED_HEALTH)) }).count();
-        console.log(`[auto05] Overview AFTER rename: old-name count=${ovOldAfter}, new-name count=${ovNewAfter}`);
+        const ovOldAfter = await page
+          .getByRole('button', { name: new RegExp(esc(TEMPLATE_HEALTH)) })
+          .count();
+        const ovNewAfter = await page
+          .getByRole('button', { name: new RegExp(esc(RENAMED_HEALTH)) })
+          .count();
+        console.log(
+          `[auto05] Overview AFTER rename: old-name count=${ovOldAfter}, new-name count=${ovNewAfter}`,
+        );
         await shot('06-overview-after-rename');
-        assert(ovNewAfter >= 1, `expected "${RENAMED_HEALTH}" on the Overview after rename, found ${ovNewAfter}`);
-        assert(ovOldAfter === 0, `expected 0 stale "${TEMPLATE_HEALTH}" rows on the Overview after rename, found ${ovOldAfter}`);
+        assert(
+          ovNewAfter >= 1,
+          `expected "${RENAMED_HEALTH}" on the Overview after rename, found ${ovNewAfter}`,
+        );
+        assert(
+          ovOldAfter === 0,
+          `expected 0 stale "${TEMPLATE_HEALTH}" rows on the Overview after rename, found ${ovOldAfter}`,
+        );
 
         await openAutomationView(RENAMED_HEALTH);
         await shot('07-view-hero-after-rename');
         const viewBodyAfter = await bodyText();
-        assert(!viewBodyAfter.includes(TEMPLATE_HEALTH), `expected the View screen to have no trace of the stale name "${TEMPLATE_HEALTH}"`);
+        assert(
+          !viewBodyAfter.includes(TEMPLATE_HEALTH),
+          `expected the View screen to have no trace of the stale name "${TEMPLATE_HEALTH}"`,
+        );
 
         await navTo(page, 'Insights');
-        await page.getByRole('heading', { name: 'Insights', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('heading', { name: 'Insights', level: 1 })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(800);
         const insightsAfter = await bodyText();
         const hasNewNameInInsights = insightsAfter.includes(RENAMED_HEALTH);
         const hasOldNameInInsights = insightsAfter.includes(TEMPLATE_HEALTH);
-        console.log(`[auto05] Insights AFTER rename: new name shown=${hasNewNameInInsights}, stale old name shown=${hasOldNameInInsights}`);
+        console.log(
+          `[auto05] Insights AFTER rename: new name shown=${hasNewNameInInsights}, stale old name shown=${hasOldNameInInsights}`,
+        );
         await shot('08-insights-after-rename');
-        assert(hasNewNameInInsights, `expected Insights "By source" to show "${RENAMED_HEALTH}" for the PRE-rename run, got body head: ${insightsAfter.slice(0, 500)}`);
-        assert(!hasOldNameInInsights, `expected Insights to show NO trace of the stale name "${TEMPLATE_HEALTH}" after rename`);
+        assert(
+          hasNewNameInInsights,
+          `expected Insights "By source" to show "${RENAMED_HEALTH}" for the PRE-rename run, got body head: ${insightsAfter.slice(0, 500)}`,
+        );
+        assert(
+          !hasOldNameInInsights,
+          `expected Insights to show NO trace of the stale name "${TEMPLATE_HEALTH}" after rename`,
+        );
 
         note(
           `rename-propagates-everywhere: renaming "${TEMPLATE_HEALTH}" -> "${RENAMED_HEALTH}" (via draft-file+publish, no extra reload/refresh ` +
@@ -579,14 +681,25 @@ async function main() {
         await installLockerAndSeedTrashedItem();
         await shot('09-locker-item-trashed');
 
-        await scaffoldCustomAutomation({ id: AGENT_ID, name: AGENT_NAME, handlerJs: AGENT_PURGE_HANDLER_JS });
-        grantIdForRevoke = await approveAgentGrant(AGENT_ID, [{ schema: 'locker', verbs: 'read+act' }]);
+        await scaffoldCustomAutomation({
+          id: AGENT_ID,
+          name: AGENT_NAME,
+          handlerJs: AGENT_PURGE_HANDLER_JS,
+        });
+        grantIdForRevoke = await approveAgentGrant(AGENT_ID, [
+          { schema: 'locker', verbs: 'read+act' },
+        ]);
         console.log(`[auto05] approved agent grant ${grantIdForRevoke} for "${AGENT_ID}"`);
 
         const agentsAfterGrant = await gwAgents();
         const agentRow = agentsAfterGrant.find((a) => a.name === AGENT_NAME);
-        assert(Boolean(agentRow), `expected an enrolled agent named "${AGENT_NAME}" right after grant approval`);
-        console.log(`[auto05] agent enrolled with real manifest name pre-park: ${JSON.stringify(agentRow.name)}`);
+        assert(
+          Boolean(agentRow),
+          `expected an enrolled agent named "${AGENT_NAME}" right after grant approval`,
+        );
+        console.log(
+          `[auto05] agent enrolled with real manifest name pre-park: ${JSON.stringify(agentRow.name)}`,
+        );
 
         await openAutomationView(AGENT_NAME);
         await runNowFromViewScreen();
@@ -601,32 +714,57 @@ async function main() {
           if (parked) break;
           await page.waitForTimeout(700);
         }
-        assert(Boolean(parked), 'expected a parked locker.purge_item invocation within 30s of Run now');
+        assert(
+          Boolean(parked),
+          'expected a parked locker.purge_item invocation within 30s of Run now',
+        );
         parkedInvocationId = parked.invocationId;
-        console.log(`[auto05] parked BEFORE rename: invocationId=${parkedInvocationId} caller=${JSON.stringify(parked.caller)} grantId=${JSON.stringify(parked.grantId ?? '(not exposed on this DTO)')}`);
-        assert(parked.caller === AGENT_NAME, `expected the parked row's caller to be the pre-rename name "${AGENT_NAME}", got ${JSON.stringify(parked.caller)}`);
+        console.log(
+          `[auto05] parked BEFORE rename: invocationId=${parkedInvocationId} caller=${JSON.stringify(parked.caller)} grantId=${JSON.stringify(parked.grantId ?? '(not exposed on this DTO)')}`,
+        );
+        assert(
+          parked.caller === AGENT_NAME,
+          `expected the parked row's caller to be the pre-rename name "${AGENT_NAME}", got ${JSON.stringify(parked.caller)}`,
+        );
 
         await goApprovals(page);
         await shot('11-approvals-parked-before-rename');
         const rowBefore = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowBefore.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextBefore = await rowBefore.innerText();
-        console.log(`[auto05] Approvals row text BEFORE rename: ${JSON.stringify(rowTextBefore.replace(/\n/g, ' | '))}`);
-        assert(rowTextBefore.includes(AGENT_NAME), `expected the Approvals row to show "${AGENT_NAME}" before rename, got: ${rowTextBefore}`);
+        const rowTextBefore = await rowBefore.textContent();
+        console.log(
+          `[auto05] Approvals row text BEFORE rename: ${JSON.stringify(rowTextBefore.replace(/\n/g, ' | '))}`,
+        );
+        assert(
+          rowTextBefore.includes(AGENT_NAME),
+          `expected the Approvals row to show "${AGENT_NAME}" before rename, got: ${rowTextBefore}`,
+        );
 
         // ---- RENAME the automation while its invocation sits parked ----
         await renameAutomationViaFiles(AGENT_ID, AGENT_ID, RENAMED_AGENT_NAME);
 
         const agentsAfterRename = await gwAgents();
         const agentRowAfterRename = agentsAfterRename.find((a) => a.partyId === agentRow.partyId);
-        console.log(`[auto05] agent display_name AFTER rename+republish: ${JSON.stringify(agentRowAfterRename?.name)}`);
-        assert(agentRowAfterRename?.name === RENAMED_AGENT_NAME, `expected the agent's display name to update to "${RENAMED_AGENT_NAME}" on the next reconcile, got ${JSON.stringify(agentRowAfterRename?.name)}`);
+        console.log(
+          `[auto05] agent display_name AFTER rename+republish: ${JSON.stringify(agentRowAfterRename?.name)}`,
+        );
+        assert(
+          agentRowAfterRename?.name === RENAMED_AGENT_NAME,
+          `expected the agent's display name to update to "${RENAMED_AGENT_NAME}" on the next reconcile, got ${JSON.stringify(agentRowAfterRename?.name)}`,
+        );
 
         // ---- what does the STILL-PARKED invocation show now? ----
         const blockingAfterRename = await gwBlocking();
-        const parkedAfterRename = (blockingAfterRename.parked ?? []).find((p) => p.invocationId === parkedInvocationId);
-        assert(Boolean(parkedAfterRename), 'expected the SAME parked invocation to still be present after the rename (rename must not drop it)');
-        console.log(`[auto05] parked AFTER rename (same invocationId=${parkedInvocationId}): caller=${JSON.stringify(parkedAfterRename.caller)}`);
+        const parkedAfterRename = (blockingAfterRename.parked ?? []).find(
+          (p) => p.invocationId === parkedInvocationId,
+        );
+        assert(
+          Boolean(parkedAfterRename),
+          'expected the SAME parked invocation to still be present after the rename (rename must not drop it)',
+        );
+        console.log(
+          `[auto05] parked AFTER rename (same invocationId=${parkedInvocationId}): caller=${JSON.stringify(parkedAfterRename.caller)}`,
+        );
 
         // Approvals was ALREADY the active route from the "before rename"
         // check above (no navigation away in between) -- ApprovalsRoute.tsx's
@@ -639,8 +777,10 @@ async function main() {
         await shot('12-approvals-parked-after-rename-left-open');
         const rowLeftOpen = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowLeftOpen.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextLeftOpen = await rowLeftOpen.innerText();
-        console.log(`[auto05] Approvals row text, LEFT OPEN across the rename (no renav, no decision): ${JSON.stringify(rowTextLeftOpen.replace(/\n/g, ' | '))}`);
+        const rowTextLeftOpen = await rowLeftOpen.textContent();
+        console.log(
+          `[auto05] Approvals row text, LEFT OPEN across the rename (no renav, no decision): ${JSON.stringify(rowTextLeftOpen.replace(/\n/g, ' | '))}`,
+        );
         note(
           `rename-mid-parked-invocation, LEFT-OPEN case: with the Approvals screen already open and left mounted across the rename (no ` +
             `navigation away, no decision made), its row kept showing the PRE-rename caller ("${rowTextLeftOpen.includes(AGENT_NAME) && !rowTextLeftOpen.includes(RENAMED_AGENT_NAME) ? AGENT_NAME : rowTextLeftOpen}") even though GET /_vault/blocking already reflects the new name. This is ` +
@@ -655,17 +795,22 @@ async function main() {
         // rename propagate to the Approvals surface", matching how flow 1
         // verified the other 4 surfaces.
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await goApprovals(page);
         await page.waitForTimeout(400);
         await shot('13-approvals-parked-after-rename-fresh-look');
         const rowAfter = parkedRowToggle(page, 'locker.purge_item', 0);
         await rowAfter.waitFor({ state: 'visible', timeout: 10_000 });
-        const rowTextAfter = await rowAfter.innerText();
-        console.log(`[auto05] Approvals row text AFTER rename, FRESH LOOK (navigated away + back): ${JSON.stringify(rowTextAfter.replace(/\n/g, ' | '))}`);
+        const rowTextAfter = await rowAfter.textContent();
+        console.log(
+          `[auto05] Approvals row text AFTER rename, FRESH LOOK (navigated away + back): ${JSON.stringify(rowTextAfter.replace(/\n/g, ' | '))}`,
+        );
 
         const uiShowsNewName = rowTextAfter.includes(RENAMED_AGENT_NAME);
-        const uiShowsOldName = rowTextAfter.includes(AGENT_NAME) && !rowTextAfter.includes(RENAMED_AGENT_NAME);
+        const uiShowsOldName =
+          rowTextAfter.includes(AGENT_NAME) && !rowTextAfter.includes(RENAMED_AGENT_NAME);
         const apiShowsNewName = parkedAfterRename.caller === RENAMED_AGENT_NAME;
 
         // On a FRESH look, API and UI must AGREE -- a mismatch between what
@@ -696,18 +841,31 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'revoke-mid-flight',
-      'Revoke the automation agent\'s grant while its invocation is STILL parked (no UI surface exists for this -- use the owner API DELETE route) -- document the exact resulting behavior',
+      "Revoke the automation agent's grant while its invocation is STILL parked (no UI surface exists for this -- use the owner API DELETE route) -- document the exact resulting behavior",
       async () => {
         assert(Boolean(parkedInvocationId), 'need a parked invocation carried over from flow 2');
-        assert(Boolean(grantIdForRevoke), 'need the grantId from flow 2\'s approveAgentGrant');
+        assert(Boolean(grantIdForRevoke), "need the grantId from flow 2's approveAgentGrant");
 
         const blockingBefore = await gwBlocking();
-        const stillParkedBefore = (blockingBefore.parked ?? []).some((p) => p.invocationId === parkedInvocationId);
-        assert(stillParkedBefore, 'expected the invocation to still be parked immediately before revoke');
+        const stillParkedBefore = (blockingBefore.parked ?? []).some(
+          (p) => p.invocationId === parkedInvocationId,
+        );
+        assert(
+          stillParkedBefore,
+          'expected the invocation to still be parked immediately before revoke',
+        );
 
-        const revokeRes = await gwFetch(`/centraid/_vault/grants/${encodeURIComponent(grantIdForRevoke)}`, { method: 'DELETE' });
-        console.log(`[auto05] DELETE /_vault/grants/${grantIdForRevoke} -> status=${revokeRes.status} body=${JSON.stringify(revokeRes.json)}`);
-        assert(revokeRes.status === 200, `expected the revoke to succeed, got ${JSON.stringify(revokeRes)}`);
+        const revokeRes = await gwFetch(
+          `/centraid/_vault/grants/${encodeURIComponent(grantIdForRevoke)}`,
+          { method: 'DELETE' },
+        );
+        console.log(
+          `[auto05] DELETE /_vault/grants/${grantIdForRevoke} -> status=${revokeRes.status} body=${JSON.stringify(revokeRes.json)}`,
+        );
+        assert(
+          revokeRes.status === 200,
+          `expected the revoke to succeed, got ${JSON.stringify(revokeRes)}`,
+        );
         note(
           `revoke-mid-flight mechanism: there is NO UI surface anywhere in the renderer for revoking an automation agent's vault schema grant -- ` +
             `Approvals' own "Standing grants" section (ApprovalsScreen.tsx GrantRow) is wired to listOutboxGrants()/revokeOutboxGrant, a totally ` +
@@ -716,8 +874,12 @@ async function main() {
         );
 
         const blockingAfterRevoke = await gwBlocking();
-        const stillParkedAfterRevoke = (blockingAfterRevoke.parked ?? []).find((p) => p.invocationId === parkedInvocationId);
-        console.log(`[auto05] parked invocation present in GET /_vault/blocking AFTER revoke: ${Boolean(stillParkedAfterRevoke)}`);
+        const stillParkedAfterRevoke = (blockingAfterRevoke.parked ?? []).find(
+          (p) => p.invocationId === parkedInvocationId,
+        );
+        console.log(
+          `[auto05] parked invocation present in GET /_vault/blocking AFTER revoke: ${Boolean(stillParkedAfterRevoke)}`,
+        );
 
         // Approvals was already the active, mounted route from the end of
         // flow 2 (no gateway push channel — ApprovalsRoute.tsx's own header
@@ -726,29 +888,50 @@ async function main() {
         // this check reflects what the owner actually sees on a real look,
         // not a stale left-open snapshot from before the revoke.
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await goApprovals(page);
         await page.waitForTimeout(400);
         await shot('13-approvals-after-revoke-fresh-look');
-        const rowsAfterRevoke = await page.locator('button', { hasText: 'locker.purge_item' }).count();
-        console.log(`[auto05] Approvals rows for "locker.purge_item" visible after revoke (FRESH LOOK): ${rowsAfterRevoke}`);
-        assert(rowsAfterRevoke === 0, `expected the revoked-and-dropped parked row to be GONE from a freshly-mounted Approvals screen, found ${rowsAfterRevoke}`);
+        const rowsAfterRevoke = await page
+          .locator('button', { hasText: 'locker.purge_item' })
+          .count();
+        console.log(
+          `[auto05] Approvals rows for "locker.purge_item" visible after revoke (FRESH LOOK): ${rowsAfterRevoke}`,
+        );
+        assert(
+          rowsAfterRevoke === 0,
+          `expected the revoked-and-dropped parked row to be GONE from a freshly-mounted Approvals screen, found ${rowsAfterRevoke}`,
+        );
 
         // Attempt to approve the (possibly-gone) invocation directly over the
         // API -- proves whether it's cleanly gone (404) vs. an
         // unapprovable-forever ghost vs. one that still silently executes
         // without a live grant.
-        const approveAttempt = await gwFetch(`/centraid/_vault/parked/${encodeURIComponent(parkedInvocationId)}`, {
-          method: 'POST',
-          body: { approve: true },
-        });
-        console.log(`[auto05] POST /_vault/parked/${parkedInvocationId} {approve:true} AFTER revoke -> status=${approveAttempt.status} body=${JSON.stringify(approveAttempt.json)}`);
+        const approveAttempt = await gwFetch(
+          `/centraid/_vault/parked/${encodeURIComponent(parkedInvocationId)}`,
+          {
+            method: 'POST',
+            body: { approve: true },
+          },
+        );
+        console.log(
+          `[auto05] POST /_vault/parked/${parkedInvocationId} {approve:true} AFTER revoke -> status=${approveAttempt.status} body=${JSON.stringify(approveAttempt.json)}`,
+        );
 
-        const cleanlyDropped = !stillParkedAfterRevoke && rowsAfterRevoke === 0 && approveAttempt.status === 404;
-        const executedWithoutGrant = approveAttempt.status === 200 && approveAttempt.json?.status === 'executed';
-        const stuckForever = Boolean(stillParkedAfterRevoke) && approveAttempt.status !== 404 && approveAttempt.status !== 200;
+        const cleanlyDropped =
+          !stillParkedAfterRevoke && rowsAfterRevoke === 0 && approveAttempt.status === 404;
+        const executedWithoutGrant =
+          approveAttempt.status === 200 && approveAttempt.json?.status === 'executed';
+        const stuckForever =
+          Boolean(stillParkedAfterRevoke) &&
+          approveAttempt.status !== 404 &&
+          approveAttempt.status !== 200;
 
-        console.log(`[auto05] classification: cleanlyDropped=${cleanlyDropped}, executedWithoutGrant=${executedWithoutGrant}, stuckForever=${stuckForever}`);
+        console.log(
+          `[auto05] classification: cleanlyDropped=${cleanlyDropped}, executedWithoutGrant=${executedWithoutGrant}, stuckForever=${stuckForever}`,
+        );
 
         assert(
           !executedWithoutGrant,
@@ -766,9 +949,14 @@ async function main() {
         await fl.locator('button.v-nav-item', { hasText: 'Trash' }).click();
         await page.waitForTimeout(400);
         const stillInTrash = await fl.locator('.v-item', { hasText: LOCKER_TARGET_TITLE }).count();
-        console.log(`[auto05] "${LOCKER_TARGET_TITLE}" still in Locker trash after revoke (must be 1, NOT purged): ${stillInTrash}`);
+        console.log(
+          `[auto05] "${LOCKER_TARGET_TITLE}" still in Locker trash after revoke (must be 1, NOT purged): ${stillInTrash}`,
+        );
         await shot('14-locker-trash-after-revoke-not-purged');
-        assert(stillInTrash === 1, `expected "${LOCKER_TARGET_TITLE}" to remain un-purged after a mid-flight revoke, found count=${stillInTrash}`);
+        assert(
+          stillInTrash === 1,
+          `expected "${LOCKER_TARGET_TITLE}" to remain un-purged after a mid-flight revoke, found count=${stillInTrash}`,
+        );
 
         note(
           `revoke-mid-flight OBSERVED BEHAVIOR: revoking the grant (DELETE /_vault/grants/${grantIdForRevoke}) that a park depended on ` +
@@ -787,16 +975,27 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       're-grant-recovery',
-      'Re-grant the same automation\'s agent access after the revoke -- a fresh Run now must work end to end again with no leftover broken state',
+      "Re-grant the same automation's agent access after the revoke -- a fresh Run now must work end to end again with no leftover broken state",
       async () => {
-        const newGrantId = await approveAgentGrant(AGENT_ID, [{ schema: 'locker', verbs: 'read+act' }]);
+        const newGrantId = await approveAgentGrant(AGENT_ID, [
+          { schema: 'locker', verbs: 'read+act' },
+        ]);
         console.log(`[auto05] re-granted: new grantId=${newGrantId} (old was ${grantIdForRevoke})`);
-        assert(newGrantId !== grantIdForRevoke, 'expected a FRESH grantId from the re-grant, not the old (revoked) one reused');
+        assert(
+          newGrantId !== grantIdForRevoke,
+          'expected a FRESH grantId from the re-grant, not the old (revoked) one reused',
+        );
 
         const agentsAfterRegrant = await gwAgents();
         const agentRow = agentsAfterRegrant.find((a) => a.name === RENAMED_AGENT_NAME);
-        assert(Boolean(agentRow), `expected the agent to still carry its renamed display name "${RENAMED_AGENT_NAME}" after re-grant`);
-        assert(agentRow.grants.some((g) => g.grantId === newGrantId), 'expected the fresh grant to be listed as active on the agent');
+        assert(
+          Boolean(agentRow),
+          `expected the agent to still carry its renamed display name "${RENAMED_AGENT_NAME}" after re-grant`,
+        );
+        assert(
+          agentRow.grants.some((g) => g.grantId === newGrantId),
+          'expected the fresh grant to be listed as active on the agent',
+        );
 
         await openAutomationView(RENAMED_AGENT_NAME);
         await shot('15-view-before-regrant-run');
@@ -812,10 +1011,21 @@ async function main() {
           if (parkedAgain) break;
           await page.waitForTimeout(700);
         }
-        assert(Boolean(parkedAgain), 'expected a FRESH parked locker.purge_item invocation within 30s of re-grant + Run now (end-to-end recovery)');
-        assert(parkedAgain.invocationId !== parkedInvocationId, 'expected a NEW invocationId, not the old revoked one resurrected');
-        console.log(`[auto05] fresh park after re-grant: invocationId=${parkedAgain.invocationId} caller=${JSON.stringify(parkedAgain.caller)}`);
-        assert(parkedAgain.caller === RENAMED_AGENT_NAME, `expected the fresh park's caller to be the current name "${RENAMED_AGENT_NAME}", got ${JSON.stringify(parkedAgain.caller)}`);
+        assert(
+          Boolean(parkedAgain),
+          'expected a FRESH parked locker.purge_item invocation within 30s of re-grant + Run now (end-to-end recovery)',
+        );
+        assert(
+          parkedAgain.invocationId !== parkedInvocationId,
+          'expected a NEW invocationId, not the old revoked one resurrected',
+        );
+        console.log(
+          `[auto05] fresh park after re-grant: invocationId=${parkedAgain.invocationId} caller=${JSON.stringify(parkedAgain.caller)}`,
+        );
+        assert(
+          parkedAgain.caller === RENAMED_AGENT_NAME,
+          `expected the fresh park's caller to be the current name "${RENAMED_AGENT_NAME}", got ${JSON.stringify(parkedAgain.caller)}`,
+        );
 
         // Approve it for real -- proves recovery end to end, not just "it parked".
         await goApprovals(page);
@@ -836,9 +1046,14 @@ async function main() {
         await fl.locator('button.v-nav-item', { hasText: 'Trash' }).click();
         await page.waitForTimeout(400);
         const purgedNow = await fl.locator('.v-item', { hasText: LOCKER_TARGET_TITLE }).count();
-        console.log(`[auto05] "${LOCKER_TARGET_TITLE}" in Locker trash after re-grant + fresh approve (expect 0, purged for real): ${purgedNow}`);
+        console.log(
+          `[auto05] "${LOCKER_TARGET_TITLE}" in Locker trash after re-grant + fresh approve (expect 0, purged for real): ${purgedNow}`,
+        );
         await shot('19-locker-trash-purged-after-recovery');
-        assert(purgedNow === 0, `expected "${LOCKER_TARGET_TITLE}" to be purged for real after the post-recovery approval, found ${purgedNow}`);
+        assert(
+          purgedNow === 0,
+          `expected "${LOCKER_TARGET_TITLE}" to be purged for real after the post-recovery approval, found ${purgedNow}`,
+        );
 
         note(
           `re-grant-recovery: after the revoke in flow 3, re-granting the SAME automation's agent access (fresh grantId=${newGrantId}) fully ` +
@@ -852,27 +1067,38 @@ async function main() {
     // -----------------------------------------------------------------
     // FLOW: console-sweep
     // -----------------------------------------------------------------
-    await step('console-sweep', 'Zero unexpected console errors across the whole suite', async () => {
-      // flow3 deliberately POSTs to /_vault/parked/<invocationId> for an
-      // invocationId it just proved is gone (revoked-and-dropped), to assert
-      // the endpoint answers 404 cleanly rather than executing or hanging.
-      // The browser's own devtools console logs that same real, expected
-      // 404 as a "Failed to load resource" entry -- this is the deliberate
-      // assertion's OWN network call surfacing in the console, not a
-      // product bug, so it's excluded here by its distinctive URL. Every
-      // other console error still fails the sweep.
-      const allErrors = consoleMessages.filter((m) => m.type === 'error');
-      // A "Failed to load resource" console entry carries the failed
-      // resource's own URL in `frameUrl` (msg.location().url), NOT in
-      // `.text()` (the text is just the generic "...responded with a status
-      // of 404..." string) -- match on frameUrl, per the harness's own
-      // console-filter convention (never match on text alone).
-      const expected404Url = /_vault\/parked\//;
-      const unexpected = allErrors.filter((m) => !(expected404Url.test(m.frameUrl) && /404/.test(m.text)));
-      for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
-      console.log(`[auto05] console errors: ${allErrors.length} total, ${allErrors.length - unexpected.length} excluded as the deliberate revoke-then-approve-attempt 404 from flow 3`);
-      assert(unexpected.length === 0, `expected 0 UNEXPECTED console errors across the suite, got ${unexpected.length}: ${JSON.stringify(unexpected.map((e) => e.text))}`);
-    });
+    await step(
+      'console-sweep',
+      'Zero unexpected console errors across the whole suite',
+      async () => {
+        // flow3 deliberately POSTs to /_vault/parked/<invocationId> for an
+        // invocationId it just proved is gone (revoked-and-dropped), to assert
+        // the endpoint answers 404 cleanly rather than executing or hanging.
+        // The browser's own devtools console logs that same real, expected
+        // 404 as a "Failed to load resource" entry -- this is the deliberate
+        // assertion's OWN network call surfacing in the console, not a
+        // product bug, so it's excluded here by its distinctive URL. Every
+        // other console error still fails the sweep.
+        const allErrors = consoleMessages.filter((m) => m.type === 'error');
+        // A "Failed to load resource" console entry carries the failed
+        // resource's own URL in `frameUrl` (msg.location().url), NOT in
+        // `.text()` (the text is just the generic "...responded with a status
+        // of 404..." string) -- match on frameUrl, per the harness's own
+        // console-filter convention (never match on text alone).
+        const expected404Url = /_vault\/parked\//;
+        const unexpected = allErrors.filter(
+          (m) => !(expected404Url.test(m.frameUrl) && /404/.test(m.text)),
+        );
+        for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
+        console.log(
+          `[auto05] console errors: ${allErrors.length} total, ${allErrors.length - unexpected.length} excluded as the deliberate revoke-then-approve-attempt 404 from flow 3`,
+        );
+        assert(
+          unexpected.length === 0,
+          `expected 0 UNEXPECTED console errors across the suite, got ${unexpected.length}: ${JSON.stringify(unexpected.map((e) => e.text))}`,
+        );
+      },
+    );
 
     // -----------------------------------------------------------------
     // Report

@@ -16,7 +16,13 @@
 // functions of props.
 import { createRoot } from './react-core.min.js';
 import { readFailed, showSkeleton, wireAttachInput } from './kit.js';
-import { buildWall, createLogic, notebookNoteCounts, sidebarCounts, tagNoteCounts } from './logic.js';
+import {
+  buildWall,
+  createLogic,
+  notebookNoteCounts,
+  sidebarCounts,
+  tagNoteCounts,
+} from './logic.js';
 import { wireChrome } from './chrome.js';
 import { SidebarFoot, SidebarNav } from './components/Sidebar.jsx';
 import { Toolbar } from './components/Toolbar.jsx';
@@ -177,7 +183,8 @@ function render() {
     />,
   );
 
-  const footer = state.libraryTruncated && !q ? { windowSize: data.window ?? state.libraryWindow } : null;
+  const footer =
+    state.libraryTruncated && !q ? { windowSize: data.window ?? state.libraryWindow } : null;
   const targetLabel =
     state.nav.kind === 'notebook' ? `Into ${logic.notebookName(state.nav.notebookId)}` : 'Unfiled';
 
@@ -248,13 +255,19 @@ async function refresh() {
   data.tags = res?.tags ?? [];
   data.window = res?.window ?? state.libraryWindow;
   state.libraryTruncated = Boolean(res?.truncated);
-  if (state.nav.kind === 'notebook' && !data.notebooks.some((nb) => nb.notebook_id === state.nav.notebookId)) {
+  if (
+    state.nav.kind === 'notebook' &&
+    !data.notebooks.some((nb) => nb.notebook_id === state.nav.notebookId)
+  ) {
     state.nav = { kind: 'all' }; // active notebook deleted elsewhere
   }
   if (state.nav.kind === 'tag' && !data.tags.some((t) => t.concept_id === state.nav.conceptId)) {
     state.nav = { kind: 'all' }; // last note carrying this tag lost it, or aged out of the window
   }
-  if (state.editingNotebookId && !data.notebooks.some((nb) => nb.notebook_id === state.editingNotebookId)) {
+  if (
+    state.editingNotebookId &&
+    !data.notebooks.some((nb) => nb.notebook_id === state.editingNotebookId)
+  ) {
     state.editingNotebookId = null;
   }
   if (state.editorId && !logic.findNote(state.editorId)) state.editorId = null;

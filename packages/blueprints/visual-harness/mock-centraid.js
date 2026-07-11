@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) mock fixture data for every blueprint app's queries/actions, never shipped — see the header below
 // MOCK window.centraid — visual-verification harness only, never shipped.
 //
 // Replaces the runtime's real change-bridge `window.centraid.read/write` (which
@@ -312,7 +313,9 @@
         return d.document_id === input.document_id;
       });
       if (!ad) return { events: [] };
-      var events = [{ activity: 'command.core.add_document', agent_kind: 'owner', occurred_at: ad.created_at }];
+      var events = [
+        { activity: 'command.core.add_document', agent_kind: 'owner', occurred_at: ad.created_at },
+      ];
       if (ad.folder_id) {
         events.push({
           activity: 'command.core.move_document',
@@ -531,7 +534,9 @@
       case 'tag': {
         var dTag = findDoc(input.document_id);
         if (!dTag) return refuse('not_found');
-        var label = String(input.label || '').trim().toLowerCase();
+        var label = String(input.label || '')
+          .trim()
+          .toLowerCase();
         if (!label) return refuse('label_not_blank');
         if (!dTag.tags) dTag.tags = [];
         var existingTag = dTag.tags.find(function (t) {
@@ -627,7 +632,16 @@
       { album_id: 'album-family', title: 'Family', cover_content_id: null },
       { album_id: 'album-studio', title: 'Studio work', cover_content_id: null },
     ];
-    var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17', 'asset-23', 'asset-31'];
+    var tripMembers = [
+      'asset-2',
+      'asset-5',
+      'asset-8',
+      'asset-11',
+      'asset-14',
+      'asset-17',
+      'asset-23',
+      'asset-31',
+    ];
     var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12', 'asset-28', 'asset-40'];
     var studioMembers = ['asset-45', 'asset-48', 'asset-52', 'asset-55'];
 
@@ -851,7 +865,11 @@
         .toLowerCase();
       if (!term2) return { assets: [] };
       var matches = photosStore.assets.filter(function (a) {
-        return String(a.title || '').toLowerCase().indexOf(term2) !== -1;
+        return (
+          String(a.title || '')
+            .toLowerCase()
+            .indexOf(term2) !== -1
+        );
       });
       return { assets: matches };
     }
@@ -1094,7 +1112,9 @@
       case 'tag-asset': {
         var a5 = findAsset(input.asset_id);
         if (!a5) return refuse('not_found');
-        var label = String(input.label || '').trim().toLowerCase();
+        var label = String(input.label || '')
+          .trim()
+          .toLowerCase();
         if (!label) return refuse('label_not_blank');
         if (!a5.tags) a5.tags = [];
         var existingAssetTag = a5.tags.find(function (t) {
@@ -1151,7 +1171,11 @@
         effort_min: opts.effort_min || null,
         status: opts.status || 'needs-action',
         completed_at:
-          opts.completedAt !== undefined ? (opts.completedAt == null ? null : dayKey(opts.completedAt)) : null,
+          opts.completedAt !== undefined
+            ? opts.completedAt == null
+              ? null
+              : dayKey(opts.completedAt)
+            : null,
         parent_task_id: opts.parent || null,
         rrule: opts.rrule || null,
         attachments: opts.attachments || [],
@@ -1195,7 +1219,10 @@
         effort_min: 30,
         description: 'Cabin + one big hike.',
       }),
-      task('task-later-2-sub-1', 'Reserve the cabin', { status: 'completed', parent: 'task-later-2' }),
+      task('task-later-2-sub-1', 'Reserve the cabin', {
+        status: 'completed',
+        parent: 'task-later-2',
+      }),
       task('task-later-2-sub-2', 'Map the trail', { parent: 'task-later-2' }),
       task('task-later-2-sub-3', 'Pack list', { parent: 'task-later-2' }),
       task('task-anytime-1', 'Read “Thinking in Systems”', {
@@ -1266,7 +1293,10 @@
       });
       return {
         tasks: hits.map(function (t) {
-          var snippet = t.description && t.description.toLowerCase().indexOf(term) !== -1 ? '…⟦' + t.description + '⟧…' : '';
+          var snippet =
+            t.description && t.description.toLowerCase().indexOf(term) !== -1
+              ? '…⟦' + t.description + '⟧…'
+              : '';
           return Object.assign({}, t, { attachments: t.attachments || [], snippet: snippet });
         }),
       };
@@ -1282,7 +1312,12 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(reason) {
       return { status: 'failed', reason: reason, predicate: reason };
@@ -1317,7 +1352,8 @@
         if (!t1) return refuse('not_found');
         if (isParkTrigger(t1.title)) return parked();
         t1.status = input.status;
-        t1.completed_at = input.status === 'completed' || input.status === 'cancelled' ? dayKey(0) : null;
+        t1.completed_at =
+          input.status === 'completed' || input.status === 'cancelled' ? dayKey(0) : null;
         return ok({ task_id: t1.task_id });
       }
       case 'edit': {
@@ -1549,7 +1585,8 @@
       });
       return {
         notes: hits.map(function (n) {
-          var snippet = n.body.toLowerCase().indexOf(term) !== -1 ? '…⟦' + n.body.slice(0, 80) + '⟧…' : '';
+          var snippet =
+            n.body.toLowerCase().indexOf(term) !== -1 ? '…⟦' + n.body.slice(0, 80) + '⟧…' : '';
           return Object.assign({}, n, { notebook_names: notebookNamesFor(n), snippet: snippet });
         }),
       };
@@ -1570,7 +1607,12 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(predicate) {
       return { status: 'failed', reason: predicate, predicate: predicate };
@@ -1627,7 +1669,11 @@
         });
         if (already) return refuse('name_unused_by_owner');
         var nbId = uid('nb');
-        notesStore.notebooks.push({ notebook_id: nbId, name: name, sort_order: notesStore.notebooks.length });
+        notesStore.notebooks.push({
+          notebook_id: nbId,
+          name: name,
+          sort_order: notesStore.notebooks.length,
+        });
         return ok({ notebook_id: nbId });
       }
       case 'rename-notebook': {
@@ -1760,7 +1806,11 @@
         status: 'confirmed',
         calendar_id: 'cal-work',
         attachments: [],
-        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted'), guest('p-dana', 'Dana Ruiz', 'declined')],
+        attendees: [
+          you,
+          guest('p-sam', 'Sam Cole', 'accepted'),
+          guest('p-dana', 'Dana Ruiz', 'declined'),
+        ],
       },
       {
         event_id: 'ev-review',
@@ -1842,7 +1892,11 @@
         status: 'confirmed',
         calendar_id: 'cal-work',
         attachments: [],
-        attendees: [you, guest('p-sam', 'Sam Cole', 'accepted'), guest('p-priya', 'Priya Nair', 'declined')],
+        attendees: [
+          you,
+          guest('p-sam', 'Sam Cole', 'accepted'),
+          guest('p-priya', 'Priya Nair', 'declined'),
+        ],
       },
       {
         event_id: 'ev-yoga',
@@ -1982,19 +2036,21 @@
     ];
 
     // A dense day (+4) for month view's "+N more".
-    ['Standup', 'Design sync', 'Investor call', 'Onboarding', 'Wrap-up'].forEach(function (title, i) {
-      events.push({
-        event_id: 'ev-dense-' + i,
-        summary: title + ' (day+4)',
-        description: '',
-        dtstart: at(4, 9 + i, 0),
-        dtend: at(4, 9 + i, 30),
-        status: 'confirmed',
-        calendar_id: i % 2 === 0 ? 'cal-work' : 'cal-personal',
-        attachments: [],
-        attendees: [],
-      });
-    });
+    ['Standup', 'Design sync', 'Investor call', 'Onboarding', 'Wrap-up'].forEach(
+      function (title, i) {
+        events.push({
+          event_id: 'ev-dense-' + i,
+          summary: title + ' (day+4)',
+          description: '',
+          dtstart: at(4, 9 + i, 0),
+          dtend: at(4, 9 + i, 30),
+          status: 'confirmed',
+          calendar_id: i % 2 === 0 ? 'cal-work' : 'cal-personal',
+          attachments: [],
+          attendees: [],
+        });
+      },
+    );
 
     return { calendars: calendars, events: events };
   }
@@ -2039,13 +2095,28 @@
         .toLowerCase();
       if (!term) return { events: [] };
       var hits = agendaStore.events.filter(function (e) {
-        return e.status !== 'cancelled' && (e.summary + ' ' + (e.description || '')).toLowerCase().indexOf(term) !== -1;
+        return (
+          e.status !== 'cancelled' &&
+          (e.summary + ' ' + (e.description || '')).toLowerCase().indexOf(term) !== -1
+        );
       });
       return {
         events: hits.map(function (e) {
-          var hay = e.description && e.description.toLowerCase().indexOf(term) !== -1 ? e.description : e.summary;
+          var hay =
+            e.description && e.description.toLowerCase().indexOf(term) !== -1
+              ? e.description
+              : e.summary;
           var idx = hay.toLowerCase().indexOf(term);
-          var snippet = idx === -1 ? '' : '…' + hay.slice(0, idx) + '⟦' + hay.slice(idx, idx + term.length) + '⟧' + hay.slice(idx + term.length) + '…';
+          var snippet =
+            idx === -1
+              ? ''
+              : '…' +
+                hay.slice(0, idx) +
+                '⟦' +
+                hay.slice(idx, idx + term.length) +
+                '⟧' +
+                hay.slice(idx + term.length) +
+                '…';
           return Object.assign({}, e, { snippet: snippet });
         }),
       };
@@ -2061,7 +2132,12 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(reason) {
       return { status: 'failed', reason: reason, predicate: reason };
@@ -2223,7 +2299,12 @@
         ],
         dates: [
           { date_id: 'date-dadu-bday', label: 'Birthday', month_day: '08-14', reminder_on: true },
-          { date_id: 'date-dadu-anniv', label: 'Anniversary', month_day: '02-21', reminder_on: false },
+          {
+            date_id: 'date-dadu-anniv',
+            label: 'Anniversary',
+            month_day: '02-21',
+            reminder_on: false,
+          },
         ],
         notes: [
           {
@@ -2267,7 +2348,9 @@
         lastDays: 12,
         createdDays: 300,
         circle_id: 'circle-college',
-        dates: [{ date_id: 'date-meera-bday', label: 'Birthday', month_day: '11-02', reminder_on: true }],
+        dates: [
+          { date_id: 'date-meera-bday', label: 'Birthday', month_day: '11-02', reminder_on: true },
+        ],
         interactions: [
           {
             interaction_id: 'int-meera-1',
@@ -2448,7 +2531,10 @@
     if (query === 'dashboard') {
       var reconnect = peopleStore.people
         .map(function (px) {
-          return { p: px, over: peopleDaysSince(px.last_contacted_at || px.created_at) - px.cadence_days };
+          return {
+            p: px,
+            over: peopleDaysSince(px.last_contacted_at || px.created_at) - px.cadence_days,
+          };
         })
         .filter(function (x) {
           return x.over >= 0;
@@ -2512,7 +2598,14 @@
     }
     if (query === 'journal') {
       var owner = peopleStore.journal.map(function (e) {
-        return { kind: 'entry', id: e.entry_id, sort_at: e.created_at, date: e.entry_date, mood: e.mood, text: e.text };
+        return {
+          kind: 'entry',
+          id: e.entry_id,
+          sort_at: e.created_at,
+          date: e.entry_date,
+          mood: e.mood,
+          text: e.text,
+        };
       });
       var auto = [];
       peopleStore.people.forEach(function (px) {
@@ -2577,7 +2670,12 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(predicate) {
       return { status: 'failed', reason: predicate, predicate: predicate };
@@ -2669,7 +2767,11 @@
         var p6 = findPerson(input.party_id);
         if (!p6) return refuse('not_found');
         if (personParked(p6) || isParkTrigger(input.text)) return parked();
-        var note = { annotation_id: uid('note'), text: String(input.text), created_at: new Date().toISOString() };
+        var note = {
+          annotation_id: uid('note'),
+          text: String(input.text),
+          created_at: new Date().toISOString(),
+        };
         p6.notes.unshift(note);
         return ok({ annotation_id: note.annotation_id });
       }
@@ -2867,7 +2969,15 @@
   var TALLY_ME = 'party-you';
 
   function buildTallyStore() {
-    if (EMPTY_MODE) return { me: TALLY_ME, currency: 'INR', friends: [], groups: [], expenses: [], settlements: [] };
+    if (EMPTY_MODE)
+      return {
+        me: TALLY_ME,
+        currency: 'INR',
+        friends: [],
+        groups: [],
+        expenses: [],
+        settlements: [],
+      };
 
     var friends = [
       { party_id: 'party-meera', name: 'Meera', avatar_color: '#E0567A' },
@@ -2912,18 +3022,36 @@
         'party-arjun': 62000,
         'party-sana': 62000,
       }),
-      exp('exp-scooter', 'group-goa', 'Scooter rentals, 2 days', 160000, 'party-arjun', 'transport', 6, {
-        'party-you': 40000,
-        'party-meera': 40000,
-        'party-arjun': 40000,
-        'party-sana': 40000,
-      }),
-      exp('exp-groceries', 'group-goa', 'Groceries for the villa', 187550, 'party-meera', 'groceries', 5, {
-        'party-you': 46887,
-        'party-meera': 46889,
-        'party-arjun': 46887,
-        'party-sana': 46887,
-      }),
+      exp(
+        'exp-scooter',
+        'group-goa',
+        'Scooter rentals, 2 days',
+        160000,
+        'party-arjun',
+        'transport',
+        6,
+        {
+          'party-you': 40000,
+          'party-meera': 40000,
+          'party-arjun': 40000,
+          'party-sana': 40000,
+        },
+      ),
+      exp(
+        'exp-groceries',
+        'group-goa',
+        'Groceries for the villa',
+        187550,
+        'party-meera',
+        'groceries',
+        5,
+        {
+          'party-you': 46887,
+          'party-meera': 46889,
+          'party-arjun': 46887,
+          'party-sana': 46887,
+        },
+      ),
       // Partial participation — Arjun sat this one out.
       exp('exp-market', 'group-goa', 'Night market', 92000, 'party-sana', 'fun', 4, {
         'party-you': 30666,
@@ -2959,7 +3087,14 @@
       },
     ];
 
-    return { me: TALLY_ME, currency: 'INR', friends: friends, groups: groups, expenses: expenses, settlements: settlements };
+    return {
+      me: TALLY_ME,
+      currency: 'INR',
+      friends: friends,
+      groups: groups,
+      expenses: expenses,
+      settlements: settlements,
+    };
   }
 
   var tallyStore = appId === 'tally' ? buildTallyStore() : null;
@@ -2982,7 +3117,8 @@
     var f = tallyStore.friends.find(function (x) {
       return x.party_id === pid;
     });
-    if (!f) return { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?', is_me: false };
+    if (!f)
+      return { party_id: pid, name: 'Someone', color: '#5C677D', initials: '?', is_me: false };
     return {
       party_id: pid,
       name: f.name,
@@ -3008,8 +3144,10 @@
       });
     });
     tallyStore.settlements.forEach(function (s) {
-      if (s.from_party === me && s.to_party !== me) b[s.to_party] = (b[s.to_party] || 0) + s.amount_minor;
-      else if (s.to_party === me && s.from_party !== me) b[s.from_party] = (b[s.from_party] || 0) - s.amount_minor;
+      if (s.from_party === me && s.to_party !== me)
+        b[s.to_party] = (b[s.to_party] || 0) + s.amount_minor;
+      else if (s.to_party === me && s.from_party !== me)
+        b[s.from_party] = (b[s.from_party] || 0) - s.amount_minor;
     });
     return b;
   }
@@ -3068,7 +3206,13 @@
       your_amount_minor: amount,
       splits: Object.keys(e.splits).map(function (pid) {
         var p = tallyPerson(pid);
-        return { party_id: pid, name: p.name, color: p.color, initials: p.initials, share_minor: e.splits[pid] };
+        return {
+          party_id: pid,
+          name: p.name,
+          color: p.color,
+          initials: p.initials,
+          share_minor: e.splits[pid],
+        };
       }),
     };
   }
@@ -3089,7 +3233,13 @@
       var bal = tallyPairwise();
       var friends = tallyStore.friends.map(function (f) {
         var p = tallyPerson(f.party_id);
-        return { party_id: f.party_id, name: p.name, color: p.color, initials: p.initials, net_minor: bal[f.party_id] || 0 };
+        return {
+          party_id: f.party_id,
+          name: p.name,
+          color: p.color,
+          initials: p.initials,
+          net_minor: bal[f.party_id] || 0,
+        };
       });
       var owe = 0;
       var owed = 0;
@@ -3122,7 +3272,14 @@
       var g = tallyStore.groups.find(function (x) {
         return x.group_id === gid;
       });
-      if (!g) return { me: tallyStore.me, currency: tallyStore.currency, group: null, members: [], ledger: [] };
+      if (!g)
+        return {
+          me: tallyStore.me,
+          currency: tallyStore.currency,
+          group: null,
+          members: [],
+          ledger: [],
+        };
       var net = tallyGroupNet(gid);
       return {
         me: tallyStore.me,
@@ -3130,7 +3287,14 @@
         group: { group_id: g.group_id, name: g.name, icon: g.icon, color: g.color },
         members: g.members.map(function (pid) {
           var p = tallyPerson(pid);
-          return { party_id: pid, name: p.name, color: p.color, initials: p.initials, is_me: p.is_me, net_minor: net[pid] || 0 };
+          return {
+            party_id: pid,
+            name: p.name,
+            color: p.color,
+            initials: p.initials,
+            is_me: p.is_me,
+            net_minor: net[pid] || 0,
+          };
         }),
         ledger: tallySortedExpenses()
           .filter(function (e) {
@@ -3153,10 +3317,20 @@
       return {
         me: me,
         currency: tallyStore.currency,
-        friend: { party_id: pid, name: p.name, color: p.color, initials: p.initials, net_minor: netF },
+        friend: {
+          party_id: pid,
+          name: p.name,
+          color: p.color,
+          initials: p.initials,
+          net_minor: netF,
+        },
         ledger: tallySortedExpenses()
           .filter(function (e) {
-            return e.splits[pid] != null && e.splits[me] != null && (e.paid_by === pid || e.paid_by === me);
+            return (
+              e.splits[pid] != null &&
+              e.splits[me] != null &&
+              (e.paid_by === pid || e.paid_by === me)
+            );
           })
           .map(tallyLedgerRow),
       };
@@ -3211,7 +3385,11 @@
       if (!term) return { me: null, currency: 'USD', results: [] };
       var results = tallySortedExpenses()
         .filter(function (e) {
-          return String(e.description || '').toLowerCase().indexOf(term) !== -1;
+          return (
+            String(e.description || '')
+              .toLowerCase()
+              .indexOf(term) !== -1
+          );
         })
         .map(function (e) {
           return Object.assign(tallyLedgerRow(e), { group_name: tallyGroupName(e.group_id) });
@@ -3241,7 +3419,12 @@
       return map;
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(predicate) {
       return { status: 'failed', reason: predicate, predicate: predicate };
@@ -3306,7 +3489,11 @@
         var fname = String(input.name || '').trim();
         if (isParkTrigger(fname)) return parked();
         var fid = uid('party');
-        tallyStore.friends.push({ party_id: fid, name: fname, avatar_color: input.avatar_color || '#5C677D' });
+        tallyStore.friends.push({
+          party_id: fid,
+          name: fname,
+          avatar_color: input.avatar_color || '#5C677D',
+        });
         return ok({ party_id: fid });
       }
       case 'create-group': {
@@ -3445,7 +3632,8 @@
         age: 11,
       }),
       item('item-note-server', 'note', 'Server room passcode', {
-        content: 'Rack B, cabinet 3. Combo 4-8-15-16.\nAsk facilities for the new badge before Friday.',
+        content:
+          'Rack B, cabinet 3. Combo 4-8-15-16.\nAsk facilities for the new badge before Friday.',
         tags: ['office'],
         age: 60,
       }),
@@ -3513,7 +3701,8 @@
   function lockerRow(it, inTrash) {
     var subtitle;
     if (it.type === 'login') subtitle = it.username || '—';
-    else if (it.type === 'card') subtitle = it.card_number ? '•••• ' + it.card_number.slice(-4) : 'Card';
+    else if (it.type === 'card')
+      subtitle = it.card_number ? '•••• ' + it.card_number.slice(-4) : 'Card';
     else if (it.type === 'note') subtitle = 'Secure note';
     else if (it.type === 'identity') subtitle = it.email || '—';
     else if (it.type === 'wifi') subtitle = it.network || '—';
@@ -3664,7 +3853,12 @@
       });
     }
     function ok(output) {
-      return { status: 'executed', invocationId: uid('inv'), receiptId: uid('receipt'), output: output || {} };
+      return {
+        status: 'executed',
+        invocationId: uid('inv'),
+        receiptId: uid('receipt'),
+        output: output || {},
+      };
     }
     function refuse(predicate) {
       return { status: 'failed', reason: predicate, predicate: predicate };
@@ -3856,6 +4050,9 @@
   };
 
   console.info(
-    '[mock-centraid] armed for app=' + appId + (EMPTY_MODE ? ' (empty)' : '') + (DENIED_MODE ? ' (denied)' : ''),
+    '[mock-centraid] armed for app=' +
+      appId +
+      (EMPTY_MODE ? ' (empty)' : '') +
+      (DENIED_MODE ? ' (denied)' : ''),
   );
 })();

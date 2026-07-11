@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations BUILDER-TO-RUN suite: closes the gap flows-automations-01-
 // lifecycle.mjs's flow6 deliberately left open ("a full LLM build loop is
 // not required here"). This suite drives "New automation" -> a real chat
@@ -136,7 +137,11 @@ function note(msg) {
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -150,7 +155,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto06-${id}.png`) });
@@ -167,7 +178,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -207,7 +218,9 @@ async function gwReadAutomation(ref) {
 }
 
 async function gwRuns(ref, limit = 20) {
-  const { json } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`);
+  const { json } = await gwFetch(
+    `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`,
+  );
   return json?.runs ?? [];
 }
 
@@ -222,7 +235,9 @@ async function gwReadRun(runId) {
  *  pre-publish check) and, via a freshly opened session, to read files off
  *  a currently-live ref (post-publish spot check). */
 async function getDraftFile(appId, sessionId, rel) {
-  const res = await gwFetch(`/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`);
+  const res = await gwFetch(
+    `/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`,
+  );
   if (res.status !== 200) return { status: res.status, content: null, files: [] };
   const files = res.json?.files ?? [];
   const file = files.find((f) => f.path === rel);
@@ -231,7 +246,9 @@ async function getDraftFile(appId, sessionId, rel) {
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
@@ -240,7 +257,9 @@ async function openAutomationView(name) {
   const row = page.getByRole('button', { name: new RegExp(esc(name)) }).first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -275,8 +294,16 @@ async function waitForTurnToFinish(maxMs) {
     const n = await statusLoc.count().catch(() => -1);
     if (n === 0) return { finished: true, started, elapsedMs: maxMs - (deadline - Date.now()) };
     if (Date.now() - lastLog > 15_000) {
-      const label = n > 0 ? await statusLoc.first().getAttribute('aria-label').catch(() => null) : null;
-      console.log(`[auto06] still waiting on the turn... progress strip present, aria-label=${JSON.stringify(label)}`);
+      const label =
+        n > 0
+          ? await statusLoc
+              .first()
+              .getAttribute('aria-label')
+              .catch(() => null)
+          : null;
+      console.log(
+        `[auto06] still waiting on the turn... progress strip present, aria-label=${JSON.stringify(label)}`,
+      );
       lastLog = Date.now();
     }
     await page.waitForTimeout(2000);
@@ -290,7 +317,7 @@ async function lastAiMessageText() {
     // harness convention (never guess at a bare class name).
     const nodes = Array.from(document.querySelectorAll('[class*="aiText"]'));
     const last = nodes[nodes.length - 1];
-    return last ? last.innerText : null;
+    return last ? last.textContent : null;
   });
 }
 
@@ -307,7 +334,6 @@ async function main() {
   let automationAppId = null;
   let automationRef = null;
   let sessionId = null;
-  let stagedHandlerAfterTurn = null;
   let currentName = 'New automation';
 
   try {
@@ -327,16 +353,23 @@ async function main() {
 
         // scaffoldAutomationDraft() mints a REAL, already-published gateway
         // row named "New automation" before the builder even paints.
-        await page.getByRole('button', { name: 'Config' }).waitFor({ state: 'visible', timeout: 15_000 });
+        await page
+          .getByRole('button', { name: 'Config' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
         await shot('01-builder-opened-scaffold');
 
         const scaffoldRow = await gwFindRow('New automation');
-        assert(Boolean(scaffoldRow), 'expected a "New automation" gateway row to exist immediately after clicking New automation');
+        assert(
+          Boolean(scaffoldRow),
+          'expected a "New automation" gateway row to exist immediately after clicking New automation',
+        );
         automationRef = scaffoldRow.ref;
         automationAppId = scaffoldRow.ref.split('/')[0];
         sessionId = `desktop-${automationAppId}`;
-        console.log(`[auto06] scaffolded ref=${automationRef} appId=${automationAppId} sessionId=${sessionId}`);
+        console.log(
+          `[auto06] scaffolded ref=${automationRef} appId=${automationAppId} sessionId=${sessionId}`,
+        );
         assert(
           scaffoldRow.manifest?.prompt === SCAFFOLD_PROMPT,
           `expected the fresh scaffold's prompt to be the literal default, got ${JSON.stringify(scaffoldRow.manifest?.prompt)}`,
@@ -355,9 +388,17 @@ async function main() {
         console.log(`[auto06] first turn result: ${JSON.stringify(result)}`);
         await shot('02-after-first-turn');
 
-        let staged = await getDraftFile(automationAppId, sessionId, `automations/${automationAppId}/automation.json`);
+        let staged = await getDraftFile(
+          automationAppId,
+          sessionId,
+          `automations/${automationAppId}/automation.json`,
+        );
         let stagedManifest = staged.content ? JSON.parse(staged.content) : null;
-        let stagedHandler = await getDraftFile(automationAppId, sessionId, `automations/${automationAppId}/handler.js`);
+        let stagedHandler = await getDraftFile(
+          automationAppId,
+          sessionId,
+          `automations/${automationAppId}/handler.js`,
+        );
         console.log(
           `[auto06] staged draft session files after turn 1: ${JSON.stringify(staged.files)}; ` +
             `manifest.prompt=${JSON.stringify(stagedManifest?.prompt)}; handler present=${Boolean(stagedHandler.content)}`,
@@ -368,7 +409,9 @@ async function main() {
           Boolean(stagedHandler.content) &&
           !SCAFFOLD_HANDLER_MARKERS.some((m) => stagedHandler.content.includes(m)) &&
           stagedHandler.content.includes('export default');
-        console.log(`[auto06] after turn 1: promptChanged=${promptChanged} handlerChanged=${handlerChanged}`);
+        console.log(
+          `[auto06] after turn 1: promptChanged=${promptChanged} handlerChanged=${handlerChanged}`,
+        );
 
         // If the agent asked a clarifying question instead of writing code
         // (result.finished but no real file change), or aborted early, send
@@ -389,16 +432,23 @@ async function main() {
           console.log(`[auto06] nudge-turn result: ${JSON.stringify(result)}`);
           await shot('03-after-nudge-turn');
 
-          staged = await getDraftFile(automationAppId, sessionId, `automations/${automationAppId}/automation.json`);
+          staged = await getDraftFile(
+            automationAppId,
+            sessionId,
+            `automations/${automationAppId}/automation.json`,
+          );
           stagedManifest = staged.content ? JSON.parse(staged.content) : null;
-          stagedHandler = await getDraftFile(automationAppId, sessionId, `automations/${automationAppId}/handler.js`);
+          stagedHandler = await getDraftFile(
+            automationAppId,
+            sessionId,
+            `automations/${automationAppId}/handler.js`,
+          );
           console.log(
             `[auto06] staged draft session files after nudge: ${JSON.stringify(staged.files)}; ` +
               `manifest.prompt=${JSON.stringify(stagedManifest?.prompt)}; handler present=${Boolean(stagedHandler.content)}`,
           );
         }
 
-        stagedHandlerAfterTurn = stagedHandler.content;
         await shot('04-builder-config-tab-after-build');
 
         if (!result.finished) {
@@ -410,28 +460,39 @@ async function main() {
           );
           await shot('FAIL-builder-never-converged');
         }
-        assert(result.finished, 'the builder chat turn never finished (progress strip never disappeared) within the bounded budget -- see findings for the exact stuck state');
+        assert(
+          result.finished,
+          'the builder chat turn never finished (progress strip never disappeared) within the bounded budget -- see findings for the exact stuck state',
+        );
 
-        const finalPromptChanged = Boolean(stagedManifest) && stagedManifest.prompt !== SCAFFOLD_PROMPT;
+        const finalPromptChanged =
+          Boolean(stagedManifest) && stagedManifest.prompt !== SCAFFOLD_PROMPT;
         const finalHandlerChanged =
           Boolean(stagedHandler.content) &&
           !SCAFFOLD_HANDLER_MARKERS.some((m) => stagedHandler.content.includes(m)) &&
           stagedHandler.content.includes('export default');
-        console.log(`[auto06] FINAL staged-build check: promptChanged=${finalPromptChanged} handlerChanged=${finalHandlerChanged}`);
+        console.log(
+          `[auto06] FINAL staged-build check: promptChanged=${finalPromptChanged} handlerChanged=${finalHandlerChanged}`,
+        );
         console.log(`[auto06] staged handler.js full content:\n${stagedHandler.content}`);
         note(
           `staged handler.js after the builder turn(s) (session=${sessionId}):\n\`\`\`\n${stagedHandler.content}\n\`\`\`\n` +
             `automation.json prompt: ${JSON.stringify(stagedManifest?.prompt)}`,
         );
 
-        assert(finalPromptChanged, `expected the staged automation.json's prompt to differ from the scaffold default "${SCAFFOLD_PROMPT}", got ${JSON.stringify(stagedManifest?.prompt)}`);
+        assert(
+          finalPromptChanged,
+          `expected the staged automation.json's prompt to differ from the scaffold default "${SCAFFOLD_PROMPT}", got ${JSON.stringify(stagedManifest?.prompt)}`,
+        );
         assert(
           finalHandlerChanged,
           `expected the staged handler.js to be real generated code (no scaffold markers, has "export default"), got:\n${stagedHandler.content}`,
         );
 
         const hasGoalMarker = (stagedHandler.content ?? '').toLowerCase().includes(GOAL_MARKER);
-        console.log(`[auto06] staged handler.js literally contains the requested marker string "${GOAL_MARKER}": ${hasGoalMarker}`);
+        console.log(
+          `[auto06] staged handler.js literally contains the requested marker string "${GOAL_MARKER}": ${hasGoalMarker}`,
+        );
         note(
           `the builder's authored handler.js DOES contain the literal requested marker string "${GOAL_MARKER}": ${hasGoalMarker} -- ` +
             `this is evidence (not proof) that it followed the "return this exact string" instruction; the load-bearing check is the ` +
@@ -445,13 +506,18 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'publish-and-verify-plan',
-      'Click Enable (automations\' publish-equivalent primary action) -> GET /centraid/_automations/read shows real handler-backed manifest, not the scaffold default',
+      "Click Enable (automations' publish-equivalent primary action) -> GET /centraid/_automations/read shows real handler-backed manifest, not the scaffold default",
       async () => {
         assert(Boolean(automationRef), 'need a scaffolded automation ref from the previous flow');
 
         const before = await gwReadAutomation(automationRef);
-        console.log(`[auto06] gateway row BEFORE publish: enabled=${before?.enabled} prompt=${JSON.stringify(before?.manifest?.prompt)}`);
-        assert(before?.manifest?.prompt === SCAFFOLD_PROMPT, 'expected the LIVE manifest to still show the scaffold default prompt before publish (confirms the turn truly only staged, did not auto-publish)');
+        console.log(
+          `[auto06] gateway row BEFORE publish: enabled=${before?.enabled} prompt=${JSON.stringify(before?.manifest?.prompt)}`,
+        );
+        assert(
+          before?.manifest?.prompt === SCAFFOLD_PROMPT,
+          'expected the LIVE manifest to still show the scaffold default prompt before publish (confirms the turn truly only staged, did not auto-publish)',
+        );
 
         const enableBtn = page.getByRole('button', { name: 'Enable', exact: true });
         await enableBtn.waitFor({ state: 'visible', timeout: 10_000 });
@@ -468,9 +534,17 @@ async function main() {
           if (after?.manifest?.prompt !== SCAFFOLD_PROMPT) break;
           await page.waitForTimeout(700);
         }
-        console.log(`[auto06] gateway row AFTER publish: enabled=${after?.enabled} prompt=${JSON.stringify(after?.manifest?.prompt)}`);
-        assert(after?.enabled === true, `expected the automation to be enabled after clicking Enable, got ${JSON.stringify(after?.enabled)}`);
-        assert(after?.manifest?.prompt !== SCAFFOLD_PROMPT, 'expected the LIVE manifest prompt to have updated off the scaffold default after publish');
+        console.log(
+          `[auto06] gateway row AFTER publish: enabled=${after?.enabled} prompt=${JSON.stringify(after?.manifest?.prompt)}`,
+        );
+        assert(
+          after?.enabled === true,
+          `expected the automation to be enabled after clicking Enable, got ${JSON.stringify(after?.enabled)}`,
+        );
+        assert(
+          after?.manifest?.prompt !== SCAFFOLD_PROMPT,
+          'expected the LIVE manifest prompt to have updated off the scaffold default after publish',
+        );
         currentName = after?.manifest?.name || currentName;
 
         // Config/hero on the builder's own Config tab should now also show
@@ -478,16 +552,26 @@ async function main() {
         await shot('06-builder-config-tab-after-publish');
         const builderBodyTxt = await bodyText();
         const stillSaysNotDescribed = /not described yet\./i.test(builderBodyTxt);
-        console.log(`[auto06] Builder Config tab still shows "Not described yet." placeholder after publish: ${stillSaysNotDescribed}`);
-        assert(!stillSaysNotDescribed, 'expected the builder\'s own Config tab to no longer show the "Not described yet." placeholder after publish');
+        console.log(
+          `[auto06] Builder Config tab still shows "Not described yet." placeholder after publish: ${stillSaysNotDescribed}`,
+        );
+        assert(
+          !stillSaysNotDescribed,
+          'expected the builder\'s own Config tab to no longer show the "Not described yet." placeholder after publish',
+        );
 
         // Now the automation's real VIEW screen (not the builder) -- hero
         // behavior/prompt block, screenshotted per the brief.
         await openAutomationView(currentName);
         await shot('07-automation-view-hero-after-publish');
         const viewBodyTxt = await bodyText();
-        console.log(`[auto06] automation view body (first 500 chars): ${viewBodyTxt.slice(0, 500).replace(/\n/g, ' | ')}`);
-        assert(!/Describe what this automation should do\./i.test(viewBodyTxt), 'expected the automation VIEW screen to show a real prompt, not the scaffold placeholder');
+        console.log(
+          `[auto06] automation view body (first 500 chars): ${viewBodyTxt.slice(0, 500).replace(/\n/g, ' | ')}`,
+        );
+        assert(
+          !/Describe what this automation should do\./i.test(viewBodyTxt),
+          'expected the automation VIEW screen to show a real prompt, not the scaffold placeholder',
+        );
 
         note(
           `publish-and-verify-plan: after clicking "Enable" (the automations builder's publish-equivalent primary action, ` +
@@ -530,7 +614,10 @@ async function main() {
         }
         console.log(`[auto06] run final timeline data-status: ${finalStatus}`);
         await shot('10-run-view-settled');
-        assert(finalStatus === 'ok' || finalStatus === 'fail', `run did not resolve within 90s, stuck at data-status=${finalStatus}`);
+        assert(
+          finalStatus === 'ok' || finalStatus === 'fail',
+          `run did not resolve within 90s, stuck at data-status=${finalStatus}`,
+        );
 
         const runs = await gwRuns(automationRef, 5);
         const latest = runs[0];
@@ -538,7 +625,9 @@ async function main() {
         console.log(`[auto06] latest run record: ${JSON.stringify(latest)}`);
 
         const runDetail = await gwReadRun(latest.runId);
-        console.log(`[auto06] full run detail via GET /_automations/run?runId=: ${JSON.stringify(runDetail)}`);
+        console.log(
+          `[auto06] full run detail via GET /_automations/run?runId=: ${JSON.stringify(runDetail)}`,
+        );
         await shot('11-run-view-timeline-detail');
 
         let outputObj = null;
@@ -563,8 +652,14 @@ async function main() {
             `since the exact fixed string was requested and checked mechanically, no LLM judgment call needed at verification time.`,
         );
 
-        assert(runDetail?.ok === true, `expected the run to succeed (ok:true), got ok=${runDetail?.ok} error=${JSON.stringify(runDetail?.error)}`);
-        assert(resultMatchesGoal, `expected the run's summary/output to contain the requested goal marker "${GOAL_MARKER}", got summary=${JSON.stringify(runDetail?.summary)} outputJson=${JSON.stringify(runDetail?.outputJson)}`);
+        assert(
+          runDetail?.ok === true,
+          `expected the run to succeed (ok:true), got ok=${runDetail?.ok} error=${JSON.stringify(runDetail?.error)}`,
+        );
+        assert(
+          resultMatchesGoal,
+          `expected the run's summary/output to contain the requested goal marker "${GOAL_MARKER}", got summary=${JSON.stringify(runDetail?.summary)} outputJson=${JSON.stringify(runDetail?.outputJson)}`,
+        );
 
         // Timeline node expand (best-effort, same tlHead convention as
         // suites 01-05) -- downstream evidence screenshot for the report.
@@ -586,11 +681,18 @@ async function main() {
     // -----------------------------------------------------------------
     // FLOW: console-sweep
     // -----------------------------------------------------------------
-    await step('console-sweep', 'Zero unexpected console errors across the whole suite', async () => {
-      const allErrors = consoleMessages.filter((m) => m.type === 'error');
-      for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
-      assert(allErrors.length === 0, `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`);
-    });
+    await step(
+      'console-sweep',
+      'Zero unexpected console errors across the whole suite',
+      async () => {
+        const allErrors = consoleMessages.filter((m) => m.type === 'error');
+        for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
+        assert(
+          allErrors.length === 0,
+          `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`,
+        );
+      },
+    );
 
     // -----------------------------------------------------------------
     // Report

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component for the Connections settings surface; splitting would fragment one visual unit
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import { Icon } from '../ui/index.js';
 import { relativeTime } from '../format.js';
@@ -183,7 +184,7 @@ function SetupGuide({ steps }: { steps: string[] }): JSX.Element {
       {open ? (
         <ol className={styles.setupList}>
           {steps.map((s, i) => (
-            // eslint-disable-next-line react/no-array-index-key
+            // eslint-disable-next-line react/no-array-index-key -- (#330) static step list, no reorder/insert
             <li key={i}>{s}</li>
           ))}
         </ol>
@@ -206,7 +207,8 @@ function AddConnectionWizard({
   const [providerId, setProviderId] = useState(providers[0]?.id ?? '');
   const provider = providers.find((p) => p.id === providerId) ?? providers[0];
   const [connectorKind, setConnectorKind] = useState(provider?.connectors[0]?.kind ?? '');
-  const connector = provider?.connectors.find((c) => c.kind === connectorKind) ?? provider?.connectors[0];
+  const connector =
+    provider?.connectors.find((c) => c.kind === connectorKind) ?? provider?.connectors[0];
   const [label, setLabel] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -216,16 +218,18 @@ function AddConnectionWizard({
   useEffect(() => {
     const first = provider?.connectors[0]?.kind ?? '';
     setConnectorKind(first);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) intentionally re-seeds only on providerId change
   }, [providerId]);
   useEffect(() => {
     if (provider && connector) {
       const providerName = provider.name.split(' (')[0] ?? provider.name;
       setLabel(
-        provider.connectors.length > 1 ? `${providerName} · ${connectorLabel(connector.kind)}` : providerName,
+        provider.connectors.length > 1
+          ? `${providerName} · ${connectorLabel(connector.kind)}`
+          : providerName,
       );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) intentionally re-seeds only on providerId/connectorKind change
   }, [providerId, connectorKind]);
 
   if (!provider || !connector) {
@@ -234,7 +238,9 @@ function AddConnectionWizard({
 
   const ready =
     label.trim().length > 0 &&
-    (provider.credKind === 'oauth2' ? clientId.trim().length > 0 && clientSecret.trim().length > 0 : apiKey.trim().length > 0);
+    (provider.credKind === 'oauth2'
+      ? clientId.trim().length > 0 && clientSecret.trim().length > 0
+      : apiKey.trim().length > 0);
 
   const submit = (): void => {
     if (!ready) return;
@@ -377,7 +383,7 @@ export default function SettingsConnectionsScreen({
         .then(setRows)
         .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) refresh() identity is meant to track loadConnections only
     [loadConnections],
   );
 
@@ -386,7 +392,7 @@ export default function SettingsConnectionsScreen({
     return () => {
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#330) refresh() is stable via useMemo, re-run only on loadConnections
   }, [loadConnections]);
 
   const openWizard = (): void => {
@@ -498,7 +504,10 @@ export default function SettingsConnectionsScreen({
                 }
                 onToggleStatus={() =>
                   withBusy(row.connectionId, () =>
-                    setConnectionStatus(row.connectionId, row.health === 'paused' ? 'active' : 'paused'),
+                    setConnectionStatus(
+                      row.connectionId,
+                      row.health === 'paused' ? 'active' : 'paused',
+                    ),
                   )
                 }
               />
@@ -518,7 +527,11 @@ export default function SettingsConnectionsScreen({
             />
           )
         ) : (
-          <button type="button" className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)} onClick={openWizard}>
+          <button
+            type="button"
+            className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
+            onClick={openWizard}
+          >
             <Icon name="Plus" size={13} />
             <span>Add connection</span>
           </button>

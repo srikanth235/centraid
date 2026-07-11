@@ -80,7 +80,12 @@ export default function AssistantRoute(): JSX.Element {
       };
     }
     if (msg.streaming) return { kind: 'ai', streaming: true, text: msg.text };
-    return { kind: 'ai', streaming: false, html: richAnswerHtml(msg.text), error: Boolean(msg.error) };
+    return {
+      kind: 'ai',
+      streaming: false,
+      html: richAnswerHtml(msg.text),
+      error: Boolean(msg.error),
+    };
   };
 
   const buildSnapshot = (): AssistantSnapshot => ({
@@ -105,7 +110,11 @@ export default function AssistantRoute(): JSX.Element {
     for (const { payload } of rows) {
       if (payload.kind === 'user') out.push({ kind: 'user', text: payload.text ?? '' });
       else if (payload.kind === 'ai')
-        out.push({ kind: 'ai', text: payload.text ?? '', ...(payload.error ? { error: true } : {}) });
+        out.push({
+          kind: 'ai',
+          text: payload.text ?? '',
+          ...(payload.error ? { error: true } : {}),
+        });
       else if (payload.kind === 'tool') {
         const call: AsstToolCall = {
           id: payload.id ?? String(out.length),
@@ -242,6 +251,17 @@ export default function AssistantRoute(): JSX.Element {
           push();
           break;
         }
+        case 'assistant.start':
+        case 'reasoning.delta':
+        case 'phase':
+        case 'aborted':
+        case 'usage':
+        case 'webhooks':
+          // No UI surface for these yet (start/phase/usage are informational,
+          // reasoning traces aren't rendered, webhook minting is a builder-chat
+          // concern handled elsewhere). The outer stream's `finally` already
+          // clears the streaming indicator regardless of how the turn ends.
+          break;
       }
     };
 
@@ -249,12 +269,17 @@ export default function AssistantRoute(): JSX.Element {
       await streamAssistantTurn({ conversationId, message: text }, onEvent, m.current.abort.signal);
     } catch (err) {
       if (!m.current.disposed && !(err instanceof DOMException && err.name === 'AbortError')) {
-        m.current.msgs.push({ kind: 'ai', text: err instanceof Error ? err.message : String(err), error: true });
+        m.current.msgs.push({
+          kind: 'ai',
+          text: err instanceof Error ? err.message : String(err),
+          error: true,
+        });
       }
     } finally {
       if (!m.current.disposed && m.current.currentId === conversationId) {
         const live = m.current.msgs.find(
-          (msg): msg is Extract<AsstMsg, { kind: 'ai' }> => msg.kind === 'ai' && msg.streaming === true,
+          (msg): msg is Extract<AsstMsg, { kind: 'ai' }> =>
+            msg.kind === 'ai' && msg.streaming === true,
         );
         if (live) live.streaming = false;
         setBusy(false);
@@ -272,7 +297,7 @@ export default function AssistantRoute(): JSX.Element {
       model.disposed = true;
       model.abort?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once thread load, deliberately []
   }, []);
 
   return (

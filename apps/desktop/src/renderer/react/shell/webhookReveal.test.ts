@@ -21,7 +21,9 @@ describe('openWebhookReveal', () => {
     expect(card.textContent).toContain(WEBHOOK.secret);
     expect(card.textContent).toContain("won't see it again");
     (
-      [...card.querySelectorAll('button')].find((b) => b.textContent === 'Done') as HTMLButtonElement
+      [...card.querySelectorAll('button')].find(
+        (b) => b.textContent === 'Done',
+      ) as HTMLButtonElement
     ).click();
     await p;
     expect(document.querySelector('.card')).toBeNull();

@@ -61,7 +61,7 @@ function Message({
       ref={(node) => {
         if (node) hydrateRefs(node);
       }}
-      // eslint-disable-next-line react/no-danger -- markup from the trusted vanilla richAnswer renderer
+      // eslint-disable-next-line react/no-danger -- (#325) markup from the trusted vanilla richAnswer renderer
       dangerouslySetInnerHTML={{ __html: m.html }}
     />
   );

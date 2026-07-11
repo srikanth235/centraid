@@ -36,7 +36,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v08-${id}.png`) });
@@ -55,9 +61,12 @@ async function shot(name) {
 async function assertNotesNotDraft(label) {
   const tile = page.locator('[data-app-id="notes"]');
   await tile.waitFor({ state: 'visible', timeout: 15_000 });
-  const tileText = (await tile.innerText().catch(() => '')).toLowerCase();
+  const tileText = (await tile.textContent().catch(() => '')).toLowerCase();
   console.log(`[v08] (${label}) Notes tile text: ${JSON.stringify(tileText)}`);
-  assert(!tileText.includes('draft'), `(${label}) Notes tile shows a "draft" badge/description -- pin was demoted to a draft after the vault switch: ${tileText}`);
+  assert(
+    !tileText.includes('draft'),
+    `(${label}) Notes tile shows a "draft" badge/description -- pin was demoted to a draft after the vault switch: ${tileText}`,
+  );
 }
 
 async function main() {
@@ -84,60 +93,91 @@ async function main() {
       await shot('01-home-notes-pinned');
     });
 
-    await step('create-second-space', 'Settings -> Spaces -> Add profile -> auto-switches to a new, empty vault', async () => {
-      await page.getByRole('button', { name: /^Settings/ }).first().click();
-      await page.getByRole('heading', { name: 'Appearance' }).waitFor({ state: 'visible', timeout: 15_000 });
-      await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-      await page.waitForTimeout(400);
-      await page.getByRole('button', { name: /Add profile/ }).click();
-      const modal = page.getByRole('dialog');
-      await modal.first().waitFor({ state: 'visible', timeout: 10_000 });
-      const nameInput = modal.first().locator('input[type="text"]').first();
-      await nameInput.fill('QA Pin Space');
-      await page.waitForTimeout(200);
-      await modal.getByRole('button', { name: 'Create profile' }).click();
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 20_000 });
-      await page.waitForTimeout(1000);
-      await shot('02-home-new-space-empty');
-      const notesTileCount = await page.locator('[data-app-id="notes"]').count();
-      assert(notesTileCount === 0, 'the new space should start empty -- Notes from the original vault must not leak in');
-    });
+    await step(
+      'create-second-space',
+      'Settings -> Spaces -> Add profile -> auto-switches to a new, empty vault',
+      async () => {
+        await page
+          .getByRole('button', { name: /^Settings/ })
+          .first()
+          .click();
+        await page
+          .getByRole('heading', { name: 'Appearance' })
+          .waitFor({ state: 'visible', timeout: 15_000 });
+        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
+        await page.waitForTimeout(400);
+        await page.getByRole('button', { name: /Add profile/ }).click();
+        const modal = page.getByRole('dialog');
+        await modal.first().waitFor({ state: 'visible', timeout: 10_000 });
+        const nameInput = modal.first().locator('input[type="text"]').first();
+        await nameInput.fill('QA Pin Space');
+        await page.waitForTimeout(200);
+        await modal.getByRole('button', { name: 'Create profile' }).click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 20_000 });
+        await page.waitForTimeout(1000);
+        await shot('02-home-new-space-empty');
+        const notesTileCount = await page.locator('[data-app-id="notes"]').count();
+        assert(
+          notesTileCount === 0,
+          'the new space should start empty -- Notes from the original vault must not leak in',
+        );
+      },
+    );
 
-    await step('switch-back-notes-still-pinned', 'Switch back via the sidebar vault switcher -- Notes must be a normal pinned tile, not demoted to DRAFT', async () => {
-      const head = page.locator('[class*="ProfileSwitcherHead"], [class*="profileSwitcher"], [class*="switcher"]').first();
-      const headVisible = await head.isVisible().catch(() => false);
-      if (headVisible) {
-        await head.click();
-      } else {
-        await page.keyboard.press('Meta+Shift+G');
-      }
-      const menu = page.getByRole('menu');
-      await menu.waitFor({ state: 'visible', timeout: 5000 });
-      await shot('03-vault-switcher-menu');
-      await menu.getByRole('menuitem', { name: /Owner/ }).click();
-      await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 20_000 });
-      await page.waitForTimeout(1000);
-      await shot('04-home-back-on-primary-vault');
-      await assertNotesNotDraft('after switch-back, same session');
+    await step(
+      'switch-back-notes-still-pinned',
+      'Switch back via the sidebar vault switcher -- Notes must be a normal pinned tile, not demoted to DRAFT',
+      async () => {
+        const head = page
+          .locator(
+            '[class*="ProfileSwitcherHead"], [class*="profileSwitcher"], [class*="switcher"]',
+          )
+          .first();
+        const headVisible = await head.isVisible().catch(() => false);
+        if (headVisible) {
+          await head.click();
+        } else {
+          await page.keyboard.press('Meta+Shift+G');
+        }
+        const menu = page.getByRole('menu');
+        await menu.waitFor({ state: 'visible', timeout: 5000 });
+        await shot('03-vault-switcher-menu');
+        await menu.getByRole('menuitem', { name: /Owner/ }).click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 20_000 });
+        await page.waitForTimeout(1000);
+        await shot('04-home-back-on-primary-vault');
+        await assertNotesNotDraft('after switch-back, same session');
 
-      // Extra corroboration: a genuine pinned tile has no StatusPill tone at
-      // all, and clicking it should open the real live app (an iframe), not
-      // a builder/draft editor route.
-      await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
-      await shot('05-notes-opens-as-live-app-not-draft');
-      await navTo(page, 'Home');
-    });
+        // Extra corroboration: a genuine pinned tile has no StatusPill tone at
+        // all, and clicking it should open the real live app (an iframe), not
+        // a builder/draft editor route.
+        await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
+        await page.waitForSelector('iframe[data-centraid-app="1"]', {
+          state: 'attached',
+          timeout: 20_000,
+        });
+        await shot('05-notes-opens-as-live-app-not-draft');
+        await navTo(page, 'Home');
+      },
+    );
 
-    await step('relaunch-still-fine', 'Fully relaunch (same userDataDir) -- Notes still a normal pinned tile after restart', async () => {
-      await session.close();
-      session = await launchApp({ userDataDir: USER_DATA_DIR });
-      page = session.page;
-      page.setDefaultTimeout(60_000);
-      await page.waitForTimeout(500);
-      await assertNotesNotDraft('after full relaunch');
-      await shot('06-home-after-relaunch');
-    });
+    await step(
+      'relaunch-still-fine',
+      'Fully relaunch (same userDataDir) -- Notes still a normal pinned tile after restart',
+      async () => {
+        await session.close();
+        session = await launchApp({ userDataDir: USER_DATA_DIR });
+        page = session.page;
+        page.setDefaultTimeout(60_000);
+        await page.waitForTimeout(500);
+        await assertNotesNotDraft('after full relaunch');
+        await shot('06-home-after-relaunch');
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-08 VERDICT TABLE ================');

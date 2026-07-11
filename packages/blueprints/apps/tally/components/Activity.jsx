@@ -63,7 +63,12 @@ export function ActivityFeed({ viewData, me, currency }) {
   return (
     <>
       {items.map((a, i) => (
-        <ActivityItem key={a.expense_id ?? a.settlement_id ?? i} a={a} me={me} currency={currency} />
+        <ActivityItem
+          key={a.expense_id ?? a.settlement_id ?? i}
+          a={a}
+          me={me}
+          currency={currency}
+        />
       ))}
     </>
   );

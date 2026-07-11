@@ -54,7 +54,7 @@ class CountingObjectStore implements ObjectStore {
   }
 }
 
-/* eslint-disable max-classes-per-file -- the two spies are small, colocated
+/* eslint-disable max-classes-per-file -- (#354) the two spies are small, colocated
    test-only wrappers around one seam (ObjectStore + BackupProvider). */
 /** Wraps a BackupProvider, exposing the CountingObjectStore it hands out from openDataPlane. */
 class SpyProvider implements BackupProvider {

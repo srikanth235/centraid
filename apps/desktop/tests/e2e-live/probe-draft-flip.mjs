@@ -26,7 +26,7 @@ async function dumpApps(page, label) {
 
 async function badgeState(page, label) {
   const tile = page.locator('[data-app-id="notes"]');
-  const text = await tile.innerText().catch(() => '(no tile)');
+  const text = await tile.textContent().catch(() => '(no tile)');
   console.log(`[probe] tile text ${label}: ${JSON.stringify(text)}`);
 }
 
@@ -74,7 +74,9 @@ async function main() {
       await window.CentraidApi.setActiveVault({ vaultId });
     }, primary.vaultId);
     await page.waitForTimeout(1_500);
-    await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+    await page
+      .getByRole('heading', { name: 'What should we build?' })
+      .waitFor({ state: 'visible', timeout: 15_000 });
     await page.locator('[data-app-id="notes"]').waitFor({ state: 'visible', timeout: 15_000 });
 
     await badgeState(page, 'after switch back');

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) the full-story end-to-end test built exactly the way build-gateway.ts constructs BackupService (no injected provider/assembleEntries); splitting the story would break the point of an end-to-end test
 /*
  * The full-story end-to-end test for the offsite backup feature
  * (PROTOCOL.md/FORMAT.md): NO injected provider, NO injected
@@ -14,11 +15,9 @@
 
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
-import { randomBytes, createHash } from 'node:crypto';
+import crypto, { randomBytes } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import {
   loadKeyring,
   openLocalBackupProvider,
@@ -48,10 +47,6 @@ async function tempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `${prefix}-${crypto.randomUUID()}-`));
   cleanups.push(() => fs.rm(dir, { recursive: true, force: true }));
   return dir;
-}
-
-function sha256Of(bytes: Buffer): string {
-  return createHash('sha256').update(bytes).digest('hex');
 }
 
 async function countFiles(dir: string): Promise<number> {

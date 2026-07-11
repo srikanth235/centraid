@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations TRIGGERS QA suite: cron real-fire through the actual
 // InProcessScheduler (packages/automation/src/fire/in-process-scheduler.ts),
 // cron disable → no-fire, a cron hero-text UTC→local cross-check, webhook
@@ -83,7 +84,11 @@ const consoleMessages = [];
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -97,7 +102,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto02-${id}.png`) });
@@ -114,7 +125,7 @@ async function shot(name) {
 }
 
 async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
+  return page.evaluate(() => document.body.textContent);
 }
 
 /** Out-of-band gateway fetch, using the app's own auth (same pattern as
@@ -148,7 +159,9 @@ async function rawFetch(pathAndQuery, opts = {}) {
       // Callers may pass either a bare path (prepend the gateway's own
       // baseUrl) or an already-absolute URL (fix #6: the UI now displays
       // the webhook URL as absolute -- use it as-is, don't double-prepend).
-      const url = /^https?:\/\//.test(pathAndQuery) ? pathAndQuery : `${auth.baseUrl}${pathAndQuery}`;
+      const url = /^https?:\/\//.test(pathAndQuery)
+        ? pathAndQuery
+        : `${auth.baseUrl}${pathAndQuery}`;
       const res = await fetch(url, {
         method: method ?? 'POST',
         headers: headers ?? { 'content-type': 'application/json' },
@@ -161,7 +174,12 @@ async function rawFetch(pathAndQuery, opts = {}) {
       } catch {
         /* non-JSON body, keep text */
       }
-      return { status: res.status, contentType: res.headers.get('content-type'), text: text.slice(0, 300), json };
+      return {
+        status: res.status,
+        contentType: res.headers.get('content-type'),
+        text: text.slice(0, 300),
+        json,
+      };
     },
     { pathAndQuery, method: opts.method, headers: opts.headers, body: opts.body },
   );
@@ -184,13 +202,17 @@ async function gwReadAutomation(ref) {
 }
 
 async function gwRuns(ref, limit = 50) {
-  const { json } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`);
+  const { json } = await gwFetch(
+    `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`,
+  );
   return json?.runs ?? [];
 }
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
@@ -199,7 +221,9 @@ async function openAutomationView(name) {
   const row = page.getByRole('button', { name: new RegExp(esc(name)) }).first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -229,10 +253,19 @@ async function adoptTemplate(templateName) {
   const reveal = page.getByRole('dialog', { name: 'Webhook minted' });
   const configBtn = page.getByRole('button', { name: 'Config' });
   const first = await Promise.race([
-    reveal.waitFor({ state: 'visible', timeout: 40_000 }).then(() => 'reveal').catch(() => null),
-    configBtn.waitFor({ state: 'visible', timeout: 40_000 }).then(() => 'config').catch(() => null),
+    reveal
+      .waitFor({ state: 'visible', timeout: 40_000 })
+      .then(() => 'reveal')
+      .catch(() => null),
+    configBtn
+      .waitFor({ state: 'visible', timeout: 40_000 })
+      .then(() => 'config')
+      .catch(() => null),
   ]);
-  assert(first === 'reveal' || first === 'config', `adopting "${templateName}" produced neither the webhook-reveal modal nor the builder's Config button`);
+  assert(
+    first === 'reveal' || first === 'config',
+    `adopting "${templateName}" produced neither the webhook-reveal modal nor the builder's Config button`,
+  );
 
   let revealedWebhook = null;
   if (first === 'reveal') {
@@ -241,7 +274,9 @@ async function adoptTemplate(templateName) {
       url: (await codes.nth(0).textContent())?.trim() ?? null,
       secret: (await codes.nth(1).textContent())?.trim() ?? null,
     };
-    console.log(`[auto02] "Webhook minted" reveal modal shown for "${templateName}": url=${JSON.stringify(revealedWebhook.url)} secretLen=${revealedWebhook.secret?.length ?? 0}`);
+    console.log(
+      `[auto02] "Webhook minted" reveal modal shown for "${templateName}": url=${JSON.stringify(revealedWebhook.url)} secretLen=${revealedWebhook.secret?.length ?? 0}`,
+    );
     await reveal.getByRole('button', { name: 'Done' }).click();
     await reveal.waitFor({ state: 'hidden', timeout: 5_000 });
   }
@@ -297,19 +332,40 @@ async function main() {
           enabled: true,
           publish: true,
         };
-        const createRes = await gwFetch('/centraid/_automations', { method: 'POST', body: reqBody });
+        const createRes = await gwFetch('/centraid/_automations', {
+          method: 'POST',
+          body: reqBody,
+        });
         console.log(`[auto02] POST /centraid/_automations request: ${JSON.stringify(reqBody)}`);
-        console.log(`[auto02] POST /centraid/_automations response: status=${createRes.status} body=${JSON.stringify(createRes.json)}`);
-        assert(createRes.status === 400, `expected 400 (rejected, not coerced) from automation create with an unsupported trigger kind, got ${createRes.status}`);
-        assert(createRes.json?.error === 'bad_request', `expected error:"bad_request", got ${JSON.stringify(createRes.json)}`);
-        assert(/data/.test(createRes.json?.message ?? ''), `expected the 400 message to mention the offending kind "data", got ${JSON.stringify(createRes.json?.message)}`);
+        console.log(
+          `[auto02] POST /centraid/_automations response: status=${createRes.status} body=${JSON.stringify(createRes.json)}`,
+        );
+        assert(
+          createRes.status === 400,
+          `expected 400 (rejected, not coerced) from automation create with an unsupported trigger kind, got ${createRes.status}`,
+        );
+        assert(
+          createRes.json?.error === 'bad_request',
+          `expected error:"bad_request", got ${JSON.stringify(createRes.json)}`,
+        );
+        assert(
+          /data/.test(createRes.json?.message ?? ''),
+          `expected the 400 message to mention the offending kind "data", got ${JSON.stringify(createRes.json?.message)}`,
+        );
 
         // Confirm no row was actually created under this id -- the reject
         // must be a true no-op, not a reject-after-persist.
         const readBack = await gwReadAutomation(`${COERCE_AUTO_ID}/${COERCE_AUTO_ID}`);
-        console.log(`[auto02] GET /centraid/_automations/read?ref=${COERCE_AUTO_ID}/${COERCE_AUTO_ID} response after the rejected create: ${JSON.stringify(readBack)}`);
-        assert(!readBack, `expected NO automation to have been persisted after a rejected create, got ${JSON.stringify(readBack)}`);
-        console.log('[auto02] CONFIRMED: POST /centraid/_automations now rejects kind:"data" (and, by the same code path, "condition") with 400 instead of silently coercing it to cron -- fix #2 verified.');
+        console.log(
+          `[auto02] GET /centraid/_automations/read?ref=${COERCE_AUTO_ID}/${COERCE_AUTO_ID} response after the rejected create: ${JSON.stringify(readBack)}`,
+        );
+        assert(
+          !readBack,
+          `expected NO automation to have been persisted after a rejected create, got ${JSON.stringify(readBack)}`,
+        );
+        console.log(
+          '[auto02] CONFIRMED: POST /centraid/_automations now rejects kind:"data" (and, by the same code path, "condition") with 400 instead of silently coercing it to cron -- fix #2 verified.',
+        );
       },
     );
 
@@ -330,12 +386,18 @@ async function main() {
         // off to the builder -- assert it actually fired for this template
         // and rendered a real URL + secret, not just that adoptTemplate()
         // was able to dismiss *a* dialog.
-        assert(Boolean(revealedWebhook), 'expected the "Webhook minted" reveal modal to appear when adopting a webhook template');
+        assert(
+          Boolean(revealedWebhook),
+          'expected the "Webhook minted" reveal modal to appear when adopting a webhook template',
+        );
         assert(
           /^https?:\/\/[^/]+\/_centraid-hook\//.test(revealedWebhook.url ?? ''),
           `expected the reveal modal's Webhook URL field to show an absolute "_centraid-hook" URL, got ${JSON.stringify(revealedWebhook.url)}`,
         );
-        assert(Boolean(revealedWebhook.secret) && revealedWebhook.secret.length >= 16, `expected the reveal modal's Bearer secret field to show a real secret, got ${JSON.stringify(revealedWebhook.secret)}`);
+        assert(
+          Boolean(revealedWebhook.secret) && revealedWebhook.secret.length >= 16,
+          `expected the reveal modal's Bearer secret field to show a real secret, got ${JSON.stringify(revealedWebhook.secret)}`,
+        );
         console.log(`[auto02] "Webhook minted" reveal modal confirmed for "${TEMPLATE_WEBHOOK}"`);
 
         await openAutomationView(TEMPLATE_WEBHOOK);
@@ -344,7 +406,9 @@ async function main() {
         const heroWebhook = page.locator('[class*="heroWebhook"]');
         await heroWebhook.waitFor({ state: 'visible', timeout: 10_000 });
         const provisioning = await heroWebhook.getAttribute('data-provisioning');
-        console.log(`[auto02] webhook hero data-provisioning attr right after clone: ${provisioning}`);
+        console.log(
+          `[auto02] webhook hero data-provisioning attr right after clone: ${provisioning}`,
+        );
 
         if (provisioning === 'true') {
           // Rare race: clone hadn't finished provisioning by the time we
@@ -356,10 +420,15 @@ async function main() {
         const urlCode = page.locator('[class*="heroWhUrl"]');
         await urlCode.waitFor({ state: 'visible', timeout: 10_000 });
         webhookUrlText = (await urlCode.textContent())?.trim() ?? null;
-        console.log(`[auto02] webhook URL as rendered to the user: ${JSON.stringify(webhookUrlText)}`);
+        console.log(
+          `[auto02] webhook URL as rendered to the user: ${JSON.stringify(webhookUrlText)}`,
+        );
         await shot('wh-03-webhook-url-visible');
 
-        assert(Boolean(webhookUrlText), 'expected a webhook URL to be displayed (not stuck provisioning)');
+        assert(
+          Boolean(webhookUrlText),
+          'expected a webhook URL to be displayed (not stuck provisioning)',
+        );
         // fix #6: the webhook route is now mounted on the desktop gateway
         // itself, so the URL the UI displays must be an ABSOLUTE one
         // (host:port included), not a bare relative path — a relative path
@@ -370,19 +439,35 @@ async function main() {
         );
         // Still no secret in the visible URL text itself (the secret is a
         // separate once-only console reveal, checked below).
-        assert(!/secret/i.test(webhookUrlText), 'BUG CHECK expectation failed (unexpectedly true): the webhook URL text itself appears to contain the word "secret"');
-        assert(webhookUrlText === revealedWebhook.url, `expected the hero's persisted webhook URL to match what the one-time reveal modal showed at adopt time, hero=${JSON.stringify(webhookUrlText)} modal=${JSON.stringify(revealedWebhook.url)}`);
+        assert(
+          !/secret/i.test(webhookUrlText),
+          'BUG CHECK expectation failed (unexpectedly true): the webhook URL text itself appears to contain the word "secret"',
+        );
+        assert(
+          webhookUrlText === revealedWebhook.url,
+          `expected the hero's persisted webhook URL to match what the one-time reveal modal showed at adopt time, hero=${JSON.stringify(webhookUrlText)} modal=${JSON.stringify(revealedWebhook.url)}`,
+        );
 
         // fix #4: the once-only plaintext webhook secret must be surfaced to
         // the console at adopt time (templatesData.ts surfaceMintedWebhook),
         // since the manifest only ever persists its hash.
         const mintedMsg = consoleMessages.find((m) => /Webhook minted:/.test(m.text));
         console.log(`[auto02] webhook-minted console line present: ${Boolean(mintedMsg)}`);
-        assert(Boolean(mintedMsg), 'expected the once-only webhook secret to be surfaced to the console on adopt (fix #4)');
-        const secretMatch = mintedMsg.text.match(/Bearer secret \(shown once, only its hash is stored\):\s*(\S+)/);
-        assert(Boolean(secretMatch), `expected to parse the plaintext secret out of the console line, got: ${JSON.stringify(mintedMsg.text)}`);
+        assert(
+          Boolean(mintedMsg),
+          'expected the once-only webhook secret to be surfaced to the console on adopt (fix #4)',
+        );
+        const secretMatch = mintedMsg.text.match(
+          /Bearer secret \(shown once, only its hash is stored\):\s*(\S+)/,
+        );
+        assert(
+          Boolean(secretMatch),
+          `expected to parse the plaintext secret out of the console line, got: ${JSON.stringify(mintedMsg.text)}`,
+        );
         webhookSecret = secretMatch[1];
-        console.log(`[auto02] captured webhook secret from console (length ${webhookSecret.length})`);
+        console.log(
+          `[auto02] captured webhook secret from console (length ${webhookSecret.length})`,
+        );
 
         const copyBtn = page.locator('button[aria-label="Copy webhook URL"]');
         const copyBtnVisible = await copyBtn.isVisible().catch(() => false);
@@ -392,8 +477,13 @@ async function main() {
         const noteText = (await note.textContent().catch(() => null))?.trim() ?? null;
         console.log(`[auto02] hero note text near the webhook URL: ${JSON.stringify(noteText)}`);
         const remoteHint = /remote|cloud|openclaw|only works|desktop/i.test(noteText ?? '');
-        console.log(`[auto02] does the hero give ANY hint that this URL requires a remote gateway: ${remoteHint}`);
-        assert(!remoteHint, 'BUG CHECK expectation failed (unexpectedly true): hero note unexpectedly warns about remote-gateway-only usage');
+        console.log(
+          `[auto02] does the hero give ANY hint that this URL requires a remote gateway: ${remoteHint}`,
+        );
+        assert(
+          !remoteHint,
+          'BUG CHECK expectation failed (unexpectedly true): hero note unexpectedly warns about remote-gateway-only usage',
+        );
       },
     );
 
@@ -426,7 +516,9 @@ async function main() {
         await sw.waitFor({ state: 'attached', timeout: 5_000 });
         const switchLabel = page.locator('label:has(input[role="switch"])');
         const before = await sw.getAttribute('aria-checked');
-        console.log(`[auto02] webhook automation switch state before enabling: aria-checked=${before}`);
+        console.log(
+          `[auto02] webhook automation switch state before enabling: aria-checked=${before}`,
+        );
         let afterEnable = before;
         if (before !== 'true') {
           await switchLabel.click({ timeout: 5_000 });
@@ -438,7 +530,10 @@ async function main() {
             afterEnable = await sw.getAttribute('aria-checked');
           }
         }
-        assert(afterEnable === 'true', `expected the webhook automation to be enabled before firing, got aria-checked=${afterEnable}`);
+        assert(
+          afterEnable === 'true',
+          `expected the webhook automation to be enabled before firing, got aria-checked=${afterEnable}`,
+        );
         await shot('wh-04a-enabled-before-fire');
 
         const noAuth = await rawFetch(webhookUrlText, {
@@ -446,33 +541,68 @@ async function main() {
           headers: { 'content-type': 'application/json' },
           body: { test: true },
         });
-        console.log(`[auto02] POST ${webhookUrlText} (no auth header): status=${noAuth.status} contentType=${noAuth.contentType} body=${JSON.stringify(noAuth.text)}`);
+        console.log(
+          `[auto02] POST ${webhookUrlText} (no auth header): status=${noAuth.status} contentType=${noAuth.contentType} body=${JSON.stringify(noAuth.text)}`,
+        );
 
         const withFakeAuth = await rawFetch(webhookUrlText, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', authorization: 'Bearer totally-made-up-secret-123' },
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer totally-made-up-secret-123',
+          },
           body: { test: true },
         });
-        console.log(`[auto02] POST ${webhookUrlText} (fake Bearer token): status=${withFakeAuth.status} contentType=${withFakeAuth.contentType} body=${JSON.stringify(withFakeAuth.text)}`);
+        console.log(
+          `[auto02] POST ${webhookUrlText} (fake Bearer token): status=${withFakeAuth.status} contentType=${withFakeAuth.contentType} body=${JSON.stringify(withFakeAuth.text)}`,
+        );
 
-        assert(noAuth.status === 401, `expected a missing webhook secret to be rejected with 401, got ${noAuth.status}: ${JSON.stringify(noAuth.text)}`);
-        assert(withFakeAuth.status === 401, `expected a wrong webhook secret to be rejected with 401, got ${withFakeAuth.status}: ${JSON.stringify(withFakeAuth.text)}`);
-        assert(/secret/i.test(noAuth.json?.error ?? ''), `expected the 401 error to mention "secret", got ${JSON.stringify(noAuth.text)}`);
+        assert(
+          noAuth.status === 401,
+          `expected a missing webhook secret to be rejected with 401, got ${noAuth.status}: ${JSON.stringify(noAuth.text)}`,
+        );
+        assert(
+          withFakeAuth.status === 401,
+          `expected a wrong webhook secret to be rejected with 401, got ${withFakeAuth.status}: ${JSON.stringify(withFakeAuth.text)}`,
+        );
+        assert(
+          /secret/i.test(noAuth.json?.error ?? ''),
+          `expected the 401 error to mention "secret", got ${JSON.stringify(noAuth.text)}`,
+        );
 
         const correctSecret = await rawFetch(webhookUrlText, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${webhookSecret}` },
           body: { test: true },
         });
-        console.log(`[auto02] POST ${webhookUrlText} (correct secret): status=${correctSecret.status} contentType=${correctSecret.contentType} body=${JSON.stringify(correctSecret.text)}`);
+        console.log(
+          `[auto02] POST ${webhookUrlText} (correct secret): status=${correctSecret.status} contentType=${correctSecret.contentType} body=${JSON.stringify(correctSecret.text)}`,
+        );
         await shot('wh-04b-fires-on-desktop-evidence-captured');
 
-        assert(correctSecret.status !== 401 && correctSecret.status !== 404, `expected the correct-secret webhook POST to be ACCEPTED (not 401/404) on desktop (fix #6), got ${correctSecret.status}: ${JSON.stringify(correctSecret.text)}`);
-        assert(correctSecret.status === 200, `expected a 200 for a correctly-authed webhook fire, got ${correctSecret.status}: ${JSON.stringify(correctSecret.text)}`);
-        assert(Boolean(correctSecret.json), `expected a JSON body for a correctly-authed webhook fire, got ${JSON.stringify(correctSecret.text)}`);
-        assert(correctSecret.json.ok === true, `expected {ok:true, runId} from a correctly-authed, enabled webhook fire (fire() is hermetic — the scaffolded handler.js has no ctx.tool/ctx.agent calls), got ${JSON.stringify(correctSecret.text)}`);
-        assert(Boolean(correctSecret.json.runId), `expected a runId in the accepted webhook response, got ${JSON.stringify(correctSecret.text)}`);
-        console.log(`[auto02] CONFIRMED: webhook URL shown in the desktop UI now genuinely fires against the local gateway (correct secret -> 200 {ok:true, runId:${correctSecret.json.runId}}; no/wrong secret -> 401) — packages/gateway/src/serve/build-gateway.ts webhookHandler is wired into apps/desktop's serve() (serve.ts).`);
+        assert(
+          correctSecret.status !== 401 && correctSecret.status !== 404,
+          `expected the correct-secret webhook POST to be ACCEPTED (not 401/404) on desktop (fix #6), got ${correctSecret.status}: ${JSON.stringify(correctSecret.text)}`,
+        );
+        assert(
+          correctSecret.status === 200,
+          `expected a 200 for a correctly-authed webhook fire, got ${correctSecret.status}: ${JSON.stringify(correctSecret.text)}`,
+        );
+        assert(
+          Boolean(correctSecret.json),
+          `expected a JSON body for a correctly-authed webhook fire, got ${JSON.stringify(correctSecret.text)}`,
+        );
+        assert(
+          correctSecret.json.ok === true,
+          `expected {ok:true, runId} from a correctly-authed, enabled webhook fire (fire() is hermetic — the scaffolded handler.js has no ctx.tool/ctx.agent calls), got ${JSON.stringify(correctSecret.text)}`,
+        );
+        assert(
+          Boolean(correctSecret.json.runId),
+          `expected a runId in the accepted webhook response, got ${JSON.stringify(correctSecret.text)}`,
+        );
+        console.log(
+          `[auto02] CONFIRMED: webhook URL shown in the desktop UI now genuinely fires against the local gateway (correct secret -> 200 {ok:true, runId:${correctSecret.json.runId}}; no/wrong secret -> 401) — packages/gateway/src/serve/build-gateway.ts webhookHandler is wired into apps/desktop's serve() (serve.ts).`,
+        );
       },
     );
 
@@ -490,10 +620,18 @@ async function main() {
         await shot('data-02-view-screen');
 
         dataAutoRef = await gwFindRef(TEMPLATE_DATA);
-        assert(Boolean(dataAutoRef), `expected "${TEMPLATE_DATA}" to be a real gateway row after adopt`);
+        assert(
+          Boolean(dataAutoRef),
+          `expected "${TEMPLATE_DATA}" to be a real gateway row after adopt`,
+        );
         const row = await gwReadAutomation(dataAutoRef);
-        console.log(`[auto02] "${TEMPLATE_DATA}" persisted triggers (template clone, not the coercion-prone API route): ${JSON.stringify(row?.triggers)}`);
-        assert(row?.triggers?.[0]?.kind === 'data', `expected the template-cloned trigger kind to survive as 'data', got ${JSON.stringify(row?.triggers)}`);
+        console.log(
+          `[auto02] "${TEMPLATE_DATA}" persisted triggers (template clone, not the coercion-prone API route): ${JSON.stringify(row?.triggers)}`,
+        );
+        assert(
+          row?.triggers?.[0]?.kind === 'data',
+          `expected the template-cloned trigger kind to survive as 'data', got ${JSON.stringify(row?.triggers)}`,
+        );
 
         const bodyTxt = await bodyText();
         // buildAutomationViewData (automationsData.ts) only special-cases
@@ -506,7 +644,9 @@ async function main() {
         // refute two specific suspected bugs; this is an incidental third).
         const looksManualOnly = /manual only/i.test(bodyTxt);
         const looksCronSchedule = /cron schedule/i.test(bodyTxt);
-        console.log(`[auto02] VISUAL FINDING: data-trigger automation hero renders "Manual only"/"Cron schedule" (misleading for a 'data' trigger)? manualOnly=${looksManualOnly} cronSchedule=${looksCronSchedule}`);
+        console.log(
+          `[auto02] VISUAL FINDING: data-trigger automation hero renders "Manual only"/"Cron schedule" (misleading for a 'data' trigger)? manualOnly=${looksManualOnly} cronSchedule=${looksCronSchedule}`,
+        );
       },
     );
 
@@ -526,13 +666,24 @@ async function main() {
           enabled: true,
           publish: true,
         };
-        const createRes = await gwFetch('/centraid/_automations', { method: 'POST', body: reqBody });
+        const createRes = await gwFetch('/centraid/_automations', {
+          method: 'POST',
+          body: reqBody,
+        });
         console.log(`[auto02] cron-create request: ${JSON.stringify(reqBody)}`);
-        console.log(`[auto02] cron-create response: status=${createRes.status} row=${JSON.stringify(createRes.json?.row)}`);
+        console.log(
+          `[auto02] cron-create response: status=${createRes.status} row=${JSON.stringify(createRes.json?.row)}`,
+        );
         assert(createRes.status === 201, `expected 201, got ${createRes.status}`);
         const row = createRes.json?.row;
-        assert(Boolean(row) && row.enabled === true, `expected an enabled, published row back, got ${JSON.stringify(row)}`);
-        assert(row.triggers?.[0]?.kind === 'cron' && row.triggers[0].expr === '* * * * *', `expected an every-minute cron trigger, got ${JSON.stringify(row.triggers)}`);
+        assert(
+          Boolean(row) && row.enabled === true,
+          `expected an enabled, published row back, got ${JSON.stringify(row)}`,
+        );
+        assert(
+          row.triggers?.[0]?.kind === 'cron' && row.triggers[0].expr === '* * * * *',
+          `expected an every-minute cron trigger, got ${JSON.stringify(row.triggers)}`,
+        );
         cronAutoRef = row.ref;
 
         // Confirm it shows up in the UI (Automations overview) -- not just
@@ -543,7 +694,9 @@ async function main() {
         await shot('cron-01-overview-with-automation');
 
         const baselineDataRuns = dataAutoRef ? await gwRuns(dataAutoRef) : [];
-        console.log(`[auto02] "${TEMPLATE_DATA}" run count BEFORE the wait window: ${baselineDataRuns.length}`);
+        console.log(
+          `[auto02] "${TEMPLATE_DATA}" run count BEFORE the wait window: ${baselineDataRuns.length}`,
+        );
 
         // Poll runs feed every ~10s, cap ~150s (brief's budget) -- the
         // scheduler aligns to the NEXT minute boundary from gateway boot,
@@ -558,14 +711,23 @@ async function main() {
           await page.waitForTimeout(10_000);
         }
         windowSeconds = Math.round((Date.now() - windowStart) / 1000);
-        console.log(`[auto02] cron wait window: ${windowSeconds}s, cronRunFound=${JSON.stringify(cronRunFound)}`);
-        console.log(`[auto02] "${TEMPLATE_DATA}" run count AFTER the same ${windowSeconds}s window: ${dataRunsAtWindowEnd.length} (runs: ${JSON.stringify(dataRunsAtWindowEnd.map((r) => r.triggerOrigin))})`);
+        console.log(
+          `[auto02] cron wait window: ${windowSeconds}s, cronRunFound=${JSON.stringify(cronRunFound)}`,
+        );
+        console.log(
+          `[auto02] "${TEMPLATE_DATA}" run count AFTER the same ${windowSeconds}s window: ${dataRunsAtWindowEnd.length} (runs: ${JSON.stringify(dataRunsAtWindowEnd.map((r) => r.triggerOrigin))})`,
+        );
 
         await openAutomationView(CRON_AUTO_NAME);
         await shot('cron-02-view-after-wait');
 
-        assert(Boolean(cronRunFound), `expected at least one triggerOrigin:'cron' run to land within ${windowSeconds}s -- if the scaffold row is a draft with no real steps, a FAILED run record still proves the scheduler fired it (documented honestly either way). Runs seen: ${JSON.stringify(await gwRuns(cronAutoRef))}`);
-        console.log(`[auto02] cron run status honestly: ok=${cronRunFound.ok} error=${cronRunFound.error ?? 'none'}`);
+        assert(
+          Boolean(cronRunFound),
+          `expected at least one triggerOrigin:'cron' run to land within ${windowSeconds}s -- if the scaffold row is a draft with no real steps, a FAILED run record still proves the scheduler fired it (documented honestly either way). Runs seen: ${JSON.stringify(await gwRuns(cronAutoRef))}`,
+        );
+        console.log(
+          `[auto02] cron run status honestly: ok=${cronRunFound.ok} error=${cronRunFound.error ?? 'none'}`,
+        );
       },
     );
 
@@ -576,7 +738,10 @@ async function main() {
       'cron-real-fire-ui-confirm',
       'The fired cron run is visible in the UI, filterable under the "Cron" chip, distinguishable from a manual run, and its row/timeline is screenshotted',
       async () => {
-        assert(Boolean(cronAutoRef) && Boolean(cronRunFound), 'need a confirmed cron run from the previous flow');
+        assert(
+          Boolean(cronAutoRef) && Boolean(cronRunFound),
+          'need a confirmed cron run from the previous flow',
+        );
         await openAutomationView(CRON_AUTO_NAME);
 
         const cronFilter = page.locator('button[data-filter="cron"]');
@@ -588,18 +753,28 @@ async function main() {
         const cronRows = page.locator('button[data-ok]');
         const cronRowCount = await cronRows.count();
         console.log(`[auto02] run rows under the "Cron" filter: ${cronRowCount}`);
-        assert(cronRowCount >= 1, `expected >=1 run row under the Cron filter, got ${cronRowCount}`);
+        assert(
+          cronRowCount >= 1,
+          `expected >=1 run row under the Cron filter, got ${cronRowCount}`,
+        );
 
-        const rowText = await cronRows.first().innerText();
-        console.log(`[auto02] first cron-filtered run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`);
-        assert(/cron/i.test(rowText), `expected the run row to visibly say "Cron", got: ${rowText}`);
+        const rowText = await cronRows.first().textContent();
+        console.log(
+          `[auto02] first cron-filtered run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+        );
+        assert(
+          /cron/i.test(rowText),
+          `expected the run row to visibly say "Cron", got: ${rowText}`,
+        );
 
         await cronRows.first().click();
         await page.waitForTimeout(1000);
         await shot('cron-04-run-view-detail');
         const finalNodes = page.locator('[data-status]');
         const nodeCountVisible = await finalNodes.count().catch(() => 0);
-        console.log(`[auto02] run-view [data-status] node count for the cron-fired run: ${nodeCountVisible}`);
+        console.log(
+          `[auto02] run-view [data-status] node count for the cron-fired run: ${nodeCountVisible}`,
+        );
         if (nodeCountVisible > 0) {
           const finalStatus = await finalNodes.last().getAttribute('data-status');
           console.log(`[auto02] cron-fired run's final timeline node data-status: ${finalStatus}`);
@@ -615,11 +790,20 @@ async function main() {
       'Conclude the best-effort data-trigger check: registered with kind:"data" intact, and zero runs observed over the shared wait window (consistent with the bootstrap-cursor "first eval only sets the watermark, never fires" behavior + the template\'s 5/10-minute gate cadence exceeding this budget)',
       async () => {
         assert(Boolean(dataAutoRef), `"${TEMPLATE_DATA}" was not registered in the earlier flow`);
-        console.log(`[auto02] "${TEMPLATE_DATA}" (${dataAutoRef}) runs after a shared ${windowSeconds}s observation window: ${dataRunsAtWindowEnd.length}`);
-        console.log('[auto02] HONEST LIMITATION: doc-filer\'s watch gate is "*/10 * * * *" (condition.ts / manifest.ts DATA_DEFAULT_EVERY / template override) -- the scheduler only calls evaluate() for this automation on 10-minute-aligned wall-clock boundaries, so this suite\'s ~150s window may contain ZERO evaluate() calls at all, not just zero fires. A 0-run result here proves "no false fire", NOT "bootstrap-then-real-fire was exercised". A full test of the bootstrap-cursor-then-fire path would need either (a) a >=20 minute wall-clock budget straddling two 10-minute boundaries with a real matching write landed in between, or (b) test-only support for a custom `every` cadence on a data trigger, which the create route cannot mint (see api-trigger-coercion above).');
+        console.log(
+          `[auto02] "${TEMPLATE_DATA}" (${dataAutoRef}) runs after a shared ${windowSeconds}s observation window: ${dataRunsAtWindowEnd.length}`,
+        );
+        console.log(
+          '[auto02] HONEST LIMITATION: doc-filer\'s watch gate is "*/10 * * * *" (condition.ts / manifest.ts DATA_DEFAULT_EVERY / template override) -- the scheduler only calls evaluate() for this automation on 10-minute-aligned wall-clock boundaries, so this suite\'s ~150s window may contain ZERO evaluate() calls at all, not just zero fires. A 0-run result here proves "no false fire", NOT "bootstrap-then-real-fire was exercised". A full test of the bootstrap-cursor-then-fire path would need either (a) a >=20 minute wall-clock budget straddling two 10-minute boundaries with a real matching write landed in between, or (b) test-only support for a custom `every` cadence on a data trigger, which the create route cannot mint (see api-trigger-coercion above).',
+        );
         const dataRunsAtEnd = await gwRuns(dataAutoRef);
-        console.log(`[auto02] final "${TEMPLATE_DATA}" run count at end of suite (includes any additional idle time since the shared window): ${dataRunsAtEnd.length}`);
-        assert(dataRunsAtEnd.every((r) => r.triggerOrigin !== 'data' || true), 'sanity no-op');
+        console.log(
+          `[auto02] final "${TEMPLATE_DATA}" run count at end of suite (includes any additional idle time since the shared window): ${dataRunsAtEnd.length}`,
+        );
+        assert(
+          dataRunsAtEnd.every((r) => r.triggerOrigin !== 'data' || true),
+          'sanity no-op',
+        );
         // The real assertion this step CAN make honestly: no false fire.
         const falseFires = dataRunsAtEnd.filter((r) => r.triggerOrigin === 'data');
         console.log(`[auto02] runs with triggerOrigin:'data' observed: ${falseFires.length}`);
@@ -651,14 +835,22 @@ async function main() {
         const anchor = new Date();
         anchor.setUTCHours(17, 30, 0, 0);
         const expectedLocal = anchor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        console.log(`[auto02] independently computed UTC 17:30 -> local: ${expectedLocal} (host TZ offset minutes: ${anchor.getTimezoneOffset()})`);
+        console.log(
+          `[auto02] independently computed UTC 17:30 -> local: ${expectedLocal} (host TZ offset minutes: ${anchor.getTimezoneOffset()})`,
+        );
 
         const matches = whenText.includes(expectedLocal) || whenText === '30 17 * * *';
-        console.log(`[auto02] TIMEZONE CROSS-CHECK verdict: rendered=${JSON.stringify(whenText)} expectedLocalTime=${JSON.stringify(expectedLocal)} looksConverted=${matches}`);
+        console.log(
+          `[auto02] TIMEZONE CROSS-CHECK verdict: rendered=${JSON.stringify(whenText)} expectedLocalTime=${JSON.stringify(expectedLocal)} looksConverted=${matches}`,
+        );
         if (!matches) {
-          console.log('[auto02] NOTE: rendered hero text does not contain the independently-computed local time -- capture this screenshot for the owner\'s separate timezone-bug fix, not failing this step per the brief.');
+          console.log(
+            "[auto02] NOTE: rendered hero text does not contain the independently-computed local time -- capture this screenshot for the owner's separate timezone-bug fix, not failing this step per the brief.",
+          );
         } else {
-          console.log('[auto02] NOTE: rendered hero text DOES match an independent UTC->local computation in the CURRENT code (app-format.ts cronToHuman already anchors via setUTCHours + toLocaleTimeString) -- the previously-suspected timezone bug does not reproduce here; may already be fixed, or may be specific to a different surface (e.g. the overview feed) not exercised by this flow.');
+          console.log(
+            '[auto02] NOTE: rendered hero text DOES match an independent UTC->local computation in the CURRENT code (app-format.ts cronToHuman already anchors via setUTCHours + toLocaleTimeString) -- the previously-suspected timezone bug does not reproduce here; may already be fixed, or may be specific to a different surface (e.g. the overview feed) not exercised by this flow.',
+          );
         }
       },
     );
@@ -678,7 +870,10 @@ async function main() {
         const switchLabel = page.locator('label:has(input[role="switch"])');
         const before = await sw.getAttribute('aria-checked');
         console.log(`[auto02] switch state before disabling: aria-checked=${before}`);
-        assert(before === 'true', `expected the automation to still be enabled entering this flow, got aria-checked=${before}`);
+        assert(
+          before === 'true',
+          `expected the automation to still be enabled entering this flow, got aria-checked=${before}`,
+        );
 
         await switchLabel.click({ timeout: 5_000 });
         await page.waitForTimeout(600);
@@ -688,8 +883,13 @@ async function main() {
         await shot('disable-01-toggled-off');
 
         const readBack = await gwReadAutomation(cronAutoRef);
-        console.log(`[auto02] gateway row after disable (reconcile should have dropped it from the scheduler): enabled=${readBack?.enabled}`);
-        assert(readBack?.enabled === false, `expected gateway enabled:false after the UI toggle (it always sends publish:true), got ${JSON.stringify(readBack?.enabled)}`);
+        console.log(
+          `[auto02] gateway row after disable (reconcile should have dropped it from the scheduler): enabled=${readBack?.enabled}`,
+        );
+        assert(
+          readBack?.enabled === false,
+          `expected gateway enabled:false after the UI toggle (it always sends publish:true), got ${JSON.stringify(readBack?.enabled)}`,
+        );
 
         const runsBefore = await gwRuns(cronAutoRef);
         const cronRunsBefore = runsBefore.filter((r) => r.triggerOrigin === 'cron').length;
@@ -700,43 +900,62 @@ async function main() {
 
         const runsAfter = await gwRuns(cronAutoRef);
         const cronRunsAfter = runsAfter.filter((r) => r.triggerOrigin === 'cron').length;
-        console.log(`[auto02] cron-origin run count 75s later (disabled the whole time): ${cronRunsAfter}`);
+        console.log(
+          `[auto02] cron-origin run count 75s later (disabled the whole time): ${cronRunsAfter}`,
+        );
         await openAutomationView(CRON_AUTO_NAME);
         await shot('disable-02-after-75s-no-new-runs');
 
-        assert(cronRunsAfter === cronRunsBefore, `expected NO new cron-origin runs while disabled, before=${cronRunsBefore} after=${cronRunsAfter}`);
-        console.log('[auto02] CONFIRMED: disabling excludes the automation from the scheduler (register()/reconcile() gate on row.enabled, in-process-scheduler.ts:84-93,103-109) -- no fire while disabled.');
+        assert(
+          cronRunsAfter === cronRunsBefore,
+          `expected NO new cron-origin runs while disabled, before=${cronRunsBefore} after=${cronRunsAfter}`,
+        );
+        console.log(
+          '[auto02] CONFIRMED: disabling excludes the automation from the scheduler (register()/reconcile() gate on row.enabled, in-process-scheduler.ts:84-93,103-109) -- no fire while disabled.',
+        );
       },
     );
 
     // ---------------------------------------------------------------------
     // FLOW: console-sweep
     // ---------------------------------------------------------------------
-    await step('console-sweep', 'Zero unexpected console errors across the whole suite', async () => {
-      const allErrors = consoleMessages.filter((m) => m.type === 'error');
-      // Chromium logs a devtools "Failed to load resource: 401" console
-      // error for EVERY failed fetch(), including the webhook-fires-on-desktop
-      // flow's two deliberate auth-negative probes against
-      // `/_centraid-hook/<id>` (expected 401 with no auth, 401 with a fake
-      // Bearer token -- that's half the flow's point, not app misbehavior;
-      // the third, correctly-authed probe is expected to succeed with 200
-      // and logs no console error) -- and the api-trigger-coercion flow's
-      // single deliberate negative probe against `/centraid/_automations`
-      // (expected 400, fix #2 rejecting an unsupported trigger kind).
-      // Filter those specific, self-inflicted network-failure log lines out
-      // of the "unexpected" bucket; anything else still fails this step.
-      // NOTE: the failing resource's URL lands in `msg.location().url`
-      // (captured here as `frameUrl`), NOT in the message text itself
-      // ("Failed to load resource: the server responded with a status of
-      // 404 (Not Found)") -- match against frameUrl, not text.
-      const isExpectedWebhookProbeNoise = (e) =>
-        /Failed to load resource/.test(e.text) &&
-        (/_centraid-hook\//.test(e.frameUrl) || /\/centraid\/_automations$/.test(e.frameUrl));
-      const consoleErrors = allErrors.filter((e) => !isExpectedWebhookProbeNoise(e));
-      console.log(`[auto02] total console 'error' messages across the suite: ${allErrors.length} (${allErrors.length - consoleErrors.length} filtered as expected webhook-probe/coercion-reject noise)`);
-      for (const e of allErrors) console.log(`  ${isExpectedWebhookProbeNoise(e) ? 'EXPECTED' : 'UNEXPECTED'}: ${e.text} (${e.frameUrl})`);
-      assert(consoleErrors.length === 0, `expected 0 unexpected console errors, got ${consoleErrors.length}: ${JSON.stringify(consoleErrors.map((e) => e.text))}`);
-    });
+    await step(
+      'console-sweep',
+      'Zero unexpected console errors across the whole suite',
+      async () => {
+        const allErrors = consoleMessages.filter((m) => m.type === 'error');
+        // Chromium logs a devtools "Failed to load resource: 401" console
+        // error for EVERY failed fetch(), including the webhook-fires-on-desktop
+        // flow's two deliberate auth-negative probes against
+        // `/_centraid-hook/<id>` (expected 401 with no auth, 401 with a fake
+        // Bearer token -- that's half the flow's point, not app misbehavior;
+        // the third, correctly-authed probe is expected to succeed with 200
+        // and logs no console error) -- and the api-trigger-coercion flow's
+        // single deliberate negative probe against `/centraid/_automations`
+        // (expected 400, fix #2 rejecting an unsupported trigger kind).
+        // Filter those specific, self-inflicted network-failure log lines out
+        // of the "unexpected" bucket; anything else still fails this step.
+        // NOTE: the failing resource's URL lands in `msg.location().url`
+        // (captured here as `frameUrl`), NOT in the message text itself
+        // ("Failed to load resource: the server responded with a status of
+        // 404 (Not Found)") -- match against frameUrl, not text.
+        const isExpectedWebhookProbeNoise = (e) =>
+          /Failed to load resource/.test(e.text) &&
+          (/_centraid-hook\//.test(e.frameUrl) || e.frameUrl.endsWith('/centraid/_automations'));
+        const consoleErrors = allErrors.filter((e) => !isExpectedWebhookProbeNoise(e));
+        console.log(
+          `[auto02] total console 'error' messages across the suite: ${allErrors.length} (${allErrors.length - consoleErrors.length} filtered as expected webhook-probe/coercion-reject noise)`,
+        );
+        for (const e of allErrors)
+          console.log(
+            `  ${isExpectedWebhookProbeNoise(e) ? 'EXPECTED' : 'UNEXPECTED'}: ${e.text} (${e.frameUrl})`,
+          );
+        assert(
+          consoleErrors.length === 0,
+          `expected 0 unexpected console errors, got ${consoleErrors.length}: ${JSON.stringify(consoleErrors.map((e) => e.text))}`,
+        );
+      },
+    );
 
     // ---------------------------------------------------------------------
     // Report

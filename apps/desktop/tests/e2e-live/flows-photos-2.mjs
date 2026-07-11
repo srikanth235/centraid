@@ -30,11 +30,16 @@ async function shot(page, name) {
 
 async function openPhotos(page) {
   await page.getByRole('button', { name: /^Home/ }).first().click();
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   const tile = page.locator('[data-app-id="photos"]');
   await tile.waitFor({ state: 'visible', timeout: 15_000 });
   await tile.getByTestId('app-tile').click();
-  await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+  await page.waitForSelector('iframe[data-centraid-app="1"]', {
+    state: 'attached',
+    timeout: 20_000,
+  });
   const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
   await frameLoc.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
   return frameLoc;
@@ -45,8 +50,12 @@ async function main() {
   const t0 = Date.now();
   const { page, close } = await launchApp({ userDataDir: USER_DATA_DIR });
   console.log(`[phase2] RESTARTED app with reused userData in ${Date.now() - t0}ms`);
-  page.on('console', (msg) => consoleLog.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' }));
-  page.on('pageerror', (err) => consoleLog.push({ text: `[pageerror] ${err.message}`, type: 'error', frameUrl: '' }));
+  page.on('console', (msg) =>
+    consoleLog.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' }),
+  );
+  page.on('pageerror', (err) =>
+    consoleLog.push({ text: `[pageerror] ${err.message}`, type: 'error', frameUrl: '' }),
+  );
   await page.setViewportSize({ width: 1400, height: 900 });
 
   try {
@@ -63,9 +72,15 @@ async function main() {
       await shot(page, '30-after-full-restart');
       // Phase 1 left: 5 live (6 - 2 deleted + 1 restored), Test Album, Trash(1),
       // 1 lightbox-favorited asset, one asset re-dated to Jan 2026.
-      const ok = liveTiles === 5 && chips.some((c) => c.includes('Test Album')) && chips.some((c) => c.includes('Trash (1)'));
-      record('4b-restart-persistence', ok ? 'pass' : 'fail-escalated',
-        `liveTiles=${liveTiles} chips=${JSON.stringify(chips)} months=${JSON.stringify(monthLabels)} faved=${favedCount}`);
+      const ok =
+        liveTiles === 5 &&
+        chips.some((c) => c.includes('Test Album')) &&
+        chips.some((c) => c.includes('Trash (1)'));
+      record(
+        '4b-restart-persistence',
+        ok ? 'pass' : 'fail-escalated',
+        `liveTiles=${liveTiles} chips=${JSON.stringify(chips)} months=${JSON.stringify(monthLabels)} faved=${favedCount}`,
+      );
     } catch (err) {
       await shot(page, '30x-restart-FAILURE');
       record('4b-restart-persistence', 'fail-escalated', String(err?.message ?? err));
@@ -90,9 +105,11 @@ async function main() {
         await page.waitForTimeout(200);
         console.log(`[6-persist] jan asset=${assetId} caption=${JSON.stringify(caption)}`);
       }
-      record('6b-lightbox-edits-persist-restart',
+      record(
+        '6b-lightbox-edits-persist-restart',
         hasJan && caption === 'My test caption' ? 'pass' : 'fail-escalated',
-        `januaryHeaderPresent=${hasJan} captionOnJanAsset=${JSON.stringify(caption)} months=${JSON.stringify(monthLabels)}`);
+        `januaryHeaderPresent=${hasJan} captionOnJanAsset=${JSON.stringify(caption)} months=${JSON.stringify(monthLabels)}`,
+      );
     } catch (err) {
       record('6b-lightbox-edits-persist-restart', 'fail-escalated', String(err?.message ?? err));
     }
@@ -101,37 +118,55 @@ async function main() {
     try {
       const before = await frameLoc.locator('.tile-wrap').count();
       const errBefore = consoleLog.filter((c) => c.type === 'error').length;
-      await frameLoc.locator('#fileInput').setInputFiles([
-        path.join(FIXTURES_DIR, 'teal-800.png'),
-        path.join(FIXTURES_DIR, 'magenta-800.png'),
-      ]);
-      await page.waitForFunction(
-        (want) => {
-          const f = document.querySelector('iframe[data-centraid-app="1"]');
-          return f?.contentDocument?.querySelectorAll('.tile-wrap').length === want;
-        },
-        before + 2,
-        { timeout: 20_000 },
-      ).catch(() => {});
+      await frameLoc
+        .locator('#fileInput')
+        .setInputFiles([
+          path.join(FIXTURES_DIR, 'teal-800.png'),
+          path.join(FIXTURES_DIR, 'magenta-800.png'),
+        ]);
+      await page
+        .waitForFunction(
+          (want) => {
+            const f = document.querySelector('iframe[data-centraid-app="1"]');
+            return f?.contentDocument?.querySelectorAll('.tile-wrap').length === want;
+          },
+          before + 2,
+          { timeout: 20_000 },
+        )
+        .catch(() => {});
       await page.waitForTimeout(800);
       const after = await frameLoc.locator('.tile-wrap').count();
       const blobErrs = consoleLog.filter((c) => c.type === 'error' && c.text.includes('blob:'));
       const errAfter = consoleLog.filter((c) => c.type === 'error');
       const newErrs = errAfter.slice(errBefore).map((e) => e.text.slice(0, 120));
       // Verify the thumb VARIANT actually staged and serves 200 for a new tile:
-      const thumbProbe = await frameLoc.locator('.tile-wrap').first().evaluate(async (el) => {
-        const img = el.querySelector('img');
-        if (!img) return { hasImg: false };
-        const src = img.currentSrc || img.src;
-        const r = await fetch(src);
-        return { hasImg: true, src: src.slice(src.indexOf('/centraid')), status: r.status, isThumbVariant: src.includes('variant=thumb'), naturalWidth: img.naturalWidth };
-      });
+      const thumbProbe = await frameLoc
+        .locator('.tile-wrap')
+        .first()
+        .evaluate(async (el) => {
+          const img = el.querySelector('img');
+          if (!img) return { hasImg: false };
+          const src = img.currentSrc || img.src;
+          const r = await fetch(src);
+          return {
+            hasImg: true,
+            src: src.slice(src.indexOf('/centraid')),
+            status: r.status,
+            isThumbVariant: src.includes('variant=thumb'),
+            naturalWidth: img.naturalWidth,
+          };
+        });
       await shot(page, '31-upload-big-after-fix');
-      record('3b-upload-thumb-fix',
-        after === before + 2 && blobErrs.length === 0 && thumbProbe.status === 200 && thumbProbe.isThumbVariant
+      record(
+        '3b-upload-thumb-fix',
+        after === before + 2 &&
+          blobErrs.length === 0 &&
+          thumbProbe.status === 200 &&
+          thumbProbe.isThumbVariant
           ? 'pass-after-fix'
           : 'fail-escalated',
-        `tiles ${before}->${after}; blobCspErrors=${blobErrs.length}; thumbProbe=${JSON.stringify(thumbProbe)}; newConsoleErrors=${JSON.stringify(newErrs)}`);
+        `tiles ${before}->${after}; blobCspErrors=${blobErrs.length}; thumbProbe=${JSON.stringify(thumbProbe)}; newConsoleErrors=${JSON.stringify(newErrs)}`,
+      );
     } catch (err) {
       await shot(page, '31x-upload-fix-FAILURE');
       record('3b-upload-thumb-fix', 'fail-escalated', String(err?.message ?? err));
@@ -146,16 +181,23 @@ async function main() {
       await page.waitForTimeout(200);
       await target.locator('.tile-heart').click();
       await page.waitForTimeout(500);
-      const nowFaved = await frameLoc.locator(`.tile-wrap[data-asset-id="${assetId}"].faved`).count();
+      const nowFaved = await frameLoc
+        .locator(`.tile-wrap[data-asset-id="${assetId}"].faved`)
+        .count();
       await shot(page, '32-heart-set');
       // reopen app view (close + reopen) and check persistence
       frameLoc = await openPhotos(page);
       await frameLoc.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
-      const stillFaved = await frameLoc.locator(`.tile-wrap[data-asset-id="${assetId}"].faved`).count();
+      const stillFaved = await frameLoc
+        .locator(`.tile-wrap[data-asset-id="${assetId}"].faved`)
+        .count();
       const favedTotal = await frameLoc.locator('.tile-wrap.faved').count();
-      record('5ab-favorite-and-persist', nowFaved === 1 && stillFaved === 1 ? 'pass' : 'fail-escalated',
-        `asset=${assetId} favedBefore(all)=${favedBefore} favedNow=${nowFaved} stillFavedAfterReopen=${stillFaved} favedTotal=${favedTotal}`);
+      record(
+        '5ab-favorite-and-persist',
+        nowFaved === 1 && stillFaved === 1 ? 'pass' : 'fail-escalated',
+        `asset=${assetId} favedBefore(all)=${favedBefore} favedNow=${nowFaved} stillFavedAfterReopen=${stillFaved} favedTotal=${favedTotal}`,
+      );
     } catch (err) {
       await shot(page, '32x-heart-FAILURE');
       record('5ab-favorite-and-persist', 'fail-escalated', String(err?.message ?? err));
@@ -173,9 +215,11 @@ async function main() {
       await menu.waitFor({ state: 'visible', timeout: 5000 });
       const menuBox = await menu.boundingBox();
       const btnBox = await barBtn.boundingBox();
-      const anchored = menuBox && btnBox
-        ? Math.abs((menuBox.y + menuBox.height) - btnBox.y) < 60 || Math.abs(menuBox.y - (btnBox.y + btnBox.height)) < 60
-        : false;
+      const anchored =
+        menuBox && btnBox
+          ? Math.abs(menuBox.y + menuBox.height - btnBox.y) < 60 ||
+            Math.abs(menuBox.y - (btnBox.y + btnBox.height)) < 60
+          : false;
       await shot(page, '33-album-menu-anchored');
       await frameLoc.locator('.album-menu-item', { hasText: 'Test Album' }).click();
       // runBatchAddToAlbum auto-exits select mode when done — wait for the bar to hide
@@ -196,7 +240,9 @@ async function main() {
       await renameInput.fill('Renamed Album');
       await renameInput.press('Enter');
       await page.waitForTimeout(500);
-      const renamedChipCount = await frameLoc.locator('#albumChips .kit-chip', { hasText: 'Renamed Album' }).count();
+      const renamedChipCount = await frameLoc
+        .locator('#albumChips .kit-chip', { hasText: 'Renamed Album' })
+        .count();
       await shot(page, '35-album-renamed');
 
       // remove one from album
@@ -216,14 +262,22 @@ async function main() {
       await shot(page, '36-delete-armed');
       await deleteBtn.click();
       await page.waitForTimeout(600);
-      const albumChipGone = await frameLoc.locator('#albumChips .kit-chip', { hasText: 'Renamed Album' }).count();
+      const albumChipGone = await frameLoc
+        .locator('#albumChips .kit-chip', { hasText: 'Renamed Album' })
+        .count();
       const backToAll = await frameLoc.locator('.tile-wrap').count();
       await shot(page, '37-album-deleted');
-      record('5c-albums',
-        anchored && renamedChipCount === 1 && afterRemove === beforeRemove - 1 && albumChipGone === 0 && backToAll > 0
+      record(
+        '5c-albums',
+        anchored &&
+          renamedChipCount === 1 &&
+          afterRemove === beforeRemove - 1 &&
+          albumChipGone === 0 &&
+          backToAll > 0
           ? 'pass'
           : 'fail-escalated',
-        `anchored=${anchored} inAlbumAfterAdd=${inAlbum} toolsLabel=${JSON.stringify(toolsLabel)} renamedChip=${renamedChipCount} remove:${beforeRemove}->${afterRemove} armed=${JSON.stringify(armedText)} chipGone=${albumChipGone === 0} allCount=${backToAll}`);
+        `anchored=${anchored} inAlbumAfterAdd=${inAlbum} toolsLabel=${JSON.stringify(toolsLabel)} renamedChip=${renamedChipCount} remove:${beforeRemove}->${afterRemove} armed=${JSON.stringify(armedText)} chipGone=${albumChipGone === 0} allCount=${backToAll}`,
+      );
     } catch (err) {
       await shot(page, '33x-albums-FAILURE');
       record('5c-albums', 'fail-escalated', String(err?.message ?? err));
@@ -250,7 +304,10 @@ async function main() {
       // arrows didn't close it
       const stillOpen = await lightbox.isVisible();
       // delete from lightbox → closes, tile gone
-      const currentAssetSrc = await frameLoc.locator('.lightbox-stage img').getAttribute('src').catch(() => null);
+      const currentAssetSrc = await frameLoc
+        .locator('.lightbox-stage img')
+        .getAttribute('src')
+        .catch(() => null);
       const delBtn = frameLoc.locator('.lightbox-actions .kit-btn.danger');
       await delBtn.click(); // arm
       await page.waitForTimeout(150);
@@ -259,11 +316,19 @@ async function main() {
       const closedAfterDelete = !(await lightbox.isVisible());
       const countAfterDelete = await frameLoc.locator('.tile-wrap').count();
       await shot(page, '39-after-lightbox-delete');
-      record('6c-lightbox-ends-and-delete',
-        prevAtStart === true && nextAtStart === false && nextAtEnd === true && prevAtEnd === false && stillOpen && closedAfterDelete && countAfterDelete === total - 1
+      record(
+        '6c-lightbox-ends-and-delete',
+        prevAtStart === true &&
+          nextAtStart === false &&
+          nextAtEnd === true &&
+          prevAtEnd === false &&
+          stillOpen &&
+          closedAfterDelete &&
+          countAfterDelete === total - 1
           ? 'pass'
           : 'fail-escalated',
-        `prevAtStart=${prevAtStart} nextAtStart=${nextAtStart} nextAtEnd=${nextAtEnd} prevAtEnd=${prevAtEnd} stillOpenAfterArrows=${stillOpen} closedAfterDelete=${closedAfterDelete} tiles:${total}->${countAfterDelete} deletedSrc=${JSON.stringify(currentAssetSrc?.slice(0, 80))}`);
+        `prevAtStart=${prevAtStart} nextAtStart=${nextAtStart} nextAtEnd=${nextAtEnd} prevAtEnd=${prevAtEnd} stillOpenAfterArrows=${stillOpen} closedAfterDelete=${closedAfterDelete} tiles:${total}->${countAfterDelete} deletedSrc=${JSON.stringify(currentAssetSrc?.slice(0, 80))}`,
+      );
     } catch (err) {
       await shot(page, '38x-lightbox2-FAILURE');
       record('6c-lightbox-ends-and-delete', 'fail-escalated', String(err?.message ?? err));
@@ -286,12 +351,19 @@ async function main() {
         return { status: r.status, body: (await r.text()).slice(0, 200) };
       });
       await shot(page, '40-ask-sent-real-turn');
-      const wedged = await frameLoc.locator('#kitAskOverlay').evaluate((el) => getComputedStyle(el).display);
+      const wedged = await frameLoc
+        .locator('#kitAskOverlay')
+        .evaluate((el) => getComputedStyle(el).display);
       await frameLoc.locator('.kit-ask-x').click();
       await page.waitForTimeout(200);
-      const closed = await frameLoc.locator('#kitAskOverlay').evaluate((el) => getComputedStyle(el).display);
-      record('1b-ask-send-real-turn', closed === 'none' ? 'pass' : 'fail-escalated',
-        `bubbles=${JSON.stringify(bubbles).slice(0, 500)} grantChip=${JSON.stringify(grantChip)} vaultStatusProbe=${JSON.stringify(statusProbe)} openDisplay=${wedged} closedDisplay=${closed}`);
+      const closed = await frameLoc
+        .locator('#kitAskOverlay')
+        .evaluate((el) => getComputedStyle(el).display);
+      record(
+        '1b-ask-send-real-turn',
+        closed === 'none' ? 'pass' : 'fail-escalated',
+        `bubbles=${JSON.stringify(bubbles).slice(0, 500)} grantChip=${JSON.stringify(grantChip)} vaultStatusProbe=${JSON.stringify(statusProbe)} openDisplay=${wedged} closedDisplay=${closed}`,
+      );
     } catch (err) {
       await shot(page, '40x-ask2-FAILURE');
       record('1b-ask-send-real-turn', 'fail-escalated', String(err?.message ?? err));
@@ -308,8 +380,11 @@ async function main() {
       await frameLoc.locator('#searchClear').click();
       await page.waitForTimeout(300);
       const cleared = await frameLoc.locator('.tile-wrap').count();
-      record('9b-search-live-title', filtered === 1 && clearVisible && cleared > filtered ? 'pass' : 'fail-escalated',
-        `filtered=${filtered} clearVisible=${clearVisible} afterClear=${cleared}`);
+      record(
+        '9b-search-live-title',
+        filtered === 1 && clearVisible && cleared > filtered ? 'pass' : 'fail-escalated',
+        `filtered=${filtered} clearVisible=${clearVisible} afterClear=${cleared}`,
+      );
     } catch (err) {
       record('9b-search-live-title', 'fail-escalated', String(err?.message ?? err));
     }
@@ -318,7 +393,10 @@ async function main() {
     try {
       const darkTheme = await frameLoc.locator('html').evaluate((el) => el.dataset.theme);
       await shot(page, '42-dark-default');
-      await page.getByRole('button', { name: /^Settings/ }).first().click();
+      await page
+        .getByRole('button', { name: /^Settings/ })
+        .first()
+        .click();
       const lightCard = page.locator('[data-name="light"]');
       await lightCard.waitFor({ state: 'visible', timeout: 10_000 });
       await lightCard.click();
@@ -328,12 +406,26 @@ async function main() {
       await frameLoc.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(500);
       const lightThemeAttr = await frameLoc.locator('html').evaluate((el) => el.dataset.theme);
-      const bodyBg = await frameLoc.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor);
-      const h1Color = await frameLoc.locator('h1').first().evaluate((el) => getComputedStyle(el).color);
-      const accent = await frameLoc.locator('html').evaluate((el) => getComputedStyle(el).getPropertyValue('--accent') || getComputedStyle(document.body).getPropertyValue('--accent'));
+      const bodyBg = await frameLoc
+        .locator('body')
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
+      const h1Color = await frameLoc
+        .locator('h1')
+        .first()
+        .evaluate((el) => getComputedStyle(el).color);
+      const accent = await frameLoc
+        .locator('html')
+        .evaluate(
+          (el) =>
+            getComputedStyle(el).getPropertyValue('--accent') ||
+            getComputedStyle(document.body).getPropertyValue('--accent'),
+        );
       await shot(page, '44-light-mode');
-      record('10-theme-bridge', darkTheme === 'dark' && lightThemeAttr === 'light' ? 'pass' : 'fail-escalated',
-        `defaultShellTheme=dark (baked: data-theme=${JSON.stringify(darkTheme)}); after flip data-theme=${JSON.stringify(lightThemeAttr)} bodyBg=${bodyBg} h1Color=${h1Color} accent=${accent.trim()}`);
+      record(
+        '10-theme-bridge',
+        darkTheme === 'dark' && lightThemeAttr === 'light' ? 'pass' : 'fail-escalated',
+        `defaultShellTheme=dark (baked: data-theme=${JSON.stringify(darkTheme)}); after flip data-theme=${JSON.stringify(lightThemeAttr)} bodyBg=${bodyBg} h1Color=${h1Color} accent=${accent.trim()}`,
+      );
     } catch (err) {
       await shot(page, '42x-theme-FAILURE');
       record('10-theme-bridge', 'fail-escalated', String(err?.message ?? err));
@@ -356,7 +448,9 @@ async function main() {
   } finally {
     const errs = consoleLog.filter((c) => c.type === 'error');
     const warns = consoleLog.filter((c) => c.type === 'warning');
-    console.log(`\n[console-summary] total=${consoleLog.length} error=${errs.length} warning=${warns.length}`);
+    console.log(
+      `\n[console-summary] total=${consoleLog.length} error=${errs.length} warning=${warns.length}`,
+    );
     const uniq = new Map();
     for (const c of [...errs, ...warns]) {
       const key = c.text.slice(0, 90);
@@ -364,7 +458,8 @@ async function main() {
     }
     for (const [k, n] of uniq) console.log(`  x${n} ${k}`);
     console.log('\n[verdict-table]');
-    for (const r of results) console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
+    for (const r of results)
+      console.log(`  ${r.flow}: ${r.verdict}${r.note ? ' — ' + r.note : ''}`);
     await close();
   }
 }

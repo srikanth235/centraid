@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// governance: allow-repo-hygiene file-size-limit (#363) single coherent multi-step live-app QA scenario against the real Electron+gateway rig; splitting mid-scenario would fragment one flow across files with no readability gain
 // Automations TRIGGER-FIRES suite: closes the two gaps left open by
 // flows-automations-02-triggers.mjs — a condition trigger that ACTUALLY
 // fires against a real matching vault row (not just documented via a
@@ -154,7 +155,11 @@ function note(msg) {
 
 function wireConsole(p) {
   p.on('console', (msg) => {
-    consoleMessages.push({ text: msg.text(), type: msg.type(), frameUrl: msg.location()?.url ?? '' });
+    consoleMessages.push({
+      text: msg.text(),
+      type: msg.type(),
+      frameUrl: msg.location()?.url ?? '',
+    });
   });
   p.on('pageerror', (err) => {
     consoleMessages.push({ text: `[pageerror] ${err}`, type: 'error', frameUrl: '' });
@@ -168,7 +173,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-auto04-${id}.png`) });
@@ -182,10 +193,6 @@ async function shot(name) {
   const p = path.join(OUT_DIR, `auto04-${name}.png`);
   await page.screenshot({ path: p });
   return p;
-}
-
-async function bodyText() {
-  return page.evaluate(() => document.body.innerText);
 }
 
 // ---- out-of-band gateway JSON fetch (owner-device auth, same pattern as
@@ -232,24 +239,37 @@ async function putDraftFile(appId, sessionId, rel, content) {
 }
 
 async function getDraftFile(appId, sessionId, rel) {
-  const res = await gwFetch(`/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`);
+  const res = await gwFetch(
+    `/centraid/_apps/${encodeURIComponent(appId)}/files?sessionId=${encodeURIComponent(sessionId)}`,
+  );
   assert(res.status === 200, `GET draft files for "${appId}" failed: ${JSON.stringify(res)}`);
   const files = res.json?.files ?? [];
   const file = files.find((f) => f.path === rel);
-  assert(Boolean(file), `draft file "${rel}" not found for "${appId}"; available: ${JSON.stringify(files.map((f) => f.path))}`);
+  assert(
+    Boolean(file),
+    `draft file "${rel}" not found for "${appId}"; available: ${JSON.stringify(files.map((f) => f.path))}`,
+  );
   return file.content;
 }
 
 /** Clone a bundled template WITHOUT publishing, so its files stay editable
  *  in the returned session -- packages/gateway/src/routes/lifecycle-routes.ts:182-262. */
 async function cloneTemplateUnpublished(templateId) {
-  const res = await gwFetch('/centraid/_apps/_clone', { method: 'POST', body: { templateId, publish: false } });
+  const res = await gwFetch('/centraid/_apps/_clone', {
+    method: 'POST',
+    body: { templateId, publish: false },
+  });
   assert(res.status === 201, `clone of template "${templateId}" failed: ${JSON.stringify(res)}`);
   const appId = res.json?.app?.id;
   const name = res.json?.app?.name;
   const sessionId = res.json?.sessionId;
-  assert(Boolean(appId) && Boolean(name) && Boolean(sessionId), `clone response missing fields: ${JSON.stringify(res.json)}`);
-  console.log(`[auto04] cloned template "${templateId}" -> appId="${appId}" name="${name}" sessionId="${sessionId}"`);
+  assert(
+    Boolean(appId) && Boolean(name) && Boolean(sessionId),
+    `clone response missing fields: ${JSON.stringify(res.json)}`,
+  );
+  console.log(
+    `[auto04] cloned template "${templateId}" -> appId="${appId}" name="${name}" sessionId="${sessionId}"`,
+  );
   return { appId, name, sessionId };
 }
 
@@ -273,15 +293,24 @@ async function cloneAndSpeedUpTrigger(templateId, automationSubfolder, fastEvery
   const rel = `automations/${automationSubfolder}/automation.json`;
   const raw = await getDraftFile(appId, sessionId, rel);
   const manifest = JSON.parse(raw);
-  assert(Array.isArray(manifest.triggers) && manifest.triggers.length === 1, `expected exactly 1 trigger on "${templateId}", got ${JSON.stringify(manifest.triggers)}`);
+  assert(
+    Array.isArray(manifest.triggers) && manifest.triggers.length === 1,
+    `expected exactly 1 trigger on "${templateId}", got ${JSON.stringify(manifest.triggers)}`,
+  );
   const originalEvery = manifest.triggers[0].every;
   const originalEnabled = manifest.enabled;
   manifest.triggers[0].every = fastEvery;
   manifest.enabled = true;
-  console.log(`[auto04] "${templateId}" trigger before: every=${originalEvery} enabled=${originalEnabled} -> after: every=${fastEvery} enabled=true`);
+  console.log(
+    `[auto04] "${templateId}" trigger before: every=${originalEvery} enabled=${originalEnabled} -> after: every=${fastEvery} enabled=true`,
+  );
   const putRes = await putDraftFile(appId, sessionId, rel, JSON.stringify(manifest, null, 2));
   assert(putRes.status === 200, `draft overwrite of "${rel}" failed: ${JSON.stringify(putRes)}`);
-  const pub = await publishSession(appId, sessionId, `e2e: speed up ${templateId} trigger for real-fire test`);
+  const pub = await publishSession(
+    appId,
+    sessionId,
+    `e2e: speed up ${templateId} trigger for real-fire test`,
+  );
   console.log(`[auto04] published "${appId}": ${JSON.stringify(pub)}`);
   return { appId, name, triggerKind: manifest.triggers[0].kind };
 }
@@ -298,13 +327,17 @@ async function gwFindRef(name) {
 }
 
 async function gwRuns(ref, limit = 50) {
-  const { json } = await gwFetch(`/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`);
+  const { json } = await gwFetch(
+    `/centraid/_automations/runs?ref=${encodeURIComponent(ref)}&limit=${limit}`,
+  );
   return json?.runs ?? [];
 }
 
 async function openAutomationsOverview() {
   await navTo(page, 'Automations');
-  await page.getByRole('heading', { name: 'Automations', level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page
+    .getByRole('heading', { name: 'Automations', level: 1 })
+    .waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(300);
 }
 
@@ -313,7 +346,9 @@ async function openAutomationView(name) {
   const row = page.getByRole('button', { name: new RegExp(esc(name)) }).first();
   await row.waitFor({ state: 'visible', timeout: 10_000 });
   await row.click();
-  await page.getByRole('heading', { name, level: 1 }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForTimeout(200);
 }
 
@@ -346,7 +381,10 @@ async function sqliteScalar(dbPath, sql) {
  */
 async function seedRenewalEvent(dbPath) {
   const ownerPartyId = await sqliteScalar(dbPath, 'SELECT owner_party_id FROM core_vault LIMIT 1;');
-  assert(Boolean(ownerPartyId), 'could not read owner_party_id from core_vault -- is the vault bootstrapped?');
+  assert(
+    Boolean(ownerPartyId),
+    'could not read owner_party_id from core_vault -- is the vault bootstrapped?',
+  );
   console.log(`[auto04] owner_party_id: ${ownerPartyId}`);
 
   const calCount = Number(await sqliteScalar(dbPath, 'SELECT count(*) FROM schedule_calendar;'));
@@ -379,7 +417,9 @@ async function seedRenewalEvent(dbPath) {
     dbPath,
     `INSERT INTO schedule_event_ext (event_ext_id, event_id, calendar_id, busy, conferencing_uri, reminders_json, travel_buffer_min) VALUES ('${eventExtId}', '${eventId}', '${calendarId}', 'busy', NULL, NULL, NULL);`,
   );
-  console.log(`[auto04] seeded core_event ${eventId} status=tentative dtstart=${dtstart} (within-next-days 14 of now=${nowIso})`);
+  console.log(
+    `[auto04] seeded core_event ${eventId} status=tentative dtstart=${dtstart} (within-next-days 14 of now=${nowIso})`,
+  );
   return { eventId, calendarId, dtstart };
 }
 
@@ -409,16 +449,22 @@ async function installDocsApp() {
   await dialog.getByRole('button', { name: 'Use this template' }).click();
   const toast = page.locator('[data-global-toast]');
   await toast.waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 async function openDocsApp() {
   await navTo(page, 'Home');
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   const tile = page.locator('[data-app-id="docs"]');
   await tile.waitFor({ state: 'visible', timeout: 10_000 });
   await tile.getByTestId('app-tile').click();
-  await page.locator('iframe[data-centraid-app="1"]').waitFor({ state: 'attached', timeout: 15_000 });
+  await page
+    .locator('iframe[data-centraid-app="1"]')
+    .waitFor({ state: 'attached', timeout: 15_000 });
   // The iframe DOM element attaching does NOT mean the child app's own
   // bootstrap JS has finished running yet -- chrome.js's
   // `$('uploadInput').addEventListener('change', ...)` wiring is part of
@@ -456,7 +502,11 @@ async function main() {
       'condition-trigger-real-fire',
       'Clone renewal-reminders with every="* * * * *", publish, seed a real matching core.event row (app closed), reopen, wait for a real triggerOrigin:"condition" run',
       async () => {
-        const { appId, name } = await cloneAndSpeedUpTrigger(TEMPLATE_CONDITION_ID, CONDITION_AUTOMATION_SUBFOLDER, '* * * * *');
+        const { appId: _appId, name } = await cloneAndSpeedUpTrigger(
+          TEMPLATE_CONDITION_ID,
+          CONDITION_AUTOMATION_SUBFOLDER,
+          '* * * * *',
+        );
         conditionName = name;
 
         await openAutomationView(name);
@@ -464,20 +514,30 @@ async function main() {
         const kindEyebrow = page.locator('[class*="heroKind"]');
         await kindEyebrow.waitFor({ state: 'visible', timeout: 10_000 });
         const kindText = (await kindEyebrow.textContent())?.trim() ?? '';
-        console.log(`[auto04] condition automation hero kindEyebrow BEFORE any run: ${JSON.stringify(kindText)}`);
-        assert(/condition/i.test(kindText), `expected the hero eyebrow to honestly say "Condition", got ${JSON.stringify(kindText)}`);
+        console.log(
+          `[auto04] condition automation hero kindEyebrow BEFORE any run: ${JSON.stringify(kindText)}`,
+        );
+        assert(
+          /condition/i.test(kindText),
+          `expected the hero eyebrow to honestly say "Condition", got ${JSON.stringify(kindText)}`,
+        );
 
         conditionRef = await gwFindRef(name);
-        assert(Boolean(conditionRef), `expected "${name}" to be a real gateway row after clone+publish`);
+        assert(
+          Boolean(conditionRef),
+          `expected "${name}" to be a real gateway row after clone+publish`,
+        );
         const preSeedRuns = await gwRuns(conditionRef);
-        console.log(`[auto04] "${name}" run count before seeding the matching row: ${preSeedRuns.length}`);
+        console.log(
+          `[auto04] "${name}" run count before seeding the matching row: ${preSeedRuns.length}`,
+        );
 
         // Close the app fully before touching vault.db on disk -- avoids any
         // concurrent-writer race against the gateway's own WAL connection
         // (see header comment). Same close+reopen shape flows-full.mjs's
         // S2-upload flow already uses for a persistence check.
         await session.close();
-        await new Promise((r) => setTimeout(r, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         const dbPath = await findVaultDb(USER_DATA_DIR);
         const seeded = await seedRenewalEvent(dbPath);
@@ -502,8 +562,13 @@ async function main() {
           await page.waitForTimeout(10_000);
         }
         console.log(`[auto04] condition run search result: ${JSON.stringify(found)}`);
-        assert(Boolean(found), `expected a real triggerOrigin:'condition' run within 150s of reopening with a matching core.event row seeded, got runs=${JSON.stringify(await gwRuns(conditionRef))}`);
-        console.log(`[auto04] CONFIRMED real condition-trigger fire: run ${found.runId} ok=${found.ok} error=${found.error ?? 'none'}`);
+        assert(
+          Boolean(found),
+          `expected a real triggerOrigin:'condition' run within 150s of reopening with a matching core.event row seeded, got runs=${JSON.stringify(await gwRuns(conditionRef))}`,
+        );
+        console.log(
+          `[auto04] CONFIRMED real condition-trigger fire: run ${found.runId} ok=${found.ok} error=${found.error ?? 'none'}`,
+        );
       },
     );
 
@@ -514,7 +579,10 @@ async function main() {
       'condition-trigger-ui-confirm',
       'The fired condition run is visible in the UI with an honest "Condition" trigger label, not lumped into "Cron"',
       async () => {
-        assert(Boolean(conditionRef) && Boolean(conditionName), 'need a confirmed condition run from the previous flow');
+        assert(
+          Boolean(conditionRef) && Boolean(conditionName),
+          'need a confirmed condition run from the previous flow',
+        );
         await openAutomationView(conditionName);
         await shot('03-condition-view-after-fire');
 
@@ -523,9 +591,14 @@ async function main() {
         console.log(`[auto04] run rows visible on the condition automation's view: ${rowCount}`);
         assert(rowCount >= 1, `expected >=1 run row, got ${rowCount}`);
 
-        const rowText = await runRows.first().innerText();
-        console.log(`[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`);
-        assert(/condition/i.test(rowText), `expected the run row to visibly say "Condition", got: ${rowText}`);
+        const rowText = await runRows.first().textContent();
+        console.log(
+          `[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+        );
+        assert(
+          /condition/i.test(rowText),
+          `expected the run row to visibly say "Condition", got: ${rowText}`,
+        );
 
         await runRows.first().click();
         await page.waitForTimeout(1000);
@@ -535,9 +608,13 @@ async function main() {
         const nodeCount = await finalNodes.count().catch(() => 0);
         if (nodeCount > 0) {
           const finalStatus = await finalNodes.last().getAttribute('data-status');
-          console.log(`[auto04] condition-fired run's final timeline node data-status: ${finalStatus}`);
+          console.log(
+            `[auto04] condition-fired run's final timeline node data-status: ${finalStatus}`,
+          );
         }
-        note('GAP #1 CLOSED: renewal-reminders\' condition trigger was driven through a REAL fire end to end -- a genuine matching core.event row (status=tentative, dtstart within the 14-day window), a real scheduler evaluate() tick, a run record with triggerOrigin="condition", and the UI honestly labeling it "Condition" (not "Cron").');
+        note(
+          'GAP #1 CLOSED: renewal-reminders\' condition trigger was driven through a REAL fire end to end -- a genuine matching core.event row (status=tentative, dtstart within the 14-day window), a real scheduler evaluate() tick, a run record with triggerOrigin="condition", and the UI honestly labeling it "Condition" (not "Cron").',
+        );
       },
     );
 
@@ -548,7 +625,11 @@ async function main() {
       'data-trigger-bootstrap-no-fire',
       'Clone doc-text-extractor with every="* * * * *", publish, wait through >=1 tick -> confirm the bootstrap evaluate() sets the cursor WITHOUT firing (condition.ts:227 "the bootstrap pull intentionally never fires")',
       async () => {
-        const { appId, name } = await cloneAndSpeedUpTrigger(TEMPLATE_DATA_ID, DATA_AUTOMATION_SUBFOLDER, '* * * * *');
+        const { appId: _appId, name } = await cloneAndSpeedUpTrigger(
+          TEMPLATE_DATA_ID,
+          DATA_AUTOMATION_SUBFOLDER,
+          '* * * * *',
+        );
         dataName = name;
 
         await openAutomationView(name);
@@ -556,8 +637,13 @@ async function main() {
         const kindEyebrow = page.locator('[class*="heroKind"]');
         await kindEyebrow.waitFor({ state: 'visible', timeout: 10_000 });
         const kindText = (await kindEyebrow.textContent())?.trim() ?? '';
-        console.log(`[auto04] data-trigger automation hero kindEyebrow: ${JSON.stringify(kindText)}`);
-        assert(/data trigger/i.test(kindText), `expected the hero eyebrow to honestly say "Data trigger", got ${JSON.stringify(kindText)}`);
+        console.log(
+          `[auto04] data-trigger automation hero kindEyebrow: ${JSON.stringify(kindText)}`,
+        );
+        assert(
+          /data trigger/i.test(kindText),
+          `expected the hero eyebrow to honestly say "Data trigger", got ${JSON.stringify(kindText)}`,
+        );
 
         dataRef = await gwFindRef(name);
         assert(Boolean(dataRef), `expected "${name}" to be a real gateway row after clone+publish`);
@@ -571,10 +657,17 @@ async function main() {
         // keep firing at bay.
         await page.waitForTimeout(75_000);
         const runsAfterBootstrapWait = await gwRuns(dataRef);
-        console.log(`[auto04] "${name}" run count after a 75s bootstrap-only wait (no new write yet): ${runsAfterBootstrapWait.length}`);
+        console.log(
+          `[auto04] "${name}" run count after a 75s bootstrap-only wait (no new write yet): ${runsAfterBootstrapWait.length}`,
+        );
         await shot('06-data-view-after-bootstrap-wait-zero-runs');
-        assert(runsAfterBootstrapWait.length === 0, `expected ZERO runs from the bootstrap tick(s) (cursor set, no fire) -- got ${runsAfterBootstrapWait.length}: ${JSON.stringify(runsAfterBootstrapWait)}`);
-        console.log('[auto04] CONFIRMED: the bootstrap evaluate() call set the trigger cursor without firing -- no false-positive on pre-existing (zero) state.');
+        assert(
+          runsAfterBootstrapWait.length === 0,
+          `expected ZERO runs from the bootstrap tick(s) (cursor set, no fire) -- got ${runsAfterBootstrapWait.length}: ${JSON.stringify(runsAfterBootstrapWait)}`,
+        );
+        console.log(
+          '[auto04] CONFIRMED: the bootstrap evaluate() call set the trigger cursor without firing -- no false-positive on pre-existing (zero) state.',
+        );
       },
     );
 
@@ -585,7 +678,10 @@ async function main() {
       'data-trigger-real-fire-after-write',
       'Install Docs, upload a real file (core.add_document -> ctx.wrote("core.content_item", ...)) -- a GENUINE post-bootstrap write -- then wait for the next tick and confirm a run lands with triggerOrigin:"data"',
       async () => {
-        assert(Boolean(dataRef) && Boolean(dataName), 'need the bootstrapped data-trigger automation from the previous flow');
+        assert(
+          Boolean(dataRef) && Boolean(dataName),
+          'need the bootstrapped data-trigger automation from the previous flow',
+        );
 
         await installDocsApp();
         await shot('07-docs-installed');
@@ -599,7 +695,9 @@ async function main() {
         console.log(`[auto04] Docs cards after real upload: ${cardCount}`);
         assert(cardCount >= 1, `expected >=1 doc card after uploading, got ${cardCount}`);
         await shot('08-docs-real-upload-landed');
-        console.log('[auto04] real core.content_item write landed via the Docs app UI (not sqlite surgery) -- this is the genuine post-bootstrap write the gap called for.');
+        console.log(
+          '[auto04] real core.content_item write landed via the Docs app UI (not sqlite surgery) -- this is the genuine post-bootstrap write the gap called for.',
+        );
 
         // Poll for the next tick's fire -- same polling shape as the
         // condition flow above and flows-automations-02-triggers.mjs's
@@ -613,21 +711,36 @@ async function main() {
           await page.waitForTimeout(10_000);
         }
         console.log(`[auto04] data-trigger run search result: ${JSON.stringify(found)}`);
-        assert(Boolean(found), `expected a real triggerOrigin:'data' run within 150s of a genuine new core.content_item write, got runs=${JSON.stringify(await gwRuns(dataRef))}`);
-        console.log(`[auto04] CONFIRMED real data-trigger fire: run ${found.runId} ok=${found.ok} error=${found.error ?? 'none'} -- the fire itself is proven regardless of whether the handler's ctx.agent (LLM) call inside doc-text-extractor succeeded (condition.ts's fire decision precedes the handler entirely).`);
+        assert(
+          Boolean(found),
+          `expected a real triggerOrigin:'data' run within 150s of a genuine new core.content_item write, got runs=${JSON.stringify(await gwRuns(dataRef))}`,
+        );
+        console.log(
+          `[auto04] CONFIRMED real data-trigger fire: run ${found.runId} ok=${found.ok} error=${found.error ?? 'none'} -- the fire itself is proven regardless of whether the handler's ctx.agent (LLM) call inside doc-text-extractor succeeded (condition.ts's fire decision precedes the handler entirely).`,
+        );
 
         await openAutomationView(dataName);
         await shot('09-data-view-after-real-fire');
         const runRows = page.locator('button[data-ok]');
         const rowCount = await runRows.count();
-        assert(rowCount >= 1, `expected >=1 run row on the data-trigger automation's view, got ${rowCount}`);
-        const rowText = await runRows.first().innerText();
-        console.log(`[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`);
-        assert(/data/i.test(rowText), `expected the run row to visibly say "Data", got: ${rowText}`);
+        assert(
+          rowCount >= 1,
+          `expected >=1 run row on the data-trigger automation's view, got ${rowCount}`,
+        );
+        const rowText = await runRows.first().textContent();
+        console.log(
+          `[auto04] first run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+        );
+        assert(
+          /data/i.test(rowText),
+          `expected the run row to visibly say "Data", got: ${rowText}`,
+        );
         await runRows.first().click();
         await page.waitForTimeout(1000);
         await shot('10-data-run-view-detail');
-        note('GAP #2 CLOSED: doc-text-extractor\'s data trigger was driven through the FULL bootstrap-then-real-fire path -- (a) a bootstrap tick with zero pre-existing matches produced ZERO runs (proving the "first eval only sets the watermark" behavior), (b) a genuine new core.content_item row was produced through the REAL Docs app UI (not out-of-band SQL), and (c) the NEXT tick produced a real triggerOrigin="data" run, honestly labeled "Data" in the UI.');
+        note(
+          'GAP #2 CLOSED: doc-text-extractor\'s data trigger was driven through the FULL bootstrap-then-real-fire path -- (a) a bootstrap tick with zero pre-existing matches produced ZERO runs (proving the "first eval only sets the watermark" behavior), (b) a genuine new core.content_item row was produced through the REAL Docs app UI (not out-of-band SQL), and (c) the NEXT tick produced a real triggerOrigin="data" run, honestly labeled "Data" in the UI.',
+        );
       },
     );
 
@@ -638,21 +751,46 @@ async function main() {
       'concurrent-cron-same-tick',
       'Two independent every-minute cron automations, created via the (legitimate, non-rejected) POST /centraid/_automations route -- both fire in the SAME tick window, no crash, no dropped run',
       async () => {
-        const bodyA = { id: CRON_A_ID, name: CRON_A_NAME, triggers: [{ expr: '* * * * *' }], enabled: true, publish: true };
-        const bodyB = { id: CRON_B_ID, name: CRON_B_NAME, triggers: [{ expr: '* * * * *' }], enabled: true, publish: true };
+        const bodyA = {
+          id: CRON_A_ID,
+          name: CRON_A_NAME,
+          triggers: [{ expr: '* * * * *' }],
+          enabled: true,
+          publish: true,
+        };
+        const bodyB = {
+          id: CRON_B_ID,
+          name: CRON_B_NAME,
+          triggers: [{ expr: '* * * * *' }],
+          enabled: true,
+          publish: true,
+        };
         const [resA, resB] = await Promise.all([
           gwFetch('/centraid/_automations', { method: 'POST', body: bodyA }),
           gwFetch('/centraid/_automations', { method: 'POST', body: bodyB }),
         ]);
-        console.log(`[auto04] create A: status=${resA.status} row=${JSON.stringify(resA.json?.row)}`);
-        console.log(`[auto04] create B: status=${resB.status} row=${JSON.stringify(resB.json?.row)}`);
-        assert(resA.status === 201 && resB.status === 201, `expected both creates to succeed, got A=${resA.status} B=${resB.status}`);
+        console.log(
+          `[auto04] create A: status=${resA.status} row=${JSON.stringify(resA.json?.row)}`,
+        );
+        console.log(
+          `[auto04] create B: status=${resB.status} row=${JSON.stringify(resB.json?.row)}`,
+        );
+        assert(
+          resA.status === 201 && resB.status === 201,
+          `expected both creates to succeed, got A=${resA.status} B=${resB.status}`,
+        );
         const refA = resA.json.row.ref;
         const refB = resB.json.row.ref;
 
         await openAutomationsOverview();
-        await page.getByRole('button', { name: new RegExp(esc(CRON_A_NAME)) }).first().waitFor({ state: 'visible', timeout: 10_000 });
-        await page.getByRole('button', { name: new RegExp(esc(CRON_B_NAME)) }).first().waitFor({ state: 'visible', timeout: 10_000 });
+        await page
+          .getByRole('button', { name: new RegExp(esc(CRON_A_NAME)) })
+          .first()
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        await page
+          .getByRole('button', { name: new RegExp(esc(CRON_B_NAME)) })
+          .first()
+          .waitFor({ state: 'visible', timeout: 10_000 });
         await shot('11-concurrent-cron-overview');
 
         const deadline = Date.now() + 150_000;
@@ -666,18 +804,29 @@ async function main() {
           await page.waitForTimeout(10_000);
         }
         console.log(`[auto04] runA=${JSON.stringify(runA)} runB=${JSON.stringify(runB)}`);
-        assert(Boolean(runA), `expected automation A to get a cron run, got none: ${JSON.stringify(await gwRuns(refA))}`);
-        assert(Boolean(runB), `expected automation B to get a cron run, got none: ${JSON.stringify(await gwRuns(refB))}`);
+        assert(
+          Boolean(runA),
+          `expected automation A to get a cron run, got none: ${JSON.stringify(await gwRuns(refA))}`,
+        );
+        assert(
+          Boolean(runB),
+          `expected automation B to get a cron run, got none: ${JSON.stringify(await gwRuns(refB))}`,
+        );
 
         const deltaMs = Math.abs(runA.startedAt - runB.startedAt);
-        console.log(`[auto04] A.startedAt=${runA.startedAt} B.startedAt=${runB.startedAt} delta=${deltaMs}ms`);
+        console.log(
+          `[auto04] A.startedAt=${runA.startedAt} B.startedAt=${runB.startedAt} delta=${deltaMs}ms`,
+        );
         // Both automations are registered in the SAME scheduler entries map
         // and tick() iterates it synchronously within one wall-clock-minute
         // callback (in-process-scheduler.ts tick()) -- their fires should
         // land within the same minute, generously bounded at 65s to allow
         // for either landing on the tick right before/after the boundary if
         // they were created a hair apart.
-        assert(deltaMs < 65_000, `expected both cron runs to land in the SAME tick window (<65s apart), got ${deltaMs}ms apart`);
+        assert(
+          deltaMs < 65_000,
+          `expected both cron runs to land in the SAME tick window (<65s apart), got ${deltaMs}ms apart`,
+        );
 
         const crashed = await page.evaluate(() => document.title).catch(() => null);
         assert(crashed !== null, 'page appears to have crashed after two same-tick cron fires');
@@ -687,18 +836,27 @@ async function main() {
         await openAutomationView(CRON_B_NAME);
         await shot('13-cron-b-after-fire');
 
-        note(`concurrent-cron-same-tick: automation A run ${runA.runId} and automation B run ${runB.runId} landed ${deltaMs}ms apart -- both triggerOrigin="cron", no crash, no run silently dropped.`);
+        note(
+          `concurrent-cron-same-tick: automation A run ${runA.runId} and automation B run ${runB.runId} landed ${deltaMs}ms apart -- both triggerOrigin="cron", no crash, no run silently dropped.`,
+        );
       },
     );
 
     // -----------------------------------------------------------------
     // FLOW: console-sweep
     // -----------------------------------------------------------------
-    await step('console-sweep', 'Zero unexpected console errors across the whole suite', async () => {
-      const allErrors = consoleMessages.filter((m) => m.type === 'error');
-      for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
-      assert(allErrors.length === 0, `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`);
-    });
+    await step(
+      'console-sweep',
+      'Zero unexpected console errors across the whole suite',
+      async () => {
+        const allErrors = consoleMessages.filter((m) => m.type === 'error');
+        for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
+        assert(
+          allErrors.length === 0,
+          `expected 0 console errors across the suite, got ${allErrors.length}: ${JSON.stringify(allErrors.map((e) => e.text))}`,
+        );
+      },
+    );
 
     // -----------------------------------------------------------------
     // Report

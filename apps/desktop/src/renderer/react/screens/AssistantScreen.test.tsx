@@ -50,7 +50,7 @@ function push(snap: AssistantSnapshot): void {
 function setValue(el: HTMLTextAreaElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
   setter?.call(el, value);
-  act(() => el.dispatchEvent(new Event('input', { bubbles: true })));
+  void act(() => el.dispatchEvent(new Event('input', { bubbles: true })));
 }
 
 describe('AssistantScreen', () => {
@@ -61,7 +61,7 @@ describe('AssistantScreen', () => {
     expect(el.querySelector('.empty')).toBeTruthy();
     const chips = [...el.querySelectorAll<HTMLButtonElement>('.suggestChip')];
     expect(chips.length).toBe(2);
-    act(() => chips[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => chips[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     // suggestion loads into the composer draft
     expect((el.querySelector('.input') as HTMLTextAreaElement).value).toContain('spend');
   });
@@ -81,11 +81,11 @@ describe('AssistantScreen', () => {
     expect(rows.length).toBe(2);
     expect(rows[0]!.dataset.active).toBe('true');
     expect(Object.hasOwn(rows[1]!.dataset, 'active')).toBe(false);
-    act(() =>
+    void act(() =>
       rows[1]!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })),
     );
     expect(props.onDeleteThread).toHaveBeenCalledWith('t2');
-    act(() => rows[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => rows[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onSelectThread).toHaveBeenCalledWith('t1');
   });
 
@@ -101,7 +101,12 @@ describe('AssistantScreen', () => {
             label: '1 query · 12ms',
             calls: [{ tool: 'vault_sql', sql: 'SELECT 1', state: 'ok', meta: '3 rows · 12ms' }],
           },
-          { kind: 'ai', streaming: false, html: '<p class="cd-asst-p">You spent <strong>$412</strong>.</p>', error: false },
+          {
+            kind: 'ai',
+            streaming: false,
+            html: '<p class="cd-asst-p">You spent <strong>$412</strong>.</p>',
+            error: false,
+          },
         ],
       }),
     );
@@ -118,7 +123,14 @@ describe('AssistantScreen', () => {
     push(
       emptySnap({
         empty: false,
-        messages: [{ kind: 'ai', streaming: false, html: '<p>See <button class="cd-asst-ref">x</button></p>', error: false }],
+        messages: [
+          {
+            kind: 'ai',
+            streaming: false,
+            html: '<p>See <button class="cd-asst-ref">x</button></p>',
+            error: false,
+          },
+        ],
       }),
     );
     expect(props.hydrateRefs).toHaveBeenCalled();
@@ -145,7 +157,7 @@ describe('AssistantScreen', () => {
     push(emptySnap());
     const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, 'When is my next event?');
-    act(() =>
+    void act(() =>
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
     );
     expect(props.onSend).toHaveBeenCalledWith('When is my next event?');
@@ -158,7 +170,7 @@ describe('AssistantScreen', () => {
     push(emptySnap({ busy: true }));
     const send = el.querySelector('.send') as HTMLButtonElement;
     expect(send.getAttribute('aria-label')).toBe('Stop');
-    act(() => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    void act(() => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(props.onStop).toHaveBeenCalled();
     expect(props.onSend).not.toHaveBeenCalled();
   });
@@ -169,7 +181,9 @@ describe('AssistantScreen', () => {
     push(emptySnap());
     const input = el.querySelector('.input') as HTMLTextAreaElement;
     setValue(input, '   ');
-    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    void act(() =>
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
@@ -177,7 +191,7 @@ describe('AssistantScreen', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
-    act(() =>
+    void act(() =>
       (el.querySelector('.new') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),

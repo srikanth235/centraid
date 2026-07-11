@@ -83,7 +83,12 @@ export function DuplicatesView({ clusters, loading, selected, onToggle, onTrashS
             </button>
           </div>
           {clusters.map((cluster) => (
-            <ClusterCard key={cluster.key} cluster={cluster} selected={selected} onToggle={onToggle} />
+            <ClusterCard
+              key={cluster.key}
+              cluster={cluster}
+              selected={selected}
+              onToggle={onToggle}
+            />
           ))}
         </>
       ) : null}

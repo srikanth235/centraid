@@ -2,7 +2,11 @@ import { useState, type JSX } from 'react';
 import { palette, tileFinish } from '@centraid/design-tokens';
 import type { ColorHex, IconName } from '@centraid/design-tokens';
 import { Icon, KindBadge } from '../ui/index.js';
-import type { DiscoverBridgeProps, DiscoverMenuAnchor, DiscoverTemplate } from '../screen-contracts.js';
+import type {
+  DiscoverBridgeProps,
+  DiscoverMenuAnchor,
+  DiscoverTemplate,
+} from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
 import styles from './DiscoverScreen.module.css';
 import { cx } from '../ui/cx.js';
@@ -82,9 +86,7 @@ function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
           style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
         />
       ))}
-      {names.length > 4 ? (
-        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
-      ) : null}
+      {names.length > 4 ? <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span> : null}
     </div>
   );
 }

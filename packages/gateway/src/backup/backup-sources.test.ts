@@ -9,10 +9,9 @@
 import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { randomBytes, createHash } from 'node:crypto';
+import crypto, { randomBytes, createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { sealAad, unsealValue } from '@centraid/vault';
 import { openVaultPlane, type VaultPlane } from '../serve/vault-plane.js';
 import { WorktreeStore } from '../worktree-store/worktree-store.js';

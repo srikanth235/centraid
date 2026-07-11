@@ -234,7 +234,9 @@ export function Detail({
               <div className="kit-seg tk-detail-seg">
                 {PRIORITY_CHIPS.map((c) => {
                   const active =
-                    c.value === 0 ? !task.priority : flagLevel(task.priority) === flagLevel(c.value);
+                    c.value === 0
+                      ? !task.priority
+                      : flagLevel(task.priority) === flagLevel(c.value);
                   return (
                     <button
                       key={c.value}
@@ -279,7 +281,10 @@ export function Detail({
                     aria-pressed={String(task.rrule === c.value)}
                     disabled={!task.due_at}
                     onClick={() =>
-                      onPickRepeat(task.task_id, c.value ? { rrule: c.value } : { clear_rrule: true })
+                      onPickRepeat(
+                        task.task_id,
+                        c.value ? { rrule: c.value } : { clear_rrule: true },
+                      )
                     }
                   >
                     {c.label}
@@ -291,7 +296,10 @@ export function Detail({
               <div className="tk-eyebrow-label">Remind</div>
               <div className="kit-seg tk-detail-seg">
                 {REMIND_CHIPS.map((c) => {
-                  const active = c.value === null ? task.remind_before_min == null : task.remind_before_min === c.value;
+                  const active =
+                    c.value === null
+                      ? task.remind_before_min == null
+                      : task.remind_before_min === c.value;
                   return (
                     <button
                       key={c.label}
@@ -314,7 +322,9 @@ export function Detail({
             </div>
           </div>
           {!task.due_at ? (
-            <p className="muted small tk-detail-hint">Set a due date to repeat or remind on this task.</p>
+            <p className="muted small tk-detail-hint">
+              Set a due date to repeat or remind on this task.
+            </p>
           ) : null}
 
           <div className="tk-eyebrow-label">Tags</div>
@@ -335,7 +345,11 @@ export function Detail({
                 >
                   {s.status === 'completed' ? <Icon svg={I.check} /> : null}
                 </button>
-                <span className={s.status === 'completed' ? 'tk-subtask-title done' : 'tk-subtask-title'}>
+                <span
+                  className={
+                    s.status === 'completed' ? 'tk-subtask-title done' : 'tk-subtask-title'
+                  }
+                >
                   {s.title}
                 </span>
               </div>

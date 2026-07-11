@@ -1,5 +1,14 @@
 # Flow: Clone template, save, reopen
 
+> **⚠️ Stale premise — verify before running.** Commit `4397329` ("'Use
+> template' installs app templates directly as published apps") removed the
+> draft/builder stage this flow exercises: `installAppTemplate`
+> (`apps/desktop/src/renderer/react/shell/routes/templatesData.ts`) now
+> clones with `publish: true` and pins the result straight onto Home as a
+> `UserAppMeta`, never a `__draft`; `DiscoverRoute.tsx`'s `applyAppTemplate`
+> toasts "Installed …" and navigates home directly — no builder opens. Needs
+> a live-rig rewrite before reuse.
+
 ## Goal
 Cloning a built-in template should create a draft app on disk. The draft must
 still appear on home after a full Electron restart (drafts hydrate from

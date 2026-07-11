@@ -112,7 +112,7 @@ export default function BuilderPreview({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) re-resolve only on appId/device/reloadNonce
   }, [appId, device, reloadNonce]);
 
   if (!resolved) {
@@ -139,6 +139,7 @@ export default function BuilderPreview({
       <div className={styles.stage}>
         <div style={{ display: 'contents' }}>
           <div className={cardClass} style={{ '--accent-color': accentColor } as CSSProperties}>
+            {/* oxlint-disable-next-line react/iframe-missing-sandbox -- (#363) sandbox buys no isolation here (see comment above) and breaks in-app PDF preview; matches AppFrame's deliberate no-sandbox iframe */}
             <iframe
               title="App preview"
               src={resolved.themedSrc}

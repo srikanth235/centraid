@@ -14,13 +14,17 @@ export function MiniMonth({ cursor, miniEvents, onPickDay, onPrev, onNext }) {
   const gridStart = startOfWeek(new Date(cursor.getFullYear(), cursor.getMonth(), 1));
   const todayKey = localDayKey(new Date());
   const cursorKey = localDayKey(cursor);
-  const days = Array.from({ length: 42 }, (_, i) =>
-    new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i),
+  const days = Array.from(
+    { length: 42 },
+    (_, i) => new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + i),
   );
   const dow = Array.from({ length: 7 }, (_, i) =>
-    new Date(MONDAY.getFullYear(), MONDAY.getMonth(), MONDAY.getDate() + i).toLocaleDateString(undefined, {
-      weekday: 'narrow',
-    }),
+    new Date(MONDAY.getFullYear(), MONDAY.getMonth(), MONDAY.getDate() + i).toLocaleDateString(
+      undefined,
+      {
+        weekday: 'narrow',
+      },
+    ),
   );
 
   return (
@@ -30,7 +34,12 @@ export function MiniMonth({ cursor, miniEvents, onPickDay, onPrev, onNext }) {
           {cursor.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
         </span>
         <div className="ag-mini-nav">
-          <button type="button" className="kit-icon-btn" onClick={onPrev} aria-label="Previous month">
+          <button
+            type="button"
+            className="kit-icon-btn"
+            onClick={onPrev}
+            aria-label="Previous month"
+          >
             <Icon svg={I.miniLeft} />
           </button>
           <button type="button" className="kit-icon-btn" onClick={onNext} aria-label="Next month">
@@ -50,7 +59,11 @@ export function MiniMonth({ cursor, miniEvents, onPickDay, onPrev, onNext }) {
           const isToday = key === todayKey;
           const isSelected = key === cursorKey && !isToday;
           const hasEvents = (byDay.get(key) ?? []).length > 0;
-          const label = d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+          const label = d.toLocaleDateString(undefined, {
+            weekday: 'long',
+            month: 'long',
+            day: 'numeric',
+          });
           return (
             <button
               key={key}
@@ -88,7 +101,11 @@ export function CalendarList({ calendars, hiddenCals, counts, onToggle }) {
             aria-pressed={String(shown)}
             onClick={() => onToggle(c.calendar_id)}
           >
-            <span className="ag-cal-box" data-shown={String(shown)} style={shown ? { background: color } : undefined}>
+            <span
+              className="ag-cal-box"
+              data-shown={String(shown)}
+              style={shown ? { background: color } : undefined}
+            >
               {shown ? <Icon svg={I.check} /> : null}
             </span>
             <span className="ag-cal-name" data-shown={String(shown)}>

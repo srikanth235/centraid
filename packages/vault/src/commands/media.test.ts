@@ -323,9 +323,7 @@ test('two photos at the same rounded coordinates share one core.place', () => {
   const first = stageAndAdd(exifJpegAt(37, 'N', 122, 'W', 1));
   const second = stageAndAdd(exifJpegAt(37, 'N', 122, 'W', 2));
   const places = db.vault
-    .prepare(
-      'SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)',
-    )
+    .prepare('SELECT place_id FROM media_media_asset WHERE asset_id IN (?, ?)')
     .all(first.asset_id, second.asset_id) as { place_id: string }[];
   expect(places[0]?.place_id).toBe(places[1]?.place_id);
   const count = db.vault.prepare('SELECT count(*) AS n FROM core_place').get() as { n: number };

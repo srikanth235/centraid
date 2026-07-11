@@ -98,7 +98,7 @@ export default function AppFrame({
             flags propagate to every NESTED browsing context, where Chromium's
             native PDF viewer refuses to instantiate under any token set —
             silently blanking in-app document previews (docs quick-look). */}
-        {/* eslint-disable react/iframe-missing-sandbox */}
+        {/* eslint-disable react/iframe-missing-sandbox -- (#325) sandbox buys no isolation here, see comment above; real boundaries are CSP + vault consent gates */}
         <iframe
           ref={frameRef}
           src="about:blank"

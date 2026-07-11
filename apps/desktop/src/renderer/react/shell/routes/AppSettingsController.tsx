@@ -159,7 +159,7 @@ export default function AppSettingsController({
       roots.forEach((r) => r.unmount());
       roots.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) re-run only on appId, not on the mutable ref reads
   }, [appId]);
 
   const commitKnob = (key: string, value: string): void => {

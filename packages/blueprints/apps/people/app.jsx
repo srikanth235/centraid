@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) blueprint apps ship a single app.jsx entry per the kit's convention (see sibling docs/photos/tally); splitting would break the served-as-one-module contract static-server.ts assumes
 // People — your circle, remembered. A pure projection over the personal
 // vault. Every row is a core.party; circles are collections, cadence and
 // stars are judgments the vault holds, notes/tasks/gifts/debts/dates hang
@@ -77,7 +78,16 @@ const state = {
 // `renderNewMenu` are `function` declarations (hoisted), so `logic` can close
 // over them here even though they're defined further down the file.
 
-const logic = createLogic({ state, data, render, refresh, renderRows, renderDetails, renderModal, renderNewMenu });
+const logic = createLogic({
+  state,
+  data,
+  render,
+  refresh,
+  renderRows,
+  renderDetails,
+  renderModal,
+  renderNewMenu,
+});
 
 // ---------- Roots ----------
 
@@ -117,7 +127,9 @@ const mountList = makeMounter('list', () => listRoot);
 // ---------- Sidebar render ----------
 
 function renderSidebar() {
-  smartNavRoot.render(<SmartNav navKind={state.nav.kind} people={data.people} onSelectNav={logic.selectNav} />);
+  smartNavRoot.render(
+    <SmartNav navKind={state.nav.kind} people={data.people} onSelectNav={logic.selectNav} />,
+  );
   circleListRoot.render(
     <CircleList
       circles={data.circles}
@@ -145,7 +157,14 @@ function renderToolbar() {
   const rows = state.visibleRows;
   const nav = state.nav;
   const isPeople = ['all', 'reconnect', 'upcoming', 'starred', 'circle'].includes(nav.kind);
-  const titles = { all: 'All people', reconnect: 'Reconnect', upcoming: 'Upcoming', starred: 'Favorites', journal: 'Journal', activity: 'Activity' };
+  const titles = {
+    all: 'All people',
+    reconnect: 'Reconnect',
+    upcoming: 'Upcoming',
+    starred: 'Favorites',
+    journal: 'Journal',
+    activity: 'Activity',
+  };
   let title = nav.kind === 'circle' ? circleName(data, nav.circleId) : titles[nav.kind];
   if (state.search.trim()) title = `Results for "${state.search.trim()}"`;
   $('activeTitle').textContent = title;
@@ -188,7 +207,9 @@ function renderBulk() {
   const n = state.selected.size;
   bar.hidden = n === 0;
   if (n === 0) return;
-  bulkBarRoot.render(<BulkBar n={n} onFavorite={logic.favoriteSelected} onClear={logic.clearSelected} />);
+  bulkBarRoot.render(
+    <BulkBar n={n} onFavorite={logic.favoriteSelected} onClear={logic.clearSelected} />,
+  );
 }
 
 // ---------- Rows: grid + list + journal + activity ----------
@@ -214,20 +235,32 @@ function renderRows() {
   if (nav.kind === 'journal') {
     journalView.hidden = false;
     journalRoot.render(
-      <Journal entries={state.journalData?.entries ?? []} onSubmit={logic.addJournalEntry} onOpenDetails={logic.openDetails} />,
+      <Journal
+        entries={state.journalData?.entries ?? []}
+        onSubmit={logic.addJournalEntry}
+        onOpenDetails={logic.openDetails}
+      />,
     );
     return;
   }
   if (nav.kind === 'activity') {
     activityView.hidden = false;
-    activityRoot.render(<Activity recent={state.dashboardData?.recent ?? []} onOpenDetails={logic.openDetails} />);
+    activityRoot.render(
+      <Activity recent={state.dashboardData?.recent ?? []} onOpenDetails={logic.openDetails} />,
+    );
     return;
   }
 
   const rows = state.visibleRows;
   if (rows.length === 0) {
     const searching = !!state.search.trim();
-    const title = searching ? 'No matches' : nav.kind === 'starred' ? 'No favorites yet' : nav.kind === 'reconnect' ? 'All caught up' : 'No one here yet';
+    const title = searching
+      ? 'No matches'
+      : nav.kind === 'starred'
+        ? 'No favorites yet'
+        : nav.kind === 'reconnect'
+          ? 'All caught up'
+          : 'No one here yet';
     const sub = searching
       ? 'Try fewer words.'
       : nav.kind === 'reconnect'
@@ -256,7 +289,10 @@ function renderRows() {
   } else {
     listWrap.hidden = false;
     listHead.hidden = state.narrow;
-    if (!state.narrow) listHeadRoot.render(<ListHead rows={rows} selectedIds={state.selected} onToggleAll={logic.toggleAllVisible} />);
+    if (!state.narrow)
+      listHeadRoot.render(
+        <ListHead rows={rows} selectedIds={state.selected} onToggleAll={logic.toggleAllVisible} />,
+      );
     mountList(
       <>
         {rows.map((p) => (
@@ -277,7 +313,9 @@ function renderRows() {
 
   if (state.peopleTruncated && !state.search.trim()) {
     foot.hidden = false;
-    windowFootRoot.render(<WindowFoot peopleWindow={state.peopleWindow} onShowMore={logic.showMorePeople} />);
+    windowFootRoot.render(
+      <WindowFoot peopleWindow={state.peopleWindow} onShowMore={logic.showMorePeople} />,
+    );
   }
 }
 
@@ -304,15 +342,33 @@ function renderDetails() {
       onCall={() => logic.logInteraction(dp, 'Call', 'Gave them a call')}
       onToggleStar={() => logic.toggleStar(dp)}
       onToggleAdder={logic.toggleAdder}
-      onAddRelationship={(fields) => logic.drawerAct('add-relationship', { party_id: dp.party_id, ...fields }, 'Relationship added')}
-      onAddDate={(fields) => logic.drawerAct('add-important-date', { party_id: dp.party_id, ...fields }, 'Date added')}
-      onToggleReminder={(dateId) => logic.drawerAct('toggle-reminder', { date_id: dateId }, 'Reminder updated')}
-      onAddTask={(fields) => logic.drawerAct('add-task', { party_id: dp.party_id, ...fields }, 'Task added')}
+      onAddRelationship={(fields) =>
+        logic.drawerAct(
+          'add-relationship',
+          { party_id: dp.party_id, ...fields },
+          'Relationship added',
+        )
+      }
+      onAddDate={(fields) =>
+        logic.drawerAct('add-important-date', { party_id: dp.party_id, ...fields }, 'Date added')
+      }
+      onToggleReminder={(dateId) =>
+        logic.drawerAct('toggle-reminder', { date_id: dateId }, 'Reminder updated')
+      }
+      onAddTask={(fields) =>
+        logic.drawerAct('add-task', { party_id: dp.party_id, ...fields }, 'Task added')
+      }
       onToggleTask={(taskId) => logic.drawerAct('toggle-task', { task_id: taskId }, 'Task updated')}
-      onAddNote={(fields) => logic.drawerAct('add-note', { party_id: dp.party_id, ...fields }, 'Note added')}
-      onAddGift={(fields) => logic.drawerAct('add-gift', { party_id: dp.party_id, ...fields }, 'Gift idea added')}
+      onAddNote={(fields) =>
+        logic.drawerAct('add-note', { party_id: dp.party_id, ...fields }, 'Note added')
+      }
+      onAddGift={(fields) =>
+        logic.drawerAct('add-gift', { party_id: dp.party_id, ...fields }, 'Gift idea added')
+      }
       onToggleGift={(giftId) => logic.drawerAct('toggle-gift', { gift_id: giftId }, 'Gift updated')}
-      onAddDebt={(fields) => logic.drawerAct('add-debt', { party_id: dp.party_id, ...fields }, 'Debt added')}
+      onAddDebt={(fields) =>
+        logic.drawerAct('add-debt', { party_id: dp.party_id, ...fields }, 'Debt added')
+      }
       onSettleDebt={(debtId) => logic.drawerAct('settle-debt', { debt_id: debtId }, 'Debt settled')}
     />,
   );
@@ -322,7 +378,13 @@ function renderDetails() {
 
 function renderModal() {
   modalRootReact.render(
-    state.addModalOpen ? <AddPersonModal circles={data.circles} onSubmit={logic.addPerson} onClose={logic.closeAddModal} /> : null,
+    state.addModalOpen ? (
+      <AddPersonModal
+        circles={data.circles}
+        onSubmit={logic.addPerson}
+        onClose={logic.closeAddModal}
+      />
+    ) : null,
   );
 }
 
@@ -336,14 +398,17 @@ function renderNewMenu() {
     newMenuRoot.render(null);
     return;
   }
-  newMenuRoot.render(<NewMenu onAddPerson={logic.openAddModal} onNewCircle={logic.startCreateCircle} />);
+  newMenuRoot.render(
+    <NewMenu onAddPerson={logic.openAddModal} onNewCircle={logic.startCreateCircle} />,
+  );
 }
 
 // ---------- Master render ----------
 
 function render() {
   // A circle can vanish under us (deleted elsewhere) — fall back to All.
-  if (state.nav.kind === 'circle' && !data.circles.some((c) => c.circle_id === state.nav.circleId)) state.nav = { kind: 'all' };
+  if (state.nav.kind === 'circle' && !data.circles.some((c) => c.circle_id === state.nav.circleId))
+    state.nav = { kind: 'all' };
   closePopover();
   state.visibleRows = logic.currentRows(); // one source of truth for toolbar counts + rows
   renderSidebar();
@@ -411,7 +476,9 @@ async function refresh() {
   data.circles = incoming.circles ?? [];
   state.peopleTruncated = Boolean(next?.truncated);
   // Drop selections and a stale open drawer for people that no longer exist.
-  state.selected = new Set([...state.selected].filter((id) => data.people.some((p) => p.party_id === id)));
+  state.selected = new Set(
+    [...state.selected].filter((id) => data.people.some((p) => p.party_id === id)),
+  );
   if (state.detailsId && !data.people.some((p) => p.party_id === state.detailsId)) {
     state.detailsId = null;
     state.detailPerson = null;

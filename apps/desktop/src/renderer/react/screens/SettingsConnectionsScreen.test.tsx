@@ -37,7 +37,9 @@ function makeProvider(over: Partial<ProviderOptionDTO> = {}): ProviderOptionDTO 
   };
 }
 
-function makeProps(over: Partial<SettingsConnectionsBridgeProps> = {}): SettingsConnectionsBridgeProps {
+function makeProps(
+  over: Partial<SettingsConnectionsBridgeProps> = {},
+): SettingsConnectionsBridgeProps {
   return {
     beginAuthorize: vi.fn().mockResolvedValue('https://accounts.google.com/authorize?state=s1'),
     configureConnection: vi.fn().mockResolvedValue(undefined),
@@ -99,7 +101,9 @@ describe('SettingsConnectionsScreen', () => {
   it('opens the authorize URL and refreshes the list', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const authorizeBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Authorize');
+    const authorizeBtn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Authorize',
+    );
     await act(async () => authorizeBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
@@ -140,7 +144,9 @@ describe('SettingsConnectionsScreen', () => {
 
   it('surfaces the server refusal as a toast when Remove is refused', async () => {
     const props = makeProps({
-      detachConnection: vi.fn().mockRejectedValue(new Error('has 2 outbox item(s) still awaiting a decision')),
+      detachConnection: vi
+        .fn()
+        .mockRejectedValue(new Error('has 2 outbox item(s) still awaiting a decision')),
     });
     const el = await mount(props);
     const removeBtn = [...el.querySelectorAll('button')].find((b) => b.textContent === 'Remove');
@@ -148,15 +154,15 @@ describe('SettingsConnectionsScreen', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(props.showToast).toHaveBeenCalledWith(
-      expect.stringContaining('awaiting a decision'),
-    );
+    expect(props.showToast).toHaveBeenCalledWith(expect.stringContaining('awaiting a decision'));
   });
 
   it('opens the add-connection wizard and submits a new oauth2 connection', async () => {
     const props = makeProps();
     const el = await mount(props);
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('Add connection'));
+    const addBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Add connection'),
+    );
     await act(async () => addBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     await act(async () => {
       await Promise.resolve();
@@ -184,7 +190,9 @@ describe('SettingsConnectionsScreen', () => {
       if (secretInput) setNativeValue(secretInput, 'my-client-secret');
     });
 
-    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) => b.textContent?.includes('Save connection'));
+    const saveBtn = [...el.querySelectorAll('.wizard button')].find((b) =>
+      b.textContent?.includes('Save connection'),
+    );
     expect(saveBtn?.hasAttribute('disabled')).toBe(false);
     await act(async () => saveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
 

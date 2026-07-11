@@ -173,7 +173,9 @@ function automationLifetime(runs: readonly CentraidAutomationRunRecord[]): {
 } {
   const total = runs.length;
   const ok = runs.filter((r) => r.ok).length;
-  const durations = runs.filter((r) => r.endedAt !== undefined).map((r) => r.endedAt! - r.startedAt);
+  const durations = runs
+    .filter((r) => r.endedAt !== undefined)
+    .map((r) => r.endedAt! - r.startedAt);
   const avgMs = durations.length
     ? durations.reduce((a, b) => a + b, 0) / durations.length
     : undefined;
@@ -231,7 +233,10 @@ export function buildAutomationViewData(
     (t): t is { kind: 'data'; entities: readonly string[]; every?: string } => t.kind === 'data',
   );
   const dataDetail: AutomationViewData['dataDetail'] = dataTrig
-    ? { entities: [...dataTrig.entities], everyLabel: dataTrig.every ? `Every ${dataTrig.every}` : null }
+    ? {
+        entities: [...dataTrig.entities],
+        everyLabel: dataTrig.every ? `Every ${dataTrig.every}` : null,
+      }
     : null;
 
   const condTrig = row.triggers.find(

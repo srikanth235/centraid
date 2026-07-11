@@ -110,7 +110,7 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) listener re-bound only on chatEligible, toggleChat is stable
   }, [chatEligible]);
 
   const finish = window.CentraidTokens.tileFinish(vm.projColor, 'gradient');
@@ -120,7 +120,11 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
     <span className={styles.tlIdentity}>
       <span
         className={styles.tlAppIcon}
-        style={{ background: finish.background, color: finish.glyphColor, boxShadow: finish.boxShadow || undefined }}
+        style={{
+          background: finish.background,
+          color: finish.glyphColor,
+          boxShadow: finish.boxShadow || undefined,
+        }}
         dangerouslySetInnerHTML={{ __html: iconSvg(vm.projIcon || 'Sparkle', 11, 1.9) }}
       />
       <b
@@ -190,26 +194,32 @@ export default function BuilderShell(props: BuilderShellProps): JSX.Element {
   const tabs = vm.isAutomation ? AUTO_TABS : APP_TABS;
   const devicePill = (
     <div className={styles.device}>
-      {([['mobile', SmartphoneIcon], ['tablet', TabletIcon], ['desktop', MonitorIcon]] as const).map(
-        ([d, glyph]) => (
-          <button
-            key={d}
-            type="button"
-            className={styles.deviceBtn}
-            aria-label={d}
-            title={`${d[0]!.toUpperCase()}${d.slice(1)} preview`}
-            data-active={String(vm.previewDevice === d)}
-            onClick={() => vm.setPreviewDevice(d)}
-            dangerouslySetInnerHTML={{ __html: glyph }}
-          />
-        ),
-      )}
+      {(
+        [
+          ['mobile', SmartphoneIcon],
+          ['tablet', TabletIcon],
+          ['desktop', MonitorIcon],
+        ] as const
+      ).map(([d, glyph]) => (
+        <button
+          key={d}
+          type="button"
+          className={styles.deviceBtn}
+          aria-label={d}
+          title={`${d[0]!.toUpperCase()}${d.slice(1)} preview`}
+          data-active={String(vm.previewDevice === d)}
+          onClick={() => vm.setPreviewDevice(d)}
+          dangerouslySetInnerHTML={{ __html: glyph }}
+        />
+      ))}
     </div>
   );
   const urlPill = (
     <div className={styles.url} title={previewInfo?.src}>
       <span className={styles.urlDot} data-state={previewInfo ? 'local' : 'building'} />
-      <span className={styles.urlText}>{previewInfo ? formatPreviewUrl(previewInfo.src) : 'Building…'}</span>
+      <span className={styles.urlText}>
+        {previewInfo ? formatPreviewUrl(previewInfo.src) : 'Building…'}
+      </span>
       <button
         type="button"
         className={styles.urlRefresh}

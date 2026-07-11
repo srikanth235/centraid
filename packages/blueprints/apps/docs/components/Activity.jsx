@@ -21,7 +21,7 @@ export function Activity({ documentId, loadActivity }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) loadActivity is a stable prop; Details.jsx keys this component by doc.document_id, so a real document change already remounts it fresh instead of re-running this effect
   }, [documentId]);
 
   if (events === null) return <div className="d-activity-status">Loading activity…</div>;

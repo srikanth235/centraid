@@ -1,9 +1,24 @@
 # Flow: Three independent drafts coexist and persist
 
+> **⚠️ Stale premise — verify before running.** Commit `4397329` ("'Use
+> template' installs app templates directly as published apps") removed the
+> draft stage for app templates entirely: `installAppTemplate`
+> ([templatesData.ts](../../../apps/desktop/src/renderer/react/shell/routes/templatesData.ts))
+> now clones with `publish: true` and pins the result straight onto Home as a
+> `UserAppMeta`, never a `__draft`; `DiscoverRoute.tsx`'s `applyAppTemplate`
+> confirms there is no builder detour. `loadAppTemplates` also no longer
+> excludes installed templates (filters only `!isAutomationTemplate`), so the
+> "Only Publish removes a template from the available list" claim below is
+> unverified against current code. This flow's scenario (clone → builder →
+> draft tile → delete) describes a stage that no longer exists for app
+> templates; the underlying steps need a live-rig rewrite before reuse. Left
+> as historical record rather than silently deleted or guessed at — flag for
+> a follow-up pass with real e2e-live verification.
+
 ## Goal
 Multiple template clones produce independent drafts on disk and on home. The
 TEMPLATES section is NOT consumed by cloning — `loadAvailableTemplates`
-([app.ts](../../../apps/desktop/src/renderer/app.ts) at line 682) filters by
+([templatesData.ts](../../../apps/desktop/src/renderer/react/shell/routes/templatesData.ts) at line 15) filters by
 **published** `userApps`, not by drafts. Only Publish removes a template from
 the available list. All three drafts (and the three template tiles) must
 survive a full restart.

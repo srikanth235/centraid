@@ -96,7 +96,13 @@ export class S3TestServer {
 
   async close(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      this.server.close((err) => (err ? reject(err) : resolve()));
+      this.server.close((err) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve();
+      });
     });
   }
 

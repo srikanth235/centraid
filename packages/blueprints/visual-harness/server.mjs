@@ -31,7 +31,16 @@ const KIT_DIR = path.join(REPO_ROOT, 'packages/blueprints/kit');
 const MOCK_SCRIPT_FILE = path.join(__dirname, 'mock-centraid.js');
 
 const PORT = 4173;
-const SUPPORTED_APPS = new Set(['docs', 'photos', 'tasks', 'notes', 'agenda', 'people', 'tally', 'locker']);
+const SUPPORTED_APPS = new Set([
+  'docs',
+  'photos',
+  'tasks',
+  'notes',
+  'agenda',
+  'people',
+  'tally',
+  'locker',
+]);
 const BLOB_PREFIX = '/centraid/_vault/blobs';
 
 // ---------------------------------------------------------------------
@@ -43,11 +52,9 @@ const BLOB_PREFIX = '/centraid/_vault/blobs';
 // no other seam to intercept the body it produces.
 // ---------------------------------------------------------------------
 class CaptureResponse {
-  constructor() {
-    this.statusCode = 200;
-    this.headers = {};
-    this.body = Buffer.alloc(0);
-  }
+  statusCode = 200;
+  headers = {};
+  body = Buffer.alloc(0);
   setHeader(name, value) {
     this.headers[name] = value;
   }
@@ -129,7 +136,10 @@ function hashHue(id) {
 }
 
 function escapeXml(s) {
-  return s.replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+  return s.replace(
+    /[<>&"]/g,
+    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c],
+  );
 }
 
 function placeholderSvg(id, thumb) {

@@ -3,7 +3,11 @@ import { listAutomations } from '../../../gateway-client.js';
 import AutomationsOverviewScreen from '../../screens/AutomationsOverviewScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
-import { buildOverviewData, collectAutomationRuns, scaffoldAutomationDraft } from './automationsData.js';
+import {
+  buildOverviewData,
+  collectAutomationRuns,
+  scaffoldAutomationDraft,
+} from './automationsData.js';
 
 // React-owned Automations overview — replaces the vanilla renderAutomations
 // (app-automations.ts). The screen owns loading/error/data + the "View all"

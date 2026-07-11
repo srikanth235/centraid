@@ -88,7 +88,12 @@ export function AddPersonModal({ circles, onSubmit, onClose }) {
           <button type="button" className="kit-btn" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="kit-btn primary" disabled={busy || !name.trim()} onClick={submit}>
+          <button
+            type="button"
+            className="kit-btn primary"
+            disabled={busy || !name.trim()}
+            onClick={submit}
+          >
             Add person
           </button>
         </div>

@@ -92,7 +92,9 @@ function versionChain(documentId: string): string[] {
 test('add_document mints a document wrapping a canonical content item', () => {
   const { documentId, contentId } = addDocument({ data_uri: PDF, title: 'Rental agreement.pdf' });
   const doc = db.vault
-    .prepare('SELECT title, current_content_id, deleted_at FROM core_document WHERE document_id = ?')
+    .prepare(
+      'SELECT title, current_content_id, deleted_at FROM core_document WHERE document_id = ?',
+    )
     .get(documentId) as { title: string; current_content_id: string; deleted_at: string | null };
   expect(doc).toMatchObject({
     title: 'Rental agreement.pdf',
@@ -212,9 +214,9 @@ test('delete_folder refuses non-empty folders (documents or subfolders), root is
   const root = filedUnder(documentId);
   expect(root?.notation).toBe('root');
   expect(invoke('core.delete_folder', { folder_id: root?.concept_id ?? '' }).status).toBe('failed');
-  expect(invoke('core.rename_folder', { folder_id: root?.concept_id ?? '', name: 'x' }).status).toBe(
-    'failed',
-  );
+  expect(
+    invoke('core.rename_folder', { folder_id: root?.concept_id ?? '', name: 'x' }).status,
+  ).toBe('failed');
 });
 
 /** Count of starred flags-scheme tags on a document (issue #274/#352). */
@@ -336,7 +338,10 @@ test('restore_document_version repoints current_content_id and appends forward, 
       output: { content_id: string };
     }
   ).output.content_id;
-  const restore = invoke('core.restore_document_version', { document_id: documentId, content_id: v1 });
+  const restore = invoke('core.restore_document_version', {
+    document_id: documentId,
+    content_id: v1,
+  });
   expect(restore.status).toBe('executed');
   const doc = db.vault
     .prepare('SELECT current_content_id FROM core_document WHERE document_id = ?')
@@ -373,7 +378,10 @@ test('restore_document_version refuses a content id outside the chain, or the cu
     data_uri: 'data:text/plain;charset=utf-8,v1',
     title: 'Doc.txt',
   });
-  const other = addDocument({ data_uri: 'data:text/plain;charset=utf-8,unrelated', title: 'Other' });
+  const other = addDocument({
+    data_uri: 'data:text/plain;charset=utf-8,unrelated',
+    title: 'Other',
+  });
   const outsider = invoke('core.restore_document_version', {
     document_id: documentId,
     content_id: other.contentId,
@@ -404,9 +412,9 @@ test('trash + purge of a document with a version chain releases every exclusivel
     .run('2000-01-01T00:00:00.000Z', documentId);
   const swept = gw.sweep(owner);
   expect(swept.documentsPurged).toBe(1);
-  expect(db.vault.prepare('SELECT 1 FROM core_document WHERE document_id = ?').get(documentId)).toBe(
-    undefined,
-  );
+  expect(
+    db.vault.prepare('SELECT 1 FROM core_document WHERE document_id = ?').get(documentId),
+  ).toBe(undefined);
   for (const id of [v1, v2]) {
     expect(db.vault.prepare('SELECT 1 FROM core_content_item WHERE content_id = ?').get(id)).toBe(
       undefined,
@@ -421,7 +429,10 @@ test('purge protects a superseded revision still shared with a live document', (
   });
   // B starts on the SAME bytes as A's first version, then moves on — so
   // `shared` is now v1 of A's live current AND v1 of B's (dead) history.
-  const other = addDocument({ data_uri: 'data:text/plain;charset=utf-8,shared%20text', title: 'B.txt' });
+  const other = addDocument({
+    data_uri: 'data:text/plain;charset=utf-8,shared%20text',
+    title: 'B.txt',
+  });
   expect(other.contentId).toBe(shared);
   invoke('core.edit_document', { document_id: other.documentId, body_text: 'B moved on' });
   invoke('core.trash_document', { document_id: other.documentId });
@@ -430,10 +441,12 @@ test('purge protects a superseded revision still shared with a live document', (
     .run('2000-01-01T00:00:00.000Z', other.documentId);
   gw.sweep(owner);
   // B is gone, but the shared bytes survive — A (still live) is their current.
-  expect(db.vault.prepare('SELECT 1 FROM core_document WHERE document_id = ?').get(other.documentId)).toBe(
-    undefined,
-  );
-  expect(db.vault.prepare('SELECT 1 FROM core_content_item WHERE content_id = ?').get(shared)).toBeTruthy();
+  expect(
+    db.vault.prepare('SELECT 1 FROM core_document WHERE document_id = ?').get(other.documentId),
+  ).toBe(undefined);
+  expect(
+    db.vault.prepare('SELECT 1 FROM core_content_item WHERE content_id = ?').get(shared),
+  ).toBeTruthy();
   const stillCurrent = db.vault
     .prepare('SELECT current_content_id FROM core_document WHERE document_id = ?')
     .get(documentId) as { current_content_id: string };

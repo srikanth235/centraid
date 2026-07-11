@@ -80,7 +80,11 @@ export function Details({
         </div>
         <div className="d-details-foot">
           {dp ? (
-            <button type="button" className="kit-btn d-detail-btn" onClick={(e) => onMove(e.currentTarget)}>
+            <button
+              type="button"
+              className="kit-btn d-detail-btn"
+              onClick={(e) => onMove(e.currentTarget)}
+            >
               Move to circle
             </button>
           ) : null}

@@ -46,7 +46,6 @@ import {
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
   type ConversationRunner,
-  type RunnerStatus,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,

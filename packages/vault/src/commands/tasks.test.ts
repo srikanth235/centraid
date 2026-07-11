@@ -125,7 +125,8 @@ test('add_task with an rrule but no due_at is refused', () => {
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('failed');
-  if (outcome.status === 'failed') expect(outcome.predicate).toContain('needs a due date to repeat');
+  if (outcome.status === 'failed')
+    expect(outcome.predicate).toContain('needs a due date to repeat');
 });
 
 test('completing a repeating task spawns its next occurrence', () => {
@@ -150,7 +151,9 @@ test('completing a repeating task spawns its next occurrence', () => {
   expect(original.status).toBe('completed');
   expect(original.completed_at).not.toBeNull();
   const next = db.vault
-    .prepare('SELECT title, priority, status, due_at, rrule, completed_at FROM schedule_task WHERE task_id = ?')
+    .prepare(
+      'SELECT title, priority, status, due_at, rrule, completed_at FROM schedule_task WHERE task_id = ?',
+    )
     .get(output.next_task_id as string) as {
     title: string;
     priority: number;
@@ -204,7 +207,8 @@ test('add_task with a reminder but no due_at is refused', () => {
     purpose: 'dpv:ServiceProvision',
   });
   expect(outcome.status).toBe('failed');
-  if (outcome.status === 'failed') expect(outcome.predicate).toContain('needs a due date to count back');
+  if (outcome.status === 'failed')
+    expect(outcome.predicate).toContain('needs a due date to count back');
 });
 
 test('edit_task sets and clears rrule; setting it on a task with no due_at is refused', () => {
@@ -238,7 +242,8 @@ test('edit_task sets and clears rrule; setting it on a task with no due_at is re
     purpose: 'dpv:ServiceProvision',
   });
   expect(refused.status).toBe('failed');
-  if (refused.status === 'failed') expect(refused.predicate).toContain('needs a due date to repeat');
+  if (refused.status === 'failed')
+    expect(refused.predicate).toContain('needs a due date to repeat');
 });
 
 test('edit_task sets and clears remind_before_min; sending both is refused', () => {

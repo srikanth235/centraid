@@ -54,7 +54,7 @@ export function Capture({ onSubmit, registerFocus }) {
           ref={inputRef}
           type="text"
           className="tk-capture-input"
-          placeholder='Add a task — try “Email Dana fri” or “Pay rent +3d”'
+          placeholder="Add a task — try “Email Dana fri” or “Pay rent +3d”"
           aria-label="Task title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -104,7 +104,11 @@ export function Capture({ onSubmit, registerFocus }) {
             </button>
           ))}
         </div>
-        {nl ? <span className="tk-nl-hint">→ due {fmtDay(nl.due)} (“{nl.token}” leaves the title)</span> : null}
+        {nl ? (
+          <span className="tk-nl-hint">
+            → due {fmtDay(nl.due)} (“{nl.token}” leaves the title)
+          </span>
+        ) : null}
       </div>
     </div>
   );

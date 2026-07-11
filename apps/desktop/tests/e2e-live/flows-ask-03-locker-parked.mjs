@@ -47,14 +47,19 @@ async function installLocker() {
   await dialog.waitFor({ state: 'visible', timeout: 10_000 });
   await dialog.getByRole('button', { name: 'Use this template' }).click();
   await page.locator('[data-global-toast]').waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page
+    .getByRole('heading', { name: 'What should we build?' })
+    .waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('[data-app-id="locker"]').waitFor({ state: 'visible', timeout: 10_000 });
 }
 
 async function openLocker() {
   const tile = page.locator('[data-app-id="locker"]');
   await tile.getByTestId('app-tile').click();
-  await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+  await page.waitForSelector('iframe[data-centraid-app="1"]', {
+    state: 'attached',
+    timeout: 20_000,
+  });
   const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
   await frameLoc.locator('body').first().waitFor({ state: 'visible', timeout: 15_000 });
   return frameLoc;
@@ -97,12 +102,12 @@ async function main() {
     let frameLoc = await openLocker();
     await page.waitForTimeout(2000); // let the app's first vault call auto-grant
 
-    console.log('[ask03] creating 2 items via Locker\'s own UI…');
+    console.log("[ask03] creating 2 items via Locker's own UI…");
     await createItem(frameLoc, 'Old GitHub Login');
     await createItem(frameLoc, 'Temp Wifi Note');
     await shot('01-two-items-created');
 
-    console.log('[ask03] trashing both via Locker\'s own UI…');
+    console.log("[ask03] trashing both via Locker's own UI…");
     await trashItem(frameLoc, 'Old GitHub Login');
     await trashItem(frameLoc, 'Temp Wifi Note');
     await shot('02-both-trashed');
@@ -112,20 +117,24 @@ async function main() {
     await page.waitForTimeout(300);
     const trashList = await frameLoc.locator('.v-list').textContent();
     console.log(`[ask03] trash nav contents: ${JSON.stringify(trashList?.slice(0, 300))}`);
-    assert(/Old GitHub Login/.test(trashList ?? '') && /Temp Wifi Note/.test(trashList ?? ''), 'both items should be visible under Trash before the Ask flow');
+    assert(
+      /Old GitHub Login/.test(trashList ?? '') && /Temp Wifi Note/.test(trashList ?? ''),
+      'both items should be visible under Trash before the Ask flow',
+    );
     await shot('03-trash-nav-confirmed');
 
     // ---- Approve variant: ask to permanently purge "Old GitHub Login" ----
     await frameLoc.locator('#kitAskBtn').click();
-    await frameLoc.locator('.kit-ask-panel[role="dialog"]').waitFor({ state: 'visible', timeout: 10_000 });
+    await frameLoc
+      .locator('.kit-ask-panel[role="dialog"]')
+      .waitFor({ state: 'visible', timeout: 10_000 });
     const input = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
     const log = frameLoc.locator('.kit-ask-log');
 
-    async function askAndWaitForOutcome(message, timeoutMs) {
+    const askAndWaitForOutcome = async function askAndWaitForOutcome(message, timeoutMs) {
       await input.fill(message);
       await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
       const t0 = Date.now();
-      let outcome = null;
       let lastAi = -1;
       let stable = 0;
       while (Date.now() - t0 < timeoutMs) {
@@ -148,7 +157,7 @@ async function main() {
         await page.waitForTimeout(2000);
       }
       return 'timeout';
-    }
+    };
 
     console.log('[ask03] asking to permanently purge "Old GitHub Login" (attempt 1)…');
     let outcome = await askAndWaitForOutcome(
@@ -157,21 +166,31 @@ async function main() {
     );
     console.log(`[ask03] attempt 1 outcome: ${outcome}`);
     if (outcome === 'replied-no-action') {
-      console.log('[ask03] agent replied without calling the tool; retrying once with a more direct phrasing…');
-      outcome = await askAndWaitForOutcome('Purge "Old GitHub Login" now — call purge-item, do not just describe it.', 120_000);
+      console.log(
+        '[ask03] agent replied without calling the tool; retrying once with a more direct phrasing…',
+      );
+      outcome = await askAndWaitForOutcome(
+        'Purge "Old GitHub Login" now — call purge-item, do not just describe it.',
+        120_000,
+      );
       console.log(`[ask03] attempt 2 outcome: ${outcome}`);
     }
     await shot('04-after-purge-ask');
 
     if (outcome === 'no_runner') {
       verdict = 'INCONCLUSIVE';
-      detail = 'LLM unavailable (_turn returned no_conversation_runner) — acceptable per the task brief.';
+      detail =
+        'LLM unavailable (_turn returned no_conversation_runner) — acceptable per the task brief.';
     } else if (outcome === 'parked') {
       const card = log.locator('.kit-ask-action').last();
       const cardText = await card.textContent();
       console.log(`[ask03] parked card text: ${JSON.stringify(cardText)}`);
       await shot('05-parked-card-visible');
-      assert(/Proposed write . needs your ok/.test(cardText ?? '') || /needs your ok/i.test(cardText ?? ''), 'parked card missing the "needs your ok" label');
+      assert(
+        /Proposed write . needs your ok/.test(cardText ?? '') ||
+          /needs your ok/i.test(cardText ?? ''),
+        'parked card missing the "needs your ok" label',
+      );
       await card.locator('.kit-aa-approve', { hasText: 'Approve' }).click();
       await page.waitForTimeout(1500);
       await shot('06-after-approve');
@@ -193,7 +212,9 @@ async function main() {
         // Same "no live-refresh" gap seen on Tasks' board (flow 4) — force a
         // remount before calling this a bug.
         await navTo(page, 'Home');
-        await page.getByRole('heading', { name: 'What should we build?' }).waitFor({ state: 'visible', timeout: 10_000 });
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
         await page.waitForTimeout(300);
         frameLoc = await openLocker();
         await frameLoc.locator('button', { hasText: 'Trash' }).first().click();
@@ -210,7 +231,8 @@ async function main() {
         : `Approved the parked purge but "Old GitHub Login" is still visible in Trash. Trash text: ${(trashText ?? '').slice(0, 300)}`;
     } else if (outcome === 'applied-directly') {
       verdict = 'FAIL';
-      detail = 'purge-item executed WITHOUT parking for approval, despite app.json declaring confirmation:"required" for it. This bypasses the consent gate — a real bug if reproducible.';
+      detail =
+        'purge-item executed WITHOUT parking for approval, despite app.json declaring confirmation:"required" for it. This bypasses the consent gate — a real bug if reproducible.';
     } else {
       verdict = 'INCONCLUSIVE';
       detail = `Agent never invoked purge-item after 2 attempts (outcome=${outcome}) — marking inconclusive per the task brief; the Approvals-screen agent covers the parking machinery deterministically elsewhere.`;
@@ -224,10 +246,14 @@ async function main() {
         frameLoc = await openLocker();
       }
       await frameLoc.locator('#kitAskBtn').click();
-      await frameLoc.locator('.kit-ask-panel[role="dialog"]').waitFor({ state: 'visible', timeout: 10_000 });
+      await frameLoc
+        .locator('.kit-ask-panel[role="dialog"]')
+        .waitFor({ state: 'visible', timeout: 10_000 });
       const input2 = frameLoc.locator('.kit-ask-compose input[aria-label="Ask"]');
       const log2 = frameLoc.locator('.kit-ask-log');
-      await input2.fill('Permanently delete the item named "Temp Wifi Note" from the trash forever — purge it for good.');
+      await input2.fill(
+        'Permanently delete the item named "Temp Wifi Note" from the trash forever — purge it for good.',
+      );
       await frameLoc.locator('.kit-ask-send[aria-label="Send"]').click();
       const t0 = Date.now();
       let outcome2 = null;
@@ -258,7 +284,8 @@ async function main() {
           : `Discard should NOT have purged the item, but it is missing from Trash. Trash text: ${(trashText2 ?? '').slice(0, 300)}`;
       } else {
         discardVerdict = 'INCONCLUSIVE';
-        discardDetail = 'Agent did not park a second purge-item call within 120s for the discard variant.';
+        discardDetail =
+          'Agent did not park a second purge-item call within 120s for the discard variant.';
       }
       console.log(`[ask03] DISCARD VARIANT: ${discardVerdict} — ${discardDetail}`);
     } else {

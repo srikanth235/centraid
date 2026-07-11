@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive screen component (list + detail + action rows for one surface); splitting would fragment one visual unit
 import { type JSX, useMemo, useState } from 'react';
 import Icon from '../ui/Icon.js';
 import Button from '../ui/Button.js';
@@ -106,7 +107,11 @@ export interface ApprovalsScreenProps {
    * `artifact` is present only for an edit-then-approve (issue #308 A5 UI
    * slice) — the gateway rebuilds the wire request server-side from it.
    */
-  onApproveOutbox: (itemId: string, alwaysAllow: boolean, artifact?: Record<string, unknown>) => void;
+  onApproveOutbox: (
+    itemId: string,
+    alwaysAllow: boolean,
+    artifact?: Record<string, unknown>,
+  ) => void;
   onDenyOutbox: (itemId: string) => void;
   onOpenSettings: () => void;
   onConfirmParked: (invocationId: string, approve: boolean) => void;
@@ -289,7 +294,13 @@ function OutboxRow({
               className={styles.denyBtn}
             />
             {editing ? (
-              <Button label="Cancel" variant="ghost" size="sm" disabled={busy} onClick={cancelEdit} />
+              <Button
+                label="Cancel"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={cancelEdit}
+              />
             ) : null}
             <Button
               label={editing ? 'Approve with edits' : 'Approve'}
@@ -337,6 +348,8 @@ function parkedKindBadge(kind: ApprovalsParkedRowDTO['callerKind']): JSX.Element
       return <KindBadge kind="automation">Automation</KindBadge>;
     case 'assistant':
       return <KindBadge kind="assistant">Assistant</KindBadge>;
+    case 'owner-device':
+      return null;
     default:
       return null;
   }
@@ -504,7 +517,10 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
   const [expandedParked, setExpandedParked] = useState<string | null>(null);
 
   const inboxEmpty =
-    outbox.length === 0 && needsAuth.length === 0 && parked.length === 0 && scopeRequests.length === 0;
+    outbox.length === 0 &&
+    needsAuth.length === 0 &&
+    parked.length === 0 &&
+    scopeRequests.length === 0;
   const totalCount = outbox.length + needsAuth.length + parked.length + scopeRequests.length;
 
   return (
@@ -529,7 +545,11 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
         <div className={styles.groups}>
           {outbox.length > 0 ? (
             <section>
-              <GroupHead icon={<Icon name="Send" size={13} />} label="Outbox" count={outbox.length} />
+              <GroupHead
+                icon={<Icon name="Send" size={13} />}
+                label="Outbox"
+                count={outbox.length}
+              />
               <div className={styles.list}>
                 {outbox.map((row) => (
                   <OutboxRow
@@ -569,7 +589,11 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
 
           {parked.length > 0 ? (
             <section>
-              <GroupHead icon={<Icon name="Clock" size={13} />} label="Parked" count={parked.length} />
+              <GroupHead
+                icon={<Icon name="Clock" size={13} />}
+                label="Parked"
+                count={parked.length}
+              />
               <div className={styles.list}>
                 {parked.map((row) => (
                   <ParkedRow
@@ -578,7 +602,9 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
                     busy={busyId === row.invocationId}
                     expanded={expandedParked === row.invocationId}
                     onToggle={() =>
-                      setExpandedParked(expandedParked === row.invocationId ? null : row.invocationId)
+                      setExpandedParked(
+                        expandedParked === row.invocationId ? null : row.invocationId,
+                      )
                     }
                     onConfirm={(approve) => onConfirmParked(row.invocationId, approve)}
                   />
@@ -610,7 +636,11 @@ export default function ApprovalsScreen(props: ApprovalsScreenProps): JSX.Elemen
       )}
 
       <section className={styles.grantsSection}>
-        <GroupHead icon={<Icon name="Key" size={13} />} label="Standing grants" count={grants.length} />
+        <GroupHead
+          icon={<Icon name="Key" size={13} />}
+          label="Standing grants"
+          count={grants.length}
+        />
         {grants.length > 0 ? (
           <div className={styles.grantsList}>
             {grants.map((row) => (

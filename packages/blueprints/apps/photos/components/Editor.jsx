@@ -76,13 +76,13 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot load; the rotation-driven redraw is the effect below
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) one-shot load; the rotation-driven redraw is the effect below
   }, []);
 
   useEffect(() => {
     draw();
     setCrop(null); // a rectangle drawn against the OLD orientation no longer lines up
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- draw() closes over the current rotation/refs each render
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#360) draw() closes over the current rotation/refs each render
   }, [rotation]);
 
   function fractionAt(e) {
@@ -104,7 +104,12 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
     if (!dragRef.current) return;
     const cur = fractionAt(e);
     const { x: sx, y: sy } = dragRef.current;
-    setCrop({ x: Math.min(sx, cur.x), y: Math.min(sy, cur.y), w: Math.abs(cur.x - sx), h: Math.abs(cur.y - sy) });
+    setCrop({
+      x: Math.min(sx, cur.x),
+      y: Math.min(sy, cur.y),
+      w: Math.abs(cur.x - sx),
+      h: Math.abs(cur.y - sy),
+    });
   }
   function onPointerUp() {
     dragRef.current = null;
@@ -171,10 +176,20 @@ export function EditorView({ asset, onCancel, onSaved, refresh }) {
         ) : null}
       </div>
       <div className="editor-toolbar">
-        <button type="button" className="kit-btn" disabled={busy} onClick={() => setRotation((r) => (r + 90) % 360)}>
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={busy}
+          onClick={() => setRotation((r) => (r + 90) % 360)}
+        >
           ⟳ Rotate
         </button>
-        <button type="button" className="kit-btn" disabled={busy || !crop} onClick={() => setCrop(null)}>
+        <button
+          type="button"
+          className="kit-btn"
+          disabled={busy || !crop}
+          onClick={() => setCrop(null)}
+        >
           Reset crop
         </button>
         <label className="editor-trash-toggle">

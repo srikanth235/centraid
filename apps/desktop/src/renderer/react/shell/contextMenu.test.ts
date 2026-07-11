@@ -27,9 +27,9 @@ describe('context menu', () => {
     expect(menu.querySelectorAll('.item')).toHaveLength(2);
     expect(menu.querySelector('.sep')).not.toBeNull();
     expect(menu.textContent).toContain('Open');
-    expect(
-      (menu.querySelector('[data-danger="true"]') as HTMLElement).textContent,
-    ).toContain('Delete');
+    expect((menu.querySelector('[data-danger="true"]') as HTMLElement).textContent).toContain(
+      'Delete',
+    );
   });
 
   it('fires onPick with the item id and closes', () => {

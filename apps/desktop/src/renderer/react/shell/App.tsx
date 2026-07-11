@@ -71,6 +71,14 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
     case 'gateway':
     case 'settings':
       return route.kind;
+    case 'app':
+    case 'builder':
+    case 'run-view':
+    case 'automation-view':
+    case 'automation-builder':
+    case 'templates':
+      // Detail routes with no corresponding sidebar nav item — nothing to highlight.
+      return undefined;
     default:
       return undefined;
   }
@@ -143,7 +151,7 @@ export default function App(): JSX.Element {
       // drop it explicitly so it can't outlive the shell root (tests, HMR).
       closeVaultSwitcher();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once shim/listener wiring, deliberately []
   }, []);
 
   // Auto-open "What's new" once per version, matching Claude Code. On boot,

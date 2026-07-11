@@ -83,9 +83,11 @@ void (async (): Promise<void> => {
   shellRoot.render(
     <OnboardingScreen
       onComplete={async ({ displayName, avatarColor }) => {
-        await window.CentraidApi.updateProfileMetadata({ id: 'local', displayName, avatarColor }).catch(
-          () => undefined,
-        );
+        await window.CentraidApi.updateProfileMetadata({
+          id: 'local',
+          displayName,
+          avatarColor,
+        }).catch(() => undefined);
         await window.CentraidApi.saveSettings({
           onboardingCompletedAt: new Date().toISOString(),
         }).catch(() => undefined);
@@ -95,4 +97,5 @@ void (async (): Promise<void> => {
   );
 })();
 
-console.log('[react] renderer ready — App on #root; open %s for the component gallery', PREVIEW_HASH);
+const READY_LOG = '[react] renderer ready — App on #root; open %s for the component gallery';
+console.log(READY_LOG, PREVIEW_HASH); // governance: allow-repo-hygiene (#363) one-time boot-readiness marker, not leftover debug output

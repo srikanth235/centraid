@@ -58,19 +58,14 @@ function ReleaseSection({
       {notesHtml ? (
         <div
           className={styles.notes}
-          // eslint-disable-next-line react/no-danger -- notes are HTML-escaped in changelogNotesToHtml; only our own tags are emitted
+          // eslint-disable-next-line react/no-danger -- (#348) notes are HTML-escaped in changelogNotesToHtml; only our own tags are emitted
           dangerouslySetInnerHTML={{ __html: notesHtml }}
         />
       ) : (
         <p className={styles.emptyNotes}>No notes for this release.</p>
       )}
       {release.url ? (
-        <a
-          className={styles.ghLink}
-          href={release.url}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
+        <a className={styles.ghLink} href={release.url} target="_blank" rel="noreferrer noopener">
           View on GitHub →
         </a>
       ) : null}
@@ -107,7 +102,7 @@ export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX
 
   return (
     <>
-      <div className={styles.backdrop} onClick={onClose} />
+      <div className={styles.backdrop} role="presentation" onClick={onClose} />
       <div className={styles.card} role="dialog" aria-modal="true" aria-label="What's new">
         <header className={styles.head}>
           <h2 className={styles.heading}>What&rsquo;s new</h2>
@@ -142,7 +137,11 @@ export default function WhatsNewModal({ onClose }: { onClose: () => void }): JSX
             </div>
           ) : (
             state.result.releases.map((r) => (
-              <ReleaseSection key={r.version} release={r} isCurrent={sameVersion(r.version, current)} />
+              <ReleaseSection
+                key={r.version}
+                release={r}
+                isCurrent={sameVersion(r.version, current)}
+              />
             ))
           )}
         </div>

@@ -15,9 +15,7 @@ export function useBlockingCount(): number {
   const load = useCallback(() => {
     void getBlocking()
       .then((b) =>
-        setCount(
-          b.outbox.length + b.needsAuth.length + b.parked.length + b.scopeRequests.length,
-        ),
+        setCount(b.outbox.length + b.needsAuth.length + b.parked.length + b.scopeRequests.length),
       )
       .catch(() => {
         // Gateway unreachable — keep the last known count rather than flapping.

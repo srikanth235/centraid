@@ -248,7 +248,7 @@ export default function SettingsProvidersScreen({
   const doRefresh = (fn: () => Promise<AgentsStatusDTO>, setBusy: (b: boolean) => void): void => {
     setBusy(true);
     deadlineRef.current = Date.now() + POLL_WINDOW_MS;
-    fn()
+    void fn()
       .then((s) => {
         apply(s);
         if (s.anyLoading) poll();

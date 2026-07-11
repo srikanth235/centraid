@@ -113,12 +113,18 @@ export function Stage({ asset, onDims }) {
 
 function dateLine(asset) {
   const t = asset.taken_at ? new Date(asset.taken_at) : null;
-  const when = t && !Number.isNaN(t.getTime()) ? t.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' }) : null;
+  const when =
+    t && !Number.isNaN(t.getTime())
+      ? t.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })
+      : null;
   return [when, asset.place?.name].filter(Boolean).join(' · ') || fmtBytes(assetBytes(asset));
 }
 
 async function handleShare(asset) {
-  const url = typeof asset.content_uri === 'string' && asset.content_uri.startsWith('data:') ? location.href : asset.content_uri;
+  const url =
+    typeof asset.content_uri === 'string' && asset.content_uri.startsWith('data:')
+      ? location.href
+      : asset.content_uri;
   if (navigator.share) {
     try {
       await navigator.share({ title: asset.title ?? 'Photo', url });
@@ -139,7 +145,18 @@ async function handleShare(asset) {
   toast('Sharing isn’t available in this browser.');
 }
 
-export function LightboxShell({ asset, idx, list, albums: albumList, places, renderSeq, onStep, refresh, onClose, onSlideshow }) {
+export function LightboxShell({
+  asset,
+  idx,
+  list,
+  albums: albumList,
+  places,
+  renderSeq,
+  onStep,
+  refresh,
+  onClose,
+  onSlideshow,
+}) {
   const [editing, setEditing] = useState(false);
   const [infoOpen, setInfoOpen] = useState(true);
   const [probed, setProbed] = useState(null);
@@ -167,15 +184,26 @@ export function LightboxShell({ asset, idx, list, albums: albumList, places, ren
             >
               <HeartIcon filled={!!asset.favorite} />
             </button>
-            <button type="button" className="ph-lb-icon-btn" aria-label="Slideshow" onClick={onSlideshow}>
+            <button
+              type="button"
+              className="ph-lb-icon-btn"
+              aria-label="Slideshow"
+              onClick={onSlideshow}
+            >
               <PlayIcon />
             </button>
             {isRenderableUri(asset.content_uri) && !isVideoAsset(asset) ? (
-              <button type="button" className="ph-lb-icon-btn" aria-label="Edit" onClick={() => setEditing(true)}>
+              <button
+                type="button"
+                className="ph-lb-icon-btn"
+                aria-label="Edit"
+                onClick={() => setEditing(true)}
+              >
                 <EditIcon />
               </button>
             ) : null}
-            {isRenderableUri(asset.content_uri) || String(asset.content_uri ?? '').startsWith('data:') ? (
+            {isRenderableUri(asset.content_uri) ||
+            String(asset.content_uri ?? '').startsWith('data:') ? (
               <a
                 className="ph-lb-icon-btn"
                 aria-label="Download"
@@ -185,7 +213,12 @@ export function LightboxShell({ asset, idx, list, albums: albumList, places, ren
                 <DownloadIcon />
               </a>
             ) : null}
-            <button type="button" className="ph-lb-icon-btn" aria-label="Share" onClick={() => handleShare(asset)}>
+            <button
+              type="button"
+              className="ph-lb-icon-btn"
+              aria-label="Share"
+              onClick={() => handleShare(asset)}
+            >
               <ShareIcon />
             </button>
             <button
@@ -235,11 +268,33 @@ export function LightboxShell({ asset, idx, list, albums: albumList, places, ren
             />
           ) : (
             <>
-              <button type="button" className="ph-lb-nav prev" aria-label="Previous photo" disabled={idx < 0 || !list[idx - 1]} onClick={(e) => { e.stopPropagation(); onStep(-1); }}>
+              <button
+                type="button"
+                className="ph-lb-nav prev"
+                aria-label="Previous photo"
+                disabled={idx < 0 || !list[idx - 1]}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStep(-1);
+                }}
+              >
                 <ChevronLeftIcon size={24} />
               </button>
-              <Stage key={asset.asset_id} asset={asset} onDims={(w, h) => setProbed({ width: w, height: h })} />
-              <button type="button" className="ph-lb-nav next" aria-label="Next photo" disabled={idx < 0 || !list[idx + 1]} onClick={(e) => { e.stopPropagation(); onStep(1); }}>
+              <Stage
+                key={asset.asset_id}
+                asset={asset}
+                onDims={(w, h) => setProbed({ width: w, height: h })}
+              />
+              <button
+                type="button"
+                className="ph-lb-nav next"
+                aria-label="Next photo"
+                disabled={idx < 0 || !list[idx + 1]}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStep(1);
+                }}
+              >
                 <ChevronRightIcon size={24} />
               </button>
             </>
@@ -247,7 +302,14 @@ export function LightboxShell({ asset, idx, list, albums: albumList, places, ren
         </div>
         {!editing && infoOpen ? (
           <aside className="ph-lb-info" onClick={(e) => e.stopPropagation()}>
-            <LightboxInfo key={renderSeq} asset={displayAsset} albums={albumList} places={places} refresh={refresh} onClose={onClose} />
+            <LightboxInfo
+              key={renderSeq}
+              asset={displayAsset}
+              albums={albumList}
+              places={places}
+              refresh={refresh}
+              onClose={onClose}
+            />
           </aside>
         ) : null}
       </div>

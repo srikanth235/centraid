@@ -17,7 +17,7 @@ export function useAsyncData<T>(
 ): AsyncState<T> {
   const [state, setState] = useState<AsyncState<T>>({ status: 'loading' });
   // `deps` is a caller-provided array by contract — re-fetch when it changes.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) `load` itself is intentionally excluded, see contract above
   useEffect(() => {
     let alive = true;
     setState({ status: 'loading' });
@@ -33,7 +33,7 @@ export function useAsyncData<T>(
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) `load` itself is intentionally excluded, see contract above
   }, deps);
   return state;
 }

@@ -21,7 +21,10 @@ async function main() {
   const { page, close } = await launchApp({ userDataDir: FRESH_DIR });
   await page.setViewportSize({ width: 1400, height: 900 });
   try {
-    await page.getByRole('button', { name: /^Discover/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Discover/ })
+      .first()
+      .click();
     const card = page.locator('button[data-kind="app"]', { hasText: 'Photos' });
     await card.first().waitFor({ state: 'visible', timeout: 20_000 });
     await card.first().click();
@@ -31,12 +34,17 @@ async function main() {
     const tile = page.locator('[data-app-id="photos"]');
     await tile.waitFor({ state: 'visible', timeout: 20_000 });
     await tile.getByTestId('app-tile').click();
-    await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 30_000 });
+    await page.waitForSelector('iframe[data-centraid-app="1"]', {
+      state: 'attached',
+      timeout: 30_000,
+    });
     const frameLoc = page.frameLocator('iframe[data-centraid-app="1"]');
     await frameLoc.locator('h1').first().waitFor({ state: 'visible', timeout: 20_000 });
     await page.waitForTimeout(300);
     // flow-1 smoke on the fixed install
-    const askDisp = await frameLoc.locator('#kitAskOverlay').evaluate((el) => getComputedStyle(el).display);
+    const askDisp = await frameLoc
+      .locator('#kitAskOverlay')
+      .evaluate((el) => getComputedStyle(el).display);
     console.log(`[phase5] ask overlay on fresh open: display=${askDisp} (want none)`);
     await frameLoc.locator('#fileInput').setInputFiles([path.join(FIXTURES_DIR, 'teal-800.png')]);
     await frameLoc.locator('.tile-wrap').first().waitFor({ state: 'visible', timeout: 20_000 });
@@ -44,7 +52,9 @@ async function main() {
     await frameLoc.locator('.tile-wrap').first().locator('.tile').click();
     await frameLoc.locator('#lightbox').waitFor({ state: 'visible', timeout: 10_000 });
     const theme = await frameLoc.locator('html').evaluate((el) => el.dataset.theme);
-    const bg = await frameLoc.locator('#lightbox').evaluate((el) => getComputedStyle(el).backgroundColor);
+    const bg = await frameLoc
+      .locator('#lightbox')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
     const p = path.join(OUT_DIR, '61-dark-lightbox-fixed.png');
     await page.screenshot({ path: p });
     console.log(`[phase5] theme=${theme} lightbox backgroundColor=${bg}`);

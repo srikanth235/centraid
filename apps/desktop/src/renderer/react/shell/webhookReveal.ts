@@ -52,7 +52,10 @@ function copyButton(getValue: () => string, label: string): HTMLButtonElement {
  * when the user closes the modal (Done / X / Esc / backdrop click) — there
  * is nothing to confirm, so it always resolves, never rejects.
  */
-export function openWebhookReveal(webhook: MintedWebhook, opts: WebhookRevealOpts = {}): Promise<void> {
+export function openWebhookReveal(
+  webhook: MintedWebhook,
+  opts: WebhookRevealOpts = {},
+): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (): void => {
@@ -100,7 +103,10 @@ export function openWebhookReveal(webhook: MintedWebhook, opts: WebhookRevealOpt
     const urlCode = document.createElement('code');
     urlCode.className = styles.fieldValue ?? '';
     urlCode.textContent = webhook.url;
-    urlRow.append(urlCode, copyButton(() => webhook.url, 'webhook URL'));
+    urlRow.append(
+      urlCode,
+      copyButton(() => webhook.url, 'webhook URL'),
+    );
     urlField.append(urlLabel, urlRow);
 
     const secretField = document.createElement('div');
@@ -113,13 +119,18 @@ export function openWebhookReveal(webhook: MintedWebhook, opts: WebhookRevealOpt
     const secretCode = document.createElement('code');
     secretCode.className = styles.fieldValue ?? '';
     secretCode.textContent = webhook.secret;
-    secretRow.append(secretCode, copyButton(() => webhook.secret, 'bearer secret'));
+    secretRow.append(
+      secretCode,
+      copyButton(() => webhook.secret, 'bearer secret'),
+    );
     secretField.append(secretLabel, secretRow);
 
     const warn = document.createElement('div');
     warn.className = styles.warn ?? '';
     warn.innerHTML = iconSvg('AlertTriangle', 13);
-    warn.append(document.createTextNode(" Only its hash is stored — this is the only time it's readable."));
+    warn.append(
+      document.createTextNode(" Only its hash is stored — this is the only time it's readable."),
+    );
 
     const doneBtn = document.createElement('button');
     doneBtn.type = 'button';

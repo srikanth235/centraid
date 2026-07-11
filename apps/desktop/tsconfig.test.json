@@ -5,10 +5,5 @@
     "allowImportingTsExtensions": true
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts"],
-  "exclude": [
-    "dist",
-    "node_modules",
-    "src/renderer/react/ui/**",
-    "src/renderer/react/shell/**"
-  ]
+  "exclude": ["dist", "node_modules", "src/renderer/react/ui/**", "src/renderer/react/shell/**"]
 }

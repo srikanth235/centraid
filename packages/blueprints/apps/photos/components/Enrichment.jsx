@@ -98,8 +98,7 @@ export function EnrichmentPanel() {
             </>
           ) : (
             <p className="kit-small">
-              Face detection is turned off for this vault. Turn it on in vault settings to use
-              this.
+              Face detection is turned off for this vault. Turn it on in vault settings to use this.
             </p>
           )}
           <p className="lightbox-note enrichment-note" ref={noteRef}></p>

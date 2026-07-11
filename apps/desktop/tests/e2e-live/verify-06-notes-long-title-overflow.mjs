@@ -29,7 +29,13 @@ async function step(id, label, fn) {
     results.push({ id, label, verdict: 'pass', ms: Date.now() - t0 });
     console.log(`[PASS] ${id} ${label} (${Date.now() - t0}ms)`);
   } catch (err) {
-    results.push({ id, label, verdict: 'fail', ms: Date.now() - t0, error: err?.stack ?? String(err) });
+    results.push({
+      id,
+      label,
+      verdict: 'fail',
+      ms: Date.now() - t0,
+      error: err?.stack ?? String(err),
+    });
     console.error(`[FAIL] ${id} ${label}: ${err}`);
     try {
       await page.screenshot({ path: path.join(OUT_DIR, `FAIL-v06-${id}.png`) });
@@ -73,63 +79,77 @@ async function main() {
     let frame;
     await step('open-notes', 'Open Notes iframe', async () => {
       await page.locator('[data-app-id="notes"]').getByTestId('app-tile').click();
-      await page.waitForSelector('iframe[data-centraid-app="1"]', { state: 'attached', timeout: 20_000 });
+      await page.waitForSelector('iframe[data-centraid-app="1"]', {
+        state: 'attached',
+        timeout: 20_000,
+      });
       frame = frameLoc(page);
       await frame.locator('.nt-qa-title').waitFor({ state: 'visible', timeout: 15_000 });
       await page.waitForTimeout(600);
     });
 
     const longTitle = 'a'.repeat(320) + 'ZZZEND';
-    await step('create-long-title-note', 'Quick-add a note with a 320+ char unbroken (no-spaces) title', async () => {
-      const titleInput = frame.locator('.nt-qa-title');
-      await titleInput.fill(longTitle);
-      await frame.locator('.nt-qa-actions .kit-btn.primary', { hasText: 'Add note' }).click();
-      await page.waitForTimeout(700);
-      const card = frame.locator('.nt-card', { hasText: 'ZZZEND' });
-      await card.waitFor({ state: 'visible', timeout: 10_000 });
-      await shot('01-long-title-card');
-    });
+    await step(
+      'create-long-title-note',
+      'Quick-add a note with a 320+ char unbroken (no-spaces) title',
+      async () => {
+        const titleInput = frame.locator('.nt-qa-title');
+        await titleInput.fill(longTitle);
+        await frame.locator('.nt-qa-actions .kit-btn.primary', { hasText: 'Add note' }).click();
+        await page.waitForTimeout(700);
+        const card = frame.locator('.nt-card', { hasText: 'ZZZEND' });
+        await card.waitFor({ state: 'visible', timeout: 10_000 });
+        await shot('01-long-title-card');
+      },
+    );
 
-    await step('no-horizontal-overflow', 'Card renders with wrapped text -- no horizontal scrollbar / layout blowout', async () => {
-      // 1) The renderer's own document must not have horizontal overflow.
-      const pageOverflow = await page.evaluate(() => {
-        const de = document.documentElement;
-        return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };
-      });
-      console.log(`[v06] shell document scrollWidth=${pageOverflow.scrollWidth} clientWidth=${pageOverflow.clientWidth}`);
-      assert(
-        pageOverflow.scrollWidth <= pageOverflow.clientWidth + 2,
-        `shell document has horizontal overflow: scrollWidth=${pageOverflow.scrollWidth} > clientWidth=${pageOverflow.clientWidth}`,
-      );
+    await step(
+      'no-horizontal-overflow',
+      'Card renders with wrapped text -- no horizontal scrollbar / layout blowout',
+      async () => {
+        // 1) The renderer's own document must not have horizontal overflow.
+        const pageOverflow = await page.evaluate(() => {
+          const de = document.documentElement;
+          return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };
+        });
+        console.log(
+          `[v06] shell document scrollWidth=${pageOverflow.scrollWidth} clientWidth=${pageOverflow.clientWidth}`,
+        );
+        assert(
+          pageOverflow.scrollWidth <= pageOverflow.clientWidth + 2,
+          `shell document has horizontal overflow: scrollWidth=${pageOverflow.scrollWidth} > clientWidth=${pageOverflow.clientWidth}`,
+        );
 
-      // 2) Inside the app iframe's own document, same check.
-      const appFrame = page.frames().find((f) => f.url().includes('notes') || f !== page.mainFrame());
-      const frameOverflow = await frame.locator('body').evaluate(() => {
-        const de = document.documentElement;
-        return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };
-      });
-      console.log(`[v06] notes iframe document scrollWidth=${frameOverflow.scrollWidth} clientWidth=${frameOverflow.clientWidth}`);
-      assert(
-        frameOverflow.scrollWidth <= frameOverflow.clientWidth + 2,
-        `notes app document has horizontal overflow: scrollWidth=${frameOverflow.scrollWidth} > clientWidth=${frameOverflow.clientWidth}`,
-      );
+        // 2) Inside the app iframe's own document, same check.
+        const frameOverflow = await frame.locator('body').evaluate(() => {
+          const de = document.documentElement;
+          return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };
+        });
+        console.log(
+          `[v06] notes iframe document scrollWidth=${frameOverflow.scrollWidth} clientWidth=${frameOverflow.clientWidth}`,
+        );
+        assert(
+          frameOverflow.scrollWidth <= frameOverflow.clientWidth + 2,
+          `notes app document has horizontal overflow: scrollWidth=${frameOverflow.scrollWidth} > clientWidth=${frameOverflow.clientWidth}`,
+        );
 
-      // 3) The card title element itself must not be wider than its card
-      // container (the specific overflow-wrap:anywhere fix).
-      const titleEl = frame.locator('.nt-card-title', { hasText: 'ZZZEND' });
-      const box = await titleEl.evaluate((el) => ({
-        elWidth: el.getBoundingClientRect().width,
-        scrollWidth: el.scrollWidth,
-        parentWidth: el.closest('.nt-card')?.getBoundingClientRect().width ?? 0,
-      }));
-      console.log(`[v06] title element box: ${JSON.stringify(box)}`);
-      assert(
-        box.scrollWidth <= box.parentWidth + 4,
-        `card title overflows its card container: title scrollWidth=${box.scrollWidth} > card width=${box.parentWidth}`,
-      );
+        // 3) The card title element itself must not be wider than its card
+        // container (the specific overflow-wrap:anywhere fix).
+        const titleEl = frame.locator('.nt-card-title', { hasText: 'ZZZEND' });
+        const box = await titleEl.evaluate((el) => ({
+          elWidth: el.getBoundingClientRect().width,
+          scrollWidth: el.scrollWidth,
+          parentWidth: el.closest('.nt-card')?.getBoundingClientRect().width ?? 0,
+        }));
+        console.log(`[v06] title element box: ${JSON.stringify(box)}`);
+        assert(
+          box.scrollWidth <= box.parentWidth + 4,
+          `card title overflows its card container: title scrollWidth=${box.scrollWidth} > card width=${box.parentWidth}`,
+        );
 
-      await shot('02-zoom-long-title-card');
-    });
+        await shot('02-zoom-long-title-card');
+      },
+    );
 
     // ---- Report ----
     console.log('\n================ VERIFY-06 VERDICT TABLE ================');

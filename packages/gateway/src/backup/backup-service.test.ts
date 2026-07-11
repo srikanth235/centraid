@@ -9,7 +9,7 @@
 // to the engine (`packages/backup`, 107 tests) and are exercised here
 // against a fixture file this test controls directly instead.
 
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

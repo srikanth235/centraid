@@ -61,7 +61,10 @@ function notify(reminder: DueReminder): void {
   n.show();
 }
 
-async function fetchDueReminders(baseUrl: string, token: string | undefined): Promise<DueReminder[]> {
+async function fetchDueReminders(
+  baseUrl: string,
+  token: string | undefined,
+): Promise<DueReminder[]> {
   const res = await fetch(new URL('/centraid/_reminders/due', `${baseUrl}/`).toString(), {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),

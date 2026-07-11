@@ -23,7 +23,13 @@ import { SidebarFoot, SidebarNav } from './components/Sidebar.jsx';
 
 const $ = (id) => document.getElementById(id);
 
-const VIEW_TITLES = { today: 'Today', upcoming: 'Upcoming', anytime: 'Anytime', all: 'All open', logbook: 'Logbook' };
+const VIEW_TITLES = {
+  today: 'Today',
+  upcoming: 'Upcoming',
+  anytime: 'Anytime',
+  all: 'All open',
+  logbook: 'Logbook',
+};
 
 // ---------- State ----------
 // The last successful board read (never reassigned — mutated in place so
@@ -65,11 +71,20 @@ function emptyCopy() {
   if (state.view === 'logbook')
     return { title: 'Nothing logged yet', sub: 'Completed and cancelled tasks land here.' };
   if (state.view === 'today')
-    return { title: 'Nothing due today', sub: 'Enjoy the breathing room — or capture something above.' };
+    return {
+      title: 'Nothing due today',
+      sub: 'Enjoy the breathing room — or capture something above.',
+    };
   if (state.view === 'upcoming')
-    return { title: 'Nothing scheduled', sub: 'Add a task above and it lands as a receipted vault command.' };
+    return {
+      title: 'Nothing scheduled',
+      sub: 'Add a task above and it lands as a receipted vault command.',
+    };
   if (state.view === 'anytime')
-    return { title: 'No loose tasks', sub: 'Add a task above and it lands as a receipted vault command.' };
+    return {
+      title: 'No loose tasks',
+      sub: 'Add a task above and it lands as a receipted vault command.',
+    };
   return { title: 'All clear', sub: 'Add a task above and it lands as a receipted vault command.' };
 }
 
@@ -126,10 +141,17 @@ function renderDetail() {
         onClose={closeDetail}
         onToggleStatus={(t) => logic.toggleComplete(t)}
         onTitleCommit={(id, title) =>
-          logic.editField(id, { title }, { toastText: 'Renamed · receipt', activityText: `Renamed to “${title}”` })
+          logic.editField(
+            id,
+            { title },
+            { toastText: 'Renamed · receipt', activityText: `Renamed to “${title}”` },
+          )
         }
         onNotesCommit={(id, patch) =>
-          logic.editField(id, patch, { toastText: 'Notes updated · receipt', activityText: 'Notes updated' })
+          logic.editField(id, patch, {
+            toastText: 'Notes updated · receipt',
+            activityText: 'Notes updated',
+          })
         }
         onPickDue={(id, patch) =>
           logic.editField(id, patch, {
@@ -138,10 +160,18 @@ function renderDetail() {
           })
         }
         onPickPriority={(id, value) =>
-          logic.editField(id, { priority: value }, { toastText: 'Priority updated · receipt', activityText: 'Priority updated' })
+          logic.editField(
+            id,
+            { priority: value },
+            { toastText: 'Priority updated · receipt', activityText: 'Priority updated' },
+          )
         }
         onPickEffort={(id, value) =>
-          logic.editField(id, { effort_min: value }, { toastText: 'Effort updated · receipt', activityText: 'Effort updated' })
+          logic.editField(
+            id,
+            { effort_min: value },
+            { toastText: 'Effort updated · receipt', activityText: 'Effort updated' },
+          )
         }
         onPickRepeat={(id, patch) =>
           logic.editField(id, patch, {
@@ -198,7 +228,8 @@ function render() {
   $('activeSub').textContent = sub;
 
   const empty = emptyCopy();
-  const footer = state.boardTruncated && !q ? { windowSize: data.window ?? state.boardWindow } : null;
+  const footer =
+    state.boardTruncated && !q ? { windowSize: data.window ?? state.boardWindow } : null;
 
   boardRoot.render(
     <Board

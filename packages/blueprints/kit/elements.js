@@ -341,7 +341,9 @@ export class KitLineChart extends KitElement {
     const last = points[points.length - 1];
     svg.appendChild(svgEl('path', { d: area, class: 'kit-chart-area' }));
     svg.appendChild(svgEl('path', { d, class: 'kit-chart-line' }));
-    svg.appendChild(svgEl('circle', { cx: sx(last.x), cy: sy(last.y), r: 3, class: 'kit-chart-dot' }));
+    svg.appendChild(
+      svgEl('circle', { cx: sx(last.x), cy: sy(last.y), r: 3, class: 'kit-chart-dot' }),
+    );
     return svg;
   }
 }

@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#363) single cohesive builder-tab panel (cloud/publish surface); splitting would fragment one visual unit
 import { type JSX, useCallback, useEffect, useRef, useState } from 'react';
 import {
   appLiveUrl,
@@ -415,9 +416,15 @@ export default function BuilderCloud({ appId }: BuilderCloudProps): JSX.Element 
             automationsCache={automationsCache}
             automationsError={automationsError}
             runStates={runStates}
-            onToggle={onToggleAutomation}
-            onRun={onRunAutomation}
-            onDelete={onDeleteAutomation}
+            onToggle={(row, next) => {
+              void onToggleAutomation(row, next);
+            }}
+            onRun={(row) => {
+              void onRunAutomation(row);
+            }}
+            onDelete={(row) => {
+              void onDeleteAutomation(row);
+            }}
           />
         ) : (
           <div className={styles.empty}>
@@ -442,7 +449,8 @@ function Overview({
 }): JSX.Element {
   if (!appId) return <div className={styles.empty}>No app yet.</div>;
 
-  const ready = versionsCache !== undefined && versionsCache !== 'pending' && versionsCache !== 'error';
+  const ready =
+    versionsCache !== undefined && versionsCache !== 'pending' && versionsCache !== 'error';
   const versionList = ready ? versionsCache.versions : [];
   const activeVersionId = ready ? versionsCache.activeVersion : undefined;
   const activeVersion =
@@ -509,7 +517,9 @@ function Overview({
               <span className={styles.heroDot} data-status="off" />
               <span>NOT DEPLOYED</span>
             </div>
-            <span className={cx(styles.heroUrl, styles.heroUrlMuted)}>Publish to get a live URL</span>
+            <span className={cx(styles.heroUrl, styles.heroUrlMuted)}>
+              Publish to get a live URL
+            </span>
           </div>
         )}
       </div>
@@ -529,7 +539,9 @@ function Overview({
             <>
               <div className={styles.statValue}>{versionList.length}</div>
               <div className={styles.statSub}>
-                {activeVersion ? `active · ${activeVersion.uploadedAt.slice(0, 10)}` : 'No active version'}
+                {activeVersion
+                  ? `active · ${activeVersion.uploadedAt.slice(0, 10)}`
+                  : 'No active version'}
               </div>
             </>
           )}

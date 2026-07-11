@@ -45,7 +45,10 @@ async function main() {
     await gatewayNav.click();
     await page.getByText('Operational').waitFor({ state: 'visible', timeout: 20_000 });
     const heroText = await page.locator('[data-status]').first().textContent();
-    assert(heroText.includes('local gateway'), `hero names the local gateway: ${heroText.slice(0, 200)}`);
+    assert(
+      heroText.includes('local gateway'),
+      `hero names the local gateway: ${heroText.slice(0, 200)}`,
+    );
     assert(/Gateway uptime/i.test(heroText), 'uptime figure present');
     assert(/Availability/i.test(heroText), 'availability figure present');
     const beats = await page.locator('[data-ok]').count();
@@ -56,7 +59,9 @@ async function main() {
 
     // 3 — the down-alert card lives under its own Alerts tab now.
     await page.getByRole('tab', { name: 'Alerts', exact: true }).click();
-    await page.getByText('Down alert', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+    await page
+      .getByText('Down alert', { exact: true })
+      .waitFor({ state: 'visible', timeout: 10_000 });
 
     // the down-alert default is 2m; move it to 5m and confirm it persists.
     const twoMin = page.getByRole('button', { name: '2m', exact: true });
@@ -107,7 +112,10 @@ async function main() {
       await window.CentraidApi.setActiveGateway({ id: profile.id });
     });
     // Gateway switch bounces the shell home; navigate back to the page.
-    await page.getByRole('button', { name: /^Gateway/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Gateway/ })
+      .first()
+      .click();
     await page
       .getByText('Unreachable', { exact: true })
       .waitFor({ state: 'visible', timeout: 30_000 });
@@ -122,16 +130,17 @@ async function main() {
     await page.evaluate(async () => {
       await window.CentraidApi.setActiveGateway({ id: 'local' });
     });
-    await page.getByRole('button', { name: /^Gateway/ }).first().click();
+    await page
+      .getByRole('button', { name: /^Gateway/ })
+      .first()
+      .click();
     await page.getByText('Operational').waitFor({ state: 'visible', timeout: 30_000 });
     await page.screenshot({ path: path.join(OUT_DIR, 'gw01-4-recovered.png') });
     console.log('[gw01] back on local → Operational again');
 
     console.log('[gw01] PASS');
   } catch (err) {
-    await page
-      .screenshot({ path: path.join(OUT_DIR, 'gw01-FAIL.png') })
-      .catch(() => undefined);
+    await page.screenshot({ path: path.join(OUT_DIR, 'gw01-FAIL.png') }).catch(() => undefined);
     throw err;
   } finally {
     await close();

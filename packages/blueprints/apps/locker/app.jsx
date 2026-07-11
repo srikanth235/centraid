@@ -94,9 +94,22 @@ function openNew() {
 // The detail pane already holds the full (secret-bearing) item — reuse it
 // so edit never re-fetches. Map only the action-key fields into the form.
 const EDIT_FIELD_KEYS = [
-  'username', 'password', 'url', 'otp_seed', 'notes',
-  'cardholder', 'card_number', 'expiry', 'cvv', 'brand',
-  'content', 'fullname', 'email', 'phone', 'address', 'network',
+  'username',
+  'password',
+  'url',
+  'otp_seed',
+  'notes',
+  'cardholder',
+  'card_number',
+  'expiry',
+  'cvv',
+  'brand',
+  'content',
+  'fullname',
+  'email',
+  'phone',
+  'address',
+  'network',
 ];
 function openEdit(sel) {
   const fields = {};

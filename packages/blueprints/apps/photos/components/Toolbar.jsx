@@ -20,7 +20,12 @@ export function ToolbarView({
   return (
     <div className="ph-toolbar">
       {showBack ? (
-        <button type="button" className="kit-icon-btn ph-back-btn" aria-label="Back to albums" onClick={onBack}>
+        <button
+          type="button"
+          className="kit-icon-btn ph-back-btn"
+          aria-label="Back to albums"
+          onClick={onBack}
+        >
           <ChevronLeftIcon />
         </button>
       ) : null}
@@ -41,7 +46,12 @@ export function ToolbarView({
           </button>
         ) : null}
         {showSelect ? (
-          <button type="button" className="kit-btn ph-pill-btn" data-active={selectMode ? 'true' : 'false'} onClick={onToggleSelect}>
+          <button
+            type="button"
+            className="kit-btn ph-pill-btn"
+            data-active={selectMode ? 'true' : 'false'}
+            onClick={onToggleSelect}
+          >
             {selectMode ? 'Cancel' : 'Select'}
           </button>
         ) : null}

@@ -67,7 +67,7 @@ async function main() {
     // The successor process must exist (same argv ⇒ same userData marker).
     let successors = [];
     for (let i = 0; i < 20 && successors.length === 0; i++) {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       successors = await pidsFor(userDataDir);
     }
     assert(successors.length > 0, 'no relaunched instance appeared');

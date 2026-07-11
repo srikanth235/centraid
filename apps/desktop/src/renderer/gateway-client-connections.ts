@@ -26,7 +26,14 @@
  * types pass through unchanged.
  */
 
-import { GatewayClientError, auth, authHeaders, doFetch, enc, readJson } from './gateway-client-core.js';
+import {
+  GatewayClientError,
+  auth,
+  authHeaders,
+  doFetch,
+  enc,
+  readJson,
+} from './gateway-client-core.js';
 
 // ---- Connection health list (GET /_vault/connections) ----
 
@@ -180,10 +187,12 @@ export async function configureConnection(
     headers: authHeaders(token, 'application/json'),
     method: 'POST',
   });
-  const out = await readJson<{ ok: true; connection_id: string; cred_kind: string; status: string }>(
-    res,
-    'configure connection',
-  );
+  const out = await readJson<{
+    ok: true;
+    connection_id: string;
+    cred_kind: string;
+    status: string;
+  }>(res, 'configure connection');
   return { connectionId: out.connection_id, credKind: out.cred_kind, status: out.status };
 }
 
@@ -195,15 +204,11 @@ export async function setConnectionStatus(input: {
   note?: string;
 }): Promise<{ connectionId: string; status: string }> {
   const { baseUrl, token } = await auth();
-  const res = await doFetch(
-    baseUrl,
-    `/centraid/_vault/connections/${enc(input.connectionId)}`,
-    {
-      body: JSON.stringify({ status: input.status, ...(input.note ? { note: input.note } : {}) }),
-      headers: authHeaders(token, 'application/json'),
-      method: 'PATCH',
-    },
-  );
+  const res = await doFetch(baseUrl, `/centraid/_vault/connections/${enc(input.connectionId)}`, {
+    body: JSON.stringify({ status: input.status, ...(input.note ? { note: input.note } : {}) }),
+    headers: authHeaders(token, 'application/json'),
+    method: 'PATCH',
+  });
   const out = await readJson<{ ok: true; connection_id: string; status: string }>(
     res,
     'set connection status',
@@ -221,10 +226,7 @@ export async function setConnectionStatus(input: {
  * outbox decide/revoke routes, so the caller gets the server's own reason
  * instead of a generic "HTTP 409" message.
  */
-async function readRemoveOutcome(
-  res: Response,
-  op: string,
-): Promise<{ connection_id: string }> {
+async function readRemoveOutcome(res: Response, op: string): Promise<{ connection_id: string }> {
   const text = await res.text();
   if (res.ok) {
     try {

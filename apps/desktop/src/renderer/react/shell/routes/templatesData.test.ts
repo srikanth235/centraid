@@ -17,8 +17,24 @@ vi.mock('../../../gateway-client.js', () => ({
   cloneTemplate: (a: unknown) => gwCloneTemplate(a),
 }));
 
-const app = { id: 'todos', name: 'Todos', kind: 'app', colorKey: 'blue', iconKey: 'Todo', desc: 'd', version: '1' };
-const auto = { id: 'digest', name: 'Digest', kind: 'automation', colorKey: 'teal', iconKey: 'Bolt', desc: 'd', version: '1' };
+const app = {
+  id: 'todos',
+  name: 'Todos',
+  kind: 'app',
+  colorKey: 'blue',
+  iconKey: 'Todo',
+  desc: 'd',
+  version: '1',
+};
+const auto = {
+  id: 'digest',
+  name: 'Digest',
+  kind: 'automation',
+  colorKey: 'teal',
+  iconKey: 'Bolt',
+  desc: 'd',
+  version: '1',
+};
 
 beforeEach(() => {
   listTemplates.mockReset();

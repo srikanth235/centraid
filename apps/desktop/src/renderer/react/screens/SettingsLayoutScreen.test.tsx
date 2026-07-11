@@ -51,19 +51,19 @@ describe('SettingsLayoutScreen', () => {
   it('changes density, cards, and the sidebar toggle', () => {
     const props = makeProps();
     const el = mount(props);
-    act(() =>
+    void act(() =>
       seg(el, 0)
         .find((b) => b.textContent === 'compact')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
     expect(props.onSetDensity).toHaveBeenCalledWith('compact');
-    act(() =>
+    void act(() =>
       seg(el, 1)
         .find((b) => b.textContent === 'elevated')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
     );
     expect(props.onSetCards).toHaveBeenCalledWith('elevated');
-    act(() =>
+    void act(() =>
       (el.querySelector('.switch') as HTMLButtonElement).dispatchEvent(
         new MouseEvent('click', { bubbles: true }),
       ),

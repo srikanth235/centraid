@@ -380,7 +380,9 @@ function trashDocument(ctx: HandlerCtx): Record<string, unknown> {
   // trashes, its bytes — current AND every superseded revision — stay live
   // until the document itself purges (gateway/duties.ts lapsedDocuments).
   ctx.db
-    .prepare('UPDATE core_document SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE document_id = ?')
+    .prepare(
+      'UPDATE core_document SET deleted_at = ?, purge_at = ?, updated_at = ? WHERE document_id = ?',
+    )
     .run(ctx.now, until, ctx.now, input.document_id);
   ctx.wrote('core.document', input.document_id);
   ctx.cite({
@@ -817,7 +819,9 @@ function restoreDocumentVersion(ctx: HandlerCtx): Record<string, unknown> {
   // as it was, and this link only ever appends forward.
   recordRevision(ctx, input.content_id, doc.current_content_id);
   ctx.db
-    .prepare('UPDATE core_document SET current_content_id = ?, updated_at = ? WHERE document_id = ?')
+    .prepare(
+      'UPDATE core_document SET current_content_id = ?, updated_at = ? WHERE document_id = ?',
+    )
     .run(input.content_id, ctx.now, input.document_id);
   ctx.wrote('core.document', input.document_id);
   ctx.cite({

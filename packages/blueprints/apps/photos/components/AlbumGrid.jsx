@@ -9,7 +9,12 @@ export function AlbumGridView({ albums, onOpen, onNewAlbum }) {
   return (
     <div className="ph-album-grid">
       {albums.map((album) => (
-        <button type="button" key={album.album_id} className="ph-album-card" onClick={() => onOpen(album.album_id)}>
+        <button
+          type="button"
+          key={album.album_id}
+          className="ph-album-card"
+          onClick={() => onOpen(album.album_id)}
+        >
           <span
             className="ph-album-card-cover"
             style={album.coverUri ? { backgroundImage: `url(${album.coverUri})` } : undefined}
