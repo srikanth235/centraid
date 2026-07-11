@@ -33,7 +33,7 @@
 - [x] SSE subscriber cap
 - [x] worker admission control
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
-- [ ] app-engine `_changes` per-app SSE cap (third SSE surface, flagged as its own follow-up)
+- [x] app-engine `_changes` per-app SSE cap (third SSE surface)
 - [ ] hard refusal on version skew (surfaced loudly for now; refusal is the documented escalation path)
 - [ ] remote/headless self-update + mobile-down UX (distribution / RN-app work, out of this repo pass)
 
@@ -148,6 +148,22 @@
   max wait, FIFO; refusal returns a `GATEWAY_BUSY` 503 through the existing
   error shape BEFORE any worker thread spawns.
 
+- **app-engine (`_changes` SSE cap)** — app-engine `_changes` per-app SSE
+  cap (third SSE surface): the `/centraid/<appId>/_changes` stream served by
+  both the standalone gateway daemon and the desktop's embedded runtime
+  accepted unlimited concurrent subscribers, same fd-exhaustion risk as the
+  two gateway surfaces. Unlike those (one shared stream, a handful of
+  devices), `_changes` is per-app and a user can legitimately have several
+  windows of the SAME app open, so the new `ChangesSubscriberCap` is scoped
+  PER APPID (16 per app, independent budgets) rather than one global
+  counter — a runaway reconnect loop in one app's injected script can't
+  starve every other app's stream. Over cap: 503 `sse_capacity` +
+  `Retry-After`, same shape as the other two surfaces. `changesSubscriberCount()`
+  (summed across apps) is exported from `@centraid/app-engine` and folded
+  into the gateway's `sseClients` metric alongside the logs/automations
+  counts, so `/health`'s number is now the real total across all three
+  surfaces this process serves.
+
 ### Files
 
 - `apps/desktop/src/main.ts`
@@ -188,6 +204,8 @@
 - `packages/app-engine/src/handlers/handler-runner.test.ts`
 - `packages/app-engine/src/handlers/handler-runner.ts`
 - `packages/app-engine/src/handlers/worker-admission.ts`
+- `packages/app-engine/src/http/changes-sse.test.ts`
+- `packages/app-engine/src/http/changes-sse.ts`
 - `packages/app-engine/src/index.ts`
 - `packages/automation/src/fire/in-process-scheduler.test.ts`
 - `packages/automation/src/fire/in-process-scheduler.ts`
@@ -289,6 +307,12 @@
   structural subset of `ConversationStore` (just stateGet/stateSet) — the
   test fake satisfies it without casts, so the initial `no-explicit-any`
   suppressions were removed rather than justified.
+- (follow-up) `_changes`'s cap lives in `packages/app-engine` (not
+  `packages/gateway`, unlike the other two SSE caps) because the dependency
+  direction is gateway -> app-engine, not the reverse; the shared-instance
+  pattern is the same, just module-scoped one level down the graph.
+  `ChangesSubscriberCap` counts per appId in a `Map`, deleting an app's
+  entry at zero rather than leaving a stale 0 around indefinitely.
 
 ## Out of scope (tracked in #351)
 
@@ -350,15 +374,15 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 
 ## Audit
 
-Fresh-context sub-agent (haiku) verdict:
+Fresh-context sub-agent (haiku) verdict at ordinal 81:
 
-- **A1 — What changed matches the diff:** PASS — All files and descriptions in receipt's "What changed" section match the current diff (committed + uncommitted + untracked). Wave 1 fully realized: vault schema guard (migrate.ts, db.ts), desktop graceful quit/crash/restart/UI (main.ts, crash-log*.ts, gateway-ops*.ts, gateway-supervisor*.ts, BackupCard.tsx), gateway logs/diagnostics/health/backup (gateway-log-store.ts, gateway-diagnostics.ts, disk-health.ts, backup-routes.ts, vault-registry.ts). Wave 2 fully realized: instance lease + split-brain detection (gateway-instance-lease*.ts), launch-at-login (login-item.ts, settings-merge.ts), version-skew handshake wired (gateway-monitor*.ts), missed-automation ledger (scheduler-ledger*.ts, automations-routes.ts), broker/scheduler probes (broker-health*.ts, scheduler-health*.ts), metrics (gateway-log-store.ts, health-registry.ts), OAuth/outbox/SSE/worker bounds (fetch-timeout.ts, sse-cap.ts, handler-runner.ts, worker-admission.ts, outbox-executor.ts, connection-broker.ts). Docs: backups.html updated.
-- **A2 — checked items realized in the diff:** PASS — All 30 [x] checked items fully realized. Wave 1 (items 1-17): vault schema downgrade + PRAGMA FULL (migrate.ts, db.ts); graceful quit + before-quit handler (main.ts, local-gateway.ts); crash capture to rotated log (crash-log*.ts); supervised restart with backoff/detection (gateway-supervisor-core.ts); manual Restart (ipc.ts, GatewayScreen.tsx); boot-failure dialog (main.ts); rotated JSONL logs + boot tail-load (gateway-log-store.ts); diagnostics bundle endpoint + export (gateway-diagnostics.ts, SettingsDiagnosticsScreen.tsx); heartbeat on /health + fallback (gateway-monitor.ts); degraded-latency threshold 2s/3-sample (gateway-monitor-core.ts); component-error OS alerts + de-dupe (gateway-ops*.ts); vault mount failures retried (vault-registry.ts); vaults probe real SQLite read (vault-registry.ts); disk health + watermarks (disk-health.ts); backup status/run HTTP surface (backup-routes.ts, backup-service.ts); backup card + seal-key nudge (BackupCard.tsx). Wave 2 (items 18-30): instance lease + conflict detection (gateway-instance-lease*.ts); instanceId via /info (gateway-info-routes.ts); desktop single-instance lock (main.ts); version-skew detection + alert (gateway-monitor*.ts, version-handshake.ts); launch-at-login setting (login-item.ts, settings-merge.ts, main.ts); missed-automation ledger (scheduler-ledger*.ts, in-process-scheduler.ts); broker probe for token stale (broker-health*.ts, health-registry.ts); scheduler probe for tick/windows (scheduler-health*.ts); numeric metrics object (health-registry.ts); OAuth token-refresh 30s timeout (connection-broker.ts, fetch-timeout.ts); outbox external-write 60s timeout (outbox-executor.ts, fetch-timeout.ts); SSE subscriber cap 32/surface + 503 (sse-cap.ts, logs-routes.ts, automations-routes.ts); worker admission 8/16/10s (handler-runner.ts, worker-admission.ts, app-engine dispatcher.ts).
-- **A3 — checklist mirrors the issue:** PASS — Receipt's 34-item checklist (30 [x] checked, 4 [ ] deferred) matches issue #351's "Hardening pass checklist (waves 1+2, PR #361)" exactly: same items in same order, same checked/unchecked status, identical deferral notes (ontology open-time guard skipped as data question; _changes per-app SSE cap flagged as follow-up; hard refusal on version skew as escalation path; remote/headless self-update + mobile UX as distribution work).
+- **A1 — What changed matches the diff:** PASS — All files and descriptions in receipt's "What changed" section match current diff (committed + uncommitted). Wave 1 fully realized: vault schema downgrade guard (migrate.ts, db.ts), desktop graceful quit/crash/restart/UI (main.ts, crash-log*.ts, gateway-ops*.ts, gateway-supervisor*.ts, BackupCard.tsx), gateway logs/diagnostics/health/backup (gateway-log-store.ts, gateway-diagnostics.ts, disk-health.ts, backup-routes.ts, vault-registry.ts). Wave 2 fully realized: instance lease + split-brain detection (gateway-instance-lease*.ts), launch-at-login (login-item.ts, settings-merge.ts), version-skew handshake wired (gateway-monitor*.ts), missed-automation ledger (scheduler-ledger*.ts, automations-routes.ts), broker/scheduler probes (broker-health*.ts, scheduler-health*.ts), metrics (gateway-log-store.ts, health-registry.ts), OAuth/outbox/SSE/worker bounds (fetch-timeout.ts, sse-cap.ts, handler-runner.ts, worker-admission.ts, outbox-executor.ts, connection-broker.ts). Follow-up: app-engine `_changes` per-app SSE cap (changes-sse.ts, changes-sse.test.ts, app-engine/index.ts exports `ChangesSubscriberCap` + `changesSubscriberCount()`), per-appId cap=16, release decrement on disconnect, metrics folded into gateway health. Docs: backups.html updated.
+- **A2 — checked items realized in the diff:** PASS — All 31 [x] checked items fully realized. Wave 1 (items 1-17): vault schema downgrade + PRAGMA FULL; graceful quit + before-quit handler; crash capture to rotated log; supervised restart with backoff/crash-loop detection; manual Restart IPC+button; boot-failure dialog; rotated JSONL logs + boot tail-load; diagnostics bundle endpoint + export; heartbeat on /health + fallback; degraded-latency threshold 2s/3-sample; component-error OS alerts + de-dupe; vault mount failures retried; vaults probe real SQLite read; disk health + watermarks; backup status/run HTTP; backup card + seal-key nudge. Wave 2 (items 18-30): instance lease + conflict detection; instanceId via /info; desktop single-instance lock; version-skew detection + alert; launch-at-login setting; missed-automation ledger; broker probe for token refresh staleness; scheduler probe for tick staleness + missed windows; numeric metrics object; OAuth token-refresh 30s timeout; outbox external-write 60s timeout; SSE subscriber cap (32/surface) + 503 Retry-After on two gateway surfaces; worker admission 8 concurrent/16 queued/10s timeout. Item 31 (follow-up, now checked): app-engine `_changes` per-app SSE cap — `ChangesSubscriberCap` per-appId=16, count exported as `changesSubscriberCount()` for health metrics, 2 new tests in `changes-sse.test.ts`.
+- **A3 — checklist mirrors the issue:** PASS — Receipt's 34-item checklist (31 [x] checked, 3 [ ] deferred) matches issue #351's "Hardening pass checklist (waves 1+2, PR #361)" exactly after syncing the issue body for the newly-completed item: items 1-31 checked (item 31, app-engine `_changes` cap, flipped from unchecked to checked in both the receipt and the issue in this same pass), items 32-34 unchecked with identical deferral rationales (hard refusal on version skew as escalation path; ontology open-time guard as per-row data question; remote/headless self-update + mobile UX as distribution work).
 
 ## Steering
 
-Fresh-context sub-agent (haiku) verdict:
+Fresh-context sub-agent (haiku) verdict at ordinal 81:
 
-- **B1 — all steering events recorded:** PASS — No new human steering events after prior ordinal 424. Transcript review (human user messages only, excluding task notifications and hook output) found zero new steering directives in recent turns. Accounting Steering table remains valid: three recorded events (steer-key identifiers steer-ac2077f8-1-1, steer-ac2077f8-1-2, steer-ac2077f8-1-3) at ordinals 249/285/424 with session ac2077f8-e15a-46d5-be12-0c583922f047. No new rows to append.
-- **B2 — no non-steering message recorded as steering:** PASS — Steering table contains only genuine steering events (2 interrupts at ordinals 249/285, 1 correction at ordinal 424, all with clear structural or classifier basis); no false positives from task notifications, hook output, system reminders, or ordinary message continuations.
+- **B1 — all steering events recorded:** PASS — No new steering events after prior ordinal 424. Transcript human-message review (excluding task notifications, hook feedback, local commands) found ordinal 81 = detailed task specification for the app-engine follow-up work. This is a task specification/context message for work already completed (not a redirect/correction of ongoing work), so not a steering event per governance definition. Accounting Steering table remains valid with three recorded events (steer-ac2077f8-1-1 at 249, steer-ac2077f8-1-2 at 285, steer-ac2077f8-1-3 at 424, all in session ac2077f8-e15a-46d5-be12-0c583922f047). No new rows appended.
+- **B2 — no non-steering message recorded as steering:** PASS — Steering table contains only genuine steering events (interrupt/structural at 249, interrupt/structural at 285, correction/classifier at 424, each with clear basis in transcript); no false positives from task notifications, system reminders, or ordinary task requests.

@@ -185,6 +185,15 @@ export { RegistryError } from './registry/registry.js';
 // re-derive. Hosts can subscribe from outside too —
 // `runtime.changeBus.subscribe(...)`.
 export { ChangeBus, type AppChange, type ChangeListener } from './changes/change-bus.js';
+// `_changes` SSE subscriber cap (issue #351 Tier 4 hygiene) — per-appId, not
+// global (a user can legitimately have several windows of the SAME app
+// open). `changesSubscriberCount()` is the accessor a host's health/metrics
+// surface polls; `ChangesSubscriberCap` is exported for tests only.
+export {
+  changesSubscriberCount,
+  ChangesSubscriberCap,
+  CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP,
+} from './http/changes-sse.js';
 
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:

@@ -40,6 +40,7 @@ import {
   InsightsStore,
   PrefsStore,
   Runtime,
+  changesSubscriberCount,
   cleanupDeregisteredApp,
   makeConversationRouteHandler,
   makeJournalDbProvider,
@@ -476,12 +477,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // Numeric signals (issue #351 tier 3): outbox backlog, summed across
   // mounted vaults — cheap COUNT(*) at snapshot time, same style as the
   // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
-  // `HealthRegistry.snapshot`). `sseClients` sums the two production SSE
+  // `HealthRegistry.snapshot`). `sseClients` sums three production SSE
   // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
   // `runEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
-  // `sse-cap.ts`) — each backed by the SAME `SseSubscriberCap` instance
+  // `sse-cap.ts`), each backed by the SAME `SseSubscriberCap` instance
   // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
-  // so this is the real live count, not a separate tally.
+  // plus `@centraid/app-engine`'s `changesSubscriberCount()` — the per-appId
+  // `_changes` cap `Runtime.handle` admits every subscriber through — so
+  // this is the real live count across every SSE surface this process
+  // serves, not a separate tally.
   health.setMetricsSource(() => {
     let outboxPending = 0;
     for (const plane of vaultRegistry.planesList()) {
@@ -496,7 +500,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     return {
       outboxPending,
-      sseClients: logsEventsSubscriberCount() + runEventsSubscriberCount(),
+      sseClients:
+        logsEventsSubscriberCount() + runEventsSubscriberCount() + changesSubscriberCount(),
     };
   });
 
