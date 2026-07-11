@@ -10,6 +10,28 @@
  * api-key-equivalent custody, so `purgeAuthTier: 'api-key'` and
  * `purgeTarget` succeeds directly — there's no separate "interactive"
  * surface to defer to when the surface already IS the user's machine.
+ *
+ * Cross-process correctness (the whole point of generation fencing —
+ * PROTOCOL.md: "two gateways, one vault"): `registry.json` is re-read from
+ * disk on EVERY operation. There is deliberately no in-memory cache — a
+ * cache keyed by mtime was considered and rejected, because these files are
+ * small (a handful of KB per target) and a stale read here is exactly the
+ * bug generation fencing exists to catch. Each public method loads the
+ * registry once, mutates that single in-memory copy, and persists that
+ * SAME object — never a second independent read — so a method never loses
+ * its own mutations to an interleaved re-read.
+ *
+ * Honest TOCTOU window: nothing below serializes read-modify-write ACROSS
+ * operations or processes. Two `registerSnapshot` calls — same or
+ * different processes — that both read the registry before either writes
+ * can both compute (e.g.) the same `nextSeq`; the second `persist()` wins
+ * and the first's row is silently gone from the registry. This is
+ * explicitly out of scope for a JSON-file provider: `persist()`'s
+ * temp-file-then-rename keeps `registry.json` itself always well-formed
+ * (a crash mid-write never corrupts it), but does not arbitrate concurrent
+ * writers. Single-writer-per-operation is the deployment assumption — a
+ * real multi-writer NAS-sharing story needs a lock file or a real backend,
+ * neither of which this reference implementation attempts.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -95,8 +117,7 @@ export class LocalBackupProvider implements BackupProvider {
   private readonly rootDir: string;
   private readonly registryFile: string;
   private readonly objectsRoot: string;
-  private registry: Registry | null = null;
-  private loadPromise: Promise<Registry> | null = null;
+  /** Serializes the temp-file-then-rename write itself (not read-modify-write; see module header). */
   private writeChain: Promise<void> = Promise.resolve();
 
   constructor(options: LocalBackupProviderOptions) {
@@ -105,34 +126,33 @@ export class LocalBackupProvider implements BackupProvider {
     this.objectsRoot = path.join(this.rootDir, 'objects');
   }
 
+  /**
+   * Always re-reads `registry.json` from disk — no in-memory cache (module
+   * header). Every public method calls this exactly once and threads the
+   * returned object through to its own `persist()` call, so a method's own
+   * mutations are never lost to a second, independent load.
+   */
   private async load(): Promise<Registry> {
-    if (this.registry) return this.registry;
-    if (!this.loadPromise) {
-      this.loadPromise = (async () => {
-        try {
-          const raw = await fs.readFile(this.registryFile, 'utf8');
-          const parsed = JSON.parse(raw) as Registry;
-          this.registry = {
-            targets: parsed.targets ?? {},
-            snapshots: parsed.snapshots ?? {},
-            idempotency: parsed.idempotency ?? {},
-            nextSeq: parsed.nextSeq ?? {},
-          };
-        } catch (err) {
-          if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-          this.registry = emptyRegistry();
-        }
-        return this.registry;
-      })();
+    try {
+      const raw = await fs.readFile(this.registryFile, 'utf8');
+      const parsed = JSON.parse(raw) as Registry;
+      return {
+        targets: parsed.targets ?? {},
+        snapshots: parsed.snapshots ?? {},
+        idempotency: parsed.idempotency ?? {},
+        nextSeq: parsed.nextSeq ?? {},
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      return emptyRegistry();
     }
-    return this.loadPromise;
   }
 
-  /** Persist the registry atomically. Callers must hold `registry` already mutated in place. */
-  private async persist(): Promise<void> {
-    const registry = await this.load();
-    // Serialize writes: two concurrent registerSnapshot calls must not race
-    // on the temp-file rename (last-writer-wins would silently drop one).
+  /** Persist the given (already-mutated) registry atomically. */
+  private async persist(registry: Registry): Promise<void> {
+    // Serialize the writes THIS instance issues so two of its own in-flight
+    // persist() calls don't race on the temp-file rename. Does not — and
+    // cannot — serialize against another process; see the module header.
     this.writeChain = this.writeChain.then(async () => {
       await fs.mkdir(this.rootDir, { recursive: true });
       const tmp = `${this.registryFile}.${process.pid}.${Date.now()}.tmp`;
@@ -142,8 +162,7 @@ export class LocalBackupProvider implements BackupProvider {
     await this.writeChain;
   }
 
-  private async requireTarget(targetId: string): Promise<RegistryTarget> {
-    const registry = await this.load();
+  private requireTargetIn(registry: Registry, targetId: string): RegistryTarget {
     const target = registry.targets[targetId];
     if (!target) throw BackupProviderError.of('not_found', `unknown target "${targetId}"`);
     return target;
@@ -169,21 +188,23 @@ export class LocalBackupProvider implements BackupProvider {
     registry.idempotency[id] = {};
     registry.nextSeq[id] = 1;
     await persistObjectsDir(this.objectsRoot, id);
-    await this.persist();
+    await this.persist(registry);
     return { targetId: id };
   }
 
   async deleteTarget(targetId: string): Promise<void> {
-    const target = await this.requireTarget(targetId);
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
       throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
     target.status = 'deleted';
     target.deletedAt = new Date().toISOString();
-    await this.persist();
+    await this.persist(registry);
   }
 
   async undeleteTarget(targetId: string): Promise<void> {
-    const target = await this.requireTarget(targetId);
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt) {
       throw BackupProviderError.of(
         'undelete_window_expired',
@@ -192,7 +213,7 @@ export class LocalBackupProvider implements BackupProvider {
     }
     if (!target.deletedAt) {
       target.status = 'active';
-      await this.persist();
+      await this.persist(registry);
       return; // already active — undelete is a no-op
     }
     const deletedAt = new Date(target.deletedAt).getTime();
@@ -205,25 +226,26 @@ export class LocalBackupProvider implements BackupProvider {
     }
     target.status = 'active';
     target.deletedAt = null;
-    await this.persist();
+    await this.persist(registry);
   }
 
   async purgeTarget(targetId: string): Promise<void> {
     // Local disk IS the user's own custody — api-key tier suffices (see
     // module header). A remote provider MUST reject this with 403.
-    const target = await this.requireTarget(targetId);
     const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     await fs.rm(path.join(this.objectsRoot, targetId), { recursive: true, force: true });
     registry.snapshots[targetId] = [];
     registry.idempotency[targetId] = {};
     target.status = 'deleted';
     target.deletedAt = target.deletedAt ?? new Date().toISOString();
     target.purgedAt = new Date().toISOString();
-    await this.persist();
+    await this.persist(registry);
   }
 
   async openDataPlane(targetId: string, mode: 'read' | 'read-write'): Promise<ObjectStore> {
-    const target = await this.requireTarget(targetId);
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
       throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
     const root = path.join(this.objectsRoot, targetId);
@@ -233,10 +255,10 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   async registerSnapshot(targetId: string, reg: SnapshotRegistration): Promise<SnapshotRow> {
-    const target = await this.requireTarget(targetId);
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     if (target.purgedAt)
       throw BackupProviderError.of('purge_pending', `target "${targetId}" was purged`);
-    const registry = await this.load();
 
     // Idempotency replay BEFORE the fencing check (spec-mandated order).
     const existing = registry.idempotency[targetId]?.[reg.idempotencyKey];
@@ -269,7 +291,7 @@ export class LocalBackupProvider implements BackupProvider {
     target.currentGeneration = Math.max(target.currentGeneration, reg.generation);
     (registry.idempotency[targetId] ?? (registry.idempotency[targetId] = {}))[reg.idempotencyKey] =
       row;
-    await this.persist();
+    await this.persist(registry);
     return row;
   }
 
@@ -277,15 +299,15 @@ export class LocalBackupProvider implements BackupProvider {
     targetId: string,
     opts?: { includePruned?: boolean },
   ): Promise<SnapshotRow[]> {
-    await this.requireTarget(targetId);
     const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
     const rows = registry.snapshots[targetId] ?? [];
     return opts?.includePruned ? [...rows] : rows.filter((r) => r.prunedAt === null);
   }
 
   async getSnapshot(targetId: string, seq: number): Promise<SnapshotRow> {
-    await this.requireTarget(targetId);
     const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
     const row = (registry.snapshots[targetId] ?? []).find((r) => r.seq === seq);
     if (!row)
       throw BackupProviderError.of(
@@ -296,7 +318,8 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   async getTarget(targetId: string): Promise<TargetInfo> {
-    const target = await this.requireTarget(targetId);
+    const registry = await this.load();
+    const target = this.requireTargetIn(registry, targetId);
     const { usage } = await this.usage(targetId);
     return {
       id: target.id,
@@ -308,7 +331,8 @@ export class LocalBackupProvider implements BackupProvider {
   }
 
   async usage(targetId: string): Promise<{ usage: Usage; accountStatus: AccountStatus }> {
-    await this.requireTarget(targetId);
+    const registry = await this.load();
+    this.requireTargetIn(registry, targetId);
     const store = new FsObjectStore(path.join(this.objectsRoot, targetId));
     let storedBytes = 0;
     let objectCount = 0;
