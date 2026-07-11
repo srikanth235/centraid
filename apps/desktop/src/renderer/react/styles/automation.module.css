@@ -99,6 +99,14 @@
   background: color-mix(in srgb, var(--ink) 6%, transparent);
   color: var(--ink-3);
 }
+.auGlyph[data-size='sm'] {
+  width: 38px;
+  height: 38px;
+}
+.auGlyph[data-size='lg'] {
+  width: 46px;
+  height: 46px;
+}
 .auGlyph[data-hue] {
   background: color-mix(in srgb, var(--au-hue) 16%, transparent);
   color: var(--au-hue);

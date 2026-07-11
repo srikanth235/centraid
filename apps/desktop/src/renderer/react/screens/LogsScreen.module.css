@@ -77,6 +77,18 @@
   color: var(--ink-3);
 }
 
+.exportStatus {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.exportStatus[data-tone='ok'] {
+  color: var(--success);
+}
+.exportStatus[data-tone='error'] {
+  color: var(--danger);
+}
+
 .logPanel {
   position: relative;
   border: 1px solid var(--line);

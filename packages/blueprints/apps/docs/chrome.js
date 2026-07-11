@@ -17,6 +17,7 @@ export function wireChrome({
   renderNewMenu,
   closeQuick,
   closeDetails,
+  closeEditor,
   quickStep,
   applySearch,
   uploadFiles,
@@ -115,8 +116,18 @@ export function wireChrome({
     if (files?.length) await uploadFiles(files);
   });
 
-  // Keyboard: quick-look nav, and a layered Escape.
+  // Keyboard: quick-look nav, and a layered Escape. The editor sits above
+  // everything else (opening it already closed Details/Quick Look, nav.js's
+  // openEditor), a textarea's own Escape still bubbles here since the
+  // textarea itself defines no keydown handler for it.
   window.addEventListener('keydown', (e) => {
+    if (state.editingId) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeEditor();
+      }
+      return;
+    }
     if (state.quickId) {
       if (e.key === 'Escape') {
         e.preventDefault();

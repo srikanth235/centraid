@@ -3,7 +3,7 @@
   "id": "photos",
   "name": "Photos",
   "description": "Your photo library as a projection of the personal vault: the meaning — assets, albums, captions, capture times — is owned in the vault, while the bytes are rented behind each content item's content_uri. Uploading, captioning, deleting and organizing into albums all run through typed media commands — consent-checked, receipted, and deduped on identical bytes. No data of its own — revoke the grant and the app goes dark while the library stays the owner's.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "iconKey": "Camera",
   "colorKey": "ochre",
   "vault": {
@@ -29,7 +29,14 @@
       { "schema": "media", "table": "face_region", "verbs": "read" },
       { "schema": "core", "table": "party", "verbs": "read" },
       { "schema": "media", "table": "confirm_face", "verbs": "act" },
-      { "schema": "media", "table": "reject_face", "verbs": "act" }
+      { "schema": "media", "table": "reject_face", "verbs": "act" },
+      { "schema": "core", "table": "place", "verbs": "read" },
+      { "schema": "media", "table": "set_asset_place", "verbs": "act" },
+      { "schema": "core", "table": "tag_item", "verbs": "act" },
+      { "schema": "core", "table": "untag_item", "verbs": "act" },
+      { "schema": "enrich", "table": "policy", "verbs": "read" },
+      { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
+      { "schema": "blob", "table": "custody_state", "verbs": "read" }
     ]
   },
   "actions": [
@@ -294,12 +301,102 @@
         }
       },
       "writes": []
+    },
+    {
+      "name": "set-place",
+      "description": "Correct or clear a photo's place through media.set_asset_place (issue #352) — points the asset at an existing core.place row, or clears it back to unknown when place_id is omitted. There is no app-plane command to mint a brand-new place.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "place_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "tag-asset",
+      "description": "Add a free-form label to a photo through core.tag_item (issue #352) — additive and idempotent over the shared \"Tags\" concept scheme.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "asset_id": { "type": "string", "minLength": 1 },
+          "label": { "type": "string", "minLength": 1 }
+        },
+        "required": ["asset_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "untag-asset",
+      "description": "Remove one free-form label from a photo through core.untag_item (issue #352) — removes by tag_id, the specific edge.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tag_id": { "type": "string", "minLength": 1 }
+        },
+        "required": ["tag_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "request-enrichment",
+      "description": "Ask the enricher to run now through enrich.request_enrichment (issue #352) — the owner's on-demand \"Detect faces now\", reason 'manual'. Only fires when enrichment-status says the photos domain isn't 'off'.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "output": { "type": "object" },
+          "reason": { "type": "string" }
+        }
+      },
+      "writes": []
     }
   ],
   "queries": [
     {
       "name": "library",
-      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window.",
+      "description": "A bounded recent window of live media assets (newest by captured_at) with their content items' content_uri and media_type plus the albums they belong to — never a whole-table pull; trashed assets ride separately (newest 200) with their days-until-purge, and `truncated` says older photos exist beyond the window. Issue #352 phase 3/4: each asset also carries `place`, `tags` and `custody_state`; `places` is the full known place list.",
       "input": {
         "type": "object",
         "properties": {
@@ -316,6 +413,7 @@
         "properties": {
           "assets": { "type": "array" },
           "albums": { "type": "array" },
+          "places": { "type": "array" },
           "trash": { "type": "array" },
           "truncated": { "type": "boolean" },
           "window": { "type": "integer" },
@@ -340,6 +438,54 @@
           "regions": { "type": "array" },
           "people": { "type": "array" },
           "denied": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "search",
+      "description": "Title/caption search over the whole live library via FTS5 (issue #352) — not just the loaded window: matches core.content_item titles, joins albums/favorite the same way the library query does, and returns rows shaped for the same grid.",
+      "input": {
+        "type": "object",
+        "properties": {
+          "term": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "assets": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "duplicates",
+      "description": "Near-duplicate clusters over the live library (issue #352 phase 3/4, closing #299's deferred duplicates shelf): reads the standing sweep's real phash hamming clustering (media.asset_phash.cluster_id) and groups/joins client-side — a true visual-similarity signal, not a coincidence-prone fingerprint.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "clusters": { "type": "array" },
+          "vaultDenied": { "type": "object" }
+        }
+      }
+    },
+    {
+      "name": "enrichment-status",
+      "description": "Whether face-proposer enrichment is enabled for this vault (issue #352 phase 3/4): reads enrich.policy for the photos domain. `tier` is 'off' | 'local' | 'model'.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "tier": { "type": ["string", "null"] },
+          "vaultDenied": { "type": "object" }
         }
       }
     }
@@ -377,6 +523,16 @@
         { "value": "#7C5BD9", "label": "Violet" },
         { "value": "#E55772", "label": "Rose" },
         { "value": "#B47B3F", "label": "Ochre" }
+      ]
+    },
+    {
+      "key": "showMemories",
+      "label": "Memories",
+      "type": "segmented",
+      "default": "show",
+      "options": [
+        { "value": "show", "label": "Show" },
+        { "value": "hide", "label": "Hide" }
       ]
     }
   ]

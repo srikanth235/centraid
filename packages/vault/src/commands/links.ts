@@ -17,8 +17,9 @@ export const RELATIONS_SCHEME_URI = 'urn:duaility:relations';
 
 // Condition SQL treats `:word` as a named parameter even inside string
 // literals (the issue-258 colon-literal trap), so the urn is assembled with
-// char(58) when it appears in a precondition.
-const RELATIONS_SCHEME_URI_SQL = RELATIONS_SCHEME_URI.split(':')
+// char(58) when it appears in a precondition. Exported: documents.ts needs
+// the same literal in its own version-lineage preconditions.
+export const RELATIONS_SCHEME_URI_SQL = RELATIONS_SCHEME_URI.split(':')
   .map((part) => `'${part}'`)
   .join(' || char(58) || ');
 

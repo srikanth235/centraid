@@ -1,7 +1,39 @@
-import { expect, test } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import { afterEach, expect, test } from 'vitest';
 import { openVaultDb } from '../db.js';
-import { VAULT_MIGRATIONS } from './migrate.js';
+import {
+  JOURNAL_MIGRATIONS,
+  migrate,
+  ONTOLOGY_VERSION,
+  VAULT_MIGRATIONS,
+  VaultSchemaAheadError,
+} from './migrate.js';
 import { listVaultEntities, resolveEntity } from './tables.js';
+
+const cleanups: (() => void)[] = [];
+afterEach(() => {
+  while (cleanups.length > 0) cleanups.pop()?.();
+});
+
+function tempDir(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'vault-migrate-'));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function userVersionOf(file: string): number {
+  const raw = new DatabaseSync(file);
+  const row = raw.prepare('PRAGMA user_version').get() as { user_version: number };
+  raw.close();
+  return row.user_version;
+}
+
+test('ontology contract version stamps 1.3 (issue #352: core_document + revises lineage)', () => {
+  expect(ONTOLOGY_VERSION).toBe('1.3');
+});
 
 test('migrations create every table in the registry, in both files', () => {
   const db = openVaultDb();
@@ -104,4 +136,66 @@ test("extend-don't-fork: extension FK uniqueness prevents two extensions of one 
       .run(),
   ).toThrow(/UNIQUE/);
   db.close();
+});
+
+// These two tests exercise migrate() generically against JOURNAL_MIGRATIONS
+// rather than VAULT_MIGRATIONS: the vault DDL's FTS triggers call a custom
+// SQL function (vault_content_text) that only openVaultDb registers, so a
+// bare DatabaseSync can't run VAULT_MIGRATIONS directly.
+test('migrate: no-op guard does not fire for a fresh (behind) or already-migrated (equal) db', () => {
+  const db = new DatabaseSync(':memory:');
+  // behind: fresh file, version 0 < migrations.length
+  expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
+  const afterFresh = db.prepare('PRAGMA user_version').get() as { user_version: number };
+  expect(afterFresh.user_version).toBe(JOURNAL_MIGRATIONS.length);
+  // equal: re-running against the now fully-migrated db is a no-op, not a throw
+  expect(() => migrate(db, JOURNAL_MIGRATIONS)).not.toThrow();
+  const afterReplay = db.prepare('PRAGMA user_version').get() as { user_version: number };
+  expect(afterReplay.user_version).toBe(JOURNAL_MIGRATIONS.length);
+  db.close();
+});
+
+test('migrate: user_version ahead of the ladder throws VaultSchemaAheadError with both versions', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, JOURNAL_MIGRATIONS);
+  db.exec(`PRAGMA user_version = ${JOURNAL_MIGRATIONS.length + 3}`);
+  let caught: unknown;
+  try {
+    migrate(db, JOURNAL_MIGRATIONS);
+  } catch (err) {
+    caught = err;
+  }
+  expect(caught).toBeInstanceOf(VaultSchemaAheadError);
+  const err = caught as VaultSchemaAheadError;
+  expect(err.fileVersion).toBe(JOURNAL_MIGRATIONS.length + 3);
+  expect(err.knownVersion).toBe(JOURNAL_MIGRATIONS.length);
+  expect(err.message).toMatch(/newer version of Centraid/);
+  db.close();
+});
+
+test('migrate: the guard also applies to journal.db migrations, not just vault.db', () => {
+  const db = new DatabaseSync(':memory:');
+  migrate(db, JOURNAL_MIGRATIONS);
+  db.exec(`PRAGMA user_version = ${JOURNAL_MIGRATIONS.length + 1}`);
+  expect(() => migrate(db, JOURNAL_MIGRATIONS)).toThrow(VaultSchemaAheadError);
+  db.close();
+});
+
+test('downgrade guard end-to-end: openVaultDb refuses a file whose schema is ahead, and leaves it untouched', () => {
+  const dir = tempDir();
+  const first = openVaultDb({ dir });
+  first.close();
+
+  const vaultFile = path.join(dir, 'vault.db');
+  const bumped = VAULT_MIGRATIONS.length + 5;
+  const raw = new DatabaseSync(vaultFile);
+  raw.exec(`PRAGMA user_version = ${bumped}`);
+  raw.close();
+  expect(userVersionOf(vaultFile)).toBe(bumped);
+
+  expect(() => openVaultDb({ dir })).toThrow(VaultSchemaAheadError);
+
+  // The failed open must not have touched the file: the artificially bumped
+  // version (and hence the rest of the schema) is exactly as it was left.
+  expect(userVersionOf(vaultFile)).toBe(bumped);
 });

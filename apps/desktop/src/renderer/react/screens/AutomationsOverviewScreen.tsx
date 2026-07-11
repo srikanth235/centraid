@@ -47,9 +47,7 @@ function IntegrationDots({ names }: { names: readonly string[] }): JSX.Element {
           style={{ background: `var(--c-${INTEGRATION_HUES[name] ?? 'slate'})` }}
         />
       ))}
-      {names.length > 4 ? (
-        <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span>
-      ) : null}
+      {names.length > 4 ? <span className={au.auOvDotMore}>{`+${names.length - 4}`}</span> : null}
     </div>
   );
 }
@@ -62,13 +60,8 @@ function AutomationRow({
   onOpen: (ref: string) => void;
 }): JSX.Element {
   return (
-    <button
-      type="button"
-      className={au.auOvRow}
-      data-hue={row.hue}
-      onClick={() => onOpen(row.ref)}
-    >
-      <span className={au.auGlyph} data-hue={row.hue} style={{ width: 38, height: 38 }}>
+    <button type="button" className={au.auOvRow} data-hue={row.hue} onClick={() => onOpen(row.ref)}>
+      <span className={au.auGlyph} data-hue={row.hue} data-size="sm">
         <Icon name={row.glyphIcon as IconName} size={17} />
       </span>
       <span className={au.auOvBody}>
@@ -176,7 +169,11 @@ export default function AutomationsOverviewScreen({
         </div>
         <div className={styles.errorTitle}>Couldn&apos;t load automations</div>
         <div className={styles.errorText}>{errMsg}</div>
-        <button type="button" className={cx(au.auBtn, au.auBtnPrimary)} onClick={() => void reload()}>
+        <button
+          type="button"
+          className={cx(au.auBtn, au.auBtnPrimary)}
+          onClick={() => void reload()}
+        >
           <Icon name="Refresh" size={14} />
           <span>Retry</span>
         </button>
@@ -187,11 +184,19 @@ export default function AutomationsOverviewScreen({
   const { rows, runs, health } = state;
   const actions = (
     <div className={au.auActions}>
-      <button type="button" className={cx(au.auBtn, au.auBtnGhost)} onClick={onBrowseTemplates}>
+      <button
+        type="button"
+        className={cx(au.auBtn, au.auBtnGhost, styles.headBtn)}
+        onClick={onBrowseTemplates}
+      >
         <Icon name="Bolt" size={14} />
         <span>Browse templates</span>
       </button>
-      <button type="button" className={cx(au.auBtn, au.auBtnPrimary)} onClick={onNewAutomation}>
+      <button
+        type="button"
+        className={cx(au.auBtn, au.auBtnPrimary, styles.headBtn)}
+        onClick={onNewAutomation}
+      >
         <Icon name="Sparkle" size={14} />
         <span>New automation</span>
       </button>
@@ -204,7 +209,12 @@ export default function AutomationsOverviewScreen({
     <div className={styles.ov}>
       <div className={styles.ovHead}>
         <div>
-          <h1 className={styles.ovTitle}>Automations</h1>
+          <div className={styles.ovTitleRow}>
+            <span className={styles.titleIcon} aria-hidden="true">
+              <Icon name="Bolt" size={16} strokeWidth={2} />
+            </span>
+            <h1 className={styles.ovTitle}>Automations</h1>
+          </div>
           <p className={styles.ovSub}>{state.subtitle}</p>
         </div>
         {actions}

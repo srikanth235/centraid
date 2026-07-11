@@ -236,6 +236,11 @@ export const CONVERSATION_LEDGER_DDL = `
             THEN substr(c.automation_id, 1, instr(c.automation_id, '/') - 1)
           ELSE c.app_id
         END              AS app_id,
+        -- The automation's display name at fire time (issue: orphaned runs
+        -- showing the raw ref) — conversations.title is set once, at
+        -- createAutomationRun, and outlives the automation manifest being
+        -- deleted. NULLIF empties it out since the column defaults to ''.
+        CASE WHEN c.kind = 'automation' THEN NULLIF(c.title, '') END AS automation_name,
         t.trigger        AS trigger,
         t.trigger_origin AS trigger_origin,
         t.ok             AS ok,

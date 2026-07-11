@@ -39,7 +39,13 @@ export type ToolErrorCode =
   | 'INVALID_INPUT'
   | 'INVALID_MANIFEST'
   | 'NO_ACTIVE_VERSION'
-  | 'HANDLER_ERROR';
+  | 'HANDLER_ERROR'
+  /**
+   * The worker-admission gate refused a slot (issue #351): too many
+   * app-handler workers already running/queued. Distinct from
+   * HANDLER_ERROR — nothing ran, the caller should just retry shortly.
+   */
+  | 'GATEWAY_BUSY';
 
 export interface ToolErrorContent {
   readonly code: ToolErrorCode;
@@ -332,6 +338,9 @@ export class Dispatcher {
       ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
     });
     if (!outcome.ok) {
+      if (outcome.busy) {
+        return errorResult('GATEWAY_BUSY', outcome.error ?? 'gateway busy');
+      }
       return errorResult('HANDLER_ERROR', outcome.error ?? 'action handler failed');
     }
     // Action handlers historically return `{ status, body }`. Unwrap so
@@ -406,6 +415,9 @@ export class Dispatcher {
       ...(this.vaultFor ? { vault: this.vaultFor(appId) } : {}),
     });
     if (!outcome.ok) {
+      if (outcome.busy) {
+        return errorResult('GATEWAY_BUSY', outcome.error ?? 'gateway busy');
+      }
       return errorResult('HANDLER_ERROR', outcome.error ?? 'query handler failed');
     }
     return successResult(outcome.value ?? null);
@@ -475,6 +487,8 @@ export function statusForToolError(code: ToolErrorCode): number {
       return 503;
     case 'HANDLER_ERROR':
       return 500;
+    case 'GATEWAY_BUSY':
+      return 503;
   }
 }
 

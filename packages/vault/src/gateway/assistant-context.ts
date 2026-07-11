@@ -22,6 +22,7 @@ const CONVENTIONS = `## Conventions
 - SKOS concepts (core_concept in core_concept_scheme) carry vocabulary: link relations, document folders, flags, people circles. core_tag pins a concept onto any entity (target_type, target_id, concept_id).
 - Starred = a core_tag whose concept has notation '${STARRED_NOTATION}' in the flags scheme (${FLAGS_SCHEME_URI}).
 - Canonical bytes/text live in core_content_item (content_uri is a data: URI). Use the SQL function vault_content_text(media_type, content_uri) to decode a body to text. Note/message bodies hang off *_content_id columns.
+- A document's identity is core_document, not core_content_item (issue #352): current_content_id names the HEAD content item; version history is a 'revises' core.link chain over content items (NEW content item -> OLD content item), walked backward. knowledge_note's body_content_id repoints the same way and records the same revises link on edit.
 - Soft deletes: content has deleted_at, links have valid_to; filter them for "current" answers.
 - Money: core_transaction.amount_minor is an INTEGER in minor units (divide by 100 for display) with its own currency column and a debit/credit direction.
 - Sealed columns (issue #293): secret cells (locker_item password, otp_seed, card_number, cvv, content) are ciphertext at rest and show as «sealed» in results — you cannot SELECT their plaintext, and you must never try to. Derivatives come from typed commands (locker.watchtower, locker.totp_code).

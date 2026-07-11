@@ -3,8 +3,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Runtime } from '../runtime.ts';
 import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
+import { ChangeBus } from '../changes/change-bus.ts';
+import { ChangesSubscriberCap, handleAppChanges } from './changes-sse.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -195,4 +198,137 @@ test('SSE: handler-sourced events carry source but omit toolCallId/turnId', asyn
   expect(events[0]!.source).toBe('handler');
   expect(events[0]!.toolCallId).toBe(undefined);
   expect(events[0]!.turnId).toBe(undefined);
+});
+
+// Issue #351: unbounded concurrent `_changes` subscribers is a fd-exhaustion
+// risk, same as the gateway's `_logs`/`_automations` streams. Exercised via
+// `handleAppChanges` directly against a mock req/res (same lightweight
+// harness shape as `logs-routes.test.ts`) so the small injected cap never
+// touches the shared module-level singleton.
+interface MockClient {
+  req: IncomingMessage;
+  res: ServerResponse;
+  status: () => number;
+  body: () => string;
+  header: (name: string) => string | undefined;
+  ended: () => boolean;
+  close: () => void;
+}
+
+function mockClient(): MockClient {
+  const chunks: string[] = [];
+  const headers = new Map<string, string>();
+  let isEnded = false;
+  let reqCloseListener: (() => void) | undefined;
+  const res = {
+    writableEnded: false,
+    statusCode: 0,
+    writeHead(status: number) {
+      this.statusCode = status;
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value);
+    },
+    write(s: string) {
+      chunks.push(s);
+      return true;
+    },
+    end(s?: string) {
+      if (s) chunks.push(s);
+      isEnded = true;
+      this.writableEnded = true;
+    },
+    on() {
+      return this;
+    },
+  };
+  const req = {
+    on(event: string, fn: () => void) {
+      if (event === 'close') reqCloseListener = fn;
+      return this;
+    },
+  };
+  return {
+    req: req as unknown as IncomingMessage,
+    res: res as unknown as ServerResponse,
+    status: () => res.statusCode,
+    body: () => chunks.join(''),
+    header: (name: string) => headers.get(name.toLowerCase()),
+    ended: () => isEnded,
+    close: () => reqCloseListener?.(),
+  };
+}
+
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 10));
+
+test('SSE cap: subscribers past the per-app limit get 503 + Retry-After; the count decrements on disconnect', async () => {
+  const bus = new ChangeBus();
+  const cap = new ChangesSubscriberCap(2);
+
+  const a = mockClient();
+  const b = mockClient();
+  const pendingA = handleAppChanges(a.req, a.res, bus, 'myapp', cap);
+  const pendingB = handleAppChanges(b.req, b.res, bus, 'myapp', cap);
+  await settle();
+  expect(a.status()).toBe(200);
+  expect(b.status()).toBe(200);
+  expect(cap.current('myapp')).toBe(2);
+
+  // The 3rd subscriber is over the cap — refused, never joins the stream.
+  const c = mockClient();
+  await handleAppChanges(c.req, c.res, bus, 'myapp', cap);
+  expect(c.status()).toBe(503);
+  expect(c.header('Retry-After')).toBeDefined();
+  const errBody = JSON.parse(c.body()) as { error: string };
+  expect(errBody.error).toBe('sse_capacity');
+  expect(c.ended()).toBe(true);
+  expect(cap.current('myapp')).toBe(2); // the refusal never incremented the count
+
+  // Disconnecting one subscriber frees a slot for the next one.
+  a.close();
+  await pendingA;
+  expect(cap.current('myapp')).toBe(1);
+
+  const d = mockClient();
+  const pendingD = handleAppChanges(d.req, d.res, bus, 'myapp', cap);
+  await settle();
+  expect(d.status()).toBe(200);
+  expect(cap.current('myapp')).toBe(2);
+
+  b.close();
+  d.close();
+  await Promise.all([pendingB, pendingD]);
+  expect(cap.current('myapp')).toBe(0);
+});
+
+test('SSE cap: is scoped per appId — saturating one app does not refuse another', async () => {
+  const bus = new ChangeBus();
+  const cap = new ChangesSubscriberCap(1);
+
+  const a = mockClient();
+  const pendingA = handleAppChanges(a.req, a.res, bus, 'app-one', cap);
+  await settle();
+  expect(a.status()).toBe(200);
+  expect(cap.current('app-one')).toBe(1);
+
+  // app-one is saturated (cap 1) — a 2nd app-one subscriber is refused...
+  const b = mockClient();
+  await handleAppChanges(b.req, b.res, bus, 'app-one', cap);
+  expect(b.status()).toBe(503);
+
+  // ...but a subscriber to a DIFFERENT app is admitted normally — the two
+  // apps have independent budgets, exactly the "several windows of one
+  // app shouldn't starve every other app's stream" property this is for.
+  const c = mockClient();
+  const pendingC = handleAppChanges(c.req, c.res, bus, 'app-two', cap);
+  await settle();
+  expect(c.status()).toBe(200);
+  expect(cap.current('app-two')).toBe(1);
+  expect(cap.total()).toBe(2);
+
+  a.close();
+  c.close();
+  await Promise.all([pendingA, pendingC]);
+  expect(cap.total()).toBe(0);
 });

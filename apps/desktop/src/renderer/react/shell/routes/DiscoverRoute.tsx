@@ -10,6 +10,7 @@ import PageScroll from '../PageScroll.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { openTemplatePreview } from '../templatePreview.js';
 import { useAsyncData } from '../useAsyncData.js';
+import { openWebhookReveal } from '../webhookReveal.js';
 import {
   cloneAutomationTemplate,
   installAppTemplate,
@@ -66,8 +67,13 @@ export default function DiscoverRoute({
   // automation builder.
   const applyAutoTemplate = (t: TemplateEntry): void => {
     void cloneAutomationTemplate(t)
-      .then(({ automationId, webhooks }) => {
-        for (const w of webhooks) surfaceMintedWebhook(w, showToast);
+      .then(async ({ automationId, webhooks }) => {
+        // Show each minted secret once, in-app, before handing off to the
+        // builder — the console line stays as a dev-only fallback.
+        for (const w of webhooks) {
+          surfaceMintedWebhook(w);
+          await openWebhookReveal(w);
+        }
         navigate({ kind: 'automation-builder', automationId });
       })
       .catch((err: unknown) =>

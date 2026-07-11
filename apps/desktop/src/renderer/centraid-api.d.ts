@@ -104,6 +104,14 @@ export interface CentraidSettings {
    * then writes the new version back via `saveSettings`. Absent → never seen.
    */
   changelogSeenVersion?: string;
+  /**
+   * Launch Centraid automatically at OS login (issue #351) — the cheap 80%
+   * fix for "always-on" given the desktop-hosted gateway dies when the app
+   * quits and there's deliberately no OS scheduler. Applied to the OS
+   * immediately on save via `app.setLoginItemSettings`; no-op on Linux.
+   * Absent → disabled (opt-in).
+   */
+  launchAtLogin?: boolean;
 }
 
 /** A single published release shown in the "What's new" modal. */
@@ -178,6 +186,36 @@ export interface CentraidGatewayRuntime {
   outages: CentraidGatewayOutage[];
   alert: { enabled: boolean; thresholdSeconds: number };
   pollIntervalMs: number;
+  /**
+   * Reconciled health signal (issue #351): folds `/centraid/_gateway/health`'s
+   * component statuses plus a sustained-high-latency check into one badge —
+   * a "listening but hung" gateway reads as `'degraded'`, not `'up'`. Absent
+   * until the first probe reaches `/health` (or for a gateway old enough to
+   * only answer `/info`); persists at its last value while unreachable, same
+   * posture as `version`.
+   */
+  healthStatus?: 'ok' | 'degraded' | 'error';
+  /** Non-'ok' components from the most recent `/health` snapshot. */
+  componentIssues?: { component: string; status: string; message?: string }[];
+  /** True when recent probe latency has sustained above the degraded-latency threshold (~2s). */
+  latencyDegraded?: boolean;
+  /**
+   * Version-handshake verdict (issue #351, wave 2) — REMOTE gateways only.
+   * A local gateway is embedded in this same build and can never skew, so
+   * this stays absent for it. Absent for a remote gateway too until the
+   * first probe carrying `version`/`schemaEpoch` lands; persists at its
+   * last value while unreachable. `skewed: true` means the gateway's
+   * reported version/schemaEpoch doesn't match what this app was built
+   * against — v0 policy surfaces this loudly (this field + a de-duped OS
+   * notification) rather than refusing requests.
+   */
+  versionSkew?: {
+    skewed: boolean;
+    gatewayVersion: string;
+    gatewaySchemaEpoch: number;
+    clientVersion: string;
+    clientSchemaEpoch: number;
+  };
 }
 
 /** Lightweight profile describing one gateway (issue #109, metadata #113). */
@@ -529,6 +567,20 @@ interface CentraidApi {
    */
   onGatewayRuntime(cb: (snapshot: CentraidGatewayRuntime) => void): () => void;
   /**
+   * Restart the local embedded gateway (issue #351): graceful stop (WAL
+   * checkpoint + close) then relaunch. Refused for remote gateways —
+   * `ok: false` with an explanatory error.
+   */
+  restartGateway(): Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Fetch `/centraid/_gateway/diagnostics` from the active gateway and save
+   * it through a native save dialog (issue #351). `canceled` when the user
+   * dismissed the dialog.
+   */
+  exportGatewayDiagnostics(): Promise<
+    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+  >;
+  /**
    * Switch the vault this client addresses on the active gateway (issue
    * #289). A pure client-side pointer flip — no server call, no re-root:
    * subsequent requests carry a different `x-centraid-vault` header. Pass
@@ -669,6 +721,9 @@ export interface CentraidInsightsAutomationRow {
   runs: number;
   tokens: number;
   costUsd: number;
+  /** Last-known display name recorded on the automation's runs — set even
+   *  after the automation itself is deleted. */
+  automationName?: string;
 }
 
 /** One row of the "by model" breakdown. */
@@ -687,6 +742,8 @@ export interface CentraidInsightsActivityRow {
   /** `<appId>/<id>` handle for automation runs — the desktop resolves the
    *  display name from the automation list. */
   automationRef?: string;
+  /** Last-known display name recorded on the run — see `CentraidInsightsAutomationRow.automationName`. */
+  automationName?: string;
   ok: boolean;
   startedAt: number;
   tokens: number;
@@ -710,6 +767,9 @@ export interface CentraidAutomationRunRecord {
   kind: 'automation' | 'chat' | 'build';
   /** Set for `kind: 'automation'` — the automation app id. */
   automationId?: string;
+  /** The automation's last-known display name, recorded on the run itself —
+   *  survives the automation being deleted (falls back to `automationId`). */
+  automationName?: string;
   triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
   /** Source that fired the run (`cron` / `webhook` / `data` / `condition` / `manual`). */
   triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
@@ -1009,6 +1069,7 @@ declare global {
     runId: string;
     kind: 'automation' | 'chat' | 'build';
     automationId?: string;
+    automationName?: string;
     triggerKind: 'scheduled' | 'manual' | 'replay' | 'on_failure' | 'interactive';
     triggerOrigin?: 'cron' | 'webhook' | 'data' | 'condition' | 'manual';
     parentRunId?: string;
@@ -1075,6 +1136,7 @@ declare global {
     runs: number;
     tokens: number;
     costUsd: number;
+    automationName?: string;
   }
   interface CentraidInsightsModelRow {
     model: string;
@@ -1087,6 +1149,7 @@ declare global {
     kind: string;
     label: string;
     automationRef?: string;
+    automationName?: string;
     ok: boolean;
     startedAt: number;
     tokens: number;

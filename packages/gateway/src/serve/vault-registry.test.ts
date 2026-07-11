@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -218,4 +218,99 @@ test('owner routes: list + rename/presentation; create/delete are admin-plane (4
   const veto = await fetch(`${base}/vaults/${family.vaultId}`, { method: 'DELETE' });
   expect(veto.status).toBe(405);
   expect(registry.list()).toHaveLength(2);
+});
+
+// Issue #351: a corrupt vault used to vanish silently — `scannedDirs` marked
+// it as handled BEFORE the mount attempt, so a directory that failed to
+// open was never retried until process restart. These pin the fix: the
+// failure is recorded, retried (with backoff) on a later `scan()`, and
+// cleared once the directory becomes mountable.
+test('a directory that fails to mount is recorded in failedMounts, retried on a later scan (past backoff), and cleared once mountable', async () => {
+  vi.useFakeTimers();
+  try {
+    const root = await tempDir();
+    const donorRoot = await tempDir();
+
+    // A directory with a `vault.db` that isn't a valid SQLite file at all —
+    // the cheapest reliable way to make `openVaultDb` throw.
+    const badDir = path.join(root, 'badvault');
+    await fs.mkdir(badDir, { recursive: true });
+    await fs.writeFile(path.join(badDir, 'vault.db'), 'not a sqlite file');
+
+    // A donor vault, bootstrapped through the real registry so its
+    // vault.db/journal.db are genuinely valid and carry their own vaultId
+    // (never mounted in the registry under test, so no id collision below).
+    const donor = openVaultRegistry({
+      rootDir: donorRoot,
+      logger: silentLogger,
+      ownerName: 'Donor',
+    });
+    const donorVaultId = donor.list()[0]!.vaultId;
+    donor.stop();
+
+    const registry = openRegistry(root);
+
+    // Construction's initial scan() tried badvault, failed, and — unlike
+    // before the fix — did NOT permanently swallow it.
+    let failed = registry.failedMounts();
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toMatchObject({ dir: badDir });
+    expect(failed[0]!.message.length).toBeGreaterThan(0);
+    const firstAttemptAt = failed[0]!.at;
+    // The auto-created default vault is the only mounted one so far.
+    expect(registry.list()).toHaveLength(1);
+
+    // Immediately rescanning stays within the backoff window — badvault is
+    // still corrupt, but this also proves a naive fix (retry unconditionally
+    // on every scan) isn't what's under test: the failure record is
+    // untouched, not refreshed, because the attempt is skipped.
+    registry.rescan();
+    expect(registry.failedMounts()).toEqual(failed);
+
+    // The directory becomes mountable (an operator replaced the corrupt
+    // file, or — as simulated here — a valid pair of DB files lands there).
+    await fs.copyFile(
+      path.join(donorRoot, donorVaultId, 'vault.db'),
+      path.join(badDir, 'vault.db'),
+    );
+    await fs.copyFile(
+      path.join(donorRoot, donorVaultId, 'journal.db'),
+      path.join(badDir, 'journal.db'),
+    );
+
+    // Past the backoff window, the next scan retries it.
+    vi.advanceTimersByTime(31_000);
+    registry.rescan();
+
+    failed = registry.failedMounts();
+    expect(failed).toHaveLength(0);
+    const mounted = registry.list().map((v) => v.vaultId);
+    expect(mounted).toHaveLength(2);
+    expect(mounted).toContain(donorVaultId);
+    expect(firstAttemptAt).not.toBe(undefined); // sanity: we did capture a timestamp above
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a directory whose vault.db duplicates an already-mounted vault id is recorded in failedMounts too', async () => {
+  const root = await tempDir();
+  const registry = openRegistry(root);
+  const first = registry.list()[0]!;
+  const firstDir = path.join(root, first.vaultId);
+
+  // Clone the mounted vault's files into a second directory — same
+  // vaultId, so it can never cleanly mount alongside the original.
+  const dupeDir = path.join(root, 'dupe-of-first');
+  await fs.mkdir(dupeDir, { recursive: true });
+  await fs.copyFile(path.join(firstDir, 'vault.db'), path.join(dupeDir, 'vault.db'));
+  await fs.copyFile(path.join(firstDir, 'journal.db'), path.join(dupeDir, 'journal.db'));
+
+  registry.rescan();
+
+  const failed = registry.failedMounts();
+  expect(failed).toHaveLength(1);
+  expect(failed[0]).toMatchObject({ dir: dupeDir });
+  expect(failed[0]!.message).toContain(first.vaultId);
+  expect(registry.list()).toHaveLength(1);
 });

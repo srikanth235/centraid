@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
-import type { ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as esbuild from 'esbuild';
 import { contentTypeFor, resolveStaticPath, staticSecurityHeaders } from './security.js';
 import { sendError } from './http-utils.js';
@@ -14,6 +14,18 @@ import { sendError } from './http-utils.js';
  * `import './kit.js'` are unchanged), and `serveStatic` falls back to the
  * shared dir when the app folder has no copy of its own. An app *may* still
  * ship its own file to override — the per-app copy wins.
+ *
+ * This fallback only ever applies to a **root-level** request (`rel` has no
+ * directory component — see the guard in `serveStatic`). Every legitimate
+ * reference to one of these files resolves to a root-level URL: `index.html`
+ * links them relative to the app root, and a nested `components/*.jsx` file
+ * either climbs back to the root itself (`import './kit.js'` from `app.jsx`,
+ * `import '../kit.js'` from `components/X.jsx` — hand-written by the app) or,
+ * for the one specifier esbuild emits automatically, via the depth-aware
+ * `jsx-runtime` rewrite in {@link transformJsx}. A *nested* request for one of
+ * these names (e.g. `components/react-core.min.js`) therefore has no
+ * legitimate source and 404s instead of being silently served — a future
+ * depth-rewrite bug should fail loudly, not get masked by this fallback.
  *
  * `kit.js` imports `elements.js` (the kit's native Web Components, issue #327
  * — dependency-free vanilla custom elements, no runtime import of their own).
@@ -43,47 +55,92 @@ const SHARED_ASSET_FILES = new Set([
 ]);
 
 /**
- * Per-file JSX transform cache, keyed by the absolute resolved file path.
- * Unbounded: a gateway serves a bounded set of installed apps (each app
- * folder has a small, fixed number of `.jsx` files), so there's no need for
- * eviction — this isn't a general-purpose cache serving arbitrary input.
+ * Per-file JSX transform cache, keyed by the absolute resolved file path
+ * *and* the climb depth the transform was rewritten for (see
+ * {@link jsxRuntimeClimb}) — `${file}\0${depth}`. A given file is only ever
+ * requested at one depth in practice (its depth is fixed by where it lives
+ * under the app root), but keying on depth too means a mismatched depth can
+ * never serve another depth's cached rewrite, even if some future caller
+ * violates that assumption. Unbounded: a gateway serves a bounded set of
+ * installed apps (each app folder has a small, fixed number of `.jsx`
+ * files), so there's no need for eviction — this isn't a general-purpose
+ * cache serving arbitrary input.
  *
  * `ok: false` entries cache a *failed* transform (syntactically broken JSX
  * mid-generation is normal for a builder agent writing files incrementally)
  * against the file's current `mtimeMs`, so a hot preview-reload loop doesn't
  * re-run esbuild on every request for a file that hasn't changed — it only
  * re-transforms once the mtime moves.
+ *
+ * `etag` is the content hash of `code` (or the error shim body for a failed
+ * transform), computed once alongside the transform rather than per request
+ * — see {@link computeEtag}. Keying it off the same mtime-validated cache
+ * entry means an edit (mtime bump) naturally produces a fresh etag, whether
+ * the edit fixes a broken file or changes an already-working one.
  */
-type JsxCacheEntry = { mtimeMs: number } & (
+type JsxCacheEntry = { mtimeMs: number; etag: string } & (
   | { ok: true; code: string }
   | { ok: false; error: string }
 );
 const jsxCache = new Map<string, JsxCacheEntry>();
 
 // esbuild's `automatic` JSX runtime emits an extensionless relative import —
-// `import { jsx as _jsx } from "./jsx-runtime";` — which browsers can't
-// resolve (no bare-specifier/extension-less resolution over HTTP). Rewrite
-// the exact module specifier to carry the `.js` extension so it resolves the
-// same way `kit.js`'s other relative imports do. esbuild always emits double
-// quotes, but a single-quoted form costs nothing extra to also handle.
+// `import { jsx as _jsx } from "./jsx-runtime";` — resolved relative to the
+// IMPORTING FILE's own directory, same as any other relative ESM specifier.
+// Browsers can't resolve it as-is (no bare-specifier/extension-less
+// resolution over HTTP), so it's rewritten below. `jsx-runtime.js` itself is
+// only ever served from the app root (or the shared dir standing in for it —
+// see {@link SHARED_ASSET_FILES}), so a file nested under subdirectories
+// needs a specifier that *climbs back up* to the root, not just `./` — a
+// bare `.js` suffix would make `components/Grid.jsx` request
+// `components/jsx-runtime.js`, one directory too deep. esbuild always emits
+// double quotes, but a single-quoted form costs nothing extra to also
+// handle.
 const JSX_RUNTIME_SPECIFIER_RE = /(["'])\.\/jsx-runtime\1/g;
 
 /**
- * Transform a `.jsx` source file to plain JS via esbuild's `automatic` JSX
- * runtime, with an mtime-keyed cache (see {@link jsxCache}). On a transform
- * failure (normal mid-edit for a builder agent), returns a 200-able JS body
- * that logs the esbuild error to the console instead of throwing — a broken
- * `.jsx` file must not 500 the whole preview iframe, and there's no existing
- * "friendly broken preview" precedent elsewhere in this codebase to follow,
- * so this keeps the iframe alive and puts the error where a builder agent's
- * own tooling (devtools) can see it.
+ * The relative-path prefix that climbs from a served file's directory back
+ * to the app root, derived from the request path `rel` (e.g.
+ * `components/Grid.jsx`, or `app.jsx` at the root) — NOT from the resolved
+ * absolute file path, because it's the URL the browser resolves the rewritten
+ * import against, not the filesystem layout. Depth 0 (root) → `./`; depth 1
+ * (one directory down) → `../`; depth 2 → `../../`; and so on.
  */
-async function transformJsx(file: string, source: Buffer): Promise<string> {
+function jsxRuntimeClimb(rel: string): { depth: number; prefix: string } {
+  const segments = rel
+    .replace(/^\.?\/+/, '')
+    .split('/')
+    .filter(Boolean);
+  const depth = Math.max(0, segments.length - 1);
+  return { depth, prefix: depth === 0 ? './' : '../'.repeat(depth) };
+}
+
+/**
+ * Transform a `.jsx` source file to plain JS via esbuild's `automatic` JSX
+ * runtime, with an mtime-and-depth-keyed cache (see {@link jsxCache}). On a
+ * transform failure (normal mid-edit for a builder agent), returns a
+ * 200-able JS body that logs the esbuild error to the console instead of
+ * throwing — a broken `.jsx` file must not 500 the whole preview iframe, and
+ * there's no existing "friendly broken preview" precedent elsewhere in this
+ * codebase to follow, so this keeps the iframe alive and puts the error
+ * where a builder agent's own tooling (devtools) can see it.
+ *
+ * Returns the body alongside its content etag, computed once here and cached
+ * with the transform (not re-hashed per request) — the mtime key that
+ * invalidates the transform on edit invalidates the etag with it too.
+ */
+async function transformJsx(
+  file: string,
+  source: Buffer,
+  rel: string,
+): Promise<{ code: string; etag: string }> {
+  const { depth, prefix } = jsxRuntimeClimb(rel);
+  const cacheKey = `${file}\0${depth}`;
   const stat = await fs.stat(file);
-  const cached = jsxCache.get(file);
+  const cached = jsxCache.get(cacheKey);
   if (cached && cached.mtimeMs === stat.mtimeMs) {
-    if (cached.ok) return cached.code;
-    return errorShim(cached.error);
+    if (cached.ok) return { code: cached.code, etag: cached.etag };
+    return { code: errorShim(cached.error), etag: cached.etag };
   }
 
   try {
@@ -92,18 +149,47 @@ async function transformJsx(file: string, source: Buffer): Promise<string> {
       jsx: 'automatic',
       jsxImportSource: '.',
     });
-    const code = result.code.replace(JSX_RUNTIME_SPECIFIER_RE, '$1./jsx-runtime.js$1');
-    jsxCache.set(file, { mtimeMs: stat.mtimeMs, ok: true, code });
-    return code;
+    const code = result.code.replace(JSX_RUNTIME_SPECIFIER_RE, `$1${prefix}jsx-runtime.js$1`);
+    const etag = computeEtag(Buffer.from(code, 'utf8'));
+    jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: true, code, etag });
+    return { code, etag };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    jsxCache.set(file, { mtimeMs: stat.mtimeMs, ok: false, error: message });
-    return errorShim(message);
+    const shim = errorShim(message);
+    const etag = computeEtag(Buffer.from(shim, 'utf8'));
+    jsxCache.set(cacheKey, { mtimeMs: stat.mtimeMs, ok: false, error: message, etag });
+    return { code: shim, etag };
   }
 }
 
 function errorShim(message: string): string {
   return `// JSX transform failed — see the logged error below.\nconsole.error(${JSON.stringify(message)});\n`;
+}
+
+/**
+ * Strong content etag for a response body — sha256 hex, quoted per RFC 7232.
+ * Not `W/`-prefixed (weak): hashed over the exact bytes sent, so equal etags
+ * mean byte-identical bodies. Cheap enough to hash per request for plain
+ * files (react-core.min.js, the largest vendored asset at ~313KB, hashes in
+ * well under a millisecond) — no separate content cache needed; `.jsx`
+ * responses get theirs memoized for free by riding along in {@link jsxCache}.
+ */
+function computeEtag(buf: Buffer): string {
+  return `"${createHash('sha256').update(buf).digest('hex')}"`;
+}
+
+/**
+ * Does the request's `If-None-Match` header cover `etag`? Handles `*`
+ * (matches anything) and the comma-separated multi-value form. Our etags
+ * never contain commas or quotes, so a plain split+trim parse is correct —
+ * no need for a real structured-header parser. Node also folds repeated
+ * `If-None-Match` headers into one comma-joined string, which this covers.
+ */
+function ifNoneMatchHits(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const trimmed = header.trim();
+  if (trimmed === '*') return true;
+  return trimmed.split(',').some((tok) => tok.trim() === etag);
 }
 
 /**
@@ -150,6 +236,7 @@ export interface ServeStaticOptions {
 }
 
 export async function serveStatic(
+  req: IncomingMessage,
   res: ServerResponse,
   appDir: string,
   rel: string,
@@ -165,9 +252,17 @@ export async function serveStatic(
     // Fall back to the shared canonical copy for whitelisted assets an app
     // folder doesn't carry itself (kit.js / kit.css). Resolved through
     // `resolveStaticPath` so the same escape/allowlist guards apply.
+    //
+    // Root-level requests only (`rel` has no directory component) — see the
+    // doc comment on `SHARED_ASSET_FILES`. Every legitimate request for one
+    // of these names is root-level; a nested one (e.g.
+    // `components/react-core.min.js`) means the depth-aware `jsx-runtime`
+    // rewrite (or a hand-written relative import) is wrong, and that must
+    // 404 loudly instead of silently resolving to the shared copy.
+    const isRootLevel = !rel.replace(/^\.?\/+/, '').includes('/');
     const base = path.basename(file);
     const shared =
-      opts.sharedAssetsDir && SHARED_ASSET_FILES.has(base)
+      isRootLevel && opts.sharedAssetsDir && SHARED_ASSET_FILES.has(base)
         ? resolveStaticPath(opts.sharedAssetsDir, base)
         : null;
     if (!shared) return sendError(res, 404, 'not_found', 'Asset not found.');
@@ -184,10 +279,14 @@ export async function serveStatic(
   // to plain JS happens transparently at serve time, per-request, cached by
   // mtime (see {@link transformJsx}). Applies identically to the live
   // `/centraid/<id>/...` path and the draft `/centraid/_draft/<sid>/<id>/...`
-  // path — both funnel through this same `serveStatic` call.
+  // path — both funnel through this same `serveStatic` call. The transform
+  // also hands back its etag, memoized in {@link jsxCache} alongside the
+  // code, so it isn't re-hashed per request.
+  let jsxEtag: string | undefined;
   if (file.endsWith('.jsx')) {
-    const code = await transformJsx(file, buf);
-    buf = Buffer.from(code, 'utf8');
+    const transformed = await transformJsx(file, buf, rel);
+    buf = Buffer.from(transformed.code, 'utf8');
+    jsxEtag = transformed.etag;
   }
 
   const contentType = contentTypeFor(file);
@@ -222,14 +321,46 @@ export async function serveStatic(
     inlineScriptNonce = randomBytes(16).toString('base64');
     html = stampInlineScriptNonces(html, inlineScriptNonce);
     buf = Buffer.from(html, 'utf8');
+
+    // No ETag, no conditional handling: the document embeds a fresh
+    // per-response CSP nonce and serve-time-baked settings (theme, prefs,
+    // draft wiring), so no two responses are ever byte-identical — a
+    // validator would never hit. `no-store`, not `no-cache`: nothing here is
+    // worth revalidating against, so the browser shouldn't keep a copy at all.
+    res.statusCode = 200;
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'no-store');
+    for (const [k, v] of Object.entries(staticSecurityHeaders({ inlineScriptNonce }))) {
+      res.setHeader(k, v);
+    }
+    res.end(buf);
+    return true;
   }
 
-  res.statusCode = 200;
+  // Non-HTML assets: content-validated revalidation, not time-based
+  // freshness. `no-cache` (still cacheable — just always revalidate first)
+  // rather than `max-age`/`immutable`, because the same URL's bytes DO
+  // change under this gateway: reinstall/republish swaps the code-store
+  // worktree a file resolves from, and a draft file is mutated live by the
+  // builder while the preview iframe keeps polling the same path. An etag
+  // match turns a repeat request into a 304 with no body — same
+  // zero-transfer win as long-lived caching, minus the staleness risk.
+  // `private`: per-gateway, bearer-auth'd responses, never a shared/CDN cache.
+  const etag = jsxEtag ?? computeEtag(buf);
+  const ifNoneMatch = req.headers['if-none-match'];
+  const notModified = ifNoneMatchHits(
+    Array.isArray(ifNoneMatch) ? ifNoneMatch.join(',') : ifNoneMatch,
+    etag,
+  );
+
+  res.statusCode = notModified ? 304 : 200;
   res.setHeader('Content-Type', contentType);
+  res.setHeader('ETag', etag);
+  res.setHeader('Cache-Control', 'private, no-cache');
   for (const [k, v] of Object.entries(staticSecurityHeaders({ inlineScriptNonce }))) {
     res.setHeader(k, v);
   }
-  res.end(buf);
+  res.end(notModified ? Buffer.alloc(0) : buf);
   return true;
 }
 

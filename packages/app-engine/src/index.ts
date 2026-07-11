@@ -161,6 +161,20 @@ export {
   type RunHandlerOptions,
 } from './handlers/handler-runner.js';
 
+// Worker-spawn admission control (issue #351 Tier 4 hygiene) — the cap on
+// concurrent app-handler workers `runHandler` enforces by default. Exported
+// so a health/metrics surface can poll live counts, and so a host can
+// construct its own scoped `WorkerAdmission` (tests do this to exercise the
+// cap without spinning up dozens of real worker threads).
+export {
+  WorkerAdmission,
+  gatewayBusyError,
+  workerAdmissionStats,
+  WORKER_MAX_CONCURRENT,
+  WORKER_MAX_QUEUE,
+  WORKER_MAX_QUEUE_WAIT_MS,
+} from './handlers/worker-admission.js';
+
 // Error classes — hosts that want to translate them to their own response
 // shapes can import these directly. (The Runtime.handle() default handler
 // already converts them to JSON error responses.)
@@ -171,6 +185,15 @@ export { RegistryError } from './registry/registry.js';
 // re-derive. Hosts can subscribe from outside too —
 // `runtime.changeBus.subscribe(...)`.
 export { ChangeBus, type AppChange, type ChangeListener } from './changes/change-bus.js';
+// `_changes` SSE subscriber cap (issue #351 Tier 4 hygiene) — per-appId, not
+// global (a user can legitimately have several windows of the SAME app
+// open). `changesSubscriberCount()` is the accessor a host's health/metrics
+// surface polls; `ChangesSubscriberCap` is exported for tests only.
+export {
+  changesSubscriberCount,
+  ChangesSubscriberCap,
+  CHANGES_SSE_MAX_SUBSCRIBERS_PER_APP,
+} from './http/changes-sse.js';
 
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:

@@ -24,6 +24,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'transaction',
     'content_item',
     'content_derivative',
+    'document',
     'attachment',
     'activity',
     'observation',
@@ -56,7 +57,7 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
   schedule: ['calendar', 'event_ext', 'attendee', 'task', 'availability_rule'],
   social: ['contact_card', 'circle', 'circle_member', 'thread', 'thread_participant', 'message'],
   knowledge: ['note', 'annotation'],
-  media: ['media_asset', 'face_region'],
+  media: ['media_asset', 'face_region', 'asset_phash'],
   home: ['asset_item', 'warranty', 'maintenance_plan', 'utility_meter', 'meter_reading'],
   business: ['client', 'project', 'time_entry', 'invoice', 'invoice_line'],
   people: [
@@ -81,8 +82,11 @@ export const VAULT_TABLES: Readonly<Record<string, readonly string[]>> = {
     'connection_health',
   ],
   tally: ['friend', 'group', 'expense', 'expense_split', 'settlement'],
-  enrich: ['embedding', 'request'],
+  enrich: ['embedding', 'request', 'policy'],
   outbox: ['item', 'grant'],
+  // Read-only custody projection (issue #352): local-vs-replicated state per
+  // content item, rebuilt on the standing sweep — see blob/custody.ts.
+  blob: ['custody_state'],
 };
 
 /** journal.db tables — the append-only audit stream. */

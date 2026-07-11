@@ -14,12 +14,16 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+// Resolved from this module's own path, not process.cwd(): cwd differs
+// between a root-run vitest (repo root) and a package-run vitest (this
+// package's dir), but the file's own location never does.
+const PKG = path.resolve(import.meta.dirname, '..');
 // Resolved at runtime so tsc never follows the import into the vendored
 // react-core bundle (which its DOM-less config can't type-check). The file
 // URL loads natively; jsdom's globals are already installed by the environment.
-const reactCoreUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/react-core.min.js')).href;
-const jsxRuntimeUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/jsx-runtime.js')).href;
-const kitUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/kit.js')).href;
+const reactCoreUrl = pathToFileURL(path.resolve(PKG, 'kit/react-core.min.js')).href;
+const jsxRuntimeUrl = pathToFileURL(path.resolve(PKG, 'kit/jsx-runtime.js')).href;
+const kitUrl = pathToFileURL(path.resolve(PKG, 'kit/kit.js')).href;
 
 const bundle = await import(reactCoreUrl);
 const {
@@ -139,7 +143,7 @@ describe('jsx-runtime.js re-exports the same React instance', () => {
 
 describe('production build guard', () => {
   it('does not contain React dev-mode markers', () => {
-    const src = readFileSync(path.resolve(process.cwd(), 'kit/react-core.min.js'), 'utf8');
+    const src = readFileSync(path.resolve(PKG, 'kit/react-core.min.js'), 'utf8');
     // `react` / `react-dom` have no "production" package.json export
     // condition (unlike lit) — both CJS entry files branch on
     // `process.env.NODE_ENV` at require-time between e.g.

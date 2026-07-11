@@ -14,10 +14,14 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+// Resolved from this module's own path, not process.cwd(): cwd differs
+// between a root-run vitest (repo root) and a package-run vitest (this
+// package's dir), but the file's own location never does.
+const PKG = path.resolve(import.meta.dirname, '..');
 // Resolved at runtime so the file URL loads natively; jsdom's globals are
 // already installed by the environment.
-const kitUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/kit.js')).href;
-const elementsUrl = pathToFileURL(path.resolve(process.cwd(), 'kit/elements.js')).href;
+const kitUrl = pathToFileURL(path.resolve(PKG, 'kit/kit.js')).href;
+const elementsUrl = pathToFileURL(path.resolve(PKG, 'kit/elements.js')).href;
 const {
   barSpan,
   el,

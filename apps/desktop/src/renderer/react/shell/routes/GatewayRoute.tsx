@@ -1,5 +1,9 @@
 import { type JSX, useEffect, useState } from 'react';
-import { streamGatewayLogs } from '../../../gateway-client.js';
+import {
+  getGatewayBackupStatus,
+  runGatewayBackupNow,
+  streamGatewayLogs,
+} from '../../../gateway-client.js';
 import GatewayScreen from '../../screens/GatewayScreen.js';
 import { useShellActions } from '../actions.js';
 import PageScroll from '../PageScroll.js';
@@ -23,10 +27,25 @@ export default function GatewayRoute(): JSX.Element {
   const { health } = useGatewayHealth();
   const [saving, setSaving] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // Launch-at-login (issue #351) isn't part of the pushed runtime snapshot —
+  // it's a plain settings field, read once on mount via the generic
+  // getSettings() surface (same one saveSettings writes through).
+  const [launchAtLogin, setLaunchAtLogin] = useState(false);
+  const [savingLaunchAtLogin, setSavingLaunchAtLogin] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void window.CentraidApi.getSettings().then((s) => {
+      if (!cancelled) setLaunchAtLogin(Boolean(s.launchAtLogin));
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const save = async (patch: { gatewayAlertSeconds?: number; gatewayAlertsEnabled?: boolean }) => {
@@ -39,6 +58,22 @@ export default function GatewayRoute(): JSX.Element {
       );
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveLaunchAtLogin = async (enabled: boolean) => {
+    setSavingLaunchAtLogin(true);
+    const prev = launchAtLogin;
+    setLaunchAtLogin(enabled); // optimistic — matches the alert toggle's feel
+    try {
+      await window.CentraidApi.saveSettings({ launchAtLogin: enabled });
+    } catch (err) {
+      setLaunchAtLogin(prev);
+      showToast(
+        `Couldn’t save the login setting: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setSavingLaunchAtLogin(false);
     }
   };
 
@@ -58,9 +93,16 @@ export default function GatewayRoute(): JSX.Element {
         savingAlert={saving}
         onAlertSecondsChange={(seconds) => void save({ gatewayAlertSeconds: seconds })}
         onAlertsEnabledChange={(enabled) => void save({ gatewayAlertsEnabled: enabled })}
+        launchAtLogin={launchAtLogin}
+        savingLaunchAtLogin={savingLaunchAtLogin}
+        onLaunchAtLoginChange={(enabled) => void saveLaunchAtLogin(enabled)}
         health={health}
         loadHealth={loadDiagnosticsData}
         streamLogs={streamGatewayLogs}
+        loadBackupStatus={getGatewayBackupStatus}
+        onRunBackupNow={runGatewayBackupNow}
+        onRestartGateway={() => window.CentraidApi.restartGateway()}
+        onExportDiagnostics={() => window.CentraidApi.exportGatewayDiagnostics()}
       />
     </PageScroll>
   );

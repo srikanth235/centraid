@@ -323,6 +323,7 @@ export async function runFire(
   try {
     outcome = await runHandler({
       automationId: opts.automationRef,
+      automationName: row.name,
       automationDir: row.dir,
       handlerFile: handlerPath(row.dir),
       runId,

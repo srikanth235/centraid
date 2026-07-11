@@ -44,6 +44,31 @@ export interface HealthEvent {
   message: string;
 }
 
+/**
+ * Coarse numeric signals (issue #351 tier 3) — deliberately separate from
+ * `ComponentHealth.detail`, which stays a plain human-readable string (an
+ * existing contract kept as-is). Everything here is a raw number a
+ * self-hoster's own monitoring can graph without parsing prose.
+ */
+export interface HealthMetrics {
+  /** `process.memoryUsage().rss` at snapshot time. */
+  rssBytes: number;
+  /** Outbox items awaiting drain, summed across mounted vaults. */
+  outboxPending: number;
+  /**
+   * Live SSE subscriber count across every open run stream. Optional and
+   * commonly absent: it needs a global counter on `RunEventBus`, which a
+   * sibling change (the SSE subscriber cap) is adding — wire this up once
+   * that lands (see `build-gateway.ts`'s `setMetricsSource` call).
+   */
+  sseClients?: number;
+  uptimeMs: number;
+}
+
+/** What a host-injected metrics source contributes — `rssBytes`/`uptimeMs` are computed here. */
+export type MetricsSourceResult = Partial<Pick<HealthMetrics, 'outboxPending' | 'sseClients'>>;
+export type MetricsSource = () => MetricsSourceResult;
+
 export interface HealthSnapshot {
   /** Worst component status — `ok` when every component is ok. */
   status: ComponentStatus;
@@ -52,6 +77,13 @@ export interface HealthSnapshot {
   components: ComponentHealth[];
   /** Newest-first structured log tail (warns + errors), bounded. */
   recentEvents: HealthEvent[];
+  /**
+   * Coarse numeric signals — see `HealthMetrics`. Always present:
+   * `rssBytes`/`uptimeMs` need no host wiring; `outboxPending` defaults to 0
+   * until a host calls `setMetricsSource`; `sseClients` stays absent until
+   * one is supplied.
+   */
+  metrics: HealthMetrics;
 }
 
 /** A snapshot-time check for state no subsystem pushes. */
@@ -87,11 +119,22 @@ export class HealthRegistry {
   private readonly maxEvents: number;
   private readonly now: () => number;
   private readonly startedAtMs: number;
+  private metricsSource?: MetricsSource;
 
   constructor(options: HealthRegistryOptions = {}) {
     this.maxEvents = options.maxEvents ?? DEFAULT_MAX_EVENTS;
     this.now = options.now ?? Date.now;
     this.startedAtMs = this.now();
+  }
+
+  /**
+   * Register the host's numeric-metrics source (issue #351 tier 3) — called
+   * once at `buildGateway()` time. Only `outboxPending`/`sseClients` come
+   * from here; `rssBytes`/`uptimeMs` are computed inside `snapshot()`
+   * itself, needing no host wiring at all.
+   */
+  setMetricsSource(source: MetricsSource): void {
+    this.metricsSource = source;
   }
 
   reportOk(component: string, detail?: string): void {
@@ -169,12 +212,20 @@ export class HealthRegistry {
       .sort((a, b) => a.component.localeCompare(b.component));
 
     const nowMs = this.now();
+    const uptimeMs = nowMs - this.startedAtMs;
+    const sourced = this.metricsSource?.() ?? {};
     return {
       status: components.reduce<ComponentStatus>((acc, c) => worseOf(acc, c.status), 'ok'),
       startedAt: new Date(this.startedAtMs).toISOString(),
-      uptimeMs: nowMs - this.startedAtMs,
+      uptimeMs,
       components,
       recentEvents: this.events.toReversed(),
+      metrics: {
+        rssBytes: process.memoryUsage().rss,
+        outboxPending: sourced.outboxPending ?? 0,
+        ...(sourced.sseClients !== undefined ? { sseClients: sourced.sseClients } : {}),
+        uptimeMs,
+      },
     };
   }
 
@@ -189,6 +240,7 @@ export class HealthRegistry {
 
   private pushEvent(component: string, level: 'warn' | 'error', message: string): void {
     this.events.push({ at: new Date(this.now()).toISOString(), component, level, message });
-    if (this.events.length > this.maxEvents) this.events.splice(0, this.events.length - this.maxEvents);
+    if (this.events.length > this.maxEvents)
+      this.events.splice(0, this.events.length - this.maxEvents);
   }
 }

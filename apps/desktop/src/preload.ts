@@ -35,6 +35,10 @@ const Channel = {
   // Gateway runtime watch (heartbeat status + outage log + down alert).
   GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
   GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
+  // Gateway ops (issue #351): manual restart of the local embedded gateway
+  // + save-dialog export of the gateway's diagnostics bundle.
+  GATEWAY_RESTART: 'centraid:gateway-runtime:restart',
+  GATEWAY_DIAGNOSTICS_EXPORT: 'centraid:gateway-runtime:export-diagnostics',
   // Vault addressing (issue #289): client-side active vault per gateway.
   VAULTS_SET_ACTIVE: 'centraid:vaults:set-active',
   VAULT_CHANGED: 'centraid:vaults:changed',
@@ -155,6 +159,11 @@ contextBridge.exposeInMainWorld('CentraidApi', {
     ipcRenderer.on(Channel.GATEWAY_RUNTIME_EVENT, handler);
     return () => ipcRenderer.off(Channel.GATEWAY_RUNTIME_EVENT, handler);
   },
+  // Gateway ops (issue #351). Restart applies to the local embedded gateway
+  // only (remote gateways restart server-side); diagnostics export fetches
+  // the active gateway's bundle and saves it via a native dialog.
+  restartGateway: () => ipcRenderer.invoke(Channel.GATEWAY_RESTART),
+  exportGatewayDiagnostics: () => ipcRenderer.invoke(Channel.GATEWAY_DIAGNOSTICS_EXPORT),
   onGatewayChanged: (
     cb: (msg: {
       activeGatewayId: string;

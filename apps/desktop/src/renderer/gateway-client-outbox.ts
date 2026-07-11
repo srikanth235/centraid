@@ -34,6 +34,7 @@ export interface OutboxItem {
   itemId: string;
   connection: OutboxConnectionRef;
   actor: string | null;
+  /** `'owner' | 'app' | 'agent' | 'assistant'` — the gateway refines the stored `ai_agent` kind (VaultPlane.refineActorKind); kept loose here. */
   actorKind: string;
   verb: string;
   target: string;

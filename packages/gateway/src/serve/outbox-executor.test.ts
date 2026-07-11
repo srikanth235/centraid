@@ -61,6 +61,22 @@ function fetchDouble(): FetchDouble {
   return { impl, calls, respond: (status, body = '{}') => responses.push({ status, body }) };
 }
 
+/**
+ * A fetchImpl that never resolves on its own — it only settles when the
+ * caller's AbortSignal fires, exactly like real `fetch` does under
+ * `AbortSignal.timeout` (issue #351: simulates a wedged third-party
+ * endpoint without an actual hung socket).
+ */
+function hangingFetch(): typeof fetch {
+  return ((_url: string | URL, init?: RequestInit): Promise<Response> => {
+    return new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+      });
+    });
+  }) as typeof fetch;
+}
+
 function configureApiKey(plane: VaultPlane, over: Record<string, unknown> = {}): string {
   const outcome = plane.gateway.invoke(plane.ownerCredential, {
     command: 'sync.configure_credential',
@@ -245,6 +261,24 @@ test('a 401 gets one forced refresh, then the drain succeeds (oauth2 lane)', asy
   expect(api.calls[1]?.headers.authorization).toBe('Bearer fresh-token');
   expect(itemRow(plane, itemId).status).toBe('sent');
 });
+
+test('a hung external write times out; deferred per the existing network-failure policy — issue #351', async () => {
+  const plane = openPlane(await tempDir());
+  configureApiKey(plane);
+  const itemId = stageItem(plane);
+  plane.decideOutbox({ itemId, decision: 'approve' });
+
+  const broker = new ConnectionBroker(() => plane);
+  // A short write timeout so the test doesn't wait out the real 60s default.
+  const executor = new OutboxExecutor(broker, silentLogger, hangingFetch(), {
+    writeTimeoutMs: 30,
+  });
+  const report = await executor.drain(plane);
+  // Same disposition as any other network failure (see drainItem's catch):
+  // the item stays approved for a later pass, nothing terminal happens.
+  expect(report).toMatchObject({ approved: 1, sent: 0, failed: 0, deferred: 1 });
+  expect(itemRow(plane, itemId).status).toBe('approved');
+}, 10_000);
 
 test('a credential-less connection defers the item — it survives for the reconnect', async () => {
   const plane = openPlane(await tempDir());

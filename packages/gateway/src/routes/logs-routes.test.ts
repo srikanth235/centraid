@@ -8,6 +8,7 @@ import { beforeEach, expect, test } from 'vitest';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { GatewayLogStore, type GatewayLogEntry } from '../serve/gateway-log-store.ts';
 import { makeLogsRouteHandler } from './logs-routes.ts';
+import { SseSubscriberCap } from './sse-cap.ts';
 
 let store: GatewayLogStore;
 let handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -22,6 +23,7 @@ interface MockClient {
   res: ServerResponse;
   status: () => number;
   body: () => string;
+  header: (name: string) => string | undefined;
   events: () => GatewayLogEntry[];
   ended: () => boolean;
   close: () => void;
@@ -29,6 +31,7 @@ interface MockClient {
 
 function client(url: string, method = 'GET'): MockClient {
   const chunks: string[] = [];
+  const headers = new Map<string, string>();
   let isEnded = false;
   let closeListener: (() => void) | undefined;
   const res = {
@@ -38,7 +41,9 @@ function client(url: string, method = 'GET'): MockClient {
       this.statusCode = status;
       return this;
     },
-    setHeader() {},
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value);
+    },
     write(s: string) {
       chunks.push(s);
       return true;
@@ -65,6 +70,7 @@ function client(url: string, method = 'GET'): MockClient {
     res: res as unknown as ServerResponse,
     status: () => res.statusCode,
     body: () => chunks.join(''),
+    header: (name: string) => headers.get(name.toLowerCase()),
     ended: () => isEnded,
     close: () => closeListener?.(),
     events: () =>
@@ -155,4 +161,37 @@ test('client disconnect unsubscribes and ends the response', async () => {
 
   // A line after disconnect reaches no one and doesn't throw.
   store.append('info', 'after close');
+});
+
+// Issue #351: unbounded concurrent SSE subscribers is a fd-exhaustion risk.
+// A small cap (2) makes the "cap+1" scenario cheap to exercise directly.
+test('SSE subscribers past the cap get 503 + Retry-After; the count decrements on disconnect', async () => {
+  const cap = new SseSubscriberCap(2);
+  const capped = makeLogsRouteHandler(store, { subscriberCap: cap });
+
+  const a = client('/centraid/_logs/events');
+  const b = client('/centraid/_logs/events');
+  expect(await capped(a.req, a.res)).toBe(true);
+  expect(await capped(b.req, b.res)).toBe(true);
+  expect(a.status()).toBe(200);
+  expect(b.status()).toBe(200);
+  expect(cap.current()).toBe(2);
+
+  // The 3rd subscriber is over the cap — refused, never joins the stream.
+  const c = client('/centraid/_logs/events');
+  expect(await capped(c.req, c.res)).toBe(true);
+  expect(c.status()).toBe(503);
+  expect(c.header('Retry-After')).toBeDefined();
+  const errBody = JSON.parse(c.body()) as { error: string };
+  expect(errBody.error).toBe('sse_capacity');
+  expect(c.ended()).toBe(true);
+  expect(cap.current()).toBe(2); // the refusal never incremented the count
+
+  // Disconnecting one live subscriber frees a slot for the next comer.
+  a.close();
+  expect(cap.current()).toBe(1);
+  const d = client('/centraid/_logs/events');
+  expect(await capped(d.req, d.res)).toBe(true);
+  expect(d.status()).toBe(200);
+  expect(cap.current()).toBe(2);
 });

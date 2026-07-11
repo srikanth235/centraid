@@ -103,6 +103,9 @@ export class BackupService {
   private timer: NodeJS.Timeout | undefined;
   /** Serializes every run — "one at a time (no concurrent backups)". */
   private chain: Promise<void> = Promise.resolve();
+  /** The vault/kind currently executing inside `chain`, if any — read by
+   *  `isRunning()` (the `_gateway/backup` route's `running` flag). */
+  private activeRun: { vaultId: string; kind: 'backup' | 'verify' } | undefined;
 
   constructor(opts: BackupServiceOptions) {
     this.config = opts.config;
@@ -180,7 +183,34 @@ export class BackupService {
   // ── Backup ────────────────────────────────────────────────────────────
 
   async runBackup(vaultId: string): Promise<void> {
-    return this.enqueue(() => this.doRunBackup(vaultId));
+    return this.enqueue(async () => {
+      this.activeRun = { vaultId, kind: 'backup' };
+      try {
+        await this.doRunBackup(vaultId);
+      } finally {
+        this.activeRun = undefined;
+      }
+    });
+  }
+
+  /**
+   * Manual "run every mounted vault now" — the CLI's `backup run` (no
+   * `--vault`) and the Gateway page's "Back up now" button. Unlike `tick()`,
+   * bypasses the due-ness check: every mounted vault backs up immediately,
+   * one at a time (the same `chain` serialization `runBackup` always uses).
+   */
+  async runAll(): Promise<void> {
+    for (const plane of this.vaults.planesList()) {
+      await this.runBackup(plane.boot.vaultId);
+    }
+  }
+
+  /** Is a backup/verify run currently executing? Scoped to `vaultId` when
+   *  given, otherwise true if ANY vault is mid-run (`chain` only ever runs
+   *  one at a time). */
+  isRunning(vaultId?: string): boolean {
+    if (!this.activeRun) return false;
+    return vaultId === undefined || this.activeRun.vaultId === vaultId;
   }
 
   private async doRunBackup(vaultId: string): Promise<void> {
@@ -275,7 +305,12 @@ export class BackupService {
   async runVerify(vaultId: string): Promise<VerifySnapshotResult | undefined> {
     let result: VerifySnapshotResult | undefined;
     await this.enqueue(async () => {
-      result = await this.doRunVerify(vaultId);
+      this.activeRun = { vaultId, kind: 'verify' };
+      try {
+        result = await this.doRunVerify(vaultId);
+      } finally {
+        this.activeRun = undefined;
+      }
     });
     return result;
   }

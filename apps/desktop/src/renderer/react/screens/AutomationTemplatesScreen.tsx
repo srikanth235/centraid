@@ -1,4 +1,5 @@
 import { useMemo, useState, type JSX } from 'react';
+import type { IconName } from '@centraid/design-tokens';
 import { Icon } from '../ui/index.js';
 import type { AutomationTemplatesBridgeProps, DiscoverTemplate } from '../screen-contracts.js';
 import { INTEGRATION_HUES } from '../format.js';
@@ -6,7 +7,22 @@ import styles from './AutomationTemplatesScreen.module.css';
 import au from '../styles/automation.module.css';
 import { cx } from '../ui/cx.js';
 
-type Trig = 'all' | 'cron' | 'webhook';
+type Trig = 'all' | 'cron' | 'webhook' | 'data' | 'condition';
+
+// Trigger-kind → icon/label, matching the labels automationsData.ts'
+// buildAutomationViewData (kindEyebrow/run trig) uses for the same four kinds —
+// data and condition triggers reuse the Clock glyph there too (only webhook
+// gets its own icon), so the card badge and the segmented filter stay honest
+// without inventing a new mark.
+const TRIGGER_KIND_META: Record<
+  'cron' | 'webhook' | 'data' | 'condition',
+  { icon: IconName; label: string }
+> = {
+  cron: { icon: 'Clock', label: 'Cron' },
+  webhook: { icon: 'Webhook', label: 'Webhook' },
+  data: { icon: 'Clock', label: 'Data' },
+  condition: { icon: 'Clock', label: 'Condition' },
+};
 
 function IntegrationChips({ integrations }: { integrations: readonly string[] }): JSX.Element {
   return (
@@ -46,7 +62,7 @@ function TemplateCard({
       <span className={styles.foot}>
         <span className={styles.trig}>
           <span className={styles.trigIcon} aria-hidden="true">
-            <Icon name={t.triggerKind === 'webhook' ? 'Webhook' : 'Clock'} size={13} />
+            <Icon name={TRIGGER_KIND_META[t.triggerKind ?? 'cron'].icon} size={13} />
           </span>
           {t.triggerLabel ?? ''}
         </span>
@@ -65,6 +81,7 @@ function TemplateCard({
  */
 export default function AutomationTemplatesScreen({
   templates,
+  subtitle,
   onPreview,
   onStartFromScratch,
 }: AutomationTemplatesBridgeProps): JSX.Element {
@@ -125,6 +142,16 @@ export default function AutomationTemplatesScreen({
 
   return (
     <div className={styles.wrap}>
+      <div className={styles.head}>
+        <div className={styles.titleRow}>
+          <span className={styles.titleIcon} aria-hidden="true">
+            <Icon name="Bolt" size={16} strokeWidth={2} />
+          </span>
+          <h1 className={styles.title}>Templates</h1>
+        </div>
+        {subtitle ? <p className={styles.sub}>{subtitle}</p> : null}
+      </div>
+
       <div className={styles.toolbar}>
         <div className={styles.search}>
           <span className={styles.searchIc} aria-hidden="true">
@@ -140,7 +167,7 @@ export default function AutomationTemplatesScreen({
           />
         </div>
         <div className={styles.seg} role="tablist" aria-label="Filter by trigger">
-          {(['all', 'cron', 'webhook'] as const).map((k) => (
+          {(['all', 'cron', 'webhook', 'data', 'condition'] as const).map((k) => (
             <button
               key={k}
               type="button"
@@ -151,7 +178,7 @@ export default function AutomationTemplatesScreen({
               data-active={k === trig ? 'true' : undefined}
               onClick={() => setTrig(k)}
             >
-              {k === 'all' ? 'All' : k === 'cron' ? 'Cron' : 'Webhook'}
+              {k === 'all' ? 'All' : TRIGGER_KIND_META[k].label}
             </button>
           ))}
         </div>
@@ -182,7 +209,7 @@ export default function AutomationTemplatesScreen({
         </div>
       ) : null}
 
-      <div className={styles.cats}>
+      <div>
         {shown.length === 0 ? (
           <div className={styles.empty}>
             <div className={styles.emptyIcon} aria-hidden="true">

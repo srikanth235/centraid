@@ -12,6 +12,7 @@ export function createNav({
   renderDetails,
   renderQuick,
   renderNewMenu,
+  renderEditor,
   clearSelection,
 }) {
   function openDetails(id) {
@@ -34,9 +35,25 @@ export function createNav({
     renderQuick();
   }
   function quickStep(delta) {
-    const idx = state.visibleRows.findIndex((d) => d.content_id === state.quickId);
+    const idx = state.visibleRows.findIndex((d) => d.document_id === state.quickId);
     const next = idx < 0 ? undefined : state.visibleRows[idx + delta];
-    if (next) openQuick(next.content_id);
+    if (next) openQuick(next.document_id);
+  }
+
+  // The in-place text editor (issue #352) is its own overlay, stacked above
+  // Details exactly like Quick Look is — opening it closes Details/Quick
+  // Look the same way opening either of those closes the other.
+  function openEditor(id) {
+    state.editingId = id;
+    state.detailsId = null;
+    state.quickId = null;
+    renderDetails();
+    renderQuick();
+    renderEditor();
+  }
+  function closeEditor() {
+    state.editingId = null;
+    renderEditor();
   }
 
   function triggerUpload() {
@@ -52,6 +69,15 @@ export function createNav({
 
   function selectType(key) {
     state.type = key;
+    clearSelection();
+    render();
+  }
+
+  // Free-form label filter (issue #352 phase 4) — same shape as selectType,
+  // toggling off when the same tag is clicked again (a chip row's usual
+  // idiom) rather than requiring a separate "All" chip of its own.
+  function selectTag(key) {
+    state.tag = state.tag === key ? 'all' : key;
     clearSelection();
     render();
   }
@@ -82,9 +108,12 @@ export function createNav({
     openQuick,
     closeQuick,
     quickStep,
+    openEditor,
+    closeEditor,
     triggerUpload,
     startCreateFolder,
     selectType,
+    selectTag,
     selectNav,
     showMoreDocs,
   };

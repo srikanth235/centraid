@@ -85,7 +85,7 @@ export interface TemplateEntry {
   // automation-only display fields:
   emoji?: string;
   category?: string;
-  triggerKind?: 'cron' | 'webhook';
+  triggerKind?: 'cron' | 'webhook' | 'data' | 'condition';
   triggerLabel?: string;
   integrations?: readonly string[];
 }

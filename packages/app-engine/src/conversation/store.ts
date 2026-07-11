@@ -258,14 +258,25 @@ export class ConversationStore {
    * `automation_id`, so every fire is an independent durable run grouped by ref
    * (not turns piled into one perpetual thread). Automations aren't user-scoped,
    * so `user_id` is empty. The fire then inserts its turn under `conversationId`.
+   *
+   * `name` (the automation's display name at fire time) rides the
+   * conversation's own `title` column — it survives the automation being
+   * deleted later, so an orphaned run can still show its last-known name
+   * instead of the raw `<appId>/<id>` ref (see `run_summary.automation_name`).
    */
-  createAutomationRun(conversationId: string, automationRef: string, appId?: string): void {
+  createAutomationRun(
+    conversationId: string,
+    automationRef: string,
+    appId?: string,
+    name?: string,
+  ): void {
     this.createConversation({
       id: conversationId,
       kind: 'automation',
       userId: '',
       automationId: automationRef,
       ...(appId !== undefined ? { appId } : {}),
+      ...(name !== undefined ? { title: name } : {}),
     });
   }
 

@@ -32,6 +32,35 @@ describe('scaffoldAppFiles', () => {
     expect(lintHandlerSource(out.get('automations/briefing/handler.js')!)).toEqual([]);
   });
 
+  it('accepts a condition/data trigger paired with a vault block', () => {
+    const vault = {
+      purpose: 'dpv:ServiceProvision',
+      scopes: [{ schema: 'core', table: 'invoice', verbs: 'read' as const }],
+    };
+    const out = byPath(
+      scaffoldAppFiles('watcher', {
+        triggers: [{ kind: 'data', entities: ['core.invoice'], every: '*/10 * * * *' }],
+        vault,
+      }),
+    );
+    const mf = JSON.parse(out.get('automations/watcher/automation.json')!) as {
+      triggers: { kind: string; entities?: string[]; every?: string }[];
+      vault?: { purpose: string };
+    };
+    expect(mf.triggers).toEqual([
+      { kind: 'data', entities: ['core.invoice'], every: '*/10 * * * *' },
+    ]);
+    expect(mf.vault?.purpose).toBe('dpv:ServiceProvision');
+  });
+
+  it('rejects a condition/data trigger with no vault block', () => {
+    expect(() =>
+      scaffoldAppFiles('watcher2', {
+        triggers: [{ kind: 'condition', entity: 'core.invoice' }],
+      }),
+    ).toThrow(/manifest\.vault block/);
+  });
+
   it('emits the requires.tools allowlist slot (and model when given)', () => {
     const plain = byPath(scaffoldAppFiles('briefing'));
     const reqs = (

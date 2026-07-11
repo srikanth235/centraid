@@ -47,24 +47,39 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const PKG = process.cwd();
+// Resolved from this module's own path, not process.cwd(): cwd differs
+// between a root-run vitest (repo root) and a package-run vitest (this
+// package's dir), but the file's own location never does.
+const PKG = path.resolve(import.meta.dirname, '..');
 // Apps import these as siblings (`./kit.js`); at rest they live only in `kit/`,
 // and the gateway serves them from a shared dir (SHARED_ASSET_FILES in
 // app-engine/src/http/static-server.ts). Symlinks reproduce that layout.
 const SHARED = ['kit.js', 'elements.js', 'react-core.min.js', 'jsx-runtime.js'];
 
 // React-dialect apps ship app.jsx; the gateway transpiles it per-request. The
-// harness mirrors that with the same transform options + specifier rewrite as
-// transformJsx() in app-engine/src/http/static-server.ts — via the esbuild
-// CLI, because esbuild's JS API refuses to load under the jsdom environment
-// (realm-split Uint8Array trips its TextEncoder startup invariant).
-function transformJsxLikeTheGateway(source: string): string {
+// harness mirrors that with the same transform options + depth-aware
+// specifier rewrite as transformJsx()/jsxRuntimeClimb() in
+// app-engine/src/http/static-server.ts — via the esbuild CLI, because
+// esbuild's JS API refuses to load under the jsdom environment (realm-split
+// Uint8Array trips its TextEncoder startup invariant).
+//
+// `depth` is the number of directory segments in the file's app-relative
+// path (0 at the app root, 1 under `components/`, …) — esbuild's emitted
+// `./jsx-runtime` import is resolved relative to the importing file's own
+// directory, and `jsx-runtime.js` only ever lives at the app root, so a
+// nested file needs a specifier that climbs back up (`../jsx-runtime.js`,
+// `../../jsx-runtime.js`, …) rather than a bare `./jsx-runtime.js`.
+function transformJsxLikeTheGateway(source: string, depth: number): string {
   const bin = path.resolve(PKG, '../..', 'node_modules/.bin/esbuild');
   const code = execFileSync(bin, ['--loader=jsx', '--jsx=automatic', '--jsx-import-source=.'], {
     input: source,
     encoding: 'utf8',
   });
-  return code.replace(/(["'])\.\/jsx-runtime\1/g, '$1./jsx-runtime.js$1');
+  const prefix = depth === 0 ? './' : '../'.repeat(depth);
+  return code.replace(
+    /(["'])\.\/jsx-runtime\1/g,
+    (_m, q: string) => `${q}${prefix}jsx-runtime.js${q}`,
+  );
 }
 
 const DENIED = { vaultDenied: { message: 'Grant revoked.' } };
@@ -125,30 +140,29 @@ export function describeAppBoot(app: string) {
       // imports name; vite loads the (already-transformed) content fine.
       if (existsSync(path.join(appDir, 'app.jsx'))) {
         entry = 'app.jsx';
-        const jsxDirs = new Set<string>();
         for (const rel of collectSources(appDir)) {
           const out = path.join(dir, rel);
           mkdirSync(path.dirname(out), { recursive: true });
           if (rel.endsWith('.jsx')) {
+            const depth = rel.split('/').length - 1;
             writeFileSync(
               out,
-              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8')),
+              transformJsxLikeTheGateway(readFileSync(path.join(appDir, rel), 'utf8'), depth),
             );
-            jsxDirs.add(path.dirname(out));
           } else {
             cpSync(path.join(appDir, rel), out);
           }
         }
-        // The gateway resolves a missing nested `components/jsx-runtime.js`
-        // (or react-core, kit.js…) via the SHARED_ASSET_FILES *basename*
-        // fallback. Symlinking the shared set into every dir that holds a
-        // transformed .jsx reproduces that resolution on disk.
-        jsxDirs.add(dir);
-        for (const d of jsxDirs) {
-          for (const f of SHARED) {
-            if (!existsSync(path.join(d, f)))
-              symlinkSync(path.join(PKG, 'kit', f), path.join(d, f));
-          }
+        // Shared assets (kit.js / react-core.min.js / jsx-runtime.js…) only
+        // ever live at the app root — mirrors the gateway's root-only
+        // SHARED_ASSET_FILES fallback (static-server.ts). A nested .jsx
+        // file's relative imports either climb back to the root themselves
+        // (`../kit.js`, `../react-core.min.js` — hand-written by the app) or,
+        // for the one specifier esbuild emits automatically, via the
+        // depth-aware rewrite above, so only the root needs the symlinks.
+        for (const f of SHARED) {
+          if (!existsSync(path.join(dir, f)))
+            symlinkSync(path.join(PKG, 'kit', f), path.join(dir, f));
         }
       } else {
         entry = 'app.js';

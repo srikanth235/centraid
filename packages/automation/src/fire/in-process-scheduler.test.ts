@@ -191,3 +191,50 @@ describe('condition-trigger watches', () => {
     expect(() => s.tick()).not.toThrow();
   });
 });
+
+describe('InProcessScheduler onTick hook (issue #351)', () => {
+  it('fires once per processed minute, before any automation fire', async () => {
+    const order: string[] = [];
+    let clock = at(8, 0);
+    const s = new InProcessScheduler({
+      fire: (ref) => void order.push(`fire:${ref}`),
+      onTick: (t) => void order.push(`tick:${t.getHours()}:${t.getMinutes()}`),
+      now: () => clock,
+    });
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+
+    s.tick();
+    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
+
+    // Same minute again — de-duped, no second tick or fire.
+    s.tick();
+    expect(order).toEqual(['tick:8:0', 'fire:a/one']);
+
+    clock = at(8, 1);
+    s.tick();
+    expect(order).toEqual(['tick:8:0', 'fire:a/one', 'tick:8:1']);
+  });
+
+  it('a throwing onTick routes to onError instead of crashing the timer loop', async () => {
+    const errors: Array<{ err: unknown; ref: string }> = [];
+    const s = new InProcessScheduler({
+      fire: () => {},
+      onTick: () => {
+        throw new Error('boom');
+      },
+      onError: (err, ref) => errors.push({ err, ref }),
+      now: () => at(8, 0),
+    });
+    expect(() => s.tick()).not.toThrow();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.err).toBeInstanceOf(Error);
+  });
+
+  it('onTick is optional — omitting it changes nothing about firing', async () => {
+    const fired: string[] = [];
+    const s = new InProcessScheduler({ fire: (ref) => void fired.push(ref), now: () => at(8, 0) });
+    await s.reconcile([row('a/one', true, ['0 8 * * *'])]);
+    expect(() => s.tick()).not.toThrow();
+    expect(fired).toEqual(['a/one']);
+  });
+});

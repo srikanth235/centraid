@@ -11,7 +11,7 @@ export default async ({ body, ctx }) => {
     const outcome = await ctx.vault.invoke({
       command: 'core.restore_document',
       input: {
-        content_id: String(input.content_id ?? ''),
+        document_id: String(input.document_id ?? ''),
       },
       purpose: 'dpv:ServiceProvision',
     });

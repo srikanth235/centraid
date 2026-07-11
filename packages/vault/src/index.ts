@@ -46,6 +46,7 @@ export {
   VAULT_MIGRATIONS,
   JOURNAL_MIGRATIONS,
   migrate,
+  VaultSchemaAheadError,
 } from './schema/migrate.js';
 export {
   resolveEntity,

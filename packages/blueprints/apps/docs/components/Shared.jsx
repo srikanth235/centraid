@@ -1,5 +1,6 @@
 // Small shared presentational bits used across the Sidebar, Grid, List,
 // Details and QuickLook components. Pure functions of props — no app state.
+import { custodyMeta } from '../format.js';
 import { I } from '../icons.js';
 
 // A trusted static SVG string rendered inline, with the exact DOM shape the
@@ -24,6 +25,17 @@ export function Checkbox({ cls, selected, onClick, label }) {
       {selected ? <Icon svg={I.check} /> : null}
     </button>
   );
+}
+
+// A compact backup-status dot (issue #352 phase 4, blob/custody.ts) for Grid
+// cards and List rows — the full-text chip version lives inline in
+// Details.jsx, where there's room for the label. Renders nothing for a
+// custody-less row (an inline document, or the standing sweep hasn't run
+// yet) rather than claim a state the vault never asserted.
+export function CustodyDot({ state }) {
+  const meta = custodyMeta(state);
+  if (!meta) return null;
+  return <span className={`d-custody-dot custody-${meta.tone}`} title={meta.label} aria-label={meta.label} role="img" />;
 }
 
 // The search-hit snippet: replicated as JSX `<mark>` spans instead of calling

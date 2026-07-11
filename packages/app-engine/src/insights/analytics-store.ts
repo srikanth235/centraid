@@ -32,6 +32,7 @@ interface RawSummary {
   run_id: string;
   kind: string;
   automation_ref: string | null;
+  automation_name: string | null;
   app_id: string | null;
   trigger: string;
   trigger_origin: string | null;
@@ -58,6 +59,7 @@ function fromRaw(raw: RawSummary): RunSummary {
     runId: raw.run_id,
     kind: raw.kind as RunKind,
     ...(raw.automation_ref !== null ? { automationRef: raw.automation_ref } : {}),
+    ...(raw.automation_name !== null ? { automationName: raw.automation_name } : {}),
     ...(raw.app_id !== null ? { appId: raw.app_id } : {}),
     trigger: raw.trigger,
     ...(raw.trigger_origin !== null ? { triggerOrigin: raw.trigger_origin } : {}),

@@ -40,6 +40,14 @@ export interface LogsBridgeProps {
    * the stream itself keeps running, only the search box changes.
    */
   focusQuery?: { text: string; nonce: number };
+  /**
+   * Save `/centraid/_gateway/diagnostics` through a native save dialog
+   * (issue #351). Omitted → the toolbar button doesn't render (keeps this
+   * screen usable standalone, e.g. in a future non-desktop host).
+   */
+  onExportDiagnostics?: () => Promise<
+    { ok: true; path: string } | { ok: false; canceled?: boolean; error?: string }
+  >;
 }
 
 type StreamStatus = 'connecting' | 'live' | 'reconnecting';
@@ -76,13 +84,23 @@ const STATUS_LABEL: Record<StreamStatus, string> = {
   reconnecting: 'Reconnecting…',
 };
 
-export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps): JSX.Element {
+export default function LogsScreen({
+  streamLogs,
+  focusQuery,
+  onExportDiagnostics,
+}: LogsBridgeProps): JSX.Element {
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [filter, setFilter] = useState<LevelFilter>('all');
   const [query, setQuery] = useState('');
   const [follow, setFollow] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [exportState, setExportState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'pending' }
+    | { kind: 'done'; path: string }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
 
   useEffect(() => {
     if (focusQuery) setQuery(focusQuery.text);
@@ -97,6 +115,16 @@ export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps):
   const followRef = useRef(true);
   followRef.current = follow;
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Guards the export flow's deferred `setExportState({kind: 'idle'})`
+  // against firing after unmount (e.g. the user leaves the Logs tab right
+  // after a successful export).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -181,6 +209,32 @@ export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps):
 
   const errorCount = useMemo(() => entries.filter((e) => e.level === 'error').length, [entries]);
 
+  const exportDiagnostics = async (): Promise<void> => {
+    if (!onExportDiagnostics) return;
+    setExportState({ kind: 'pending' });
+    try {
+      const result = await onExportDiagnostics();
+      if (!mountedRef.current) return;
+      if (result.ok) {
+        setExportState({ kind: 'done', path: result.path });
+        setTimeout(() => {
+          if (mountedRef.current) setExportState({ kind: 'idle' });
+        }, 4000);
+      } else if (result.canceled) {
+        setExportState({ kind: 'idle' });
+      } else {
+        setExportState({ kind: 'error', message: result.error ?? 'Export failed.' });
+      }
+    } catch (err) {
+      if (mountedRef.current) {
+        setExportState({
+          kind: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  };
+
   return (
     <div className={styles.wrap}>
       <div className={styles.toolbar}>
@@ -227,7 +281,26 @@ export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps):
         >
           Clear
         </button>
+        {onExportDiagnostics ? (
+          <button
+            type="button"
+            className={controlsCss.chip}
+            onClick={() => void exportDiagnostics()}
+            disabled={exportState.kind === 'pending'}
+          >
+            {exportState.kind === 'pending' ? 'Exporting…' : 'Export diagnostics'}
+          </button>
+        ) : null}
       </div>
+      {exportState.kind === 'done' ? (
+        <div className={styles.exportStatus} data-tone="ok">
+          Saved to {exportState.path}
+        </div>
+      ) : exportState.kind === 'error' ? (
+        <div className={styles.exportStatus} data-tone="error">
+          {exportState.message}
+        </div>
+      ) : null}
 
       <div className={styles.logPanel}>
         <div className={styles.logScroll} ref={scrollRef} onScroll={onScroll}>

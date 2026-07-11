@@ -14,6 +14,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { AnalyticsStore, InsightsStore, makeJournalDbProvider } from '@centraid/app-engine';
 import { WorktreeStore } from '../worktree-store/index.js';
 import { makeAutomationsRouteHandler } from './automations-routes.ts';
+import { SseSubscriberCap } from './sse-cap.ts';
 
 let dir: string;
 let analytics: AnalyticsStore;
@@ -117,4 +118,102 @@ test('GET /centraid/_insights/summary returns a payload object', async () => {
   expect(r.status).toBe(200);
   expect(typeof r.body).toBe('object');
   expect(r.body).not.toBe(null);
+});
+
+// Issue #351: run/events SSE was unbounded — a small cap (2) makes the
+// "cap+1" scenario cheap to exercise. `subscribeRunEvents` is wired to a
+// no-op unsub (never fires `run.end`) so the stream stays open under test,
+// same as a real live run being watched.
+interface SseMockClient {
+  req: IncomingMessage;
+  res: ServerResponse;
+  status: () => number;
+  header: (name: string) => string | undefined;
+  body: () => string;
+  ended: () => boolean;
+  close: () => void;
+}
+
+function sseClient(url: string): SseMockClient {
+  const chunks: string[] = [];
+  const headers = new Map<string, string>();
+  let isEnded = false;
+  let closeListener: (() => void) | undefined;
+  const res = {
+    writableEnded: false,
+    statusCode: 0,
+    writeHead(status: number) {
+      this.statusCode = status;
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      headers.set(name.toLowerCase(), value);
+    },
+    write(s: string) {
+      chunks.push(s);
+      return true;
+    },
+    end(s?: string) {
+      if (s) chunks.push(s);
+      isEnded = true;
+      this.writableEnded = true;
+    },
+    on() {
+      return this;
+    },
+  };
+  const req = {
+    method: 'GET',
+    url,
+    on(event: string, fn: () => void) {
+      if (event === 'close') closeListener = fn;
+      return this;
+    },
+  };
+  return {
+    req: req as unknown as IncomingMessage,
+    res: res as unknown as ServerResponse,
+    status: () => res.statusCode,
+    header: (name: string) => headers.get(name.toLowerCase()),
+    body: () => chunks.join(''),
+    ended: () => isEnded,
+    close: () => closeListener?.(),
+  };
+}
+
+test('run/events subscribers past the cap get 503 + Retry-After; the count decrements on disconnect', async () => {
+  const cap = new SseSubscriberCap(2);
+  const capped = makeAutomationsRouteHandler({
+    store: new WorktreeStore({ root: path.join(dir, 'code') }),
+    journalDbFile: path.join(dir, 'journal.db'),
+    analytics,
+    insights,
+    runAutomation: (input) => fired.push(input),
+    subscribeRunEvents: () => () => undefined, // keeps the stream open, like a real live run
+    subscriberCap: cap,
+  });
+
+  const a = sseClient('/centraid/_automations/run/events?runId=r1');
+  const b = sseClient('/centraid/_automations/run/events?runId=r2');
+  expect(await capped(a.req, a.res)).toBe(true);
+  expect(await capped(b.req, b.res)).toBe(true);
+  expect(a.status()).toBe(200);
+  expect(b.status()).toBe(200);
+  expect(cap.current()).toBe(2);
+
+  const c = sseClient('/centraid/_automations/run/events?runId=r3');
+  expect(await capped(c.req, c.res)).toBe(true);
+  expect(c.status()).toBe(503);
+  expect(c.header('Retry-After')).toBeDefined();
+  const errBody = JSON.parse(c.body()) as { error: string };
+  expect(errBody.error).toBe('sse_capacity');
+  expect(c.ended()).toBe(true);
+  expect(cap.current()).toBe(2);
+
+  a.close();
+  expect(cap.current()).toBe(1);
+  const d = sseClient('/centraid/_automations/run/events?runId=r4');
+  expect(await capped(d.req, d.res)).toBe(true);
+  expect(d.status()).toBe(200);
+  expect(cap.current()).toBe(2);
 });

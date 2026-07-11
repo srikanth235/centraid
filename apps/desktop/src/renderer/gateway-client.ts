@@ -519,3 +519,8 @@ export * from './gateway-client-outbox.js';
 // Re-exported here so the Settings → Logs screen imports it from the
 // same barrel.
 export * from './gateway-client-logs.js';
+
+// The offsite backup engine's status/run surface (issue #351) lives in
+// `gateway-client-backup.ts`. Re-exported here so the Gateway page's
+// Backup card imports it from the same barrel.
+export * from './gateway-client-backup.js';

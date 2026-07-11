@@ -85,6 +85,8 @@ test('same bytes, different declared type: one content item (raw-bytes dedup)', 
   );
   const second = gw.stageBlob(owner, { bytes: PNG_BYTES, mediaType: 'image/x-weird' });
   expect(second.existingContentId).toBe(a.content_id);
+  // A second document over the same bytes still dedupes the CONTENT — it's a
+  // brand-new document, but wraps the identical content item (issue #352).
   const b = executed<{ content_id: string; deduped: number }>(
     invoke('core.add_document', { staged_sha: second.sha256, title: 'again.png' }),
   );
@@ -132,13 +134,13 @@ test('inline data_uri: text stays in the row, binary spills to the CAS, big refu
   expect((refused as { predicate?: string }).predicate).toContain('within_size_cap');
 });
 
-test('extracted text feeds the PARENT document row in search, and survives rename', () => {
+test('extracted text feeds the OWNING document row in search, and survives rename', () => {
   const pdf = Buffer.from('%PDF-1.1\nBT (unicorn depreciation schedule) Tj ET\n%%EOF');
   const staged = gw.stageBlob(owner, { bytes: pdf, filename: 'depr.pdf' });
-  const doc = executed<{ content_id: string }>(
+  const doc = executed<{ document_id: string; content_id: string }>(
     invoke('core.add_document', { staged_sha: staged.sha256, title: 'Depreciation' }),
   );
-  // The text variant exists and the PARENT (not a shadow row) matches.
+  // The text variant exists and the OWNING document (not a shadow row) matches.
   const variant = db.vault
     .prepare(
       "SELECT text_content FROM core_content_derivative WHERE content_id = ? AND variant = 'text'",
@@ -146,25 +148,25 @@ test('extracted text feeds the PARENT document row in search, and survives renam
     .get(doc.content_id) as { text_content: string };
   expect(variant.text_content).toContain('unicorn depreciation');
   const hits = gw.search(owner, {
-    entity: 'core.content_item',
+    entity: 'core.document',
     query: 'unicorn',
     purpose: 'dpv:ServiceProvision',
   });
-  expect(hits.rows.map((r) => r.content_id)).toContain(doc.content_id);
-  // A rename rebuilds the FTS row — extracted text must survive (the v9
-  // COALESCE, not the v2 vault_content_text-only rebuild).
-  executed(invoke('core.rename_document', { content_id: doc.content_id, title: 'Renamed' }));
+  expect(hits.rows.map((r) => r.document_id)).toContain(doc.document_id);
+  // A rename rebuilds the FTS row — extracted text must survive (the
+  // derivative-aware COALESCE, not a title-only rebuild).
+  executed(invoke('core.rename_document', { document_id: doc.document_id, title: 'Renamed' }));
   const after = gw.search(owner, {
-    entity: 'core.content_item',
+    entity: 'core.document',
     query: 'unicorn',
     purpose: 'dpv:ServiceProvision',
   });
-  expect(after.rows.map((r) => r.content_id)).toContain(doc.content_id);
+  expect(after.rows.map((r) => r.document_id)).toContain(doc.document_id);
 });
 
 test('egress rule: attached serves, trash still serves, unclaimed refuses', () => {
   const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
-  const doc = executed<{ content_id: string }>(
+  const doc = executed<{ document_id: string; content_id: string }>(
     invoke('core.add_document', { staged_sha: staged.sha256, title: 'photo.png' }),
   );
   const ok = gw.resolveBlob(owner, doc.content_id);
@@ -174,7 +176,7 @@ test('egress rule: attached serves, trash still serves, unclaimed refuses', () =
     expect(db.blobs.getSync(ok.blob.sha256)?.equals(PNG_BYTES)).toBe(true);
   }
   // Trash keeps rendering until the purge sweep actually reclaims.
-  executed(invoke('core.trash_document', { content_id: doc.content_id }));
+  executed(invoke('core.trash_document', { document_id: doc.document_id }));
   expect(gw.resolveBlob(owner, doc.content_id).status).toBe('ok');
   // A variant nobody produced is a clean miss, not an error.
   expect(gw.resolveBlob(owner, doc.content_id, { variant: 'thumb' }).status).toBe('no-variant');
@@ -227,16 +229,18 @@ test('a variant staged AFTER its parent was claimed registers immediately', () =
 test('purge sweep reclaims CAS bytes and derivative rows; staging TTL sweeps unclaimed', () => {
   const pdf = Buffer.from('%PDF-1.1\nBT (soon to be purged content) Tj ET\n%%EOF');
   const staged = gw.stageBlob(owner, { bytes: pdf });
-  const doc = executed<{ content_id: string }>(
+  const doc = executed<{ document_id: string; content_id: string }>(
     invoke('core.add_document', { staged_sha: staged.sha256, title: 'doomed.pdf' }),
   );
-  executed(invoke('core.trash_document', { content_id: doc.content_id }));
-  // Ripen the trash, then sweep.
+  executed(invoke('core.trash_document', { document_id: doc.document_id }));
+  // Ripen the trash, then sweep — the DOCUMENT purges (content is untouched
+  // while it lives, issue #352), which in turn releases its exclusively-
+  // owned content since nothing else rents it.
   db.vault
-    .prepare('UPDATE core_content_item SET purge_at = ? WHERE content_id = ?')
-    .run('2000-01-01T00:00:00.000Z', doc.content_id);
+    .prepare('UPDATE core_document SET purge_at = ? WHERE document_id = ?')
+    .run('2000-01-01T00:00:00.000Z', doc.document_id);
   const swept = gw.sweep(owner);
-  expect(swept.contentPurged).toBe(1);
+  expect(swept.documentsPurged).toBe(1);
   expect(swept.blobsReclaimed).toBeGreaterThanOrEqual(1);
   expect(db.blobs.hasSync(staged.sha256)).toBe(false);
   expect(db.vault.prepare('SELECT count(*) AS n FROM core_content_derivative').get()).toEqual({
@@ -280,4 +284,32 @@ test('readonly devices cannot stage; blob maintenance sweep replicates and repor
   expect(swept.replicated).toEqual([]);
   expect(swept.missing).toEqual([]);
   expect(swept.receiptId).toBeTruthy();
+});
+
+test('blob maintenance sweep refreshes the app-readable custody-state mirror (issue #352)', async () => {
+  const staged = gw.stageBlob(owner, { bytes: PNG_BYTES });
+  const doc = executed<{ content_id: string }>(
+    invoke('core.add_document', { staged_sha: staged.sha256, title: 'p.png' }),
+  );
+  await gw.sweepBlobs(owner);
+  const row = db.vault
+    .prepare('SELECT sha256, custody_state FROM blob_custody_state WHERE content_id = ?')
+    .get(doc.content_id) as { sha256: string; custody_state: string } | undefined;
+  expect(row).toMatchObject({ sha256: staged.sha256, custody_state: 'local-only' });
+  // Read via the registered logical entity — the same surface an app uses.
+  const read = gw.read(owner, {
+    entity: 'blob.custody_state',
+    where: [{ column: 'content_id', op: 'eq', value: doc.content_id }],
+    purpose: 'dpv:ServiceProvision',
+  });
+  expect(read.rows).toHaveLength(1);
+
+  // Purging the document's content releases the mirror row too (ON DELETE
+  // CASCADE), not a stale entry the app plane would misread.
+  await gw.sweepBlobs(owner); // idempotent re-run, still one row
+  expect(
+    (
+      db.vault.prepare('SELECT count(*) AS n FROM blob_custody_state').get() as { n: number }
+    ).n,
+  ).toBe(1);
 });
