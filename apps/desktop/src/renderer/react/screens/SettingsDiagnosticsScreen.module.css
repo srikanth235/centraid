@@ -108,6 +108,22 @@
   color: var(--ink-3);
 }
 
+.jumpToLogs {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--accent-deep, var(--accent));
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.jumpToLogs:hover {
+  color: var(--accent);
+}
+
 .healthLabel {
   flex: none;
   font-family: var(--font-mono);

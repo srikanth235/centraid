@@ -6,13 +6,14 @@ import styles from './SettingsDiagnosticsScreen.module.css';
 import buttonCss from '../ui/Button.module.css';
 import controlsCss from '../styles/controls.module.css';
 
-// Settings → Diagnostics: the owner surface over the gateway's
+// Gateway → Components: the owner surface over the gateway's
 // component-level health (`GET /centraid/_gateway/health`). Uptime says
 // the process answers; this says which subsystem stopped working — vaults,
 // schedulers, outbox, connections — with each component's last error and
 // the gateway's recent structured warn/error tail. Prop-driven like
 // SettingsProvidersScreen: this file owns the view + load/refresh state,
-// the gateway I/O lives in `routes/settingsDiagnosticsData.ts`.
+// the gateway I/O lives in `routes/settingsDiagnosticsData.ts`. Mounted from
+// the Gateway page's Components tab (GatewayScreen.tsx), not Settings.
 
 export type HealthStatus = 'ok' | 'degraded' | 'error';
 
@@ -43,6 +44,10 @@ export interface GatewayHealthDTO {
 
 export interface SettingsDiagnosticsBridgeProps {
   loadHealth: () => Promise<GatewayHealthDTO>;
+  /** Jump into the Logs tab, focused on this component's lines — omitted
+   *  when the caller has nowhere to send the click (only wired from the
+   *  Gateway page, where Logs is a sibling tab). */
+  onJumpToLogs?: (component: string) => void;
 }
 
 const STATUS_LABEL: Record<HealthStatus, string> = {
@@ -84,7 +89,13 @@ function eventClock(iso: string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
-function ComponentRow({ row }: { row: HealthComponentDTO }): JSX.Element {
+function ComponentRow({
+  row,
+  onJumpToLogs,
+}: {
+  row: HealthComponentDTO;
+  onJumpToLogs?: (component: string) => void;
+}): JSX.Element {
   // The sub-line reads the most useful thing per state: a failing
   // component shows its LAST ERROR (the actionable bit); a healthy one
   // shows its probe detail ("2 vaults mounted") or last-ok recency.
@@ -104,6 +115,15 @@ function ComponentRow({ row }: { row: HealthComponentDTO }): JSX.Element {
           {row.errorCount} err{row.errorCount === 1 ? '' : 's'}
         </span>
       ) : null}
+      {row.status !== 'ok' && onJumpToLogs ? (
+        <button
+          type="button"
+          className={styles.jumpToLogs}
+          onClick={() => onJumpToLogs(row.component)}
+        >
+          View in logs
+        </button>
+      ) : null}
       <span className={styles.healthLabel} data-health={row.status}>
         {row.status === 'ok' ? 'Healthy' : row.status === 'degraded' ? 'Degraded' : 'Failing'}
       </span>
@@ -113,6 +133,7 @@ function ComponentRow({ row }: { row: HealthComponentDTO }): JSX.Element {
 
 export default function SettingsDiagnosticsScreen({
   loadHealth,
+  onJumpToLogs,
 }: SettingsDiagnosticsBridgeProps): JSX.Element {
   const [health, setHealth] = useState<GatewayHealthDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -164,7 +185,9 @@ export default function SettingsDiagnosticsScreen({
         {health.components.length === 0 ? (
           <div className={styles.empty}>No components have reported yet.</div>
         ) : (
-          health.components.map((row) => <ComponentRow key={row.component} row={row} />)
+          health.components.map((row) => (
+            <ComponentRow key={row.component} row={row} onJumpToLogs={onJumpToLogs} />
+          ))
         )}
       </div>
 

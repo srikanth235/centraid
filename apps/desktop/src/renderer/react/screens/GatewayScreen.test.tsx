@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GatewayRuntimeSnapshot } from '../shell/routes/gatewayData.js';
+import type { GatewayHealthDTO } from './SettingsDiagnosticsScreen.js';
 import GatewayScreen from './GatewayScreen.js';
 
 const T0 = Date.UTC(2026, 6, 11, 12, 0, 0);
@@ -33,18 +34,35 @@ const base: GatewayRuntimeSnapshot = {
   pollIntervalMs: 5000,
 };
 
+function makeHealth(over: Partial<GatewayHealthDTO> = {}): GatewayHealthDTO {
+  return {
+    status: 'ok',
+    startedAt: new Date(T0).toISOString(),
+    uptimeMs: 3_600_000,
+    components: [],
+    recentEvents: [],
+    ...over,
+  };
+}
+
 const noop = (): void => {};
-const render = (snapshot: GatewayRuntimeSnapshot): string =>
+const noLoadHealth = (): Promise<GatewayHealthDTO> => Promise.resolve(makeHealth());
+const noStreamLogs = (): Promise<void> => new Promise<void>(() => {}); // never resolves — no lines, "live" shell only
+
+const render = (snapshot: GatewayRuntimeSnapshot, health: GatewayHealthDTO | null = null): string =>
   renderToStaticMarkup(
     <GatewayScreen
       snapshot={snapshot}
       now={NOW}
       onAlertSecondsChange={noop}
       onAlertsEnabledChange={noop}
+      health={health}
+      loadHealth={noLoadHealth}
+      streamLogs={noStreamLogs}
     />,
   );
 
-describe('GatewayScreen', () => {
+describe('GatewayScreen — Overview tab (default)', () => {
   it('renders the operational hero with the gauge cluster', () => {
     const html = render(base);
     expect(html).toContain('<h1>Gateway</h1>');
@@ -56,6 +74,14 @@ describe('GatewayScreen', () => {
     expect(html).toContain('data-status="up"');
     // Server uptime figure ticks forward from the last heartbeat.
     expect(html).toContain('1h 01m 00s');
+  });
+
+  it('renders the tab strip with Overview active', () => {
+    const html = render(base);
+    expect(html).toContain('role="tablist"');
+    expect(html).toContain('Components');
+    expect(html).toContain('Logs');
+    expect(html).toContain('Alerts');
   });
 
   it('renders one heartbeat tick per sample, flagging failures', () => {
@@ -85,16 +111,18 @@ describe('GatewayScreen', () => {
     expect(html).toContain('No downtime recorded this session');
   });
 
-  it('marks the active threshold preset and shows an off-ladder value as its own chip', () => {
-    expect(render(base)).toContain('presetActive');
-    const custom = render({ ...base, alert: { enabled: true, thresholdSeconds: 600 } });
-    expect(custom).toContain('>10m<');
+  it('reconciles a healthy heartbeat with a failing component into "Degraded"', () => {
+    const html = render(base, makeHealth({ status: 'error' }));
+    expect(html).toContain('Degraded');
+    expect(html).toContain('data-status="degraded"');
+    // Heartbeat itself is still up — the uptime figure keeps ticking.
+    expect(html).toContain('1h 01m 00s');
   });
 
-  it('dims the threshold ladder when alerts are disabled', () => {
-    const html = render({ ...base, alert: { enabled: false, thresholdSeconds: 120 } });
-    expect(html).toContain('data-disabled');
-    expect(html).toContain('aria-checked="false"');
+  it('lets the heartbeat win when the process is unreachable, even with healthy components', () => {
+    const html = render({ ...base, status: 'down' }, makeHealth({ status: 'ok' }));
+    expect(html).toContain('Unreachable');
+    expect(html).toContain('data-status="down"');
   });
 });
 
@@ -112,7 +140,40 @@ describe('GatewayScreen interactions', () => {
     host.remove();
   });
 
-  it('reports preset clicks and the toggle flip', async () => {
+  const clickTab = async (label: string): Promise<void> => {
+    const btn = [...host.querySelectorAll('[role="tab"]')].find((b) =>
+      b.textContent?.startsWith(label),
+    ) as HTMLButtonElement;
+    await act(async () => btn.click());
+  };
+
+  it('shows the Components tab badge count from unhealthy components', async () => {
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={makeHealth({
+            status: 'error',
+            components: [
+              { component: 'vaults', status: 'ok', errorCount: 0 },
+              { component: 'connections', status: 'error', errorCount: 4 },
+            ],
+          })}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+        />,
+      );
+    });
+    const componentsTab = [...host.querySelectorAll('[role="tab"]')].find((b) =>
+      b.textContent?.startsWith('Components'),
+    );
+    expect(componentsTab?.textContent).toContain('1');
+  });
+
+  it('moves the down-alert preset/switch controls under the Alerts tab', async () => {
     const onSeconds = vi.fn();
     const onEnabled = vi.fn();
     await act(async () => {
@@ -122,9 +183,16 @@ describe('GatewayScreen interactions', () => {
           now={NOW}
           onAlertSecondsChange={onSeconds}
           onAlertsEnabledChange={onEnabled}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
         />,
       );
     });
+    // Not visible on Overview.
+    expect([...host.querySelectorAll('button')].some((b) => b.textContent === '5m')).toBe(false);
+
+    await clickTab('Alerts');
     const fiveMin = [...host.querySelectorAll('button')].find((b) => b.textContent === '5m');
     await act(async () => fiveMin?.click());
     expect(onSeconds).toHaveBeenCalledWith(300);
@@ -132,5 +200,93 @@ describe('GatewayScreen interactions', () => {
     const toggle = host.querySelector<HTMLButtonElement>('[role="switch"]');
     await act(async () => toggle?.click());
     expect(onEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it('switching to the Components tab mounts the diagnostics screen', async () => {
+    const loadHealth = vi
+      .fn()
+      .mockResolvedValue(
+        makeHealth({ components: [{ component: 'vaults', status: 'ok', errorCount: 0 }] }),
+      );
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={loadHealth}
+          streamLogs={noStreamLogs}
+        />,
+      );
+    });
+    await clickTab('Components');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loadHealth).toHaveBeenCalled();
+    expect(host.textContent).toContain('Vaults');
+  });
+
+  it('switching to the Logs tab mounts the log stream', async () => {
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={noLoadHealth}
+          streamLogs={noStreamLogs}
+        />,
+      );
+    });
+    await clickTab('Logs');
+    expect(host.querySelector('input[type="search"]')).not.toBeNull();
+    expect(host.textContent).toContain('No log lines yet');
+  });
+
+  it('jumps from a failing component straight into a focused Logs search', async () => {
+    const loadHealth = vi.fn().mockResolvedValue(
+      makeHealth({
+        status: 'error',
+        components: [
+          {
+            component: 'connections',
+            status: 'error',
+            lastError: 'ETIMEDOUT',
+            errorCount: 4,
+          },
+        ],
+      }),
+    );
+    await act(async () => {
+      root.render(
+        <GatewayScreen
+          snapshot={base}
+          now={NOW}
+          onAlertSecondsChange={noop}
+          onAlertsEnabledChange={noop}
+          health={null}
+          loadHealth={loadHealth}
+          streamLogs={noStreamLogs}
+        />,
+      );
+    });
+    await clickTab('Components');
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const jumpBtn = [...host.querySelectorAll('button')].find(
+      (b) => b.textContent === 'View in logs',
+    ) as HTMLButtonElement;
+    expect(jumpBtn).toBeDefined();
+    await act(async () => jumpBtn.click());
+
+    // Landed on the Logs tab, search box seeded with the component id.
+    const search = host.querySelector<HTMLInputElement>('input[type="search"]');
+    expect(search?.value).toBe('connections');
   });
 });

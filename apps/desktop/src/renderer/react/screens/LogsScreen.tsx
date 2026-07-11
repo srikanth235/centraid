@@ -3,12 +3,13 @@ import { cx } from '../ui/cx.js';
 import styles from './LogsScreen.module.css';
 import controlsCss from '../styles/controls.module.css';
 
-// Settings → Logs: the gateway's realtime diagnostics surface. Streams
+// Gateway → Logs: the gateway's realtime diagnostics surface. Streams
 // the gateway's log lines (SSE, replay-then-live) so a user whose
 // automation/sync/outbox is misbehaving can SEE what the gateway is doing
 // without hunting for a terminal. Prop-driven like the other settings
 // screens: the transport is injected (`streamLogs` → gateway-client),
 // this file owns the view + stream lifecycle (reconnect, follow, filter).
+// Mounted from the Gateway page's Logs tab (GatewayScreen.tsx).
 
 export type LogLevelDTO = 'info' | 'warn' | 'error';
 
@@ -32,6 +33,13 @@ export interface LogsBridgeProps {
     signal: AbortSignal,
     after?: number,
   ) => Promise<void>;
+  /**
+   * A cross-link jump into a focused search — from a failing component in
+   * the Components tab, for instance. `nonce` is bumped on every jump
+   * request (even a repeat of the same text) so the effect below reapplies;
+   * the stream itself keeps running, only the search box changes.
+   */
+  focusQuery?: { text: string; nonce: number };
 }
 
 type StreamStatus = 'connecting' | 'live' | 'reconnecting';
@@ -68,13 +76,20 @@ const STATUS_LABEL: Record<StreamStatus, string> = {
   reconnecting: 'Reconnecting…',
 };
 
-export default function LogsScreen({ streamLogs }: LogsBridgeProps): JSX.Element {
+export default function LogsScreen({ streamLogs, focusQuery }: LogsBridgeProps): JSX.Element {
   const [entries, setEntries] = useState<LogEntryDTO[]>([]);
   const [status, setStatus] = useState<StreamStatus>('connecting');
   const [filter, setFilter] = useState<LevelFilter>('all');
   const [query, setQuery] = useState('');
   const [follow, setFollow] = useState(true);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (focusQuery) setQuery(focusQuery.text);
+    // Only the nonce identifies a fresh jump request — a repeat click with
+    // the same text still needs to reapply (and re-focus the search box).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusQuery?.nonce]);
 
   // The stream's resume cursor + the follow flag live in refs so the
   // long-lived stream effect never restarts on render-state changes.
