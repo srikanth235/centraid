@@ -36,6 +36,16 @@
      the --t-* type scale, --font-*/--mono, --sel/--selb, --_accent and its
      accent-soft/deep derivations, --surface/--surface-2/--text/--muted/
      --ink-faint/--radius aliases) now comes from tokens.css. */
+
+  /* --accent-deep is tuned for background+white-text buttons (dark in both
+     themes). Chips/icons/dots that show accent-deep AS foreground on top of
+     --accent-soft (or a plain dark surface) need the opposite move in dark
+     mode — this alias is the escape hatch; light mode just mirrors accent-deep. */
+  --accent-deep-fg: var(--accent-deep);
+  /* Custody "warn" amber — same idea: the light-mode value reads fine on
+     paper but falls short of AA on a dark surface, so dark mode gets a
+     brighter tint. */
+  --custody-warn: #9a6b1f;
 }
 
 :root[data-theme='dark'] {
@@ -48,6 +58,8 @@
   --c-doc: #8aa0ff;
   --c-sheet: #93c17f;
   --c-slide: #d9ab6d;
+  --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+  --custody-warn: #e0a94a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -58,6 +70,8 @@
     --c-doc: #8aa0ff;
     --c-sheet: #93c17f;
     --c-slide: #d9ab6d;
+    --accent-deep-fg: color-mix(in oklab, var(--_accent) 65%, white);
+    --custody-warn: #e0a94a;
   }
 }
 
@@ -267,7 +281,7 @@ button {
 }
 .d-nav-item[aria-current='true'] {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   font-weight: 600;
 }
 .d-nav-count {
@@ -368,7 +382,7 @@ button {
   color: var(--ink-3);
 }
 .d-consent-line svg {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   flex-shrink: 0;
 }
 .d-consent-line span {
@@ -774,7 +788,7 @@ button {
 }
 .d-snippet mark {
   background: var(--accent-soft);
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border-radius: 3px;
   padding: 0 1px;
 }
@@ -915,11 +929,11 @@ button {
   border-color: var(--line); /* not interactive — suppress kit-chip's hover cue */
 }
 .custody-chip.custody-ok {
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border-color: color-mix(in oklab, var(--_accent) 35%, var(--line));
 }
 .custody-chip.custody-warn {
-  color: #9a6b1f;
+  color: var(--custody-warn);
   border-color: color-mix(in oklab, #c9922e 35%, var(--line));
 }
 .custody-chip.custody-danger {
@@ -936,7 +950,7 @@ button {
   vertical-align: middle;
 }
 .d-custody-dot.custody-ok {
-  background: var(--accent-deep);
+  background: var(--accent-deep-fg);
 }
 .d-custody-dot.custody-warn {
   background: #c9922e;
@@ -1018,7 +1032,7 @@ button {
   width: 8px;
   height: 8px;
   border-radius: var(--r-pill);
-  background: var(--accent-deep);
+  background: var(--accent-deep-fg);
   margin-top: 5px;
 }
 .d-activity-line {
@@ -1045,7 +1059,7 @@ button {
 .d-receipt-chip {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 4px;
@@ -1145,7 +1159,7 @@ button {
 .d-version-tag {
   font-family: var(--mono);
   font-size: 9.5px;
-  color: var(--accent-deep);
+  color: var(--accent-deep-fg);
   border: 1px solid var(--accent-soft);
   border-radius: 4px;
   padding: 0 5px;

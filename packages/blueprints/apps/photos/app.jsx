@@ -543,20 +543,23 @@ renderZoomButtons();
 
 $('hamburgerBtn').addEventListener('click', () => sidebar.openSidebar());
 
-// The scroll pane's real width drives the justified timeline. ResizeObserver
-// isn't implemented under jsdom (the app-boot test's environment) — the
-// `resize` listener fallback keeps boot safe there while still tracking the
-// real thing in a real browser.
+// The grid's real width drives the justified timeline — read off #grid
+// itself, not its #scrollPane parent, since scrollPane's clientWidth
+// includes the pane's own left+right padding (app.css's `.ph-scroll`) that
+// #grid's tiles never get to use. ResizeObserver isn't implemented under
+// jsdom (the app-boot test's environment) — the `resize` listener fallback
+// keeps boot safe there while still tracking the real thing in a real
+// browser.
 function measurePane() {
-  const el = $('scrollPane');
+  const el = $('grid');
   const w = el?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 0);
   if (w > 0 && Math.abs(w - paneWidth) > 1) {
     paneWidth = w;
     renderMain();
   }
 }
-if (typeof ResizeObserver !== 'undefined' && $('scrollPane')) {
-  new ResizeObserver(measurePane).observe($('scrollPane'));
+if (typeof ResizeObserver !== 'undefined' && $('grid')) {
+  new ResizeObserver(measurePane).observe($('grid'));
 } else if (typeof window !== 'undefined') {
   window.addEventListener('resize', measurePane);
 }
