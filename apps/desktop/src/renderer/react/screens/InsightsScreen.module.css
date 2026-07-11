@@ -134,7 +134,7 @@
   font-weight: 600;
 }
 .delta[data-tone='up'] {
-  color: #d98a3d;
+  color: var(--c-amber);
 }
 .delta[data-tone='down'] {
   color: var(--ink-3);
@@ -239,7 +239,7 @@
   color: var(--ink);
 }
 .chartStatAccent {
-  color: #d98a3d;
+  color: var(--c-amber);
 }
 .chartStatSub {
   font-family: var(--font-mono);
@@ -348,8 +348,8 @@
   font-size: 8.5px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #d98a3d;
-  background: color-mix(in srgb, #d98a3d 14%, transparent);
+  color: var(--c-amber);
+  background: color-mix(in srgb, var(--c-amber) 14%, transparent);
   border-radius: 4px;
   padding: 2px 5px;
 }

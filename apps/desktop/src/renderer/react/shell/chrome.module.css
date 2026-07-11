@@ -285,8 +285,8 @@
 }
 .sbItem[aria-current='true'],
 .sbItem[data-active='true'] {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
 }
 .sbItem[data-disabled='true'] {
   opacity: 0.45;
