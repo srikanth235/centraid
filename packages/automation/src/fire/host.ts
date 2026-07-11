@@ -1,11 +1,6 @@
 /**
  * Common interface every "thing that fires automations on a schedule"
- * implements. Centraid has two such backends today:
- *
- *   - openclaw (cloud gateway): registers each automation as a cron job
- *     under the gateway's own scheduler via `cron.add`/`cron.update`/
- *     `cron.remove` gateway-tool calls. See
- *     `@centraid/openclaw-plugin/src/lib/automations-cron.ts`.
+ * implements. Centraid's backend today:
  *
  *   - local gateway (desktop embed + standalone daemon): the in-process
  *     `InProcessScheduler` (issue #149) keeps an in-memory registry and a
@@ -26,7 +21,7 @@
  *     existing entry.
  *   - `register` is also the toggle path. When `row.enabled` is false,
  *     the host's implementation decides whether to register a
- *     suppressed entry (openclaw's `enabled: false` cron job) or to
+ *     suppressed entry or to
  *     unregister entirely (the in-process scheduler simply drops a
  *     disabled row from its registry). Either is fine — callers just
  *     call `register(row)` and don't care.
@@ -59,8 +54,7 @@ export interface Host {
   /**
    * List the centraid-owned host entries currently registered. The
    * format is host-specific (automation refs for the in-process
-   * scheduler, cron job names for openclaw) — useful only for diagnostics
-   * and reconciliation.
+   * scheduler) — useful only for diagnostics and reconciliation.
    */
   list(): Promise<readonly string[]>;
 

@@ -195,6 +195,7 @@ export { registerHealthCommands } from './commands/health.js';
 export { registerKnowledgeCommands } from './commands/knowledge.js';
 export { registerBusinessCommands } from './commands/business.js';
 export { registerAttachmentCommands, ATTACHABLE_SUBJECTS } from './commands/attachments.js';
+export { registerTagCommands, TAGGABLE_SUBJECTS } from './commands/tags.js';
 export { registerLinkCommands, RELATIONS_SCHEME_URI } from './commands/links.js';
 export { registerPartyCommands } from './commands/parties.js';
 export { registerMediaCommands } from './commands/media.js';
@@ -208,7 +209,6 @@ export { registerSyncCommands } from './commands/sync.js';
 export { registerEnrichCommands } from './commands/enrich.js';
 export { registerOutboxCommands } from './commands/outbox.js';
 export { registerJudgmentCommands } from './commands/judgment.js';
-export { registerTagCommands, LABELS_SCHEME_URI } from './commands/tags.js';
 
 export {
   AGENT_CONTENT_VARIANTS,
@@ -251,7 +251,7 @@ export { parseVcards, normalizeHandle, type Vcard, type VcardIdentifier } from '
 export { importIcsEvents, importVcardParties, type ImportResult } from './ingest/import.js';
 export { importVaultExport, canonicalJson, type VaultExport } from './gateway/portability.js';
 export type { ViewDefinition, ViewJoin, ViewResult } from './gateway/views.js';
-export { type BackupResult } from './gateway/custody.js';
+export { stageVaultDbs, type BackupResult, type StageDbsResult } from './gateway/custody.js';
 export {
   validateExtSpecs,
   canonicalSpecJson,

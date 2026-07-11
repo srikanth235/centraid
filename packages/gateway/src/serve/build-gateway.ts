@@ -13,15 +13,12 @@
  * no server-global active vault: switching is a client-side view change the
  * server never observes, and N clients ride N vaults concurrently.
  *
- * Three hosts mount the same core:
+ * Two hosts mount the same core:
  *
  *   - Electron embed: `buildGateway()` (or `serve()`) in the main
  *     process, paths derived from `gateway-paths.ts`.
  *   - `centraid-gateway` daemon: `serve()`, paths derived from a
  *     `--data-dir` config.
- *   - `@centraid/openclaw-plugin`: `buildGateway()` + mount
- *     `composedHandler` on the OpenClaw HTTP server (which owns auth),
- *     driving `start()`/`stop()` from `gateway_start`/shutdown.
  *
  * Construction (stores → prefs loader → chat runner → `Runtime` → route
  * handlers) runs in `buildGateway()`; the per-vault host bundle (code
@@ -47,7 +44,6 @@ import {
   makeUserStoreRouteHandler,
   type ConversationRunner,
   type RunnerStatus,
-  type RunnerStatusOptions,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -99,10 +95,13 @@ import { makeTemplatesRouteHandler } from '../routes/templates-routes.js';
 import { makeAgentsRouteHandler } from '../routes/agents-routes.js';
 import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
+import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
 import { makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
+import { BackupService } from '../backup/backup-service.js';
+import type { BackupConfig } from '../backup/backup-config.js';
 
 export type { DeviceAccess } from './vault-context.js';
 
@@ -136,31 +135,6 @@ export interface BuildGatewayOptions {
    */
   sessionIdFor?: (appId: string) => string;
   /**
-   * In-process chat runner override (Plane B). When set, this runner backs
-   * `POST /centraid/<id>/_turn` instead of the gateway's own codex/claude
-   * CLI runner. The OpenClaw plugin injects a `runEmbeddedAgent`-backed
-   * runner so chat runs in OpenClaw's process — the desktop/daemon omit it
-   * and get the default CLI runner (unchanged).
-   */
-  conversationRunner?: ConversationRunner;
-  /**
-   * Override for the `GET /centraid/_turn/runner-status` preflight. Defaults
-   * to reporting the configured codex/claude CLI adapter (via `runPreflight`).
-   * The OpenClaw plugin injects `{ kind: 'openclaw', ok: true }` — its chat
-   * runs in-process, not through a CLI, so a codex/claude preflight would
-   * misreport readiness.
-   */
-  runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
-  /**
-   * Override for how an automation is fired (Plane B). The gateway's default
-   * runs the handler through `runAutomation` (codex/claude CLI puppet).
-   * The OpenClaw plugin injects an in-process fire here, so BOTH scheduled
-   * (cron) and manual (run-now) fires execute in OpenClaw's process. The
-   * factory is called once with the gateway-resolved deps; it returns the
-   * fire function the scheduler + automations route share.
-   */
-  fireAutomationFactory?: FireAutomationFactory;
-  /**
    * Device-plane access control (issue #289 phase 2). When set, the
    * composed handler resolves the calling device from the request and
    * refuses vaults the device is not enrolled in; the vault list filters
@@ -168,6 +142,14 @@ export interface BuildGatewayOptions {
    * transport is implicitly enrolled in every vault.
    */
   deviceAccess?: DeviceAccess;
+  /**
+   * Offsite backup engine (PROTOCOL.md/FORMAT.md), off by default. When
+   * `enabled`, `buildGateway` constructs a `BackupService` (component
+   * `'backups'` on `health`), starts its hourly scheduler from `start()`,
+   * and stops it from `stop()`. State lives under `paths.backupDir`
+   * (defaults to a `backup` sibling of `paths.vaultDir`).
+   */
+  backup?: BackupConfig;
 }
 
 /** Fires one automation. Shared by the cron scheduler + the run-now route. */
@@ -181,19 +163,6 @@ export type FireAutomation = (
     input?: unknown;
   },
 ) => void;
-
-/** Gateway-resolved deps handed to a {@link FireAutomationFactory}. */
-export interface FireAutomationDeps {
-  /** The current fire's vault workspace, resolved at fire time (#289). */
-  workspace: () => VaultWorkspace;
-  /** Resolves the current fire's vault's live `main` worktree apps dir. */
-  codeAppsDir: () => string;
-  /** Logger for fire failures. */
-  logger: RuntimeLogger;
-}
-
-/** Builds a {@link FireAutomation} from gateway-resolved deps. */
-export type FireAutomationFactory = (deps: FireAutomationDeps) => FireAutomation;
 
 /** A route handler in the gateway chain: `true` when it owned the response. */
 export type RouteHandler = (req: IncomingMessage, res: ServerResponse) => Promise<boolean>;
@@ -227,6 +196,13 @@ export interface BuiltGateway {
    * join the same structured tail.
    */
   health: HealthRegistry;
+  /**
+   * The offsite backup service (PROTOCOL.md/FORMAT.md) — present only when
+   * `BuildGatewayOptions.backup?.enabled`. `cli/backup-admin.ts` builds its
+   * own instance from the same resolved config for one-shot CLI gestures;
+   * this is the live, scheduled one `start()`/`stop()` drive.
+   */
+  backup?: BackupService;
   /** Device-prefs store (`prefs.json`) — #280 killed the identity DB. */
   prefs: PrefsStore;
   /** Run-summary rollup over the current request's journal.db. */
@@ -249,8 +225,7 @@ export interface BuiltGateway {
   /**
    * Resolves the current request's vault's live `main` worktree apps dir,
    * rotating atomically per publish/rollback. Hosts that register their own
-   * automation surface (e.g. the OpenClaw plugin's `_centraid-hook`
-   * webhook route) resolve automation CODE through this. Throws before
+   * automation surface resolve automation CODE through this. Throws before
    * `start()` has mounted the vault's workspace.
    */
   codeAppsDir: () => string;
@@ -274,9 +249,8 @@ export interface BuiltGateway {
    * (`x-centraid-vault` header → enrollment check → default), then replay
    * `conversation → prefs → extraHandlers[] → runtime.handle` inside that
    * vault's ambient scope — MINUS the bearer check (cf. `app-engine`
-   * http-server.ts). Hosts that own auth (the OpenClaw plugin's
-   * `auth: 'gateway'`) mount this on a single prefix route. Always
-   * resolves the response, so it returns `true`.
+   * http-server.ts). Hosts that own auth themselves mount this on a single
+   * prefix route. Always resolves the response, so it returns `true`.
    */
   composedHandler: RouteHandler;
   /**
@@ -285,8 +259,7 @@ export interface BuiltGateway {
    * shared secret in the request IS the auth. Resolves the slug to its
    * OWNING vault across every mounted vault (webhook ids are globally
    * unique), then blocks until the fire completes and answers with its
-   * outcome — the same contract the OpenClaw plugin's `_centraid-hook`
-   * mount honors. Returns `false` for any non-matching URL so the host can
+   * outcome. Returns `false` for any non-matching URL so the host can
    * fall through to `composedHandler`.
    */
   webhookHandler: RouteHandler;
@@ -337,10 +310,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
 
   // Vault mounts are pull-checked at snapshot time — nothing pushes when a
   // plane silently fails to open, so the probe asks the registry directly.
+  // A mounted plane whose directory carried a restore-quarantine marker
+  // (FORMAT.md restore rule 4) stays flagged here until an operator
+  // resolves it — outbox is auto-parked (vault-quarantine.ts), automations
+  // are NOT, deliberately (see that module's header).
   health.registerProbe('vaults', async () => {
-    const count = vaultRegistry.planesList().length;
-    return count > 0
-      ? { status: 'ok', detail: `${count} vault${count === 1 ? '' : 's'} mounted` }
+    const planes = vaultRegistry.planesList();
+    const quarantined = planes.filter((p) => p.quarantine !== null);
+    if (quarantined.length > 0) {
+      const detail = quarantined
+        .map((p) => `${p.boot.vaultId} (source seq ${p.quarantine?.sourceSeq}) needs review`)
+        .join('; ');
+      return { status: 'error', detail: `restored from backup — ${detail}` };
+    }
+    return planes.length > 0
+      ? { status: 'ok', detail: `${planes.length} vault${planes.length === 1 ? '' : 's'} mounted` }
       : { status: 'error', detail: 'no vaults mounted' };
   });
 
@@ -367,6 +351,20 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }
     return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
   });
+
+  // Offsite backup engine (PROTOCOL.md/FORMAT.md) — constructed only when
+  // enabled; registers its own 'backups' health component (push + a
+  // staleness probe), started/stopped alongside the gateway below.
+  const backupService = options.backup?.enabled
+    ? new BackupService({
+        config: options.backup,
+        backupDir: paths.backupDir ?? path.join(path.dirname(paths.vaultDir), 'backup'),
+        vaults: vaultRegistry,
+        health,
+        logger: health.loggerFor('backups', logger),
+      })
+    : undefined;
+
   const currentWorkspace = (): VaultWorkspace => vaultRegistry.currentWorkspace();
 
   // Device prefs (`prefs.json`) + the request vault's ledger stores. The
@@ -501,9 +499,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // runner over that store, and the store-backed route handlers. Built
   // lazily per vault, cached by id; the request's one resolves per call.
   const hosts = new Map<string, Promise<VaultHost>>();
-  // Synchronous handles to MOUNTED hosts — the schedulers + the OpenClaw
-  // webhook route resolve code paths through these between requests (all
-  // only run post-start, when every boot-time vault is mounted).
+  // Synchronous handles to MOUNTED hosts — the schedulers + the webhook
+  // route resolve code paths through these between requests (all only run
+  // post-start, when every boot-time vault is mounted).
   const settledHosts = new Map<string, VaultHost>();
   // In-process bus for live run streaming (issue #158): a fire publishes via
   // `onRunEvent`; the `run/events` SSE endpoint subscribes by runId.
@@ -559,54 +557,46 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   let outboxTimer: NodeJS.Timeout | undefined;
 
   // The one fire path, shared by "run now" (manual) and the cron schedulers
-  // (scheduled). A host can override the fire entirely (Plane B — OpenClaw
-  // runs it in-process); the default below runs on THIS host with the
-  // gateway's own runner pref, against the CURRENT vault's live `main` code
-  // + its data tree, streaming each run over the event bus. Scheduled fires
-  // enter their vault's scope via `runWithVaultContext` (see schedulerFor);
-  // manual fires inherit the request's scope.
-  const fireAutomation: FireAutomation = options.fireAutomationFactory
-    ? options.fireAutomationFactory({
-        workspace: currentWorkspace,
-        codeAppsDir: () => currentSettledHost().codeAppsDir(),
-        logger,
-      })
-    : (automationRef, opts): void => {
-        // Mint the runId here so every fire (cron included) has a bus channel.
-        const runId =
-          opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
-        void (async () => {
-          const runnerPrefs = await prefsLoader();
-          const host = await currentVaultHost();
-          const ws = currentWorkspace();
-          await runAutomation({
-            automationRef,
-            runId,
-            appsDir: ws.appsDir,
-            journalDbFile: ws.journalDbFile,
-            codeAppsDir: host.codeAppsDir(),
-            // Each fire's ctx.vault rides the automation's enrolled
-            // agent.agent credential, resolved per app id (duaility §12).
-            vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
-            resolveConnection: connectionBroker.resolveForFire,
-            runner: runnerPrefs?.kind ?? 'codex',
-            triggerKind: opts.triggerKind,
-            triggerOrigin: opts.triggerOrigin,
-            ...(opts.input !== undefined ? { input: opts.input } : {}),
-            onRunEvent: (ev) => runEventBus.publish(runId, ev),
-          });
-          // Grant-matched outbox items the fire just staged drain now, not
-          // on the next clock tick (issue #306 phase 3).
-          drainOutbox(vaultRegistry.current());
-          health.reportOk('automation-runs');
-        })().catch((err) => {
-          const message = err instanceof Error ? err.message : String(err);
-          // Failed before the ledger opened: close off the bus or the viewer hangs.
-          runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
-          health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
-          logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
-        });
-      };
+  // (scheduled). Runs on THIS host with the gateway's own runner pref,
+  // against the CURRENT vault's live `main` code + its data tree, streaming
+  // each run over the event bus. Scheduled fires enter their vault's scope
+  // via `runWithVaultContext` (see schedulerFor); manual fires inherit the
+  // request's scope.
+  const fireAutomation: FireAutomation = (automationRef, opts): void => {
+    // Mint the runId here so every fire (cron included) has a bus channel.
+    const runId = opts.runId ?? `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
+    void (async () => {
+      const runnerPrefs = await prefsLoader();
+      const host = await currentVaultHost();
+      const ws = currentWorkspace();
+      await runAutomation({
+        automationRef,
+        runId,
+        appsDir: ws.appsDir,
+        journalDbFile: ws.journalDbFile,
+        codeAppsDir: host.codeAppsDir(),
+        // Each fire's ctx.vault rides the automation's enrolled
+        // agent.agent credential, resolved per app id (duaility §12).
+        vaultFor: (appId: string) => vaultRegistry.agentBridgeFor(appId),
+        resolveConnection: connectionBroker.resolveForFire,
+        runner: runnerPrefs?.kind ?? 'codex',
+        triggerKind: opts.triggerKind,
+        triggerOrigin: opts.triggerOrigin,
+        ...(opts.input !== undefined ? { input: opts.input } : {}),
+        onRunEvent: (ev) => runEventBus.publish(runId, ev),
+      });
+      // Grant-matched outbox items the fire just staged drain now, not
+      // on the next clock tick (issue #306 phase 3).
+      drainOutbox(vaultRegistry.current());
+      health.reportOk('automation-runs');
+    })().catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      // Failed before the ledger opened: close off the bus or the viewer hangs.
+      runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
+      health.reportError('automation-runs', `${opts.triggerKind} ${automationRef}: ${message}`);
+      logger.warn(`${opts.triggerKind} ${automationRef} failed: ` + message);
+    });
+  };
 
   const settledHostFor = (vaultId: string): VaultHost => {
     const host = settledHosts.get(vaultId);
@@ -706,19 +696,17 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // draft worktree with the union of native file tools + the vault
     // register (`vault_sql`/`vault_invoke`, #286 phase 2) — one surface
     // that both tweaks the app's code and looks at the real data it
-    // projects. A host-injected runner (Plane B) bypasses this per-vault one.
-    const runner: ConversationRunner =
-      options.conversationRunner ??
-      makeUnifiedConversationRunner({
-        store,
-        prefsLoader,
-        getDispatcher,
-        publicBaseUrl: () => serverUrl,
-        ext,
-        ...makeVaultToolRunners(vaultRegistry),
-        ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
-        ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
-      });
+    // projects.
+    const runner: ConversationRunner = makeUnifiedConversationRunner({
+      store,
+      prefsLoader,
+      getDispatcher,
+      publicBaseUrl: () => serverUrl,
+      ext,
+      ...makeVaultToolRunners(vaultRegistry),
+      ...(paths.modelCatalogFile ? { catalogPath: paths.modelCatalogFile } : {}),
+      ...(options.sessionIdFor ? { sessionIdFor: options.sessionIdFor } : {}),
+    });
 
     const handlers: RouteHandler[] = [
       makeAppsStoreRouteHandler(store, {
@@ -960,10 +948,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   };
 
   // ── Webhook trigger route (issue #96) ─────────────────────────────────
-  // Core-gateway parity with the OpenClaw plugin's `/_centraid-hook` mount:
-  // the desktop/daemon gateway IS the always-on host for desktop-only
-  // users, so it must answer webhook POSTs the same way OpenClaw does, not
-  // just when a cloud host happens to be in the loop. `makeWebhookRouteHandler`
+  // The desktop/daemon gateway IS the always-on host, so it answers webhook
+  // POSTs directly. `makeWebhookRouteHandler`
   // is single-apps-dir (it resolves against ONE `appsDir` closed over at
   // construction), so one instance is built per vault, cached by id; a
   // cheap pre-scan across every MOUNTED vault's `list()` (webhook ids are
@@ -979,8 +965,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
    * fire-and-forget `fireAutomation` the scheduler/manual-run routes use
    * (which streams progress over the SSE bus and returns immediately), a
    * webhook POST awaits the run to completion and answers with its outcome,
-   * matching the contract `runOpenclawFire` satisfies for the OpenClaw
-   * mount and `makeWebhookRouteHandler` expects from its `fire` callback.
+   * matching the contract `makeWebhookRouteHandler` expects from its `fire`
+   * callback.
    */
   const webhookFire = async (
     vaultId: string,
@@ -1074,7 +1060,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     sharedAssetsDir: KIT_DIR,
     userStore: prefs,
     conversationHistoryStore,
-    conversationRunner: options.conversationRunner ?? {
+    conversationRunner: {
       // Facade over the request vault's unified runner (#280) — builder-
       // capable, so turns persist as `kind='build'` (issue #181). EVERY
       // ask turn rides the vault register (issue #286 phase 2: the vault
@@ -1086,30 +1072,28 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       },
     },
     conversationRunnerSessionDir: () => currentWorkspace().runnerSessionDir,
-    runnerStatus:
-      options.runnerStatus ??
-      (async (statusOpts) => {
-        const runnerPrefs = await prefsLoader();
-        if (!runnerPrefs) {
-          return {
-            kind: 'none' as const,
-            ok: false,
-            reason: 'No coding agent configured.',
-            hint: 'Open Settings → Agents and pick Codex or Claude Code.',
-          };
-        }
-        // The model list is a pure catalog read; enumeration is owned by the
-        // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
-        // the client polls `modelsStatus` until it leaves `loading`.
-        const status = await runPreflight(runnerPrefs, catalogPath ? { catalogPath } : {});
-        if (catalogPath && warmer && status.ok) {
-          const count = status.models?.length ?? 0;
-          if ((statusOpts?.refresh ?? false) || count === 0)
-            void warmer.warm(runnerPrefs.kind, 'models');
-          status.modelsStatus = deriveStatus(count, warmer.isWarming(runnerPrefs.kind, 'models'));
-        }
-        return status;
-      }),
+    runnerStatus: async (statusOpts) => {
+      const runnerPrefs = await prefsLoader();
+      if (!runnerPrefs) {
+        return {
+          kind: 'none' as const,
+          ok: false,
+          reason: 'No coding agent configured.',
+          hint: 'Open Settings → Agents and pick Codex or Claude Code.',
+        };
+      }
+      // The model list is a pure catalog read; enumeration is owned by the
+      // warmer. A Refresh (or a cold cache) kicks a warm fire-and-forget and
+      // the client polls `modelsStatus` until it leaves `loading`.
+      const status = await runPreflight(runnerPrefs, catalogPath ? { catalogPath } : {});
+      if (catalogPath && warmer && status.ok) {
+        const count = status.models?.length ?? 0;
+        if ((statusOpts?.refresh ?? false) || count === 0)
+          void warmer.warm(runnerPrefs.kind, 'models');
+        status.modelsStatus = deriveStatus(count, warmer.isWarming(runnerPrefs.kind, 'models'));
+      }
+      return status;
+    },
     logger,
     codeDirOverride: async (appId: string) =>
       (await currentVaultHost()).store.resolveActiveAppDir(appId),
@@ -1178,6 +1162,10 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     makeHealthRouteHandler(health),
+    // Due task/event reminders, computed live — the desktop main process
+    // polls this to fire OS notifications (issue: Tasks/Agenda comparison
+    // flagged "no time-based alerts, anywhere").
+    makeRemindersRouteHandler(vaultRegistry),
     // Realtime gateway logs (JSON tail + SSE) — the diagnostics surface
     // the desktop's Settings → Logs screen streams from.
     makeLogsRouteHandler(logStore),
@@ -1254,8 +1242,8 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   // is addressed to (#289), then replay the chain `startRuntimeHttpServer`
   // used to run — chat-history → prefs → extra handlers → `runtime.handle`
   // — inside that vault's ambient scope. WITHOUT the bearer check, for
-  // hosts that own auth (OpenClaw's `auth: 'gateway'`). CORS is the host's
-  // job too: a fronting gateway emits its own.
+  // hosts that own auth themselves. CORS is the host's job too: a fronting
+  // gateway emits its own.
   const conversationHandler = makeConversationRouteHandler(() => conversationHistoryStore);
   const userStoreHandler = makeUserStoreRouteHandler(
     () => prefs,
@@ -1375,11 +1363,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         );
       })();
     }
+
+    // Offsite backup engine: hourly scheduler, started only when enabled.
+    backupService?.start();
   };
 
   const stop = async (): Promise<void> => {
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearInterval(outboxTimer);
+    backupService?.stop();
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
   };
@@ -1387,6 +1379,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   return {
     runtime,
     health,
+    ...(backupService ? { backup: backupService } : {}),
     prefs,
     analyticsStore,
     conversationHistoryStore,

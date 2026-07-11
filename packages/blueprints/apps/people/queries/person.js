@@ -6,7 +6,7 @@
  * tasks, gift ideas, open debts and the interaction history. Nothing is stored
  * by the app; it is all a read of the owner's vault.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';

@@ -3,7 +3,7 @@
  * half of the propose-and-confirm loop `media_face_region` always carried.
  * Risk low: it curates DERIVED data, same class as captioning.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

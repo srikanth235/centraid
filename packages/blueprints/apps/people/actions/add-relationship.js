@@ -1,7 +1,7 @@
 /**
  * Record a relationship (partner, child, pet…) for a person. Runs through people.add_relationship — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

@@ -34,15 +34,14 @@
 //     `{kind:'cron', expr: t.expr ?? '0 9 * * *'}`. There is NO way to mint
 //     a real data/condition trigger through this API route; only a
 //     file-based template clone preserves those kinds verbatim.
-//   - The `/_centraid-hook/<slug>` webhook route is now ALSO mounted by the
+//   - The `/_centraid-hook/<slug>` webhook route is mounted by the
 //     desktop/daemon gateway itself (packages/gateway/src/serve/build-gateway.ts
-//     webhookHandler, wired into apps/desktop's serve() in serve.ts) — parity
-//     with the openclaw plugin's mount (packages/openclaw-plugin/src/index.ts).
+//     webhookHandler, wired into apps/desktop's serve() in serve.ts).
 //     AutomationViewScreen renders an ABSOLUTE URL for it, resolved against
 //     the live gateway origin (automationsData.ts:166-188,
 //     AutomationViewScreen.tsx:241-272).
 //   - triggerOrigin string literals: 'manual' (run-now), 'cron' (scheduler),
-//     'condition'/'data' (watch-trigger evaluate), 'webhook' (openclaw only)
+//     'condition'/'data' (watch-trigger evaluate), 'webhook' (inbound HTTP POST)
 //     — all stamped in packages/gateway/src/serve/build-gateway.ts, flow
 //     through to `RunRecordJson.triggerOrigin` (automations-routes.ts).
 //   - AutomationViewScreen's per-run trigger label (automationsData.ts:

@@ -141,7 +141,7 @@ function albumAssets() {
   // selectedAlbum slot without a second piece of state.
   if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
     const label = selectedAlbum.slice(4);
-    return assets.filter((a) => a.tags?.includes(label));
+    return assets.filter((a) => a.tags?.some((t) => t.label === label));
   }
   return assets.filter((a) => a.album_ids?.includes(selectedAlbum));
 }

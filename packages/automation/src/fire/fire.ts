@@ -15,8 +15,8 @@
  *
  * agent-runtime's `runAutomation` is now a thin wrapper that builds the
  * `openDispatch` closure (capturing the runner kind + CLI spawn) and calls
- * `runFire`. A second host (e.g. openclaw) can inject its own
- * dispatch surface instead of reimplementing the spine.
+ * `runFire`. A future host can inject its own dispatch surface instead of
+ * reimplementing the spine.
  */
 
 import { randomUUID } from 'node:crypto';

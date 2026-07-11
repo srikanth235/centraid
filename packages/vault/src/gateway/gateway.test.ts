@@ -183,7 +183,7 @@ describe('S3/S4 command execution', () => {
     const checks = db.journal
       .prepare('SELECT phase, passed FROM agent_invocation_check WHERE invocation_id = ?')
       .all(outcome.invocationId) as { phase: string; passed: number }[];
-    expect(checks.filter((c) => c.phase === 'pre')).toHaveLength(3);
+    expect(checks.filter((c) => c.phase === 'pre')).toHaveLength(4);
     expect(checks.filter((c) => c.phase === 'post')).toHaveLength(2);
     expect(checks.every((c) => c.passed === 1)).toBe(true);
     const prov = db.journal

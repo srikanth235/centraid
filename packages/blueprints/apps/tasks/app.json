@@ -59,13 +59,38 @@
         "schema": "core",
         "table": "detach",
         "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "tag_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "untag_item",
+        "verbs": "act"
       }
     ]
   },
   "actions": [
     {
       "name": "add",
-      "description": "Add a task (optionally with a note, dated, prioritized, estimated, or as a subtask of a top-level task) through schedule.add_task.",
+      "description": "Add a task (optionally with a note, dated, prioritized, estimated, repeating, reminded, or as a subtask of a top-level task) through schedule.add_task. A repeating (`rrule`) or reminded (`remind_before_min`) task needs `due_at`.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -94,6 +119,14 @@
           "parent_task_id": {
             "type": "string",
             "minLength": 1
+          },
+          "rrule": {
+            "type": "string",
+            "minLength": 1
+          },
+          "remind_before_min": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": ["title"],
@@ -152,7 +185,7 @@
     },
     {
       "name": "edit",
-      "description": "Edit a task's title, note (set or clear), due date (set or clear), priority or effort through schedule.edit_task.",
+      "description": "Edit a task's title, note (set or clear), due date (set or clear), priority, effort, or reminder lead time (set or clear) through schedule.edit_task.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -187,6 +220,20 @@
           "effort_min": {
             "type": "integer",
             "minimum": 1
+          },
+          "remind_before_min": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "clear_remind": {
+            "type": "boolean"
+          },
+          "rrule": {
+            "type": "string",
+            "minLength": 1
+          },
+          "clear_rrule": {
+            "type": "boolean"
           }
         },
         "required": ["task_id"],
@@ -285,12 +332,78 @@
         }
       },
       "writes": []
+    },
+    {
+      "name": "add-tag",
+      "description": "Tag a task through core.tag_item — a free-form label shared with every other app that tags through the same command (one shared Tags concept scheme). Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["task_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-tag",
+      "description": "Remove one tag edge from a task through core.untag_item; the shared concept survives for other subjects.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tag_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["tag_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
     }
   ],
   "queries": [
     {
       "name": "board",
-      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed) — never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
+      "description": "The task board as a bounded window (newest open tasks by creation, caller-sized, families kept whole; the logbook read is capped at its visible 50 most recently closed), each row carrying its tags (`[{tag_id, concept_id, label}]`), plus the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` says more open tasks exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -309,6 +422,9 @@
             "type": "array"
           },
           "logbook": {
+            "type": "array"
+          },
+          "tags": {
             "type": "array"
           },
           "counts": {

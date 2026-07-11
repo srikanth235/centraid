@@ -172,16 +172,16 @@ export function LightboxInfo({ asset, albums: albumList, places, refresh, onClos
       <div className="ph-chip-row">
         {(asset.tags ?? []).map((tag) => (
           <button
-            key={tag}
+            key={tag.tag_id}
             type="button"
             className="ph-tag-chip-x"
-            aria-label={`Remove tag ${tag}`}
+            aria-label={`Remove tag ${tag.label}`}
             onClick={async () => {
-              const outcome = await act('untag-asset', { asset_id: asset.asset_id, label: tag });
+              const outcome = await act('untag-asset', { tag_id: tag.tag_id });
               if (narrate(outcome, noteRef.current)) await refresh();
             }}
           >
-            {tag} ×
+            {tag.label} ×
           </button>
         ))}
         {addingTag ? (

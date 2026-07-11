@@ -6,8 +6,7 @@ conversation ledger, and the full `/centraid/*` URL surface exposed
 through `Runtime.handle(req, res)`. App code is served from the
 gateway-owned git store via the host's `codeDirOverride` (issue #137).
 Consumed by [`@centraid/gateway`](../gateway) (Electron
-embed + standalone daemon) and [`@centraid/openclaw-plugin`](../openclaw-plugin)
-(OpenClaw gateway shim).
+embed + standalone daemon).
 
 ## What it serves
 

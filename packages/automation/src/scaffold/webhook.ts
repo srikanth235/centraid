@@ -1,27 +1,22 @@
 /**
  * Webhook trigger dispatch (issue #96).
  *
- * A `webhook` trigger fires an automation on an inbound HTTP POST. Every
- * host that can be someone's always-on gateway mounts a listener: the
- * openclaw plugin registers a single prefix route at `/_centraid-hook`
- * (`auth: 'plugin'`, no gateway bearer), and the core gateway
- * (`packages/gateway/src/serve/build-gateway.ts`) mounts the equivalent
- * ahead of its own bearer check — the desktop/daemon gateway IS the
- * always-on gateway for desktop-only users (there is no separate remote
- * host in that topology). Both mountings hand every request to
+ * A `webhook` trigger fires an automation on an inbound HTTP POST. The core
+ * gateway (`packages/gateway/src/serve/build-gateway.ts`) mounts a listener
+ * at `/_centraid-hook` ahead of its own bearer check — the desktop/daemon
+ * gateway IS the always-on gateway for desktop-only users (there is no
+ * separate remote host in that topology). It hands every request to
  * `makeWebhookRouteHandler` built here.
  *
- * Auth copies the stock openclaw `webhooks` plugin recipe: a shared
- * secret carried as `Authorization: Bearer <secret>` or the
- * `x-openclaw-webhook-secret` header. The secret is generated
+ * Auth is a shared secret carried as `Authorization: Bearer <secret>` or
+ * the `x-openclaw-webhook-secret` header. The secret is generated
  * server-side and shown once at creation — `automation.json` stores
  * only a SHA-256 hash, since the manifest file is user-visible.
  *
  * The handler also enforces a body-size cap, a fixed-window rate limit,
  * and a single-in-flight guard per webhook id. Running the resolved
- * automation is delegated to the caller-supplied `fire` callback
- * (`runOpenclawFire` on the gateway) so this module stays free of any
- * openclaw dependency.
+ * automation is delegated to the caller-supplied `fire` callback so this
+ * module stays free of any host dependency.
  */
 
 import crypto from 'node:crypto';
@@ -228,8 +223,8 @@ export interface WebhookFireResult {
 }
 
 /**
- * Runs the resolved automation. Supplied by the gateway host
- * (`runOpenclawFire`) so this module carries no openclaw dependency.
+ * Runs the resolved automation. Supplied by the gateway host so this
+ * module carries no host dependency.
  */
 export type WebhookFireFn = (input: {
   /** `<appId>/<automationId>` handle of the resolved automation. */

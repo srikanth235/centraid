@@ -1,5 +1,5 @@
 // Document metadata (issue #352 phase 4): free-form labels through
-// core.tag_entity/untag_entity (an owner "Labels" concept scheme,
+// core.tag_item/untag_item (the shared "Tags" concept scheme,
 // packages/vault/src/commands/tags.ts — additive and idempotent, mirroring
 // the photos app's tag-asset/untag-asset actions) and the real activity read
 // over consent.provenance that replaces Details.jsx's old synthesized
@@ -20,8 +20,8 @@ export function createMetadata({ refresh, act, narrate }) {
     }
   }
 
-  async function removeTag(doc, label) {
-    const outcome = await act('untag', { document_id: doc.document_id, label });
+  async function removeTag(doc, tagId) {
+    const outcome = await act('untag', { tag_id: tagId });
     if (narrate(outcome)) {
       toast('Tag removed · receipted.');
       await refresh();

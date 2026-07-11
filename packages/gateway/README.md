@@ -6,13 +6,12 @@ Host-agnostic centraid gateway. `buildGateway()` wires
 an in-process cron scheduler against injected paths, and `serve()` starts an
 HTTP server in front of it.
 
-Three hosts mount the same core:
+Two hosts mount the same core:
 
 | Host | Paths come from | Bearer token | App-code backend |
 | --- | --- | --- | --- |
 | [`@centraid/desktop`](../../apps/desktop) embed | `gateway-paths.ts` → `<userData>/gateways/<id>/` | Electron `safeStorage` | git store |
 | `centraid-gateway` CLI (this package) | a JSON config file or `--data-dir` flag | persisted at `<dataDir>/token.bin` | legacy tarball upload |
-| [`@centraid/openclaw-plugin`](../openclaw-plugin) | OpenClaw state dir | OpenClaw owns auth | git store |
 
 No new wire protocol — every host serves the same `/centraid/*`,
 `/_centraid-conversations/*`, and `/_centraid-user/*` routes, so desktop and
@@ -45,7 +44,7 @@ now the `run_summary` view inside each vault's `journal.db`.
 There is no `secrets` injection: the gateway is auth-agnostic about the coding
 agent — codex and Claude Code each own their own auth (`codex login` /
 `claude login` on the gateway host). Supply `appsStoreRoot` to opt into the git
-store backend (the desktop and OpenClaw do); omit it for the legacy
+store backend (the desktop does); omit it for the legacy
 tarball-upload backend (what the standalone CLI below uses).
 
 ## `centraid-gateway` CLI — standalone daemon
@@ -145,7 +144,7 @@ daemon ships intentionally narrow:
   restart, by design.
 - The CLI daemon runs the **legacy tarball-upload** code backend (no
   `appsStoreRoot`), so it has no draft worktree and uses the data-only chat
-  runner rather than the unified builder chat the desktop/OpenClaw get.
+  runner rather than the unified builder chat the desktop gets.
 
 ## Tests
 

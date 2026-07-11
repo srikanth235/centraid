@@ -88,6 +88,31 @@
         "schema": "core",
         "table": "detach",
         "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "tag",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "concept_scheme",
+        "verbs": "read"
+      },
+      {
+        "schema": "core",
+        "table": "tag_item",
+        "verbs": "act"
+      },
+      {
+        "schema": "core",
+        "table": "untag_item",
+        "verbs": "act"
       }
     ]
   },
@@ -427,12 +452,78 @@
         }
       },
       "writes": []
+    },
+    {
+      "name": "add-tag",
+      "description": "Tag a note through core.tag_item — a free-form label shared with every other app that tags through the same command (one shared Tags concept scheme). Idempotent.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "note_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["note_id", "label"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
+    },
+    {
+      "name": "remove-tag",
+      "description": "Remove one tag edge from a note through core.untag_item; the shared concept survives for other subjects.",
+      "confirmation": "none",
+      "input": {
+        "type": "object",
+        "properties": {
+          "tag_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["tag_id"],
+        "additionalProperties": false
+      },
+      "output": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "output": {
+            "type": "object"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "writes": []
     }
   ],
   "queries": [
     {
       "name": "library",
-      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names and decoded bodies, plus the notebooks for filtering — never a whole-table pull; `truncated` says older notes exist beyond the window.",
+      "description": "A bounded recent window of notes (newest by updated_at, pinned always included) with their notebook names, decoded bodies and tags (`[{tag_id, concept_id, label}]`), plus the notebooks for filtering and the distinct tag list (`[{concept_id, label}]`) seen within the window — never a whole-table pull; `truncated` says older notes exist beyond the window.",
       "input": {
         "type": "object",
         "properties": {
@@ -451,6 +542,9 @@
             "type": "array"
           },
           "notebooks": {
+            "type": "array"
+          },
+          "tags": {
             "type": "array"
           },
           "truncated": {

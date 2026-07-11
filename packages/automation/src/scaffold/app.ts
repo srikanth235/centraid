@@ -12,7 +12,7 @@
  *
  * `appsDir` here is an app-CODE root: `<appsDir>/<id>/automations/...`.
  * Callers pass the live git-store `main` worktree's `apps/` dir (the
- * gateway's cron scheduler / run-now, the OpenClaw fire path); the
+ * gateway's cron scheduler / run-now / webhook fire paths); the
  * draft builder passes its session worktree's `apps/` dir. Code lives in
  * the worktree (issue #137); the per-app DATA dir is resolved separately.
  *

@@ -21,7 +21,7 @@ export interface RuntimeHttpServerOptions {
    * Whether to mount `/_centraid-user/*` against `runtime.userStore`.
    * Defaults to true when `runtime.userStore` is set; explicit `false`
    * disables the route even if a store is attached (used by hosts that
-   * mount their own equivalent route, e.g. the openclaw plugin).
+   * mount their own equivalent route).
    */
   exposeUserStoreRoute?: boolean;
   /**
@@ -41,7 +41,7 @@ export interface RuntimeHttpServerOptions {
    * the request (response already sent), `false` to fall through.
    * Tried in order. The gateway uses this to mount the apps-store
    * publish/session surface without baking a git backend into
-   * `app-engine` (which OpenClaw + standalone setups share).
+   * `app-engine` (which the standalone daemon and desktop share).
    */
   extraHandlers?: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>>;
   /**
@@ -91,8 +91,8 @@ const USER_STORE_PREFIX = '/_centraid-user';
  * Node merges `setHeader` values into a later `writeHead`, so the SSE
  * writers in chat-routes/changes-sse inherit these without change.
  *
- * Remote gateways front by OpenClaw must emit their own CORS — this
- * only governs the local embedded server.
+ * Remote gateways must emit their own CORS — this only governs the local
+ * embedded server.
  */
 function setCorsHeaders(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -112,8 +112,8 @@ function setCorsHeaders(res: ServerResponse): void {
  *   - The token is randomly minted on `start()` unless one is provided.
  *
  * When `conversationDbPath` is provided, the server also serves the
- * `/_centraid-conversations/*` HTTP surface (same shape the OpenClaw plugin exposes
- * on the remote gateway). The same bearer check applies.
+ * `/_centraid-conversations/*` HTTP surface (same shape the standalone
+ * daemon exposes on the remote gateway). The same bearer check applies.
  */
 export async function startRuntimeHttpServer(
   opts: RuntimeHttpServerOptions,

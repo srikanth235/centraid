@@ -12,7 +12,7 @@
  * consent denial is a first-class outcome (vaultDenied), rendered as the
  * "ask the owner for access" state.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';

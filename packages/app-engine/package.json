@@ -2,7 +2,7 @@
   "name": "@centraid/app-engine",
   "version": "0.1.0",
   "private": true,
-  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the OpenClaw plugin shim and by the desktop in-process runtime.",
+  "description": "Centraid runtime engine — handler loader, sqlite-backed apps, versioned uploads, and the /centraid HTTP surface. Transport-agnostic; consumed by the standalone daemon and the desktop in-process runtime.",
   "files": [
     "dist",
     "README.md"

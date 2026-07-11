@@ -14,8 +14,7 @@
  *
  * Note: this is one of two in-process `ConversationRunner` implementations. The
  * other (`makeUnifiedConversationRunner`, gateway) is also a config over the same
- * core; a third lives in `@centraid/openclaw-plugin` and drives an
- * in-process openclaw agent.
+ * core.
  */
 
 import {

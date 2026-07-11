@@ -1,8 +1,9 @@
 /**
- * Add a free-form label to a photo through core.tag_entity (issue #352
- * phase 3/4) — additive and idempotent over the owner "Labels" concept
- * scheme (packages/vault/src/commands/tags.ts); tagging the same label
- * twice just dedupes onto the one tag row.
+ * Add a free-form label to a photo through core.tag_item (issue #352
+ * phase 3/4) — additive and idempotent over the shared "Tags" concept
+ * scheme (packages/vault/src/commands/tags.ts, the same scheme notes/tasks
+ * tag through); tagging the same label twice just dedupes onto the one
+ * tag row.
  *
  * @type {import('@centraid/openclaw-plugin').ActionHandler}
  */
@@ -10,10 +11,10 @@ export default async ({ body, ctx }) => {
   const input = body ?? {};
   try {
     const outcome = await ctx.vault.invoke({
-      command: 'core.tag_entity',
+      command: 'core.tag_item',
       input: {
-        target_type: 'media.media_asset',
-        target_id: String(input.asset_id ?? ''),
+        subject_type: 'media.media_asset',
+        subject_id: String(input.asset_id ?? ''),
         label: String(input.label ?? ''),
       },
       purpose: 'dpv:ServiceProvision',

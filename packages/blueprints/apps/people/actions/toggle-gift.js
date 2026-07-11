@@ -1,7 +1,7 @@
 /**
  * Flip a gift between idea and given. Runs through people.toggle_gift — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

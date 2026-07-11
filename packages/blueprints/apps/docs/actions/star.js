@@ -4,7 +4,7 @@
  * writes, so "Starred" means one thing across every surface. Idempotent;
  * refuses trashed documents (restore first). Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

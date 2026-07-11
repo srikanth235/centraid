@@ -2,7 +2,7 @@
  * Reject one face proposal (issue #299 phase 3): the region row deletes —
  * it is derived, re-derivable data, so rejection is disposal, not history.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

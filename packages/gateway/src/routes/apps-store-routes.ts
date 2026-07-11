@@ -2,8 +2,8 @@
 //
 // These routes live in gateway-runtime, not app-engine, because
 // they're specific to the WorktreeStore backend — app-engine stays
-// backend-agnostic (OpenClaw + standalone share it). They're mounted
-// via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
+// backend-agnostic (the standalone daemon and desktop share it). They're
+// mounted via `startRuntimeHttpServer`'s `extraHandlers` seam, after the
 // bearer check, before `runtime.handle`.
 //
 // Surface (all under the reserved `_apps` namespace, distinct verbs

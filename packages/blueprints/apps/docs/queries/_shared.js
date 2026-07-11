@@ -2,8 +2,9 @@
  * Shared read/join helpers for the docs app's queries (issue #352 phase 4) —
  * pulled out once drive.js and search.js both needed the SAME bounded joins
  * over the same windowed document/content ids: free-form labels
- * (core.tag_entity/untag_entity over the "Labels" scheme —
- * packages/vault/src/commands/tags.ts) and the blob custody projection
+ * (core.tag_item/untag_item over the shared "Tags" scheme —
+ * packages/vault/src/commands/tags.ts, shared with notes/tasks) and the
+ * blob custody projection
  * (blob.custody_state, blob/custody.ts). Mirrors the photos app's own
  * queries/_shared.js readAssetJoins split, minus the parts specific to media
  * (favorite star and place stay inline in drive.js/search.js — they already
@@ -17,24 +18,25 @@
  * needs to know this file exists besides the two callers that import it.
  */
 
-const LABELS_SCHEME_URI = 'https://centraid.dev/schemes/labels';
+const TAGS_SCHEME_URI = 'centraid:tags:v1';
 const DOCUMENT_TARGET_TYPE = 'core.document';
 
 /**
  * Free-form labels for the windowed document ids, keyed by document_id —
- * `{ document_id -> string[] }`. `schemes`/`concepts` are the SAME
+ * `{ document_id -> {tag_id, label}[] }`. `schemes`/`concepts` are the SAME
  * core.concept_scheme/core.concept reads the caller already made for the
  * folders scheme (and, in drive.js, the flags scheme) — passed in rather
  * than re-read, since a personal vault's whole concept table is small and
- * already unbounded-read once per query.
+ * already unbounded-read once per query. Each entry carries its tag_id:
+ * untag.js removes by tag_id (core.untag_item), not by label.
  */
 export async function readLabelsByDocument({ ctx, purpose, documentIds, schemes, concepts }) {
   const tagsByDoc = new Map();
-  const labelsScheme = (schemes ?? []).find((s) => s.uri === LABELS_SCHEME_URI);
-  if (!labelsScheme || documentIds.length === 0) return tagsByDoc;
+  const tagsScheme = (schemes ?? []).find((s) => s.uri === TAGS_SCHEME_URI);
+  if (!tagsScheme || documentIds.length === 0) return tagsByDoc;
   const labelConceptById = new Map(
     (concepts ?? [])
-      .filter((c) => c.scheme_id === labelsScheme.scheme_id)
+      .filter((c) => c.scheme_id === tagsScheme.scheme_id)
       .map((c) => [c.concept_id, c.pref_label ?? c.notation]),
   );
   const labelTags = await ctx.vault.read({
@@ -49,7 +51,7 @@ export async function readLabelsByDocument({ ctx, purpose, documentIds, schemes,
     const label = labelConceptById.get(t.concept_id);
     if (!label) continue; // a tag on this document from some OTHER scheme (folders/flags)
     if (!tagsByDoc.has(t.target_id)) tagsByDoc.set(t.target_id, []);
-    tagsByDoc.get(t.target_id).push(label);
+    tagsByDoc.get(t.target_id).push({ tag_id: t.tag_id, label });
   }
   return tagsByDoc;
 }

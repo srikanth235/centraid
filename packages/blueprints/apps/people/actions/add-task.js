@@ -1,7 +1,7 @@
 /**
  * Add a follow-up task tied to a person. Runs through people.add_task — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

@@ -29,8 +29,8 @@
       { "schema": "core", "table": "create_folder", "verbs": "act" },
       { "schema": "core", "table": "rename_folder", "verbs": "act" },
       { "schema": "core", "table": "delete_folder", "verbs": "act" },
-      { "schema": "core", "table": "tag_entity", "verbs": "act" },
-      { "schema": "core", "table": "untag_entity", "verbs": "act" },
+      { "schema": "core", "table": "tag_item", "verbs": "act" },
+      { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "consent", "table": "provenance", "verbs": "read" },
       { "schema": "blob", "table": "custody_state", "verbs": "read" }
     ]
@@ -197,7 +197,7 @@
     },
     {
       "name": "tag",
-      "description": "Add a free-form label to a document through core.tag_entity (issue #352 phase 4) — additive and idempotent over the owner \"Labels\" concept scheme; tagging the same label twice just dedupes onto the one tag row.",
+      "description": "Add a free-form label to a document through core.tag_item (issue #352 phase 4) — additive and idempotent over the shared \"Tags\" concept scheme; tagging the same label twice just dedupes onto the one tag row.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -220,15 +220,14 @@
     },
     {
       "name": "untag",
-      "description": "Remove one free-form label from a document through core.untag_entity — the other half of tag's additive gesture.",
+      "description": "Remove one free-form label from a document through core.untag_item — the other half of tag's additive gesture. Removes by tag_id, the specific edge.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "document_id": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 }
+          "tag_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["document_id", "label"],
+        "required": ["tag_id"],
         "additionalProperties": false
       },
       "output": {

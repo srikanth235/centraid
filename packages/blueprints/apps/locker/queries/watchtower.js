@@ -5,7 +5,7 @@
  * boundary (issue #293), the unseal receipted — compromised is the one
  * stored breach flag. Only non-trashed items are reviewed.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { decorate, readTags, readStarred, readWatchtower } from './items.js';

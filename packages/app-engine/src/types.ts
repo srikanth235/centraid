@@ -1,9 +1,5 @@
 /**
- * Shared types for the centraid openclaw plugin.
- *
- * The OpenClaw plugin SDK types are not yet pinned in this package — see
- * `lib/sdk-shim.ts` for the minimal subset we depend on. When the SDK is
- * installed locally we'll switch to the real imports.
+ * Shared types for centraid app authoring.
  */
 
 export type AppId = string;
@@ -40,7 +36,7 @@ export type HandlerFn<Args, Ret = void> = (args: Args) => Promise<Ret>;
  * to type their handler default exports:
  *
  * ```ts
- * import type { QueryHandler } from "@centraid/openclaw-plugin";
+ * import type { QueryHandler } from "@centraid/app-engine";
  * export default (async ({ query, ctx }) => {
  *   const out = await ctx.vault.read({
  *     entity: 'schedule.task',

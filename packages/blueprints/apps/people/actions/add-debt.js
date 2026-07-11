@@ -1,7 +1,7 @@
 /**
  * Record a debt you owe a person or they owe you, in minor units. Runs through people.add_debt — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

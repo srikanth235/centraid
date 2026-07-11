@@ -4,7 +4,7 @@ description: How to author or modify a centraid app — the canonical folder lay
 ---
 ## Centraid app authoring
 
-You are working inside a centraid app app folder. Your job is to author or modify the files that make up a single app published to a centraid-equipped OpenClaw gateway. Read this section before making changes.
+You are working inside a centraid app app folder. Your job is to author or modify the files that make up a single app published to a centraid gateway. Read this section before making changes.
 
 ### Folder layout (canonical)
 
@@ -19,14 +19,14 @@ You are working inside a centraid app app folder. Your job is to author or modif
                            # ./react-core.min.js, the same shared
                            # sibling-import mechanism as ./kit.js.
   app.json                 # the APP MANIFEST — see "App manifest" below
-  package.json             # devDependency on @centraid/openclaw-plugin (for editor types)
+  package.json             # devDependency on @centraid/app-engine (for editor types)
   queries/<name>.js        # dispatched against queries[name] in the manifest
   actions/<name>.js        # dispatched against actions[name] in the manifest
   automations/<id>/automation.json  # a scheduled automation the app owns
   automations/<id>/handler.js       #   its handler (see "Automations" below)
 ```
 
-Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/openclaw-plugin` (installed as a devDependency).
+Handlers are authored as **plain `.js` ES modules** — there is no `tsconfig.json`, no `tsc`, and no build step. The gateway loads `.js` directly. Type checking comes from JSDoc annotations that the editor resolves against `@centraid/app-engine` (installed as a devDependency).
 
 ### UI dialect — React
 
@@ -136,7 +136,7 @@ There is **no `db`** — apps have no private database. `ctx.vault` is the only 
 
 Every call is consent-checked host-side and receipted. A denial throws with the receipt id in the message — do not retry in a loop; surface the denial. Until the owner approves the manifest's requested scopes, calls fail closed.
 
-Type the default export by pointing JSDoc `@type` at the alias in `@centraid/openclaw-plugin`. Declare row shapes with `@typedef` and cast `ctx.vault.read/search` rows with a JSDoc `@type` cast.
+Type the default export by pointing JSDoc `@type` at the alias in `@centraid/app-engine`. Declare row shapes with `@typedef` and cast `ctx.vault.read/search` rows with a JSDoc `@type` cast.
 
 **Every `ctx.vault` call is async** and returns a `Promise<...>` — always `await` it. Forgetting `await` is the #1 bug in handler code.
 
@@ -147,7 +147,7 @@ Type the default export by pointing JSDoc `@type` at the alias in `@centraid/ope
  * @property {string} id
  * @property {string} title
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 export default async ({ input, ctx }) => {
   const { rows } = await ctx.vault.read({
@@ -162,7 +162,7 @@ export default async ({ input, ctx }) => {
 
 ```js
 // actions/<name>.js — invoked from the page as window.centraid.write({ action: '<name>', input })
-/** @type {import('@centraid/openclaw-plugin').ActionHandler} */
+/** @type {import('@centraid/app-engine').ActionHandler} */
 export default async ({ body, ctx, log }) => {
   // `body` is the validated input. Do work through ctx.vault.invoke.
   const outcome = await ctx.vault.invoke({
@@ -182,7 +182,7 @@ Action handlers may return `{ status, body }` (legacy shape). The dispatcher unw
 
 Files run as JavaScript. The following are **syntax errors** in `.js` and must never appear:
 
-- `import type { ... }` — use a JSDoc `@typedef` or `import('@centraid/openclaw-plugin').TypeName` inside `@type` instead.
+- `import type { ... }` — use a JSDoc `@typedef` or `import('@centraid/app-engine').TypeName` inside `@type` instead.
 - `x as Foo` and `<Foo>x` — use a JSDoc cast: `/** @type {Foo} */ (x)`.
 - `(...) satisfies Foo` — use `/** @type {Foo} */` on the export instead.
 - `interface Foo { ... }`, `type Foo = ...`, enums — declare shapes with `@typedef` in JSDoc.
@@ -325,7 +325,7 @@ When one automation references another — e.g. `onFailure` — use the sibling'
 A plain `.js` ES module — same JS-only discipline as `queries/` and `actions/` (no `import type`, no `x as Foo`, no `interface`; use JSDoc). It receives `{ ctx, log }` only — **no `db`, no `body`, no `query`, no `window`**. A cron fire has no request and no DOM.
 
 ```js
-/** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
+/** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
   // ctx.tool(name, args)         — one host / MCP tool call; Promise.all batches independents
   // ctx.agent({ prompt, json })  — one constrained model turn (pass json when consumed structurally)
@@ -349,7 +349,7 @@ When the user's request includes scheduled behaviour: build the UI / queries / a
 
 ### Build / publish expectations
 
-There is **no build step**. The publish step uploads the app folder as-is; the runtime loads `.js` files directly and transpiles `.jsx` files per-request (esbuild, `jsx: 'automatic'`) — you never run a bundler yourself. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/openclaw-plugin` resolves — it changes nothing at runtime.
+There is **no build step**. The publish step uploads the app folder as-is; the runtime loads `.js` files directly and transpiles `.jsx` files per-request (esbuild, `jsx: 'automatic'`) — you never run a bundler yourself. Don't introduce `tsconfig.json`, don't add `build`/`watch` scripts, don't reach for a bundler. If you want editor IntelliSense locally, run `bun install` (or `npm install`) so `@centraid/app-engine` resolves — it changes nothing at runtime.
 
 ### When asked to scaffold a new app
 

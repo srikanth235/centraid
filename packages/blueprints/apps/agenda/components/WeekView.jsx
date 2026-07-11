@@ -24,7 +24,7 @@ function AllDayCell({ date, byDay, colorFor, onEventOpen }) {
     <div className="ag-week-allday-cell">
       {segs.map((seg) => (
         <button
-          key={seg.ev.event_id}
+          key={seg.ev.instance_key ?? seg.ev.event_id}
           type="button"
           className="ag-allday-chip"
           style={{ '--ev-color': colorFor(seg.ev.calendar_id) }}
@@ -79,7 +79,7 @@ function WeekCol({ date, byDay, isToday, colorFor, onSlotCreate, onEventOpen }) 
         const color = colorFor(seg.ev.calendar_id);
         return (
           <button
-            key={seg.ev.event_id}
+            key={seg.ev.instance_key ?? seg.ev.event_id}
             type="button"
             className="ag-week-ev"
             data-status={seg.ev.status}

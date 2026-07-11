@@ -1,7 +1,7 @@
 /**
  * Turn a date's reminder on or off. Runs through people.toggle_reminder — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

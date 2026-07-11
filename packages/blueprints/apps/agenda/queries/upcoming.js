@@ -13,7 +13,7 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state, receipt id included.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 /**
@@ -83,6 +83,150 @@ function attendeesByEvent(attendees, nameById, mePartyId) {
 // multi-day events are not cut off at the window edge.
 const SPAN_BUFFER_MS = 31 * 24 * 60 * 60 * 1000;
 
+// ---------- Recurrence (RFC 5545 §3.3.10 subset, DAILY/WEEKLY/MONTHLY/YEARLY
+// with INTERVAL/COUNT/UNTIL/BYDAY) ----------
+//
+// Self-contained on purpose: query handlers are standalone modules, so this
+// mirrors (rather than imports) @centraid/vault's recurrence/rrule.ts. Keep
+// the two in sync if the supported subset changes.
+const DAY_TOKENS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+
+function parseRrule(rrule) {
+  const parts = new Map();
+  for (const seg of String(rrule).split(';')) {
+    const eq = seg.indexOf('=');
+    if (eq < 0) continue;
+    parts.set(seg.slice(0, eq).trim().toUpperCase(), seg.slice(eq + 1).trim());
+  }
+  const freq = parts.get('FREQ');
+  if (!['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'].includes(freq)) return null;
+  const interval = Math.max(1, Number.parseInt(parts.get('INTERVAL') ?? '1', 10) || 1);
+  const countRaw = parts.get('COUNT');
+  const count = countRaw ? Math.max(1, Number.parseInt(countRaw, 10) || 0) || undefined : undefined;
+  const until = parts.get('UNTIL') || undefined;
+  const byDayRaw = parts.get('BYDAY');
+  const byDay = byDayRaw
+    ? byDayRaw
+        .split(',')
+        .map((d) => d.trim().toUpperCase())
+        .filter((d) => DAY_TOKENS.includes(d))
+    : undefined;
+  return { freq, interval, count, until, byDay: byDay && byDay.length > 0 ? byDay : undefined };
+}
+
+function addDays(d, n) {
+  const next = new Date(d.getTime());
+  next.setUTCDate(next.getUTCDate() + n);
+  return next;
+}
+
+function addMonths(d, n) {
+  const next = new Date(d.getTime());
+  const day = next.getUTCDate();
+  next.setUTCDate(1);
+  next.setUTCMonth(next.getUTCMonth() + n);
+  const daysInMonth = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, daysInMonth));
+  return next;
+}
+
+/** Occurrence starts of `rrule` (anchored at `dtstartIso`) inside `[rangeFrom, rangeTo)`. */
+function expandRrule(rrule, dtstartIso, rangeFrom, rangeTo, maxInstances = 200) {
+  const parsed = parseRrule(rrule);
+  const dtstart = new Date(dtstartIso);
+  if (!parsed || Number.isNaN(dtstart.getTime())) return [];
+  const untilRaw = parsed.until ? new Date(parsed.until) : null;
+  const until = untilRaw && !Number.isNaN(untilRaw.getTime()) ? untilRaw : null;
+  const out = [];
+  let occurrenceIndex = 0;
+
+  const cursorAt = (k) => {
+    if (parsed.freq === 'DAILY') return addDays(dtstart, k * parsed.interval);
+    if (parsed.freq === 'WEEKLY') return addDays(dtstart, k * 7 * parsed.interval);
+    if (parsed.freq === 'MONTHLY') return addMonths(dtstart, k * parsed.interval);
+    return addMonths(dtstart, k * 12 * parsed.interval);
+  };
+
+  if (parsed.freq === 'WEEKLY' && parsed.byDay) {
+    const weekStart = addDays(dtstart, -dtstart.getUTCDay());
+    let week = weekStart;
+    let guard = 0;
+    while (guard < maxInstances * 8) {
+      guard += 1;
+      for (const token of parsed.byDay) {
+        const d = addDays(week, DAY_TOKENS.indexOf(token));
+        if (d.getTime() < dtstart.getTime()) continue;
+        if (until && d.getTime() > until.getTime()) continue;
+        if (parsed.count !== undefined && occurrenceIndex >= parsed.count) continue;
+        occurrenceIndex += 1;
+        if (d.getTime() >= rangeFrom.getTime() && d.getTime() < rangeTo.getTime()) out.push(d.toISOString());
+      }
+      if (
+        (parsed.count !== undefined && occurrenceIndex >= parsed.count) ||
+        (until && week.getTime() > until.getTime()) ||
+        week.getTime() > rangeTo.getTime() ||
+        out.length >= maxInstances
+      ) {
+        break;
+      }
+      week = addDays(week, 7 * parsed.interval);
+    }
+    return out.slice(0, maxInstances).sort();
+  }
+
+  let k = 0;
+  let guard = 0;
+  while (out.length < maxInstances && guard < maxInstances * 4) {
+    guard += 1;
+    const cursor = cursorAt(k);
+    if (cursor.getTime() >= rangeTo.getTime()) break;
+    if (until && cursor.getTime() > until.getTime()) break;
+    if (parsed.count !== undefined && occurrenceIndex >= parsed.count) break;
+    occurrenceIndex += 1;
+    if (cursor.getTime() >= rangeFrom.getTime()) out.push(cursor.toISOString());
+    k += 1;
+  }
+  return out;
+}
+
+/**
+ * Materialize each recurring event's occurrences inside `[rangeFrom,
+ * rangeTo)` into instance rows — same shape as the anchor, dtstart/dtend
+ * shifted, `event_id` UNCHANGED (reschedule/cancel/RSVP/attach all still
+ * target the one canonical series row; there is no per-instance identity
+ * yet, only per-instance rendering) plus `is_recurrence_instance` and
+ * `instance_key` for the UI to key list rendering on since several
+ * instances now share one `event_id`.
+ */
+function expandRecurringEvents(rows, rangeFrom, rangeTo) {
+  const out = [];
+  for (const ev of rows) {
+    if (!ev.rrule) {
+      out.push({ ...ev, is_recurrence_instance: false, instance_key: ev.event_id });
+      continue;
+    }
+    const durationMs = ev.dtend
+      ? new Date(ev.dtend).getTime() - new Date(ev.dtstart).getTime()
+      : 0;
+    const starts = expandRrule(ev.rrule, ev.dtstart, rangeFrom, rangeTo);
+    if (starts.length === 0) continue;
+    for (const startIso of starts) {
+      const isAnchor = startIso === new Date(ev.dtstart).toISOString();
+      out.push({
+        ...ev,
+        dtstart: startIso,
+        dtend:
+          ev.dtend && Number.isFinite(durationMs)
+            ? new Date(new Date(startIso).getTime() + durationMs).toISOString()
+            : ev.dtend,
+        is_recurrence_instance: !isAnchor,
+        instance_key: `${ev.event_id}:${startIso}`,
+      });
+    }
+  }
+  return out;
+}
+
 export default async ({ query, ctx }) => {
   const purpose = 'dpv:ServiceProvision';
   try {
@@ -93,16 +237,31 @@ export default async ({ query, ctx }) => {
     const to = typeof query?.to === 'string' && query.to ? query.to : null;
     const fromMs = new Date(from).getTime();
     const fromLower = Number.isNaN(fromMs) ? from : new Date(fromMs - SPAN_BUFFER_MS).toISOString();
+    // A recurring series is one row anchored (maybe years) in the past — the
+    // dtstart>=fromLower filter below would drop it even though its next
+    // occurrence lands inside the visible window. It is fetched separately,
+    // unbounded by date, and merged before the range check happens on
+    // per-instance dtstarts instead of the anchor's.
     const where = [
       { column: 'status', op: 'ne', value: 'cancelled' },
       { column: 'dtstart', op: 'gte', value: fromLower },
     ];
     if (to) where.push({ column: 'dtstart', op: 'lt', value: to });
-    const [events, calendars] = await Promise.all([
+    const [events, recurring, calendars] = await Promise.all([
       ctx.vault.read({ entity: 'core.event', where, purpose }),
+      ctx.vault.read({
+        entity: 'core.event',
+        where: [
+          { column: 'status', op: 'ne', value: 'cancelled' },
+          { column: 'rrule', op: 'not-null' },
+        ],
+        purpose,
+      }),
       ctx.vault.read({ entity: 'schedule.calendar', purpose }),
     ]);
-    const windowed = events.rows ?? [];
+    const windowedById = new Map((events.rows ?? []).map((e) => [e.event_id, e]));
+    for (const e of recurring.rows ?? []) windowedById.set(e.event_id, e);
+    const windowed = [...windowedById.values()];
     if (windowed.length === 0) {
       return { events: [], calendars: calendars.rows ?? [] };
     }
@@ -162,19 +321,31 @@ export default async ({ query, ctx }) => {
         : { rows: [] };
     const contentById = new Map((contents.rows ?? []).map((c) => [c.content_id, c]));
     const attByEvent = attachmentsBySubject('core.event', attachments.rows ?? [], contentById);
-    const calByEvent = new Map((exts.rows ?? []).map((x) => [x.event_id, x.calendar_id]));
-    const rows = windowed
+    const extByEvent = new Map((exts.rows ?? []).map((x) => [x.event_id, x]));
+    const enriched = windowed.map((e) => {
+      const ext = extByEvent.get(e.event_id);
+      return {
+        ...e,
+        calendar_id: ext?.calendar_id ?? null,
+        conferencing_uri: ext?.conferencing_uri ?? null,
+        attachments: attByEvent.get(e.event_id) ?? [],
+        attendees: guestsByEvent.get(e.event_id) ?? [],
+      };
+    });
+    // Open-ended "upcoming" (no `to`) still needs a real ceiling to expand
+    // against — a year out is generous runway without walking an unbounded
+    // DAILY series forever (expandRrule's own maxInstances backstops that
+    // regardless).
+    const expandTo = to ?? new Date(fromMs + 366 * 24 * 60 * 60 * 1000).toISOString();
+    const rows = expandRecurringEvents(enriched, fromLower, expandTo)
       .filter((e) => {
-        // True lower bound: keep anything still running at `from`.
+        // True lower bound: keep anything still running at `from`. Only
+        // meaningful for the non-recurring set — a recurrence instance's
+        // dtstart already sits inside [fromLower, expandTo) by construction.
+        if (e.is_recurrence_instance || e.rrule) return true;
         const endMs = new Date(e.dtend ?? e.dtstart).getTime();
         return Number.isNaN(endMs) || Number.isNaN(fromMs) || endMs >= fromMs;
       })
-      .map((e) => ({
-        ...e,
-        calendar_id: calByEvent.get(e.event_id) ?? null,
-        attachments: attByEvent.get(e.event_id) ?? [],
-        attendees: guestsByEvent.get(e.event_id) ?? [],
-      }))
       .toSorted((a, b) => String(a.dtstart).localeCompare(String(b.dtstart)));
     return {
       events: rows,

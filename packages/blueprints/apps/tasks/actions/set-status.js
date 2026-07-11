@@ -4,7 +4,7 @@
  * iff completed), so this handler is a pure pass-through. Outcome passed
  * through for the UI to narrate.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

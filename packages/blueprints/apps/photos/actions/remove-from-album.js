@@ -2,7 +2,7 @@
  * Take a photo out of an album through media.remove_from_album; the photo
  * itself stays in the library. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

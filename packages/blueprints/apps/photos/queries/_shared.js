@@ -3,10 +3,11 @@
  * 3/4) — pulled out once queries/library.js and queries/search.js both
  * needed the SAME bounded joins over the same windowed asset/content ids:
  * the favorite star (issue #274, pre-existing), free-form labels
- * (core.tag_entity/untag_entity over the "Labels" scheme —
- * packages/vault/src/commands/tags.ts), the linked place (core.place,
- * media.ts's EXIF-GPS auto-link + media.set_asset_place) and the blob
- * custody projection (blob.custody_state, blob/custody.ts).
+ * (core.tag_item/untag_item over the shared "Tags" scheme —
+ * packages/vault/src/commands/tags.ts, shared with notes/tasks), the
+ * linked place (core.place, media.ts's EXIF-GPS auto-link +
+ * media.set_asset_place) and the blob custody projection
+ * (blob.custody_state, blob/custody.ts).
  *
  * NOT a query itself — the dispatcher resolves a query name straight to
  * `queries/<name>.js` (never a directory scan: packages/app-engine/src/
@@ -17,7 +18,7 @@
 
 export const BLOB_ROUTE = '/centraid/_vault/blobs';
 const FLAGS_SCHEME_URI = 'https://centraid.dev/schemes/flags';
-const LABELS_SCHEME_URI = 'https://centraid.dev/schemes/labels';
+const TAGS_SCHEME_URI = 'centraid:tags:v1';
 
 /**
  * Blob-backed bytes (issue #296) resolve to same-origin serve URLs (Range,
@@ -87,19 +88,21 @@ export async function readAssetJoins({ ctx, purpose, assetIds, contentIds }) {
     for (const t of starTags.rows ?? []) starredIds.add(t.target_id);
   }
 
-  // Free-form labels (issue #352): core.tag_entity targets the ASSET itself
-  // (target_type 'media.media_asset'), unlike the content-item-scoped
-  // favorite star above — see tags.ts's TAGGABLE_TARGETS.
-  const labelsScheme = (schemes.rows ?? []).find((s) => s.uri === LABELS_SCHEME_URI);
+  // Free-form labels (issue #352): core.tag_item targets the ASSET itself
+  // (subject_type 'media.media_asset'), unlike the content-item-scoped
+  // favorite star above — see tags.ts's SUBJECT_PK. Each entry carries the
+  // tag_id too: untag-asset.js removes by tag_id (core.untag_item), not by
+  // label, so the UI needs it to render a working remove control.
+  const tagsScheme = (schemes.rows ?? []).find((s) => s.uri === TAGS_SCHEME_URI);
   const labelConceptById = new Map(
-    labelsScheme
+    tagsScheme
       ? (concepts.rows ?? [])
-          .filter((c) => c.scheme_id === labelsScheme.scheme_id)
+          .filter((c) => c.scheme_id === tagsScheme.scheme_id)
           .map((c) => [c.concept_id, c.pref_label ?? c.notation])
       : [],
   );
   const tagsByAsset = new Map();
-  if (labelsScheme && assetIds.length > 0) {
+  if (tagsScheme && assetIds.length > 0) {
     const labelTags = await ctx.vault.read({
       entity: 'core.tag',
       where: [
@@ -112,7 +115,7 @@ export async function readAssetJoins({ ctx, purpose, assetIds, contentIds }) {
       const label = labelConceptById.get(t.concept_id);
       if (!label) continue; // a tag on this asset from some OTHER scheme
       if (!tagsByAsset.has(t.target_id)) tagsByAsset.set(t.target_id, []);
-      tagsByAsset.get(t.target_id).push(label);
+      tagsByAsset.get(t.target_id).push({ tag_id: t.tag_id, label });
     }
   }
 

@@ -7,7 +7,7 @@
  * the `people` window uses, plus the vault's hit snippet. Name matches rank
  * first, then role, then notes.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';

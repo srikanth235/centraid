@@ -69,3 +69,42 @@ export function backupVault(db: VaultDb, destDir: string): BackupResult {
   });
   return { vaultPath, journalPath, vaultSha256, journalSha256, blobsCopied: copied, receiptId };
 }
+
+export interface StageDbsResult {
+  vaultPath: string;
+  journalPath: string;
+  vaultSha256: string;
+  journalSha256: string;
+  receiptId: string;
+}
+
+/**
+ * A narrower `backupVault`: consistent VACUUM INTO copies of the two SQLite
+ * files ONLY — named `vault.db` / `journal.db` (the offsite backup engine's
+ * `centraid-snapshot/1` entry paths, FORMAT.md), receipted the same way.
+ * Deliberately does NOT touch the blob CAS: at 100+ GB, copying every blob
+ * into a staging dir on every backup tick is exactly the duplication the
+ * offsite engine exists to avoid — its `SourceEntry` assembly reads CAS
+ * files IN PLACE instead (see `packages/gateway/src/backup`).
+ */
+export function stageVaultDbs(db: VaultDb, destDir: string): StageDbsResult {
+  requireDir(db, 'stage');
+  const vaultPath = path.join(destDir, 'vault.db');
+  const journalPath = path.join(destDir, 'journal.db');
+  for (const p of [vaultPath, journalPath]) rmSync(p, { force: true });
+  db.vault.exec(`VACUUM INTO '${vaultPath.replaceAll("'", "''")}'`);
+  db.journal.exec(`VACUUM INTO '${journalPath.replaceAll("'", "''")}'`);
+  const vaultSha256 = sha256Hex(readFileSync(vaultPath).toString('binary'));
+  const journalSha256 = sha256Hex(readFileSync(journalPath).toString('binary'));
+  const receiptId = writeReceipt(db.journal, {
+    grantId: null,
+    invocationId: null,
+    action: 'act consent.backup_stage_dbs',
+    objectType: 'core.vault',
+    objectId: null,
+    purpose: null,
+    decision: 'allow',
+    detail: { vaultSha256, journalSha256, destDir },
+  });
+  return { vaultPath, journalPath, vaultSha256, journalSha256, receiptId };
+}

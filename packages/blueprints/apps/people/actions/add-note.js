@@ -1,7 +1,7 @@
 /**
  * Add a note about a person, kept as a searchable annotation on their party. Runs through people.add_note — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

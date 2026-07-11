@@ -5,7 +5,7 @@
  *   - registry, versioned uploads, sqlite-backed handler runner
  *   - the full `/centraid/...` URL surface as a `Runtime.handle(req, res)` fn
  *
- * Hosts: `@centraid/openclaw-plugin` (OpenClaw gateway shim) and the
+ * Hosts: the standalone daemon in `@centraid/gateway` and the
  * desktop in-process embed in `@centraid/desktop`.
  */
 
@@ -20,8 +20,8 @@ export {
   type SurfaceStatus,
 } from './runtime.js';
 
-// Per-app chat surface — `ConversationRunner` is the host-injected seam, both
-// OpenClaw and the desktop local-runtime implement it. The HTTP route
+// Per-app chat surface — `ConversationRunner` is the host-injected seam that
+// the gateway's unified conversation runner implements. The HTTP route
 // (`POST /centraid/<id>/_turn`) is dispatched by `Runtime.handle` when
 // `RuntimeOptions.conversationRunner` is set. The transcript lives in each app's
 // per-app `runtime.sqlite`, fronted by `ConversationHistoryStore`.
@@ -174,7 +174,7 @@ export { ChangeBus, type AppChange, type ChangeListener } from './changes/change
 
 // Conversation-history store (the read/write facade backing the chat surface)
 // + its HTTP route dispatcher. Used in two places:
-//   - openclaw-plugin registers it on the gateway's HTTP surface
+//   - the standalone daemon registers it on the gateway's HTTP surface
 //   - startRuntimeHttpServer intercepts the same prefix for the embedded
 //     local runtime, so the desktop sees identical behavior in both modes
 // The store is conversation-first (spans kind=chat|build); the DTO types it

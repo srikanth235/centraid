@@ -1,47 +1,43 @@
-// Free-form multi-tag commands (issue #352 phase 3/4): core_tag is already
-// UNIQUE(target_type, target_id, concept_id) — multi-tag capable — but every
-// existing writer treats it as SINGLE-tag storage: documents.ts's `fileInto`
-// deletes-then-inserts one folders-scheme tag, flags.ts's `setStarred` one
-// flags-scheme tag. Neither gives an app a generic, ADDITIVE "put a label on
-// this" gesture. These two commands are that gesture, over an owner "labels"
-// concept scheme — bootstrapped on first use exactly like the folders and
-// flags schemes (documents.ts / flags.ts), so a label is a first-class SKOS
-// concept (findable, mergeable, renameable later) rather than a bare string
-// column would be.
+// Generic tagging (core §01, issue #274's "folders-scheme tags" comment):
+// owner-driven, free-form labels on top of the same SKOS mechanism the
+// enrichment pipeline uses for classification (core_concept /
+// core_concept_scheme) and core_tag itself. Distinct from core.collection
+// (an ordered, owner-curated container — "Paris trip" holding specific
+// items) and from social.circle (an audience) — a tag is neither ordered
+// nor a container, just a cross-cutting label a projection can filter by.
 //
-// Scoped to two target types today (documents, media assets) — the same
-// polymorphic-ref discipline core.link_entities uses (validate the target
-// resolves, exists, and is LIVE) without link_entities' fully generic reach:
-// a free-form labeling surface open to every canonical table is more power
-// than either app needs, and narrowing the allow-list keeps the risk surface
-// tight. Widening to another target type is one entry in TAGGABLE_TARGETS.
-//
-// No new read path is needed: core.tag / core.concept / core.concept_scheme
-// are already registered logical entities (schema/tables.ts), so an app with
-// read scope on them lists an entity's labels with the same bounded-read
-// pattern the photos app already uses for the flags-scheme star (see
-// packages/blueprints/apps/photos/queries/library.js).
+// One well-known scheme per vault, `centraid:tags:v1`, found by its unique
+// `uri` rather than a hardcoded id — every projection that tags anything
+// shares the same scheme, same posture as attachments sharing one
+// core_content_item pool. Issue #352 widened the original task/note-only
+// reach to documents and media assets — same mechanism, no new table, no
+// second scheme: exactly the "one judgment, one mechanism" rule a `favorite`
+// column or a parallel tags table would have violated.
 
 import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 
-// An https URI, not a urn: one — this literal is interpolated into condition
-// SQL, where `:labels` would read as a named parameter (the issue-258
-// colon-literal trap folders/flags both note).
-export const LABELS_SCHEME_URI = 'https://centraid.dev/schemes/labels';
+const TAGS_SCHEME_URI = 'centraid:tags:v1';
 
-/** Polymorphic targets this command pack accepts, with their live-row test. */
-const TAGGABLE_TARGETS: Record<string, { physical: string; pk: string }> = {
-  'core.document': { physical: 'core_document', pk: 'document_id' },
-  'media.media_asset': { physical: 'media_media_asset', pk: 'asset_id' },
+/**
+ * The entities a projection may tag: logical name → primary-key column,
+ * plus whether the table has a `deleted_at` lifecycle to respect (tasks
+ * don't soft-delete; notes/documents/media assets do). Same allow-list
+ * posture as attachments.ts's SUBJECT_PK: the physical table is the logical
+ * name with the dot underscored, so this doubles as a guard against an
+ * unknown subject_type ever reaching raw SQL.
+ */
+const SUBJECT_PK: Record<string, { pk: string; live?: boolean }> = {
+  'knowledge.note': { pk: 'note_id', live: true },
+  'schedule.task': { pk: 'task_id' },
+  'core.document': { pk: 'document_id', live: true },
+  'media.media_asset': { pk: 'asset_id', live: true },
 };
 
-const TARGET_LIVE_SQL = Object.entries(TAGGABLE_TARGETS)
-  .map(
-    ([type, t]) =>
-      `(:target_type = '${type}' AND EXISTS(SELECT 1 FROM ${t.physical} WHERE ${t.pk} = :target_id AND deleted_at IS NULL))`,
-  )
-  .join('\n              OR ');
+/** A tag's display label → its notation: lowercased, collapsed whitespace, trimmed. */
+function notationOf(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, ' ');
+}
 
 /** The acting party: the caller's own party, else the vault owner (apps). */
 function actorPartyId(ctx: HandlerCtx): string {
@@ -53,31 +49,23 @@ function actorPartyId(ctx: HandlerCtx): string {
   return owner.owner_party_id;
 }
 
-/** The labels scheme, created on first use. */
-function labelsSchemeId(ctx: HandlerCtx): string {
+function findOrCreateTagsScheme(ctx: HandlerCtx): string {
   const existing = ctx.db
     .prepare('SELECT scheme_id FROM core_concept_scheme WHERE uri = ?')
-    .get(LABELS_SCHEME_URI) as { scheme_id: string } | undefined;
+    .get(TAGS_SCHEME_URI) as { scheme_id: string } | undefined;
   if (existing) return existing.scheme_id;
   const schemeId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO core_concept_scheme (scheme_id, uri, title, publisher, version)
-       VALUES (?, ?, 'Labels', 'centraid', '1')`,
+       VALUES (?, ?, 'Tags', 'centraid', 'v1')`,
     )
-    .run(schemeId, LABELS_SCHEME_URI);
+    .run(schemeId, TAGS_SCHEME_URI);
   return schemeId;
 }
 
-/**
- * Find-or-create a label concept by text. Identity is the trimmed,
- * lowercased text (so "Beach" and "beach" collapse onto one concept, the
- * same free-form-tag semantics users expect); `pref_label` keeps whichever
- * casing was typed first.
- */
-function findOrCreateLabelConcept(ctx: HandlerCtx, label: string): string {
-  const notation = label.trim().toLowerCase();
-  const schemeId = labelsSchemeId(ctx);
+function findOrCreateConcept(ctx: HandlerCtx, schemeId: string, label: string): string {
+  const notation = notationOf(label);
   const existing = ctx.db
     .prepare('SELECT concept_id FROM core_concept WHERE scheme_id = ? AND notation = ?')
     .get(schemeId, notation) as { concept_id: string } | undefined;
@@ -92,134 +80,141 @@ function findOrCreateLabelConcept(ctx: HandlerCtx, label: string): string {
   return conceptId;
 }
 
-/** Condition fragment: `:label` resolves to a live tag on (target_type, target_id). */
-const TAG_LIVE_SQL = `
-  SELECT count(*) AS n FROM core_tag t
-    JOIN core_concept c ON c.concept_id = t.concept_id
-    JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-   WHERE t.target_type = :target_type AND t.target_id = :target_id
-     AND s.uri = '${LABELS_SCHEME_URI}' AND c.notation = lower(trim(:label))`;
-
-const TAG_ENTITY: CommandDefinition = {
-  name: 'core.tag_entity',
+const TAG_ITEM: CommandDefinition = {
+  name: 'core.tag_item',
   ownerSchema: 'core',
   inputSchema: {
     type: 'object',
-    required: ['target_type', 'target_id', 'label'],
+    required: ['subject_type', 'subject_id', 'label'],
     additionalProperties: false,
     properties: {
-      target_type: { type: 'string', enum: Object.keys(TAGGABLE_TARGETS) },
-      target_id: { type: 'string', minLength: 1 },
+      subject_type: { type: 'string', enum: Object.keys(SUBJECT_PK) },
+      subject_id: { type: 'string', minLength: 1 },
       label: { type: 'string', minLength: 1 },
     },
   },
   outputSchema: {
     type: 'object',
-    required: ['tag_id', 'concept_id'],
-    properties: { tag_id: { type: 'string' }, concept_id: { type: 'string' }, deduped: {} },
-  },
-  preconditions: [
-    {
-      name: 'label_not_blank',
-      sql: `SELECT CASE WHEN trim(:label) != '' THEN 1 ELSE 0 END AS n`,
-      column: 'n',
-      op: 'eq',
-      value: 1,
+    required: ['tag_id', 'concept_id', 'notation'],
+    properties: {
+      tag_id: { type: 'string' },
+      concept_id: { type: 'string' },
+      notation: { type: 'string' },
     },
+  },
+  preconditions: [],
+  postconditions: [
     {
-      name: 'target_exists_live',
-      sql: `SELECT (${TARGET_LIVE_SQL}) AS n`,
+      name: 'tag_recorded',
+      sql: `SELECT count(*) AS n FROM core_tag
+             WHERE tag_id = :tag_id AND target_type = :subject_type AND target_id = :subject_id
+               AND concept_id = :concept_id`,
       column: 'n',
       op: 'eq',
       value: 1,
     },
   ],
-  postconditions: [{ name: 'tag_live', sql: TAG_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
   idempotency: 'idempotent',
   risk: 'low',
-  handler: tagEntity,
+  handler: tagItem,
 };
 
-function tagEntity(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { target_type: string; target_id: string; label: string };
-  const conceptId = findOrCreateLabelConcept(ctx, input.label);
-  const existing = ctx.db
+function tagItem(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { subject_type: string; subject_id: string; label: string };
+  const subject = SUBJECT_PK[input.subject_type];
+  if (!subject) throw new Error(`cannot tag ${input.subject_type}`);
+  const table = input.subject_type.replace('.', '_');
+  const liveClause = subject.live ? ' AND deleted_at IS NULL' : '';
+  const found = ctx.db
+    .prepare(`SELECT count(*) AS n FROM ${table} WHERE ${subject.pk} = ?${liveClause}`)
+    .get(input.subject_id) as { n: number };
+  if (found.n !== 1) throw new Error(`no live ${input.subject_type} with id ${input.subject_id}`);
+  const notation = notationOf(input.label);
+  if (!notation) throw new Error('tag label is empty');
+
+  const schemeId = findOrCreateTagsScheme(ctx);
+  const conceptId = findOrCreateConcept(ctx, schemeId, input.label);
+
+  // Idempotent: retagging with the same label just returns the existing
+  // edge (core_tag's UNIQUE(target_type, target_id, concept_id) — the same
+  // "attach again, no duplicate" posture as core.attach's dedup).
+  const existingTag = ctx.db
     .prepare(
       'SELECT tag_id FROM core_tag WHERE target_type = ? AND target_id = ? AND concept_id = ?',
     )
-    .get(input.target_type, input.target_id, conceptId) as { tag_id: string } | undefined;
-  if (existing) {
-    return { tag_id: existing.tag_id, concept_id: conceptId, deduped: 1 };
+    .get(input.subject_type, input.subject_id, conceptId) as { tag_id: string } | undefined;
+  if (existingTag) {
+    return { tag_id: existingTag.tag_id, concept_id: conceptId, notation };
   }
+
+  // Owner-asserted: a party, no confidence — the exact inverse of an
+  // enrichment-derived tag (confidence, no party), per the derived-data
+  // contract enrich-publishers.ts documents.
   const tagId = ctx.newId();
   ctx.db
     .prepare(
       `INSERT INTO core_tag (tag_id, target_type, target_id, concept_id, tagged_by_party_id, confidence, tagged_at)
        VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     )
-    .run(tagId, input.target_type, input.target_id, conceptId, actorPartyId(ctx), ctx.now);
+    .run(tagId, input.subject_type, input.subject_id, conceptId, actorPartyId(ctx), ctx.now);
   ctx.wrote('core.tag', tagId);
   ctx.cite({
-    claim: `${input.target_type} ${input.target_id} labeled "${input.label.trim()}"`,
-    entityType: 'core.tag',
-    entityId: tagId,
+    claim: `tagged ${input.subject_type} ${input.subject_id} "${notation}"`,
+    entityType: input.subject_type,
+    entityId: input.subject_id,
   });
-  return { tag_id: tagId, concept_id: conceptId, deduped: 0 };
+  return { tag_id: tagId, concept_id: conceptId, notation };
 }
 
-const UNTAG_ENTITY: CommandDefinition = {
-  name: 'core.untag_entity',
+const UNTAG_ITEM: CommandDefinition = {
+  name: 'core.untag_item',
   ownerSchema: 'core',
   inputSchema: {
     type: 'object',
-    required: ['target_type', 'target_id', 'label'],
+    required: ['tag_id'],
     additionalProperties: false,
-    properties: {
-      target_type: { type: 'string', enum: Object.keys(TAGGABLE_TARGETS) },
-      target_id: { type: 'string', minLength: 1 },
-      label: { type: 'string', minLength: 1 },
-    },
+    properties: { tag_id: { type: 'string', minLength: 1 } },
   },
   outputSchema: {
     type: 'object',
-    required: ['target_type', 'target_id'],
-    properties: { target_type: { type: 'string' }, target_id: { type: 'string' } },
+    required: ['tag_id'],
+    properties: { tag_id: { type: 'string' } },
   },
-  preconditions: [{ name: 'tag_live', sql: TAG_LIVE_SQL, column: 'n', op: 'eq', value: 1 }],
-  postconditions: [{ name: 'tag_gone', sql: TAG_LIVE_SQL, column: 'n', op: 'eq', value: 0 }],
+  preconditions: [
+    {
+      name: 'tag_exists',
+      sql: 'SELECT count(*) AS n FROM core_tag WHERE tag_id = :tag_id',
+      column: 'n',
+      op: 'eq',
+      value: 1,
+    },
+  ],
+  postconditions: [
+    {
+      name: 'tag_removed',
+      sql: 'SELECT count(*) AS n FROM core_tag WHERE tag_id = :tag_id',
+      column: 'n',
+      op: 'eq',
+      value: 0,
+    },
+  ],
   idempotency: 'idempotent',
   risk: 'low',
-  handler: untagEntity,
+  handler: untagItem,
 };
 
-function untagEntity(ctx: HandlerCtx): Record<string, unknown> {
-  const input = ctx.input as { target_type: string; target_id: string; label: string };
-  const notation = input.label.trim().toLowerCase();
-  const row = ctx.db
-    .prepare(
-      `SELECT t.tag_id AS tag_id FROM core_tag t
-         JOIN core_concept c ON c.concept_id = t.concept_id
-         JOIN core_concept_scheme s ON s.scheme_id = c.scheme_id
-        WHERE t.target_type = ? AND t.target_id = ? AND s.uri = ? AND c.notation = ?`,
-    )
-    .get(input.target_type, input.target_id, LABELS_SCHEME_URI, notation) as
-    | { tag_id: string }
-    | undefined;
-  if (!row) throw new Error('tag vanished between check and execute');
-  // Classification, not history (issue #274's same reasoning for flags): a
-  // hard delete, not an end-dated row — nothing reads a dead label's history.
-  ctx.db.prepare('DELETE FROM core_tag WHERE tag_id = ?').run(row.tag_id);
-  ctx.wrote('core.tag', row.tag_id);
-  ctx.cite({
-    claim: `${input.target_type} ${input.target_id} label "${input.label.trim()}" removed`,
-    entityType: 'core.tag',
-    entityId: row.tag_id,
-  });
-  return { target_type: input.target_type, target_id: input.target_id };
+function untagItem(ctx: HandlerCtx): Record<string, unknown> {
+  const input = ctx.input as { tag_id: string };
+  ctx.db.prepare('DELETE FROM core_tag WHERE tag_id = ?').run(input.tag_id);
+  ctx.wrote('core.tag', input.tag_id);
+  return { tag_id: input.tag_id };
 }
 
-/** Register the free-form tagging commands on a gateway. */
+/** Register the core tagging commands on a gateway. */
 export function registerTagCommands(gateway: Gateway): void {
-  gateway.registerCommand(TAG_ENTITY);
-  gateway.registerCommand(UNTAG_ENTITY);
+  gateway.registerCommand(TAG_ITEM);
+  gateway.registerCommand(UNTAG_ITEM);
 }
+
+/** The subject types a projection may tag — exported for callers/tests. */
+export const TAGGABLE_SUBJECTS = Object.keys(SUBJECT_PK);

@@ -209,7 +209,9 @@ function renderToolbar() {
   // Distinct labels across the WHOLE loaded drive (issue #352 phase 4) —
   // never scoped to the current folder/nav, mirroring the photos app's own
   // tag-chip derivation (toolbar.jsx's renderChips).
-  const tagOptions = [...new Set(activeFiles().flatMap((f) => f.tags ?? []))].sort();
+  const tagOptions = [
+    ...new Set(activeFiles().flatMap((f) => (f.tags ?? []).map((t) => t.label))),
+  ].sort();
   tagChipsRoot.render(<TagChips tags={tagOptions} active={state.tag} onSelect={selectTag} />);
 
   const sortNames = { added: 'Date', name: 'Name', size: 'Size' };

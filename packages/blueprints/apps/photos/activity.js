@@ -5,7 +5,7 @@
 // itself (whose activity rows all read `lf.taken`, never a distinct per-event
 // timestamp), every row here shares that one real date signal instead of
 // inventing per-fact ones. Each fact still corresponds to a real receipted
-// vault command when it happened (add_to_album/tag_entity/add_asset are all
+// vault command when it happened (add_to_album/tag_item/add_asset are all
 // typed, consent-checked commands) — this module just doesn't claim to know
 // exactly when.
 import { dayKey, fmtDay } from './format.js';
@@ -22,7 +22,7 @@ export function buildActivity(asset) {
   }
   const tags = asset.tags ?? [];
   if (tags.length > 0) {
-    activity.push({ text: `Tagged ${tags.join(', ')}`, date: dateLabel });
+    activity.push({ text: `Tagged ${tags.map((t) => t.label).join(', ')}`, date: dateLabel });
   }
   activity.push({ text: 'Uploaded to your vault', date: dateLabel });
   return activity;

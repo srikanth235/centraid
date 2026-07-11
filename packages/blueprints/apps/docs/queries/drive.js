@@ -19,11 +19,11 @@
  *
  * Phase 4 (issue #352) adds two more bounded joins, factored into
  * ./_shared.js since search.js needs the identical pair: `tags` (free-form
- * labels over the owner "Labels" scheme, core.tag_entity/untag_entity) and
+ * labels over the shared "Tags" scheme, core.tag_item/untag_item) and
  * `custody_state` (the blob custody projection, local-only/replicated/
  * remote-only/missing/absent) keyed off each row's current_content_id.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { readCustodyByContent, readLabelsByDocument } from './_shared.js';

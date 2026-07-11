@@ -143,6 +143,18 @@ function renderDetail() {
         onPickEffort={(id, value) =>
           logic.editField(id, { effort_min: value }, { toastText: 'Effort updated · receipt', activityText: 'Effort updated' })
         }
+        onPickRepeat={(id, patch) =>
+          logic.editField(id, patch, {
+            toastText: 'Repeat updated · receipt',
+            activityText: patch.clear_rrule ? 'Stopped repeating' : 'Repeat updated',
+          })
+        }
+        onPickRemind={(id, patch) =>
+          logic.editField(id, patch, {
+            toastText: 'Reminder updated · receipt',
+            activityText: patch.clear_remind ? 'Reminder cleared' : 'Reminder updated',
+          })
+        }
         onToggleSubtask={(sub) => logic.toggleComplete(sub)}
         onAddSubtask={(parentId, title) => logic.addSubtask(parentId, title)}
         onAttach={(taskId) => {
@@ -150,6 +162,8 @@ function renderDetail() {
           $('attachInput').click();
         }}
         onRemoveAttachment={(attachmentId) => logic.removeAttachment(attachmentId)}
+        onAddTag={(taskId, label) => logic.addTag(taskId, label)}
+        onRemoveTag={(tagId) => logic.removeTag(tagId)}
         onToggleProcess={(t) => logic.toggleProcess(t)}
         onCancel={(t) => {
           logic.cancelTask(t);

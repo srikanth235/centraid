@@ -45,6 +45,42 @@ function proposeEvent(): string {
   return (outcome as { output: { event_id: string } }).output.event_id;
 }
 
+test('propose_event stores rrule, conferencing_uri and reminders', () => {
+  const outcome = invoke('schedule.propose_event', {
+    summary: 'Weekly standup',
+    dtstart: '2026-07-06T09:00:00Z',
+    dtend: '2026-07-06T09:15:00Z',
+    calendar_id: calendarId,
+    start_tz: 'Asia/Kolkata',
+    rrule: 'FREQ=WEEKLY;BYDAY=MO',
+    conferencing_uri: 'https://meet.example.com/standup',
+    reminders: [{ minutes_before: 10 }, { minutes_before: 0 }],
+  });
+  expect(outcome.status).toBe('executed');
+  const eventId = (outcome as { output: { event_id: string } }).output.event_id;
+  const event = db.vault
+    .prepare('SELECT start_tz, rrule FROM core_event WHERE event_id = ?')
+    .get(eventId) as { start_tz: string; rrule: string };
+  expect(event).toEqual({ start_tz: 'Asia/Kolkata', rrule: 'FREQ=WEEKLY;BYDAY=MO' });
+  const ext = db.vault
+    .prepare('SELECT conferencing_uri, reminders_json FROM schedule_event_ext WHERE event_id = ?')
+    .get(eventId) as { conferencing_uri: string; reminders_json: string };
+  expect(ext.conferencing_uri).toBe('https://meet.example.com/standup');
+  expect(JSON.parse(ext.reminders_json)).toEqual([{ minutes_before: 10 }, { minutes_before: 0 }]);
+});
+
+test('propose_event refuses an unrecognized repeat rule', () => {
+  const outcome = invoke('schedule.propose_event', {
+    summary: 'Bad rule',
+    dtstart: '2026-07-06T09:00:00Z',
+    dtend: '2026-07-06T09:15:00Z',
+    calendar_id: calendarId,
+    rrule: 'every monday',
+  });
+  expect(outcome.status).toBe('failed');
+  if (outcome.status === 'failed') expect(outcome.predicate).toContain('not recognized');
+});
+
 test('cancel_event marks the event cancelled as a SEQUENCE revision, not a vanish', () => {
   const eventId = proposeEvent();
   const before = db.vault

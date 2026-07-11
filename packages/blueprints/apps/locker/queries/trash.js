@@ -3,7 +3,7 @@
  * trashed item keeps its star and tags so a restore is lossless; it rides the
  * same decorate() path as the live window.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { decorate, readTags, readStarred } from './items.js';

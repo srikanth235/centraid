@@ -297,6 +297,24 @@ export function createLogic({ state, data, render, refresh }) {
     return outcome;
   }
 
+  // ---------- Tags ----------
+
+  async function addTag(noteId, label) {
+    const l = String(label ?? '').trim();
+    if (!l) return undefined;
+    const outcome = await act('add-tag', { note_id: noteId, label: l });
+    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    else render();
+    return outcome;
+  }
+
+  async function removeTag(tagId) {
+    const outcome = await act('remove-tag', { tag_id: tagId });
+    if (narrate(outcome) || outcome?.status === 'denied') await refresh();
+    else render();
+    return outcome;
+  }
+
   // ---------- Search ----------
 
   let searchSeq = 0;
@@ -357,6 +375,8 @@ export function createLogic({ state, data, render, refresh }) {
     setAttachTarget,
     getAttachTarget,
     removeAttachment,
+    addTag,
+    removeTag,
     applySearchInput,
     clearSearch,
     clearPending,
@@ -392,6 +412,8 @@ export function scopedRows(data, state) {
   if (state.nav.kind === 'pinned') rows = rows.filter((n) => n.pinned === 1);
   else if (state.nav.kind === 'notebook') {
     rows = rows.filter((n) => (n.notebook_ids ?? []).includes(state.nav.notebookId));
+  } else if (state.nav.kind === 'tag') {
+    rows = rows.filter((n) => (n.tags ?? []).some((t) => t.concept_id === state.nav.conceptId));
   }
   return rows;
 }
@@ -402,6 +424,15 @@ export function notebookNoteCounts(data) {
   const map = new Map();
   for (const n of data.notes ?? []) {
     for (const id of n.notebook_ids ?? []) map.set(id, (map.get(id) ?? 0) + 1);
+  }
+  return map;
+}
+
+/** concept_id → note count within the library window, same bounded honesty. */
+export function tagNoteCounts(data) {
+  const map = new Map();
+  for (const n of data.notes ?? []) {
+    for (const t of n.tags ?? []) map.set(t.concept_id, (map.get(t.concept_id) ?? 0) + 1);
   }
   return map;
 }

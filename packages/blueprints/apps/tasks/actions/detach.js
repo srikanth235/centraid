@@ -3,7 +3,7 @@
  * content item stays (it is deduped and may back other attachments). Same
  * handler shape across every app.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

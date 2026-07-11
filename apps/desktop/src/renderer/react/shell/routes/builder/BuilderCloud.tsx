@@ -547,7 +547,6 @@ function Overview({
                 <span className={styles.statusDot} data-status="live" />
                 Reachable
               </div>
-              <div className={styles.statSub}>openclaw · 18789</div>
             </>
           ) : (
             <>

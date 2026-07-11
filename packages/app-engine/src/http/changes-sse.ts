@@ -17,7 +17,7 @@
  *     });
  *
  * Auth lives in the surrounding HTTP server (loopback bearer for the
- * embedded local runtime, gateway auth for the OpenClaw plugin). For the
+ * embedded local runtime, gateway auth for the standalone daemon). For the
  * desktop iframe specifically, Electron's `webRequest.onBeforeSendHeaders`
  * injects the bearer token automatically — `EventSource` doesn't support
  * custom headers natively but it doesn't need to.

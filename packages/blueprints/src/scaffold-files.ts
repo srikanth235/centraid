@@ -167,7 +167,7 @@ export function appPackageJson(id: string): string {
         version: '0.1.0',
         private: true,
         type: 'module',
-        devDependencies: { '@centraid/openclaw-plugin': '*' },
+        devDependencies: { '@centraid/app-engine': '*' },
       },
       null,
       2,

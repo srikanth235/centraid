@@ -4,7 +4,7 @@
  * is the explicit clear_due / clear_description intent, never an empty
  * string. Outcome passed through for the UI to narrate.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const raw = body ?? {};
@@ -16,6 +16,10 @@ export default async ({ body, ctx }) => {
   if (raw.clear_due === true) input.clear_due = true;
   if (raw.priority !== undefined) input.priority = Number(raw.priority);
   if (raw.effort_min) input.effort_min = Number(raw.effort_min);
+  if (raw.remind_before_min !== undefined) input.remind_before_min = Number(raw.remind_before_min);
+  if (raw.clear_remind === true) input.clear_remind = true;
+  if (raw.rrule) input.rrule = String(raw.rrule);
+  if (raw.clear_rrule === true) input.clear_rrule = true;
   try {
     const outcome = await ctx.vault.invoke({
       command: 'schedule.edit_task',

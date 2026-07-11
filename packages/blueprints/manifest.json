@@ -134,10 +134,12 @@
       "version": "0.3.0",
       "kind": "app",
       "files": [
+        "actions/add-tag.js",
         "actions/add.js",
         "actions/attach.js",
         "actions/detach.js",
         "actions/edit.js",
+        "actions/remove-tag.js",
         "actions/set-status.js",
         "app.css",
         "app.json",
@@ -406,6 +408,7 @@
       "version": "0.4.0",
       "kind": "app",
       "files": [
+        "actions/add-tag.js",
         "actions/attach.js",
         "actions/create-note.js",
         "actions/create-notebook.js",
@@ -414,6 +417,7 @@
         "actions/detach.js",
         "actions/edit-note.js",
         "actions/move-note.js",
+        "actions/remove-tag.js",
         "actions/rename-notebook.js",
         "app.css",
         "app.json",
@@ -1431,6 +1435,27 @@
         "app.json",
         "automations/google-gmail-send/automation.json",
         "automations/google-gmail-send/handler.js"
+      ]
+    },
+    {
+      "id": "google-calendar-invite-send",
+      "name": "Calendar invite send",
+      "desc": "Agenda's needs-action guests leave through the outbox as ICS invites — each send is a reviewable artifact you approve, performed by the gateway through your own Google OAuth client.",
+      "colorKey": "red",
+      "iconKey": "CalendarPlus",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "💌",
+      "category": "Connectors",
+      "triggerKind": "condition",
+      "triggerLabel": "When you invite someone to an event",
+      "integrations": [
+        "Gmail"
+      ],
+      "files": [
+        "app.json",
+        "automations/google-calendar-invite-send/automation.json",
+        "automations/google-calendar-invite-send/handler.js"
       ]
     },
     {

@@ -130,7 +130,8 @@ export function createLogic({ state, data, render, refresh, openQuick }) {
     // Free-form label filter (issue #352 phase 4) — same "all" escape hatch
     // and same idiom as the type chips above, alongside them rather than
     // replacing them (a document can be one type AND carry several labels).
-    if (tag && tag !== 'all') list = list.filter((f) => (f.tags ?? []).includes(tag));
+    if (tag && tag !== 'all')
+      list = list.filter((f) => (f.tags ?? []).some((t) => t.label === tag));
     if (search.trim()) return list; // keep the vault's rank order for search
     if (nav.kind === 'recent') {
       return [...list]

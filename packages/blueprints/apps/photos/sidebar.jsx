@@ -70,7 +70,9 @@ export function createSidebar({
         coverUri: cover?.thumb_uri ?? cover?.content_uri ?? null,
       };
     });
-    const tagOptions = [...new Set(assets.flatMap((a) => a.tags ?? []))].sort();
+    const tagOptions = [
+      ...new Set(assets.flatMap((a) => (a.tags ?? []).map((t) => t.label))),
+    ].sort();
     const bytes = assets.reduce((sum, a) => sum + (a.byte_size ?? 0), 0);
     const storageLabel =
       assets.length === 0

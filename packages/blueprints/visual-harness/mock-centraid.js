@@ -234,13 +234,20 @@
     // same trick the photos fixture uses) so every badge tone renders
     // somewhere; a handful of docs also carry hand-picked labels so the
     // toolbar's tag-filter chips have something real to show.
+    // core.tag_item's edges carry a tag_id (untag.js removes by tag_id, not
+    // label) — each fixture label gets a stable synthetic id.
+    function docLabelTags(documentId, labels) {
+      return labels.map(function (label) {
+        return { tag_id: 'tag-' + documentId + '-' + label, label: label };
+      });
+    }
     var tagsByDoc = {
-      'doc-1': ['lease', '2024'],
-      'doc-3': ['taxes'],
-      'doc-4': ['taxes', 'receipts'],
-      'doc-6': ['taxes'],
-      'doc-9': ['travel'],
-      'doc-16': ['travel'],
+      'doc-1': docLabelTags('doc-1', ['lease', '2024']),
+      'doc-3': docLabelTags('doc-3', ['taxes']),
+      'doc-4': docLabelTags('doc-4', ['taxes', 'receipts']),
+      'doc-6': docLabelTags('doc-6', ['taxes']),
+      'doc-9': docLabelTags('doc-9', ['travel']),
+      'doc-16': docLabelTags('doc-16', ['travel']),
     };
     var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
     documents.forEach(function (d, i) {
@@ -527,17 +534,25 @@
         var label = String(input.label || '').trim().toLowerCase();
         if (!label) return refuse('label_not_blank');
         if (!dTag.tags) dTag.tags = [];
-        if (dTag.tags.indexOf(label) === -1) dTag.tags.push(label);
+        var existingTag = dTag.tags.find(function (t) {
+          return t.label === label;
+        });
+        if (!existingTag) dTag.tags.push({ tag_id: uid('tag'), label: label });
         return ok({ document_id: dTag.document_id });
       }
       case 'untag': {
-        var dUntag = findDoc(input.document_id);
-        if (!dUntag) return refuse('not_found');
-        var label2 = String(input.label || '').trim().toLowerCase();
-        dUntag.tags = (dUntag.tags || []).filter(function (t) {
-          return t !== label2;
+        // core.untag_item removes by tag_id alone (no document_id sent) —
+        // find whichever document currently owns this edge.
+        var dUntag = docs.find(function (d) {
+          return (d.tags || []).some(function (t) {
+            return t.tag_id === input.tag_id;
+          });
         });
-        return ok({ document_id: dUntag.document_id });
+        if (!dUntag) return refuse('not_found');
+        dUntag.tags = dUntag.tags.filter(function (t) {
+          return t.tag_id !== input.tag_id;
+        });
+        return ok({ tag_id: input.tag_id });
       }
       case 'create-folder': {
         var parentId = input.parent_folder_id != null ? String(input.parent_folder_id) : null;
@@ -629,14 +644,21 @@
       'asset-23': places[2],
       'asset-31': places[2],
     };
+    // core.tag_item's edges carry a tag_id (untag-asset.js removes by
+    // tag_id, not label) — each fixture label gets a stable synthetic id.
+    function labelTags(assetId, labels) {
+      return labels.map(function (label) {
+        return { tag_id: 'tag-' + assetId + '-' + label, label: label };
+      });
+    }
     var tagsByAsset = {
-      'asset-2': ['beach', 'family'],
-      'asset-5': ['hike'],
-      'asset-8': ['family'],
-      'asset-11': ['beach'],
-      'asset-14': ['sunset'],
-      'asset-23': ['coast', 'beach'],
-      'asset-45': ['work'],
+      'asset-2': labelTags('asset-2', ['beach', 'family']),
+      'asset-5': labelTags('asset-5', ['hike']),
+      'asset-8': labelTags('asset-8', ['family']),
+      'asset-11': labelTags('asset-11', ['beach']),
+      'asset-14': labelTags('asset-14', ['sunset']),
+      'asset-23': labelTags('asset-23', ['coast', 'beach']),
+      'asset-45': labelTags('asset-45', ['work']),
     };
     // Cycles through all four custody states so every badge tone renders
     // somewhere in the fixture.
@@ -1075,17 +1097,25 @@
         var label = String(input.label || '').trim().toLowerCase();
         if (!label) return refuse('label_not_blank');
         if (!a5.tags) a5.tags = [];
-        if (a5.tags.indexOf(label) === -1) a5.tags.push(label);
+        var existingAssetTag = a5.tags.find(function (t) {
+          return t.label === label;
+        });
+        if (!existingAssetTag) a5.tags.push({ tag_id: uid('tag'), label: label });
         return ok({ asset_id: a5.asset_id });
       }
       case 'untag-asset': {
-        var a6 = findAsset(input.asset_id);
-        if (!a6) return refuse('not_found');
-        var label2 = String(input.label || '').trim().toLowerCase();
-        a6.tags = (a6.tags || []).filter(function (t) {
-          return t !== label2;
+        // core.untag_item removes by tag_id alone (no asset_id sent) — find
+        // whichever asset currently owns this edge.
+        var a6 = assets.find(function (a) {
+          return (a.tags || []).some(function (t) {
+            return t.tag_id === input.tag_id;
+          });
         });
-        return ok({ asset_id: a6.asset_id });
+        if (!a6) return refuse('not_found');
+        a6.tags = a6.tags.filter(function (t) {
+          return t.tag_id !== input.tag_id;
+        });
+        return ok({ tag_id: input.tag_id });
       }
       case 'request-enrichment': {
         if (photosStore.enrichmentTier === 'off') return refuse('enrichment_off');
@@ -2054,6 +2084,8 @@
           dtend: input.dtend,
           status: 'tentative',
           calendar_id: input.calendar_id,
+          rrule: input.rrule || null,
+          conferencing_uri: input.conferencing_uri || null,
           attachments: [],
           attendees: [],
         });

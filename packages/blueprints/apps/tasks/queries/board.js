@@ -12,7 +12,7 @@
  * Everything comes from the vault — this app holds no rows of its own; a
  * consent denial is a first-class outcome the UI renders, receipt included.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 /**
@@ -155,6 +155,41 @@ export default async ({ input, ctx }) => {
             purpose,
           })
         : { rows: [] };
+    const tags =
+      taskIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.tag',
+            where: [
+              { column: 'target_type', op: 'eq', value: 'schedule.task' },
+              { column: 'target_id', op: 'in', value: taskIds },
+            ],
+            purpose,
+          })
+        : { rows: [] };
+    const tagRows = tags.rows ?? [];
+    const tagConceptIds = [...new Set(tagRows.map((t) => t.concept_id))];
+    const tagConcepts =
+      tagConceptIds.length > 0
+        ? await ctx.vault.read({
+            entity: 'core.concept',
+            where: [{ column: 'concept_id', op: 'in', value: tagConceptIds }],
+            purpose,
+          })
+        : { rows: [] };
+    const tagLabelByConcept = new Map((tagConcepts.rows ?? []).map((c) => [c.concept_id, c.pref_label]));
+    const tagsByTask = new Map();
+    for (const t of tagRows) {
+      if (!tagsByTask.has(t.target_id)) tagsByTask.set(t.target_id, []);
+      tagsByTask.get(t.target_id).push({
+        tag_id: t.tag_id,
+        concept_id: t.concept_id,
+        label: tagLabelByConcept.get(t.concept_id) ?? '?',
+      });
+    }
+    const allTags = [...tagLabelByConcept.entries()]
+      .map(([concept_id, label]) => ({ concept_id, label }))
+      .toSorted((a, b) => a.label.localeCompare(b.label));
+
     const linkRows = links.rows ?? [];
     const uniqueRefs = [
       ...new Map(
@@ -222,6 +257,7 @@ export default async ({ input, ctx }) => {
       ...task,
       attachments: attByTask.get(task.task_id) ?? [],
       references: refsByTask.get(task.task_id) ?? [],
+      tags: tagsByTask.get(task.task_id) ?? [],
     });
 
     const withChildren = (task) => {
@@ -254,6 +290,7 @@ export default async ({ input, ctx }) => {
     return {
       open,
       logbook,
+      tags: allTags,
       counts: { open: openCount, closed: rows.length - openCount },
       truncated,
       window,
@@ -262,6 +299,7 @@ export default async ({ input, ctx }) => {
     return {
       open: [],
       logbook: [],
+      tags: [],
       counts: { open: 0, closed: 0 },
       vaultDenied: { code: err.code, message: err.message },
     };

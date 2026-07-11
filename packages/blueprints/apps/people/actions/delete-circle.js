@@ -1,7 +1,7 @@
 /**
  * Delete an empty circle (move its people out first). Runs through people.delete_circle — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

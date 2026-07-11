@@ -10,8 +10,7 @@ import type { GatewayPaths } from '../paths.ts';
 // `buildGateway()` is the host-agnostic core: it constructs the whole
 // object graph but binds no socket. These tests pin that contract — the
 // listener-free shape, plus `composedHandler` dispatching the gateway's
-// route chain WITHOUT a bearer check (the surface the OpenClaw plugin
-// mounts under its own `auth: 'gateway'`).
+// route chain WITHOUT a bearer check (for hosts that own auth themselves).
 
 let dataDir: string;
 let gateway: BuiltGateway;
@@ -109,7 +108,7 @@ test('composedHandler dispatches runtime routes with NO bearer check', async () 
   await gateway.start('http://127.0.0.1:0');
   const srv = await mountUnauthed(gateway.composedHandler);
   try {
-    // No Authorization header — a fronting host (OpenClaw) owns auth, so
+    // No Authorization header — a fronting host owns auth itself, so
     // the composed chain must serve the request, not 401 it.
     const res = await fetch(`${srv.url}/centraid/_apps`);
     expect(res.status).toBe(200);

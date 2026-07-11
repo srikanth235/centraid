@@ -62,7 +62,7 @@ export interface RuntimeOptions {
    * `app-index` and bakes them into the served HTML (merged with the app's
    * own `__centraid_settings` table and any URL-query overrides). Without
    * it, app-index falls back to URL-query-only injection so
-   * single-app/standalone setups still work. Hosts (openclaw plugin,
+   * single-app/standalone setups still work. Hosts (the standalone daemon,
    * desktop local-runtime) construct the store themselves and additionally
    * mount `/_centraid-user/*` for the desktop to read/write prefs.
    */
@@ -77,9 +77,7 @@ export interface RuntimeOptions {
   conversationHistoryStore?: ConversationHistoryStore;
   /**
    * Optional per-app chat runner. When provided, `POST /centraid/<id>/_turn`
-   * drives a model turn via this runner. Two implementations exist:
-   * `openclaw-plugin/lib/openclaw-conversation-runner` (calls `runEmbeddedAgent`
-   * in-process on the gateway side) and `@centraid/agent-runtime`'s
+   * drives a model turn via this runner — `@centraid/agent-runtime`'s
    * `makeConversationRunner` (drives codex app-server / Claude SDK locally).
    *
    * Without a runner the chat routes 503 with `no_conversation_runner`. Hosts
@@ -145,8 +143,8 @@ export type ModelTier = 'smart' | 'balanced' | 'fast';
 
 /**
  * One model a runtime can serve, as surfaced by a runtime that can
- * enumerate its catalog (e.g. OpenClaw via `openclaw models list`). The
- * `id` is what the chat picker persists and hands back as the chat model.
+ * enumerate its catalog. The `id` is what the chat picker persists and
+ * hands back as the chat model.
  */
 export interface RunnerModel {
   /** Stable model id passed back as the chat model (e.g. "openai-codex/gpt-5.5"). */
@@ -181,12 +179,10 @@ export interface RunnerStatusOptions {
 
 /**
  * Shape returned by the runner-status preflight route. Both hosts share
- * the schema; OpenClaw reports `{ kind: 'openclaw', ok: true }` plus its
- * enumerated `models`, the desktop local-runtime reports the configured
- * CLI adapter.
+ * the schema, reporting the configured CLI adapter.
  */
 export interface RunnerStatus {
-  kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
+  kind: 'codex' | 'claude-code' | 'none';
   ok: boolean;
   /** Adapter version string when detectable (e.g. "codex 0.20.4"). */
   version?: string;
@@ -229,7 +225,7 @@ const noopLogger: RuntimeLogger = {
 /**
  * The centraid runtime engine, decoupled from any specific transport.
  *
- * A host (OpenClaw plugin shim, in-process Electron embed, ...) constructs
+ * A host (the standalone daemon, in-process Electron embed, ...) constructs
  * a `Runtime`, calls `bootstrap()` once, then routes inbound HTTP requests
  * through `handle(req, res)`. `onCronChanged` is forwarded by the host when
  * the scheduler reports a job state transition.
@@ -243,9 +239,9 @@ export class Runtime {
   readonly dispatcher: Dispatcher;
   /**
    * Per-app change notification bus. Subscribed by the `/centraid/<id>/_changes`
-   * SSE endpoint and emitted by `runQuery` (HTTP path + openclaw legacy tool)
-   * and `handler-runner` (app action writes). Hosts can subscribe from
-   * outside too — e.g. to add a write-driven log line.
+   * SSE endpoint and emitted by `runQuery` (HTTP path) and `handler-runner`
+   * (app action writes). Hosts can subscribe from outside too — e.g. to add
+   * a write-driven log line.
    */
   readonly changeBus: ChangeBus;
   /**

@@ -848,6 +848,68 @@ mark {
   margin-bottom: 4px;
 }
 
+.nt-tag-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 14px;
+}
+.nt-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent-deep);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 3px 6px 3px 10px;
+}
+.nt-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.nt-tag-remove:hover {
+  opacity: 1;
+}
+.nt-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 8px;
+}
+.nt-tag-chip-static {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.nt-tag-add {
+  display: inline-flex;
+}
+.nt-tag-input {
+  font: inherit;
+  font-size: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: transparent;
+  color: var(--ink);
+  min-width: 90px;
+}
+.nt-tag-input:focus {
+  outline: none;
+  border-color: var(--accent-deep);
+  border-style: solid;
+}
+
 .nt-editor-foot {
   flex-shrink: 0;
   border-top: 1px solid var(--line);

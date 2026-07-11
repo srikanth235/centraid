@@ -3,7 +3,7 @@
  * owner's role and the display names an entry line needs. The app turns these
  * into "You added … in …" / "Alex paid you …" sentences.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { loadTally, personOf } from './dashboard.js';

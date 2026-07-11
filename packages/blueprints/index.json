@@ -360,6 +360,20 @@
       "integrations": ["Gmail"]
     },
     {
+      "id": "google-calendar-invite-send",
+      "name": "Calendar invite send",
+      "desc": "Agenda's needs-action guests leave through the outbox as ICS invites — each send is a reviewable artifact you approve, performed by the gateway through your own Google OAuth client.",
+      "colorKey": "red",
+      "iconKey": "CalendarPlus",
+      "version": "0.1.0",
+      "kind": "automation",
+      "emoji": "💌",
+      "category": "Connectors",
+      "triggerKind": "condition",
+      "triggerLabel": "When you invite someone to an event",
+      "integrations": ["Gmail"]
+    },
+    {
       "id": "google-calendar-pull",
       "name": "Google Calendar sync",
       "desc": "Your Google Calendar lands in the vault as events — read-only, incremental via sync tokens.",

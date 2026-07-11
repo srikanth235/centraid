@@ -18,7 +18,7 @@
  * custody badge reads identically whether the row arrived via browse or
  * search.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { readCustodyByContent, readLabelsByDocument } from './_shared.js';

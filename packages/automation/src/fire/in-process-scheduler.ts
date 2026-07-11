@@ -1,9 +1,9 @@
 /**
  * In-process cron scheduler (issue #149) — n8n semantics.
  *
- * The always-on server (the local gateway, or openclaw on cloud) owns cron
- * triggers in-process: a single minute-boundary timer over an in-memory
- * registry of enabled cron automations. There is no OS-level scheduler.
+ * The always-on server (the local gateway) owns cron triggers in-process:
+ * a single minute-boundary timer over an in-memory registry of enabled
+ * cron automations. There is no OS-level scheduler.
  *
  * Consequences, accepted deliberately (this reverses #69's "fire even when
  * the desktop is closed"):

@@ -4,7 +4,7 @@
  * `denied`, or `failed` (a precondition such as the busy-conflict check) —
  * so the UI can narrate what the consent plane decided.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

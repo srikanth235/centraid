@@ -35,6 +35,11 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
     tokenUrl: 'https://oauth2.googleapis.com/token',
     scopes: [
       'https://www.googleapis.com/auth/gmail.readonly',
+      // gmail.send (not the broader gmail.modify) — outbound only, never
+      // reads or deletes existing mail. Unlocks the outbox-staged sends
+      // below (google-gmail-send, google-calendar-invite-send); every
+      // actual send still parks for the owner's approval regardless.
+      'https://www.googleapis.com/auth/gmail.send',
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/contacts.readonly',
       'https://www.googleapis.com/auth/drive.readonly',
@@ -73,6 +78,16 @@ export const PROVIDER_PRESETS: readonly ProviderPreset[] = [
         templateId: 'google-drive-pull',
         kind: 'pull.gdrive',
         scope: 'https://www.googleapis.com/auth/drive.readonly',
+      },
+      {
+        templateId: 'google-gmail-send',
+        kind: 'pull.gmail',
+        scope: 'https://www.googleapis.com/auth/gmail.send',
+      },
+      {
+        templateId: 'google-calendar-invite-send',
+        kind: 'pull.gmail',
+        scope: 'https://www.googleapis.com/auth/gmail.send',
       },
     ],
   },

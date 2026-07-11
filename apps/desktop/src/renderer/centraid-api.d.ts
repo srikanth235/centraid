@@ -832,7 +832,7 @@ export interface CentraidMintedWebhook {
   secret: string;
 }
 
-/** One model a runtime can serve (OpenClaw enumerates these). */
+/** One model a runtime can serve. */
 export interface CentraidRunnerModel {
   id: string;
   name?: string;
@@ -868,7 +868,7 @@ export interface CentraidHostTool {
 
 /** Preflight snapshot returned by `getRunnerStatus`. */
 export interface CentraidRunnerStatus {
-  kind: 'openclaw' | 'codex' | 'claude-code' | 'none';
+  kind: 'codex' | 'claude-code' | 'none';
   ok: boolean;
   version?: string;
   minVersion?: string;

@@ -32,8 +32,8 @@
       { "schema": "media", "table": "reject_face", "verbs": "act" },
       { "schema": "core", "table": "place", "verbs": "read" },
       { "schema": "media", "table": "set_asset_place", "verbs": "act" },
-      { "schema": "core", "table": "tag_entity", "verbs": "act" },
-      { "schema": "core", "table": "untag_entity", "verbs": "act" },
+      { "schema": "core", "table": "tag_item", "verbs": "act" },
+      { "schema": "core", "table": "untag_item", "verbs": "act" },
       { "schema": "enrich", "table": "policy", "verbs": "read" },
       { "schema": "enrich", "table": "request_enrichment", "verbs": "act" },
       { "schema": "blob", "table": "custody_state", "verbs": "read" }
@@ -327,7 +327,7 @@
     },
     {
       "name": "tag-asset",
-      "description": "Add a free-form label to a photo through core.tag_entity (issue #352) — additive and idempotent over the owner \"Labels\" concept scheme.",
+      "description": "Add a free-form label to a photo through core.tag_item (issue #352) — additive and idempotent over the shared \"Tags\" concept scheme.",
       "confirmation": "none",
       "input": {
         "type": "object",
@@ -350,15 +350,14 @@
     },
     {
       "name": "untag-asset",
-      "description": "Remove one free-form label from a photo through core.untag_entity (issue #352).",
+      "description": "Remove one free-form label from a photo through core.untag_item (issue #352) — removes by tag_id, the specific edge.",
       "confirmation": "none",
       "input": {
         "type": "object",
         "properties": {
-          "asset_id": { "type": "string", "minLength": 1 },
-          "label": { "type": "string", "minLength": 1 }
+          "tag_id": { "type": "string", "minLength": 1 }
         },
-        "required": ["asset_id", "label"],
+        "required": ["tag_id"],
         "additionalProperties": false
       },
       "output": {

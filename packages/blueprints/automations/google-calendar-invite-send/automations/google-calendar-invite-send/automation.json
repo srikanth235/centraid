@@ -1,0 +1,40 @@
+{
+  "name": "Calendar invite send",
+  "version": "0.1.0",
+  "description": "Extends the outbox pattern (issue #306) from email to calendar: watches schedule_attendee for needs-action guests on your events and stages an ICS invite email for each one that has a resolvable address, through the same pull.gmail connection google-gmail-send uses. Nothing leaves until you approve the item (or a standing 'always allow' grant matches).",
+  "enabled": false,
+  "prompt": "When I invite someone to an event who has a resolvable email address, stage an ICS calendar invite in the outbox so I can approve, edit, or discard it before it sends. Never call the network yourself — the outbox executor performs approved sends through my Gmail connection.",
+  "triggers": [
+    {
+      "kind": "condition",
+      "entity": "schedule.attendee",
+      "where": [{ "column": "partstat", "op": "eq", "value": "needs-action" }],
+      "every": "*/5 * * * *"
+    }
+  ],
+  "requires": {
+    "tools": []
+  },
+  "connector": {
+    "kind": "pull.gmail",
+    "label": "personal"
+  },
+  "vault": {
+    "purpose": "dpv:ServiceProvision",
+    "why": "Reads needs-action invites (event, attendee, their email) and stages each as an outbox artifact for your decision. Holds no send capability of its own — external writes are the outbox executor's, behind your approval.",
+    "scopes": [
+      { "schema": "schedule", "verbs": "read" },
+      { "schema": "core", "verbs": "read" },
+      { "schema": "outbox", "verbs": "act" }
+    ]
+  },
+  "history": {
+    "keep": {
+      "count": 100
+    }
+  },
+  "generated": {
+    "by": "centraid-template",
+    "at": "2026-07-11T00:00:00.000Z"
+  }
+}

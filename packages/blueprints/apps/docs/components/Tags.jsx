@@ -1,5 +1,5 @@
 // The Details drawer's tag editor (issue #352 phase 4): add/remove chips
-// over core.tag_entity/untag_entity (an owner "Labels" concept scheme,
+// over core.tag_item/untag_item (the shared "Tags" concept scheme,
 // packages/vault/src/commands/tags.ts) — additive and idempotent, so
 // retyping an existing label just no-ops rather than erroring. Mirrors the
 // photos app's Lightbox.jsx tag editor (its `lightbox-tags` block) almost
@@ -16,14 +16,14 @@ export function Tags({ doc, onAddTag, onRemoveTag }) {
     <div className="d-tags-row">
       {tags.map((tag) => (
         <button
-          key={tag}
+          key={tag.tag_id}
           type="button"
           className="kit-chip d-tag-chip"
-          aria-label={`Remove tag ${tag}`}
+          aria-label={`Remove tag ${tag.label}`}
           disabled={trashed}
-          onClick={() => onRemoveTag(doc, tag)}
+          onClick={() => onRemoveTag(doc, tag.tag_id)}
         >
-          {tag} ×
+          {tag.label} ×
         </button>
       ))}
       {trashed ? null : adding ? (
