@@ -525,6 +525,16 @@
         { "value": "#E55772", "label": "Rose" },
         { "value": "#B47B3F", "label": "Ochre" }
       ]
+    },
+    {
+      "key": "showMemories",
+      "label": "Memories",
+      "type": "segmented",
+      "default": "show",
+      "options": [
+        { "value": "show", "label": "Show" },
+        { "value": "hide", "label": "Hide" }
+      ]
     }
   ]
 }

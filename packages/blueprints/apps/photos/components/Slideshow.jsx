@@ -8,6 +8,7 @@
 // keys step manually (and reset the auto-advance clock), Escape exits.
 import { useEffect, useRef, useState } from '../react-core.min.js';
 import { isRenderableUri, isVideoAsset } from '../format.js';
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from '../icons.jsx';
 
 const ADVANCE_MS = 4000;
 
@@ -66,7 +67,7 @@ export function SlideshowView({ list, startAssetId, onClose }) {
           onClick={onClose}
           aria-label="Close slideshow"
         >
-          × Close
+          <CloseIcon size={14} /> Close
         </button>
       </>
     );
@@ -83,9 +84,9 @@ export function SlideshowView({ list, startAssetId, onClose }) {
         onClick={(e) => e.stopPropagation()}
       />
       {[
-        ['prev', -1, '‹', 'Previous photo'],
-        ['next', 1, '›', 'Next photo'],
-      ].map(([variant, delta, glyph, name]) => (
+        ['prev', -1, ChevronLeftIcon, 'Previous photo'],
+        ['next', 1, ChevronRightIcon, 'Next photo'],
+      ].map(([variant, delta, Glyph, name]) => (
         <button
           key={variant}
           type="button"
@@ -96,7 +97,7 @@ export function SlideshowView({ list, startAssetId, onClose }) {
             step(delta);
           }}
         >
-          {glyph}
+          <Glyph size={22} />
         </button>
       ))}
       <div className="slideshow-bar" onClick={(e) => e.stopPropagation()}>
@@ -106,7 +107,8 @@ export function SlideshowView({ list, startAssetId, onClose }) {
           aria-pressed={paused ? 'true' : 'false'}
           onClick={() => setPaused((p) => !p)}
         >
-          {paused ? '▶ Play' : '⏸ Pause'}
+          {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
+          {paused ? 'Play' : 'Pause'}
         </button>
         <span className="slideshow-count">
           {idx + 1} / {photos.length}

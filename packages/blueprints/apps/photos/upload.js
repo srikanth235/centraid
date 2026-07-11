@@ -166,14 +166,16 @@ function dragHasFiles(e) {
   return [...(e.dataTransfer?.types ?? [])].includes('Files');
 }
 
-// Every DOM entry point that can hand this app files: the header button, the
-// empty-state's own button (which prefers the picker when an album is
-// selected), the hidden file input, page-wide drag/drop, and paste. Wired
-// once at boot from app.jsx; `dragDepth` is pure drop-overlay bookkeeping
-// that no component or app.jsx orchestrator ever reads, so it lives here
-// rather than among app.jsx's domain state.
+// Every DOM entry point that can hand this app files: the sidebar's "Add
+// photos" button (React-owned since the v2 sidebar — wired via its own
+// `onUpload` prop in app.jsx instead of a boot-time listener here, since
+// this module runs before the sidebar's first render ever mounts that
+// node), the empty-state's own button (which prefers the picker when an
+// album is selected), the hidden file input, page-wide drag/drop, and
+// paste. Wired once at boot from app.jsx; `dragDepth` is pure drop-overlay
+// bookkeeping that no component or app.jsx orchestrator ever reads, so it
+// lives here rather than among app.jsx's domain state.
 export function wireUpload({ uploadFiles, isAlbumSelected, openPicker }) {
-  $('uploadBtn').addEventListener('click', () => $('fileInput').click());
   $('emptyUpload').addEventListener('click', () => {
     // Inside a real album the natural "add" is from the library, not disk.
     if (isAlbumSelected()) openPicker();

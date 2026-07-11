@@ -547,29 +547,35 @@
         "actions/untag-asset.js",
         "actions/update-asset.js",
         "actions/upload.js",
+        "activity.js",
         "albums-actions.js",
         "app.css",
         "app.json",
         "app.jsx",
         "assets-actions.js",
-        "components/AlbumTools.jsx",
-        "components/Chips.jsx",
+        "components/AlbumGrid.jsx",
         "components/Duplicates.jsx",
         "components/Editor.jsx",
         "components/Enrichment.jsx",
-        "components/Grid.jsx",
         "components/InlineInput.jsx",
         "components/Lightbox.jsx",
+        "components/LightboxInfo.jsx",
+        "components/Memories.jsx",
         "components/Picker.jsx",
         "components/SelectionBar.jsx",
+        "components/Sidebar.jsx",
         "components/Slideshow.jsx",
+        "components/Timeline.jsx",
+        "components/Toolbar.jsx",
         "constants.js",
         "dom.js",
         "duplicates-actions.js",
         "duplicates.jsx",
         "faces.js",
         "format.js",
+        "icons.jsx",
         "index.html",
+        "layout.js",
         "lightbox.jsx",
         "media.js",
         "outcomes.js",
@@ -584,8 +590,8 @@
         "queries/search.js",
         "search.js",
         "selection-actions.js",
+        "sidebar.jsx",
         "slideshow.jsx",
-        "toolbar.jsx",
         "upload.js",
         "visibility.js"
       ],
@@ -651,6 +657,22 @@
             {
               "value": "#B47B3F",
               "label": "Ochre"
+            }
+          ]
+        },
+        {
+          "key": "showMemories",
+          "label": "Memories",
+          "type": "segmented",
+          "default": "show",
+          "options": [
+            {
+              "value": "show",
+              "label": "Show"
+            },
+            {
+              "value": "hide",
+              "label": "Hide"
             }
           ]
         }

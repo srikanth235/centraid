@@ -1,11 +1,14 @@
-// Face-proposer on-demand (issue #352 phase 3/4): a header toggle + popover
-// that reads `enrichment-status` (enrich.policy for the photos domain) on
-// mount and either offers "Detect faces now" (fires enrich.request_enrichment,
-// reason 'manual') or says plainly that enrichment is off — never a button
-// that would silently no-op. Fully self-contained (own open/status/busy
-// state via hooks), so app.jsx mounts it once at boot and never re-renders
-// it itself; no domain (asset/album) state is threaded in.
+// Face-proposer on-demand (issue #352 phase 3/4): a header icon-button +
+// popover that reads `enrichment-status` (enrich.policy for the photos
+// domain) on mount and either offers "Detect faces now" (fires
+// enrich.request_enrichment, reason 'manual') or says plainly that
+// enrichment is off — never a button that would silently no-op. Fully
+// self-contained (own open/status/busy state via hooks), so app.jsx mounts
+// it once at boot and never re-renders it itself; no domain (asset/album)
+// state is threaded in. v2: lives in the main header's icon-button group
+// (next to zoom) instead of the old text "✨ Faces" toolbar button.
 import { act, narrate } from '../outcomes.js';
+import { SparkleIcon } from '../icons.jsx';
 import { useEffect, useRef, useState } from '../react-core.min.js';
 
 export function EnrichmentPanel() {
@@ -50,12 +53,15 @@ export function EnrichmentPanel() {
     <div className="enrichment-wrap" ref={wrapRef}>
       <button
         type="button"
-        className="kit-btn head-btn"
+        className="ph-header-icon-btn"
+        data-active={open ? 'true' : 'false'}
         aria-haspopup="true"
         aria-expanded={open ? 'true' : 'false'}
+        aria-label="Face detection"
+        title="Face detection"
         onClick={() => setOpen((v) => !v)}
       >
-        ✨ Faces
+        <SparkleIcon />
       </button>
       {open ? (
         <div className="kit-popover enrichment-panel" role="dialog" aria-label="Face detection">

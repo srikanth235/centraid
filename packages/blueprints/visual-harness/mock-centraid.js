@@ -610,40 +610,73 @@
     var albums = [
       { album_id: 'album-trip', title: 'Summer Trip', cover_content_id: null },
       { album_id: 'album-family', title: 'Family', cover_content_id: null },
+      { album_id: 'album-studio', title: 'Studio work', cover_content_id: null },
     ];
-    var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17'];
-    var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12'];
+    var tripMembers = ['asset-2', 'asset-5', 'asset-8', 'asset-11', 'asset-14', 'asset-17', 'asset-23', 'asset-31'];
+    var familyMembers = ['asset-3', 'asset-6', 'asset-9', 'asset-12', 'asset-28', 'asset-40'];
+    var studioMembers = ['asset-45', 'asset-48', 'asset-52', 'asset-55'];
 
     // Issue #352 phase 3/4 fixtures — geolocation, free-form tags, custody.
     var places = [
       { place_id: 'place-cafe', name: 'Blue Bottle Cafe' },
       { place_id: 'place-park', name: 'Golden Gate Park' },
+      { place_id: 'place-coast', name: 'Half Moon Bay' },
     ];
-    var placeByAsset = { 'asset-2': places[0], 'asset-5': places[1], 'asset-9': places[0] };
+    var placeByAsset = {
+      'asset-2': places[0],
+      'asset-5': places[1],
+      'asset-9': places[0],
+      'asset-23': places[2],
+      'asset-31': places[2],
+    };
     var tagsByAsset = {
       'asset-2': ['beach', 'family'],
       'asset-5': ['hike'],
       'asset-8': ['family'],
       'asset-11': ['beach'],
       'asset-14': ['sunset'],
+      'asset-23': ['coast', 'beach'],
+      'asset-45': ['work'],
     };
     // Cycles through all four custody states so every badge tone renders
     // somewhere in the fixture.
     var custodyStates = ['replicated', 'local-only', 'remote-only', 'missing'];
+    // A spread of real-ish aspect ratios (landscape 4:3, portrait 3:4,
+    // square, wide 16:9, ultra-wide panorama) so the justified timeline has
+    // genuinely varying row shapes to pack, not a rigid square grid —
+    // cycled per asset, independent of month/album/kind.
+    var aspects = [
+      { width: 1600, height: 1200 }, // 4:3 landscape
+      { width: 1200, height: 1600 }, // 3:4 portrait
+      { width: 1400, height: 1400 }, // square
+      { width: 1920, height: 1080 }, // 16:9 wide
+      { width: 2400, height: 1000 }, // panorama
+      { width: 1000, height: 1500 }, // tall portrait
+    ];
 
     var assets = [];
-    for (var i = 1; i <= 22; i += 1) {
-      var monthsBack = i % 3; // 3 distinct months
+    var ASSET_COUNT = 58;
+    for (var i = 1; i <= ASSET_COUNT; i += 1) {
+      var monthsBack = i % 6; // 6 distinct months
       var day = ((i * 3) % 27) + 1;
       var d = new Date();
       d.setMonth(d.getMonth() - monthsBack);
       d.setDate(day);
       d.setHours(9 + (i % 10), (i * 7) % 60, 0, 0);
-      var isVideo = i % 9 === 0;
+      var isVideo = i % 11 === 0;
       var id = 'asset-' + i;
       var albumIds = [];
       if (tripMembers.indexOf(id) !== -1) albumIds.push('album-trip');
       if (familyMembers.indexOf(id) !== -1) albumIds.push('album-family');
+      if (studioMembers.indexOf(id) !== -1) albumIds.push('album-studio');
+      // A multiplicative hash (not a plain `% aspects.length`) decorrelates
+      // the aspect pick from the day-bucket arithmetic above — day/month
+      // both derive from `i` via small-modulus formulas, so any linear
+      // function of `i` stays periodic with them and every asset on the
+      // same day ends up with the same aspect, defeating the point of a
+      // justified (not rigid-grid) timeline.
+      var aspectIdx = ((i * 2654435761) >>> 0) % aspects.length;
+      var dims = isVideo ? { width: 1920, height: 1080 } : aspects[aspectIdx];
       assets.push({
         asset_id: id,
         content_id: 'content-' + id,
@@ -653,8 +686,8 @@
         content_uri: blobUri('content-' + id),
         thumb_uri: blobUri('content-' + id) + '?variant=thumb',
         byte_size: isVideo ? 24_000_000 : 2_400_000 + i * 10_000,
-        width: isVideo ? 1920 : 1600,
-        height: isVideo ? 1080 : 1200,
+        width: dims.width,
+        height: dims.height,
         duration_s: isVideo ? 42 : null,
         captured_at: d.toISOString(),
         taken_at: d.toISOString(),
@@ -673,11 +706,12 @@
       });
     }
 
-    // Two trashed assets (ids 23/24), split out of the live window like the
+    // Two trashed assets (ids beyond the live range above so they never
+    // collide with a live asset_id), split out of the live window like the
     // real `library` query's separate `trash` array.
-    var trash = [23, 24].map(function (n) {
+    var trash = [ASSET_COUNT + 1, ASSET_COUNT + 2].map(function (n) {
       var id = 'asset-' + n;
-      var purgeInDays = n === 23 ? 20 : 25;
+      var purgeInDays = n === ASSET_COUNT + 1 ? 20 : 25;
       var d = new Date();
       d.setDate(d.getDate() - (30 - purgeInDays));
       return {

@@ -11,6 +11,7 @@ https://github.com/srikanth235/centraid/issues/352
 - [x] vault plumbing geo tags activity sync faces
 - [x] photos wave-3 ui
 - [x] docs wave-3 ui
+- [x] photos v2 visual redesign per design handoff
 
 ## Decisions
 
@@ -107,6 +108,21 @@ Free-form tags (Details drawer editor + sidebar filter chip row, mirroring photo
 - Custody badge intentionally renders nothing (not a guessed state) for inline `data:`-URI documents or any document the blob sweep hasn't reached yet yet — matches the convention the photos app already established.
 - A concurrency hazard surfaced and was caught: this agent's first pass at `mock-centraid.js` was clobbered by the concurrently-running photos-wave-3 agent's own `Write`-based overwrite of the same file; detected via a live probe returning no `tags` field, diagnosed against `git diff`, and reapplied. Verified post-hoc (this review) that the final file contains both apps' fixtures completely — see Verification.
 
+### photos v2 visual redesign per design handoff
+
+Rebuilt the Photos UI shell against an owner-supplied design handoff (`design-handoff/Photos v2 - build prompt.md` + reference implementation `Photos - Reinvented.dc.html`) — a Google-Photos-grade sidebar, memories strip, justified-row timeline, an albums grid view, and a redesigned lightbox with a right-side info panel — while preserving every #352 feature byte-identical at the query/action/command layer: server FTS search, EXIF details, slideshow, real phash-based duplicates shelf, free-form tags, geolocation place picker, custody/backup status, face-proposer on-demand trigger, and the non-destructive crop/rotate editor.
+
+- New: `packages/blueprints/apps/photos/{layout,activity,icons,sidebar}.{js,jsx}`, `components/{Sidebar,Memories,AlbumGrid,Timeline,Toolbar,LightboxInfo}.jsx`
+- Modified: `app.jsx` (orchestrator rewrite), `app.css` (full rewrite onto the new shell), `app.json`, `index.html`, `constants.js`, `components/{Enrichment,Lightbox,Slideshow}.jsx`, `upload.js`
+- Deleted (superseded): `toolbar.jsx`, `components/{Chips,AlbumTools,Grid}.jsx`
+- Untouched, verified byte-identical: every action/query module and the vault-facing contracts they call — `actions/**`, `queries/**`, `components/{Editor,Duplicates,Picker,InlineInput,SelectionBar}.jsx`, `duplicates.jsx`, `lightbox.jsx`, `picker.jsx`, `slideshow.jsx`, `search.js`, `visibility.js`, `media.js`, `format.js`, `outcomes.js`, `dom.js`, `faces.js`
+- Memories = Favorites (if non-empty) + up to 6 albums with live members, sorted by newest member's capture time — no fabricated smart-memories. Storage meter = honest byte sum across loaded assets, no fictional quota (the mockup's static "15 GB" figure was dropped for the same reason Docs' Storage component doesn't fabricate one).
+- `packages/blueprints/manifest.json` (regenerated), `packages/blueprints/visual-harness/mock-centraid.js` (fixtures extended to 58 assets/6 months/3 albums/3 places with varied aspect ratios, so the justified grid has something real to pack)
+- Real bugs found and fixed:
+  1. (build agent, live-browser pass) `components/Lightbox.jsx` imported `fmtBytes` from the wrong module (`format.js` instead of `kit.js`), breaking app boot entirely — a class of bug per-file syntax checks can't catch.
+  2. (this review, independent verification) header overflowed its own width by ~20px below 480px viewports, clipping the Ask button — `.ph-zoom` (the least essential control at phone width) now hides under 480px.
+- Also independently verified during this review: a suspected "tags silently fail to save" bug turned out to be a testing-tool artifact (a devicePixelRatio coordinate-scaling quirk in the browser harness affecting synthetic keyboard events on controlled inputs, not the app) — confirmed by dispatching real DOM events directly, which persisted and rendered the tag correctly.
+
 ## Out of scope
 
 Sharing, collaboration, comments. On-device face detection models. Smart albums / memories / scene recognition. Data migrations (pre-release v0: dev vaults recreate; ONTOLOGY_VERSION equality-enforced).
@@ -165,6 +181,21 @@ visual harness live-browser pass: place chip + picker, tag add/remove +
   console errors
 ```
 
+photos v2 visual redesign per design handoff — build agent's automated pass plus this review's independent re-verification:
+
+```
+node packages/blueprints/scripts/lint-apps.mjs → 0 problems (150 files)
+esbuild --loader:.jsx=jsx / .js=jsx on every new/changed file → no syntax errors
+packages/blueprints: bunx vitest run src/app-manifests.test.ts src/app-boot → 82/82 passed (9 files)
+independent live-browser re-verification (this review, separate from the build
+  agent's own pass): timeline+memories, lightbox (caption/EXIF/place-picker/
+  albums/tags/activity/custody), tag add+remove round-trip via real DOM events,
+  Albums grid, Duplicates shelf (real 3-copy/2-copy phash clusters), Trash+
+  Restore (toast + count update confirmed), narrow width (390px) drawer+scrim
+  open/close, dark theme — zero console errors in every state; one CSS
+  overflow bug found and fixed live (see below)
+```
+
 docs app on the wrapper with editing and version history:
 
 ```
@@ -201,8 +232,46 @@ visual harness (bun packages/blueprints/visual-harness/server.mjs):
 
 ## Audit
 
-(attested before final commit)
+**What changed**: The receipt's `## What changed` section accurately captures the scope and structure of the 7 commits in main..HEAD. All major subsystems are accounted for: (1) document wrapper entity (`core_document` table, revises lineage, tests), (2) filing publisher retargeting, (3) docs app rewrite, (4) photos search/EXIF/slideshow/duplicates, (5) vault plumbing (geo linking, tags, activity, custody, faces, phash), (6) photos wave-3 UI, (7) docs wave-3 UI, and (8) photos v2 visual redesign. Vault changes match git diff (7 new/modified command packs, schema extensions). Blueprint app changes match filesystem (58 photos files, 46 docs files per manifest regeneration). Cross-cutting concerns (CSP fix for `data:` URIs in Editor.jsx, concurrency hazard detected and resolved in mock-centraid.js) are documented.
+
+**Checklist realization**: All 8 checklist items map to completed work in the diff:
+- `[x] document wrapper entity and revises lineage` — `core_document` DDL in core.ts, registered in tables.ts, version bump to 1.3, revises seeded into bootstrap.ts, tests cover restore-cycle bug.
+- `[x] filing publisher retargets wrapped content items onto their document` — enrich-publishers.ts resolves owning document, tests verify wrapped and unwrapped cases.
+- `[x] docs app on the wrapper with editing and version history` — app.jsx/Editor.jsx/History.jsx implement in-place edit + version history panel, queries/history.js walks the revises chain.
+- `[x] photos search exif slideshow duplicates` — search.js server-side FTS, lightbox.jsx EXIF panel, slideshow.jsx with controls, duplicates.jsx shows phash clusters.
+- `[x] vault plumbing geo tags activity sync faces` — media.ts place linking, tags.ts commands, gateway activity read route, blob custody_state table, enrich policy mirroring, phash cluster recompute, face-proposer automation scope fix.
+- `[x] photos wave-3 ui` — photos app components (Editor, Enrichment) and actions (set-place, tag-asset, untag-asset, request-enrichment) wired over vault plumbing.
+- `[x] docs wave-3 ui` — docs app components (Tags, Activity) and actions (tag, untag) wired, manifest/mock-centraid regenerated with both apps' fixtures.
+- `[x] photos v2 visual redesign per design handoff` — app.jsx orchestrator rewrite, app.css full rewrite, new shell components (Sidebar, Memories, Timeline, LightboxInfo), every action/query byte-identical to wave-3.
+
+**Checklist-to-issue mapping**: Issue #352 defines 4 phases; receipt checklist naturally aligns: Phase 1 (document identity) + Phase 2 (docs app) = items 1–3; Phase 3 (photos surfacing) = items 4–6; Phase 4 (universal joins) = items 7–8. The receipt additionally includes item 8 (photos v2 redesign), which was explicitly in-scope per the issue's "A parity audit" premise — matching Google Photos/Dropbox visually as well as functionally.
+
+**Verdict: PASS**
 
 ## Steering
 
-(attested before final commit)
+Two human-steering events detected and recorded in `## Accounting` → `### Steering`:
+
+1. **Redirect on visual staleness (steer-1297f2eb831-20260711-1, ordinal 656, 08:25:57.776Z)**: After the build agent completed the initial photos wave-3 UI, the user observes the live visual and reports the Photos app "looks stale…the photos UI is similar [to] docs UI" — referring to the sidebar layout not matching a fresher visual they'd seen. This interrupts the agent's assumption that the wave-3 work was visually complete. The agent pauses coverage testing, investigates the code, and switches to running the visual-harness browser preview to examine the current state. The redirect surfaces a genuine visual mismatch: the sidebar was introduced in an earlier commit (not this branch), but the user's expectation was a redesigned Photos UI with a justified-grid layout and revised sidebar style per the design handoff, not the bare docs-like layout. This correction steers the work toward the photos v2 visual redesign that follows, requiring the agent to consume the design-handoff mockup and rebuild the shell.
+
+2. **Rejection of governance gate (steer-1297f2eb831-20260711-2, ordinal 738, 08:35:18.959Z)**: After all feature implementation is complete and the agent has successfully built both app redesigns and verified them in the harness, the agent attempts to run `bash .governance/run.sh` (the pre-commit governance gate) before opening a PR. The user rejects this tool call with the message "done…skip governance gate". This is a direct correction: the user is instructing the agent to skip governance and proceed directly to PR opening. The user's intent is to defer governance to the merge pipeline rather than run it locally. The agent respects this and proceeds to PR creation without running the gate.
+
+Both steering events are **corrections** (tier: classifier) — user messages that redirect or correct the agent's direction mid-task. The first steers new work (requiring a visual redesign commit); the second steers process (deferred governance). Neither is a tool denial (clicking "reject" on an offered action); both are substantive redirects that changed what work gets done or how it's sequenced.
+
+## Accounting
+
+<!-- Accounting rows are maintained by the agent-token-accounting and agent-steering-accounting pre-commit hooks. Keys are opaque — do not parse. -->
+
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-1297f2eb-831-1783763308-1 | claude-code | 1297f2eb-831b-4438-983c-86fdea06f9be | #352 | claude-sonnet-5 | 90611 | 1465883 | 185820537 | 485610 | 2042104 | 68.7992 | 90611 | 1465883 | 185820537 | 485610 | feat(photos): v2 visual redesign — sidebar, memories, justified timeline, lightb |
+| claude-code-1297f2eb-831-1783763623-1 | claude-code | 1297f2eb-831b-4438-983c-86fdea06f9be | #352 | claude-sonnet-5 | 9822 | 30370 | 6065963 | 10462 | 50654 | 2.1201 | 100433 | 1496253 | 191886500 | 496072 | feat(photos): v2 visual redesign — sidebar, memories, justified timeline, lightb |
+
+### Steering
+
+| steer-key | session | issue | type | tier | user-reason | commit | ordinal | timestamp |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| steer-1297f2eb831-20260711-1 | 1297f2eb-831b-4438-983c-86fdea06f9be | #352 | correction | classifier | Photos UI looks stale, doesn't match expected v2 redesign | e2c9b54 | 656 | 2026-07-11T08:25:57.776Z |
+| steer-1297f2eb831-20260711-2 | 1297f2eb-831b-4438-983c-86fdea06f9be | #352 | correction | classifier | Reject governance gate command, skip it | e2c9b54 | 738 | 2026-07-11T08:35:18.959Z |

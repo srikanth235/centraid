@@ -1,4 +1,4 @@
-// governance: allow-repo-hygiene file-size-limit the app-root orchestrator owns module-level state + the render wiring for every region (issue #352 phase 3/4 added the tag filter + face-proposer mount alongside the pre-existing grid/lightbox/toolbar wiring); splitting further would scatter one cohesive boot sequence across files for no reader benefit.
+// governance: allow-repo-hygiene file-size-limit the app-root orchestrator owns module-level state + the render wiring for every region (v2's justified timeline/sidebar/memories/lightbox redesign grew this alongside the pre-existing #352 tag filter + face-proposer mount); splitting further would scatter one cohesive boot sequence across files for no reader benefit.
 // Photos — a pure projection over the personal vault. Every tile rendered
 // here is a media.media_asset joined to its core.content_item; the bytes
 // themselves are rented, addressed by content_uri, never copied into the
@@ -9,52 +9,56 @@
 // asset. The app stores nothing: revoke the grant and this page goes dark
 // while the library remains the owner's.
 //
-// This file is the entry/orchestrator only: module-level state, refresh(),
-// the grid/selection-bar render orchestrators, the React roots, and the raw
-// DOM event wiring. The album-chips/album-tools, album-picker, lightbox,
-// slideshow and duplicates-shelf regions (issue #352 added the last two) are
-// self-contained enough (their own small slice of state, one root each) to
-// carry their own render orchestrator too — see createToolbar()/
+// v2 rebuilds the chrome (sidebar, justified timeline, memories, redesigned
+// lightbox) around that SAME contract — same `library`/`search`/
+// `duplicates`/`enrichment-status`/`faces` queries, same action set. This
+// file is the entry/orchestrator only: module-level state, refresh(), the
+// sidebar/toolbar/main/selection-bar render orchestrators, the React roots,
+// and the raw DOM event wiring (header icon buttons, keyboard, search,
+// upload). The album nav/tools region now lives in sidebar.jsx (replacing
+// toolbar.jsx); the lightbox, slideshow and duplicates-shelf regions stay
+// self-contained with their own render orchestrator — see createSidebar()/
 // createPicker()/createLightbox()/createSlideshow()/createDuplicates() in
-// toolbar.jsx/picker.jsx/lightbox.jsx/slideshow.jsx/duplicates.jsx,
+// sidebar.jsx/picker.jsx/lightbox.jsx/slideshow.jsx/duplicates.jsx,
 // constructed once at boot below. `visibility.js` holds the pure
 // "what's visible right now" computation (album × search filter) both the
-// grid and lightbox need. Every pure view lives in components/*.jsx; the
-// pure helpers live in format.js/media.js/constants.js; the vault-write
-// flows too large to keep inline live in outcomes.js/assets-actions.js/
+// timeline and lightbox need; `layout.js` holds the justified-row math.
+// Every pure view lives in components/*.jsx; the pure helpers live in
+// format.js/media.js/constants.js/activity.js; the vault-write flows too
+// large to keep inline live in outcomes.js/assets-actions.js/
 // albums-actions.js/selection-actions.js/picker-actions.js/upload.js/
 // faces.js/duplicates-actions.js.
 
-import { DUPLICATES, FAVORITES, TRASH } from './constants.js';
+import { ALBUMS, DUPLICATES, FAVORITES, TRASH } from './constants.js';
 import { $ } from './dom.js';
 import { createDuplicates } from './duplicates.jsx';
 import { readFailed } from './kit.js';
+import { DEFAULT_ZOOM, gridWidthFallback, ZOOM_LEVELS } from './layout.js';
 import { createLightbox } from './lightbox.jsx';
 import { notice } from './outcomes.js';
 import { createPicker } from './picker.jsx';
 import { createSearch } from './search.js';
+import { createSidebar } from './sidebar.jsx';
 import { createSlideshow } from './slideshow.jsx';
-import { createToolbar } from './toolbar.jsx';
 import { runUpload, wireUpload } from './upload.js';
 import { createVisibility } from './visibility.js';
-// React owns six containers — one root per dynamic region of the static
-// index.html body (chips, album tools, grid, selection bar, lightbox,
-// picker). Each region's render orchestrator (renderGrid, renderLightbox, …)
-// calls that root's `.render()` with the current external state on every
-// change — the same "re-render the whole region from scratch" shape the Lit
-// port used, just with React's reconciler doing the DOM diffing instead of
-// lit-html's.
+// React owns several containers — one root per dynamic region of the static
+// index.html body. Each region's render orchestrator calls that root's
+// `.render()` with the current external state on every change.
 import { createRoot } from './react-core.min.js';
+import { AlbumGridView } from './components/AlbumGrid.jsx';
 import { EnrichmentPanel } from './components/Enrichment.jsx';
-import { GridBody, TrashGridBody } from './components/Grid.jsx';
+import { MemoriesStrip } from './components/Memories.jsx';
 import { SelectionBarView } from './components/SelectionBar.jsx';
+import { TimelineBody } from './components/Timeline.jsx';
+import { ToolbarView } from './components/Toolbar.jsx';
 
 let assets = [];
 let albums = [];
 let places = []; // issue #352: the full known core.place list, for the lightbox picker
 let trash = [];
-// null = All; an album_id; FAVORITES / TRASH / DUPLICATES; or `tag:<label>`
-// (issue #352's tag filter — see albumAssets() below).
+// null = All; an album_id; FAVORITES / TRASH / DUPLICATES / ALBUMS; or
+// `tag:<label>` (issue #352's tag filter — see albumAssets() below).
 let selectedAlbum = null;
 let uploading = false;
 let readErrorShown = false;
@@ -64,6 +68,11 @@ let selectMode = false;
 let batchBusy = false;
 let selectAnchor = null; // last toggled asset_id, for shift-click ranges
 const selectedIds = new Set();
+let zoomIndex = DEFAULT_ZOOM;
+// The scroll pane's real content width, kept fresh by a ResizeObserver (Boot,
+// below) — the justified timeline's `justify()` needs real pixels, not a
+// CSS-breakpoint guess.
+let paneWidth = gridWidthFallback(typeof window !== 'undefined' ? window.innerWidth : 1280);
 
 // ---------- Data ----------
 
@@ -90,9 +99,7 @@ async function refresh() {
   const denied = data?.vaultDenied;
   $('consentBanner').hidden = !denied;
   $('live').hidden = Boolean(denied);
-  // The sidebar wrapper only opens once a read lands — until then (and
-  // while consent is denied) the grid pane keeps the full width.
-  $('sideNav').hidden = Boolean(denied);
+  $('sidebarMount').hidden = Boolean(denied);
   if (denied) {
     $('consentDetail').textContent = denied.message ?? '';
     return;
@@ -109,6 +116,7 @@ async function refresh() {
     selectedAlbum !== FAVORITES &&
     selectedAlbum !== TRASH &&
     selectedAlbum !== DUPLICATES &&
+    selectedAlbum !== ALBUMS &&
     !(typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) &&
     !albums.some((a) => a.album_id === selectedAlbum)
   ) {
@@ -117,8 +125,9 @@ async function refresh() {
   for (const id of [...selectedIds]) {
     if (!assets.some((a) => a.asset_id === id)) selectedIds.delete(id);
   }
-  renderToolbar();
-  renderGrid();
+  sidebar.renderSidebar();
+  renderToolbarBar();
+  renderMain();
   renderSelectionBar();
   lightbox.renderIfOpen();
 }
@@ -128,8 +137,8 @@ function albumAssets() {
   if (selectedAlbum === FAVORITES) return assets.filter((a) => a.favorite);
   if (selectedAlbum === TRASH) return trash;
   // Tag filter (issue #352): a `tag:<label>` shelf, the same prefixed-value
-  // trick TRASH/FAVORITES/DUPLICATES use to ride the one selectedAlbum slot
-  // without a second piece of state.
+  // trick TRASH/FAVORITES/DUPLICATES/ALBUMS use to ride the one
+  // selectedAlbum slot without a second piece of state.
   if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
     const label = selectedAlbum.slice(4);
     return assets.filter((a) => a.tags?.includes(label));
@@ -150,23 +159,129 @@ const { visibleAssets, findAsset } = createVisibility({
   getSelectedAlbum: () => selectedAlbum,
 });
 
-// ---------- Grid ----------
+// ---------- Memories (v2) ----------
+// Real data has no built-in "memories" concept — this is derived, honestly,
+// from what's already loaded: Favorites (if non-empty) + up to 6 albums with
+// at least one photo, newest-active-first (by their newest member's
+// captured_at). No fabricated "smart" ML memories, no "this month last
+// year" bucket (not cheaply derivable from the loaded window alone without
+// a second query this app doesn't have).
+function buildMemories() {
+  if (document.documentElement.getAttribute('data-show-memories') === 'hide') return [];
+  const cards = [];
+  const favs = assets.filter((a) => a.favorite);
+  if (favs.length > 0) {
+    cards.push({
+      key: 'built-in:favorites',
+      title: 'Favorites',
+      sub: `${favs.length} photo${favs.length === 1 ? '' : 's'}`,
+      coverUri: favs[0].thumb_uri ?? favs[0].content_uri ?? null,
+      newestAt: favs[0].taken_at ?? '',
+      onOpen: () => navigateTo(FAVORITES),
+    });
+  }
+  const albumCards = albums
+    .map((album) => {
+      const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+      if (members.length === 0) return null;
+      const newest = members.reduce((a, b) => (String(a.taken_at ?? '') > String(b.taken_at ?? '') ? a : b));
+      return {
+        key: album.album_id,
+        title: album.title ?? 'Album',
+        sub: `${members.length} photo${members.length === 1 ? '' : 's'}`,
+        coverUri: newest.thumb_uri ?? newest.content_uri ?? null,
+        newestAt: newest.taken_at ?? '',
+        onOpen: () => navigateTo(album.album_id),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.newestAt).localeCompare(String(a.newestAt)));
+  return [...cards, ...albumCards].slice(0, 6);
+}
 
-function renderGrid() {
-  const grid = $('grid');
-  // Duplicates (issue #352) swaps the WHOLE grid for its own cluster-card
-  // view — not a filter over `assets`, so it short-circuits before any of
-  // the timeline/empty-state machinery below.
+// ---------- Navigation ----------
+
+function navigateTo(id) {
+  if (selectedAlbum === DUPLICATES && id !== DUPLICATES) duplicates.invalidate();
+  selectedAlbum = id;
+  if (selectMode) {
+    exitSelectMode(); // exitSelectMode already re-renders the toolbar/main/selection-bar
+  } else {
+    renderToolbarBar();
+    renderMain();
+  }
+  sidebar.renderSidebar();
+}
+
+// ---------- Toolbar (title/subtitle/back/new-album/select) ----------
+
+const toolbarRoot = createRoot($('toolbarMount'));
+
+function toolbarTitleSub() {
+  const n = visibleAssets().length;
+  const q = searchQuery.trim();
+  if (selectedAlbum === ALBUMS) {
+    return { title: 'Albums', sub: `${albums.length} album${albums.length === 1 ? '' : 's'} · covers pulled from your library` };
+  }
   if (selectedAlbum === DUPLICATES) {
-    grid.classList.remove('selecting');
-    $('empty').hidden = true;
+    return { title: 'Duplicates', sub: 'Near-duplicate clusters in your library' };
+  }
+  const countSub = q ? `${n} match${n === 1 ? '' : 'es'} “${q}”` : `${n} photo${n === 1 ? '' : 's'}`;
+  if (selectedAlbum === TRASH) {
+    return { title: 'Trash', sub: q ? countSub : `${n} in trash · auto-purge after 30 days` };
+  }
+  if (selectedAlbum === FAVORITES) return { title: 'Favorites', sub: countSub };
+  if (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:')) {
+    return { title: `#${selectedAlbum.slice(4)}`, sub: countSub };
+  }
+  const album = albums.find((a) => a.album_id === selectedAlbum);
+  if (album) return { title: album.title ?? 'Album', sub: countSub };
+  return { title: 'Photos', sub: countSub };
+}
+
+function renderToolbarBar() {
+  const { title, sub } = toolbarTitleSub();
+  const inAlbum = albums.some((a) => a.album_id === selectedAlbum);
+  toolbarRoot.render(
+    <ToolbarView
+      title={title}
+      subtitle={sub}
+      showBack={inAlbum}
+      onBack={() => navigateTo(ALBUMS)}
+      showNewAlbum={selectedAlbum === ALBUMS}
+      onNewAlbum={() => sidebar.openNewAlbum()}
+      showAddPhotos={inAlbum}
+      onAddPhotos={openPicker}
+      showSelect={selectedAlbum !== TRASH && selectedAlbum !== DUPLICATES && selectedAlbum !== ALBUMS}
+      selectMode={selectMode}
+      onToggleSelect={() => (selectMode ? exitSelectMode() : enterSelectMode())}
+    />,
+  );
+}
+
+// ---------- Main content (timeline / memories / albums grid / duplicates / empty) ----------
+
+const mainRoot = createRoot($('grid'));
+
+function renderMain() {
+  const empty = $('empty');
+  if (selectedAlbum === DUPLICATES) {
+    empty.hidden = true;
     duplicates.ensureLoaded();
     duplicates.renderDuplicates();
     return;
   }
-  grid.classList.toggle('selecting', selectMode);
+  if (selectedAlbum === ALBUMS) {
+    empty.hidden = true;
+    const enriched = albums.map((album) => {
+      const members = assets.filter((a) => (a.album_ids ?? []).includes(album.album_id));
+      return { ...album, count: members.length, coverUri: members[0]?.thumb_uri ?? members[0]?.content_uri ?? null };
+    });
+    mainRoot.render(<AlbumGridView albums={enriched} onOpen={navigateTo} onNewAlbum={() => sidebar.openNewAlbum()} />);
+    return;
+  }
+
   const shown = visibleAssets();
-  const empty = $('empty');
   empty.hidden = shown.length > 0;
   if (shown.length === 0) {
     const searching = searchQuery !== '';
@@ -181,50 +296,42 @@ function renderGrid() {
             : selectedAlbum
               ? 'Nothing in this album yet.'
               : 'No photos yet — your library starts with the first upload.';
-    // `#emptyUpload` is a stable node wired once at boot (wireUpload, in
-    // upload.js) — kit.js's own `emptyState()` helper replaces its
-    // container's children on every call, which would silently drop that
-    // listener. The kit-empty markup stays static in index.html instead;
-    // this orchestrator only ever flips text/hidden on existing nodes.
     $('emptyUpload').hidden =
       searching ||
       selectedAlbum === FAVORITES ||
       selectedAlbum === TRASH ||
       (typeof selectedAlbum === 'string' && selectedAlbum.startsWith('tag:'));
   }
-  // Trash forgoes the timeline: newest-trashed first, purge labels on tiles.
-  if (selectedAlbum === TRASH) {
-    gridRoot.render(<TrashGridBody assets={shown} refresh={refresh} />);
-    return;
-  }
-  // Google-Photos-style timeline: sticky month headers, day labels inside
-  // (bucketed inside GridBody itself, off the flat `shown` list).
+
   const inAlbum = albums.some((a) => a.album_id === selectedAlbum);
-  // The window is honest about its edge: All, Favorites, albums and the
-  // client-side search all filter the same loaded slice, so any of them can
-  // silently miss photos older than the window. "Show more" grows it — with
-  // no search plane, that is the only road back in time.
-  gridRoot.render(
-    <GridBody
-      assets={shown}
-      inAlbum={inAlbum}
-      albumId={selectedAlbum}
-      refresh={refresh}
-      libraryTruncated={libraryTruncated}
-      selectedAlbum={selectedAlbum}
-      searchQuery={searchQuery}
-      libraryWindow={libraryWindow}
-      selectMode={selectMode}
-      selectedIds={selectedIds}
-      onEnterSelectMode={enterSelectMode}
-      onToggleSelect={toggleSelect}
-      onOpen={lightbox.openLightbox}
-      onShowMore={async (e) => {
-        e.target.disabled = true;
-        libraryWindow += 500;
-        await refresh();
-      }}
-    />,
+  const showMemories = selectedAlbum === null && searchQuery.trim() === '' && !selectMode;
+  mainRoot.render(
+    <>
+      {showMemories ? <MemoriesStrip memories={buildMemories()} /> : null}
+      <TimelineBody
+        assets={shown}
+        containerWidth={paneWidth}
+        targetHeight={ZOOM_LEVELS[zoomIndex]}
+        inAlbum={inAlbum}
+        albumId={selectedAlbum}
+        isTrash={selectedAlbum === TRASH}
+        refresh={refresh}
+        selectedAlbum={selectedAlbum}
+        searchQuery={searchQuery}
+        libraryWindow={libraryWindow}
+        truncated={libraryTruncated}
+        selectMode={selectMode}
+        selectedIds={selectedIds}
+        onEnterSelectMode={enterSelectMode}
+        onToggleSelect={toggleSelect}
+        onOpen={lightbox.openLightbox}
+        onShowMore={async (e) => {
+          e.target.disabled = true;
+          libraryWindow += 500;
+          await refresh();
+        }}
+      />
+    </>,
   );
 }
 
@@ -233,10 +340,9 @@ function renderGrid() {
 function enterSelectMode() {
   selectMode = true;
   selectAnchor = null;
-  $('selectBtn').textContent = 'Cancel';
-  $('selectBtn').dataset.active = 'true';
   document.body.classList.add('has-selection');
-  renderGrid();
+  renderToolbarBar();
+  renderMain();
   renderSelectionBar();
 }
 
@@ -244,11 +350,10 @@ function exitSelectMode() {
   selectMode = false;
   selectedIds.clear();
   selectAnchor = null;
-  $('selectBtn').textContent = 'Select';
-  delete $('selectBtn').dataset.active;
   document.body.classList.remove('has-selection');
   closeAlbumMenu();
-  renderGrid();
+  renderToolbarBar();
+  renderMain();
   renderSelectionBar();
 }
 
@@ -265,7 +370,7 @@ function toggleSelect(assetId, shiftKey) {
         else selectedIds.delete(list[i].asset_id);
       }
       selectAnchor = assetId;
-      renderGrid();
+      renderMain();
       renderSelectionBar();
       return;
     }
@@ -273,7 +378,7 @@ function toggleSelect(assetId, shiftKey) {
   if (selectedIds.has(assetId)) selectedIds.delete(assetId);
   else selectedIds.add(assetId);
   selectAnchor = assetId;
-  renderGrid();
+  renderMain();
   renderSelectionBar();
 }
 
@@ -321,6 +426,8 @@ function setBarBusy(on) {
   for (const btn of $('selectionBar').querySelectorAll('button')) btn.disabled = on;
 }
 
+const selectionBarRoot = createRoot($('selectionBar'));
+
 function renderSelectionBar() {
   const bar = $('selectionBar');
   bar.hidden = !selectMode;
@@ -343,14 +450,9 @@ function renderSelectionBar() {
   );
 }
 
-// ---------- Lightbox ----------
-// lightbox.jsx owns the render orchestrator (see its header comment) — wired
-// up in Boot below, since it needs `lightboxRoot`/`slideshow`, both
-// constructed there. `renderGrid` (above) and the keyboard handler (below)
-// only ever call `openLightbox`/`closeLightbox`/`step` inside their own
-// deferred callbacks, never while THIS module is still evaluating — so
-// referencing them ahead of the Boot assignment is safe (same forward
-// reference `renderGrid` already makes to `gridRoot`).
+// ---------- Lightbox / slideshow / duplicates / picker ----------
+// Each owns its own render orchestrator (see their header comments) — wired
+// up in Boot below.
 
 // ---------- Keyboard ----------
 
@@ -361,6 +463,7 @@ window.addEventListener('keydown', (e) => {
   }
   if ($('lightbox').hidden) {
     if (e.key === 'Escape' && selectMode && !batchBusy) exitSelectMode();
+    else if (e.key === 'Escape' && sidebar.isSidebarOpen()) sidebar.closeSidebar();
     return;
   }
   const tag = e.target?.tagName;
@@ -375,7 +478,7 @@ window.addEventListener('keydown', (e) => {
 
 // ---------- Search ----------
 // Server FTS (queries/search.js, issue #352) is debounced via search.js's
-// createSearch; the immediate renderGrid() call below keeps the existing
+// createSearch; the immediate renderMain() call below keeps the existing
 // client-side match (day/month/album-name/loaded-title) responsive at zero
 // latency while that request is in flight.
 
@@ -384,13 +487,14 @@ const { run: runSearch, invalidate: invalidateSearch } = createSearch({
   setResults: (r) => {
     searchResults = r;
   },
-  renderGrid,
+  renderGrid: renderMain,
 });
 
 $('searchInput').addEventListener('input', () => {
   searchQuery = $('searchInput').value.trim();
   $('searchClear').hidden = searchQuery === '';
-  renderGrid();
+  renderToolbarBar();
+  renderMain();
   runSearch();
 });
 
@@ -401,7 +505,8 @@ function clearSearch() {
   if (searchQuery !== '' || searchResults !== null) {
     searchQuery = '';
     searchResults = null;
-    renderGrid();
+    renderToolbarBar();
+    renderMain();
   }
 }
 
@@ -417,6 +522,45 @@ $('searchClear').addEventListener('click', () => {
   $('searchInput').focus();
 });
 
+// ---------- Zoom / hamburger ----------
+
+function renderZoomButtons() {
+  $('zoomOutBtn').disabled = zoomIndex === 0;
+  $('zoomInBtn').disabled = zoomIndex === ZOOM_LEVELS.length - 1;
+}
+
+$('zoomOutBtn').addEventListener('click', () => {
+  zoomIndex = Math.max(0, zoomIndex - 1);
+  renderZoomButtons();
+  renderMain();
+});
+$('zoomInBtn').addEventListener('click', () => {
+  zoomIndex = Math.min(ZOOM_LEVELS.length - 1, zoomIndex + 1);
+  renderZoomButtons();
+  renderMain();
+});
+renderZoomButtons();
+
+$('hamburgerBtn').addEventListener('click', () => sidebar.openSidebar());
+
+// The scroll pane's real width drives the justified timeline. ResizeObserver
+// isn't implemented under jsdom (the app-boot test's environment) — the
+// `resize` listener fallback keeps boot safe there while still tracking the
+// real thing in a real browser.
+function measurePane() {
+  const el = $('scrollPane');
+  const w = el?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 0);
+  if (w > 0 && Math.abs(w - paneWidth) > 1) {
+    paneWidth = w;
+    renderMain();
+  }
+}
+if (typeof ResizeObserver !== 'undefined' && $('scrollPane')) {
+  new ResizeObserver(measurePane).observe($('scrollPane'));
+} else if (typeof window !== 'undefined') {
+  window.addEventListener('resize', measurePane);
+}
+
 // ---------- Upload ----------
 
 async function uploadFiles(files) {
@@ -431,16 +575,7 @@ async function uploadFiles(files) {
 
 // ---------- Boot ----------
 
-// One React root per dynamic container, created once at module scope (Form
-// 1: external mutable state above + a render orchestrator per region, same
-// shape the Lit port used with `litRender`). Unlike Lit's standalone
-// `render()`, `createRoot(...).render()` fully owns its container from the
-// first call, so no manual "clear the pre-existing skeleton" step is needed
-// the way the Lit port's `mountGrid` guard was.
-const chipsRoot = createRoot($('albumChips'));
-const albumToolsRoot = createRoot($('albumTools'));
-const gridRoot = createRoot($('grid'));
-const selectionBarRoot = createRoot($('selectionBar'));
+const sidebarRoot = createRoot($('sidebarMount'));
 const lightboxRoot = createRoot($('lightbox'));
 const pickerRoot = createRoot($('picker'));
 const slideshowRoot = createRoot($('slideshow'));
@@ -450,12 +585,12 @@ const slideshowRoot = createRoot($('slideshow'));
 // re-rendered by refresh().
 createRoot($('enrichmentMount')).render(<EnrichmentPanel />);
 
-// Duplicates (issue #352) renders into the SAME gridRoot the library/trash
-// views use — selecting its chip swaps `#grid`'s content exactly the way
+// Duplicates (issue #352) renders into the SAME mainRoot the library/trash
+// views use — selecting its shelf swaps `#grid`'s content exactly the way
 // selecting Trash already does. Slideshow gets its own root/container since
 // it can open from the lightbox too, independent of whatever the grid is
 // currently showing.
-const duplicates = createDuplicates({ gridRoot, refresh });
+const duplicates = createDuplicates({ gridRoot: mainRoot, refresh });
 const slideshow = createSlideshow({ slideshowRoot });
 const lightbox = createLightbox({
   lightboxRoot,
@@ -467,8 +602,9 @@ const lightbox = createLightbox({
   slideshow,
 });
 
-// The album picker is constructed before the toolbar, since the toolbar's
-// "Add photos" button needs a live `openPicker` to hand `<AlbumToolsView>`.
+// The album picker is constructed before the sidebar, since the sidebar's
+// per-album rows and the toolbar's "Add photos" button both need a live
+// `openPicker`.
 const { openPicker, closePicker } = createPicker({
   pickerRoot,
   getAlbums: () => albums,
@@ -477,13 +613,11 @@ const { openPicker, closePicker } = createPicker({
   refresh,
 });
 
-const { renderToolbar } = createToolbar({
-  chipsRoot,
-  albumToolsRoot,
+const sidebar = createSidebar({
+  sidebarRoot,
   getAlbums: () => albums,
   getAssets: () => assets,
   getTrash: () => trash,
-  getAlbumAssets: albumAssets,
   getSelectedAlbum: () => selectedAlbum,
   setSelectedAlbum: (id) => {
     // Leaving the shelf: the next visit re-fetches rather than showing a
@@ -492,11 +626,13 @@ const { renderToolbar } = createToolbar({
     selectedAlbum = id;
   },
   refresh,
-  renderGrid,
+  renderMain: () => {
+    renderToolbarBar();
+    renderMain();
+  },
   exitSelectModeIfActive: () => {
     if (selectMode) exitSelectMode();
   },
-  openPicker,
 });
 
 wireUpload({
@@ -505,20 +641,15 @@ wireUpload({
   openPicker,
 });
 
-$('selectBtn').addEventListener('click', () => {
-  if (selectMode) exitSelectMode();
-  else enterSelectMode();
-});
-
 // Desktop-only toolbar entry point (CSS-gated at >=720px — see app.css); the
-// lightbox's own "Slideshow" button is the entry point at every width.
+// lightbox's own Slideshow icon covers every width.
 $('slideshowBtn').addEventListener('click', () => lightbox.startSlideshow(null));
 
 window.addEventListener('focus', refresh);
 // Shimmer rows while the first read is in flight — the genuine
 // `<kit-skeleton>` custom element, rendered as ordinary JSX (not the
 // `showSkeleton()` DOM-mutating helper, which must never target a
-// React-owned node); `renderGrid` replaces it with real content once
+// React-owned node); `renderMain` replaces it with real content once
 // `refresh()` resolves.
-gridRoot.render(<kit-skeleton rows={6}></kit-skeleton>);
+mainRoot.render(<kit-skeleton rows={6}></kit-skeleton>);
 refresh();
