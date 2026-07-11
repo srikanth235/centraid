@@ -8,7 +8,7 @@
 - [x] `chunkStream` FastCDC chunker (frozen gear table), keyring epochs, canonical-JSON manifest
 - [x] `createSnapshot` / `restoreSnapshot` / `verifySnapshot` / `writeRecoveryKit` engine
 - [x] `providerConformanceCases` conformance kit
-- [ ] `stageVaultDbs` receipted VACUUM INTO staging primitive (packages/vault)
+- [x] `stageVaultDbs` receipted VACUUM INTO staging primitive (packages/vault)
 - [ ] `BackupService` scheduler + `'backups'` health component (staleness probe)
 - [ ] `centraid-gateway backup` CLI — status|run|list|verify|restore|kit
 - [ ] `RESTORE_QUARANTINE.json` handling at vault mount (outbox parked; automations flagged)
