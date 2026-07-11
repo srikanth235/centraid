@@ -71,6 +71,16 @@ describe('buildOverviewData', () => {
     const data = buildOverviewData([], []);
     expect(data.subtitle).toBe('Conversations that run on their own.');
   });
+
+  it('keeps the subtitle consistent with the health tiles — drafts are not "paused"', () => {
+    const data = buildOverviewData(
+      [row(), row({ id: 'x', ref: 'x/main', enabled: false })],
+      [entry()],
+    );
+    expect(data.subtitle).toContain('1 active');
+    expect(data.subtitle).toContain('0 paused');
+    expect(data.subtitle).toContain('1 drafts');
+  });
 });
 
 const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationRow =>
@@ -84,12 +94,16 @@ const viewRow = (over: Partial<CentraidAutomationRow> = {}): CentraidAutomationR
     ...over,
   }) as unknown as CentraidAutomationRow;
 
+const GATEWAY_ORIGIN = 'http://127.0.0.1:5173';
+
 describe('buildAutomationViewData', () => {
   it('derives hero + status + 30-day KPIs for a cron automation', () => {
     const recent = Date.now() - 60_000;
-    const data = buildAutomationViewData(viewRow(), [
-      entry({ startedAt: recent, endedAt: recent + 2000 }).run,
-    ]);
+    const data = buildAutomationViewData(
+      viewRow(),
+      [entry({ startedAt: recent, endedAt: recent + 2000 }).run],
+      GATEWAY_ORIGIN,
+    );
     expect(data?.name).toBe('Daily Digest');
     expect(data?.kindEyebrow).toBe('Cron schedule');
     expect(data?.heroIcon).toBe('Clock');
@@ -102,9 +116,53 @@ describe('buildAutomationViewData', () => {
     const data = buildAutomationViewData(
       viewRow({ triggers: [{ kind: 'webhook', pending: true } as never] }),
       [],
+      GATEWAY_ORIGIN,
     );
     expect(data?.kindEyebrow).toBe('Webhook');
     expect(data?.webhook).toEqual({ pending: true, url: null });
     expect(data?.kpis.total).toBe('0');
+  });
+
+  it('derives an absolute webhook URL off the gateway origin once provisioned', () => {
+    const data = buildAutomationViewData(
+      viewRow({ triggers: [{ kind: 'webhook', id: 'abc123' } as never] }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(data?.webhook).toEqual({
+      pending: false,
+      url: 'http://127.0.0.1:5173/_centraid-hook/abc123',
+    });
+  });
+
+  it('labels data/condition triggers honestly instead of "Cron schedule"/"Manual only"', () => {
+    const dataTrig = buildAutomationViewData(
+      viewRow({ triggers: [{ kind: 'data', entities: ['core.content_derivative'] } as never] }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(dataTrig?.kindEyebrow).toBe('Data trigger');
+    expect(dataTrig?.when).toBe('On data changes');
+
+    const condTrig = buildAutomationViewData(
+      viewRow({ triggers: [{ kind: 'condition', entity: 'core.event' } as never] }),
+      [],
+      GATEWAY_ORIGIN,
+    );
+    expect(condTrig?.kindEyebrow).toBe('Condition');
+    expect(condTrig?.when).toBe('On condition');
+
+    const manual = buildAutomationViewData(viewRow({ triggers: [] }), [], GATEWAY_ORIGIN);
+    expect(manual?.kindEyebrow).toBe('Manual');
+    expect(manual?.when).toBe('Manual only');
+  });
+
+  it('labels a data-origin run "Data" in the run rows', () => {
+    const data = buildAutomationViewData(
+      viewRow(),
+      [entry({ triggerKind: 'scheduled', triggerOrigin: 'data' } as never).run],
+      GATEWAY_ORIGIN,
+    );
+    expect(data?.runs[0]?.trigLabel).toBe('Data');
   });
 });

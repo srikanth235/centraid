@@ -227,10 +227,21 @@ export function cronToHuman(expr: string): string {
   if (fields.length !== 5) return expr;
   const [min, hour, dom, month, dow] = fields as [string, string, string, string, string];
 
-  const fmtTime = (h: number, m: number): string => {
+  // The cron digits are UTC; anchor them with the UTC setter so
+  // toLocaleTimeString performs the actual UTC→local conversion.
+  const utcAnchor = (h: number, m: number): Date => {
     const date = new Date();
-    date.setHours(h, m, 0, 0);
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    date.setUTCHours(h, m, 0, 0);
+    return date;
+  };
+  const fmtTime = (h: number, m: number): string =>
+    utcAnchor(h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  // When the conversion crosses midnight, day-of-week labels shift too:
+  // -1, 0, or +1 days relative to the UTC day.
+  const dayShift = (h: number, m: number): number => {
+    const date = utcAnchor(h, m);
+    const diff = (date.getDay() - date.getUTCDay() + 7) % 7;
+    return diff === 6 ? -1 : diff;
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -254,11 +265,16 @@ export function cronToHuman(expr: string): string {
   if (isExactTime && dom === '*' && month === '*') {
     const time = fmtTime(hourNum, minNum);
     if (dow === '*') return `Daily at ${time}`;
-    if (dow === '1-5') return `Weekdays at ${time}`;
-    if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+    const shift = dayShift(hourNum, minNum);
+    if (shift === 0) {
+      if (dow === '1-5') return `Weekdays at ${time}`;
+      if (dow === '0,6' || dow === '6,0') return `Weekends at ${time}`;
+    }
+    // Crossing midnight turns "weekdays"/"weekends" into an off-by-one set
+    // with no honest compact label — fall through to the raw-expr fallback.
     const single = Number(dow);
     if (!Number.isNaN(single) && single >= 0 && single <= 6) {
-      return `${dayNames[single]}s at ${time}`;
+      return `${dayNames[(single + shift + 7) % 7]}s at ${time}`;
     }
   }
 
@@ -266,15 +282,19 @@ export function cronToHuman(expr: string): string {
 }
 
 // Human-readable summary of an automation's trigger list. One cron → its
-// `cronToHuman` form; many crons → a count; a webhook adds a "Webhook" tag;
-// an empty list reads "Manual only".
+// `cronToHuman` form; many crons → a count; webhook/data/condition triggers
+// each add a tag; an empty list reads "Manual only".
 export function triggersSummary(triggers: ReadonlyArray<{ kind: string; expr?: string }>): string {
   const crons = triggers.filter((t) => t.kind === 'cron');
   const hasWebhook = triggers.some((t) => t.kind === 'webhook');
+  const hasData = triggers.some((t) => t.kind === 'data');
+  const hasCondition = triggers.some((t) => t.kind === 'condition');
   const parts: string[] = [];
   if (crons.length === 1 && crons[0]!.expr) parts.push(cronToHuman(crons[0]!.expr));
   else if (crons.length > 1) parts.push(`${crons.length} schedules`);
   if (hasWebhook) parts.push('Webhook');
+  if (hasData) parts.push('On data changes');
+  if (hasCondition) parts.push('On condition');
   return parts.join(' · ') || 'Manual only';
 }
 

@@ -44,10 +44,22 @@ export async function handleAutomationCreate(
 
   // Mint webhook secrets gateway-side: plaintext returned once, manifest
   // persists only the hash. A `webhook` trigger entry carries no secret in.
+  // This endpoint scaffolds cron/webhook triggers only — richer kinds (data,
+  // condition) come from templates or the builder, so reject them loudly
+  // instead of silently rewriting them into a default cron.
   let webhook: { id: string; secret: string; url: string } | undefined;
   const triggerInput = Array.isArray(body.triggers)
     ? (body.triggers as Array<{ kind?: string; expr?: string }>)
     : undefined;
+  const badKind = triggerInput?.find(
+    (t) => t.kind !== undefined && t.kind !== 'cron' && t.kind !== 'webhook',
+  );
+  if (badKind) {
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: `Unsupported trigger kind "${badKind.kind}" — create accepts cron and webhook triggers; data/condition triggers come from templates or the builder.`,
+    });
+  }
   const triggers: automation.Trigger[] | undefined = triggerInput?.map((t) => {
     if (t.kind === 'webhook') {
       const wid = automation.generateWebhookId();

@@ -82,7 +82,10 @@ export function buildOverviewData(
     else drafts += 1;
     if (lastEntry && !lastEntry.run.ok) attention += 1;
   }
-  const subParts = [`${active} active`, `${paused + drafts} paused`];
+  // Keep the prose consistent with the health tiles below it — drafts are
+  // not "paused", they've simply never run.
+  const subParts = [`${active} active`, `${paused} paused`];
+  if (drafts > 0) subParts.push(`${drafts} drafts`);
   if (runs.length > 0) subParts.push(`${runs.length} recent runs`);
 
   return {
@@ -153,6 +156,17 @@ function automationLifetime(runs: readonly CentraidAutomationRunRecord[]): {
 export function buildAutomationViewData(
   row: CentraidAutomationRow,
   runs: readonly CentraidAutomationRunRecord[],
+  /**
+   * The active gateway's base URL (`auth().baseUrl` — see
+   * `gateway-client-core.ts`). The webhook route only ever lives on the
+   * gateway that owns the automation (issue #96: core gateway mount), so a
+   * bare `/_centraid-hook/<id>` path is ambiguous the moment more than one
+   * gateway exists (remote daemon vs. this desktop's embedded one) — the
+   * caller resolves it and passes it in here so this function stays pure
+   * (no import of the gateway-client module, which has a load-time
+   * `window.CentraidApi` side effect the unit tests stub around).
+   */
+  gatewayOrigin: string,
 ): AutomationViewData {
   const hasWebhook = row.triggers.some((t) => t.kind === 'webhook');
   const hasCron = row.triggers.some((t) => t.kind === 'cron');
@@ -171,7 +185,7 @@ export function buildAutomationViewData(
     webhook =
       wh?.pending || !wh?.id
         ? { pending: true, url: null }
-        : { pending: false, url: `/_centraid-hook/${wh.id}` };
+        : { pending: false, url: new URL(`/_centraid-hook/${wh.id}`, gatewayOrigin).toString() };
   }
 
   const statusKind = auStatusForRow(row.enabled, hasRun) as AuStatusKind;
@@ -191,7 +205,15 @@ export function buildAutomationViewData(
     glyphIcon: glyphForId(row.id),
     heroIcon: hasWebhook && !hasCron ? 'Webhook' : 'Clock',
     hue: hueForId(row.id),
-    kindEyebrow: hasWebhook && !hasCron ? 'Webhook' : 'Cron schedule',
+    kindEyebrow: hasCron
+      ? 'Cron schedule'
+      : hasWebhook
+        ? 'Webhook'
+        : row.triggers.some((t) => t.kind === 'data')
+          ? 'Data trigger'
+          : row.triggers.some((t) => t.kind === 'condition')
+            ? 'Condition'
+            : 'Manual',
     kpis: {
       avg: life.avg,
       cost: life.cost,
@@ -207,9 +229,13 @@ export function buildAutomationViewData(
       const trig =
         run.triggerOrigin === 'webhook'
           ? { icon: 'Webhook', label: 'Webhook' }
-          : run.triggerKind === 'manual'
-            ? { icon: 'Play', label: 'Manual' }
-            : { icon: 'Clock', label: 'Cron' };
+          : run.triggerOrigin === 'data'
+            ? { icon: 'Clock', label: 'Data' }
+            : run.triggerOrigin === 'condition'
+              ? { icon: 'Clock', label: 'Condition' }
+              : run.triggerKind === 'manual'
+                ? { icon: 'Play', label: 'Manual' }
+                : { icon: 'Clock', label: 'Cron' };
       const filterKey: 'cron' | 'webhook' | 'manual' | 'other' =
         run.triggerOrigin === 'webhook'
           ? 'webhook'
