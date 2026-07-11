@@ -60,6 +60,9 @@ export function daemonLayoutFor(dataDir: string): DaemonLayout {
     vaultDir: path.join(abs, 'vault'),
     backupDir: path.join(abs, 'backup'),
     logsDir: path.join(abs, 'gateway-logs'),
+    // Storage connections + recovery-kit state (issue #367 §C1/§C10) — same
+    // sibling-of-`vault/` convention as `backupDir`/`logsDir`.
+    storageDir: path.join(abs, 'storage'),
     devicesFile: path.join(abs, 'devices.json'),
     pairingTicketsFile: path.join(abs, 'pairing-tickets.json'),
     endpointKeyFile: path.join(abs, 'endpoint-key.bin'),

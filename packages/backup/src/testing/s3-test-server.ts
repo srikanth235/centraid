@@ -60,6 +60,9 @@ export class S3TestServer {
   private readonly objects = new Map<string, Buffer>();
   private readonly server: http.Server;
   private readonly listPageSize: number;
+  /** In-flight multipart uploads (issue #367 §C8), keyed by uploadId. */
+  private readonly multipart = new Map<string, { key: string; parts: Map<number, Buffer> }>();
+  private nextUploadId = 1;
 
   private constructor(server: http.Server, port: number, listPageSize: number) {
     this.server = server;
@@ -163,14 +166,70 @@ export class S3TestServer {
       return;
     }
 
+    // Multipart upload (issue #367 §C8: `S3BlobStore.putStream`'s three
+    // control calls). `uploads` (empty value) = initiate; `uploadId` alone
+    // on a POST = complete; `uploadId` + `partNumber` on a PUT = one part;
+    // `uploadId` alone on a DELETE = abort. Real S3 disambiguates the same
+    // way — these query params never appear on a plain object PUT/DELETE.
+    if (req.method === 'POST' && url.searchParams.has('uploads')) {
+      const uploadId = String(this.nextUploadId++);
+      this.multipart.set(uploadId, { key, parts: new Map() });
+      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.end(
+        `<?xml version="1.0" encoding="UTF-8"?><InitiateMultipartUploadResult>` +
+          `<Bucket></Bucket><Key>${escapeXml(key)}</Key><UploadId>${uploadId}</UploadId>` +
+          `</InitiateMultipartUploadResult>`,
+      );
+      return;
+    }
+
+    if (req.method === 'PUT' && url.searchParams.has('uploadId') && url.searchParams.has('partNumber')) {
+      const uploadId = url.searchParams.get('uploadId') ?? '';
+      const partNumber = Number(url.searchParams.get('partNumber'));
+      const upload = this.multipart.get(uploadId);
+      if (!upload) {
+        res.writeHead(404, {});
+        res.end();
+        return;
+      }
+      const body = await readBody(req);
+      upload.parts.set(partNumber, body);
+      res.writeHead(200, { etag: `"part-${partNumber}"` });
+      res.end();
+      return;
+    }
+
+    if (req.method === 'POST' && url.searchParams.has('uploadId')) {
+      const uploadId = url.searchParams.get('uploadId') ?? '';
+      const upload = this.multipart.get(uploadId);
+      if (!upload) {
+        res.writeHead(404, {});
+        res.end();
+        return;
+      }
+      await readBody(req); // the complete-request XML body — parts already came in via PUT
+      const ordered = [...upload.parts.entries()].sort((a, b) => a[0] - b[0]).map(([, buf]) => buf);
+      this.objects.set(upload.key, Buffer.concat(ordered));
+      this.multipart.delete(uploadId);
+      res.writeHead(200, { 'content-type': 'application/xml' });
+      res.end(
+        `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUploadResult>` +
+          `<Bucket></Bucket><Key>${escapeXml(upload.key)}</Key></CompleteMultipartUploadResult>`,
+      );
+      return;
+    }
+
+    if (req.method === 'DELETE' && url.searchParams.has('uploadId')) {
+      const uploadId = url.searchParams.get('uploadId') ?? '';
+      this.multipart.delete(uploadId);
+      res.writeHead(204, {});
+      res.end();
+      return;
+    }
+
     if (req.method === 'PUT') {
-      const chunks: Buffer[] = [];
-      req.on('data', (c: Buffer) => chunks.push(c));
-      await new Promise<void>((resolve, reject) => {
-        req.on('end', () => resolve());
-        req.on('error', reject);
-      });
-      this.objects.set(key, Buffer.concat(chunks));
+      const body = await readBody(req);
+      this.objects.set(key, body);
       res.writeHead(200, {});
       res.end();
       return;
@@ -243,4 +302,13 @@ export class S3TestServer {
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function readBody(req: http.IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
 }
