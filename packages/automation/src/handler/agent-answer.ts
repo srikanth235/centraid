@@ -2,10 +2,8 @@
  * Coerce a host agent's final answer into the shape `ctx.agent` promised.
  *
  * Every automation host ends a `ctx.agent` turn with a blob of assistant text
- * and must turn it into the value the handler awaits — and they must agree on
- * how. The codex/claude CLI runner (`@centraid/agent-runtime`) and the OpenClaw
- * embedded runner (`@centraid/openclaw-plugin`) had their own copies of this;
- * it lives here so the two hosts can't drift.
+ * and must turn it into the value the handler awaits. Shared here so hosts
+ * can't drift.
  *
  * A plain prompt returns the trimmed text as-is; a `json` prompt parses it,
  * tolerating a ```json fence the model may wrap around the object.

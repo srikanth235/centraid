@@ -8,7 +8,7 @@
  * the detail pane is self-contained. A missing or wrong id returns
  * item:null, never an error.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { readTags, readStarred } from './items.js';

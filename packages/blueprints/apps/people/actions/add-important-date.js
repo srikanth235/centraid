@@ -1,7 +1,7 @@
 /**
  * Add an important date (birthday, anniversary…); birthdays auto-create their reminder. Runs through people.add_important_date — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

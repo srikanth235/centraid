@@ -135,7 +135,7 @@
             "patterns": [
               {
                 "group": ["@centraid/*"],
-                "message": "app-engine is the stable core of the dependency DAG — it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, openclaw-plugin). See governance: module-layering."
+                "message": "app-engine is the stable core of the dependency DAG — it must not import other @centraid packages. Mode/runtime specifics belong at entrypoints (desktop main, gateway CLI). See governance: module-layering."
               }
             ]
           }

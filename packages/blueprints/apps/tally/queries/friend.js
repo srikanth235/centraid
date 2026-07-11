@@ -2,7 +2,7 @@
  * One friend: the net balance with them (positive = they owe you) and the
  * expenses you both took part in, newest first, decorated like a group ledger.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 import { loadTally, pairwise, ledgerRow, personOf } from './dashboard.js';

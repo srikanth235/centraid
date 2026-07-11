@@ -456,7 +456,7 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         updateMessage(statusIdx, { kind: 'status', text: 'Gateway needs a token to accept uploads.' });
         showToast('Gateway requires a token. Configure it in Settings.');
       } else if (/gateway_unreachable|Could not reach gateway|fetch failed|ECONNREFUSED/i.test(msg)) {
-        updateMessage(statusIdx, { kind: 'status', text: 'Gateway not reachable. Is openclaw running?' });
+        updateMessage(statusIdx, { kind: 'status', text: 'Gateway not reachable. Is it running?' });
         showToast('Gateway not reachable. Check the URL in Settings.');
       } else if (/HTTP 422/i.test(msg)) {
         const file = msg.match(/"file"\s*:\s*"([^"]+)"/)?.[1];

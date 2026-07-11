@@ -12,7 +12,7 @@ Describe an app in a sentence — an agent builds it, a local gateway runs it, a
 - **Clone templates** — 8 blueprint apps (Docs, Photos, Notes, People, Locker, Tally, Agenda, Tasks) + 24 automation templates (Gmail pull, Briefing, Email triage, photo captioner, …). Click and deploy, no compile step.
 - **Run automations** — cron-, webhook-, condition- or data-change-triggered background agents. A generated handler runs in a worker thread with a curated `ctx` surface (`ctx.vault`, `ctx.agent`, `ctx.fetch`, KV state, run history).
 - **Chat with your data** — every app has one `/centraid/<id>/_turn` surface that can rewrite a handler *and* answer a data question in the same conversation; the vault-wide assistant reads across all of them.
-- **Run it anywhere** — one gateway core, three hosts: embedded in the Electron desktop, the standalone `centraid-gateway` daemon, or the OpenClaw plugin. Mobile (Expo) is a thin client over an iroh p2p tunnel.
+- **Run it anywhere** — one gateway core, two hosts: embedded in the Electron desktop, or the standalone `centraid-gateway` daemon. Mobile (Expo) is a thin client over an iroh p2p tunnel.
 - **Local-first** — the vault is SQLite files on your machine, single Bearer token, consent checked and receipted on every access, nothing leaves your devices unless you point it somewhere.
 
 ## How it works (30 seconds)
@@ -23,8 +23,8 @@ Describe an app in a sentence — an agent builds it, a local gateway runs it, a
         │        HTTP + Bearer       │
         ▼                            ▼
  ┌─────────────────── gateway ───────────────────────┐
- │ buildGateway() — same core, three hosts:          │
- │ desktop embed · centraid-gateway daemon · openclaw│
+ │ buildGateway() — same core, two hosts:            │
+ │ desktop embed · centraid-gateway daemon           │
  │                                                   │
  │  app-engine        agent-runtime      automation  │
  │  declared-handler  codex subprocess   cron+webhook│
@@ -76,7 +76,6 @@ Full tour: [Get started](https://centraid.dev/docs/start/) — install → vault
 | `packages/blueprints` | Template gallery: 8 blueprint apps + 24 automation templates, blank-app scaffolders, clone flow. |
 | `packages/skills` | Agent grounding: `SKILL.md` units + dynamic renderers (live design tokens, host-tool list). |
 | `packages/design-tokens` | Colors, type, spacing, app metadata, icons — shared across desktop and mobile. |
-| `packages/openclaw-plugin` | Mounts the `/centraid` prefix on an OpenClaw gateway. |
 | `packages/tsconfig` | Shared `base` / `electron` / `expo` tsconfigs. |
 
 ## Build / check

@@ -2,7 +2,7 @@
  * HTTP route dispatcher for the conversation-history store.
  *
  * Mounted under `/_centraid-conversations` by both gateway hosts:
- *   - the OpenClaw plugin (remote gateway) via `api.registerHttpRoute`
+ *   - the standalone daemon's `composedHandler`
  *   - `startRuntimeHttpServer` for the desktop's embedded local runtime
  *
  * The store itself lives in `history.ts`. This module is split

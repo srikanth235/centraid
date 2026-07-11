@@ -12,7 +12,7 @@
  * A consent denial is a first-class outcome, not an error: the UI renders
  * it as the "ask the owner for access" state.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const FOLDER_SCHEME_URI = 'https://centraid.dev/schemes/folders';

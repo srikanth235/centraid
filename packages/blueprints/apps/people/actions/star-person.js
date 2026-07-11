@@ -1,7 +1,7 @@
 /**
  * Favorite a person — the one canonical flags-scheme star, shared across your vault. Runs through people.star_person — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

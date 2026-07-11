@@ -24,8 +24,6 @@ export {
   type BuiltGateway,
   type RouteHandler,
   type FireAutomation,
-  type FireAutomationDeps,
-  type FireAutomationFactory,
 } from './serve/build-gateway.js';
 export { serve, type ServeOptions, type GatewayServeHandle } from './serve/serve.js';
 // Component-level health (self-hosting observability): hosts push their
@@ -60,13 +58,10 @@ export {
   type VaultInfo,
 } from './serve/vault-registry.js';
 export { makeVaultRouteHandler } from './routes/vault-routes.js';
-// The vault-register tool runners + the embedded-turn grounding block —
-// reused by the in-process OpenClaw plugin to give its embedded chat turns
-// the same `vault_sql` / `vault_invoke` / `vault_content` capability the
-// codex/claude runners get, executed through the same consent/receipt
-// pipeline (issue #319).
+// The vault-register tool runners, giving chat turns `vault_sql` /
+// `vault_invoke` / `vault_content` capability through the same
+// consent/receipt pipeline the codex/claude runners use (issue #319).
 export { makeVaultToolRunners, assistantCwd } from './runs/assistant-conversation-runner.js';
-export { buildVaultToolsGrounding } from './runs/assistant-prompt.js';
 export {
   runWithVaultContext,
   vaultContext,

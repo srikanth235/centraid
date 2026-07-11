@@ -4,7 +4,7 @@
  * deduped) content item rather than mutating canonical bytes. Pinning is a
  * field here, not a separate command: it's a flag with no lifecycle.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

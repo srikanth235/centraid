@@ -9,7 +9,7 @@
  * from the `people` window; this query is the same judgment server-side —
  * used for the Activity feed and as a stable summary surface.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 const CIRCLE_SCHEME_URI = 'https://centraid.dev/schemes/circles';

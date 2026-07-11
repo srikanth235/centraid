@@ -5,7 +5,7 @@
  * Owner entries carry their chosen mood; auto entries carry the person they
  * were with so the view can render their monogram.
  *
- * @type {import('@centraid/openclaw-plugin').QueryHandler}
+ * @type {import('@centraid/app-engine').QueryHandler}
  */
 
 export default async ({ ctx }) => {

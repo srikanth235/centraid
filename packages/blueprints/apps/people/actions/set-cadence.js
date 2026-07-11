@@ -1,7 +1,7 @@
 /**
  * Set how often you want to reach out to a person. Runs through people.set_cadence — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

@@ -125,7 +125,7 @@ const DEFAULT_HANDLER = `/**
  * \`ctx\` surface: ctx.tool · ctx.agent · ctx.state.get/set/del · ctx.runs.last/list
  * · ctx.input. Return \`{ summary?, output? }\` — \`summary\` shows in the run list.
  *
- * @type {import('@centraid/openclaw-plugin').AutomationHandler}
+ * @type {import('@centraid/automation').AutomationHandler}
  */
 export default async ({ ctx, log }) => {
   log.info('automation fired');

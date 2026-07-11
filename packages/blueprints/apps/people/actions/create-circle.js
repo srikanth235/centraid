@@ -1,7 +1,7 @@
 /**
  * Create a circle (a SKOS concept in your circles scheme), like a Docs folder. Runs through people.create_circle — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

@@ -1,7 +1,7 @@
 /**
  * Revise a person's name, role line, avatar hue or how-you-met note. Runs through people.edit_person — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

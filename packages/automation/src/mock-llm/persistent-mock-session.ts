@@ -11,14 +11,13 @@
  *
  * The ONE thing that varies per host is how the agent is pointed at the mock —
  * a `driveAgent` callback that runs the host's agent against the mock's base
- * URL + bearer (an in-process Claude SDK turn or a `codex exec` subprocess for
- * the local runner, an embedded `runEmbeddedAgent` run for OpenClaw).
+ * URL + bearer (an in-process Claude SDK turn or a `codex exec` subprocess).
  * Everything else — the mock
  * server, the single dispatch id, batch staging/correlation, per-call timing,
- * and teardown — is shared here so codex, claude, and OpenClaw run the exact
+ * and teardown — is shared here so codex and claude run the exact
  * same runtime (the issue's central goal). Lives in app-engine-adjacent
- * `@centraid/automation` so both the CLI host (agent-runtime) and the in-process
- * host (openclaw-plugin) can import it without either depending on the other.
+ * `@centraid/automation` so the CLI host (agent-runtime) can import it
+ * without depending on any agent backend.
  */
 
 import { randomUUID } from 'node:crypto';

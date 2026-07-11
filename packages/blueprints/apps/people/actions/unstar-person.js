@@ -1,7 +1,7 @@
 /**
  * Remove a person's favorite star. Runs through people.unstar_person — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

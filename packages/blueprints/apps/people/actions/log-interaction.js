@@ -1,7 +1,7 @@
 /**
  * Log a touch (message, call, met up, note); stamps last-contacted so they drop off Reconnect. Runs through people.log_interaction — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

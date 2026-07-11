@@ -4,7 +4,7 @@
  * any field that does not belong to the chosen type, so nothing is smuggled
  * in. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 
 const FIELDS = [

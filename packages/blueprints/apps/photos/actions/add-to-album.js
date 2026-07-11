@@ -3,7 +3,7 @@
  * the end of the album's running order. Already a member is a 'failed'
  * outcome (a precondition, not an error), which the UI narrates. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

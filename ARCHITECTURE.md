@@ -2,13 +2,12 @@
 
 ## Overview
 
-Centraid is personal software over a sovereign vault. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the vault plane, the app engine, the agent runtime, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. That gateway runs three ways from the same code:
+Centraid is personal software over a sovereign vault. Its backend is a single host-agnostic **gateway** (`@centraid/gateway`) that wires together the vault plane, the app engine, the agent runtime, and the chat/automation runners against injected paths and secrets. It never reaches for Electron APIs or env conventions itself — the host supplies absolute paths. That gateway runs two ways from the same code:
 
 - **Embedded** in the Electron desktop's main process (`apps/desktop`). The renderer is a **thin client** that talks to the embedded gateway over HTTP with a Bearer token; Electron IPC is reserved for genuinely native operations (token storage, keychain, reveal-in-Finder, gateway lifecycle).
 - **Standalone** as the `centraid-gateway` daemon (a bin shipped by `@centraid/gateway`), serving the same HTTP surface under a config-file `dataDir`.
-- **As an OpenClaw plugin** (`@centraid/openclaw-plugin`) that mounts a single `/centraid` prefix on an OpenClaw host and owns auth itself.
 
-`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket (the OpenClaw plugin mounts that composed handler directly). The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design-tokens` and `@centraid/tsconfig` are the cross-surface shared packages.
+`serve()` boots a gateway and fronts it with a loopback HTTP listener plus Bearer auth; `buildGateway()` constructs the same host-agnostic graph without a socket. The mobile app (`apps/mobile`, Expo) embeds no gateway — it connects to one over HTTP. `@centraid/design-tokens` and `@centraid/tsconfig` are the cross-surface shared packages.
 
 The monorepo is orchestrated by [Turborepo](https://turbo.build) and run on [Bun](https://bun.sh) (`packageManager` pinned at the root). Linting and formatting use [oxlint](https://oxc.rs/docs/guide/usage/linter) and [oxfmt](https://github.com/oxc-project/oxfmt); type checking is TypeScript per workspace; tests run on [vitest](https://vitest.dev) with v8 coverage.
 
@@ -45,7 +44,6 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 │   ├── skills/                    # @centraid/skills — SKILL.md grounding + dynamic renderers
 │   ├── tunnel/                    # @centraid/tunnel — iroh QUIC device tunnel + pairing wire protocol
 │   ├── design-tokens/             # @centraid/design-tokens — colors, type, spacing, icons
-│   ├── openclaw-plugin/           # @centraid/openclaw-plugin — /centraid prefix on an OpenClaw host
 │   └── tsconfig/                  # @centraid/tsconfig — base.json, electron.json, expo.json
 ├── turbo.json                     # task graph (build / dev / typecheck / lint / test)
 └── package.json                   # workspaces, top-level scripts, devDependencies
@@ -53,7 +51,7 @@ An app declares **queries** (bounded reads) and **actions** (typed writes) in it
 
 ### Dependency shape
 
-`@centraid/app-engine` is the foundation (depends only on `ajv`), and `@centraid/vault` stands beside it with no workspace dependencies — the gateway is where the two meet (handlers reach the vault through an injected `ctx.vault` bridge, never a package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + blueprints + skills + vault. `@centraid/openclaw-plugin` depends on the gateway; the desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
+`@centraid/app-engine` is the foundation (depends only on `ajv`), and `@centraid/vault` stands beside it with no workspace dependencies — the gateway is where the two meet (handlers reach the vault through an injected `ctx.vault` bridge, never a package import). `@centraid/automation` builds on app-engine + blueprints; `@centraid/agent-runtime` on app-engine + automation; `@centraid/gateway` on app-engine + agent-runtime + automation + blueprints + skills + vault. The desktop app depends on gateway + agent-runtime + app-engine + automation + design-tokens + tunnel. Both apps share `@centraid/design-tokens` (mobile resolves it from `src` for React Native).
 
 ## On-disk layout
 

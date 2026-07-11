@@ -29,8 +29,8 @@ import type { CentraidAgentsStatus, CentraidRunnerStatus } from './centraid-api.
 
 /**
  * Runner preflight + model catalog from the ACTIVE gateway. Reads the
- * gateway's own `GET /centraid/_turn/runner-status` — so a remote OpenClaw
- * gateway reports `{ kind: 'openclaw', models: [...] }` and the chat picker
+ * gateway's own `GET /centraid/_turn/runner-status` — so a remote gateway
+ * reports its own configured runner and models, and the chat picker
  * can list them.
  */
 export async function getRunnerStatus(
@@ -50,8 +50,8 @@ export async function getRunnerStatus(
 /**
  * Which coding-agent credentials are present on the ACTIVE gateway's host.
  * Reads the gateway's `GET /centraid/_agents/status` — detection lives
- * beside the runner, so a remote OpenClaw gateway reports its own host's
- * agents rather than whatever is installed on the desktop.
+ * beside the runner, so a remote gateway reports its own host's agents
+ * rather than whatever is installed on the desktop.
  */
 export async function getAgentsStatus(
   opts: { refresh?: boolean; refreshTools?: boolean } = {},

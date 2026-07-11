@@ -1,7 +1,7 @@
 /**
  * Toggle a person task between open and done. Runs through people.toggle_task — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

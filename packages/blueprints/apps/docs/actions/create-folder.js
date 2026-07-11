@@ -3,7 +3,7 @@
  * owner's folders scheme, nested under parent_folder_id (omit for the
  * drive's top level). The vault refuses duplicate sibling names. Risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

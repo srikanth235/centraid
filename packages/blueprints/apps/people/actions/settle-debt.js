@@ -1,7 +1,7 @@
 /**
  * Settle a debt (marks it closed, kept as history). Runs through people.settle_debt — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

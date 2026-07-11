@@ -2,7 +2,7 @@
  * tally.delete_group — see app.json for the contract. Consent denials and precondition
  * refusals come back as first-class outcomes the app narrates.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 const KEYS = ['group_id'];
 export default async ({ body, ctx }) => {

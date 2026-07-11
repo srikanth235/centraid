@@ -5,7 +5,7 @@
  * here as a first-class outcome for the UI to narrate — an ask in flight,
  * not an error.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   const input = body ?? {};

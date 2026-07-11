@@ -1,7 +1,7 @@
 /**
  * Add an owner-level journal entry with a mood and a line about your day. Runs through people.add_journal_entry — consent-checked and receipted, risk low.
  *
- * @type {import('@centraid/openclaw-plugin').ActionHandler}
+ * @type {import('@centraid/app-engine').ActionHandler}
  */
 export default async ({ body, ctx }) => {
   try {

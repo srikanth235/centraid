@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { lintHandlerSource, formatHandlerLintError } from './lint.js';
 
 const CLEAN_HANDLER = `
-/** @type {import('@centraid/openclaw-plugin').AutomationHandler} */
+/** @type {import('@centraid/automation').AutomationHandler} */
 export default async ({ ctx, log }) => {
   const since = await ctx.runs.last({ status: 'ok' });
   const prs = await ctx.tool('github.list_pull_requests', { repo: 'foo/bar' });
