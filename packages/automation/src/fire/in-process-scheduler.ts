@@ -47,6 +47,14 @@ export interface InProcessSchedulerOptions {
   now?: () => Date;
   /** Sink for fire rejections and diagnostics. */
   onError?: (err: unknown, ref: string) => void;
+  /**
+   * Fired once per processed minute, BEFORE any fire (issue #351): the host's
+   * hook for per-tick bookkeeping that has nothing to do with any one
+   * automation — the missed-run ledger (`scheduler-ledger.ts`) and liveness
+   * probing both hang off this rather than widening `Host`/`LocalScheduler`,
+   * so an injected test double (`stubScheduler` et al.) never needs it.
+   */
+  onTick?: (at: Date) => void;
 }
 
 interface SchedulerEntry {
@@ -70,6 +78,7 @@ export class InProcessScheduler implements LocalScheduler {
   private readonly evaluate?: (ref: string, triggerIndex: number) => void | Promise<void>;
   private readonly now: () => Date;
   private readonly onError?: (err: unknown, ref: string) => void;
+  private readonly onTick?: (at: Date) => void;
   private boundary?: ReturnType<typeof setTimeout>;
   private interval?: ReturnType<typeof setInterval>;
   private lastFiredMinute?: string;
@@ -79,6 +88,7 @@ export class InProcessScheduler implements LocalScheduler {
     this.evaluate = opts.evaluate;
     this.now = opts.now ?? (() => new Date());
     this.onError = opts.onError;
+    this.onTick = opts.onTick;
   }
 
   async register(row: Row): Promise<void> {
@@ -137,6 +147,11 @@ export class InProcessScheduler implements LocalScheduler {
     const minute = minuteKey(at);
     if (minute === this.lastFiredMinute) return;
     this.lastFiredMinute = minute;
+    try {
+      this.onTick?.(at);
+    } catch (err) {
+      this.onError?.(err, '<scheduler-tick>');
+    }
     for (const entry of this.entries.values()) {
       if (entry.crons.some((expr) => cronMatches(expr, at))) {
         this.fireSafely(entry.ref);

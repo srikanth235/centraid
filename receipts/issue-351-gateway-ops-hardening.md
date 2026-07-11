@@ -24,10 +24,10 @@
 - [ ] desktop single-instance lock
 - [ ] version-skew handshake wired for remote gateways
 - [ ] launch-at-login setting
-- [ ] missed-automation-run ledger (recorded, never retro-executed)
-- [ ] `broker` health probe (needs-auth + overdue token refresh)
-- [ ] `scheduler` health probe (per-vault tick staleness + missed windows)
-- [ ] numeric metrics on the health snapshot
+- [x] missed-automation-run ledger (recorded, never retro-executed)
+- [x] `broker` health probe (needs-auth + overdue token refresh)
+- [x] `scheduler` health probe (per-vault tick staleness + missed windows)
+- [x] numeric metrics on the health snapshot
 - [x] OAuth token-refresh timeout
 - [x] outbox external-write timeout
 - [x] SSE subscriber cap

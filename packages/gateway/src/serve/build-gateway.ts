@@ -36,11 +36,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
   AnalyticsStore,
   ConversationHistoryStore,
+  ConversationStore,
   InsightsStore,
   PrefsStore,
   Runtime,
   cleanupDeregisteredApp,
   makeConversationRouteHandler,
+  makeJournalDbProvider,
   makeUserStoreRouteHandler,
   type ConversationRunner,
   type RunnerStatus,
@@ -69,6 +71,9 @@ import {
 import { WorktreeStore } from '../worktree-store/index.js';
 import { openVaultRegistry, type VaultRegistry } from './vault-registry.js';
 import { createDiskHealthProbe } from './disk-health.js';
+import { createBrokerHealthProbe } from './broker-health.js';
+import { createSchedulerHealthProbe } from './scheduler-health.js';
+import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
 import type { InstallScopeBlock, VaultPlane } from './vault-plane.js';
@@ -80,7 +85,10 @@ import { makeImportRouteHandler } from '../routes/import-routes.js';
 import { makeBlobRouteHandler } from '../routes/blob-routes.js';
 import { makeAppsStoreRouteHandler } from '../routes/apps-store-routes.js';
 import { makeDraftCodeDirResolver, type ExtBandOps } from '../lifecycle/ext-band.js';
-import { makeAutomationsRouteHandler } from '../routes/automations-routes.js';
+import {
+  makeAutomationsRouteHandler,
+  runEventsSubscriberCount,
+} from '../routes/automations-routes.js';
 import { RunEventBus } from '../runs/run-event-bus.js';
 import { defaultLogger } from './default-logger.js';
 import { GatewayLogStore } from './gateway-log-store.js';
@@ -101,7 +109,7 @@ import { makeGatewayInfoRouteHandler } from '../routes/gateway-info-routes.js';
 import { makeHealthRouteHandler } from '../routes/health-routes.js';
 import { makeRemindersRouteHandler } from '../routes/reminders-routes.js';
 import { HealthRegistry } from './health-registry.js';
-import { makeLogsRouteHandler } from '../routes/logs-routes.js';
+import { logsEventsSubscriberCount, makeLogsRouteHandler } from '../routes/logs-routes.js';
 import { sendJson } from '../routes/route-helpers.js';
 import type { GatewayPaths } from '../paths.js';
 import { BackupService } from '../backup/backup-service.js';
@@ -376,6 +384,24 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     }),
   );
 
+  // Second-gateway detection (issue #351 tier 1): "one gateway per user" is
+  // an owner-stated topology, never enforced — nothing stops a copied vault
+  // dir or a daemon + desktop embed both pointed at the same root from
+  // corrupting data via cross-copy WAL semantics. A lease file at the vault
+  // registry root (`gateway.lease`, sibling of the per-vault subdirectories
+  // — `VaultRegistry.scan()` already skips non-directory entries there, so
+  // this is invisible to vault mounting) records who's serving; a FRESH
+  // foreign lease is never clobber-written (split-brain must be loud, never
+  // auto-resolved — mirrors the backup protocol's generation fencing), a
+  // STALE one (crashed owner) is reclaimed cleanly. `start()`/`stop()` below
+  // drive its renew timer; `instanceId` also rides `_gateway/info` so a
+  // client can detect a gateway swap-under-it.
+  const instanceLease = new GatewayInstanceLease({
+    rootDir: paths.vaultDir,
+    health,
+    logger: health.loggerFor('instance', logger),
+  });
+
   // Connection health lives in each vault's DB (`needs-auth` flips there,
   // not in broker memory) — surface "N connections need re-auth" so a dead
   // OAuth token shows up here instead of as silent connector failures.
@@ -398,6 +424,80 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       };
     }
     return { status: 'ok', detail: `${total} connection${total === 1 ? '' : 's'} configured` };
+  });
+
+  // Broker credential health (issue #351 tier 2): narrower than `connections`
+  // above — specifically the ConnectionBroker's own custody of
+  // broker-carried (oauth2/api_key) credentials, naming which ones are dead
+  // or sitting on an overdue token nobody has refreshed yet. See
+  // `broker-health.ts` for why this is a separate signal from `connections`.
+  health.registerProbe(
+    'broker',
+    createBrokerHealthProbe({
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({ vaultId: p.boot.vaultId, db: p.db.vault })),
+    }),
+  );
+
+  // Scheduler ledger (issue #351 tier 2): one shared `ConversationStore` per
+  // mounted vault, bound to that vault's `journal.db` via the SAME
+  // `makeJournalDbProvider` path `fire.ts` and the analytics stores use —
+  // guarantees the conversation-ledger band (`automation_state` included)
+  // exists before this reads/writes it, regardless of tick timing. Memoized
+  // so a health poll or a scheduler tick never reopens the file. Written
+  // from each vault's scheduler `onTick` hook below; read by the
+  // `scheduler` liveness probe and by `automations`'s reconcile push.
+  const schedulerLedgers = new Map<string, automation.SchedulerLedgerStore>();
+  const schedulerLedgerFor = (vaultId: string): automation.SchedulerLedgerStore => {
+    const existing = schedulerLedgers.get(vaultId);
+    if (existing) return existing;
+    const plane = vaultRegistry.get(vaultId);
+    if (!plane) throw new Error(`gateway: unknown vault "${vaultId}"`);
+    const ledger = new automation.SchedulerLedgerStore(
+      new ConversationStore(makeJournalDbProvider(plane.workspace.journalDbFile)),
+    );
+    schedulerLedgers.set(vaultId, ledger);
+    return ledger;
+  };
+
+  // Per-vault scheduler liveness + missed-run visibility (issue #351 tiers
+  // 2/3) — see scheduler-health.ts. Reads the SAME ledger `onTick` writes.
+  health.registerProbe(
+    'scheduler',
+    createSchedulerHealthProbe({
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({
+          vaultId: p.boot.vaultId,
+          snapshot: () => schedulerLedgerFor(p.boot.vaultId).load(),
+        })),
+    }),
+  );
+
+  // Numeric signals (issue #351 tier 3): outbox backlog, summed across
+  // mounted vaults — cheap COUNT(*) at snapshot time, same style as the
+  // `connections` probe above. `rssBytes`/`uptimeMs` need no wiring (see
+  // `HealthRegistry.snapshot`). `sseClients` sums the two production SSE
+  // surfaces' live subscriber counts — `logsEventsSubscriberCount` /
+  // `runEventsSubscriberCount` (issue #351's SSE subscriber-cap change,
+  // `sse-cap.ts`) — each backed by the SAME `SseSubscriberCap` instance
+  // `makeLogsRouteHandler`/`makeAutomationsRouteHandler` admit through below,
+  // so this is the real live count, not a separate tally.
+  health.setMetricsSource(() => {
+    let outboxPending = 0;
+    for (const plane of vaultRegistry.planesList()) {
+      try {
+        const row = plane.db.vault
+          .prepare(`SELECT COUNT(*) AS n FROM outbox_item WHERE status = 'approved'`)
+          .get() as { n: number } | undefined;
+        outboxPending += row?.n ?? 0;
+      } catch {
+        /* a vault whose outbox table isn't there yet contributes 0 */
+      }
+    }
+    return {
+      outboxPending,
+      sseClients: logsEventsSubscriberCount() + runEventsSubscriberCount(),
+    };
   });
 
   // Offsite backup engine (PROTOCOL.md/FORMAT.md) — constructed only when
@@ -848,6 +948,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
               health.reportError('automation-runs', message);
               logger.warn(message);
             },
+            // Missed-run ledger (issue #351 tier 2): every processed minute,
+            // before any fire, compare the persisted `lastTickAt` against
+            // `at` — a gap wide enough to be a real outage gets ONE recorded
+            // entry per enabled cron automation (earliest missed fire),
+            // never a retro-execution (see scheduler-ledger.ts). Runs inside
+            // this vault's scope so `automation.list` resolves its `main`.
+            onTick: (at) => {
+              void runWithVaultContext({ vaultId }, async () => {
+                const { rows } = await automation.list(settledHostFor(vaultId).codeAppsDir());
+                const missed = automation.recordSchedulerTick({
+                  ledger: schedulerLedgerFor(vaultId),
+                  now: at,
+                  automations: rows,
+                });
+                if (missed.length > 0) {
+                  const latest = missed[missed.length - 1]!;
+                  health.reportDegraded(
+                    'automation-runs',
+                    `${missed.length} automation${missed.length === 1 ? '' : 's'} missed a ` +
+                      `scheduled fire during downtime (vault ${vaultId}) — latest ` +
+                      `${latest.automationRef} scheduled for ${latest.scheduledFor}`,
+                  );
+                  logger.warn(
+                    `scheduler (vault ${vaultId}): recorded ${missed.length} missed window(s) ` +
+                      'after a gap — recorded, not retro-executed',
+                  );
+                }
+              }).catch((err) => {
+                logger.warn(
+                  `scheduler ledger tick (vault ${vaultId}) failed: ` +
+                    (err instanceof Error ? err.message : String(err)),
+                );
+              });
+            },
           });
     schedulers.set(vaultId, created);
     if (schedulersStarted) created.start();
@@ -1049,9 +1183,18 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // Grant-matched outbox items the fire just staged drain now (issue
       // #306 phase 3), same as the default local fire path.
       drainOutbox(plane);
+      // Health parity with `fireAutomation` (issue #351 tier 2): a
+      // webhook-triggered fire used to bypass `automation-runs` entirely —
+      // a connector wired to a broken webhook could fail silently forever.
+      // This mirrors `fireAutomation`'s semantics exactly: `reportOk` means
+      // the FIRE PIPELINE ran (not that the automation's own outcome was
+      // ok — a failing handler still reports pipeline-ok here); only an
+      // exception firing the run at all (caught below) flips it to error.
+      health.reportOk('automation-runs');
       return { ok: outcome.ok, runId, ...(outcome.error ? { error: outcome.error } : {}) };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      health.reportError('automation-runs', `webhook ${automationRef}: ${message}`);
       runEventBus.publish(runId, { type: 'run.end', ok: false, error: message });
       return { ok: false, runId, error: message };
     }
@@ -1220,7 +1363,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
   const extraHandlers: RouteHandler[] = [
     // Gateway identity + version handshake (issue #289): cheap static
     // JSON, mounted first — health polling hits it every few seconds.
-    makeGatewayInfoRouteHandler(),
+    makeGatewayInfoRouteHandler({ instanceId: instanceLease.instanceId }),
     // Component-level health + structured error tail. `_gateway/info`
     // is the liveness probe; this is the "what's actually wrong" surface.
     makeHealthRouteHandler(health),
@@ -1379,6 +1522,11 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // webhook minting can build absolute `_centraid-hook` URLs.
     serverUrl = publicBaseUrl;
 
+    // Claim/renew the instance lease first — a fresh foreign lease should
+    // flip `instance` health red as early in boot as possible, well before
+    // any vault mounts (issue #351).
+    instanceLease.start();
+
     // Start the per-vault in-process cron schedulers as they mount. Under
     // n8n semantics they only fire while running — downtime is not
     // backfilled (issue #149).
@@ -1445,6 +1593,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     await Promise.all([...schedulers.values()].map((sched) => sched.stop()));
     if (outboxTimer) clearInterval(outboxTimer);
     backupService?.stop();
+    // Release the lease so a fresh start (or another instance) sees an
+    // absent file instead of waiting out LEASE_FRESH_WINDOW_MS.
+    instanceLease.stop();
     // Sweep clock down, WAL checkpoint, files closed. Idempotent.
     vaultRegistry.stop();
   };

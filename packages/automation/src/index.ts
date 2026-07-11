@@ -90,6 +90,25 @@ export {
   type LocalScheduler,
 } from './fire/in-process-scheduler.js';
 
+// Missed-automation-run ledger (issue #351 tier 2): the honest record a
+// downtime leaves behind now that the scheduler's "no backfill" silence is
+// legible instead of invisible. `InProcessScheduler`'s `onTick` hook is the
+// host's seam into this; the gateway wires `recordSchedulerTick` there and
+// exposes `SchedulerLedgerStore`/`parseSchedulerLedgerSnapshot` to its
+// health probes (scheduler liveness, missed-window counts).
+export {
+  SCHEDULER_LEDGER_AUTOMATION_ID,
+  SCHEDULER_LEDGER_KEY,
+  SchedulerLedgerStore,
+  parseSchedulerLedgerSnapshot,
+  computeMissedWindows,
+  recordSchedulerTick,
+  type MissedWindowEntry,
+  type SchedulerLedgerSnapshot,
+  type ComputeMissedWindowsOptions,
+  type RecordSchedulerTickOptions,
+} from './fire/scheduler-ledger.js';
+
 // Webhook trigger dispatch (issue #96). A `webhook` trigger fires an
 // automation on an inbound HTTP POST; the gateway mounts the route
 // built by `makeWebhookRouteHandler`. Secret helpers are shared by the
