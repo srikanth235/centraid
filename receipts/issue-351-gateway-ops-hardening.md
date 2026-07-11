@@ -32,6 +32,13 @@
 - [x] outbox external-write timeout
 - [x] SSE subscriber cap
 - [x] worker admission control
+- [x] CLI daemon service unit (`centraid-gateway service` install/uninstall/status, launchd + systemd)
+- [ ] scoped ENOSPC fail-closed handling (typed disk-full errors, partial-file cleanup, log-writer fail-open)
+- [ ] disk health surfaces last ENOSPC event
+- [ ] `enrichment` health probe
+- [ ] `blob-sweep` health probe
+- [ ] desktop outage-history persistence (survives restart)
+- [ ] recovery-kit confirmation gate (persisted flag + backup card gate)
 - [ ] ontology-version open-time guard (no single DB-level marker exists — `ontology_version` is stamped per-row, so an open-time compare is a product/data question, not a mechanical check)
 - [x] app-engine `_changes` per-app SSE cap (third SSE surface)
 - [ ] hard refusal on version skew (surfaced loudly for now; refusal is the documented escalation path)
@@ -164,6 +171,59 @@
   counts, so `/health`'s number is now the real total across all three
   surfaces this process serves.
 
+- **packages/gateway (CLI, wave 4)** — CLI daemon service unit (`centraid-gateway service` install/uninstall/status, launchd + systemd):
+  pure unit-content generators in `service-unit.ts` (launchd plist with
+  crash-only KeepAlive; systemd user unit with Restart=on-failure), a
+  `service` subcommand (`service-admin.ts`) that installs/uninstalls/queries
+  a LaunchAgent (`launchctl bootstrap/bootout/print gui/$UID`) on macOS or a
+  systemd user unit (`systemctl --user`) on Linux, `--dry-run` prints
+  everything and writes nothing, service stdout/stderr land in the daemon
+  layout's logs dir. A real launchd e2e (gated `CENTRAID_LAUNCHD_E2E=1`,
+  test-only label, /bin/sleep payload, bootout in finally) was run and
+  passed. The package's `bin` field pointed at `./dist/cli.js` while tsc
+  emits `dist/cli/cli.js` — fixed alongside since a broken bin entry
+  defeats the service unit's premise.
+- **packages/vault + gateway (wave 4)** — scoped ENOSPC fail-closed handling (typed disk-full errors, partial-file cleanup, log-writer fail-open):
+  `errors.ts` adds `isDiskFullError` (ENOSPC + SQLITE_FULL, errcode 13),
+  `VaultDiskFullError`, and a process-wide `sharedDiskFullTracker` that
+  every classified write path reports into (SQLite open/pragma in `db.ts`,
+  blob CAS `putSync` in `blob/local.ts`, `writeBlobFile` in
+  `blob/custody.ts` — both blob paths delete their partial `.tmp` file
+  before rethrowing). `GatewayLogStore.persist()` backs off disk appends
+  for 30s after ENOSPC (in-memory ring stays alive, drops counted) instead
+  of throwing per line. disk health surfaces last ENOSPC event: the `disk`
+  probe reads the shared tracker and forces `error` with an
+  "ENOSPC observed at <time> in <context>" detail for at least one tick.
+  A real disk-full e2e (gated `CENTRAID_DISKFULL_E2E=1`, 5MiB hdiutil
+  image, genuine kernel ENOSPC, detach in finally) was run twice and passed.
+- **packages/gateway (probes, wave 4)** — `enrichment` health probe:
+  per-vault install/enabled counts of the bundled enricher automations plus
+  run outcomes from the existing automation-turn ledger
+  (`listAutomationTurns`) — ok when idle or never-run (honest unknown),
+  degraded on a recent failure or >48h staleness, error on a 3-failure
+  streak. `blob-sweep` health probe: per-vault S3-configured check,
+  local-only vs replicated counts from the custody table
+  (`custodyStateCounts`), and sweep liveness via new
+  `BlobCustody.sweepStatus()` (lastCompletedAt/lastError/consecutiveFailures
+  recorded around `reconcile()`); the sweep was already scheduled per plane
+  (`VaultPlane.runSweep`) — it just had no readable outcome until now. Both
+  registered in `build-gateway.ts` after `scheduler`.
+- **apps/desktop + gateway backup (wave 4)** — desktop outage-history persistence (survives restart):
+  `gateway-outage-log-core.ts` derives `down`/`degraded`/`component-error`/
+  `version-skew`/`recovered` events from monitor tick transitions (recovered
+  carries downtime length), persisted as capped NDJSON (500 entries,
+  temp+rename) under `<userData>/gateway-outage-log.jsonl`, loaded on boot,
+  shown in the Gateway page Alerts tab (`AlertHistoryPanel`, extracted to
+  its own component to respect the 500-line cap) with an "earlier session"
+  badge — verified in real Electron including an app relaunch over the same
+  userData dir. recovery-kit confirmation gate (persisted flag + backup card gate):
+  `GET /centraid/_gateway/backup` now returns `recoveryKit.confirmedAt`
+  (epoch seconds, persisted in the backup state file), new
+  `POST /centraid/_gateway/backup/kit-confirmed` stamps it, and the Backup
+  card gates on it — prominent "Export recovery kit" + explicit
+  "I've saved my recovery kit" confirm when null, quiet dated state once
+  set. The flag is deliberately generic: #367's S3-enable flow reuses it.
+
 ### Files
 
 - `apps/desktop/src/main.ts`
@@ -176,6 +236,9 @@
 - `apps/desktop/src/main/gateway-ops-core.test.ts`
 - `apps/desktop/src/main/gateway-ops-core.ts`
 - `apps/desktop/src/main/gateway-ops.ts`
+- `apps/desktop/src/main/gateway-outage-log-core.test.ts`
+- `apps/desktop/src/main/gateway-outage-log-core.ts`
+- `apps/desktop/src/main/gateway-outage-log.ts`
 - `apps/desktop/src/main/gateway-supervisor-core.test.ts`
 - `apps/desktop/src/main/gateway-supervisor-core.ts`
 - `apps/desktop/src/main/ipc.ts`
@@ -188,6 +251,8 @@
 - `apps/desktop/src/renderer/centraid-api.d.ts`
 - `apps/desktop/src/renderer/gateway-client-backup.ts`
 - `apps/desktop/src/renderer/gateway-client.ts`
+- `apps/desktop/src/renderer/react/screens/AlertHistoryPanel.test.tsx`
+- `apps/desktop/src/renderer/react/screens/AlertHistoryPanel.tsx`
 - `apps/desktop/src/renderer/react/screens/BackupCard.module.css`
 - `apps/desktop/src/renderer/react/screens/BackupCard.test.tsx`
 - `apps/desktop/src/renderer/react/screens/BackupCard.tsx`
@@ -200,6 +265,9 @@
 - `apps/desktop/src/renderer/react/screens/SettingsDiagnosticsScreen.test.tsx`
 - `apps/desktop/src/renderer/react/screens/SettingsDiagnosticsScreen.tsx`
 - `apps/desktop/src/renderer/react/shell/routes/GatewayRoute.tsx`
+- `apps/desktop/src/renderer/react/shell/routes/gatewayData.test.ts`
+- `apps/desktop/src/renderer/react/shell/routes/gatewayData.ts`
+- `apps/desktop/tests/e2e-live/flows-gateway-01-runtime-page.mjs`
 - `packages/app-engine/src/handlers/dispatcher.ts`
 - `packages/app-engine/src/handlers/handler-runner.test.ts`
 - `packages/app-engine/src/handlers/handler-runner.ts`
@@ -212,8 +280,17 @@
 - `packages/automation/src/fire/scheduler-ledger.test.ts`
 - `packages/automation/src/fire/scheduler-ledger.ts`
 - `packages/automation/src/index.ts`
+- `packages/gateway/package.json`
+- `packages/gateway/src/backup/backup-service.test.ts`
 - `packages/gateway/src/backup/backup-service.ts`
+- `packages/gateway/src/backup/backup-state.ts`
+- `packages/gateway/src/cli/cli.ts`
 - `packages/gateway/src/cli/paths.ts`
+- `packages/gateway/src/cli/service-admin.test.ts`
+- `packages/gateway/src/cli/service-admin.ts`
+- `packages/gateway/src/cli/service-install.e2e.test.ts`
+- `packages/gateway/src/cli/service-unit.test.ts`
+- `packages/gateway/src/cli/service-unit.ts`
 - `packages/gateway/src/paths.ts`
 - `packages/gateway/src/routes/automations-routes.test.ts`
 - `packages/gateway/src/routes/automations-routes.ts`
@@ -224,6 +301,8 @@
 - `packages/gateway/src/routes/logs-routes.test.ts`
 - `packages/gateway/src/routes/logs-routes.ts`
 - `packages/gateway/src/routes/sse-cap.ts`
+- `packages/gateway/src/serve/blob-sweep-health.test.ts`
+- `packages/gateway/src/serve/blob-sweep-health.ts`
 - `packages/gateway/src/serve/broker-health.test.ts`
 - `packages/gateway/src/serve/broker-health.ts`
 - `packages/gateway/src/serve/build-gateway.test.ts`
@@ -232,6 +311,8 @@
 - `packages/gateway/src/serve/connection-broker.ts`
 - `packages/gateway/src/serve/disk-health.test.ts`
 - `packages/gateway/src/serve/disk-health.ts`
+- `packages/gateway/src/serve/enrichment-health.test.ts`
+- `packages/gateway/src/serve/enrichment-health.ts`
 - `packages/gateway/src/serve/fetch-timeout.ts`
 - `packages/gateway/src/serve/gateway-diagnostics.test.ts`
 - `packages/gateway/src/serve/gateway-diagnostics.ts`
@@ -248,12 +329,20 @@
 - `packages/gateway/src/serve/serve.test.ts`
 - `packages/gateway/src/serve/vault-registry.test.ts`
 - `packages/gateway/src/serve/vault-registry.ts`
+- `packages/vault/src/blob/blob.test.ts`
+- `packages/vault/src/blob/custody.ts`
+- `packages/vault/src/blob/disk-full.e2e.test.ts`
+- `packages/vault/src/blob/flow.test.ts`
+- `packages/vault/src/blob/local.ts`
 - `packages/vault/src/db.test.ts`
 - `packages/vault/src/db.ts`
+- `packages/vault/src/errors.test.ts`
+- `packages/vault/src/errors.ts`
 - `packages/vault/src/index.ts`
 - `packages/vault/src/schema/migrate.test.ts`
 - `packages/vault/src/schema/migrate.ts`
 - `scripts/docs-site/src/content/backups.html`
+- `scripts/docs-site/src/content/start.html`
 
 ## Decisions
 
@@ -314,6 +403,18 @@
   `ChangesSubscriberCap` counts per appId in a `Map`, deleting an app's
   entry at zero rather than leaving a stale 0 around indefinitely.
 
+- Wave 4: ENOSPC reporting uses a process-wide `sharedDiskFullTracker`
+  singleton (vault exports it, gateway's disk probe and log store default to
+  it) — closes the loop with zero changes to `build-gateway.ts` call sites.
+- Wave 4: the recovery-kit flag lives in the backup state file, so it is
+  unreachable while the desktop's embedded gateway runs without a `backup`
+  config block — wiring a default local provider into the desktop embed is
+  a product decision deferred to #367/C (which needs the flag independent
+  of backup configuration anyway).
+- Wave 4: `service install` resolves node + CLI entry from the module's own
+  location (`import.meta.url`), not the package `bin` symlink, so it works
+  identically under tsx dev and compiled dist.
+
 ## Out of scope (tracked in #351)
 
 - Ontology-version open-time guard — `ontology_version` is stamped per-row
@@ -354,6 +455,20 @@ npx turbo run typecheck test build --filter=@centraid/vault \
   token-endpoint and hung outbox-write timeouts against real
   never-responding servers, SSE cap 503 + count-decrement, and worker
   admission burst/FIFO/queue-timeout tests.
+- Wave 4, same command: vault 493 tests / gateway 432 / desktop 670 all
+  green under the combined tree (service unit 19 unit tests + gated launchd
+  e2e run once for real and torn down cleanly; ENOSPC classifier + tmp-file
+  cleanup + log-store backoff tests, plus the gated hdiutil disk-full e2e
+  run twice for real; enrichment + blob-sweep probe suites 17 tests;
+  outage-log core 19 tests; recovery-kit route/state/UI tests including a
+  real serve() restart-persistence round-trip; `AlertHistoryPanel` split
+  out of `GatewayScreen` keeps both under the 500-line cap, 19 tests green
+  across the two files after the split).
+- Wave 4 e2e-live: `node apps/desktop/tests/e2e-live/flows-gateway-01-runtime-page.mjs`
+  run against real Electron — drives a controlled down→recovered gateway,
+  asserts both entries in the Alert history panel, relaunches the app over
+  the same userData dir, and asserts they persist with the
+  "earlier session" badge.
 - `serve.test.ts` proves the diagnostics endpoint 401s without the bearer
   and that the gateway's own token never appears in the response body.
 - oxlint/oxfmt run scoped to touched files by each workstream; one
@@ -372,6 +487,14 @@ npx turbo run typecheck test build --filter=@centraid/vault \
 | steer-ac2077f8-1-2 | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | interrupt | structural |  | c2a2303 | 285 | 2026-07-11T05:30:46.226Z |
 | steer-ac2077f8-1-3 | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | correction | classifier | PRs merged before E2E verification; state mismatch | c2a2303 | 424 | 2026-07-11T08:42:51.780Z |
 
+### Costs
+
+| cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| claude-code-ac2077f8-e15-1783788594-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 8 | 7315 | 988282 | 9288 | 16611 | 1.5442 | 871528 | 14419886 | 514044791 | 2697144 | feat(gateway): centraid-gateway service — launchd/systemd unit for the headless  |
+| claude-code-ac2077f8-e15-1783788630-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 6 | 2628 | 753261 | 1227 | 3861 | 0.8475 | 871534 | 14422514 | 514798052 | 2698371 | test (#351) |
+| claude-code-ac2077f8-e15-1783788721-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 5267 | 17936 | 1011680 | 14606 | 37809 | 2.0189 | 876801 | 14440450 | 515809732 | 2712977 | feat(gateway): centraid-gateway service — launchd/systemd unit for the headless  |
+| claude-code-ac2077f8-e15-1783788767-1 | claude-code | ac2077f8-e15a-46d5-be12-0c583922f047 | #351 | claude-fable-5 | 8 | 3182 | 1049774 | 1471 | 4661 | 1.1632 | 876809 | 14443632 | 516859506 | 2714448 |  |
 ## Audit
 
 Fresh-context sub-agent (haiku) verdict at ordinal 81:

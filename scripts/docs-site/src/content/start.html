@@ -229,6 +229,41 @@
           Administration is deliberately shell-only — vault create/delete, device enrollment, and
           key custody never ride HTTP. <a href="../devices/#topology">Devices § topology →</a>
         </p>
+        <div class="prose r" style="--d: 0.3s; margin-top: 18px">
+          <p>
+            "Always-on" only holds if something brings the daemon back — after a crash, after a
+            reboot. <code>centraid-gateway service</code> generates and installs a real OS service
+            unit for it: a <b>LaunchAgent</b> on macOS, a <b>systemd --user</b> unit on Linux —
+            both restart on crash and start on login/boot, with stdout/stderr landing in the same
+            <code>gateway-logs/</code> directory the daemon's own persisted log ring writes to.
+          </p>
+        </div>
+        <div class="term r" style="--d: 0.36s; margin-top: 18px; max-width: 760px">
+          <div class="term-bar"><span>on the always-on machine</span></div>
+          <div class="term-body">
+            <div class="ln">
+              <span class="p">$</span>
+              <code>centraid-gateway service install --data-dir ~/centraid-data</code>
+            </div>
+            <div class="cm"># preview first — writes and runs nothing</div>
+            <div class="ln">
+              <span class="p">$</span>
+              <code>centraid-gateway service install --data-dir ~/centraid-data --dry-run</code>
+            </div>
+            <div class="ln">
+              <span class="p">$</span>
+              <code>centraid-gateway service status</code>
+            </div>
+            <div class="ln">
+              <span class="p">$</span>
+              <code>centraid-gateway service uninstall</code>
+            </div>
+          </div>
+        </div>
+        <p class="aside r" style="--d: 0.4s">
+          Unsupported platforms are refused politely rather than half-installed — front the daemon
+          with your own supervisor there instead.
+        </p>
       </section>
 
       <!-- 08 BACKUP -->
