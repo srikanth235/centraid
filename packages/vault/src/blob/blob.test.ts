@@ -221,12 +221,14 @@ test('sweepStatus records the last reconcile outcome (issue #351 wave 4)', async
   const { custody } = makeCustody(null);
   expect(custody.sweepStatus()).toEqual({
     lastCompletedAt: null,
+    lastAttemptedAt: null,
     lastError: null,
     consecutiveFailures: 0,
   });
   await custody.reconcile(new Set());
   const ok = custody.sweepStatus();
   expect(ok.lastCompletedAt).toBeTruthy();
+  expect(ok.lastAttemptedAt).toBeTruthy();
   expect(ok.lastError).toBeNull();
   expect(ok.consecutiveFailures).toBe(0);
 });
@@ -377,6 +379,52 @@ test('s3 driver: put/get/has/list/delete against a fake endpoint, SigV4 signed',
     for (const h of fake.authHeaders) {
       expect(h).toMatch(/^AWS4-HMAC-SHA256 Credential=AK\//);
     }
+  } finally {
+    await fake.close();
+  }
+});
+
+test('s3 driver: throttleBytesPerSec paces sustained PUT throughput (issue #367 §C7)', async () => {
+  const fake = await startFakeS3();
+  try {
+    // A tight budget relative to the payload: each put is ~1/4 of the whole
+    // per-second budget, so 8 sequential puts (2 seconds of bytes) must take
+    // meaningfully longer than an unthrottled run of the same puts.
+    const bytes = Buffer.alloc(4096, 7);
+    const rate = bytes.length * 4; // 4 puts/sec worth of budget
+
+    const throttled = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      prefix: 'throttled',
+      credentials: () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' }),
+      throttleBytesPerSec: rate,
+    });
+    const unthrottled = new S3BlobStore({
+      endpoint: fake.url,
+      bucket: 'test-bucket',
+      prefix: 'unthrottled',
+      credentials: () => Promise.resolve({ accessKeyId: 'AK', secretAccessKey: 'SK' }),
+    });
+
+    const puts = 8;
+    const startUnthrottled = Date.now();
+    for (let i = 0; i < puts; i++) {
+      await unthrottled.put(sha256OfBytes(Buffer.concat([bytes, Buffer.from([i])])), bytes);
+    }
+    const unthrottledMs = Date.now() - startUnthrottled;
+
+    const startThrottled = Date.now();
+    for (let i = 0; i < puts; i++) {
+      await throttled.put(sha256OfBytes(Buffer.concat([bytes, Buffer.from([i, 1])])), bytes);
+    }
+    const throttledMs = Date.now() - startThrottled;
+
+    // 8 puts at 4 puts/sec worth of budget should take roughly ~1.75s of
+    // waiting (the bucket starts full, so the first ~4 are free) — assert
+    // it's clearly slower than the unthrottled run, generously bounded to
+    // avoid flaking on a loaded CI box.
+    expect(throttledMs).toBeGreaterThan(unthrottledMs + 500);
   } finally {
     await fake.close();
   }

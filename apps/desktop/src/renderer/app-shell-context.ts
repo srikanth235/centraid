@@ -45,7 +45,13 @@ export interface AppearancePrefs {
 // dispatcher in app.ts and the per-route refresh in the route modules.
 export type ShellRoute =
   | { kind: 'home' }
-  | { kind: 'settings' }
+  // `page` deep-links into one Settings sub-page (e.g. `'storage'` from the
+  // Gateway page's Storage card — issue #367 §D3); omitted, SettingsRoute
+  // falls back to its own default (Appearance). Loosely typed as `string`
+  // here (not SettingsRoute's own page union) to avoid a type-only import
+  // cycle between this shared-types module and a screen route module —
+  // SettingsRoute.tsx validates it against its known page ids itself.
+  | { kind: 'settings'; page?: string }
   | { kind: 'assistant' }
   | { kind: 'insights' }
   | { kind: 'discover' }

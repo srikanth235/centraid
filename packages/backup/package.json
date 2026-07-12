@@ -2,7 +2,7 @@
   "name": "@centraid/backup",
   "version": "0.1.0",
   "private": true,
-  "description": "Offsite backup engine: the centraid-backup-provider/1 wire protocol seam (PROTOCOL.md) plus the centraid-snapshot/1 format engine (FORMAT.md) — FastCDC chunking, AES-256-GCM keyring/epochs, manifest build/restore/verify, a local filesystem provider, a remote HTTP+S3 provider, and the conformance kit any provider is graded against. Zero runtime dependencies — Node >=22 builtins only.",
+  "description": "Offsite storage engine: the centraid-storage-provider/1 wire protocol seam (PROTOCOL.md, account+grant layer over backup and cas store classes) plus the centraid-snapshot/1 format engine (FORMAT.md) — FastCDC chunking, AES-256-GCM keyring/epochs, manifest build/restore/verify, a local filesystem provider, a remote HTTP+S3 provider, and the conformance kit any provider is graded against. Zero runtime dependencies — Node >=22 builtins only.",
   "files": [
     "dist",
     "README.md",

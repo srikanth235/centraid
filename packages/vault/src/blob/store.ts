@@ -75,6 +75,14 @@ export interface BlobStore {
   /** Every sha the store holds — the reconciliation sweep's ground truth. */
   list(): Promise<string[]>;
   stat(sha256: string): Promise<BlobStat | null>;
+  /**
+   * Optional streaming upload (issue #367 §C8): push `source` without the
+   * caller materializing the whole blob in memory first. Implementations
+   * that can't stream simply omit this — callers fall back to `put`.
+   * `approxSize` need not be exact; it only informs the multipart-vs-single
+   * decision and part sizing.
+   */
+  putStream?(sha256: string, source: NodeJS.ReadableStream, approxSize: number): Promise<void>;
 }
 
 /** Clamp a requested range against a known size; null = unsatisfiable. */

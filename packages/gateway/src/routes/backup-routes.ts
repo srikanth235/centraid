@@ -23,6 +23,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
 import type { BackupService, RecoveryKitState } from '../backup/backup-service.js';
+import type { RecoveryKitStateStore } from '../backup/recovery-kit-state.js';
 import { sendError, sendJson } from './route-helpers.js';
 
 const BACKUP_PATH = '/centraid/_gateway/backup';
@@ -47,12 +48,22 @@ export interface BackupStatusBody {
 export interface BackupRouteDeps {
   /** `undefined` when `options.backup?.enabled` is false — no service exists. */
   backupService?: BackupService;
+  /**
+   * Gateway-level recovery-kit state (issue #367 §C10) — present even when
+   * backup isn't configured, so the confirmation gate the S3-storage enable
+   * flow shares can actually be satisfied on a backup-less gateway (the
+   * desktop embed) instead of only bypassed with force.
+   */
+  recoveryKitStore?: RecoveryKitStateStore;
   vaults: VaultRegistry;
 }
 
 async function buildStatus(deps: BackupRouteDeps): Promise<BackupStatusBody> {
   const { backupService } = deps;
-  if (!backupService) return { configured: false, vaults: [], recoveryKit: { confirmedAt: null } };
+  if (!backupService) {
+    const recoveryKit = (await deps.recoveryKitStore?.status()) ?? { confirmedAt: null };
+    return { configured: false, vaults: [], recoveryKit };
+  }
   const [state, recoveryKit] = await Promise.all([
     backupService.status(),
     backupService.recoveryKitStatus(),
@@ -116,16 +127,20 @@ export function makeBackupRouteHandler(deps: BackupRouteDeps): RouteHandler {
       if ((req.method ?? 'GET') !== 'POST') {
         return sendJson(res, 405, { error: 'method_not_allowed', message: 'POST only' });
       }
-      const { backupService } = deps;
-      if (!backupService) {
+      const { backupService, recoveryKitStore } = deps;
+      try {
+        if (backupService) {
+          const recoveryKit = await backupService.confirmRecoveryKit();
+          return sendJson(res, 200, { ok: true, ...recoveryKit });
+        }
+        if (recoveryKitStore) {
+          const recoveryKit = await recoveryKitStore.confirm();
+          return sendJson(res, 200, { ok: true, ...recoveryKit });
+        }
         return sendJson(res, 409, {
           error: 'not_configured',
           message: 'backup is not configured — add a "backup" block to the gateway config',
         });
-      }
-      try {
-        const recoveryKit = await backupService.confirmRecoveryKit();
-        return sendJson(res, 200, { ok: true, ...recoveryKit });
       } catch (err) {
         return sendError(res, err);
       }

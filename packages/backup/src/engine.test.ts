@@ -6,7 +6,7 @@ import { createKeyring, type Keyring } from './crypto.js';
 import { createSnapshot, restoreSnapshot, verifySnapshot, type SourceEntry } from './engine.js';
 import { LocalBackupProvider } from './local-provider.js';
 import type { ObjectStore } from './object-store.js';
-import type { BackupProvider } from './provider.js';
+import type { BackupProvider, StoreClass } from './provider.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -75,10 +75,10 @@ class SpyProvider implements BackupProvider {
   purgeTarget(targetId: string) {
     return this.inner.purgeTarget(targetId);
   }
-  async openDataPlane(targetId: string, mode: 'read' | 'read-write') {
-    const store = new CountingObjectStore(await this.inner.openDataPlane(targetId, mode));
-    if (mode === 'read-write') this.lastStore = store;
-    return store;
+  async openDataPlane(targetId: string, store: StoreClass, mode: 'read' | 'read-write') {
+    const objStore = new CountingObjectStore(await this.inner.openDataPlane(targetId, store, mode));
+    if (mode === 'read-write') this.lastStore = objStore;
+    return objStore;
   }
   registerSnapshot(targetId: string, reg: Parameters<BackupProvider['registerSnapshot']>[1]) {
     return this.inner.registerSnapshot(targetId, reg);
@@ -364,7 +364,7 @@ describe('createSnapshot / restoreSnapshot roundtrip', () => {
       appMeta: APP_META,
     });
     // Corrupt the stored manifest object directly on disk.
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     const bytes = await store.get(row!.manifestKey);
     const tampered = new Uint8Array(bytes);
     tampered[0]! ^= 0xff;
@@ -397,7 +397,7 @@ describe('verifySnapshot', () => {
       appMeta: APP_META,
     });
 
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     const listed: string[] = [];
     for await (const obj of store.list('chunks/')) listed.push(obj.key);
     expect(listed.length).toBeGreaterThan(0);
@@ -425,7 +425,7 @@ describe('verifySnapshot', () => {
       appMeta: APP_META,
     });
 
-    const store = await provider.openDataPlane(targetId, 'read-write');
+    const store = await provider.openDataPlane(targetId, 'backup', 'read-write');
     const listed: string[] = [];
     for await (const obj of store.list('chunks/')) listed.push(obj.key);
     expect(listed.length).toBeGreaterThan(0);

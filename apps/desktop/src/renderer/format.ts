@@ -144,11 +144,20 @@ export function relativeWhen(iso: string): string {
   }
 }
 
-/** Human byte size with one decimal at KB/MB, integer bytes below 1 KiB. */
+/** Human byte size with one decimal at KB/MB/GB/TB, integer bytes below 1 KiB.
+ *  Steps all the way to TB (issue #367's Storage card shows quota-scale
+ *  figures, not just app-log-scale ones) — behavior below 1 MB is unchanged
+ *  from the original KB/MB-only helper. */
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(1)} ${units[unit]}`;
 }
 
 /**

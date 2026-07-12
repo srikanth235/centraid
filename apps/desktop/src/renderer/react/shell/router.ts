@@ -26,8 +26,9 @@ export const INITIAL_ROUTER: RouterState = { stack: [], index: -1 };
  *  same history entry. */
 export function routeKey(route: ShellRoute): string {
   switch (route.kind) {
-    case 'home':
     case 'settings':
+      return route.page ? `settings:${route.page}` : 'settings';
+    case 'home':
     case 'assistant':
     case 'insights':
     case 'discover':

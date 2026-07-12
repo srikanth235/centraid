@@ -28,7 +28,8 @@
  * `"manifestKey": "manifests/…"`, and both `LocalBackupProvider` and this
  * package's in-process fake gateway happily accepted that — but a live
  * Clawgnition gateway 400s it with `invalid_manifest_key`, because it
- * enforces manifestKey to literally start with the target's `vaults/{id}/`
+ * enforces manifestKey to literally start with the target's per-store
+ * prefix (`u/{id}/backup/` since centraid-storage-provider/1)
  * prefix. Fixed by having `createSnapshot` (and the conformance kit's own
  * registration test data) build prefixed keys; PROTOCOL.md's example was
  * corrected to match.
@@ -384,7 +385,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       // the ObjectStore key too, which is *already* scoped under the
       // grant's own "vaults/{id}/" prefix) — hence `includes`, not
       // `startsWith`, below.
-      const putKeys = s3.listDirect(BUCKET, `vaults/${targetId}/`);
+      const putKeys = s3.listDirect(BUCKET, `u/${targetId}/backup/`);
       expect(putKeys.some((k) => k.includes('/manifests/'))).toBe(true);
       expect(putKeys.filter((k) => k.includes('/chunks/')).length).toBeGreaterThan(1); // multi-chunked
 
@@ -415,7 +416,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       expect(targetId, 'depends on test b having run first').toBeDefined();
       // `listDirect`'s keys are already bucket-relative (see the comment
       // in test "b") — directly usable with `deleteObjectDirect`.
-      const chunkKeys = s3.listDirect(BUCKET, `vaults/${targetId}/chunks/`);
+      const chunkKeys = s3.listDirect(BUCKET, `u/${targetId}/backup/chunks/`);
       expect(chunkKeys.length).toBeGreaterThan(0);
       const victim = chunkKeys[0]!;
       expect(s3.deleteObjectDirect(BUCKET, victim)).toBe(true);
@@ -443,7 +444,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
       format: 'centraid-snapshot/1',
       appMeta: {},
     };
-    const manifestKeyFor = (name: string) => `vaults/${targetId}/manifests/${name}`;
+    const manifestKeyFor = (name: string) => `u/${targetId}/backup/manifests/${name}`;
 
     // Takeover: register gen 2 first (currentGeneration starts at 0).
     const gen2 = await provider.registerSnapshot(targetId, {
@@ -514,7 +515,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     // with these particular static dev credentials, which carry no IAM
     // policy). `S3ObjectStore.put` refuses locally based on `grant.mode`
     // before ever making the request — that's what this asserts.
-    const readStore = await provider.openDataPlane(targetId, 'read');
+    const readStore = await provider.openDataPlane(targetId, 'backup', 'read');
     await expect(readStore.put('chunks/nope', new Uint8Array([1]))).rejects.toThrow(/read.*mode/i);
   }, 30_000);
 
@@ -525,7 +526,7 @@ describe.skipIf(SKIP_REASON !== null)(SUITE_TITLE, () => {
     const targetId = await freshTarget('interop-shape-check');
     await provider.registerSnapshot(targetId, {
       idempotencyKey: 'interop-shape-1',
-      manifestKey: `vaults/${targetId}/manifests/shape-1.json`,
+      manifestKey: `u/${targetId}/backup/manifests/shape-1.json`,
       manifestHash: 'e'.repeat(64),
       totalBytes: 4096,
       objectCount: 2,

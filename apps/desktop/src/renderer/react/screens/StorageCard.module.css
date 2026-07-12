@@ -1,0 +1,289 @@
+/* Gateway → Overview → Storage. Co-located with StorageCard.tsx; reuses
+   GatewayScreen.module.css's .panel/.panelHead/.panelEmpty shells (imported
+   there as `gwStyles`) so the card reads as a sibling of Backups rather
+   than a bolted-on style. The quota bar is the one place this card departs
+   from BackupCard's plain-rows shape — it's the hero read, so it gets more
+   visual weight than a status line. */
+
+.card {
+  grid-column: 1 / -1;
+}
+
+.body {
+  padding: 14px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.loadError {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.inlineLink {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-deep, var(--accent));
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.connectionList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connectionPanel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: color-mix(in oklab, var(--bg-sunken) 40%, transparent);
+}
+
+.connectionHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.connectionName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.kindBadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--ink-3);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.kindBadge[data-kind='provider'] {
+  color: var(--accent-deep, var(--accent));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.useBadges {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.useBadge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  padding: 1.5px 5px;
+}
+
+/* ── Quota bar — the hero element. Layered per-store segments, tabular
+   numerals on the byte figures so the used/quota pair aligns visually. ── */
+.quotaBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.quotaTrack {
+  position: relative;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.quotaSegBackup,
+.quotaSegCas {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transition: width 0.3s var(--ease, ease);
+}
+.quotaSegBackup {
+  left: 0;
+  background: var(--accent);
+}
+.quotaSegCas {
+  background: color-mix(in srgb, var(--accent) 55%, var(--icon-amber) 45%);
+}
+.quotaTrack[data-severity='warn'] .quotaSegBackup,
+.quotaTrack[data-severity='warn'] .quotaSegCas {
+  background: var(--icon-amber);
+}
+.quotaTrack[data-severity='error'] .quotaSegBackup,
+.quotaTrack[data-severity='error'] .quotaSegCas {
+  background: var(--danger);
+}
+.quotaFoot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.quotaFootUsed {
+  color: var(--ink-2);
+}
+.quotaFootPct {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.quotaFootPct[data-severity='warn'] {
+  color: var(--icon-amber);
+}
+.quotaFootPct[data-severity='error'] {
+  color: var(--danger);
+}
+.quotaLegend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.legendDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex: none;
+}
+.legendDotBackup {
+  background: var(--accent);
+}
+.legendDotCas {
+  background: color-mix(in srgb, var(--accent) 55%, var(--icon-amber) 45%);
+}
+
+.unmetered {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.unmeteredTag {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.pendingUsage {
+  font-size: 11.5px;
+  color: var(--ink-4);
+  font-style: italic;
+}
+
+/* ── Drift line — the honest integrity read: two independent witnesses to
+   the same fact, named plainly rather than picking one to show. ── */
+.driftLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.driftLine svg {
+  flex: none;
+  color: var(--success);
+}
+.driftLine[data-emphasis='warn'] {
+  color: var(--icon-amber);
+}
+.driftLine[data-emphasis='warn'] svg {
+  color: var(--icon-amber);
+}
+
+.fetchedAt {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--ink-4);
+}
+.usageError {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* ── Per-vault replication rows — mirrors BackupCard's .vaultList shape. ── */
+.vaultList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.vaultRow {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vaultRow + .vaultRow {
+  border-top: 1px solid var(--line);
+}
+.vaultHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vaultName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.localOnlyBadge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.vaultMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.vaultMeta span[data-emphasis='warn'] {
+  color: var(--icon-amber);
+}
+.vaultError {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
