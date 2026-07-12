@@ -32,6 +32,7 @@ CREATE TABLE consent_provenance (
   signature     TEXT
 ) STRICT;
 CREATE INDEX idx_provenance_entity ON consent_provenance(entity_type, entity_id);
+CREATE INDEX idx_provenance_prev_prov ON consent_provenance(prev_prov_id);
 
 CREATE TABLE agent_command_invocation (
   invocation_id TEXT PRIMARY KEY,
@@ -44,6 +45,7 @@ CREATE TABLE agent_command_invocation (
   executed_at   TEXT,
   receipt_id    TEXT REFERENCES consent_receipt(receipt_id)
 ) STRICT;
+CREATE INDEX idx_command_invocation_receipt ON agent_command_invocation(receipt_id);
 
 CREATE TABLE consent_receipt (
   receipt_id         TEXT PRIMARY KEY,
@@ -58,6 +60,7 @@ CREATE TABLE consent_receipt (
   hash               TEXT NOT NULL UNIQUE,
   detail_json        TEXT CHECK (detail_json IS NULL OR json_valid(detail_json))
 ) STRICT;
+CREATE INDEX idx_receipt_invocation ON consent_receipt(invocation_id);
 
 CREATE TABLE agent_invocation_check (
   check_id      TEXT PRIMARY KEY,
@@ -68,6 +71,7 @@ CREATE TABLE agent_invocation_check (
   observed_json TEXT CHECK (observed_json IS NULL OR json_valid(observed_json)),
   checked_at    TEXT NOT NULL
 ) STRICT;
+CREATE INDEX idx_invocation_check_invocation ON agent_invocation_check(invocation_id);
 
 CREATE TABLE agent_evidence (
   evidence_id   TEXT PRIMARY KEY,
@@ -78,6 +82,8 @@ CREATE TABLE agent_evidence (
   prov_id       TEXT REFERENCES consent_provenance(prov_id),
   weight        REAL CHECK (weight BETWEEN 0 AND 1)
 ) STRICT;
+CREATE INDEX idx_evidence_invocation ON agent_evidence(invocation_id);
+CREATE INDEX idx_evidence_prov ON agent_evidence(prov_id);
 
 CREATE TABLE agent_explanation (
   explanation_id TEXT PRIMARY KEY,
@@ -117,4 +123,5 @@ CREATE TABLE journal_archive_manifest (
   created_at       TEXT NOT NULL
 ) STRICT;
 CREATE INDEX idx_archive_manifest_stream_time ON journal_archive_manifest(stream, to_time);
+CREATE INDEX idx_archive_manifest_prev_manifest ON journal_archive_manifest(prev_manifest_id);
 `;

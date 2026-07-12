@@ -1,10 +1,10 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { registerScheduleCommands } from '../commands/schedule.js';
 import { bootstrapVault, createGrant, enrollApp, type BootstrapResult } from '../bootstrap.js';
 import { openVaultDb, type VaultDb } from '../db.js';
-import { uuidv7 } from '../ids.js';
+import { sha256Hex, uuidv7 } from '../ids.js';
 import { createGateway, Gateway } from './gateway.js';
-import { importVaultExport } from './portability.js';
+import { canonicalJson, importVaultExport } from './portability.js';
 import type { Credential } from './types.js';
 
 let db: VaultDb;
@@ -127,4 +127,49 @@ test('import refuses a non-fresh vault', () => {
   seedLife();
   const { artifact } = gw.exportVault(owner);
   expect(() => importVaultExport(db, artifact)).toThrow(/not a fresh vault/);
+});
+
+test('a poisoned row on one table is skipped, not fatal to the whole export (§4.3 hardening)', () => {
+  seedLife();
+  // Simulate node:sqlite's real failure mode reading back an out-of-range
+  // INTEGER (verified: .get()/.all() throw "Value is too large to be
+  // represented as a JavaScript number") by making exactly the `core_place`
+  // read throw. Everything else — including the `PRAGMA table_info` call
+  // that picks its primary key — passes through untouched.
+  const originalPrepare = db.vault.prepare.bind(db.vault);
+  const spy = vi
+    .spyOn(db.vault, 'prepare')
+    .mockImplementation((sql: string): ReturnType<typeof db.vault.prepare> => {
+      if (sql.includes('FROM "core_place"')) {
+        throw new Error('Value is too large to be represented as a JavaScript number');
+      }
+      return originalPrepare(sql);
+    });
+
+  const { artifact } = gw.exportVault(owner);
+  spy.mockRestore();
+
+  expect(artifact.skippedTables?.map((s) => s.entity)).toContain('core.place');
+  expect(artifact.skippedTables?.find((s) => s.entity === 'core.place')?.error).toContain(
+    'too large',
+  );
+  expect(artifact.tables['core.place']).toBeUndefined();
+  // Everything else still made it into the artifact — including a table
+  // that references `core_place` via an (unpopulated, so non-violating) FK.
+  expect(artifact.tables['core.event']?.length).toBeGreaterThan(0);
+  expect(artifact.tables['core.party']?.length).toBeGreaterThan(0);
+
+  // verifyHash covers exactly the tables that actually made it in, so
+  // round-trip verification stays sound against a partial artifact.
+  expect(artifact.verifyHash).toBe(sha256Hex(canonicalJson(artifact.tables)));
+
+  // A partial artifact still imports cleanly — it just doesn't carry the
+  // skipped entity's rows.
+  const restored = openVaultDb();
+  expect(() => importVaultExport(restored, artifact)).not.toThrow();
+  const places = restored.vault.prepare('SELECT count(*) AS n FROM core_place').get() as {
+    n: number;
+  };
+  expect(places.n).toBe(0);
+  restored.close();
 });

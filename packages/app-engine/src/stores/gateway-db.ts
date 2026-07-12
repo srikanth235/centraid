@@ -122,7 +122,7 @@ export const CONVERSATION_LEDGER_DDL = `
       created_at         INTEGER NOT NULL,
       updated_at         INTEGER NOT NULL,
       CHECK (kind IN ('chat','automation','build'))
-    );
+    ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
       ON conversations(user_id, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_conversations_app
@@ -154,7 +154,7 @@ export const CONVERSATION_LEDGER_DDL = `
       step_count               INTEGER,
       tool_count               INTEGER,
       CHECK (trigger IN ('scheduled','manual','replay','on_failure','interactive'))
-    );
+    ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_turns_conversation
       ON turns(conversation_id, seq);
     CREATE INDEX IF NOT EXISTS idx_turns_started
@@ -188,7 +188,7 @@ export const CONVERSATION_LEDGER_DDL = `
       ended_at           INTEGER,
       duration_ms        INTEGER,
       CHECK (kind IN ('message_in','step','tool','agent'))
-    );
+    ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_items_by_turn
       ON items(turn_id, ordinal);
     CREATE INDEX IF NOT EXISTS idx_items_by_model
@@ -203,7 +203,7 @@ export const CONVERSATION_LEDGER_DDL = `
       source     TEXT,
       filename   TEXT,
       created_at INTEGER NOT NULL
-    );
+    ) STRICT;
     CREATE INDEX IF NOT EXISTS idx_attachments_item
       ON attachments(item_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_hash
@@ -215,7 +215,7 @@ export const CONVERSATION_LEDGER_DDL = `
       value_json    TEXT,
       updated_at    INTEGER NOT NULL,
       PRIMARY KEY (automation_id, key)
-    );
+    ) STRICT;
 
     -- run_summary is a VIEW, not a table: one row per FINISHED run, every
     -- kind — the Insights/Executions source. It used to be a denormalized

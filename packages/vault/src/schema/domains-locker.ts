@@ -66,6 +66,7 @@ CREATE TABLE locker_item (
 ) STRICT;
 
 CREATE INDEX locker_item_type_idx ON locker_item(type);
+CREATE INDEX locker_item_connection_idx ON locker_item(connection_id);
 `;
 
 // A stable, owner-assigned alias for an item (issue #298 item 4). A

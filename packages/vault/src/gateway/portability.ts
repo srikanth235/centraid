@@ -20,6 +20,16 @@ export interface VaultExport {
   tables: Record<string, Record<string, unknown>[]>;
   /** sha256 over the canonical form of `tables`. */
   verifyHash: string;
+  /**
+   * Entities a poisoned row knocked out of this export (issue #374 tier
+   * 4.3) — e.g. an out-of-range integer `node:sqlite` throws reading back
+   * rather than silently truncating. Absent/omitted means every entity made
+   * it in. `verifyHash` is computed over `tables` as actually assembled, so
+   * a skip here never desyncs round-trip verification — it just means the
+   * artifact is honestly partial instead of a single bad row sinking the
+   * whole export.
+   */
+  skippedTables?: { entity: string; error: string }[];
 }
 
 /** Deterministic JSON: object keys sorted at every level. */
@@ -54,14 +64,30 @@ export function exportVault(
 ): { artifact: VaultExport; exportId: string; receiptId: string } {
   const requestedAt = nowIso();
   const tables: Record<string, Record<string, unknown>[]> = {};
+  const skippedTables: { entity: string; error: string }[] = [];
   for (const logical of listVaultEntities(db.vault)) {
     const ref = resolveEntity(logical, db.vault);
     if (!ref) continue;
-    const pk = primaryKeyColumn(db, ref.physical);
-    tables[logical] = db.vault
-      .prepare(`SELECT * FROM "${ref.physical}" ORDER BY "${pk}"`)
-      .all() as Record<string, unknown>[];
+    // Per-table isolation (issue #374 tier 4.3): one poisoned row anywhere
+    // — e.g. an INTEGER past Number.MAX_SAFE_INTEGER, which node:sqlite
+    // throws reading back rather than truncating — must not abort every
+    // OTHER table's export. Skip just this one, log it in the artifact and
+    // the receipt, and keep going.
+    try {
+      const pk = primaryKeyColumn(db, ref.physical);
+      tables[logical] = db.vault
+        .prepare(`SELECT * FROM "${ref.physical}" ORDER BY "${pk}"`)
+        .all() as Record<string, unknown>[];
+    } catch (err) {
+      skippedTables.push({
+        entity: logical,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
+  // Computed over `tables` as actually assembled — a skipped table is never
+  // counted, so round-trip verification stays sound against the artifact
+  // that was actually produced, not the one that was attempted.
   const verifyHash = sha256Hex(canonicalJson(tables));
   const artifact: VaultExport = {
     format: 'jsonld',
@@ -69,6 +95,7 @@ export function exportVault(
     exportedAt: requestedAt,
     tables,
     verifyHash,
+    ...(skippedTables.length > 0 ? { skippedTables } : {}),
   };
   const exportId = uuidv7();
   db.vault
@@ -93,7 +120,13 @@ export function exportVault(
     objectId: exportId,
     purpose: null,
     decision: 'allow',
-    detail: { verifyHash, rowCount: Object.values(tables).reduce((n, rows) => n + rows.length, 0) },
+    detail: {
+      verifyHash,
+      rowCount: Object.values(tables).reduce((n, rows) => n + rows.length, 0),
+      ...(skippedTables.length > 0
+        ? { skippedTableCount: skippedTables.length, skippedTables }
+        : {}),
+    },
   });
   return { artifact, exportId, receiptId };
 }

@@ -28,6 +28,7 @@ CREATE TABLE social_circle_member (
   added_at  TEXT NOT NULL,
   UNIQUE (circle_id, party_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_circle_member_party ON social_circle_member(party_id);
 
 CREATE TABLE social_thread (
   thread_id       TEXT PRIMARY KEY,
@@ -49,6 +50,7 @@ CREATE TABLE social_thread_participant (
   UNIQUE (thread_id, party_id),
   CHECK (party_id IS NOT NULL OR handle IS NOT NULL)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_thread_participant_party ON social_thread_participant(party_id);
 
 CREATE TABLE social_message (
   message_id      TEXT PRIMARY KEY,
@@ -62,6 +64,10 @@ CREATE TABLE social_message (
   external_id     TEXT UNIQUE,
   CHECK (sender_party_id IS NOT NULL OR sender_handle IS NOT NULL)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_message_thread ON social_message(thread_id);
+CREATE INDEX IF NOT EXISTS idx_message_sender_party ON social_message(sender_party_id);
+CREATE INDEX IF NOT EXISTS idx_message_body_content ON social_message(body_content_id);
+CREATE INDEX IF NOT EXISTS idx_message_in_reply_to ON social_message(in_reply_to_id);
 `;
 
 export const KNOWLEDGE_DDL = `
@@ -80,6 +86,8 @@ CREATE TABLE knowledge_note (
   deleted_at      TEXT,
   purge_at        TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_note_author_party ON knowledge_note(author_party_id);
+CREATE INDEX IF NOT EXISTS idx_note_body_content ON knowledge_note(body_content_id);
 
 CREATE TABLE knowledge_annotation (
   annotation_id   TEXT PRIMARY KEY,
@@ -90,6 +98,7 @@ CREATE TABLE knowledge_annotation (
   body_text       TEXT NOT NULL,
   created_at      TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_annotation_author_party ON knowledge_annotation(author_party_id);
 `;
 
 export const MEDIA_DDL = `
@@ -109,6 +118,8 @@ CREATE TABLE media_media_asset (
   deleted_at       TEXT,
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_media_asset_place ON media_media_asset(place_id);
+CREATE INDEX IF NOT EXISTS idx_media_asset_camera_device ON media_media_asset(camera_device_id);
 
 CREATE TABLE media_face_region (
   region_id             TEXT PRIMARY KEY,
@@ -118,4 +129,7 @@ CREATE TABLE media_face_region (
   confidence            REAL CHECK (confidence BETWEEN 0 AND 1),
   confirmed_by_party_id TEXT REFERENCES core_party(party_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_face_region_asset ON media_face_region(asset_id);
+CREATE INDEX IF NOT EXISTS idx_face_region_party ON media_face_region(party_id);
+CREATE INDEX IF NOT EXISTS idx_face_region_confirmed_by_party ON media_face_region(confirmed_by_party_id);
 `;

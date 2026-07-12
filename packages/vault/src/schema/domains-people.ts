@@ -36,6 +36,7 @@ CREATE TABLE people_interaction (
   occurred_at    TEXT NOT NULL,
   created_at     TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_interaction_party ON people_interaction(party_id);
 
 CREATE TABLE people_task (
   task_id    TEXT PRIMARY KEY,
@@ -44,6 +45,7 @@ CREATE TABLE people_task (
   done       INTEGER NOT NULL CHECK (done IN (0,1)),
   created_at TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_people_task_party ON people_task(party_id);
 
 CREATE TABLE people_important_date (
   date_id     TEXT PRIMARY KEY,
@@ -54,6 +56,7 @@ CREATE TABLE people_important_date (
   reminder_on INTEGER NOT NULL CHECK (reminder_on IN (0,1)),
   created_at  TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_important_date_party ON people_important_date(party_id);
 
 CREATE TABLE people_relationship (
   relationship_id TEXT PRIMARY KEY,
@@ -64,6 +67,7 @@ CREATE TABLE people_relationship (
   pet             TEXT,
   created_at      TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_relationship_party ON people_relationship(party_id);
 
 CREATE TABLE people_gift (
   gift_id    TEXT PRIMARY KEY,
@@ -72,6 +76,7 @@ CREATE TABLE people_gift (
   state      TEXT NOT NULL CHECK (state IN ('idea','given')),
   created_at TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_gift_party ON people_gift(party_id);
 
 CREATE TABLE people_debt (
   debt_id      TEXT PRIMARY KEY,
@@ -83,6 +88,7 @@ CREATE TABLE people_debt (
   settled_at   TEXT,
   created_at   TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_debt_party ON people_debt(party_id);
 
 CREATE TABLE people_journal_entry (
   entry_id       TEXT PRIMARY KEY,
@@ -92,4 +98,5 @@ CREATE TABLE people_journal_entry (
   body_text      TEXT NOT NULL,
   created_at     TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_journal_entry_owner_party ON people_journal_entry(owner_party_id);
 `;

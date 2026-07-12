@@ -65,4 +65,8 @@ CREATE TABLE IF NOT EXISTS outbox_item (
   CHECK ((subject_type IS NULL) = (subject_id IS NULL))
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_outbox_item_status ON outbox_item(status, staged_at);
+CREATE INDEX IF NOT EXISTS idx_outbox_item_connection ON outbox_item(connection_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_item_recipient_party ON outbox_item(recipient_party_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_item_grant ON outbox_item(grant_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_item_published_message ON outbox_item(published_message_id);
 `;

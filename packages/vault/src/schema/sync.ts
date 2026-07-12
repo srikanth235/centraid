@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS sync_import_batch (
   resolved_at   TEXT,
   summary_json  TEXT NOT NULL CHECK (json_valid(summary_json))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_sync_import_batch_connection ON sync_import_batch(connection_id);
 
 CREATE TABLE IF NOT EXISTS sync_import_row (
   row_id              TEXT PRIMARY KEY,
@@ -88,6 +89,7 @@ CREATE TABLE IF NOT EXISTS sync_connection_run (
   skipped       INTEGER NOT NULL DEFAULT 0,
   error         TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_sync_connection_run_connection ON sync_connection_run(connection_id);
 `;
 
 // Broker-owned credentials (issue #304, amending #290 decision 4): a

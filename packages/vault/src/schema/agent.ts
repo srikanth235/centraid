@@ -40,6 +40,7 @@ CREATE TABLE agent_capability (
   description           TEXT NOT NULL,
   requires_confirmation INTEGER NOT NULL CHECK (requires_confirmation IN (0,1))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_capability_command ON agent_capability(command_id);
 
 CREATE TABLE agent_correction (
   correction_id         TEXT PRIMARY KEY,
@@ -52,6 +53,7 @@ CREATE TABLE agent_correction (
   reason                TEXT,
   created_at            TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_correction_corrected_by_party ON agent_correction(corrected_by_party_id);
 
 CREATE TABLE agent_judgment (
   judgment_id                TEXT PRIMARY KEY,
@@ -63,4 +65,5 @@ CREATE TABLE agent_judgment (
   learned_at                 TEXT NOT NULL,
   expires_at                 TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_judgment_derived_from_correction ON agent_judgment(derived_from_correction_id);
 `;

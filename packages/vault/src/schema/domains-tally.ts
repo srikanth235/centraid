@@ -81,4 +81,10 @@ CREATE TABLE tally_settlement (
 
 CREATE INDEX tally_expense_group_idx ON tally_expense(group_id);
 CREATE INDEX tally_settlement_group_idx ON tally_settlement(group_id);
+CREATE INDEX tally_expense_paid_by_idx ON tally_expense(paid_by);
+CREATE INDEX tally_expense_txn_idx ON tally_expense(txn_id);
+CREATE INDEX tally_expense_split_party_idx ON tally_expense_split(party_id);
+CREATE INDEX tally_settlement_from_party_idx ON tally_settlement(from_party);
+CREATE INDEX tally_settlement_to_party_idx ON tally_settlement(to_party);
+CREATE INDEX tally_settlement_txn_idx ON tally_settlement(txn_id);
 `;

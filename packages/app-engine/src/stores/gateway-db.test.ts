@@ -207,6 +207,44 @@ describe('openJournalDb (the conversation-ledger band of the vault journal)', ()
   });
 });
 
+describe('STRICT tables (issue #374 SQLite hardening)', () => {
+  it('every ledger table is created STRICT', () => {
+    const path = freshDbPath();
+    openJournalDb(path).close();
+    const db = new DatabaseSync(path);
+    try {
+      const rows = db
+        .prepare(`SELECT name, sql FROM sqlite_master WHERE type = 'table'`)
+        .all() as Array<{ name: string; sql: string }>;
+      for (const table of ['conversations', 'turns', 'items', 'attachments', 'automation_state']) {
+        const row = rows.find((r) => r.name === table);
+        expect(row?.sql.trim().endsWith('STRICT')).toBe(true);
+      }
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects a type-violating insert (STRICT enforcement)', () => {
+    const path = freshDbPath();
+    const db = openJournalDb(path);
+    try {
+      const now = Date.now();
+      // turn_count is INTEGER; a non-numeric TEXT value violates STRICT.
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO conversations (id, kind, user_id, turn_count, created_at, updated_at)
+             VALUES ('c1', 'chat', 'u1', 'not-a-number', ?, ?)`,
+          )
+          .run(now, now),
+      ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+});
+
 describe('lazy provider', () => {
   it('opens the DB once and reuses the handle for subsequent calls', () => {
     const provider = makeJournalDbProvider(freshDbPath());

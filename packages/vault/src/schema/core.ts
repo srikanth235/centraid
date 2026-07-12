@@ -18,6 +18,7 @@ CREATE TABLE core_vault (
   settings_json   TEXT NOT NULL CHECK (json_valid(settings_json)),
   created_at      TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_vault_owner_party ON core_vault(owner_party_id);
 
 CREATE TABLE core_party (
   party_id          TEXT PRIMARY KEY,
@@ -30,6 +31,7 @@ CREATE TABLE core_party (
   updated_at        TEXT NOT NULL,
   ontology_version  TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_party_avatar_content ON core_party(avatar_content_id);
 
 CREATE TABLE core_party_identifier (
   identifier_id TEXT PRIMARY KEY,
@@ -58,6 +60,7 @@ CREATE TABLE core_place (
   parent_place_id TEXT REFERENCES core_place(place_id),
   created_at      TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_place_parent_place ON core_place(parent_place_id);
 
 CREATE TABLE core_event (
   event_id           TEXT PRIMARY KEY,
@@ -75,6 +78,8 @@ CREATE TABLE core_event (
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_event_location_place ON core_event(location_place_id);
+CREATE INDEX IF NOT EXISTS idx_event_organizer_party ON core_event(organizer_party_id);
 
 CREATE TABLE core_account (
   account_id           TEXT PRIMARY KEY,
@@ -88,6 +93,8 @@ CREATE TABLE core_account (
   opened_at            TEXT,
   closed_at            TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_account_owner_party ON core_account(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_account_institution_party ON core_account(institution_party_id);
 
 CREATE TABLE core_transaction (
   txn_id                TEXT PRIMARY KEY,
@@ -103,6 +110,9 @@ CREATE TABLE core_transaction (
   category_concept_id   TEXT REFERENCES core_concept(concept_id),
   external_id           TEXT UNIQUE
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_transaction_account ON core_transaction(account_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_counterparty_party ON core_transaction(counterparty_party_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_category_concept ON core_transaction(category_concept_id);
 
 CREATE TABLE core_content_item (
   content_id       TEXT PRIMARY KEY,
@@ -118,6 +128,8 @@ CREATE TABLE core_content_item (
   purge_at         TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL),
   created_at       TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_content_item_creator_party ON core_content_item(creator_party_id);
+CREATE INDEX IF NOT EXISTS idx_content_item_origin_device ON core_content_item(origin_device_id);
 
 -- A document's identity is separate from its bytes (issue #352): the
 -- wrapper is the row apps and links address; current_content_id repoints on
@@ -134,6 +146,7 @@ CREATE TABLE core_document (
   deleted_at          TEXT,
   purge_at            TEXT CHECK (purge_at IS NULL OR deleted_at IS NOT NULL)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_document_current_content ON core_document(current_content_id);
 
 CREATE TABLE core_attachment (
   attachment_id TEXT PRIMARY KEY,
@@ -144,6 +157,7 @@ CREATE TABLE core_attachment (
   is_primary    INTEGER NOT NULL CHECK (is_primary IN (0,1)),
   created_at    TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_attachment_content ON core_attachment(content_id);
 
 CREATE TABLE core_activity (
   activity_id       TEXT PRIMARY KEY,
@@ -155,6 +169,10 @@ CREATE TABLE core_activity (
   source_app_id     TEXT REFERENCES consent_app(app_id),
   created_at        TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_activity_actor_party ON core_activity(actor_party_id);
+CREATE INDEX IF NOT EXISTS idx_activity_kind_concept ON core_activity(kind_concept_id);
+CREATE INDEX IF NOT EXISTS idx_activity_location_place ON core_activity(location_place_id);
+CREATE INDEX IF NOT EXISTS idx_activity_source_app ON core_activity(source_app_id);
 
 CREATE TABLE core_observation (
   observation_id   TEXT PRIMARY KEY,
@@ -173,6 +191,9 @@ CREATE TABLE core_observation (
   activity_id      TEXT REFERENCES core_activity(activity_id),
   CHECK (value_num IS NOT NULL OR value_text IS NOT NULL)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_observation_subject_party ON core_observation(subject_party_id);
+CREATE INDEX IF NOT EXISTS idx_observation_device ON core_observation(device_id);
+CREATE INDEX IF NOT EXISTS idx_observation_activity ON core_observation(activity_id);
 
 CREATE TABLE core_observation_component (
   component_id   TEXT PRIMARY KEY,
@@ -181,6 +202,7 @@ CREATE TABLE core_observation_component (
   value_num      REAL NOT NULL,
   unit           TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_observation_component_observation ON core_observation_component(observation_id);
 
 CREATE TABLE core_link (
   link_id             TEXT PRIMARY KEY,
@@ -194,6 +216,7 @@ CREATE TABLE core_link (
   asserted_by         TEXT NOT NULL CHECK (asserted_by IN ('owner','app','agent','import')),
   provenance_id       TEXT -- → consent.provenance (journal.db); gateway-enforced
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_link_relation_concept ON core_link(relation_concept_id);
 
 CREATE TABLE core_concept_scheme (
   scheme_id TEXT PRIMARY KEY,
@@ -213,6 +236,7 @@ CREATE TABLE core_concept (
   definition         TEXT,
   UNIQUE (scheme_id, notation)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_concept_broader_concept ON core_concept(broader_concept_id);
 
 CREATE TABLE core_tag (
   tag_id             TEXT PRIMARY KEY,
@@ -224,6 +248,8 @@ CREATE TABLE core_tag (
   tagged_at          TEXT NOT NULL,
   UNIQUE (target_type, target_id, concept_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_tag_concept ON core_tag(concept_id);
+CREATE INDEX IF NOT EXISTS idx_tag_tagged_by_party ON core_tag(tagged_by_party_id);
 
 -- One curation mechanism (issue #274): an owner-curated, ordered, typed
 -- container. Albums and notebooks are surface views over this one table —
@@ -239,6 +265,9 @@ CREATE TABLE core_collection (
   sort_order           INTEGER NOT NULL,
   created_at           TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_collection_owner_party ON core_collection(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_collection_cover_content ON core_collection(cover_content_id);
+CREATE INDEX IF NOT EXISTS idx_collection_parent_collection ON core_collection(parent_collection_id);
 
 CREATE TABLE core_collection_entry (
   entry_id      TEXT PRIMARY KEY,

@@ -10,6 +10,7 @@ import { nowIso, sha256Hex, uuidv7 } from '../ids.js';
 import { promoteStagedBlob } from '../blob/promote.js';
 import { ONTOLOGY_VERSION } from '../schema/migrate.js';
 import { ENRICH_PUBLISHERS } from './enrich-publishers.js';
+import { assertPayload } from './payload-schemas.js';
 import type { Publisher, PublishedWrite } from './staging.js';
 
 // ── core.event (ICS) ────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export interface EventPayload {
 const eventPublisher: Publisher = {
   entityType: 'core.event',
   probe(vault, payload) {
+    // Read-only — the runtime schema gate covers WRITE paths only (#374 T3).
     const p = payload as unknown as EventPayload;
     const existing = vault
       .prepare('SELECT event_id FROM core_event WHERE ical_uid = ?')
@@ -41,7 +43,7 @@ const eventPublisher: Publisher = {
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as EventPayload;
+    const p = assertPayload<EventPayload>('EventPayload', payload);
     const eventId = uuidv7();
     vault
       .prepare(
@@ -66,7 +68,7 @@ const eventPublisher: Publisher = {
     return { entityId: eventId, wrote: [] };
   },
   update(vault, entityId, payload, now) {
-    const p = payload as unknown as EventPayload;
+    const p = assertPayload<EventPayload>('EventPayload', payload);
     vault
       .prepare(
         `UPDATE core_event SET summary = ?, description = ?, dtstart = ?, dtend = ?, start_tz = ?,
@@ -173,7 +175,7 @@ const partyPublisher: Publisher = {
       : { entityId: partyId, disposition: 'skip', note: 'existing person; nothing new' };
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as PartyPayload;
+    const p = assertPayload<PartyPayload>('PartyPayload', payload);
     const partyId = uuidv7();
     vault
       .prepare(
@@ -184,7 +186,7 @@ const partyPublisher: Publisher = {
     return { entityId: partyId, wrote: bindIdentifiers(vault, partyId, p.identifiers) };
   },
   update(vault, entityId, payload) {
-    const p = payload as unknown as PartyPayload;
+    const p = assertPayload<PartyPayload>('PartyPayload', payload);
     // The vault wins: an import never rewrites a person's name or birthday —
     // it only backfills handles the vault has never seen.
     return { wrote: bindIdentifiers(vault, entityId, p.identifiers) };
@@ -248,7 +250,7 @@ const messagePublisher: Publisher = {
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as MessagePayload;
+    const p = assertPayload<MessagePayload>('MessagePayload', payload);
     const wrote: PublishedWrite[] = [];
 
     // Sender: resolve by email handle, else mint a person for the address.
@@ -418,7 +420,7 @@ const transactionPublisher: Publisher = {
       : null;
   },
   create(vault, ownerPartyId, payload) {
-    const p = payload as unknown as TransactionPayload;
+    const p = assertPayload<TransactionPayload>('TransactionPayload', payload);
     const wrote: PublishedWrite[] = [];
     const account = accountFor(vault, ownerPartyId, p.accountName, p.currency);
     if (account.created) wrote.push({ type: 'core.account', id: account.accountId });
@@ -441,7 +443,7 @@ const transactionPublisher: Publisher = {
     return { entityId: txnId, wrote };
   },
   update(vault, entityId, payload) {
-    const p = payload as unknown as TransactionPayload;
+    const p = assertPayload<TransactionPayload>('TransactionPayload', payload);
     vault
       .prepare(
         `UPDATE core_transaction SET description = ?, amount_minor = ?, posted_at = ? WHERE txn_id = ?`,
@@ -486,7 +488,7 @@ const lockerItemPublisher: Publisher = {
       : null;
   },
   create(vault, _owner, payload, now) {
-    const p = payload as unknown as LockerItemPayload;
+    const p = assertPayload<LockerItemPayload>('LockerItemPayload', payload);
     const itemId = uuidv7();
     vault
       .prepare(
@@ -500,7 +502,7 @@ const lockerItemPublisher: Publisher = {
   update(vault, entityId, payload, now) {
     // Source fills gaps, never overwrites: an imported password lands only
     // where the vault holds none (vault-wins, issue #290 decision 6).
-    const p = payload as unknown as LockerItemPayload;
+    const p = assertPayload<LockerItemPayload>('LockerItemPayload', payload);
     vault
       .prepare(
         `UPDATE locker_item SET
