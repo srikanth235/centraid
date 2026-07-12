@@ -30,17 +30,39 @@ node .ds-sync/package-capture.mjs  --out ./ds-bundle-desktop
 ## The input build (`desktop-src/build.mjs`) — how it avoids drift
 
 The real components are single-source in `apps/desktop`. Every build **copies
-them fresh** (`Icon/Button/Logo/AppCard.tsx` + `cx.ts` + `tile-visual.ts`) into
-`desktop-src/src/`, so there are no hand-maintained twins to drift. Then it:
-regenerates `styles/tokens.css` from the built `@centraid/design-tokens`
-(`toCss()`), copies the renderer `styles.css` verbatim, reuses the Blueprint
-Kit's committed woff2 + `fonts.css`, concatenates `styles/bundle.css` = tokens
-+ fonts + styles (the `cssEntry`; **no CSS bridge needed** — `styles.css` is
-written directly against design-tokens var names), esbuild-bundles the entry
-(design-tokens **inlined from TS source**, `react`/`react-dom` external so the
-converter binds them to `_vendor/`), and runs `tsc --emitDeclarationOnly` for
-the `.d.ts` tree. `Gallery` (a demo composite in the real `ui/index.ts`) is
-deliberately **excluded** from the curated DS entry.
+them fresh** (`Icon/Button/Logo/AppCard.tsx` + `KindBadge.tsx` + `StatusPill.tsx`
++ their `.module.css` + `cx.ts` + `tile-visual.ts` + the ambient
+`css-modules.d.ts`) into `desktop-src/src/`, so there are no hand-maintained
+twins to drift. Then it: regenerates `styles/tokens.css` from the built
+`@centraid/design-tokens` (`toCss()`), copies the renderer `styles.css`
+verbatim, reuses the Blueprint Kit's committed woff2 + `fonts.css`,
+esbuild-bundles the entry (design-tokens **inlined from TS source**,
+`react`/`react-dom` external so the converter binds them to `_vendor/`, `.css`
+imports via esbuild's built-in `local-css` loader — see below), concatenates
+`styles/bundle.css` = tokens + fonts + styles + the esbuild CSS-Modules output
+(the `cssEntry`; **no CSS bridge needed** — `styles.css` is written directly
+against design-tokens var names), and runs `tsc --emitDeclarationOnly` for the
+`.d.ts` tree (needs the copied `css-modules.d.ts` to typecheck `import styles
+from './X.module.css'`). `Gallery` (a demo composite in the real
+`ui/index.ts`) is deliberately **excluded** from the curated DS entry.
+
+**2026-07-12 fresh-reset finding**: since #340 ("real-app E2E pass"), `Button`
+and `AppCard` moved their styling to co-located CSS Modules (`Button.module.css`,
+`AppCard.module.css`) and `AppCard` grew two new sub-components (`KindBadge`,
+`StatusPill`, each with their own `.module.css`) that `COMPONENT_FILES` didn't
+know about — the build failed with `Could not resolve "./Button.module.css"`
+etc. until they were added, esbuild's `loader: {'.css':'local-css'}` was wired
+in, and the emitted `dist/index.css` was folded into `styles/bundle.css`.
+**Re-sync risk, updated**: if `apps/desktop/src/renderer/react/ui/` gains
+another CSS Module or sub-component, `COMPONENT_FILES` needs the matching
+entry (both the `.tsx`/`.ts` and its `.module.css`) or the build throws
+`Could not resolve`. `desktop.conventions.md` used to claim the shipped CSS
+carries "`.cd-*` component rules" — that was already stale (the real app's
+Vite config uses `generateScopedName: '[name]__[local]__[hash:base64:5]'`,
+never a `cd-` prefix) and has been corrected to describe scoped/hashed class
+names generically; don't reintroduce a literal class-name convention claim
+here since it's an implementation detail the design agent never touches
+directly.
 
 ## Shared `.design-sync/` tree — the two syncs coexist
 

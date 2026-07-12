@@ -8,7 +8,7 @@
 // inlined from source, react/react-dom external — the converter provides
 // React via _vendor/), and tsc emits the .d.ts tree for prop extraction.
 import { execSync } from 'node:child_process';
-import { writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, copyFileSync, mkdirSync, rmSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -27,13 +27,28 @@ mkdirSync(stylesDir, { recursive: true });
 const COMPONENT_FILES = [
   'Icon.tsx',
   'Button.tsx',
+  'Button.module.css',
   'Logo.tsx',
   'AppCard.tsx',
+  'AppCard.module.css',
+  'KindBadge.tsx',
+  'KindBadge.module.css',
+  'StatusPill.tsx',
+  'StatusPill.module.css',
   'cx.ts',
   'tile-visual.ts',
 ];
 for (const f of COMPONENT_FILES) copyFileSync(resolve(uiDir, f), resolve(srcDir, f));
 console.log('[build] copied', COMPONENT_FILES.length, 'component files from apps/desktop');
+
+// 1b. Ambient `*.module.css` → class-map declaration (tsc needs this to type
+//     `import styles from './X.module.css'`; Vite resolves it at runtime via
+//     its own css.modules config — nothing to replicate there).
+copyFileSync(
+  resolve(repoRoot, 'apps/desktop/src/renderer/react/css-modules.d.ts'),
+  resolve(srcDir, 'css-modules.d.ts'),
+);
+console.log('[build] copied css-modules.d.ts (ambient *.module.css types)');
 
 // 2. Curated barrel — the four shell primitives + their public types.
 writeFileSync(
@@ -74,26 +89,23 @@ copyFileSync(
 console.log('[build] copied fonts/*.woff2 + styles/fonts.css');
 
 // 5. The canonical renderer stylesheet — copied verbatim, never edited here.
-//    It defines the type scale + every cd-* component rule the shell draws.
+//    Since #340, this is a thin shell; per-component styling moved to
+//    CSS Modules (Button.module.css, AppCard.module.css, …) — see step 7.
 copyFileSync(
   resolve(repoRoot, 'apps/desktop/src/renderer/styles.css'),
   resolve(stylesDir, 'styles.css'),
 );
 console.log('[build] copied styles/styles.css');
 
-// 6. The flat cssEntry the converter copies into _ds_bundle.css. Concatenated
-//    (not @import'd — the converter copies cssEntry verbatim). Order: tokens
-//    define the vars → fonts register @font-face → styles.css reads both.
-//    No bridge needed: styles.css is written directly against design-tokens.
-const parts = ['tokens.css', 'fonts.css', 'styles.css'].map(
-  (f) => `/* ==== ${f} ==== */\n${readFileSync(resolve(stylesDir, f), 'utf8')}`,
-);
-writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
-console.log('[build] wrote styles/bundle.css (cssEntry)');
-
-// 7. Importable entry — esbuild bundles the components with design-tokens
+// 6. Importable entry — esbuild bundles the components with design-tokens
 //    inlined from TS source (its dist is CJS; source keeps named exports
 //    clean), react/react-dom external so the converter binds them to _vendor.
+//    `.css` uses esbuild's built-in `local-css` loader (native CSS Modules
+//    support since 0.21) so `import styles from './X.module.css'` resolves to
+//    a real class-name map — Button/AppCard/KindBadge/StatusPill read theirs
+//    this way since #340. Bundled CSS rules land in a companion dist/index.css
+//    (esbuild's standard behavior for a JS entry that pulls in CSS), folded
+//    into the cssEntry at step 7.
 rmSync(distDir, { recursive: true, force: true });
 const esbuild = await import(
   pathToFileURL(resolve(repoRoot, '.ds-sync/node_modules/esbuild/lib/main.js')).href
@@ -107,9 +119,23 @@ await esbuild.build({
   outfile: resolve(distDir, 'index.js'),
   external: ['react', 'react-dom', 'react/jsx-runtime'],
   alias: { '@centraid/design-tokens': resolve(repoRoot, 'packages/design-tokens/src/index.ts') },
+  loader: { '.css': 'local-css' },
   logLevel: 'info',
 });
 console.log('[build] esbuild -> dist/index.js');
+
+// 7. The flat cssEntry the converter copies into _ds_bundle.css. Concatenated
+//    (not @import'd — the converter copies cssEntry verbatim). Order: tokens
+//    define the vars → fonts register @font-face → styles.css reads both →
+//    the CSS-Modules output last (its selectors read the token vars above).
+const componentCssPath = resolve(distDir, 'index.css');
+const componentCss = existsSync(componentCssPath) ? readFileSync(componentCssPath, 'utf8') : '';
+const parts = ['tokens.css', 'fonts.css', 'styles.css'].map(
+  (f) => `/* ==== ${f} ==== */\n${readFileSync(resolve(stylesDir, f), 'utf8')}`,
+);
+if (componentCss) parts.push(`/* ==== dist/index.css (CSS Modules) ==== */\n${componentCss}`);
+writeFileSync(resolve(stylesDir, 'bundle.css'), parts.join('\n\n'));
+console.log('[build] wrote styles/bundle.css (cssEntry)', componentCss ? '(incl. CSS Modules output)' : '');
 
 // 8. .d.ts tree for prop extraction (ts-morph reads these).
 execSync('npx tsc -p tsconfig.json', { cwd: here, stdio: 'inherit' });

@@ -10,8 +10,10 @@ the command chrome, and the assistant. Import everything from
 There is **no provider or context to wrap**. Components render standalone and
 are styled entirely by the design system's global `styles.css` (it `@import`s
 the fonts and `_ds_bundle.css`, which carries the token blocks **and** the real
-`.cd-*` component rules). Every design already receives that closure. Two
-attributes on an ancestor control the look:
+per-component CSS-Modules rules). Every design already receives that closure.
+Class names are scoped/hashed (e.g. `Button__btn__aB3xZ`) — never reference one
+literally; always go through the component's own props. Two attributes on an
+ancestor control the look:
 
 - **Theme**: `data-theme="<name>"` — default (unset) = light. Available: `dark`,
   `notion-light`, `notion-dark`, `airtable-light`, `airtable-dark`,
@@ -56,8 +58,8 @@ There is **no utility-class vocabulary** here. Two rules:
 Read these before styling — they beat any summary here:
 
 - **Styles**: `styles.css` → `@import "./_ds_bundle.css"` holds the token/theme
-  variable blocks **and** the `.cd-*` component selectors. Grep it for a
-  variable's definition or a component's exact classes.
+  variable blocks **and** the per-component CSS-Modules selectors. Grep it for
+  a variable's definition or a component's exact classes.
 - **Per-component API**: `components/general/<Name>/<Name>.d.ts` (the
   `<Name>Props` contract) and `<Name>.prompt.md` (usage).
 
