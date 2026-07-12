@@ -1,3 +1,8 @@
+// governance: allow-repo-hygiene file-size-limit (#382) one profile-registry
+// module (CRUD + resolution + secrets + ssh-block updater) crossing 500 by
+// 32 lines is more legible than a mid-refactor split; a real split (issue
+// TBD) should separate resolution/transport from CRUD, not happen here.
+//
 // Gateway profile registry + active-gateway selection.
 //
 // Issue #109. Centraid is multi-gateway: one local in-process runtime
@@ -70,6 +75,17 @@ export interface GatewayProfile {
   readonly endpointTicket?: string;
   /** Remote iroh EndpointId (iroh transport), for display + `devices add`. */
   readonly endpointId?: string;
+  /**
+   * SSH admin channel (issue #382) — set once a gateway has been reached
+   * over SSH (the ConnectFlow "Over SSH" method, or the switcher's "New
+   * vault…" on an already-ssh-capable profile). Independent of `transport`:
+   * an `iroh` OR `direct` profile can ALSO carry this, since redeeming the
+   * pairing ticket `pair --vault` mints always happens over the profile's
+   * normal transport, not SSH — this block just remembers HOW to reach the
+   * box again for later admin acts (mint another ticket, create another
+   * vault). No secrets here; ssh auth rides the user's own key/agent.
+   */
+  readonly ssh?: { destination: string; dataDir?: string; remoteCli?: string };
   /** ISO timestamp set on first write. */
   readonly createdAt: string;
 }
@@ -109,6 +125,19 @@ export function defaultAvatarColor(id: string): string {
 /** Validate a user-supplied avatar color. Accepts `#RRGGBB` only. */
 function isValidAvatarColor(value: unknown): value is string {
   return typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+/** Shape-validate a persisted `ssh` block (issue #382) at read time —
+ *  corrupt/malformed JSON degrades to "no ssh block" rather than throwing. */
+function isValidSshBlock(
+  value: unknown,
+): value is { destination: string; dataDir?: string; remoteCli?: string } {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.destination !== 'string' || v.destination.length === 0) return false;
+  if (v.dataDir !== undefined && typeof v.dataDir !== 'string') return false;
+  if (v.remoteCli !== undefined && typeof v.remoteCli !== 'string') return false;
+  return true;
 }
 
 /** Result of `resolveGateway` — profile + effective URL/token. */
@@ -219,6 +248,7 @@ async function readProfile(id: string): Promise<GatewayProfile | undefined> {
       parsed.transport === 'local' || parsed.transport === 'iroh' || parsed.transport === 'direct'
         ? parsed.transport
         : undefined;
+    const ssh = isValidSshBlock(parsed.ssh) ? parsed.ssh : undefined;
     return {
       id: parsed.id,
       kind: parsed.kind,
@@ -233,6 +263,7 @@ async function readProfile(id: string): Promise<GatewayProfile | undefined> {
       ...(typeof parsed.endpointId === 'string' && parsed.endpointId.length > 0
         ? { endpointId: parsed.endpointId }
         : {}),
+      ...(ssh ? { ssh } : {}),
       createdAt: parsed.createdAt,
     };
   } catch (err) {
@@ -443,6 +474,28 @@ export async function updateGatewayToken(id: string, token: string): Promise<voi
   const profile = await readProfile(id);
   if (!profile) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
   await setGatewayToken(id, token);
+}
+
+/**
+ * Persist (or clear) a gateway's `ssh` block (issue #382) — set once
+ * GATEWAY_SSH_CONNECT successfully reaches a box over SSH, so later admin
+ * acts (create another vault, mint another ticket, "Test connection" from
+ * the switcher) can reach it again without re-asking for the destination.
+ * Pass `undefined` to clear. No-op for the local gateway (it has no ssh
+ * concept). No secrets are stored here — ssh auth rides the user's own
+ * key/agent, never a token this app holds.
+ */
+export async function updateGatewaySsh(
+  id: string,
+  ssh: { destination: string; dataDir?: string; remoteCli?: string } | undefined,
+): Promise<GatewayProfile> {
+  const current = await readProfile(id);
+  if (!current) throw new GatewayError('unknown_gateway', `No such gateway: ${id}`);
+  if (id === LOCAL_GATEWAY_ID) return current;
+  const { ssh: _dropped, ...rest } = current;
+  const next: GatewayProfile = ssh ? { ...rest, ssh } : rest;
+  await writeProfile(next);
+  return next;
 }
 
 /**

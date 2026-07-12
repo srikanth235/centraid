@@ -18,12 +18,18 @@
  *   centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]
  *   centraid-gateway print-token --data-dir <path>
  *   centraid-gateway vault <list|create|rename|delete> --data-dir <path> …   (admin plane, #289)
- *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]
+ *   centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--json]
  *   centraid-gateway devices <list|add|revoke> --data-dir <path> …
  *   centraid-gateway key <status|export|restore|rotate> --data-dir <path> …  (custody, #298)
  *   centraid-gateway service <install|uninstall|status> …                    (OS service unit, #351)
+ *   centraid-gateway status [--data-dir <path> | --config <path>] [--json]   (issue #382)
  *   centraid-gateway --help
  *   centraid-gateway --version
+ *
+ * `--json` on `pair`/`vault list`/`vault create`/`status` (issue #382) swaps
+ * the human text for a single machine-readable line — the desktop's SSH
+ * ConnectFlow drives the remote CLI this way; every other subcommand's
+ * output is unchanged.
  */
 
 import { promises as fs } from 'node:fs';
@@ -41,6 +47,7 @@ import { commandDevices, commandPair } from './device-admin.js';
 import { commandKey } from './key-admin.js';
 import { commandBackup } from './backup-admin.js';
 import { commandService } from './service-admin.js';
+import { commandStatus } from './status-admin.js';
 import { makeDaemonDevicePlane } from './endpoint-host.js';
 
 const PKG_VERSION = '0.1.0';
@@ -70,11 +77,11 @@ function usage(): never {
       'Usage:',
       '  centraid-gateway serve [--config <path>] [--data-dir <path>] [--host <h>] [--port <p>]',
       '  centraid-gateway print-token --data-dir <path>',
-      '  centraid-gateway vault list --data-dir <path>',
-      '  centraid-gateway vault create --data-dir <path> [--name <name>]',
+      '  centraid-gateway vault list --data-dir <path> [--json]',
+      '  centraid-gateway vault create --data-dir <path> [--name <name>] [--json]',
       '  centraid-gateway vault rename --data-dir <path> <vaultId> <name>',
       '  centraid-gateway vault delete --data-dir <path> <vaultId>',
-      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>]',
+      '  centraid-gateway pair --data-dir <path> [--vault <name-or-id>] [--ttl-minutes <n>] [--json]',
       '  centraid-gateway devices list --data-dir <path> [--vault <name-or-id>]',
       '  centraid-gateway devices add --data-dir <path> <endpoint-id> --vault <name-or-id> [--label <l>]',
       '  centraid-gateway devices revoke --data-dir <path> <enrollment-or-endpoint-id>',
@@ -91,6 +98,7 @@ function usage(): never {
       '  centraid-gateway service install   [--data-dir <path> | --config <path>] [--host <h>] [--port <p>] [--dry-run] [--label <id>]',
       '  centraid-gateway service uninstall [--dry-run] [--label <id>]',
       '  centraid-gateway service status    [--dry-run] [--label <id>]',
+      '  centraid-gateway status [--data-dir <path> | --config <path>] [--label <id>] [--json]',
       '  centraid-gateway --version',
       '  centraid-gateway --help',
       '',
@@ -104,7 +112,7 @@ function usage(): never {
       'A ticket minted by `pair` also redeems over plain HTTP (POST',
       '/centraid/_gateway/pair, issue #376) for a device that cannot dial',
       'the iroh endpoint directly — it enrolls the caller and mints it a',
-      'per-device HTTP bearer token, confined to that device\'s vaults the',
+      "per-device HTTP bearer token, confined to that device's vaults the",
       'same way an iroh-proved caller is. The printed token above (serve /',
       'print-token) stays the unrestricted ADMIN plane; never hand it to a',
       'device you mean to confine.',
@@ -123,6 +131,12 @@ function usage(): never {
       '(issue #351). install writes the unit pointing `serve` at the SAME',
       '--data-dir/--config it was given; --dry-run prints the unit and the',
       'commands without writing or running anything.',
+      '',
+      'status (issue #382) is a one-shot combined read: the same OS service',
+      'probe `service status` runs, plus (when --data-dir/--config is given)',
+      'whether the data dir exists, its persisted iroh endpoint id, and its',
+      'vault count. No HTTP liveness check — serve() never persists which',
+      'host:port it bound to, so there is nothing on disk to dial.',
       '',
       'Bind defaults to 127.0.0.1:0 (loopback, OS-assigned port). Pass',
       '--host 0.0.0.0 to bind LAN-reachable interfaces. There is no TLS',
@@ -320,6 +334,9 @@ async function main(): Promise<void> {
       return;
     case 'service':
       await commandService(rest, fail);
+      return;
+    case 'status':
+      await commandStatus(rest, fail);
       return;
     default:
       fail(`unknown subcommand "${sub}"`, 2);

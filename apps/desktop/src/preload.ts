@@ -35,6 +35,9 @@ const Channel = {
   // Pairing-ticket redemption + per-gateway vault preview (issue #376).
   GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
   GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
+  // ConnectFlow "handshake ladder" + "Over SSH" commit (issue #382).
+  GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
+  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
   // Gateway runtime watch (heartbeat status + outage log + down alert).
   GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
   GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
@@ -166,6 +169,25 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the flat (gateway, vault) switcher.
   listGatewayVaults: (input: { gatewayId: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_LIST_VAULTS, input),
+  // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
+  // for url/ticket/ssh/gateway inputs. Never rejects.
+  testGatewayConnection: (
+    input:
+      | { kind: 'url'; url: string; token?: string }
+      | { kind: 'ticket'; ticket: string }
+      | { kind: 'ssh'; destination: string; dataDir?: string }
+      | { kind: 'gateway'; gatewayId: string },
+  ) => ipcRenderer.invoke(Channel.GATEWAY_TEST_CONNECTION, input),
+  // ConnectFlow "Over SSH" commit (issue #382): (optional) create a vault
+  // remotely, mint+redeem a pairing ticket, persist the ssh block on the
+  // resulting profile. On success the active gateway AND vault both flip,
+  // same as `redeemGatewayPairing`.
+  sshConnectGateway: (input: {
+    destination: string;
+    dataDir?: string;
+    label?: string;
+    vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
+  }) => ipcRenderer.invoke(Channel.GATEWAY_SSH_CONNECT, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
   // the per-poll push stream the Gateway page (and sidebar pill) subscribe to.
   getGatewayRuntime: () => ipcRenderer.invoke(Channel.GATEWAY_RUNTIME_GET),

@@ -125,6 +125,43 @@ test('vault admin rejects bad usage + the last-vault delete', async () => {
   ).rejects.toThrow(/last vault/);
 });
 
+test('vault list/create --json wrap output in one {ok,...} line (issue #382)', async () => {
+  const created = lastJson(
+    await capture(() =>
+      commandVault(['create', '--data-dir', dataDir, '--name', 'Family', '--json'], fail),
+    ),
+  );
+  expect(created).toEqual({ ok: true, vaultId: expect.any(String), name: 'Family' });
+
+  const listed = lastJson(
+    await capture(() => commandVault(['list', '--data-dir', dataDir, '--json'], fail)),
+  );
+  expect(listed.ok).toBe(true);
+  expect(Array.isArray(listed.vaults)).toBe(true);
+  // The bootstrapped default vault + the one just created.
+  expect((listed.vaults as unknown[]).length).toBe(2);
+  expect(listed.vaults).toContainEqual(
+    expect.objectContaining({ vaultId: created.vaultId, name: 'Family' }),
+  );
+});
+
+test('vault --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
+  let captured = '';
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown): boolean => {
+    captured += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await expect(commandVault(['list', '--json'], fail)).rejects.toThrow(/--data-dir/);
+  } finally {
+    process.stdout.write = original;
+  }
+  const parsed = lastJson(captured);
+  expect(parsed).toMatchObject({ ok: false, error: 'usage' });
+  expect(parsed.message).toMatch(/--data-dir/);
+});
+
 // ── devices admin ─────────────────────────────────────────────────────
 
 test('devices add / list / revoke, scoped by vault', async () => {
@@ -161,7 +198,7 @@ test('devices add / list / revoke, scoped by vault', async () => {
   ).rejects.toThrow(/no enrollment/);
 });
 
-test('devices revoke cascades into that device key\'s HTTP token (issue #376)', async () => {
+test("devices revoke cascades into that device key's HTTP token (issue #376)", async () => {
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
   await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Other'], fail));
   const layout = daemonLayoutFor(dataDir);
@@ -183,14 +220,20 @@ test('devices revoke cascades into that device key\'s HTTP token (issue #376)', 
   );
 
   const familyRow = JSON.parse(
-    (await capture(() => commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail)))
+    (
+      await capture(() =>
+        commandDevices(['list', '--data-dir', dataDir, '--vault', 'Family'], fail),
+      )
+    )
       .trim()
       .split('\n')[0]!,
   ) as { enrollmentId: string };
 
   // Revoking ONE enrollment (by its row id) leaves the other — the token
   // that key holds must survive.
-  await capture(() => commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail));
+  await capture(() =>
+    commandDevices(['revoke', '--data-dir', dataDir, familyRow.enrollmentId], fail),
+  );
   expect(DeviceTokenStore.open(layout.deviceTokensFile).authorize(token)).toEqual({
     deviceKey: 'http:device-1',
   });
@@ -249,6 +292,50 @@ test('pair needs the daemon endpoint identity, then mints a pasteable ticket', a
     gw: 'gw-ticket-base32',
     vaultName: 'Family',
   });
+});
+
+test('pair --json emits one JSON line instead of the pasteable text block (issue #382)', async () => {
+  const layout = daemonLayoutFor(dataDir);
+  await fs.mkdir(dataDir, { recursive: true });
+  await fs.writeFile(
+    layout.endpointStateFile,
+    JSON.stringify({ endpointId: 'gw-endpoint', ticket: 'gw-ticket-base32' }),
+  );
+  await capture(() => commandVault(['create', '--data-dir', dataDir, '--name', 'Family'], fail));
+
+  const line = await capture(() =>
+    commandPair(['--data-dir', dataDir, '--vault', 'Family', '--json'], fail),
+  );
+  const parsed = lastJson(line);
+  expect(parsed.ok).toBe(true);
+  expect(parsed).toHaveProperty('ticket');
+  expect(parsed).toHaveProperty('vaultId');
+  expect(parsed).toMatchObject({ vaultName: 'Family' });
+  expect(typeof parsed.expiresAt).toBe('string');
+  // The ticket itself still decodes to the same payload shape as the human path.
+  const payload = JSON.parse(
+    Buffer.from(parsed.ticket as string, 'base64url').toString('utf8'),
+  ) as { kind: string; vaultName: string };
+  expect(payload).toMatchObject({ kind: 'centraid-gw-pair', vaultName: 'Family' });
+});
+
+test('pair --json failure emits {ok:false,error,message} on stdout, then still fails the process', async () => {
+  let captured = '';
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown): boolean => {
+    captured += String(chunk);
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await expect(commandPair(['--data-dir', dataDir, '--json'], fail)).rejects.toThrow(
+      CliFailError,
+    );
+  } finally {
+    process.stdout.write = original;
+  }
+  const parsed = lastJson(captured);
+  expect(parsed).toMatchObject({ ok: false, error: 'error' });
+  expect(typeof parsed.message).toBe('string');
 });
 
 // ── daemon device plane (deviceAccess + ticket redemption) ─────────────
