@@ -52,7 +52,10 @@ export type ShellRoute =
   // cycle between this shared-types module and a screen route module —
   // SettingsRoute.tsx validates it against its known page ids itself.
   | { kind: 'settings'; page?: string }
-  | { kind: 'assistant' }
+  // `conversationId` omitted = a fresh, not-yet-created conversation (the
+  // composer creates one lazily on first send); set = the sidebar's Chats
+  // list or a resumed session. See AssistantRoute.tsx.
+  | { kind: 'assistant'; conversationId?: string }
   | { kind: 'insights' }
   | { kind: 'discover' }
   | { kind: 'starred' }

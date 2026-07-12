@@ -2,19 +2,24 @@ import { type JSX, useEffect, useRef } from 'react';
 import {
   ASSISTANT_APP_ID,
   createConversation,
-  deleteConversation,
-  getUserPrefs,
-  listConversations,
   loadConversation,
   streamAssistantTurn,
+  uploadConversationAttachment,
+  MAX_ATTACHMENT_BYTES,
+  type ConversationAttachmentRef,
   type TurnStreamEvent,
 } from '../../../gateway-client.js';
-import { relativeTime } from '../../../app-format.js';
 import mainScrollCss from '../../styles/mainScroll.module.css';
-import type { AssistantSnapshot, AsstMsgDTO } from '../../screen-contracts.js';
+import type {
+  AssistantSnapshot,
+  AsstMsgDTO,
+  AsstModelPickerDTO,
+  AgentRunnerKind,
+} from '../../screen-contracts.js';
 import AssistantScreen from '../../screens/AssistantScreen.js';
 import { useShellActions } from '../actions.js';
 import { hydrateRefs, richAnswerHtml } from './assistantRich.js';
+import { loadProviders, setSubsystemModel } from './settingsProvidersData.js';
 
 interface AsstToolCall {
   id: string;
@@ -25,33 +30,29 @@ interface AsstToolCall {
   durationMs?: number;
   errorText?: string;
 }
+interface AsstAttachment {
+  hash: string;
+  mime: string;
+  filename?: string;
+  sizeBytes: number;
+}
 type AsstMsg =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; attachments?: AsstAttachment[] }
   | { kind: 'ai'; text: string; error?: boolean; streaming?: boolean }
   | { kind: 'tools'; calls: AsstToolCall[] };
 
-// Resolves the model the user picked in Settings → Agents → "Default model
-// for Claude Code" (persisted per-runner as `chatModelByRunner[kind]`) for
-// whichever runner kind is currently active. Mirrors the exact read pattern
-// `settingsProvidersData.ts`'s `loadProviders()` uses for the same two prefs.
-// Fetched fresh on every send rather than cached in the route's ref/state:
-// the user can flip this in Settings without leaving/remounting Assistant,
-// and a couple of tiny IPC reads per turn-send is cheap compared to silently
-// sending stale-model turns. Returns `undefined` (never `''`) when there's no
-// saved preference for the active kind, so callers omit `model` entirely and
-// the Claude Agent SDK's own default still applies — matching prior behavior.
-async function resolveActiveChatModel(): Promise<string | undefined> {
-  const [kindRaw, modelMap] = await Promise.all([
-    getUserPrefs()
-      .then((p) => p['agent.runner.kind'])
-      .catch(() => undefined),
-    window.CentraidApi.getSettings()
-      .then((s) => s.chatModelByRunner)
-      .catch(() => undefined),
-  ]);
-  const kind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
-  const model = modelMap?.[kind];
-  return model ? model : undefined;
+/** A file the composer has uploaded (or is uploading) ahead of the next
+ *  send — issue #190. Not persisted; lives only in this route's ref model
+ *  until it rides a turn (then it's folded into the sent user message) or
+ *  is removed. */
+interface PendingAttachment {
+  localId: string;
+  filename: string;
+  sizeBytes: number;
+  mime: string;
+  state: 'uploading' | 'ready' | 'error';
+  errorText?: string;
+  ref?: ConversationAttachmentRef;
 }
 
 const SUGGESTIONS = [
@@ -61,25 +62,59 @@ const SUGGESTIONS = [
   'Which notes mention travel plans?',
 ];
 
+interface AssistantRouteProps {
+  /** The open conversation's id, from the shell route (`{kind:'assistant',
+   *  conversationId}`) — `undefined` is a fresh, not-yet-created
+   *  conversation. Driving selection from the route (rather than an
+   *  internal thread list) is what lets the shell sidebar's "Chats" list
+   *  be the one place a conversation gets picked. */
+  conversationId?: string;
+}
+
 // React-owned Assistant copilot — replaces the vanilla renderAssistant. Owns the
-// SSE stream + thread model + the rich-answer renderer (assistantRich) and pushes
-// a derived snapshot into AssistantScreen via its onReady updater (the same
-// contract the vanilla side used). The mutable model lives in a ref (the
-// snapshot, not React state, is the source of truth for the screen).
-export default function AssistantRoute(): JSX.Element {
-  const { showToast, confirm } = useShellActions();
+// SSE stream + message model + the rich-answer renderer and pushes a derived
+// snapshot into AssistantScreen via its onReady updater. The mutable model
+// lives in a ref (the snapshot, not React state, is the source of truth for
+// the screen). The conversation LIST lives in the shell sidebar now (App.tsx
+// owns useAssistantConversations); this route only loads/streams the ONE
+// conversation named by its `conversationId` prop.
+export default function AssistantRoute({ conversationId }: AssistantRouteProps): JSX.Element {
+  const { showToast, replace, refreshAssistantThreads } = useShellActions();
   const m = useRef({
-    threads: [] as CentraidConversationSummary[],
     currentId: null as string | null,
     msgs: [] as AsstMsg[],
+    pendingAttachments: [] as PendingAttachment[],
     busy: false,
     abort: null as AbortController | null,
     disposed: false,
   });
   const updateRef = useRef<((s: AssistantSnapshot) => void) | null>(null);
+  // Set right after `submit()` lazily creates a conversation and replaces
+  // the route to carry its id — the resulting `conversationId` prop change
+  // would otherwise re-trigger the load effect below and stomp the
+  // in-progress local state with a (still-empty) server round-trip.
+  const suppressSelectRef = useRef<string | null>(null);
+  // The active runner kind as of the last `loadModelPicker()` — needed by
+  // `onSetModel` to write the right `model.<kind>.assistant` pref key
+  // without re-fetching (matches settingsProvidersData.ts's write path).
+  const modelPickerRunnerRef = useRef<AgentRunnerKind>('codex');
 
   const toMsgDTO = (msg: AsstMsg): AsstMsgDTO => {
-    if (msg.kind === 'user') return { kind: 'user', text: msg.text };
+    if (msg.kind === 'user')
+      return {
+        kind: 'user',
+        text: msg.text,
+        ...(msg.attachments?.length
+          ? {
+              attachments: msg.attachments.map((a) => ({
+                hash: a.hash,
+                filename: a.filename ?? 'Attachment',
+                mime: a.mime,
+                sizeBytes: a.sizeBytes,
+              })),
+            }
+          : {}),
+      };
     if (msg.kind === 'tools') {
       const n = msg.calls.length;
       const running = msg.calls.some((c) => c.state === 'run');
@@ -114,15 +149,16 @@ export default function AssistantRoute(): JSX.Element {
   };
 
   const buildSnapshot = (): AssistantSnapshot => ({
-    threads: m.current.threads.map((t) => ({
-      id: t.id,
-      title: t.title || 'New conversation',
-      timeLabel: relativeTime(new Date(t.updatedAt).toISOString()),
-      active: t.id === m.current.currentId,
-    })),
     empty: m.current.msgs.length === 0,
     busy: m.current.busy,
     messages: m.current.msgs.map(toMsgDTO),
+    pendingAttachments: m.current.pendingAttachments.map((a) => ({
+      id: a.localId,
+      filename: a.filename,
+      sizeBytes: a.sizeBytes,
+      state: a.state,
+      ...(a.errorText ? { errorText: a.errorText } : {}),
+    })),
   });
   const push = (): void => updateRef.current?.(buildSnapshot());
   const setBusy = (b: boolean): void => {
@@ -133,7 +169,23 @@ export default function AssistantRoute(): JSX.Element {
   const hydrate = (rows: Array<{ payload: CentraidConversationHistoryMessage }>): AsstMsg[] => {
     const out: AsstMsg[] = [];
     for (const { payload } of rows) {
-      if (payload.kind === 'user') out.push({ kind: 'user', text: payload.text ?? '' });
+      if (payload.kind === 'user')
+        out.push({
+          kind: 'user',
+          text: payload.text ?? '',
+          // Defensive: `attachments` is a newer field on persisted user
+          // turns — absent on messages sent before it existed.
+          ...(payload.attachments?.length
+            ? {
+                attachments: payload.attachments.map((a) => ({
+                  hash: a.hash,
+                  mime: a.mime,
+                  ...(a.filename ? { filename: a.filename } : {}),
+                  sizeBytes: a.sizeBytes,
+                })),
+              }
+            : {}),
+        });
       else if (payload.kind === 'ai')
         out.push({
           kind: 'ai',
@@ -159,20 +211,14 @@ export default function AssistantRoute(): JSX.Element {
     return out;
   };
 
-  const loadThreads = async (): Promise<void> => {
-    try {
-      m.current.threads = await listConversations(ASSISTANT_APP_ID);
-    } catch {
-      m.current.threads = [];
-    }
-    if (!m.current.disposed) push();
-  };
-
   const selectThread = async (id: string | null): Promise<void> => {
     m.current.abort?.abort();
     setBusy(false);
     m.current.currentId = id;
     m.current.msgs = [];
+    // Files staged for a different conversation shouldn't silently ride
+    // along with whichever one the user switches to next.
+    m.current.pendingAttachments = [];
     push();
     if (!id) return;
     try {
@@ -186,35 +232,122 @@ export default function AssistantRoute(): JSX.Element {
     push();
   };
 
-  const deleteThread = async (id: string): Promise<void> => {
-    const t = m.current.threads.find((x) => x.id === id);
-    const yes = await confirm({
-      title: 'Delete conversation?',
-      message: `“${t?.title || 'New conversation'}” will be removed from this vault's history.`,
-      confirmLabel: 'Delete',
-      danger: true,
-    });
-    if (!yes) return;
-    await deleteConversation(ASSISTANT_APP_ID, id).catch(() => undefined);
-    m.current.threads = m.current.threads.filter((x) => x.id !== id);
-    if (m.current.currentId === id) await selectThread(null);
-    else push();
+  const attachFiles = (files: File[]): void => {
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        showToast(`"${file.name}" is over the 25MB attachment limit.`);
+        continue;
+      }
+      const localId = crypto.randomUUID();
+      const mime = file.type || 'application/octet-stream';
+      m.current.pendingAttachments.push({
+        localId,
+        filename: file.name,
+        sizeBytes: file.size,
+        mime,
+        state: 'uploading',
+      });
+      push();
+      void (async () => {
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const ref = await uploadConversationAttachment(ASSISTANT_APP_ID, bytes, mime, file.name);
+          if (m.current.disposed) return;
+          const entry = m.current.pendingAttachments.find((a) => a.localId === localId);
+          if (entry) {
+            entry.state = 'ready';
+            entry.ref = ref;
+          }
+          push();
+        } catch (err) {
+          if (m.current.disposed) return;
+          const entry = m.current.pendingAttachments.find((a) => a.localId === localId);
+          if (entry) {
+            entry.state = 'error';
+            entry.errorText = err instanceof Error ? err.message : 'Upload failed';
+          }
+          push();
+        }
+      })();
+    }
+  };
+
+  // Composer model picker — reuses the exact Settings → Models → Agents data
+  // path (settingsProvidersData.ts): the active runner's catalog + the
+  // `model.<kind>.assistant` subsystem pref. No model field ever rides the
+  // turn request — the gateway resolves the effective model server-side
+  // from this same pref at turn time.
+  const loadModelPicker = async (): Promise<AsstModelPickerDTO> => {
+    const status = await loadProviders();
+    modelPickerRunnerRef.current = status.selectedKind;
+    const card = status.cards.find((c) => c.kind === status.selectedKind);
+    const models = card?.models ?? [];
+    const defaultId = status.savedModelByKind[status.selectedKind] ?? '';
+    const defaultModel =
+      models.find((m) => m.id === defaultId) ?? models.find((m) => m.default) ?? models[0];
+    return {
+      connected: card?.connected ?? false,
+      models: models.map((m) => ({
+        id: m.id,
+        ...(m.name ? { name: m.name } : {}),
+        ...(m.default ? { default: true } : {}),
+      })),
+      defaultModelName: defaultModel?.name ?? defaultModel?.id ?? 'gateway default',
+      selectedModelId: status.subsystemModelByKind[status.selectedKind]?.assistant ?? '',
+    };
+  };
+
+  const setModel = (modelId: string): void => {
+    setSubsystemModel(modelPickerRunnerRef.current, 'assistant', modelId);
+  };
+
+  const removePendingAttachment = (localId: string): void => {
+    m.current.pendingAttachments = m.current.pendingAttachments.filter(
+      (a) => a.localId !== localId,
+    );
+    push();
   };
 
   const submit = async (textArg?: string): Promise<void> => {
     const text = (textArg ?? '').trim();
-    if (!text || m.current.busy) return;
+    if (m.current.busy) return;
+    if (m.current.pendingAttachments.some((a) => a.state === 'uploading')) {
+      showToast('Wait for attachments to finish uploading.');
+      return;
+    }
+    const ready = m.current.pendingAttachments.filter(
+      (a): a is PendingAttachment & { ref: ConversationAttachmentRef } =>
+        a.state === 'ready' && a.ref !== undefined,
+    );
+    if (!text && ready.length === 0) return;
     if (!m.current.currentId) {
       try {
         const created = await createConversation(ASSISTANT_APP_ID, '');
         m.current.currentId = created.id;
+        suppressSelectRef.current = created.id;
+        replace?.({ kind: 'assistant', conversationId: created.id });
+        refreshAssistantThreads?.();
       } catch (err) {
         showToast(err instanceof Error ? err.message : 'Could not start a conversation');
         return;
       }
     }
     const conversationId = m.current.currentId;
-    m.current.msgs.push({ kind: 'user', text });
+    m.current.msgs.push({
+      kind: 'user',
+      text,
+      ...(ready.length
+        ? {
+            attachments: ready.map((a) => ({
+              hash: a.ref.hash,
+              mime: a.ref.mime,
+              filename: a.filename,
+              sizeBytes: a.ref.sizeBytes,
+            })),
+          }
+        : {}),
+    });
+    m.current.pendingAttachments = m.current.pendingAttachments.filter((a) => a.state !== 'ready');
     push();
     setBusy(true);
     m.current.abort = new AbortController();
@@ -291,9 +424,12 @@ export default function AssistantRoute(): JSX.Element {
     };
 
     try {
-      const model = await resolveActiveChatModel();
       await streamAssistantTurn(
-        { conversationId, message: text, ...(model ? { model } : {}) },
+        {
+          conversationId,
+          message: text,
+          ...(ready.length ? { attachments: ready.map((a) => a.ref) } : {}),
+        },
         onEvent,
         m.current.abort.signal,
       );
@@ -314,21 +450,37 @@ export default function AssistantRoute(): JSX.Element {
         if (live) live.streaming = false;
         setBusy(false);
         push();
-        void loadThreads();
+        // A completed turn can change the sidebar row's title (first turn)
+        // and timestamp — refresh the shell's conversation list.
+        refreshAssistantThreads?.();
       }
     }
   };
 
+  // Disposal lifecycle — abort any in-flight turn and stop pushing snapshots
+  // once the route unmounts (navigating away from Assistant entirely).
   useEffect(() => {
     const model = m.current;
     model.disposed = false;
-    void loadThreads();
     return () => {
       model.disposed = true;
       model.abort?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#325) mount-once thread load, deliberately []
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/unmount lifecycle only, deliberately []
   }, []);
+
+  // Drive which conversation is loaded from the route. Fires on mount (with
+  // whatever `conversationId` the route opened with) and again whenever the
+  // sidebar/route changes it — except right after `submit()` itself just
+  // created + replaced to this id, which the suppress guard above skips.
+  useEffect(() => {
+    if (conversationId && suppressSelectRef.current === conversationId) {
+      suppressSelectRef.current = null;
+      return;
+    }
+    void selectThread(conversationId ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectThread closes over the stable ref model, not React state
+  }, [conversationId]);
 
   return (
     <div className={mainScrollCss.hasWall}>
@@ -343,9 +495,11 @@ export default function AssistantRoute(): JSX.Element {
           m.current.abort?.abort();
           setBusy(false);
         }}
-        onSelectThread={(id) => void selectThread(id)}
-        onDeleteThread={(id) => void deleteThread(id)}
+        onAttachFiles={attachFiles}
+        onRemovePendingAttachment={removePendingAttachment}
         hydrateRefs={(node) => hydrateRefs(node)}
+        loadModelPicker={loadModelPicker}
+        onSetModel={setModel}
       />
     </div>
   );

@@ -23,6 +23,8 @@ import ShellFrame from './ShellFrame.js';
 export interface ShellNav {
   route: ShellRoute;
   navigate: (route: ShellRoute) => void;
+  /** Swap the current history entry in place (no new back-stack entry). */
+  replace: (route: ShellRoute) => void;
   back: () => void;
   forward: () => void;
   canGoBack: boolean;
@@ -76,6 +78,7 @@ export default function ShellApp({
     () => ({
       route,
       navigate: (r) => dispatch({ type: 'navigate', route: r }),
+      replace: (r) => dispatch({ type: 'replace', route: r }),
       back: () => dispatch({ type: 'back' }),
       forward: () => dispatch({ type: 'forward' }),
       canGoBack: canBack(state),

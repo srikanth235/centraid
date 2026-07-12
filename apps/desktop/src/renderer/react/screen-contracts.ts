@@ -446,11 +446,19 @@ export interface AgentCardDTO {
   modelsLoading: boolean;
   toolsLoading: boolean;
 }
+/**
+ * The chat/agent subsystems that can each pin their own model, independent
+ * of the runner's default (issue: model config → gateway prefs store).
+ * Mirrors the gateway prefs keys `model.<runnerKind>.<subsystem>`.
+ */
+export type ModelSubsystem = 'assistant' | 'ask' | 'builder' | 'automations';
 export interface AgentsStatusDTO {
   selectedKind: AgentRunnerKind;
   cards: AgentCardDTO[];
   anyLoading: boolean;
   savedModelByKind: Record<string, string>;
+  /** Per-runner subsystem model overrides, keyed by runner kind then subsystem. */
+  subsystemModelByKind: Record<string, Partial<Record<ModelSubsystem, string>>>;
 }
 export interface SettingsProvidersBridgeProps {
   loadStatus: () => Promise<AgentsStatusDTO>;
@@ -458,8 +466,10 @@ export interface SettingsProvidersBridgeProps {
   refreshTools: () => Promise<AgentsStatusDTO>;
   /** Switch the active agent; resolves true on success. */
   activateRunner: (kind: AgentRunnerKind) => Promise<boolean>;
-  /** Persist this agent's default model ('' = gateway default). */
+  /** Persist this agent's default model ('' = clears back to the backend default). */
   setAgentModel: (kind: AgentRunnerKind, modelId: string) => void;
+  /** Persist this agent's per-subsystem model override ('' = clears back to the default model). */
+  setSubsystemModel: (kind: AgentRunnerKind, subsystem: ModelSubsystem, modelId: string) => void;
 }
 
 // ── Settings: Space (issue #382) ─────────────────────────────────────────────
@@ -618,43 +628,79 @@ export interface RunViewBridgeProps {
 }
 
 // ── Assistant (streaming copilot) ───────────────────────────────────────────
-// The vanilla side owns the stream (streamAssistantTurn), the message model,
+// AssistantRoute owns the stream (streamAssistantTurn), the message model,
 // and the rich-answer renderer; it pushes a snapshot to React on each change.
 // Final AI answers carry pre-rendered HTML (from the vanilla `richAnswer`);
 // React injects it and re-hydrates the interactive vault refs via `hydrateRefs`.
+// The conversation LIST + selection now live in the shell sidebar (App.tsx +
+// Sidebar.tsx) — AssistantScreen renders a single, full-width conversation
+// only, so there's no `threads`/`onSelectThread`/`onDeleteThread` here.
 export interface AsstToolCallDTO {
   tool: string;
   sql?: string;
   state: 'run' | 'ok' | 'error';
   meta: string;
 }
+/** A file attached to a sent (or historical) user message. */
+export interface AsstAttachmentDTO {
+  hash: string;
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+}
 export type AsstMsgDTO =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; attachments?: AsstAttachmentDTO[] }
   | { kind: 'tools'; label: string; calls: AsstToolCallDTO[] }
   | { kind: 'ai'; streaming: true; text: string }
   | { kind: 'ai'; streaming: false; html: string; error: boolean };
-export interface AsstThreadDTO {
+/** A file the composer has uploaded (or is uploading) ahead of the next send. */
+export interface AsstPendingAttachmentDTO {
   id: string;
-  title: string;
-  timeLabel: string;
-  active: boolean;
+  filename: string;
+  sizeBytes: number;
+  state: 'uploading' | 'ready' | 'error';
+  errorText?: string;
 }
 export interface AssistantSnapshot {
-  threads: AsstThreadDTO[];
   empty: boolean;
   busy: boolean;
   messages: AsstMsgDTO[];
+  pendingAttachments: AsstPendingAttachmentDTO[];
+}
+/**
+ * The composer's inline model picker (subsystem `assistant`, active runner
+ * only) — mirrors the same `model.<runnerKind>.assistant` gateway pref the
+ * Settings → Models → Agents "Chat & agent subsystems" group reads/writes
+ * (settingsProvidersData.ts), so both surfaces always agree. `models` is the
+ * active runner's catalog; `selectedModelId` is `''` when the subsystem has
+ * no override (falls through to `defaultModelName`, the runner's own default
+ * — either its saved default model or its catalog-marked default).
+ */
+export interface AsstModelOptionDTO {
+  id: string;
+  name?: string;
+  default?: boolean;
+}
+export interface AsstModelPickerDTO {
+  connected: boolean;
+  models: AsstModelOptionDTO[];
+  defaultModelName: string;
+  selectedModelId: string;
 }
 export interface AssistantBridgeProps {
   suggestions: string[];
   onReady: (update: (s: AssistantSnapshot) => void) => void;
   onSend: (text: string) => void;
   onStop: () => void;
-  /** `null` = new conversation. */
-  onSelectThread: (id: string | null) => void;
-  onDeleteThread: (id: string) => void;
+  /** Upload one or more just-picked/dropped/pasted files ahead of the next send. */
+  onAttachFiles: (files: File[]) => void;
+  onRemovePendingAttachment: (id: string) => void;
   /** Wire the interactive vault refs inside a just-rendered answer node. */
   hydrateRefs: (node: HTMLElement) => void;
+  /** Read the assistant model picker's current state (fetched on mount). */
+  loadModelPicker: () => Promise<AsstModelPickerDTO>;
+  /** Persist the subsystem model override ('' clears back to the default model). */
+  onSetModel: (modelId: string) => void;
 }
 
 // ── App-view settings popover ────────────────────────────────────────────────

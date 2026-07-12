@@ -123,6 +123,9 @@ export interface ConversationAttachmentRef {
   filename?: string;
 }
 
+/** The gateway's per-file cap on `uploadConversationAttachment` (issue #190). */
+export const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
 export interface StreamTurnInput {
   /** The chat session id the gateway keys the turn on. */
   conversationId: string;
@@ -282,6 +285,7 @@ export async function streamAssistantTurn(
       message: input.message,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinking ? { thinking: input.thinking } : {}),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     }),
     signal,
   });
