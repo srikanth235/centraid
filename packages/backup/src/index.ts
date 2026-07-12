@@ -2,16 +2,21 @@
 export { BackupProviderError, CODE_STATUS } from './provider.js';
 export type {
   AccountStatus,
+  BackupDiscovery,
   BackupProvider,
   BackupProviderErrorCode,
   BackupProviderErrorDetails,
   ProviderCapabilities,
+  ProviderCapabilityFlag,
   Retention,
   S3Grant,
   SnapshotRegistration,
   SnapshotRow,
+  StoreClass,
+  StoreUsageReport,
   TargetInfo,
   Usage,
+  UsageByStore,
 } from './provider.js';
 
 // Data plane.
@@ -19,6 +24,12 @@ export { assertSafeKey, FsObjectStore } from './object-store.js';
 export type { ObjectStore } from './object-store.js';
 export { S3ObjectStore } from './s3-store.js';
 export type { S3ObjectStoreOptions } from './s3-store.js';
+
+// Layer-1 generic grant path (PROTOCOL.md § Credential grant) — for a
+// consumer (e.g. a `cas` store client) that wants a grant without pulling in
+// the snapshot engine or `BackupProvider`.
+export { requestCasGrant, requestStorageGrant } from './cas-grant.js';
+export type { RequestCasGrantOptions, RequestStorageGrantOptions } from './cas-grant.js';
 
 // Chunking (FORMAT.md § Chunking).
 export { CHUNKER_PARAMS, chunkBuffer, chunkStream, findCut, GEAR } from './chunker.js';
