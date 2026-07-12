@@ -65,6 +65,15 @@
 .row[data-active='true'] {
   background: color-mix(in srgb, var(--accent) 11%, transparent);
 }
+.rowDisabled {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.55;
+}
+.rowDisabled:hover,
+.rowDisabled:focus-visible {
+  background: transparent;
+}
 .avatar {
   width: 28px;
   height: 28px;
@@ -75,6 +84,18 @@
 }
 .avatar svg {
   display: block;
+}
+.avatarMuted {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink-4);
+}
+@keyframes vsSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin svg {
+  animation: vsSpin 900ms linear infinite;
 }
 .text {
   flex: 1;

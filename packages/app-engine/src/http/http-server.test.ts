@@ -4,7 +4,11 @@ import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { Runtime } from '../runtime.ts';
-import { startRuntimeHttpServer, type RuntimeHttpServerHandle } from './http-server.ts';
+import {
+  startRuntimeHttpServer,
+  AUTHED_DEVICE_HEADER,
+  type RuntimeHttpServerHandle,
+} from './http-server.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -102,6 +106,57 @@ test('publicPaths serve without the bearer; everything else still 401s (issue #3
     expect(other.status).toBe(401);
   } finally {
     await publicServer.close();
+  }
+});
+
+test('authorizeBearer (issue #376): admin plane, device plane, and refusal', async () => {
+  const runtime = new Runtime({ appsDir: workspace });
+  const pluggableServer = await startRuntimeHttpServer({
+    runtime,
+    extraHandlers: [
+      async (req, res) => {
+        if ((req.url ?? '') !== '/centraid/_echo-device') return false;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ deviceHeader: req.headers[AUTHED_DEVICE_HEADER] ?? null }));
+        return true;
+      },
+    ],
+    authorizeBearer: (bearer) => {
+      if (bearer === 'admin-secret') return { plane: 'admin' };
+      if (bearer === 'device-secret') return { plane: 'device', deviceKey: 'dev-abc' };
+      return undefined;
+    },
+  });
+  try {
+    // An unrecognized bearer is refused, same 401 shape as the default check.
+    const bad = await fetch(`${pluggableServer.url}/centraid/_apps`, {
+      headers: { Authorization: 'Bearer nope' },
+    });
+    expect(bad.status).toBe(401);
+
+    // The admin plane authenticates but stamps no device header.
+    const admin = await fetch(`${pluggableServer.url}/centraid/_echo-device`, {
+      headers: { Authorization: 'Bearer admin-secret' },
+    });
+    expect(admin.status).toBe(200);
+    expect(await admin.json()).toEqual({ deviceHeader: null });
+
+    // The device plane authenticates AND stamps the resolved device key.
+    const device = await fetch(`${pluggableServer.url}/centraid/_echo-device`, {
+      headers: { Authorization: 'Bearer device-secret' },
+    });
+    expect(device.status).toBe(200);
+    expect(await device.json()).toEqual({ deviceHeader: 'dev-abc' });
+
+    // A client cannot forge the device header directly — it is always
+    // deleted before authorizeBearer decides anything.
+    const forged = await fetch(`${pluggableServer.url}/centraid/_echo-device`, {
+      headers: { Authorization: 'Bearer admin-secret', [AUTHED_DEVICE_HEADER]: 'forged-key' },
+    });
+    expect(forged.status).toBe(200);
+    expect(await forged.json()).toEqual({ deviceHeader: null });
+  } finally {
+    await pluggableServer.close();
   }
 });
 

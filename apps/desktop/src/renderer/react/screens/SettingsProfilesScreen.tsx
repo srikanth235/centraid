@@ -155,6 +155,7 @@ export default function SettingsProfilesScreen({
   onAdd,
   onConnect,
   onRemoveConnection,
+  onAddConnection,
 }: SettingsProfilesBridgeProps): JSX.Element {
   return (
     <>
@@ -199,6 +200,12 @@ export default function SettingsProfilesScreen({
               <ConnectionRow key={c.id} c={c} onConnect={onConnect} onRemove={onRemoveConnection} />
             ))}
           </div>
+          <button type="button" className={styles.profManageAdd} onClick={onAddConnection}>
+            <span>
+              <Icon name="Plus" size={14} />
+            </span>
+            Add gateway
+          </button>
         </div>
       </div>
     </>

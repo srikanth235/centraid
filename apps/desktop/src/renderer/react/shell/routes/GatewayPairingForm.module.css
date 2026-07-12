@@ -1,0 +1,147 @@
+/* GatewayPairingForm (issue #376) — the ticket-paste form shared by the
+   Settings → Connections "Add gateway" modal and the onboarding gateway
+   step. Field styling mirrors SpaceModal.module.css's `.profField*` /
+   SettingsConnectionsScreen.module.css's `.wizard*` (same kit tokens, same
+   padding/radius rhythm) so it reads as one system with the rest of Settings.
+   Pure kit tokens throughout — the onboarding host wraps this in a
+   `data-theme="dark"` element so the tokens resolve to the dark ramp
+   regardless of the user's actual theme pref (see OnboardingScreen.tsx). */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field {
+  display: block;
+}
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-bottom: 7px;
+  font: var(--t-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.fieldOptional {
+  font: var(--t-small);
+  font-size: 11px;
+  color: var(--ink-4);
+  font-weight: 400;
+}
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: 0.5px solid var(--line);
+  border-radius: 8px;
+  font: var(--t-body);
+  font-size: 13.5px;
+  color: var(--ink);
+  outline: none;
+  transition:
+    border-color 120ms,
+    box-shadow 120ms;
+}
+.textarea {
+  resize: vertical;
+  min-height: 64px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.input:focus,
+.textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.input:disabled,
+.textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.hint {
+  margin-top: 6px;
+  font: var(--t-small);
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+
+/* "Connect by URL" — collapsed by default (the AssistantScreen `.tools`
+   details/summary convention: no default marker, a text arrow instead). */
+.advanced {
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 2%, transparent);
+}
+.advancedSummary {
+  cursor: pointer;
+  padding: 9px 12px;
+  list-style: none;
+  user-select: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.advancedSummary::-webkit-details-marker {
+  display: none;
+}
+.advancedSummary::before {
+  content: '▸ ';
+  color: var(--ink-4);
+}
+.advanced[open] > .advancedSummary::before {
+  content: '▾ ';
+}
+.advancedBody {
+  padding: 2px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.modeToggle {
+  display: flex;
+  gap: 6px;
+}
+.modeBtn[data-selected='true'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+
+.error {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--danger);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.connectIcon {
+  display: inline-flex;
+}
+.connectIcon[data-spin='true'] {
+  animation: gwp-spin 0.9s linear infinite;
+}
+@keyframes gwp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .connectIcon[data-spin='true'] {
+    animation: none;
+  }
+}

@@ -48,6 +48,7 @@ function makeProps(over: Partial<SettingsProfilesBridgeProps> = {}): SettingsPro
     onAdd: vi.fn(),
     onConnect: vi.fn(),
     onRemoveConnection: vi.fn(),
+    onAddConnection: vi.fn(),
     ...over,
   };
 }
@@ -135,5 +136,15 @@ describe('SettingsProfilesScreen', () => {
       ),
     );
     expect(props.onRemoveConnection).toHaveBeenCalledWith('remote1');
+  });
+
+  it('fires onAddConnection from the Connections section "Add gateway" button', () => {
+    const props = makeProps();
+    const el = mount(props);
+    const connList = el.querySelectorAll('.profManageList')[1] as HTMLElement;
+    const addBtn = connList.nextElementSibling as HTMLButtonElement;
+    expect(addBtn.textContent).toContain('Add gateway');
+    void act(() => addBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onAddConnection).toHaveBeenCalledTimes(1);
   });
 });

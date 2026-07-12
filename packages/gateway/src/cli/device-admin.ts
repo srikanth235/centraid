@@ -8,6 +8,15 @@
  * the device being enrolled. `devices add` is the direct shortcut when the
  * admin already knows a device's EndpointId (the desktop shows its own in
  * Settings). Both write files the daemon re-reads live — no restart.
+ *
+ * The SAME ticket also redeems over plain HTTP (`POST
+ * /centraid/_gateway/pair`, `routes/pair-routes.ts`, issue #376) for a
+ * device that cannot dial iroh — that path mints an `EnrollmentStore` row
+ * exactly like `devices add` (its `endpointId` is a synthetic
+ * `http:<uuid>`), plus a per-device HTTP token. `devices list` therefore
+ * already shows HTTP-redeemed devices; `devices revoke` cascades into
+ * their token too (a device key with no enrollments left anywhere loses
+ * the token that rode it).
  */
 
 import fs from 'node:fs';
@@ -22,6 +31,7 @@ import {
   encodePairingTicket,
   DEFAULT_TICKET_TTL_MS,
 } from '../serve/pairing-store.js';
+import { DeviceTokenStore } from '../serve/device-token-store.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
 
 const quietLogger = {
@@ -207,5 +217,12 @@ export async function commandDevices(
   if (!target) fail('usage: devices revoke --data-dir <path> <enrollment-or-endpoint-id>', 2);
   const removed = devices.revoke(target);
   if (removed.length === 0) fail(`no enrollment matches "${target}"`, 1);
+  // A device key that no longer holds ANY enrollment loses its HTTP token
+  // too (issue #376) — the ACL bit is gone; the token that rode it dies
+  // with it. A key that still holds another vault's row keeps its token
+  // (revoking one row is "leave this vault", not "kill the device").
+  const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
+  const deadKeys = new Set(removed.map((r) => r.endpointId).filter((key) => !devices.isEnrolled(key)));
+  for (const key of deadKeys) deviceTokens.revokeForDeviceKey(key);
   for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
 }

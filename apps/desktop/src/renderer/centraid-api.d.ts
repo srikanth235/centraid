@@ -272,6 +272,41 @@ export interface CentraidGatewayProfile {
 }
 
 /**
+ * Result of redeeming a gateway pairing ticket (issue #376). On success, the
+ * paired gateway AND the vault it enrolled into are both now active — the
+ * renderer should treat this the same as a `setActiveGateway` +
+ * `setActiveVault` response and drop gateway/vault-scoped state.
+ */
+export type CentraidRedeemGatewayPairingResult =
+  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
+  | {
+      ok: false;
+      /** Stable error code — safe to switch on for copy. */
+      error: 'invalid_ticket' | 'ticket_expired' | 'invalid_input' | 'unreachable' | 'bad_response';
+      /** Human-readable detail, safe to show as-is if there's no copy for `error`. */
+      message: string;
+    };
+
+/**
+ * One vault of a (not-necessarily-active) gateway, from `listGatewayVaults`
+ * (issue #376). Mirrors `renderer/gateway-client-vault.ts`'s `VaultListEntry`
+ * — same shape, fetched for a gateway the client isn't addressing yet.
+ */
+export interface CentraidGatewayVaultEntry {
+  vaultId: string;
+  name: string;
+  ownerPartyId?: string;
+  color?: string;
+  icon?: string;
+  blurb?: string;
+}
+
+/** Result of `listGatewayVaults` — a preview read, never mutates active state. */
+export type CentraidListGatewayVaultsResult =
+  | { ok: true; vaults: CentraidGatewayVaultEntry[] }
+  | { ok: false; error: 'unreachable' | 'auth_failed' | 'bad_response' };
+
+/**
  * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
  * gateway-side (`<bin> --version`) and read over `GET /centraid/_agents/status`
  * (see `renderer/gateway-client-conversation.ts`). Centraid is agnostic to how each
@@ -579,6 +614,31 @@ interface CentraidApi {
    * crosses to the renderer. Re-fetched on every gateway switch.
    */
   getGatewayAuth(): Promise<{ baseUrl: string; token?: string; vaultId?: string }>;
+  /**
+   * Redeem a pairing ticket minted by `centraid-gateway pair --vault <name>`
+   * (issue #376). Default `mode: 'auto'` picks the `http` transport when
+   * `url` is set, else `iroh`. On success the paired gateway AND the vault
+   * it enrolled into are both active — treat the result like a combined
+   * `setActiveGateway` + `setActiveVault` and drop gateway/vault-scoped
+   * state; the same `onGatewayChanged` / `onVaultChanged` broadcasts fire.
+   * Never rejects — failures come back as `{ok:false, error, message}`.
+   */
+  redeemGatewayPairing(input: {
+    /** The pasted/scanned one-line pairing token. */
+    ticket: string;
+    /** Optional profile label; falls back to the gateway/vault's own name. */
+    label?: string;
+    mode?: 'auto' | 'iroh' | 'http';
+    /** Required for (and only meaningful with) the `http` transport. */
+    url?: string;
+  }): Promise<CentraidRedeemGatewayPairingResult>;
+  /**
+   * Read a gateway's vault list WITHOUT switching to it (issue #376) — the
+   * flat (gateway, vault) switcher's preview. `~3s` timeout; a resolvable
+   * but unauthenticated/unreachable gateway comes back `ok:false`, never a
+   * rejection.
+   */
+  listGatewayVaults(input: { gatewayId: string }): Promise<CentraidListGatewayVaultsResult>;
   /**
    * Latest gateway-runtime snapshot from the main-process heartbeat
    * monitor. Resolves immediately from the last poll (≤5s old); the first

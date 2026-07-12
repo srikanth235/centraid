@@ -488,6 +488,9 @@ export interface SettingsProfilesBridgeProps {
   onAdd: () => void;
   onConnect: (id: string) => void;
   onRemoveConnection: (id: string) => void;
+  /** Opens the "Add gateway" modal (issue #376) — pairing-ticket redemption
+   *  or the advanced URL+token add. */
+  onAddConnection: () => void;
 }
 
 // ── Home ────────────────────────────────────────────────────────────────────

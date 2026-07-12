@@ -1,16 +1,26 @@
 import { tileFinish } from '@centraid/design-tokens';
-import type { VaultListEntry } from '../../gateway-client.js';
 import { iconSvg } from './iconSvg.js';
 import { DEFAULT_SPACE_ICON, PROFILE_COLORS } from './routes/SpaceModal.js';
+import type { FlatSwitcherRow, PairRow } from './flatVaultSwitcher-core.js';
 import styles from './vaultSwitcher.module.css';
 
-// Vault quick-switcher popover — ported from the vanilla profiles.ts
-// `openDropdown`. A generic anchored body-portal overlay, same mechanics as
-// `contextMenu.ts` (and for the same reason: the sidebar column clips
-// `overflow: hidden` and, in themes with a blurred sidebar, a
+// Flat (gateway, vault) quick-switcher popover (issue #376, spec #289 §7) —
+// ported from the vanilla profiles.ts `openDropdown`, then widened from
+// "the active gateway's vaults" to every registered gateway's (gateway,
+// vault) pairs in one list. A generic anchored body-portal overlay, same
+// mechanics as `contextMenu.ts` (and for the same reason: the sidebar
+// column clips `overflow: hidden` and, in themes with a blurred sidebar, a
 // `backdrop-filter` establishes a containing block that would trap a plain
 // `position: fixed` descendant — appending straight to `document.body`
 // sidesteps both).
+//
+// This module is IO-free and knows nothing about gateways being reachable
+// or not — it just renders whatever `FlatSwitcherRow[]` it's given
+// (`flatVaultSwitcherRegistry.ts` owns the fetch/cache/merge that produces
+// that list) and reports which pair got picked. `updateVaultSwitcherRows`
+// patches an already-open popover's list in place, for the
+// stale-while-revalidate refresh: rows stream in per-gateway without
+// closing/reopening (and re-stealing focus/scroll) on every settle.
 //
 // Deliberately simplified vs. the vanilla dropdown: no per-row hover-reveal
 // edit button and no inline add/rename/delete — those already have a home in
@@ -20,9 +30,8 @@ import styles from './vaultSwitcher.module.css';
 
 export interface VaultSwitcherOpts {
   anchor: DOMRect;
-  vaults: VaultListEntry[];
-  activeVaultId: string;
-  onSwitch: (vaultId: string) => void;
+  rows: FlatSwitcherRow[];
+  onSelect: (row: PairRow) => void;
   onManage: () => void;
   /** Called once, however the popover closes (row pick, backdrop, Escape,
    *  or a subsequent open call) — lets the trigger button drop its
@@ -32,8 +41,11 @@ export interface VaultSwitcherOpts {
 
 let backdropEl: HTMLElement | null = null;
 let popEl: HTMLElement | null = null;
+let listEl: HTMLElement | null = null;
+let eyebrowEl: HTMLElement | null = null;
 let keyHandler: ((e: KeyboardEvent) => void) | null = null;
 let closeCb: (() => void) | null = null;
+let selectCb: ((row: PairRow) => void) | null = null;
 
 export function isVaultSwitcherOpen(): boolean {
   return popEl !== null;
@@ -48,6 +60,9 @@ export function closeVaultSwitcher(): void {
   backdropEl = null;
   popEl?.remove();
   popEl = null;
+  listEl = null;
+  eyebrowEl = null;
+  selectCb = null;
   const cb = closeCb;
   closeCb = null;
   cb?.();
@@ -64,9 +79,110 @@ function avatarNode(color: string | undefined, icon: string | undefined): HTMLEl
   return span;
 }
 
+function statusIconNode(status: 'loading' | 'unreachable' | 'auth_failed' | 'bad_response'): HTMLElement {
+  const span = document.createElement('span');
+  span.className = `${styles.avatar ?? ''} ${styles.avatarMuted ?? ''}`;
+  span.innerHTML =
+    status === 'loading' ? iconSvg('Loader', 15, 2) : iconSvg('AlertCircle', 15, 1.9);
+  if (status === 'loading') span.classList.add(styles.spin ?? '');
+  return span;
+}
+
+function statusText(status: 'loading' | 'unreachable' | 'auth_failed' | 'bad_response'): string {
+  switch (status) {
+    case 'loading':
+      return 'Checking…';
+    case 'auth_failed':
+      return 'Sign-in required';
+    case 'bad_response':
+      return 'Unexpected response';
+    default:
+      return 'Offline';
+  }
+}
+
+function buildPairRow(row: PairRow): HTMLElement {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = styles.row ?? '';
+  el.setAttribute('role', 'menuitem');
+  el.dataset.active = String(row.isActive);
+  el.append(avatarNode(row.color, row.icon));
+
+  const text = document.createElement('span');
+  text.className = styles.text ?? '';
+  const nameEl = document.createElement('span');
+  nameEl.className = styles.name ?? '';
+  nameEl.textContent = row.name;
+  text.append(nameEl);
+  const sub = document.createElement('span');
+  sub.className = styles.sub ?? '';
+  sub.textContent = row.gatewayLabel;
+  text.append(sub);
+  el.append(text);
+
+  const check = document.createElement('span');
+  check.className = styles.check ?? '';
+  if (row.isActive) check.innerHTML = iconSvg('Check', 14, 2.2);
+  else if (row.gatewayRefreshing) check.innerHTML = iconSvg('Loader', 12, 2);
+  if (row.gatewayRefreshing && !row.isActive) check.classList.add(styles.spin ?? '');
+  el.append(check);
+
+  el.addEventListener('click', () => {
+    const select = selectCb;
+    closeVaultSwitcher();
+    if (!row.isActive) select?.(row);
+  });
+  return el;
+}
+
+function buildStatusRow(row: Extract<FlatSwitcherRow, { kind: 'gateway-status' }>): HTMLElement {
+  const el = document.createElement('div');
+  el.className = `${styles.row ?? ''} ${styles.rowDisabled ?? ''}`;
+  el.setAttribute('role', 'menuitem');
+  el.setAttribute('aria-disabled', 'true');
+  el.append(statusIconNode(row.status));
+
+  const text = document.createElement('span');
+  text.className = styles.text ?? '';
+  const nameEl = document.createElement('span');
+  nameEl.className = styles.name ?? '';
+  nameEl.textContent = row.gatewayLabel;
+  text.append(nameEl);
+  const sub = document.createElement('span');
+  sub.className = styles.sub ?? '';
+  sub.textContent = statusText(row.status);
+  text.append(sub);
+  el.append(text);
+  return el;
+}
+
+function renderRows(rows: FlatSwitcherRow[]): void {
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  for (const row of rows) {
+    listEl.append(row.kind === 'pair' ? buildPairRow(row) : buildStatusRow(row));
+  }
+  if (eyebrowEl) {
+    const pairCount = rows.filter((r) => r.kind === 'pair').length;
+    eyebrowEl.textContent = `Spaces · ${pairCount}`;
+  }
+}
+
+/**
+ * Patch an already-open popover's rows in place (stale-while-revalidate
+ * refresh landing) — no-op if the popover isn't open, so a background
+ * fetch settling after the owner already closed the popover is harmless.
+ */
+export function updateVaultSwitcherRows(rows: FlatSwitcherRow[]): void {
+  if (!isVaultSwitcherOpen()) return;
+  renderRows(rows);
+}
+
 export function openVaultSwitcher(opts: VaultSwitcherOpts): void {
   closeVaultSwitcher();
   closeCb = opts.onClose ?? null;
+  selectCb = opts.onSelect;
 
   backdropEl = document.createElement('div');
   backdropEl.className = styles.scrim ?? '';
@@ -77,48 +193,14 @@ export function openVaultSwitcher(opts: VaultSwitcherOpts): void {
   popEl.className = styles.pop ?? '';
   popEl.setAttribute('role', 'menu');
 
-  const eyebrow = document.createElement('div');
-  eyebrow.className = styles.eyebrow ?? '';
-  eyebrow.textContent = `Spaces · ${opts.vaults.length}`;
-  popEl.append(eyebrow);
+  eyebrowEl = document.createElement('div');
+  eyebrowEl.className = styles.eyebrow ?? '';
+  popEl.append(eyebrowEl);
 
-  const list = document.createElement('div');
-  list.className = styles.list ?? '';
-  for (const v of opts.vaults) {
-    const isActive = v.vaultId === opts.activeVaultId;
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = styles.row ?? '';
-    row.setAttribute('role', 'menuitem');
-    row.dataset.active = String(isActive);
-    row.append(avatarNode(v.color, v.icon));
-
-    const text = document.createElement('span');
-    text.className = styles.text ?? '';
-    const nameEl = document.createElement('span');
-    nameEl.className = styles.name ?? '';
-    nameEl.textContent = v.name;
-    text.append(nameEl);
-    if (v.blurb) {
-      const sub = document.createElement('span');
-      sub.className = styles.sub ?? '';
-      sub.textContent = v.blurb;
-      text.append(sub);
-    }
-    row.append(text);
-
-    const check = document.createElement('span');
-    check.className = styles.check ?? '';
-    if (isActive) check.innerHTML = iconSvg('Check', 14, 2.2);
-    row.append(check);
-
-    row.addEventListener('click', () => {
-      closeVaultSwitcher();
-      if (!isActive) opts.onSwitch(v.vaultId);
-    });
-    list.append(row);
-  }
-  popEl.append(list);
+  listEl = document.createElement('div');
+  listEl.className = styles.list ?? '';
+  popEl.append(listEl);
+  renderRows(opts.rows);
 
   popEl.append(Object.assign(document.createElement('div'), { className: styles.divider ?? '' }));
 

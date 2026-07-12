@@ -14,6 +14,15 @@
  * The QUIC dial is inherently a live-network operation; this module owns the
  * lifecycle (one proxy per profile, dedupe, teardown) and delegates the
  * wire to `@centraid/tunnel`, which is covered by its own offline battery.
+ *
+ * `ensureIrohDeviceKey` (issue #376) is exported so `gateway-pairing.ts` can
+ * mint/read the SAME key file before a profile even exists: the enrolled
+ * device identity is the iroh EndpointId of the dialing client, so the key
+ * that redeems a pairing ticket and the key that later dials the gateway
+ * must be identical. The pairing flow pre-mints the gateway id, calls this
+ * to get its secret key, dials with it, and only writes `profile.json`
+ * (via `addGateway({ id, ... })`) on success — so the key file and the
+ * profile agree on id from the first read onward.
  */
 
 import fs from 'node:fs';
@@ -42,7 +51,13 @@ function deviceKeyFile(gatewayId: string): string {
   return path.join(gatewayDir(gatewayId), 'iroh-device-key.bin');
 }
 
-function readOrMintDeviceKey(gatewayId: string): Uint8Array {
+/**
+ * Read (or mint on first call) the 32-byte iroh secret key for `gatewayId`.
+ * Exported so `gateway-pairing.ts` can obtain — and thereby dial with — the
+ * exact key that will later live at this path once the profile is written;
+ * see the module doc comment above.
+ */
+export function ensureIrohDeviceKey(gatewayId: string): Uint8Array {
   const file = deviceKeyFile(gatewayId);
   try {
     const bytes = fs.readFileSync(file);
@@ -64,7 +79,7 @@ function readOrMintDeviceKey(gatewayId: string): Uint8Array {
 export async function deviceEndpointId(gatewayId: string): Promise<string> {
   const existing = connections.get(gatewayId);
   if (existing) return existing.client.endpointId;
-  const client = await createTunnelClient({ secretKey: readOrMintDeviceKey(gatewayId) });
+  const client = await createTunnelClient({ secretKey: ensureIrohDeviceKey(gatewayId) });
   const id = client.endpointId;
   await client.close();
   return id;
@@ -82,7 +97,7 @@ export async function ensureIrohProxy(gatewayId: string, endpointTicket: string)
   const inFlight = starting.get(gatewayId);
   if (inFlight) return (await inFlight).baseUrl;
   const p = (async (): Promise<IrohConnection> => {
-    const client = await createTunnelClient({ secretKey: readOrMintDeviceKey(gatewayId) });
+    const client = await createTunnelClient({ secretKey: ensureIrohDeviceKey(gatewayId) });
     // Re-dial per proxy request so the tunnel follows a dropped connection;
     // startLocalProxy calls this for every HTTP request.
     const proxy = await startLocalProxy(() => client.connect(endpointTicket));

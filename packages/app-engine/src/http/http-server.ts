@@ -66,6 +66,19 @@ export interface RuntimeHttpServerOptions {
    * credential on every request.
    */
   publicPathPrefixes?: readonly string[];
+  /**
+   * Pluggable bearer authorization (issue #376). When set, it REPLACES the
+   * single-shared-token equality check: called with the raw bearer string
+   * (Authorization header, `Bearer ` prefix stripped), it returns
+   * `{plane:'admin'}` for the landlord token, `{plane:'device',
+   * deviceKey}` for a per-device tenant token, or `undefined` to refuse
+   * the request with 401. On a `'device'` match, the caller's resolved
+   * `deviceKey` is stamped onto `AUTHED_DEVICE_HEADER` for downstream
+   * handlers to read — comparisons should be timing-safe, same
+   * expectation as the default `token` check. Absent → the original
+   * single-shared-token behavior (`opts.token`).
+   */
+  authorizeBearer?: (bearer: string) => BearerAuthorization | undefined;
 }
 
 export interface RuntimeHttpServerHandle {
@@ -79,6 +92,19 @@ export interface RuntimeHttpServerHandle {
 
 const CONVERSATIONS_PREFIX = '/_centraid-conversations';
 const USER_STORE_PREFIX = '/_centraid-user';
+
+/**
+ * Internal, server-stamped device-identity header (issue #376). Set ONLY
+ * by `route()` below, ONLY after `authorizeBearer` resolves a presented
+ * bearer to a device-plane token — never trust a client-supplied value:
+ * every request has it deleted first, so a bearer-holder can never forge
+ * an identity for a downstream handler (the gateway's `composedHandler`)
+ * to trust.
+ */
+export const AUTHED_DEVICE_HEADER = 'x-centraid-authed-device';
+
+/** What a presented bearer resolved to — the shared landlord token, or one tenant's device. */
+export type BearerAuthorization = { plane: 'admin' } | { plane: 'device'; deviceKey: string };
 
 /**
  * Permissive CORS for the desktop renderer (issue: thin-client). The
@@ -157,12 +183,29 @@ export async function startRuntimeHttpServer(
     const isPublic =
       (opts.publicPaths ?? []).includes(pathname) ||
       (opts.publicPathPrefixes ?? []).some((prefix) => pathname.startsWith(prefix));
+    // Never trust a client-supplied device header — deleted unconditionally
+    // before auth runs; only the `authorizeBearer` branch below re-sets it,
+    // and only after verifying the bearer names a device token (#376).
+    delete req.headers[AUTHED_DEVICE_HEADER];
     const raw = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-    if (!isPublic && (!raw || !timingSafeEqual(raw, token))) {
-      res.statusCode = 401;
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
-      return;
+    if (!isPublic) {
+      if (opts.authorizeBearer) {
+        const authz = raw ? opts.authorizeBearer(raw) : undefined;
+        if (!authz) {
+          res.statusCode = 401;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
+          return;
+        }
+        if (authz.plane === 'device') {
+          req.headers[AUTHED_DEVICE_HEADER] = authz.deviceKey;
+        }
+      } else if (!raw || !timingSafeEqual(raw, token)) {
+        res.statusCode = 401;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ error: 'unauthorized', message: 'Invalid bearer token.' }));
+        return;
+      }
     }
     if (conversationHandler && (req.url ?? '').startsWith(CONVERSATIONS_PREFIX)) {
       const handled = await conversationHandler(req, res);

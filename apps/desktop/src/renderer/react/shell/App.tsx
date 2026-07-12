@@ -19,7 +19,9 @@ import { useGatewayRuntime } from './useGatewayRuntime.js';
 import { useShellApps } from './useShellApps.js';
 import { useStarred } from './useStarred.js';
 import { relaunchToUpdate, useUpdateStatus } from './useUpdateStatus.js';
-import { closeVaultSwitcher, openVaultSwitcher } from './vaultSwitcher.js';
+import { applySelection, resolveSelection, type PairRow } from './flatVaultSwitcher-core.js';
+import { getCachedFlatRows, openFlatVaultRegistry } from './flatVaultSwitcherRegistry.js';
+import { closeVaultSwitcher, openVaultSwitcher, updateVaultSwitcherRows } from './vaultSwitcher.js';
 import ApprovalsRoute from './routes/ApprovalsRoute.js';
 import AppViewRoute from './routes/AppViewRoute.js';
 import AssistantRoute from './routes/AssistantRoute.js';
@@ -204,19 +206,41 @@ export default function App(): JSX.Element {
           subtitle={
             activeVault.loading || !activeVault.active
               ? '—'
-              : `${appsCount} app${appsCount === 1 ? '' : 's'}`
+              : `${appsCount} app${appsCount === 1 ? '' : 's'}${
+                  // Ambient gateway hint (#289 §7) — minimal: fold onto the
+                  // existing subtitle line rather than redesigning the head.
+                  activeVault.activeGatewayKind === 'remote' && activeVault.activeGatewayLabel
+                    ? ` · ${activeVault.activeGatewayLabel}`
+                    : ''
+                }`
           }
           open={vaultSwitcherOpen}
           onToggle={(anchor) => {
             setVaultSwitcherOpen(true);
+            const activeGatewayId = activeVault.activeGatewayId;
+            if (!activeGatewayId) return;
+            const active = { gatewayId: activeGatewayId, vaultId: activeVault.activeVaultId };
+            const select = (row: PairRow): void => {
+              const plan = resolveSelection(row, active.gatewayId);
+              void applySelection(plan, {
+                setActiveGateway: (input) => window.CentraidApi.setActiveGateway(input),
+                setActiveVault: (input) => window.CentraidApi.setActiveVault(input),
+              });
+            };
+            // Flat (gateway, vault) switcher (#376): paint instantly from
+            // whatever's cached from a prior open, then refresh every
+            // registered gateway concurrently and patch the list in place
+            // as each settles (stale-while-revalidate).
             openVaultSwitcher({
               anchor,
-              vaults: activeVault.vaults,
-              activeVaultId: activeVault.activeVaultId,
-              onSwitch: activeVault.switchVault,
+              rows: getCachedFlatRows(active),
+              onSelect: select,
               onManage: go({ kind: 'settings' }),
               onClose: () => setVaultSwitcherOpen(false),
             });
+            void openFlatVaultRegistry(active, updateVaultSwitcherRows).then(({ rows }) =>
+              updateVaultSwitcherRows(rows),
+            );
           }}
         />
       );

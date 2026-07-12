@@ -1,7 +1,17 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OnboardingScreen, { type OnboardingScreenProps } from './OnboardingScreen.js';
+
+const redeemGatewayPairing = vi.fn();
+beforeEach(() => {
+  redeemGatewayPairing.mockReset();
+  (globalThis as unknown as { CentraidApi: unknown }).CentraidApi = {
+    addGateway: vi.fn(),
+    redeemGatewayPairing,
+    setActiveGateway: vi.fn(),
+  };
+});
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -75,5 +85,63 @@ describe('OnboardingScreen', () => {
       await Promise.resolve();
     });
     expect(el.querySelector('.error')?.textContent).toContain('nope');
+  });
+
+  it('"Connect to a gateway instead" swaps in the ticket form; "Use this Mac instead" swaps back', () => {
+    const el = mount({ onComplete: vi.fn() });
+    typeName(el.querySelector('.input') as HTMLInputElement, 'Ada');
+    const altAction = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect instead'),
+    ) as HTMLButtonElement;
+    void act(() => altAction.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    // The name/color form is gone; the ticket-paste form is in its place.
+    expect(el.querySelector('.cta')).toBeNull();
+    expect(el.querySelector('textarea')).toBeTruthy();
+    expect(el.textContent).toContain('Connect to a');
+
+    const back = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Use this Mac instead',
+    ) as HTMLButtonElement;
+    void act(() => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(el.querySelector('.cta')).toBeTruthy();
+    expect(el.querySelector('textarea')).toBeNull();
+  });
+
+  it('completing the gateway form finishes onboarding with the typed name, falling back to the vault name', async () => {
+    redeemGatewayPairing.mockResolvedValue({
+      gatewayId: 'gw1',
+      ok: true,
+      vaultId: 'v1',
+      vaultName: 'Office',
+    });
+    const onComplete = vi.fn().mockResolvedValue(undefined);
+    const el = mount({ onComplete });
+    // No name typed — the vault name should carry the finish call.
+    const altAction = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect instead'),
+    ) as HTMLButtonElement;
+    void act(() => altAction.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+
+    const setter = Object.getOwnPropertyDescriptor(
+      globalThis.HTMLTextAreaElement.prototype,
+      'value',
+    )?.set;
+    const textarea = el.querySelector('textarea') as HTMLTextAreaElement;
+    act(() => {
+      setter?.call(textarea, 'a-ticket');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const connectBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Connect & finish'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      connectBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(redeemGatewayPairing).toHaveBeenCalledWith({ label: undefined, ticket: 'a-ticket' });
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ displayName: 'Office' }));
   });
 });

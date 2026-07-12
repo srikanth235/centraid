@@ -6,8 +6,13 @@
  * `centraid-gateway print-token` subcommand so the user can paste the
  * URL + token into the desktop's "Add remote gateway" form.
  *
- * v0 model: one shared token per daemon. Per-device tokens with a
- * revocation list are listed as out-of-scope on the parent issue.
+ * This token is the ADMIN/landlord plane: any holder can address every
+ * vault on the daemon — never treat it as per-tenant auth. The TENANT
+ * plane is per-device HTTP tokens (issue #376, `serve/device-token-
+ * store.ts`), minted by `POST /centraid/_gateway/pair` or the iroh
+ * pairing ceremony and confined to their device's enrollments by
+ * `build-gateway.ts`'s `composedHandler`; the shared token here plays no
+ * part in that check.
  */
 
 import { promises as fs } from 'node:fs';

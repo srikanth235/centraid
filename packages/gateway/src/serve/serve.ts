@@ -14,9 +14,10 @@
  *     daemon (paths under a config-file `dataDir`).
  */
 
-import { startRuntimeHttpServer } from '@centraid/app-engine';
+import { startRuntimeHttpServer, type RuntimeHttpServerOptions } from '@centraid/app-engine';
 import { WEBHOOK_ROUTE_PREFIX } from '@centraid/automation';
 import { OAUTH_CALLBACK_PATH } from '../routes/connections-routes.js';
+import { PAIR_ROUTE_PATH } from '../routes/pair-routes.js';
 import { buildGateway, type BuildGatewayOptions, type BuiltGateway } from './build-gateway.js';
 
 export interface ServeOptions extends BuildGatewayOptions {
@@ -30,6 +31,14 @@ export interface ServeOptions extends BuildGatewayOptions {
    * per-launch; the daemon persists one across restarts.
    */
   token?: string;
+  /**
+   * Pluggable bearer authorization (issue #376), forwarded verbatim to
+   * `startRuntimeHttpServer`. When set, it replaces the shared-token
+   * equality check with (shared token → admin plane) + (per-device HTTP
+   * token → device plane). Absent → the original single-shared-token
+   * behavior (the desktop embed keeps this).
+   */
+  authorizeBearer?: RuntimeHttpServerOptions['authorizeBearer'];
 }
 
 export interface GatewayServeHandle extends Omit<
@@ -66,12 +75,17 @@ export async function serve(options: ServeOptions): Promise<GatewayServeHandle> 
     // the auth, checked by `webhookHandler` itself; requiring the gateway
     // owner's bearer as well would defeat the point of a webhook (the
     // caller is a third-party service, not the owner).
-    publicPaths: [OAUTH_CALLBACK_PATH],
+    // The pairing-redemption route (issue #376) is public for the same
+    // reason: its own one-time ticket secret IS the auth, checked by
+    // `makePairRouteHandler` itself. Only present when the daemon wired
+    // `devicePairing` — the desktop embed never adds this path.
+    publicPaths: [OAUTH_CALLBACK_PATH, ...(options.devicePairing ? [PAIR_ROUTE_PATH] : [])],
     publicPathPrefixes: [WEBHOOK_ROUTE_PREFIX],
   };
   if (options.host !== undefined) serverOptions.host = options.host;
   if (options.port !== undefined) serverOptions.port = options.port;
   if (options.token !== undefined) serverOptions.token = options.token;
+  if (options.authorizeBearer !== undefined) serverOptions.authorizeBearer = options.authorizeBearer;
   const server = await startRuntimeHttpServer(serverOptions);
   await gateway.start(server.url);
 
