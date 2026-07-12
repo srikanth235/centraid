@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type JSX } from 'react';
+import GatewayPairingForm from '../shell/routes/GatewayPairingForm.js';
+import type { GatewayConnectSuccess } from '../shell/routes/gatewayModals.js';
 import styles from './OnboardingScreen.module.css';
 
 export interface OnboardingCompleteInput {
@@ -48,13 +50,23 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The gateway choice (issue #376) is a toggle within this same step, not a
+  // separate screen: "Keep everything on this Mac" stays the unconditional
+  // default (the CTA below still does exactly what it always did — a fresh
+  // install never sees the gateway panel unless it asks for it). Flipping
+  // this swaps the name/color form for the ticket-paste form; the name/color
+  // already chosen are still what gets saved on a successful connect.
+  const [gatewayOpen, setGatewayOpen] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // One frame so the CSS entry animation isn't fighting the focus shift.
+    // Skipped once the gateway panel is open — GatewayPairingForm focuses its
+    // own ticket field.
+    if (gatewayOpen) return;
     const id = requestAnimationFrame(() => nameRef.current?.focus());
     return () => cancelAnimationFrame(id);
-  }, []);
+  }, [gatewayOpen]);
 
   const ready = displayName.trim().length > 0 && !submitting;
 
@@ -74,6 +86,22 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
     })();
   };
 
+  // The gateway panel's own form handles the "connecting…" lifecycle; this
+  // only fires once `connectGateway` has already succeeded, so it's just the
+  // same local-profile save `submit()` does. Falls back to the vault's name
+  // when the user hopped to "Connect to a gateway" before typing their own —
+  // connecting shouldn't be gated on filling in a name first.
+  const finishAfterGatewayConnect = (result: GatewayConnectSuccess): void => {
+    setError(null);
+    void (async () => {
+      try {
+        await onComplete({ avatarColor, displayName: displayName.trim() || result.label });
+      } catch (err) {
+        setError(`Couldn't save your profile: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    })();
+  };
+
   return (
     <div
       className={styles.view}
@@ -87,100 +115,133 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps):
           <span className={styles.eyebrowDot} aria-hidden="true" />
           CENTRAID
         </div>
-        <h1 className={styles.title}>
-          Make yourself <em>at home</em>.
-        </h1>
-        <p className={styles.sub}>
-          A name and a color. We use them for your local workspace — you can change either at any
-          time.
-        </p>
+        {!gatewayOpen ? (
+          <>
+            <h1 className={styles.title}>
+              Make yourself <em>at home</em>.
+            </h1>
+            <p className={styles.sub}>
+              A name and a color. We use them for your local workspace — you can change either at
+              any time.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className={styles.title}>
+              Connect to a <em>gateway</em>.
+            </h1>
+            <p className={styles.sub}>
+              Paste the pairing ticket from <code>centraid-gateway pair --vault &lt;name&gt;</code>{' '}
+              running elsewhere. Your name and color still save to this Mac.
+            </p>
+          </>
+        )}
         <div className={styles.avatarWrap}>
           <span className={styles.avatarRing} aria-hidden="true" />
           <span className={styles.avatar} style={{ background: avatarColor }} aria-hidden="true">
             <span className={styles.initials}>{initials(displayName)}</span>
           </span>
         </div>
-        <form
-          className={styles.form}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <label className={styles.fieldLabel} htmlFor="cd-onb-name">
-            Your name
-          </label>
-          <input
-            ref={nameRef}
-            id="cd-onb-name"
-            className={styles.input}
-            type="text"
-            placeholder="What should we call you?"
-            autoCapitalize="words"
-            autoComplete="name"
-            spellCheck={false}
-            aria-label="Your name"
-            maxLength={60}
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                submit();
-              }
+        {!gatewayOpen ? (
+          <form
+            className={styles.form}
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
             }}
-          />
-          <span className={styles.fieldLabel} id="cd-onb-color-label">
-            Pick a color
-          </span>
-          <div className={styles.swatches} role="radiogroup" aria-labelledby="cd-onb-color-label">
-            {AVATAR_PALETTE.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className={styles.swatch}
-                role="radio"
-                aria-label={`Color ${c}`}
-                aria-checked={c === avatarColor}
-                data-color={c}
-                data-selected={c === avatarColor ? 'true' : 'false'}
-                style={{ background: c }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setAvatarColor(c);
-                }}
-              />
-            ))}
-          </div>
-          <button
-            type="button"
-            className={styles.cta}
-            disabled={!ready}
-            data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
-            onClick={submit}
           >
-            <span>Enter Centraid</span>
-            <span className={styles.ctaArrow}>
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
+            <label className={styles.fieldLabel} htmlFor="cd-onb-name">
+              Your name
+            </label>
+            <input
+              ref={nameRef}
+              id="cd-onb-name"
+              className={styles.input}
+              type="text"
+              placeholder="What should we call you?"
+              autoCapitalize="words"
+              autoComplete="name"
+              spellCheck={false}
+              aria-label="Your name"
+              maxLength={60}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+            />
+            <span className={styles.fieldLabel} id="cd-onb-color-label">
+              Pick a color
             </span>
-          </button>
-          {error ? (
-            <div className={styles.error} role="alert">
-              {error}
+            <div className={styles.swatches} role="radiogroup" aria-labelledby="cd-onb-color-label">
+              {AVATAR_PALETTE.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  className={styles.swatch}
+                  role="radio"
+                  aria-label={`Color ${c}`}
+                  aria-checked={c === avatarColor}
+                  data-color={c}
+                  data-selected={c === avatarColor ? 'true' : 'false'}
+                  style={{ background: c }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setAvatarColor(c);
+                  }}
+                />
+              ))}
             </div>
-          ) : null}
-        </form>
+            <button
+              type="button"
+              className={styles.cta}
+              disabled={!ready}
+              data-state={submitting ? 'submitting' : ready ? 'ready' : 'idle'}
+              onClick={submit}
+            >
+              <span>Enter Centraid</span>
+              <span className={styles.ctaArrow}>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </span>
+            </button>
+            <button type="button" className={styles.altAction} onClick={() => setGatewayOpen(true)}>
+              Already have a gateway running? Connect instead →
+            </button>
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+          </form>
+        ) : (
+          <div className={styles.gatewayPanel} data-theme="dark">
+            <GatewayPairingForm
+              cancelLabel="Use this Mac instead"
+              connectLabel="Connect & finish"
+              onCancel={() => setGatewayOpen(false)}
+              onConnected={finishAfterGatewayConnect}
+            />
+            {error ? (
+              <div className={styles.error} role="alert">
+                {error}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );

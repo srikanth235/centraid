@@ -29,6 +29,8 @@ import SpaceModal, {
   randomSpaceColor,
   type SpaceModalInitial,
 } from './SpaceModal.js';
+import GatewayModal from './GatewayModal.js';
+import type { GatewayConnectSuccess } from './gatewayModals.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 import {
   attachVaultConnection,
@@ -190,6 +192,18 @@ export default function SettingsRoute({
       mode: 'add',
       initial: { icon: DEFAULT_SPACE_ICON, color: randomSpaceColor() },
     });
+  // "Add gateway" (issue #376) — a sibling modal to the Spaces one above,
+  // separate boolean state since it doesn't need row/initial context. The
+  // active gateway/vault switch already happened inside GatewayPairingForm
+  // by the time onConnected fires; App.tsx's onGatewayChanged/onVaultChanged
+  // listener does the actual re-scope + navigate-home, so this just closes
+  // the modal, toasts, and refreshes the Connections list under it.
+  const [gatewayModalOpen, setGatewayModalOpen] = useState(false);
+  const onGatewayConnected = (result: GatewayConnectSuccess): void => {
+    setGatewayModalOpen(false);
+    showToast(`Connected · ${result.label}`);
+    refreshSpaces();
+  };
   const openEditSpace = (row: ProfileRowDTO): void => {
     void loadSpaceInitial(row).then((initial) => setSpaceModal({ mode: 'edit', row, initial }));
   };
@@ -357,6 +371,7 @@ export default function SettingsRoute({
                   onSwitch={(id) => void window.CentraidApi.setActiveVault({ vaultId: id })}
                   onConnect={(id) => void window.CentraidApi.setActiveGateway({ id })}
                   onRemoveConnection={(id) => void window.CentraidApi.removeGateway({ id })}
+                  onAddConnection={() => setGatewayModalOpen(true)}
                   // Add / rename / delete drive the React <SpaceModal> below; the
                   // gateway I/O + re-scope live in spaceModals.ts.
                   onAdd={openAddSpace}
@@ -391,6 +406,12 @@ export default function SettingsRoute({
                 },
               }
             : {})}
+        />
+      ) : null}
+      {gatewayModalOpen ? (
+        <GatewayModal
+          onCancel={() => setGatewayModalOpen(false)}
+          onConnected={onGatewayConnected}
         />
       ) : null}
     </>
