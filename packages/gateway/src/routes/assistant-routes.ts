@@ -22,8 +22,12 @@ import {
   ASSISTANT_APP_ID,
   driveTurnOverSse,
   isValidConversationId,
+  parseTurnAttachmentRefs,
+  resolveTurnAttachments,
   type ConversationHistoryStore,
   type ConversationRunner,
+  type ModelSubsystem,
+  type TurnAttachmentRef,
 } from '@centraid/app-engine';
 import type { RouteHandler } from '../serve/build-gateway.js';
 import type { VaultRegistry } from '../serve/vault-registry.js';
@@ -39,6 +43,14 @@ export interface AssistantRouteOptions {
   runner: ConversationRunner;
   /** Per-gateway lock map — assistant turns serialize per conversation. */
   conversationLocks: Map<string, Promise<void>>;
+  /**
+   * Model resolution (prefs plumbing): given the subsystem and the request
+   * body's explicit `model` (if any), resolve the model id/alias per the
+   * shared order — explicit → `model.<runnerKind>.<subsystem>` prefs →
+   * `model.<runnerKind>.default` prefs → nothing. Optional so hermetic
+   * tests can omit it (falls through to the raw body value).
+   */
+  resolveModel?: (subsystem: ModelSubsystem, explicit?: string) => Promise<string | undefined>;
 }
 
 export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHandler {
@@ -90,6 +102,21 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
         const plane = opts.vaults.current();
         const extraSystemPrompt = buildAssistantPrompt(plane.name, plane.assistantContext());
 
+        // Attachments uploaded ahead of the turn (issue #190), mirroring the
+        // per-app `_turn` route exactly: the bytes already live in the
+        // `_assistant` blob CAS (`POST /_centraid-conversations/apps/_assistant/blobs`).
+        const attachmentRefs: TurnAttachmentRef[] = parseTurnAttachmentRefs(body.attachments);
+        const turnAttachments = resolveTurnAttachments(
+          opts.conversationStore,
+          ASSISTANT_APP_ID,
+          attachmentRefs,
+        );
+
+        const explicitModel = typeof body.model === 'string' ? body.model : undefined;
+        const model = opts.resolveModel
+          ? await opts.resolveModel('assistant', explicitModel)
+          : explicitModel;
+
         await driveTurnOverSse({
           req,
           res,
@@ -103,10 +130,12 @@ export function makeAssistantRouteHandler(opts: AssistantRouteOptions): RouteHan
           conversationRunnerSessionDir: opts.vaults.currentWorkspace().runnerSessionDir,
           conversationLocks: opts.conversationLocks,
           banner: `assistant vault ${plane.boot.vaultId} session ${conversationId}`,
-          model: typeof body.model === 'string' ? body.model : undefined,
+          model,
           thinking: typeof body.thinking === 'string' ? body.thinking : undefined,
           prevAdapterSessionId: session.adapterSessionId ?? undefined,
           prevAdapterKind: session.adapterKind ?? undefined,
+          ...(attachmentRefs.length > 0 ? { attachmentRefs } : {}),
+          ...(turnAttachments.length > 0 ? { turnAttachments } : {}),
         });
         return true;
       }

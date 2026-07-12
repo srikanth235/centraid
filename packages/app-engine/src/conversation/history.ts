@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto';
 import type { WorkspaceProvider } from '../stores/vault-workspace.js';
 import { ConversationStore, type ConversationMeta } from './store.js';
 import type { RunKind } from './schema.js';
-import { isValidAppId } from '../registry/app-paths.js';
+import { ASSISTANT_APP_ID, isValidAppOrAssistantId } from '../registry/app-paths.js';
 import { costForUsage } from '../model-pricing.js';
 import { parseStepOutput, parseToolArgs, parseToolOutput } from './transcript.js';
 import { BlobStore, blobUrl, type PutResult } from '../data/blob-store.js';
@@ -51,6 +51,21 @@ export interface ConversationMessageRow {
   idx: number;
   payload: unknown;
   createdAt: number;
+}
+
+/**
+ * Attachment metadata exposed on a reconstructed `user` transcript entry
+ * (issue: model/attachment prefs plumbing). One entry per `attachments`
+ * row FK'd to the turn's `message_in` item — `hash` is the CAS key (see
+ * `blobUrl`/`blobPathFor`), `url` a ready-to-fetch download link so both
+ * frontends can render an attachment chip without recomputing it.
+ */
+export interface ConversationAttachmentPayload {
+  hash: string;
+  mime: string;
+  sizeBytes: number;
+  filename?: string;
+  url: string;
 }
 
 /** A file already landed in the blob CAS, to attach to a turn's inbound message. */
@@ -118,13 +133,10 @@ export interface RecordTurnInput {
   nodes: TurnNode[];
 }
 
-/**
- * The vault assistant's reserved conversation scope. Real app ids can never
- * start with `_` (see `isValidAppId`), so this namespace is structurally
- * collision-free: the assistant's threads ride the same per-vault ledger,
- * blob CAS and HTTP surface as app chats, scoped under this id.
- */
-export const ASSISTANT_APP_ID = '_assistant';
+// Re-exported for back-compat — every existing import site pulls this from
+// the package root (`@centraid/app-engine`), which re-exports it from here.
+// The value now lives in `app-paths.ts` (see there for why).
+export { ASSISTANT_APP_ID };
 
 export class ConversationHistoryStore {
   private readonly workspace: WorkspaceProvider;
@@ -144,7 +156,7 @@ export class ConversationHistoryStore {
   }
 
   private appConversation(appId: string): { store: ConversationStore } {
-    if (appId !== ASSISTANT_APP_ID && !isValidAppId(appId)) {
+    if (!isValidAppOrAssistantId(appId)) {
       throw new Error(`conversation-history: invalid app id "${appId}"`);
     }
     return { store: this.store };
@@ -243,10 +255,10 @@ export class ConversationHistoryStore {
   }
 
   /** Attachment metadata + download URL for a message item's attachments. */
-  private attachmentsPayload(appId: string, itemId: string): unknown[] {
+  private attachmentsPayload(appId: string, itemId: string): ConversationAttachmentPayload[] {
     const { store } = this.appConversation(appId);
     return store.listAttachmentsForItem(itemId).map((a) => ({
-      id: a.id,
+      hash: a.hash,
       mime: a.mime,
       sizeBytes: a.sizeBytes,
       ...(a.filename !== undefined ? { filename: a.filename } : {}),

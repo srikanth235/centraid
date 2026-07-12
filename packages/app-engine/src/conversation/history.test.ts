@@ -132,6 +132,51 @@ describe('ConversationHistoryStore', () => {
     expect(loaded?.messages[1]!.payload).toEqual({ kind: 'ai', text: 'reply' });
   });
 
+  it('recordTurn attachments surface on the reconstructed user message (hash/mime/sizeBytes/filename/url)', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, {
+      conversationId: s.id,
+      userMessage: 'see attached',
+      startedAt: 1_000,
+      endedAt: 1_010,
+      ok: true,
+      finalText: 'got it',
+      attachments: [
+        { hash: 'a'.repeat(64), mime: 'image/png', sizeBytes: 1234, filename: 'shot.png' },
+      ],
+      nodes: [{ kind: 'step', text: 'got it', startedAt: 1_000, endedAt: 1_010 }],
+    });
+    const loaded = store.getSession(APP, s.id);
+    const user = loaded?.messages[0]!.payload as {
+      kind: string;
+      text: string;
+      attachments?: Array<{
+        hash: string;
+        mime: string;
+        sizeBytes: number;
+        filename?: string;
+        url: string;
+      }>;
+    };
+    expect(user.kind).toBe('user');
+    expect(user.attachments).toEqual([
+      {
+        hash: 'a'.repeat(64),
+        mime: 'image/png',
+        sizeBytes: 1234,
+        filename: 'shot.png',
+        url: `/_centraid-conversations/apps/${APP}/blobs/${'a'.repeat(64)}`,
+      },
+    ]);
+  });
+
+  it('recordTurn omits `attachments` from the user payload when there are none', () => {
+    const s = store.createSession(APP);
+    store.recordTurn(APP, turn(s.id, 'no files', 'ok'));
+    const user = store.getSession(APP, s.id)?.messages[0]!.payload as Record<string, unknown>;
+    expect('attachments' in user).toBe(false);
+  });
+
   it('recordTurn preserves order across multiple turns', () => {
     const s = store.createSession(APP);
     store.recordTurn(APP, turn(s.id, 'q1', 'a1', 1_000));

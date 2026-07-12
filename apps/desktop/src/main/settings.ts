@@ -33,15 +33,6 @@ export interface PersistedSettings {
   /** Optional URL the home shelf hits for remote-template updates. */
   remoteTemplatesUrl?: string;
   /**
-   * Per-runner chat-model selection for the app-view agentic chat, keyed by
-   * runner kind (`'codex'` | `'claude-code'` | …). A model id only means
-   * something inside its own runner, so the choice is scoped to the runner
-   * rather than stored as one global id — switching the active agent can
-   * never leave a foreign model id selected, and each agent remembers its
-   * own pick. A missing key → that runner uses its gateway default.
-   */
-  chatModelByRunner?: Record<string, string>;
-  /**
    * The active vault the client addresses on each gateway (issue #289),
    * keyed by gateway id. The server no longer holds an active-vault
    * pointer — the client owns it and sends it as `x-centraid-vault`.
@@ -135,9 +126,6 @@ export interface DesktopSettings {
   activeProfileAvatarColor: string;
   /** UI prefs (unchanged from earlier shapes). */
   remoteTemplatesUrl?: string;
-  /** Per-runner chat-model selection (keyed by runner kind). See
-   * {@link PersistedSettings.chatModelByRunner}. */
-  chatModelByRunner?: Record<string, string>;
   /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show onboarding
@@ -167,21 +155,6 @@ function persistedDefaults(): PersistedSettings {
 }
 
 /**
- * Defensive parse of the persisted `chatModelByRunner` map: keep only
- * `string → non-empty-string` entries, drop everything else. Returns
- * `{ chatModelByRunner }` ready to spread, or `undefined` when there's
- * nothing valid to carry. Not migration — just malformed-write hygiene.
- */
-function sanitizeModelMap(raw: unknown): { chatModelByRunner: Record<string, string> } | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const out: Record<string, string> = {};
-  for (const [kind, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value === 'string' && value.length > 0) out[kind] = value;
-  }
-  return Object.keys(out).length ? { chatModelByRunner: out } : undefined;
-}
-
-/**
  * Type-narrow a raw `settings.json` blob into `PersistedSettings`.
  * Unknown fields are silently dropped — defensive parsing for malformed
  * writes, not migration. Centraid is v0; there's no prior on-disk
@@ -196,12 +169,6 @@ function narrow(raw: Record<string, unknown>): PersistedSettings {
     ...(typeof raw.remoteTemplatesUrl === 'string'
       ? { remoteTemplatesUrl: raw.remoteTemplatesUrl }
       : {}),
-    // A legacy global `chatModel` string (pre-#188) is intentionally NOT
-    // migrated into `chatModelByRunner`: Centraid is v0/pre-release with no
-    // on-disk-shape compatibility guarantees, and a stale global id can't be
-    // safely attributed to a specific runner anyway. It's dropped; the picker
-    // falls back to each runner's gateway default until the user re-picks.
-    ...sanitizeModelMap(raw.chatModelByRunner),
     ...sanitizeVaultMap(raw.activeVaultByGateway),
     ...(typeof raw.onboardingCompletedAt === 'string'
       ? { onboardingCompletedAt: raw.onboardingCompletedAt }
@@ -302,7 +269,6 @@ async function resolveEffective(p: PersistedSettings): Promise<DesktopSettings> 
     gatewayToken: resolved.token,
     ...(activeVaultId !== undefined ? { activeVaultId } : {}),
     ...(p.remoteTemplatesUrl !== undefined ? { remoteTemplatesUrl: p.remoteTemplatesUrl } : {}),
-    ...(p.chatModelByRunner !== undefined ? { chatModelByRunner: p.chatModelByRunner } : {}),
     ...(p.onboardingCompletedAt !== undefined
       ? { onboardingCompletedAt: p.onboardingCompletedAt }
       : {}),

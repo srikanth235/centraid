@@ -23,7 +23,12 @@ import {
   updateConnectionStatus,
 } from './settingsConnectionsData.js';
 import { deleteSpace, saveSpace } from './spaceModals.js';
-import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
+import {
+  activateRunner,
+  loadProviders,
+  setAgentModel,
+  setSubsystemModel,
+} from './settingsProvidersData.js';
 import {
   attachVaultConnection,
   confirmStorageRecoveryKit,
@@ -131,7 +136,7 @@ const PAGES: readonly PageDef[] = [
     section: 'Models',
     icon: 'Sparkle',
     subtitle:
-      'The coding-agent CLIs the gateway can drive. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
+      'The coding-agent CLIs the gateway can drive, plus which model each one uses by default and per chat surface. Detection checks whether each CLI is runnable on the gateway’s host — Centraid is agnostic to how they authenticate.',
   },
 ];
 
@@ -309,6 +314,7 @@ export default function SettingsRoute({
                 refreshTools={() => loadProviders({ refreshTools: true })}
                 activateRunner={activateRunner}
                 setAgentModel={setAgentModel}
+                setSubsystemModel={setSubsystemModel}
               />
             ) : page === 'phone' ? (
               <PhoneScreen {...phoneProps} />

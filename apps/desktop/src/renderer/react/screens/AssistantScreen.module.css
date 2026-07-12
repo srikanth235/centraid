@@ -3,94 +3,24 @@
     opacity: 0;
   }
 }
+@keyframes cd-asst-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .asst {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 232px 1fr;
-}
-@media (max-width: 760px) {
-  .asst {
-    grid-template-columns: 0 1fr;
-  }
-  .side {
-    display: none;
-  }
-}
-.side {
-  border-right: 0.5px solid var(--line);
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  padding: 10px 8px;
-  gap: 8px;
-}
-.new {
-  border: 0.5px solid var(--line-strong);
-  border-radius: var(--r-md, 10px);
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 12.5px;
-  padding: 7px 10px;
-  cursor: pointer;
-  text-align: left;
-}
-.new:hover {
-  color: var(--ink);
-  border-color: var(--accent);
-}
-.threads {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.thread {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  border: 0;
-  background: transparent;
-  border-radius: 8px;
-  padding: 7px 9px;
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-  color: var(--ink-2);
-}
-.thread:hover {
-  background: var(--bg-elev);
-}
-.thread[data-active='true'] {
-  background: var(--bg-elev);
-  color: var(--ink);
-}
-.threadTitle {
-  font-size: 12.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-.threadTime {
-  font-size: 10.5px;
-  color: var(--ink-4);
-}
-.threadsEmpty {
-  color: var(--ink-4);
-  font-size: 12px;
-  padding: 8px 9px;
 }
 .chat {
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+  flex: 1;
 }
 .scroll {
   flex: 1;
@@ -102,9 +32,17 @@
   gap: 12px;
 }
 .msg {
-  max-width: 760px;
+  /* Full-width screen (the internal threads aside is gone) — a generous
+     measure keeps long answers readable without the page feeling empty. */
+  max-width: 880px;
   width: 100%;
   margin: 0 auto;
+}
+.msgUser {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
 .msgUser > div {
   margin-left: auto;
@@ -117,6 +55,27 @@
   font-size: 13px;
   color: var(--ink);
   white-space: pre-wrap;
+}
+.msgAttachments {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  width: fit-content;
+  max-width: 78%;
+  margin-left: auto;
+}
+.msgAttachChip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 10px;
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  max-width: 100%;
 }
 .msgAi {
   font-size: 13.5px;
@@ -175,46 +134,318 @@
 .tool[data-state='error'] .toolMeta {
   color: var(--danger);
 }
+
+/* Composer — modeled on Claude Code's: one cohesive rounded frame
+   (`.composerRow`) holding staged-attachment chips, the auto-growing
+   textarea, and a slim bottom controls strip (attach left, model picker +
+   send right). The frame itself is the focus/drag target — a soft ring
+   grows around the whole card rather than just the textarea, so attaching a
+   file or opening the model menu never reflows anything else. */
 .composer {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
   padding: 10px 22px 16px;
-  max-width: 804px;
+  max-width: 920px;
   width: 100%;
   margin: 0 auto;
+}
+.composerRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 10px 8px;
+  border-radius: var(--r-xl);
+  border: 0.5px solid var(--line-strong);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-sm);
+  transition:
+    box-shadow 140ms ease,
+    border-color 140ms ease;
+}
+.composerRow:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--accent) 18%, transparent),
+    var(--shadow-sm);
+}
+.composerRow[data-dragover='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 28%, transparent);
 }
 .input {
   flex: 1;
   resize: none;
-  min-height: 40px;
+  min-height: 30px;
   max-height: 160px;
-  border: 0.5px solid var(--line-strong);
-  border-radius: 12px;
-  background: var(--bg-elev);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13px;
-  padding: 10px 12px;
+  font-size: 13.5px;
+  padding: 4px 4px 6px;
 }
 .input:focus {
   outline: none;
-  border-color: var(--accent);
+}
+.input::placeholder {
+  color: var(--ink-4);
+}
+
+/* Bottom controls strip — attach on the left, model picker + send on the
+   right, separated from the textarea by a hairline so it reads as its own
+   quiet row inside the same card (not a second bolted-on toolbar). */
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 0.5px solid var(--line);
+}
+.controlsLeft,
+.controlsRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.attachBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition:
+    color 100ms,
+    background 100ms;
+}
+.attachBtn:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 7%, transparent);
+}
+.attachBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .send {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   border: 0;
   background: var(--accent);
   color: var(--ink-inv, #fff);
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 100ms,
+    transform 100ms;
 }
 .send:hover {
   background: var(--accent-light);
 }
+.send:active {
+  transform: scale(0.94);
+}
+.send:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Inline model picker — a quiet text control, not a boxed button, so it
+   reads as metadata about the composer rather than a competing action. */
+.modelPicker {
+  position: relative;
+}
+.modelBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 26px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background 100ms,
+    color 100ms;
+}
+.modelBtn:hover {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+.modelBtn[aria-expanded='true'] {
+  color: var(--ink);
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+.modelBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.modelBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.modelBtnLabel {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modelMenu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 220px;
+  max-width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--r-lg);
+  background: var(--bg-elev);
+  border: 0.5px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  animation: cd-asst-menu-pop 130ms cubic-bezier(0.2, 0.7, 0.3, 1.2);
+}
+@keyframes cd-asst-menu-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.modelItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 100ms;
+}
+.modelItem:hover,
+.modelItem:focus-visible {
+  background: color-mix(in oklab, var(--ink) 6%, transparent);
+  outline: none;
+}
+.modelItem[data-active='true'] {
+  background: color-mix(in srgb, var(--accent) 11%, transparent);
+}
+.modelItemHint {
+  flex: none;
+  color: var(--ink-4);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 130px;
+}
+.modelDivider {
+  height: 0.5px;
+  margin: 4px 2px;
+  background: var(--line);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modelMenu {
+    animation: none;
+  }
+}
+
+/* Staged (not-yet-sent) attachment chips, above the input row. */
+.attachRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+.attachChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0.5px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  padding: 5px 6px 5px 9px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  max-width: 220px;
+}
+.attachChip[data-state='error'] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.attachName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.attachSize {
+  color: var(--ink-4);
+  font-size: 10.5px;
+  flex: none;
+}
+.attachChip[data-state='error'] .attachSize {
+  color: var(--danger);
+}
+.attachRemove {
+  border: 0;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  flex: none;
+  border-radius: var(--r-sm, 4px);
+}
+.attachRemove:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.attachRemove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.attachSpinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  border-top-color: var(--accent);
+  animation: cd-asst-spin 0.7s linear infinite;
+  flex: none;
+}
+
 .empty {
   margin: auto;
   max-width: 560px;

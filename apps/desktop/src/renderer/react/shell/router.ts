@@ -16,6 +16,10 @@ export interface RouterState {
 
 export type RouterAction =
   | { type: 'navigate'; route: ShellRoute }
+  // Swaps the current history entry in place (no new stack entry) — used
+  // when a route's identity is resolved lazily after first paint, e.g. the
+  // assistant route creating its conversation id on first send.
+  | { type: 'replace'; route: ShellRoute }
   | { type: 'back' }
   | { type: 'forward' };
 
@@ -28,8 +32,9 @@ export function routeKey(route: ShellRoute): string {
   switch (route.kind) {
     case 'settings':
       return route.page ? `settings:${route.page}` : 'settings';
-    case 'home':
     case 'assistant':
+      return route.conversationId ? `assistant:${route.conversationId}` : 'assistant';
+    case 'home':
     case 'insights':
     case 'discover':
     case 'starred':
@@ -74,6 +79,12 @@ export function routerReducer(state: RouterState, action: RouterAction): RouterS
       const stack = state.stack.slice(0, state.index + 1);
       stack.push(action.route);
       return { stack, index: stack.length - 1 };
+    }
+    case 'replace': {
+      if (state.index < 0) return routerReducer(state, { type: 'navigate', route: action.route });
+      const stack = state.stack.slice();
+      stack[state.index] = action.route;
+      return { ...state, stack };
     }
     case 'back':
       return canGoBack(state) ? { ...state, index: state.index - 1 } : state;

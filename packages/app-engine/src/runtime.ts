@@ -22,7 +22,7 @@ import type { PrefsStore } from './stores/prefs-store.js';
 import type { ConversationHistoryStore } from './conversation/history.js';
 import { readAppSettings } from './settings/app-settings.js';
 import { buildSettingsInject } from './settings/settings-merge.js';
-import { handleTurnRoute, parseTurnSubRoute } from './http/turn-routes.js';
+import { handleTurnRoute, parseTurnSubRoute, type AskModelPrefs } from './http/turn-routes.js';
 import type { ConversationRunner } from './conversation/runner.js';
 import type { VaultBridge } from './handlers/vault-bridge.js';
 import type { AppRef, RegistryEntry } from './types.js';
@@ -136,6 +136,14 @@ export interface RuntimeOptions {
    * Without it, `ctx.vault.*` calls fail closed with VAULT_UNAVAILABLE.
    */
   vaultFor?: (appId: string) => VaultBridge;
+  /**
+   * Optional ask-model picker backing (subsystem `ask`). When provided,
+   * `GET`/`PUT /centraid/<id>/_turn/model` let the kit Ask panel's inline
+   * model picker read/set the `model.<runnerKind>.ask` prefs override —
+   * the SAME key `resolveSubsystemModel` reads at turn time, so the
+   * picker and the actual turn always agree. Without it those routes 503.
+   */
+  askModel?: AskModelPrefs;
 }
 
 /** Provider-agnostic capability tier a model is classified into. */
@@ -258,6 +266,8 @@ export class Runtime {
   readonly appMeta?: (entry: RegistryEntry) => Promise<{ name?: string; description?: string }>;
   /** Optional runner-status preflight. */
   readonly runnerStatus?: (opts?: RunnerStatusOptions) => Promise<RunnerStatus>;
+  /** Optional ask-model picker backing. See `RuntimeOptions.askModel`. */
+  readonly askModel?: AskModelPrefs;
   private readonly appsDirProvider: () => string;
   private readonly sessionDirProvider: () => string;
   /**
@@ -299,6 +309,7 @@ export class Runtime {
     this.sessionDirProvider = typeof sessionDir === 'string' ? () => sessionDir : sessionDir;
     this.appMeta = opts.appMeta;
     this.runnerStatus = opts.runnerStatus;
+    this.askModel = opts.askModel;
     if (opts.codeDirOverride) this.codeDirOverride = opts.codeDirOverride;
     if (opts.draftCodeDir) this.draftCodeDir = opts.draftCodeDir;
     this.dispatcher = new Dispatcher({
@@ -382,6 +393,7 @@ export class Runtime {
       conversationRunnerSessionDir: this.conversationRunnerSessionDir,
       appMeta: this.appMeta,
       conversationLocks: this.conversationLocks,
+      ...(this.askModel ? { askModel: this.askModel } : {}),
     };
   }
 

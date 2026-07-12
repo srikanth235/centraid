@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { PrefsStore, makeUserStoreRouteHandler } from './prefs-store.js';
+import { PrefsStore, makeUserStoreRouteHandler, resolveSubsystemModel } from './prefs-store.js';
 
 function freshFile(): string {
   return join(mkdtempSync(join(tmpdir(), 'centraid-prefs-')), 'prefs.json');
@@ -82,6 +82,58 @@ describe('PrefsStore', () => {
     const store = new PrefsStore(freshFile());
     store.setPrefs({ x: 1 });
     expect(store.setPrefs({})).toEqual({ x: 1 });
+  });
+});
+
+describe('resolveSubsystemModel', () => {
+  it('prefers the explicit override over any pref', () => {
+    const prefs = {
+      'model.claude-code.assistant': 'from-subsystem-pref',
+      'model.claude-code.default': 'from-default-pref',
+    };
+    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant', 'explicit-model')).toBe(
+      'explicit-model',
+    );
+  });
+
+  it('falls through to the per-subsystem pref when there is no explicit value', () => {
+    const prefs = {
+      'model.claude-code.assistant': 'from-subsystem-pref',
+      'model.claude-code.default': 'from-default-pref',
+    };
+    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-subsystem-pref');
+  });
+
+  it('falls through to the runner-wide default when the subsystem pref is unset', () => {
+    const prefs = { 'model.claude-code.default': 'from-default-pref' };
+    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-default-pref');
+  });
+
+  it('treats an empty-string pref as unset and keeps falling through', () => {
+    const prefs = {
+      'model.claude-code.assistant': '',
+      'model.claude-code.default': 'from-default-pref',
+    };
+    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBe('from-default-pref');
+  });
+
+  it('resolves to undefined when nothing is configured — the backend uses its own default', () => {
+    expect(resolveSubsystemModel({}, 'claude-code', 'assistant')).toBeUndefined();
+  });
+
+  it('scopes prefs by runner kind — a codex pref does not leak into claude-code resolution', () => {
+    const prefs = { 'model.codex.assistant': 'codex-only-model' };
+    expect(resolveSubsystemModel(prefs, 'claude-code', 'assistant')).toBeUndefined();
+  });
+
+  it('scopes prefs by subsystem — an ask override does not leak into builder resolution', () => {
+    const prefs = { 'model.codex.ask': 'ask-only-model' };
+    expect(resolveSubsystemModel(prefs, 'codex', 'builder')).toBeUndefined();
+  });
+
+  it('ignores an empty-string explicit override (falls through like unset)', () => {
+    const prefs = { 'model.codex.automations': 'automations-model' };
+    expect(resolveSubsystemModel(prefs, 'codex', 'automations', '')).toBe('automations-model');
   });
 });
 

@@ -24,6 +24,14 @@ export interface ShellActions {
   /** Navigate — mirrors ShellApp's nav so deep children can route without
    *  threading `nav` all the way down. Set by App.tsx per render. */
   navigate: (route: ShellRoute) => void;
+  /** Swap the current history entry in place — mirrors ShellApp's nav.replace.
+   *  Optional: only App.tsx's real wiring provides it; route unit tests that
+   *  build a partial ShellActions fixture don't need to. */
+  replace?: (route: ShellRoute) => void;
+  /** Re-fetch the shell sidebar's assistant conversation list (new thread
+   *  created, first-turn title set, a turn completing changes its
+   *  timestamp). Set by App.tsx, backed by useAssistantConversations. */
+  refreshAssistantThreads?: () => void;
 }
 
 const ShellActionsContext = createContext<ShellActions | null>(null);

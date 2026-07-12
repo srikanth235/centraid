@@ -134,6 +134,48 @@ test('composedHandler routes the chat-history + prefs prefixes', async () => {
   }
 });
 
+test('composedHandler serves the kit Ask panel model picker (GET/PUT /centraid/<appId>/_turn/model)', async () => {
+  await gateway.start('http://127.0.0.1:0');
+  await gateway.runtime.registry.ensureUploaded('demo');
+  const srv = await mountUnauthed(gateway.composedHandler);
+  try {
+    // No override yet — `current` is null, no defaultModel (no prefs, no
+    // catalog in this hermetic test — the CLI probe/warmer never runs).
+    const before = (await (
+      await fetch(`${srv.url}/centraid/demo/_turn/model`)
+    ).json()) as { runnerKind: string; current: string | null; catalog: unknown[] };
+    expect(before.runnerKind).toBe('codex'); // prefsLoader's default when unset
+    expect(before.current).toBeNull();
+    expect(before.catalog).toEqual([]);
+
+    // Setting the override writes the SAME `model.<kind>.ask` prefs key
+    // `resolveSubsystemModel` reads at turn time — one source of truth.
+    const putRes = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-5.5-mini' }),
+    });
+    expect(putRes.status).toBe(200);
+    expect(gateway.prefs.getAllPrefs()['model.codex.ask']).toBe('gpt-5.5-mini');
+
+    const after = (await (await fetch(`${srv.url}/centraid/demo/_turn/model`)).json()) as {
+      current: string | null;
+    };
+    expect(after.current).toBe('gpt-5.5-mini');
+
+    // `model: null` clears the override back to default.
+    const cleared = await fetch(`${srv.url}/centraid/demo/_turn/model`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: null }),
+    });
+    expect(((await cleared.json()) as { current: string | null }).current).toBeNull();
+    expect(gateway.prefs.getAllPrefs()['model.codex.ask']).toBeUndefined();
+  } finally {
+    await srv.close();
+  }
+});
+
 test('start() activates the vault workspace so its apps dir exists', async () => {
   await gateway.start('http://127.0.0.1:0');
   const vaultId = gateway.vaults.current().boot.vaultId;

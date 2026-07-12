@@ -20,6 +20,16 @@ export {
   type SurfaceStatus,
 } from './runtime.js';
 
+// Ask-model picker (subsystem `ask`) — `GET`/`PUT /centraid/<id>/_turn/model`.
+// Backs the kit Ask panel's inline model picker off the same
+// `resolveSubsystemModel` prefs the turn route resolves at send time.
+export {
+  isValidConversationId,
+  type AskModelInfo,
+  type AskModelOption,
+  type AskModelPrefs,
+} from './http/turn-routes.js';
+
 // Per-app chat surface — `ConversationRunner` is the host-injected seam that
 // the gateway's unified conversation runner implements. The HTTP route
 // (`POST /centraid/<id>/_turn`) is dispatched by `Runtime.handle` when
@@ -210,6 +220,7 @@ export {
   deriveTitle,
   type ConversationSummary,
   type ConversationMessageRow,
+  type ConversationAttachmentPayload,
   type TurnNode,
   type ConversationTurnAttachment,
   type RecordTurnInput,
@@ -220,10 +231,11 @@ export { makeConversationRouteHandler } from './http/conversation-routes.js';
 export {
   driveTurnOverSse,
   withConversationLock,
+  parseTurnAttachmentRefs,
+  resolveTurnAttachments,
   type DriveTurnOptions,
   type TurnAttachmentRef,
 } from './http/turn-sse.js';
-export { isValidConversationId } from './http/turn-routes.js';
 
 // Blob content-addressed store for attachment bytes (issue #190). Bytes live
 // at `<workspace appsDir>/<appId>/blobs/<hash>` inside the vault, deduped by
@@ -259,7 +271,12 @@ export type { RunSummary } from './conversation/run-summary-sink.js';
 
 // Device-prefs store + HTTP route dispatcher (a JSON file — #280 killed the
 // identity DB; the wire prefix stays `/_centraid-user` for the desktop client).
-export { PrefsStore, makeUserStoreRouteHandler } from './stores/prefs-store.js';
+export {
+  PrefsStore,
+  makeUserStoreRouteHandler,
+  resolveSubsystemModel,
+  type ModelSubsystem,
+} from './stores/prefs-store.js';
 
 // Per-app `settings.json` reader and the settings-merge pipeline that
 // turns layered prefs/settings into the `SettingsInject` payload baked into

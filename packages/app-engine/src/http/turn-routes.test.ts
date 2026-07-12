@@ -9,6 +9,7 @@ import type { ConversationRunner } from '../conversation/runner.ts';
 import { ConversationHistoryStore } from '../conversation/history.ts';
 import { makeJournalDbProvider } from '../stores/gateway-db.ts';
 import type { WorkspaceProvider } from '../stores/vault-workspace.ts';
+import type { AskModelInfo, AskModelPrefs } from './turn-routes.ts';
 
 let workspace: string;
 let server: RuntimeHttpServerHandle;
@@ -405,6 +406,148 @@ test('chat prompt resolves the manifest via the git-store code-dir override (#13
   expect(seenPrompt).toMatch(/addNote/);
   expect(seenPrompt).toMatch(/listNotes/);
   expect(seenPrompt).not.toMatch(/manifest unavailable/);
+});
+
+// ---------- Ask-model picker (GET/PUT /centraid/<appId>/_turn/model) ----------
+
+/** An in-memory `AskModelPrefs` fake — mirrors the gateway's prefs-store + catalog wiring. */
+function fakeAskModel(opts?: {
+  runnerKind?: string;
+  defaultModel?: string;
+  catalog?: { id: string; label: string }[];
+}): AskModelPrefs & { current: string | null } {
+  const state = { current: null as string | null };
+  return {
+    get current() {
+      return state.current;
+    },
+    set current(v: string | null) {
+      state.current = v;
+    },
+    get: async (): Promise<AskModelInfo> => ({
+      runnerKind: opts?.runnerKind ?? 'codex',
+      ...(opts?.defaultModel ? { defaultModel: opts.defaultModel } : {}),
+      current: state.current,
+      catalog: opts?.catalog ?? [],
+    }),
+    set: async (model: string | null) => {
+      state.current = model;
+    },
+  };
+}
+
+async function bootstrapWithAskModel(askModel: AskModelPrefs): Promise<void> {
+  workspace = await fs.mkdtemp(
+    path.join(os.tmpdir(), `centraid-chat-routes-${crypto.randomUUID()}-`),
+  );
+  runtime = new Runtime({ appsDir: workspace, askModel });
+  server = await startRuntimeHttpServer({ runtime });
+  await runtime.bootstrap();
+}
+
+test('GET /_turn/model 503s when no askModel is configured', async () => {
+  await bootstrap();
+  await registerApp('demo');
+  const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  expect(res.status).toBe(503);
+  const body = (await res.json()) as { error: string };
+  expect(body.error).toBe('no_model_prefs');
+});
+
+test('PUT /_turn/model 503s when no askModel is configured', async () => {
+  await bootstrap();
+  await registerApp('demo');
+  const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-5.5' }),
+  });
+  expect(res.status).toBe(503);
+});
+
+test('GET /_turn/model 404s for an unregistered app', async () => {
+  await bootstrapWithAskModel(fakeAskModel());
+  const res = await fetch(`${server.url}/centraid/ghost/_turn/model`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  expect(res.status).toBe(404);
+});
+
+test('GET /_turn/model returns the picker state — no override means current: null', async () => {
+  const askModel = fakeAskModel({
+    runnerKind: 'codex',
+    defaultModel: 'gpt-5.5',
+    catalog: [
+      { id: 'gpt-5.5', label: 'GPT-5.5' },
+      { id: 'gpt-5.5-mini', label: 'GPT-5.5 mini' },
+    ],
+  });
+  await bootstrapWithAskModel(askModel);
+  await registerApp('demo');
+  const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as AskModelInfo;
+  expect(body).toEqual({
+    runnerKind: 'codex',
+    defaultModel: 'gpt-5.5',
+    current: null,
+    catalog: [
+      { id: 'gpt-5.5', label: 'GPT-5.5' },
+      { id: 'gpt-5.5-mini', label: 'GPT-5.5 mini' },
+    ],
+  });
+});
+
+test('PUT /_turn/model sets the override and GET reflects it', async () => {
+  const askModel = fakeAskModel({ runnerKind: 'codex', defaultModel: 'gpt-5.5' });
+  await bootstrapWithAskModel(askModel);
+  await registerApp('demo');
+
+  const putRes = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-5.5-mini' }),
+  });
+  expect(putRes.status).toBe(200);
+  const putBody = (await putRes.json()) as AskModelInfo;
+  expect(putBody.current).toBe('gpt-5.5-mini');
+
+  const getRes = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    headers: { Authorization: `Bearer ${server.token}` },
+  });
+  const getBody = (await getRes.json()) as AskModelInfo;
+  expect(getBody.current).toBe('gpt-5.5-mini');
+});
+
+test('PUT /_turn/model with model: null clears the override back to default', async () => {
+  const askModel = fakeAskModel({ runnerKind: 'codex', defaultModel: 'gpt-5.5' });
+  askModel.current = 'gpt-5.5-mini'; // pre-existing override
+  await bootstrapWithAskModel(askModel);
+  await registerApp('demo');
+
+  const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: null }),
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as AskModelInfo;
+  expect(body.current).toBeNull();
+});
+
+test('PUT /_turn/model with a non-string, non-null model returns 400', async () => {
+  await bootstrapWithAskModel(fakeAskModel());
+  await registerApp('demo');
+  const res = await fetch(`${server.url}/centraid/demo/_turn/model`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${server.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 42 }),
+  });
+  expect(res.status).toBe(400);
 });
 
 beforeEach(() => {

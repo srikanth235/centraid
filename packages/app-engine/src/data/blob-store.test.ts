@@ -59,4 +59,15 @@ describe('BlobStore', () => {
       `/_centraid-conversations/apps/app/blobs/${'a'.repeat(64)}`,
     );
   });
+
+  it('rejects a `_`-prefixed app id that is not the reserved assistant scope', () => {
+    const store = new BlobStore(freshAppsDir());
+    expect(() => store.pathFor('_not-a-real-scope', 'a'.repeat(64))).toThrow(/invalid app id/i);
+  });
+
+  it('allows the reserved `_assistant` scope through the same app-id gate', async () => {
+    const store = new BlobStore(freshAppsDir('_assistant'));
+    const put = await store.put('_assistant', Buffer.from('assistant upload'));
+    expect(await store.read('_assistant', put.hash)).toEqual(Buffer.from('assistant upload'));
+  });
 });

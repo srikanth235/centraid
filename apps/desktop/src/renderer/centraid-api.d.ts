@@ -76,15 +76,6 @@ export interface CentraidSettings {
    */
   activeVaultId?: string;
   /**
-   * Per-runner chat-model selection for the app-view agentic chat, keyed by
-   * runner kind (`'codex'` | `'claude-code'` | …). The model is scoped to its
-   * runner so switching agents never leaves a foreign id selected; a missing
-   * key means that runner uses its gateway default. Patch one runner at a time
-   * via `saveSettings({ chatModelByRunner: { [kind]: id } })` (`''` clears that
-   * runner; omitting the field preserves the whole map).
-   */
-  chatModelByRunner?: Record<string, string>;
-  /**
    * ISO timestamp the user finished first-run onboarding. Absent on a
    * fresh install — the renderer gates on this to show the welcome /
    * profile-setup view before mounting home.
@@ -418,9 +409,18 @@ export interface CentraidConversationSummary {
   messageCount: number;
 }
 
+/** One file attached to a persisted user turn (issue #190 history mirror). */
+export interface CentraidConversationHistoryAttachment {
+  hash: string;
+  mime: string;
+  filename?: string;
+  sizeBytes: number;
+  url?: string;
+}
+
 /** Coarse-grained persisted shape per message in a chat session. */
 export type CentraidConversationHistoryMessage =
-  | { kind: 'user'; text: string }
+  | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
   | { kind: 'ai'; text: string; error?: boolean }
   | {
       kind: 'tool';
@@ -1185,8 +1185,15 @@ declare global {
     updatedAt: number;
     messageCount: number;
   }
+  interface CentraidConversationHistoryAttachment {
+    hash: string;
+    mime: string;
+    filename?: string;
+    sizeBytes: number;
+    url?: string;
+  }
   type CentraidConversationHistoryMessage =
-    | { kind: 'user'; text: string }
+    | { kind: 'user'; text: string; attachments?: CentraidConversationHistoryAttachment[] }
     | { kind: 'ai'; text: string; error?: boolean }
     | {
         kind: 'tool';

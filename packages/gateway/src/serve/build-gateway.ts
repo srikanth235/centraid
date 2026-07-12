@@ -46,7 +46,10 @@ import {
   makeConversationRouteHandler,
   makeJournalDbProvider,
   makeUserStoreRouteHandler,
+  resolveSubsystemModel,
+  type AskModelInfo,
   type ConversationRunner,
+  type ModelSubsystem,
   type RuntimeLogger,
   type AutomationTriggerKind,
   type AutomationTriggerOrigin,
@@ -698,6 +701,21 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     };
   };
 
+  // Per-subsystem model resolution (shared prefs contract): explicit
+  // (request/manifest) → `model.<runnerKind>.<subsystem>` → `model.<runnerKind>.default`
+  // → nothing (the backend's own built-in default). The active runner kind
+  // rides the same per-turn `prefsLoader` every register already reads —
+  // when no runner is configured yet, an explicit override still wins but
+  // there's no prefs fallback to apply.
+  const resolveModel = async (
+    subsystem: ModelSubsystem,
+    explicit?: string,
+  ): Promise<string | undefined> => {
+    const runnerPrefs = await prefsLoader();
+    if (!runnerPrefs) return explicit;
+    return resolveSubsystemModel(prefs.getAllPrefs(), runnerPrefs.kind, subsystem, explicit);
+  };
+
   // One warmer owns ALL host-capability enumeration — models + tools, both
   // runners — shared by the boot probe and the status routes so concurrent
   // warms dedupe (a client Refresh mid-boot joins the boot warm). Enumerators
@@ -758,6 +776,40 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     ? (kind: RunnerKind, refresh: boolean) =>
         resolveCatalogSurface('tools', kind, refresh, readRunnerTools)
     : undefined;
+
+  // Ask-model picker (kit Ask panel, subsystem `ask`) — GET/PUT
+  // `/centraid/<appId>/_turn/model`. Reads/writes the SAME
+  // `model.<runnerKind>.ask` prefs key `resolveModel` resolves at turn
+  // time, off the SAME catalog surface the desktop's Settings → Agents
+  // picker reads (`resolveCatalogModels`) — one source of truth, no second
+  // store. A cold/empty catalog just means an empty `catalog` list; the
+  // picker still shows "Use default".
+  const askModelPrefs = {
+    get: async (): Promise<AskModelInfo> => {
+      const runnerPrefs = (await prefsLoader()) ?? { kind: 'codex' as const };
+      const allPrefs = prefs.getAllPrefs();
+      const scoped = allPrefs[`model.${runnerPrefs.kind}.ask`];
+      const current = typeof scoped === 'string' && scoped.length > 0 ? scoped : null;
+      const savedDefault = allPrefs[`model.${runnerPrefs.kind}.default`];
+      const { list } = resolveCatalogModels
+        ? await resolveCatalogModels(runnerPrefs.kind, false)
+        : { list: [] };
+      const defaultModel =
+        typeof savedDefault === 'string' && savedDefault.length > 0
+          ? savedDefault
+          : list.find((m) => m.default)?.id;
+      return {
+        runnerKind: runnerPrefs.kind,
+        ...(defaultModel ? { defaultModel } : {}),
+        current,
+        catalog: list.map((m) => ({ id: m.id, label: m.name ?? m.id })),
+      };
+    },
+    set: async (model: string | null): Promise<void> => {
+      const runnerPrefs = (await prefsLoader()) ?? { kind: 'codex' as const };
+      prefs.setPrefs({ [`model.${runnerPrefs.kind}.ask`]: model && model.length > 0 ? model : null });
+    },
+  };
 
   // Catalog invalidation (issue #308 B4): the warmer used to run at boot /
   // manual Refresh only, so a published app, an install, or a new
@@ -867,6 +919,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       const runnerPrefs = await prefsLoader();
       const host = await currentVaultHost();
       const ws = currentWorkspace();
+      // Prefs fallback for `ctx.agent` calls — the automation's own
+      // `requires.model` (read inside `runFire`) still wins over this.
+      const automationsModel = await resolveModel('automations');
       await runAutomation({
         automationRef,
         runId,
@@ -881,6 +936,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
         triggerKind: opts.triggerKind,
         triggerOrigin: opts.triggerOrigin,
         ...(opts.input !== undefined ? { input: opts.input } : {}),
+        ...(automationsModel ? { model: automationsModel } : {}),
         onRunEvent: (ev) => runEventBus.publish(runId, ev),
       });
       // Grant-matched outbox items the fire just staged drain now, not
@@ -1310,6 +1366,9 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     const host = settledHostFor(vaultId);
     const runId = `${automationRef}:${Date.now()}:${crypto.randomUUID().slice(0, 8)}`;
     const runnerPrefs = await prefsLoader();
+    // Prefs fallback for `ctx.agent` calls — the automation's own
+    // `requires.model` (read inside `runFire`) still wins over this.
+    const automationsModel = await resolveModel('automations');
     try {
       const { outcome } = await runWithVaultContext({ vaultId }, () =>
         runAutomation({
@@ -1327,6 +1386,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           triggerKind: 'scheduled',
           triggerOrigin: 'webhook',
           ...(body !== undefined ? { input: body } : {}),
+          ...(automationsModel ? { model: automationsModel } : {}),
           onRunEvent: (ev) => runEventBus.publish(runId, ev),
         }),
       );
@@ -1408,8 +1468,15 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       // is the only store) — the owner assistant wearing the app lens.
       runKind: 'build',
       run: async (input) => {
-        if (input.register === 'ask') return askRunner.run(input);
-        return (await currentVaultHost()).runner.run(input);
+        // Model prefs plumbing: an explicit `input.model` (the `_turn` POST
+        // body) always wins; otherwise resolve off the register — `ask` is
+        // the per-app copilot, anything else (including unset) is the
+        // builder chat.
+        const subsystem: ModelSubsystem = input.register === 'ask' ? 'ask' : 'builder';
+        const model = await resolveModel(subsystem, input.model);
+        const resolvedInput = model !== input.model ? { ...input, model } : input;
+        if (input.register === 'ask') return askRunner.run(resolvedInput);
+        return (await currentVaultHost()).runner.run(resolvedInput);
       },
     },
     conversationRunnerSessionDir: () => currentWorkspace().runnerSessionDir,
@@ -1441,6 +1508,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     draftCodeDir: async (appId: string, sessionId: string) =>
       (await currentVaultHost()).draftCodeDir(appId, sessionId),
     vaultFor: (appId: string) => vaultRegistry.bridgeFor(appId),
+    askModel: askModelPrefs,
   });
 
   runtimeRef = runtime;
@@ -1570,6 +1638,7 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
       conversationStore: conversationHistoryStore,
       runner: assistantRunner,
       conversationLocks: new Map(),
+      resolveModel,
     }),
     // Scenario seeds (issue #290 phase 1): load/reset an app's demo data.
     // Mounted BEFORE the generic `_vault` handler (same prefix family).

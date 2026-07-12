@@ -1,11 +1,28 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantBridgeProps, AssistantSnapshot } from '../screen-contracts.js';
+import type {
+  AssistantBridgeProps,
+  AssistantSnapshot,
+  AsstModelPickerDTO,
+} from '../screen-contracts.js';
 import AssistantScreen from './AssistantScreen.js';
 
 function emptySnap(over: Partial<AssistantSnapshot> = {}): AssistantSnapshot {
-  return { threads: [], empty: true, busy: false, messages: [], ...over };
+  return { empty: true, busy: false, messages: [], pendingAttachments: [], ...over };
+}
+
+function modelPickerDTO(over: Partial<AsstModelPickerDTO> = {}): AsstModelPickerDTO {
+  return {
+    connected: true,
+    models: [
+      { id: 'sonnet-5', name: 'Sonnet 5', default: true },
+      { id: 'opus-5', name: 'Opus 5' },
+    ],
+    defaultModelName: 'Sonnet 5',
+    selectedModelId: '',
+    ...over,
+  };
 }
 
 function makeProps(over: Partial<AssistantBridgeProps> = {}): AssistantBridgeProps {
@@ -14,9 +31,11 @@ function makeProps(over: Partial<AssistantBridgeProps> = {}): AssistantBridgePro
     onReady: vi.fn(),
     onSend: vi.fn(),
     onStop: vi.fn(),
-    onSelectThread: vi.fn(),
-    onDeleteThread: vi.fn(),
+    onAttachFiles: vi.fn(),
+    onRemovePendingAttachment: vi.fn(),
     hydrateRefs: vi.fn(),
+    loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO()),
+    onSetModel: vi.fn(),
     ...over,
   };
 }
@@ -52,6 +71,12 @@ function setValue(el: HTMLTextAreaElement, value: string): void {
   setter?.call(el, value);
   void act(() => el.dispatchEvent(new Event('input', { bubbles: true })));
 }
+/** Flush the `loadModelPicker()` microtask the picker fetches on mount. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
 
 describe('AssistantScreen', () => {
   it('shows the empty state with clickable suggestions', () => {
@@ -64,29 +89,6 @@ describe('AssistantScreen', () => {
     void act(() => chips[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     // suggestion loads into the composer draft
     expect((el.querySelector('.input') as HTMLTextAreaElement).value).toContain('spend');
-  });
-
-  it('lists threads and marks the active one; right-click deletes', () => {
-    const props = makeProps();
-    const el = mount(props);
-    push(
-      emptySnap({
-        threads: [
-          { id: 't1', title: 'Spending', timeLabel: '2h ago', active: true },
-          { id: 't2', title: 'Travel notes', timeLabel: 'yesterday', active: false },
-        ],
-      }),
-    );
-    const rows = [...el.querySelectorAll<HTMLButtonElement>('.thread')];
-    expect(rows.length).toBe(2);
-    expect(rows[0]!.dataset.active).toBe('true');
-    expect(Object.hasOwn(rows[1]!.dataset, 'active')).toBe(false);
-    void act(() =>
-      rows[1]!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })),
-    );
-    expect(props.onDeleteThread).toHaveBeenCalledWith('t2');
-    void act(() => rows[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-    expect(props.onSelectThread).toHaveBeenCalledWith('t1');
   });
 
   it('renders user, tools, and streaming/final AI messages', () => {
@@ -115,6 +117,26 @@ describe('AssistantScreen', () => {
     expect(el.querySelector('.asstPre')?.textContent).toBe('SELECT 1');
     // final answer HTML is injected verbatim
     expect(el.querySelector('.msgAi strong')?.textContent).toBe('$412');
+  });
+
+  it('renders attachment chips on a user message', () => {
+    const el = mount(makeProps());
+    push(
+      emptySnap({
+        empty: false,
+        messages: [
+          {
+            kind: 'user',
+            text: 'See attached',
+            attachments: [
+              { hash: 'h1', filename: 'notes.pdf', mime: 'application/pdf', sizeBytes: 2048 },
+            ],
+          },
+        ],
+      }),
+    );
+    const chip = el.querySelector('.msgAttachChip');
+    expect(chip?.textContent).toContain('notes.pdf');
   });
 
   it('re-hydrates refs inside an injected final answer', () => {
@@ -175,7 +197,7 @@ describe('AssistantScreen', () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it('does not send while busy or when the draft is blank', () => {
+  it('does not send while busy or when the draft is blank and nothing is attached', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
@@ -187,15 +209,144 @@ describe('AssistantScreen', () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it('starts a new conversation from the sidebar', () => {
+  it('sends a blank draft when a ready attachment is staged', () => {
+    const props = makeProps();
+    const el = mount(props);
+    push(
+      emptySnap({
+        pendingAttachments: [{ id: 'a1', filename: 'photo.png', sizeBytes: 1024, state: 'ready' }],
+      }),
+    );
+    const send = el.querySelector('.send') as HTMLButtonElement;
+    void act(() => send.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onSend).toHaveBeenCalledWith('');
+  });
+
+  it('renders staged attachment chips and removes one', () => {
+    const props = makeProps();
+    const el = mount(props);
+    push(
+      emptySnap({
+        pendingAttachments: [
+          { id: 'a1', filename: 'photo.png', sizeBytes: 1024, state: 'ready' },
+          { id: 'a2', filename: 'huge.zip', sizeBytes: 0, state: 'uploading' },
+        ],
+      }),
+    );
+    const chips = [...el.querySelectorAll<HTMLDivElement>('.attachChip')];
+    expect(chips.length).toBe(2);
+    const removeBtn = chips[0]!.querySelector('.attachRemove') as HTMLButtonElement;
+    void act(() => removeBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(props.onRemovePendingAttachment).toHaveBeenCalledWith('a1');
+  });
+
+  it('forwards dropped files to onAttachFiles', () => {
     const props = makeProps();
     const el = mount(props);
     push(emptySnap());
+    const row = el.querySelector('.composerRow') as HTMLDivElement;
+    const file = new File(['hello'], 'hello.txt', { type: 'text/plain' });
+    const dataTransfer = { files: [file] } as unknown as DataTransfer;
     void act(() =>
-      (el.querySelector('.new') as HTMLButtonElement).dispatchEvent(
-        new MouseEvent('click', { bubbles: true }),
+      row.dispatchEvent(
+        Object.assign(new Event('drop', { bubbles: true, cancelable: true }), { dataTransfer }),
       ),
     );
-    expect(props.onSelectThread).toHaveBeenCalledWith(null);
+    expect(props.onAttachFiles).toHaveBeenCalledWith([file]);
+  });
+
+  describe('model picker', () => {
+    it('shows "Default · <model>" when the subsystem has no override, with an accessible name', async () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      expect(btn.getAttribute('aria-label')).toBe('Assistant model');
+      expect(btn.textContent).toContain('Default · Sonnet 5');
+      expect(props.loadModelPicker).toHaveBeenCalled();
+    });
+
+    it('shows the overridden model name when the subsystem pref is set', async () => {
+      const props = makeProps({
+        loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO({ selectedModelId: 'opus-5' })),
+      });
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      expect(btn.textContent).toContain('Opus 5');
+      expect(btn.textContent).not.toContain('Default');
+    });
+
+    it('opens a menu on click with menu/menuitemradio semantics, closes on Escape', async () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(btn.getAttribute('aria-expanded')).toBe('true');
+      const menu = el.querySelector('.modelMenu') as HTMLDivElement;
+      expect(menu.getAttribute('role')).toBe('menu');
+      const items = [...el.querySelectorAll('[role="menuitemradio"]')];
+      // "Use default" + the two catalog models
+      expect(items.length).toBe(3);
+      expect(items[0]?.getAttribute('aria-checked')).toBe('true'); // no override yet
+      void act(() =>
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      );
+      expect(el.querySelector('.modelMenu')).toBeFalsy();
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('closes on an outside click', async () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(el.querySelector('.modelMenu')).toBeTruthy();
+      void act(() =>
+        document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })),
+      );
+      expect(el.querySelector('.modelMenu')).toBeFalsy();
+    });
+
+    it('picking a catalog model persists the pref and updates the label immediately', async () => {
+      const props = makeProps();
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      const opusItem = [...el.querySelectorAll('[role="menuitemradio"]')].find((n) =>
+        n.textContent?.includes('Opus 5'),
+      ) as HTMLButtonElement;
+      void act(() => opusItem.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(props.onSetModel).toHaveBeenCalledWith('opus-5');
+      expect(el.querySelector('.modelMenu')).toBeFalsy();
+      expect((el.querySelector('.modelBtn') as HTMLButtonElement).textContent).toContain(
+        'Opus 5',
+      );
+    });
+
+    it('"Use default" clears the override back to the runner default', async () => {
+      const props = makeProps({
+        loadModelPicker: vi.fn().mockResolvedValue(modelPickerDTO({ selectedModelId: 'opus-5' })),
+      });
+      const el = mount(props);
+      push(emptySnap());
+      await flush();
+      const btn = el.querySelector('.modelBtn') as HTMLButtonElement;
+      void act(() => btn.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      const useDefault = [...el.querySelectorAll('[role="menuitemradio"]')][0] as HTMLButtonElement;
+      void act(() => useDefault.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(props.onSetModel).toHaveBeenCalledWith('');
+      expect((el.querySelector('.modelBtn') as HTMLButtonElement).textContent).toContain(
+        'Default · Sonnet 5',
+      );
+    });
   });
 });

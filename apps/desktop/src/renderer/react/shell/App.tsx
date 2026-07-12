@@ -9,15 +9,18 @@ import PaletteScreen from '../screens/PaletteScreen.js';
 import WhatsNewModal from '../screens/WhatsNewModal.js';
 import { type ShellActions, ShellActionsProvider } from './actions.js';
 import { openConfirm } from './confirm.js';
+import { relativeTime } from '../../app-format.js';
+import { ASSISTANT_APP_ID, deleteConversation } from '../../gateway-client.js';
 import { buildPaletteGroups } from './routes/paletteData.js';
 import ProfileSwitcherHead from './ProfileSwitcherHead.js';
-import Sidebar, { type SidebarPage } from './Sidebar.js';
+import Sidebar, { type SidebarConversation, type SidebarPage } from './Sidebar.js';
 import ShellApp, { type ShellNav } from './ShellApp.js';
 import { showToast } from './toast.js';
 import { toSidebarApps } from './sidebarApps.js';
 import { PageEmpty } from './status.js';
 import { useActiveVault } from './useActiveVault.js';
 import { useAppearance } from './useAppearance.js';
+import { useAssistantConversations } from './useAssistantConversations.js';
 import { useBlockingCount } from './useBlockingCount.js';
 import { useGatewayRuntime } from './useGatewayRuntime.js';
 import { useShellApps } from './useShellApps.js';
@@ -50,11 +53,17 @@ import TestConnectionModal from './routes/TestConnectionModal.js';
 // confirm are live; the remaining overlay actions (⌘K palette, the generic app
 // context menu) are wired as their clusters land — until then they route to the
 // builder or no-op so a consumer never crashes.
-function makeActions(nav: ShellNav, openCommandPalette: () => void): ShellActions {
+function makeActions(
+  nav: ShellNav,
+  openCommandPalette: () => void,
+  refreshAssistantThreads: () => void,
+): ShellActions {
   return {
     showToast,
     confirm: openConfirm,
     navigate: nav.navigate,
+    replace: nav.replace,
+    refreshAssistantThreads,
     enterBuilder: (opts) =>
       nav.navigate({
         kind: 'builder',
@@ -104,6 +113,7 @@ function activePageFor(route: ShellRoute): SidebarPage | undefined {
 export default function App(): JSX.Element {
   const { prefs, setPrefs } = useAppearance();
   const { userApps, drafts, refresh, setUserApps } = useShellApps();
+  const assistantConversations = useAssistantConversations();
   const { isStarred, toggleStar } = useStarred();
   const activeVault = useActiveVault();
   const blockingCount = useBlockingCount();
@@ -208,6 +218,35 @@ export default function App(): JSX.Element {
     };
   }, []);
 
+  // Sidebar "Chats" row delete — mirrors the vanilla AssistantRoute's old
+  // deleteThread confirm pattern, now living here since the sidebar (not
+  // AssistantRoute) owns the conversation list + row actions. Bounces off
+  // the fresh assistant route if the conversation being deleted is the one
+  // currently open.
+  const deleteAssistantConversation = useCallback(
+    (id: string) => {
+      const target = assistantConversations.conversations.find((c) => c.id === id);
+      void (async () => {
+        const yes = await openConfirm({
+          title: 'Delete conversation?',
+          message: `“${target?.title || 'New conversation'}” will be removed from this vault's history.`,
+          confirmLabel: 'Delete',
+          danger: true,
+        });
+        if (!yes) return;
+        await deleteConversation(ASSISTANT_APP_ID, id).catch((err: unknown) =>
+          showToast(`Couldn't delete: ${err instanceof Error ? err.message : String(err)}`),
+        );
+        await assistantConversations.refresh();
+        const cur = navRef.current?.route;
+        if (cur?.kind === 'assistant' && cur.conversationId === id) {
+          navRef.current?.navigate({ kind: 'assistant' });
+        }
+      })();
+    },
+    [assistantConversations],
+  );
+
   const renderSidebar = useCallback(
     (nav: ShellNav) => {
       const { apps, drafts: draftApps } = toSidebarApps(userApps, drafts);
@@ -296,12 +335,23 @@ export default function App(): JSX.Element {
           }}
         />
       );
+      const conversations: SidebarConversation[] = assistantConversations.conversations.map(
+        (c) => ({
+          id: c.id,
+          title: c.title || 'New conversation',
+          timeLabel: relativeTime(new Date(c.updatedAt).toISOString()),
+        }),
+      );
       return (
         <Sidebar
           apps={apps}
           drafts={draftApps}
           activePage={page}
           activeId={nav.route.kind === 'app' ? nav.route.id : undefined}
+          conversations={conversations}
+          activeConversationId={
+            nav.route.kind === 'assistant' ? nav.route.conversationId : undefined
+          }
           headSlot={activeVault.loading || activeVault.vaults.length > 0 ? headSlot : undefined}
           onHome={go({ kind: 'home' })}
           onSearch={() => setPaletteOpen(true)}
@@ -317,6 +367,9 @@ export default function App(): JSX.Element {
           onSettings={go({ kind: 'settings' })}
           onAppClick={(id) => nav.navigate({ kind: 'app', id })}
           onNewApp={() => nav.navigate({ kind: 'builder' })}
+          onNewChat={() => nav.navigate({ kind: 'assistant' })}
+          onSelectConversation={(id) => nav.navigate({ kind: 'assistant', conversationId: id })}
+          onDeleteConversation={deleteAssistantConversation}
           onWhatsNew={() => setWhatsNewOpen(true)}
           {...(updateStatus?.available
             ? { updateVersion: updateStatus.version, onRelaunchToUpdate: relaunchToUpdate }
@@ -324,7 +377,17 @@ export default function App(): JSX.Element {
         />
       );
     },
-    [userApps, drafts, activeVault, vaultSwitcherOpen, blockingCount, updateStatus, gatewayStatus],
+    [
+      userApps,
+      drafts,
+      activeVault,
+      vaultSwitcherOpen,
+      blockingCount,
+      updateStatus,
+      gatewayStatus,
+      assistantConversations,
+      deleteAssistantConversation,
+    ],
   );
 
   const renderRoute = useCallback(
@@ -342,7 +405,7 @@ export default function App(): JSX.Element {
             />
           );
         case 'assistant':
-          return <AssistantRoute />;
+          return <AssistantRoute conversationId={nav.route.conversationId} />;
         case 'insights':
           return <InsightsRoute />;
         case 'automations':
@@ -424,7 +487,15 @@ export default function App(): JSX.Element {
           navRef.current = nav;
         }}
         renderScreen={(nav) => (
-          <ShellActionsProvider value={makeActions(nav, () => setPaletteOpen(true))}>
+          <ShellActionsProvider
+            value={makeActions(
+              nav,
+              () => setPaletteOpen(true),
+              () => {
+                void assistantConversations.refresh();
+              },
+            )}
+          >
             {renderRoute(nav)}
           </ShellActionsProvider>
         )}

@@ -46,6 +46,15 @@ export interface LiveDispatchOptions {
   runHostAgent: RunHostAgent;
   /** Manifest `requires.tools` allowlist forwarded to the CLI. */
   toolsAllow: readonly string[];
+  /**
+   * Model id/alias for `ctx.agent` calls (manifest `requires.model`, or the
+   * caller's prefs-resolved fallback — see `RunAutomationOptions.model`).
+   * Undefined means "no override" — the backend's own default applies.
+   * Only `ctx.agent` (the billed, real-provider path) reads this; the
+   * persistent tool-dispatch session always talks to the mock, which
+   * ignores the model field entirely.
+   */
+  model?: string;
   onLog: (level: 'info' | 'warn' | 'error', msg: string) => void;
 }
 
@@ -194,6 +203,7 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
         message: effectivePrompt,
         extraSystemPrompt: '',
         permissionMode: 'bypassPermissions',
+        ...(opts.model ? { model: opts.model } : {}),
         abortSignal: ctx.abortSignal,
         onEvent: (ev) => {
           if (ev.type === 'final') finalText = ev.text;
@@ -224,6 +234,9 @@ export async function startLiveDispatch(opts: LiveDispatchOptions): Promise<Live
       '--output-last-message',
       lastMessageFile,
     ];
+    // `codex exec -m/--model <MODEL>` (codex-cli supports this natively —
+    // same flag the interactive CLI takes).
+    if (opts.model) args.push('-m', opts.model);
     if (call.json) {
       const schemaFile = path.join(scratchDir, `agent-${uid}.schema.json`);
       await fs.writeFile(schemaFile, JSON.stringify(normalizeOutputSchema(call.json)), 'utf8');

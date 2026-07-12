@@ -3,7 +3,6 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
   createApp,
   createConversation,
-  getUserPrefs,
   listAutomations,
   listConversations,
   listVersions,
@@ -31,26 +30,6 @@ import {
   toBuilderMsg,
   turnProgress,
 } from './builderModel.js';
-
-// Resolves the model the user picked in Settings → Agents → "Default model
-// for Claude Code" (persisted per-runner as `chatModelByRunner[kind]`) for
-// whichever runner kind is currently active. Mirrors `AssistantRoute.tsx`'s
-// `resolveActiveChatModel()` — builder chat had the same gap (turns sent
-// with no `model`, so the agent SDK's own default applied instead of the
-// user's pick).
-async function resolveActiveChatModel(): Promise<string | undefined> {
-  const [kindRaw, modelMap] = await Promise.all([
-    getUserPrefs()
-      .then((p) => p['agent.runner.kind'])
-      .catch(() => undefined),
-    window.CentraidApi.getSettings()
-      .then((s) => s.chatModelByRunner)
-      .catch(() => undefined),
-  ]);
-  const kind = kindRaw === 'claude-code' ? 'claude-code' : 'codex';
-  const model = modelMap?.[kind];
-  return model ? model : undefined;
-}
 
 export interface UseBuilderInput {
   initialAppId?: string;
@@ -388,11 +367,10 @@ export function useBuilder(input: UseBuilderInput): BuilderViewModel {
         renderChat();
         try {
           const sessionId = await ensureConversation(appId.current, 'continue');
-          const model = await resolveActiveChatModel();
           agentAbort.current = new AbortController();
           await streamTurn(
             appId.current,
-            { conversationId: sessionId, message: text, ...(model ? { model } : {}) },
+            { conversationId: sessionId, message: text },
             handleStreamEvent,
             agentAbort.current.signal,
           );

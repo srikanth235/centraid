@@ -662,8 +662,20 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     });
   }
 
-  var MIC =
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>';
+  var HISTORY_ICON =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3.2 2"/></svg>';
+  var CLIP_ICON =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16.9 6.6 9 14.5a2.75 2.75 0 0 0 3.9 3.9l7.4-7.4a4.5 4.5 0 1 0-6.36-6.37L6.5 12.1"/></svg>';
+  var CHEVRON_ICON =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+
+  /** Default intro copy — shared by the first render and every "New conversation" reset. */
+  function introText() {
+    return (
+      cfg.intro ||
+      'Ask me to add, change, find or remove anything here. I’ll show the change for your approval before it touches the vault.'
+    );
+  }
 
   function panelHTML() {
     var scope = esc(cfg.scope || 'this app');
@@ -672,28 +684,88 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         return '<button type="button" class="kit-ask-chip">' + esc(s) + '</button>';
       })
       .join('');
-    var intro =
-      cfg.intro ||
-      'Ask me to add, change, find or remove anything here. I’ll show the change for your approval before it touches the vault.';
     return (
       '<div class="kit-ask-ov" id="kitAskOverlay" hidden><div class="kit-ask-panel" role="dialog" aria-modal="true" aria-label="Ask your vault">' +
-      '<div class="kit-ask-head"><h2>Ask</h2><span class="kit-ask-note">a projection of your vault</span><button type="button" class="kit-ask-x" aria-label="Close">✕</button></div>' +
+      '<div class="kit-ask-head"><h2>Ask</h2><span class="kit-ask-note">a projection of your vault</span>' +
+      '<button type="button" class="kit-ask-history-btn" aria-label="Conversation history" aria-pressed="false">' +
+      HISTORY_ICON +
+      '</button>' +
+      '<button type="button" class="kit-ask-x" aria-label="Close">✕</button></div>' +
       '<div class="kit-ask-context"><span class="kit-ask-scope">Scope · ' +
       scope +
       '</span><span class="kit-ask-scope" data-kit-grant>read + write · consent-gated</span></div>' +
       '<div class="kit-ask-log" role="log" aria-live="polite"><div class="kit-msg ai">' +
-      esc(intro) +
+      esc(introText()) +
       '</div></div>' +
+      '<div class="kit-ask-history" hidden>' +
+      '<div class="kit-ask-history-head"><button type="button" class="kit-ask-history-new">+ New conversation</button></div>' +
+      '<div class="kit-ask-history-list" role="list"></div>' +
+      '</div>' +
       '<div class="kit-ask-suggest">' +
       sugg +
       '</div>' +
-      '<form class="kit-ask-compose"><button type="button" class="kit-ask-mic" aria-label="Voice">' +
-      MIC +
-      '</button><input placeholder="' +
+      // Composer — one rounded frame (`.kit-ask-compose`) holding staged
+      // attachment chips, the input, and a slim bottom controls strip
+      // (attach left, model picker + send right) — modeled on Claude
+      // Code's composer, adapted to kit tokens. `data-busy` is the e2e
+      // contract for "a turn is in flight": 'true' from submit until the
+      // turn's terminal SSE event (final/error/aborted) or the stream
+      // closes; 'false' otherwise. The send button (and, while busy, the
+      // model picker) are disabled so a turn can't be double-sent.
+      '<form class="kit-ask-compose" data-busy="false">' +
+      '<input type="file" class="kit-ask-file" multiple hidden aria-hidden="true" tabindex="-1">' +
+      '<div class="kit-ask-pending" hidden></div>' +
+      '<input class="kit-ask-input" placeholder="' +
       esc(cfg.placeholder || 'Ask…') +
-      '" aria-label="Ask"><button class="kit-ask-send" type="submit" aria-label="Send">→</button></form>' +
+      '" aria-label="Ask">' +
+      '<div class="kit-ask-controls">' +
+      '<button type="button" class="kit-ask-attach" aria-label="Attach files">' +
+      CLIP_ICON +
+      '</button>' +
+      '<div class="kit-ask-controls-spacer"></div>' +
+      '<div class="kit-ask-model">' +
+      '<button type="button" class="kit-ask-model-btn" aria-label="Model" aria-haspopup="menu" aria-expanded="false">' +
+      '<span class="kit-ask-model-label">Default</span>' +
+      CHEVRON_ICON +
+      '</button>' +
+      '<div class="kit-ask-model-menu" hidden role="menu" aria-label="Choose the ask model"></div>' +
+      '</div>' +
+      '<button class="kit-ask-send" type="submit" aria-label="Send">→</button>' +
+      '</div>' +
+      '</form>' +
       '</div></div>'
     );
+  }
+
+  /**
+   * Per-panel active-conversation id. Shared by the default `_turn` driver
+   * AND the History view — selecting a past conversation there, or starting
+   * a fresh one, must be reflected in the very next turn this panel sends.
+   * Persisted in sessionStorage under a per-app key so a reload resumes the
+   * same thread (mirrors the id-provisioning contract in `makeVaultDriver`).
+   */
+  function makeConversationSession() {
+    var key = 'kitask:conversation:' + (appId() || location.pathname);
+    var cached = null;
+    return {
+      get: function () {
+        if (cached) return cached;
+        try {
+          cached = sessionStorage.getItem(key);
+        } catch (_) {}
+        return cached;
+      },
+      set: function (v) {
+        cached = v || null;
+        try {
+          if (cached) sessionStorage.setItem(key, cached);
+          else sessionStorage.removeItem(key);
+        } catch (_) {}
+      },
+      clear: function () {
+        this.set(null);
+      },
+    };
   }
 
   function init() {
@@ -718,9 +790,40 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     document.body.appendChild(ov);
     var panel = ov.querySelector('.kit-ask-panel');
     var log = ov.querySelector('.kit-ask-log');
+    var historyBtn = ov.querySelector('.kit-ask-history-btn');
+    var historyView = ov.querySelector('.kit-ask-history');
+    var historyList = ov.querySelector('.kit-ask-history-list');
+    var historyNewBtn = ov.querySelector('.kit-ask-history-new');
+    var suggestRow = ov.querySelector('.kit-ask-suggest');
+    var pendingStrip = ov.querySelector('.kit-ask-pending');
     var form = ov.querySelector('.kit-ask-compose');
-    var input = form.querySelector('input');
+    var input = form.querySelector('.kit-ask-input');
+    var fileInput = form.querySelector('.kit-ask-file');
+    var attachBtn = form.querySelector('.kit-ask-attach');
+    var sendBtn = form.querySelector('.kit-ask-send');
+    var session = makeConversationSession();
     var lastFocus = null;
+    var autoLoadAttempted = false;
+
+    // ---------- Busy state (a turn is in flight) ----------
+    // `data-busy` on `.kit-ask-compose` is the e2e contract: 'true' from
+    // submit until the turn's terminal SSE event (final/error/aborted) or
+    // the stream closes; 'false' otherwise. Fixes the working-indicator
+    // bug where `typing.done()` firing on the FIRST `assistant.delta` made
+    // the panel look idle while tool calls were still running — this state
+    // spans the WHOLE turn, not just the pre-first-token gap. Also doubles
+    // as the double-send guard: the send button (and model picker) are
+    // disabled while busy.
+    var busy = false;
+    var SEND_ARROW = '→';
+    var SEND_SPINNER = '<i class="kit-ask-send-spin"></i>';
+    function setBusy(b) {
+      busy = !!b;
+      form.dataset.busy = busy ? 'true' : 'false';
+      sendBtn.disabled = busy;
+      sendBtn.innerHTML = busy ? SEND_SPINNER : SEND_ARROW;
+      if (modelPicker) modelPicker.setDisabled(busy);
+    }
 
     function open() {
       lastFocus = document.activeElement;
@@ -729,6 +832,8 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       // (revoke, re-grant, scope widening) between opens within the same
       // iframe session, and the chip should never show stale consent state.
       refreshGrantChip(ov.querySelector('[data-kit-grant]'));
+      maybeAutoLoadStoredConversation();
+      if (modelPicker) modelPicker.load();
       setTimeout(function () {
         input && input.focus();
       }, 60);
@@ -752,15 +857,151 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       });
     });
 
-    var handler = null;
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var v = input.value.trim();
-      if (!v) return;
-      api.user(v);
-      input.value = '';
-      if (handler) handler(v);
-    });
+    // ---------- Inline model picker (subsystem `ask`, active runner) ----------
+    // A quiet text control in the composer's controls row — shows the
+    // current override's display name, or "Default" when the subsystem has
+    // no override. Backed by `GET`/`PUT <app>/_turn/model` (the SAME
+    // `model.<runnerKind>.ask` prefs key the gateway resolves at turn
+    // time — see `resolveSubsystemModel`), so the picker and the actual
+    // turn always agree. No caching beyond the current panel session: each
+    // `open()` re-fetches, since the pref can change elsewhere (desktop
+    // Settings → Agents) between opens.
+    function initAskModelPicker() {
+      var wrap = form.querySelector('.kit-ask-model');
+      var modelBtn = form.querySelector('.kit-ask-model-btn');
+      var labelEl = form.querySelector('.kit-ask-model-label');
+      var menu = form.querySelector('.kit-ask-model-menu');
+      if (!wrap || !modelBtn || !menu) return null;
+      var state = { loaded: false, current: null, defaultModel: '', catalog: [] };
+
+      function renderLabel() {
+        if (!state.loaded) {
+          labelEl.textContent = 'Model';
+          return;
+        }
+        if (state.current) {
+          var found = null;
+          for (var i = 0; i < state.catalog.length; i++) {
+            if (state.catalog[i].id === state.current) {
+              found = state.catalog[i];
+              break;
+            }
+          }
+          labelEl.textContent = found ? found.label : state.current;
+        } else {
+          labelEl.textContent = 'Default';
+        }
+      }
+
+      function onDocPointer(e) {
+        if (!menu.contains(e.target) && e.target !== modelBtn) closeMenu();
+      }
+      function onDocKey(e) {
+        if (e.key === 'Escape') closeMenu();
+      }
+      function closeMenu() {
+        if (menu.hidden) return;
+        menu.hidden = true;
+        modelBtn.setAttribute('aria-expanded', 'false');
+        document.removeEventListener('mousedown', onDocPointer, true);
+        document.removeEventListener('keydown', onDocKey, true);
+      }
+
+      function choose(modelId) {
+        closeMenu();
+        var prev = state.current;
+        state.current = modelId; // optimistic
+        renderLabel();
+        fetch(appBase() + '_turn/model', {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: modelId }),
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('model update failed (' + r.status + ')');
+            return r.json();
+          })
+          .then(function (body) {
+            state.loaded = true;
+            state.current = body.current || null;
+            state.defaultModel = body.defaultModel || '';
+            state.catalog = Array.isArray(body.catalog) ? body.catalog : [];
+            renderLabel();
+          })
+          .catch(function () {
+            state.current = prev; // revert the optimistic label on failure
+            renderLabel();
+          });
+      }
+
+      function renderMenu() {
+        menu.innerHTML = '';
+        var useDefault = el(
+          '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
+            (!state.current ? ' is-active' : '') +
+            '" aria-checked="' +
+            (!state.current) +
+            '"><span>Use default</span><span class="kit-ask-model-hint">' +
+            esc(state.defaultModel || 'gateway default') +
+            '</span></button>',
+        );
+        useDefault.addEventListener('click', function () {
+          choose(null);
+        });
+        menu.appendChild(useDefault);
+        if (state.catalog.length) menu.appendChild(el('<div class="kit-ask-model-divider"></div>'));
+        state.catalog.forEach(function (m) {
+          var active = m.id === state.current;
+          var item = el(
+            '<button type="button" role="menuitemradio" class="kit-ask-model-item' +
+              (active ? ' is-active' : '') +
+              '" aria-checked="' +
+              active +
+              '"><span>' +
+              esc(m.label || m.id) +
+              '</span></button>',
+          );
+          item.addEventListener('click', function () {
+            choose(m.id);
+          });
+          menu.appendChild(item);
+        });
+      }
+
+      function openMenu() {
+        renderMenu();
+        menu.hidden = false;
+        modelBtn.setAttribute('aria-expanded', 'true');
+        document.addEventListener('mousedown', onDocPointer, true);
+        document.addEventListener('keydown', onDocKey, true);
+      }
+
+      modelBtn.addEventListener('click', function () {
+        if (modelBtn.disabled) return;
+        if (menu.hidden) openMenu();
+        else closeMenu();
+      });
+
+      return {
+        /** Re-fetch the picker state (called on every panel `open()`). */
+        load: function () {
+          return fetchJson(appBase() + '_turn/model').then(function (r) {
+            if (r.ok && r.body) {
+              state.loaded = true;
+              state.current = r.body.current || null;
+              state.defaultModel = r.body.defaultModel || '';
+              state.catalog = Array.isArray(r.body.catalog) ? r.body.catalog : [];
+            }
+            renderLabel();
+          }, renderLabel);
+        },
+        setDisabled: function (disabled) {
+          modelBtn.disabled = !!disabled;
+          if (disabled) closeMenu();
+        },
+      };
+    }
+    var modelPicker = initAskModelPicker();
 
     function bubble(cls, html) {
       var m = el('<div class="kit-msg ' + cls + '"></div>');
@@ -770,12 +1011,28 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       return m;
     }
 
+    /** Attachment-chip markup for a message bubble — a just-sent turn or a loaded transcript. */
+    function attachmentChipsHtml(atts) {
+      if (!atts || !atts.length) return '';
+      return (
+        '<div class="kit-ask-msg-atts">' +
+        atts
+          .map(function (a) {
+            return (
+              '<span class="kit-ask-msg-att">' + CLIP_ICON + esc(a.filename || 'file') + '</span>'
+            );
+          })
+          .join('') +
+        '</div>'
+      );
+    }
+
     var api = {
       open: open,
       close: close,
-      /** append a user bubble (escaped) */
-      user: function (t) {
-        return bubble('user', esc(t));
+      /** append a user bubble (escaped); `atts` optionally renders attachment chips beneath it */
+      user: function (t, atts) {
+        return bubble('user', esc(t) + attachmentChipsHtml(atts));
       },
       /** append an assistant bubble (HTML allowed — caller sanitises) */
       ai: function (html) {
@@ -792,6 +1049,13 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           },
         };
       },
+      /**
+       * Mark the panel busy/idle for the DURATION of a turn (not just the
+       * pre-first-token gap `typing()` covers) — sets `data-busy` on
+       * `.kit-ask-compose` and disables Send + the model picker. A custom
+       * `onAsk` driver should call this too so double-sends stay guarded.
+       */
+      setBusy: setBusy,
       /** a completed, receipted action (with optional Undo) */
       applied: function (o) {
         o = o || {};
@@ -922,9 +1186,301 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     };
     window.kitAsk = api;
 
+    // ---------- Pending attachments (compose strip) ----------
+    // Files picked/dropped/pasted upload immediately to the per-app
+    // conversation blob CAS (issue #190); the strip tracks their upload
+    // state until Send folds the resolved refs into the turn body.
+    var pending = []; // { cid, file, status: 'uploading'|'done'|'error', hash, mime, filename, sizeBytes, error }
+    var pendingSeq = 0;
+    var MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+    function renderPending() {
+      pendingStrip.innerHTML = '';
+      pendingStrip.hidden = pending.length === 0 || !historyView.hidden;
+      pending.forEach(function (p) {
+        var chip = el(
+          '<span class="kit-ask-pending-chip' +
+            (p.status === 'uploading' ? ' is-uploading' : '') +
+            (p.status === 'error' ? ' is-error' : '') +
+            '">' +
+            (p.status === 'uploading' ? '<i class="kit-ask-pending-spin"></i>' : '') +
+            '<span class="kit-ask-pending-name">' +
+            esc(p.file.name) +
+            '</span><span class="kit-ask-pending-size">' +
+            (p.status === 'error' ? esc(p.error || 'failed') : esc(fmtBytes(p.file.size, '0 B'))) +
+            '</span><button type="button" class="kit-ask-pending-remove" aria-label="Remove ' +
+            esc(p.file.name) +
+            '">✕</button></span>',
+        );
+        chip.querySelector('.kit-ask-pending-remove').addEventListener('click', function () {
+          pending = pending.filter(function (x) {
+            return x.cid !== p.cid;
+          });
+          renderPending();
+        });
+        pendingStrip.appendChild(chip);
+      });
+    }
+
+    function clearPending() {
+      pending = [];
+      renderPending();
+    }
+
+    function addFiles(files) {
+      Array.prototype.slice.call(files || []).forEach(function (file) {
+        var p = { cid: ++pendingSeq, file: file, status: 'uploading' };
+        pending.push(p);
+        renderPending();
+        if (file.size > MAX_UPLOAD_BYTES) {
+          p.status = 'error';
+          p.error = 'over 25 MB';
+          renderPending();
+          return;
+        }
+        uploadBlob(file)
+          .then(function (r) {
+            if (pending.indexOf(p) === -1) return; // removed mid-upload
+            p.status = 'done';
+            p.hash = r.hash;
+            p.mime = r.mime;
+            p.sizeBytes = r.sizeBytes;
+            p.filename = file.name;
+            renderPending();
+          })
+          .catch(function (err) {
+            if (pending.indexOf(p) === -1) return;
+            p.status = 'error';
+            p.error = String((err && err.message) || err || 'upload failed');
+            renderPending();
+          });
+      });
+    }
+
+    function typesHasFiles(dt) {
+      if (!dt || !dt.types) return false;
+      for (var i = 0; i < dt.types.length; i++) {
+        if (dt.types[i] === 'Files') return true;
+      }
+      return false;
+    }
+
+    attachBtn.addEventListener('click', function () {
+      fileInput.click();
+    });
+    fileInput.addEventListener('change', function () {
+      addFiles(fileInput.files);
+      fileInput.value = '';
+    });
+    panel.addEventListener('dragover', function (e) {
+      if (!typesHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      panel.classList.add('is-dragover');
+    });
+    panel.addEventListener('dragleave', function (e) {
+      if (e.target === panel) panel.classList.remove('is-dragover');
+    });
+    panel.addEventListener('drop', function (e) {
+      if (!typesHasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      panel.classList.remove('is-dragover');
+      var files = (e.dataTransfer && e.dataTransfer.files) || [];
+      if (files.length) addFiles(files);
+    });
+    input.addEventListener('paste', function (e) {
+      var files = (e.clipboardData && e.clipboardData.files) || [];
+      if (files.length) addFiles(files);
+    });
+
+    // ---------- Conversation history (issue #190 read side) ----------
+
+    function setViewMode(mode) {
+      var isHistory = mode === 'history';
+      historyView.hidden = !isHistory;
+      log.hidden = isHistory;
+      suggestRow.hidden = isHistory;
+      form.hidden = isHistory;
+      pendingStrip.hidden = isHistory || pending.length === 0;
+      historyBtn.setAttribute('aria-pressed', isHistory ? 'true' : 'false');
+      historyBtn.classList.toggle('is-active', isHistory);
+    }
+
+    function historyNote(text) {
+      historyList.innerHTML = '';
+      historyList.appendChild(el('<div class="kit-ask-history-empty"></div>')).textContent = text;
+    }
+
+    function renderHistoryList(sessions) {
+      historyList.innerHTML = '';
+      if (!sessions || !sessions.length) {
+        historyNote('No past conversations');
+        return;
+      }
+      sessions.forEach(function (s) {
+        var title = s.title && String(s.title).trim() ? s.title : 'Conversation';
+        var turns = s.turnCount || 0;
+        var meta = (turns === 1 ? '1 turn' : turns + ' turns') + ' · ' + relTime(s.updatedAt);
+        var row = el(
+          '<div class="kit-ask-history-row">' +
+            '<button type="button" class="kit-ask-history-item" data-id="' +
+            esc(s.id) +
+            '"><span class="kit-ask-history-title">' +
+            esc(title) +
+            '</span><span class="kit-ask-history-meta">' +
+            esc(meta) +
+            '</span></button>' +
+            '<button type="button" class="kit-ask-history-del" data-id="' +
+            esc(s.id) +
+            '" aria-label="Delete ' +
+            esc(title) +
+            '">✕</button></div>',
+        );
+        historyList.appendChild(row);
+      });
+    }
+
+    function loadHistoryList() {
+      historyNote('Loading…');
+      fetchJson(conversationsBase()).then(function (r) {
+        if (!r.ok) {
+          historyNote("Couldn't load past conversations.");
+          return;
+        }
+        renderHistoryList((r.body && r.body.sessions) || []);
+      });
+    }
+
+    function resetLogToIntro() {
+      log.innerHTML = '';
+      var m = el('<div class="kit-msg ai"></div>');
+      m.textContent = introText();
+      log.appendChild(m);
+    }
+
+    /** Reconstruct the log from a loaded session's messages, collapsing a run of `tool` items into one muted note. */
+    function renderTranscript(messages) {
+      log.innerHTML = '';
+      var list = messages || [];
+      var i = 0;
+      while (i < list.length) {
+        var payload = (list[i] && list[i].payload) || {};
+        if (payload.kind === 'user') {
+          bubble('user', esc(payload.text || '') + attachmentChipsHtml(payload.attachments));
+          i++;
+        } else if (payload.kind === 'tool') {
+          var n = 0;
+          while (i < list.length && list[i].payload && list[i].payload.kind === 'tool') {
+            n++;
+            i++;
+          }
+          var note = el('<div class="kit-ask-toolnote"></div>');
+          note.textContent = '⚙ used ' + n + (n === 1 ? ' tool' : ' tools');
+          log.appendChild(note);
+        } else {
+          // 'ai' (and any future kind) render as a plain assistant bubble.
+          bubble('ai', esc(payload.text || ''));
+          i++;
+        }
+      }
+      if (!list.length) resetLogToIntro();
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function openConversation(id) {
+      historyNote('Loading…');
+      fetchJson(conversationsBase() + '/' + encodeURIComponent(id)).then(function (r) {
+        if (!r.ok) {
+          if (r.status === 404) {
+            loadHistoryList(); // a stale row — refresh the list in place
+            return;
+          }
+          historyNote("Couldn't load that conversation.");
+          return;
+        }
+        session.set(id);
+        renderTranscript(r.body && r.body.messages);
+        setViewMode('chat');
+      });
+    }
+
+    function deleteConversationRow(id) {
+      fetch(conversationsBase() + '/' + encodeURIComponent(id), { method: 'DELETE' }).then(
+        function () {
+          if (session.get() === id) {
+            session.clear();
+            resetLogToIntro();
+          }
+          loadHistoryList();
+        },
+      );
+    }
+
+    historyBtn.addEventListener('click', function () {
+      if (historyView.hidden) {
+        loadHistoryList();
+        setViewMode('history');
+      } else {
+        setViewMode('chat');
+      }
+    });
+    historyNewBtn.addEventListener('click', function () {
+      session.clear();
+      resetLogToIntro();
+      clearPending();
+      setViewMode('chat');
+      input && input.focus();
+    });
+    historyList.addEventListener('click', function (e) {
+      var del = e.target.closest('.kit-ask-history-del');
+      if (del) {
+        // Same two-click "arm then confirm" idiom as every other destructive
+        // control in the kit — no native confirm() dialog.
+        if (!armConfirm(del, { armedLabel: '✕?' })) return;
+        deleteConversationRow(del.getAttribute('data-id'));
+        return;
+      }
+      var item = e.target.closest('.kit-ask-history-item');
+      if (item) openConversation(item.getAttribute('data-id'));
+    });
+
+    /** On first open, resume a stored conversation whose transcript hasn't rendered yet (e.g. after a page reload). */
+    function maybeAutoLoadStoredConversation() {
+      if (autoLoadAttempted) return;
+      autoLoadAttempted = true;
+      var id = session.get();
+      // "empty" == still just the intro bubble — a fresh page load, not a
+      // conversation this panel has already rendered this session.
+      if (!id || log.children.length > 1) return;
+      fetchJson(conversationsBase() + '/' + encodeURIComponent(id)).then(function (r) {
+        if (!r.ok) {
+          if (r.status === 404) session.clear(); // stale id — a fresh vault, a restart
+          return;
+        }
+        renderTranscript(r.body && r.body.messages);
+      });
+    }
+
+    var handler = null;
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (busy) return; // a turn is already in flight — guard double-sends
+      var uploaded = pending.filter(function (p) {
+        return p.status === 'done';
+      });
+      var refs = uploaded.map(function (p) {
+        return { hash: p.hash, mime: p.mime, filename: p.filename, sizeBytes: p.sizeBytes };
+      });
+      var v = input.value.trim() || (refs.length ? '(attachment)' : '');
+      if (!v) return;
+      api.user(v, refs.length ? refs : undefined);
+      input.value = '';
+      clearPending();
+      if (handler) handler(v, refs);
+    });
+
     // Default brain: the app's _turn conversation agent. Registered after
     // `window.kitAsk` exists so an app.js `onAsk` call simply replaces it.
-    if (!cfg.demo) handler = makeVaultDriver(api);
+    if (!cfg.demo) handler = makeVaultDriver(api, session);
 
     if (cfg.demo) playDemo(api, cfg.demo);
     document.dispatchEvent(new CustomEvent('kitask:ready'));
@@ -943,6 +1499,16 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     return id ? '/centraid/' + encodeURIComponent(id) + '/' : '';
   }
 
+  /** Base for this app's conversation-history sessions (issue #98/#190; distinct from `appBase()`'s `/centraid/<id>/` turn surface). */
+  function conversationsBase() {
+    return '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/sessions';
+  }
+
+  /** This app's attachment blob CAS — `POST` uploads, returns `{hash, sizeBytes, mime, url}`. */
+  function blobsBase() {
+    return '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/blobs';
+  }
+
   function fetchJson(url, opts) {
     return fetch(url, opts).then(function (r) {
       return r.text().then(function (t) {
@@ -951,6 +1517,26 @@ export function wireThemeToggle(btn, { onChange } = {}) {
           j = t ? JSON.parse(t) : null;
         } catch (_) {}
         return { ok: r.ok, status: r.status, body: j };
+      });
+    });
+  }
+
+  /** Upload one File to the conversation blob CAS; resolves `{hash, sizeBytes, mime, url}`. */
+  function uploadBlob(file) {
+    return fetch(blobsBase(), {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try {
+          j = t ? JSON.parse(t) : null;
+        } catch (_) {}
+        if (!r.ok) {
+          throw new Error((j && (j.message || j.error)) || 'upload failed (' + r.status + ')');
+        }
+        return j;
       });
     });
   }
@@ -1023,12 +1609,10 @@ export function wireThemeToggle(btn, { onChange } = {}) {
    * id it doesn't own (same contract the vault assistant's shell-level
    * `_turn` enforces) — so the panel provisions its session the same way the
    * desktop's own chat pane does, via the `/_centraid-conversations` create
-   * route, rather than guessing an id client-side.
+   * route, rather than guessing an id client-side. `session` is the shared
+   * per-panel conversation-id state (also driven by the History view).
    */
-  function makeVaultDriver(api) {
-    var convKey = 'kitask:conversation:' + (appId() || location.pathname);
-    var convId = null;
-
+  function makeVaultDriver(api, session) {
     /**
      * The `_turn` route keys a turn on a real `conversations` row (the
      * conversation-history ledger, issue #286) and 404s on any id it doesn't
@@ -1036,31 +1620,22 @@ export function wireThemeToggle(btn, { onChange } = {}) {
      * desktop's own chat pane does: `POST /_centraid-conversations/apps/<id>/sessions`.
      */
     function createConversation() {
-      return fetchJson(
-        '/_centraid-conversations/apps/' + encodeURIComponent(appId() || '') + '/sessions',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({}),
-        },
-      ).then(function (r) {
+      return fetchJson(conversationsBase(), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      }).then(function (r) {
         if (!r.ok || !r.body || !r.body.id) {
           throw new Error('could not start a conversation (' + r.status + ')');
         }
-        convId = r.body.id;
-        try {
-          sessionStorage.setItem(convKey, convId);
-        } catch (_) {}
-        return convId;
+        session.set(r.body.id);
+        return r.body.id;
       });
     }
 
     /** Forget the persisted id (a stale/unowned one — a fresh vault, a restart). */
     function forgetConversation() {
-      convId = null;
-      try {
-        sessionStorage.removeItem(convKey);
-      } catch (_) {}
+      session.clear();
     }
 
     /**
@@ -1069,15 +1644,8 @@ export function wireThemeToggle(btn, { onChange } = {}) {
      * promise — the id is never guessed client-side.
      */
     function ensureConversationId() {
-      if (convId) return Promise.resolve(convId);
-      var stored = null;
-      try {
-        stored = sessionStorage.getItem(convKey);
-      } catch (_) {}
-      if (stored) {
-        convId = stored;
-        return Promise.resolve(convId);
-      }
+      var stored = session.get();
+      if (stored) return Promise.resolve(stored);
       return createConversation();
     }
 
@@ -1158,7 +1726,14 @@ export function wireThemeToggle(btn, { onChange } = {}) {
       return null;
     }
 
-    return function ask(text) {
+    return function ask(text, attachments) {
+      // Busy spans the WHOLE turn (submit → terminal SSE event or stream
+      // close) — NOT just until the first token, which is all `typing`
+      // covers. Before this, `typing.done()` firing on the first
+      // `assistant.delta` (see `append` below) made the panel look idle
+      // while a tool call was still running mid-turn; `api.setBusy` is the
+      // fix, and doubles as the double-send guard (see the submit handler).
+      api.setBusy(true);
       var typing = api.typing();
       var stream = null; // the streaming assistant bubble
       function say(t) {
@@ -1213,10 +1788,12 @@ export function wireThemeToggle(btn, { onChange } = {}) {
        * error the owner can't act on.
        */
       function runTurn(id, isRetry) {
+        var body = { conversationId: id, message: text, register: 'ask' };
+        if (attachments && attachments.length) body.attachments = attachments;
         return fetch(appBase() + '_turn', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ conversationId: id, message: text }),
+          body: JSON.stringify(body),
         }).then(function (res) {
           if (!res.ok) {
             return res.text().then(function (t) {
@@ -1272,6 +1849,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
         })
         .then(function () {
           typing.done();
+          api.setBusy(false);
         });
     };
   }
@@ -1295,7 +1873,7 @@ export function wireThemeToggle(btn, { onChange } = {}) {
     }
   }
 
-  // Kick off once everything above is defined (var MIC included).
+  // Kick off once everything above is defined.
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

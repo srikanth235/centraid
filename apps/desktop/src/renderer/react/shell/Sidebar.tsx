@@ -47,6 +47,15 @@ export interface SidebarApp {
   status?: 'new' | 'draft' | 'live' | null;
 }
 
+/** One row in the sidebar's "Chats" list — a persisted vault-assistant
+ *  conversation (mirrors `CentraidConversationSummary`, trimmed to what the
+ *  row renders). */
+export interface SidebarConversation {
+  id: string;
+  title: string;
+  timeLabel: string;
+}
+
 export interface SidebarProps {
   activeId?: string;
   activePage?: SidebarPage;
@@ -56,7 +65,17 @@ export interface SidebarProps {
   headSlot?: ReactNode;
   onHome: () => void;
   onNewApp: () => void;
+  /** The vault assistant's persisted conversations, newest first (the list
+   *  endpoint already sorts — see useAssistantConversations). */
+  conversations?: SidebarConversation[];
+  /** The conversation id of the current route, when it's the assistant
+   *  route with one open — highlights that row. */
+  activeConversationId?: string;
+  /** "+" action on the Chats section header and the empty-state fallback —
+   *  starts a fresh (not-yet-created) conversation. */
   onNewChat?: () => void;
+  onSelectConversation?: (id: string) => void;
+  onDeleteConversation?: (id: string) => void;
   onSearch?: () => void;
   onAssistant?: () => void;
   onInsights?: () => void;
@@ -177,6 +196,46 @@ function AppRow({
   );
 }
 
+function ConversationRow({
+  conversation,
+  active,
+  onClick,
+  onDelete,
+}: {
+  conversation: SidebarConversation;
+  active: boolean;
+  onClick: () => void;
+  onDelete?: () => void;
+}): JSX.Element {
+  const item = (
+    <SbItem
+      icon={<SparkleGlyph size={13} />}
+      label={conversation.title}
+      meta={conversation.timeLabel}
+      active={active}
+      onClick={onClick}
+    />
+  );
+  if (!onDelete) return item;
+  return (
+    <div className={chrome.sbAppRow}>
+      {item}
+      <button
+        className={chrome.rowMore}
+        type="button"
+        aria-label="Delete conversation"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onDelete();
+        }}
+      >
+        <Icon name="X" size={12} />
+      </button>
+    </div>
+  );
+}
+
 export default function Sidebar(props: SidebarProps): JSX.Element {
   const appList = [...props.apps, ...props.drafts];
   return (
@@ -272,8 +331,22 @@ export default function Sidebar(props: SidebarProps): JSX.Element {
         <SbItem icon={<SparkleGlyph />} label="No apps yet" disabled />
       )}
 
-      <SbSection label="Chats · 0" onAction={props.onNewChat ?? props.onNewApp} />
-      <SbItem icon={<SparkleGlyph />} label="No saved chats yet" disabled />
+      <SbSection label={`Chats · ${props.conversations?.length ?? 0}`} onAction={props.onNewChat} />
+      {props.conversations && props.conversations.length > 0 ? (
+        props.conversations.map((c) => (
+          <ConversationRow
+            key={c.id}
+            conversation={c}
+            active={c.id === props.activeConversationId}
+            onClick={() => props.onSelectConversation?.(c.id)}
+            onDelete={
+              props.onDeleteConversation ? () => props.onDeleteConversation?.(c.id) : undefined
+            }
+          />
+        ))
+      ) : (
+        <SbItem icon={<SparkleGlyph />} label="No conversations yet" disabled />
+      )}
 
       <span style={{ flex: '1', minHeight: '12px' }} />
       {props.onWhatsNew ? (

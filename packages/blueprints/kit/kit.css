@@ -1447,51 +1447,258 @@ kit-reference-strip,
   white-space: nowrap;
 }
 
+/* ── Composer — modeled on Claude Code's composer, adapted to kit tokens ──
+   One cohesive rounded frame (`.kit-ask-compose` IS the frame — it's the
+   `<form>` itself, not a wrapper) holding staged-attachment chips, the
+   input, and a slim bottom controls strip (attach left, model picker +
+   send right). The frame is the focus target — a soft ring grows around
+   the whole card, not just the input, so opening the model menu or
+   attaching a file never reflows anything else. Core functionality (not a
+   desktop-only enhancement) — works unchanged down to the narrowest phone
+   width the panel supports. */
 .kit-ask-compose {
   display: flex;
-  gap: 0.5rem;
-  padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line, #eee);
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 1rem calc(0.8rem + env(safe-area-inset-bottom));
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.55rem 0.4rem;
+  border: 1px solid var(--kit-line-strong);
+  border-radius: calc(var(--kit-radius) * 1.1);
+  background: var(--surface, #fff);
+  box-shadow: var(--shadow-sm, 0 0 0 0.5px var(--kit-line-strong));
   flex: none;
+  transition:
+    border-color 0.14s var(--kit-ease),
+    box-shadow 0.14s var(--kit-ease);
 }
-.kit-ask-compose input {
-  flex: 1;
-  min-height: 2.6rem;
-  padding: 0.5rem 0.9rem;
-  border: 1px solid var(--line, #ccc);
-  border-radius: 999px;
-  background: var(--kit-surface-2);
+.kit-ask-compose:focus-within {
+  border-color: var(--kit-accent);
+  box-shadow: var(--kit-focus-ring);
+}
+.kit-ask-input {
+  min-height: 2.1rem;
+  padding: 0.3rem 0.35rem;
+  border: none;
+  border-radius: calc(var(--kit-radius) * 0.6);
+  background: transparent;
   color: var(--text, #111);
   font: inherit;
   font-size: 0.9rem;
 }
-.kit-ask-compose input::placeholder {
+.kit-ask-input:focus {
+  outline: none;
+}
+.kit-ask-input::placeholder {
   color: var(--kit-faint);
 }
+
+/* Bottom controls strip — attach on the left, model picker + send on the
+   right, separated from the input by a hairline so it reads as its own
+   quiet row inside the same card. */
+.kit-ask-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line, #eee);
+}
+.kit-ask-controls-spacer {
+  flex: 1;
+  min-width: 0;
+}
+.kit-ask-attach {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: none;
+  border-radius: calc(var(--kit-radius) * 0.55);
+  background: transparent;
+  color: var(--muted, #888);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex: none;
+  transition:
+    color 0.1s var(--kit-ease),
+    background 0.1s var(--kit-ease);
+}
+.kit-ask-attach:hover {
+  color: var(--text, #111);
+  background: var(--kit-surface-2);
+}
+.kit-ask-attach:focus-visible {
+  outline: 2px solid var(--kit-accent);
+  outline-offset: 1px;
+}
 .kit-ask-send {
-  min-width: 2.6rem;
-  min-height: 2.6rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
   border: none;
   border-radius: 999px;
   background: var(--kit-accent-deep);
   color: #fff;
-  font-size: 1.05rem;
+  font-size: 1rem;
   line-height: 1;
-  cursor: pointer;
-  flex: none;
-}
-.kit-ask-mic {
-  min-width: 2.6rem;
-  min-height: 2.6rem;
-  border: 1px solid var(--line, #ccc);
-  border-radius: 999px;
-  background: var(--surface, #fff);
-  color: var(--muted, #888);
   cursor: pointer;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition:
+    background 0.1s var(--kit-ease),
+    transform 0.1s var(--kit-ease);
+}
+.kit-ask-send:hover:not(:disabled) {
+  background: var(--kit-accent);
+}
+.kit-ask-send:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.kit-ask-send:focus-visible {
+  outline: 2px solid var(--kit-accent);
+  outline-offset: 2px;
+}
+.kit-ask-send:disabled {
+  cursor: wait;
+  opacity: 0.85;
+}
+/* Busy send-button state — a small spinner swapped in for the arrow glyph
+   (see kit.js `setBusy`), the same recipe as `.kit-ask-action .aa-label::before`. */
+.kit-ask-send-spin {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-right-color: transparent;
+  animation: kit-spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-send-spin {
+    animation: none;
+    border-right-color: rgba(255, 255, 255, 0.55);
+  }
+}
+
+/* Inline model picker (subsystem `ask`) — a quiet text control, not a
+   boxed button, so it reads as metadata about the composer rather than a
+   competing action. Mirrors the desktop Assistant composer's picker. */
+.kit-ask-model {
+  position: relative;
+  flex: none;
+}
+.kit-ask-model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 1.9rem;
+  padding: 0 0.5rem;
+  border: none;
+  border-radius: calc(var(--kit-radius) * 0.55);
+  background: transparent;
+  color: var(--muted, #888);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.1s var(--kit-ease),
+    color 0.1s var(--kit-ease);
+}
+.kit-ask-model-btn:hover:not(:disabled) {
+  color: var(--text, #111);
+  background: var(--kit-surface-2);
+}
+.kit-ask-model-btn[aria-expanded='true'] {
+  color: var(--text, #111);
+  background: var(--kit-surface-2);
+}
+.kit-ask-model-btn:focus-visible {
+  outline: 2px solid var(--kit-accent);
+  outline-offset: 1px;
+}
+.kit-ask-model-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.kit-ask-model-label {
+  max-width: 6.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ask-model-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 5;
+  min-width: 12rem;
+  max-width: min(17rem, calc(100vw - 2rem));
+  max-height: 16rem;
+  overflow-y: auto;
+  padding: 0.35rem;
+  border-radius: calc(var(--kit-radius) * 0.85);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, #e5e5e5);
+  box-shadow: var(--kit-shadow);
+  animation: kit-ask-model-pop 0.13s cubic-bezier(0.2, 0.7, 0.3, 1.2);
+}
+@keyframes kit-ask-model-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.25rem) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-model-menu {
+    animation: none;
+  }
+}
+.kit-ask-model-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: none;
+  border-radius: calc(var(--kit-radius) * 0.45);
+  background: transparent;
+  color: var(--text, #111);
+  text-align: left;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.1s var(--kit-ease);
+}
+.kit-ask-model-item:hover,
+.kit-ask-model-item:focus-visible {
+  background: var(--kit-surface-2);
+  outline: none;
+}
+.kit-ask-model-item.is-active {
+  background: var(--kit-accent-soft);
+}
+.kit-ask-model-hint {
+  flex: none;
+  color: var(--kit-faint);
+  font-family: var(--kit-mono);
+  font-size: 0.66rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 7rem;
+}
+.kit-ask-model-divider {
+  height: 1px;
+  margin: 0.25rem 0.1rem;
+  background: var(--line, #eee);
 }
 
 /* Elevated flow: scope, applied-receipt, diff, typing indicator */
@@ -1608,6 +1815,247 @@ kit-reference-strip,
     animation: none;
     opacity: 0.5;
   }
+}
+
+/* ---------- Ask · conversation history (issue #190 read side) -------------
+   A toggleable in-panel view: past conversations for this app, newest
+   first, with a "New conversation" action and per-row delete. Replaces the
+   log/suggest/compose stack while open — same tokens, same trust language.
+   Core functionality (not a desktop-only enhancement), so it works down to
+   the narrowest phone width the panel already supports. */
+
+.kit-ask-history-btn {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: none;
+  border-radius: 50%;
+  background: var(--kit-surface-2);
+  color: var(--muted, #888);
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.kit-ask-history-btn.is-active {
+  background: var(--kit-accent-soft);
+  color: var(--kit-accent-deep-fg);
+}
+
+.kit-ask-history {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.kit-ask-history-head {
+  padding: 0.7rem 1rem 0.3rem;
+  flex: none;
+}
+.kit-ask-history-new {
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px dashed var(--line, #ccc);
+  border-radius: 0.7rem;
+  background: var(--surface, #fff);
+  color: var(--kit-accent-deep-fg);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.kit-ask-history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.4rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.kit-ask-history-empty {
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+  font-size: 0.82rem;
+  color: var(--kit-faint);
+}
+.kit-ask-history-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+.kit-ask-history-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line, #e5e5e5);
+  border-radius: 0.7rem;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+.kit-ask-history-item:hover,
+.kit-ask-history-item:focus-visible {
+  background: var(--kit-surface-2);
+}
+.kit-ask-history-title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text, #111);
+}
+.kit-ask-history-meta {
+  font-family: var(--kit-mono);
+  font-size: 0.66rem;
+  color: var(--kit-faint);
+}
+.kit-ask-history-del {
+  width: 2.2rem;
+  flex: none;
+  border: 1px solid var(--line, #e5e5e5);
+  border-radius: 0.7rem;
+  background: var(--surface, #fff);
+  color: var(--muted, #888);
+  cursor: pointer;
+}
+
+/* Collapsed tool-call run inside a loaded transcript — raw tool args/
+   results never render, just an honest "N tools ran" marker. */
+.kit-ask-toolnote {
+  align-self: center;
+  font-family: var(--kit-mono);
+  font-size: 0.68rem;
+  color: var(--kit-faint);
+  padding: 0.2rem 0.6rem;
+}
+
+/* ---------- Ask · message attachment chips --------------------------------
+   Rendered inside a `.kit-msg` bubble — currentColor-based so it reads on
+   both the accent-deep user bubble and the neutral ai bubble. */
+
+.kit-ask-msg-atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+.kit-ask-msg-att {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, currentColor 30%, transparent);
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  font-size: 0.72rem;
+}
+.kit-ask-msg-att svg {
+  flex: none;
+  width: 0.85em;
+  height: 0.85em;
+}
+
+/* ---------- Ask · pending attachments (compose strip) ---------------------
+   Files picked/dropped/pasted upload immediately to the per-app
+   conversation blob CAS (issue #190); the strip tracks upload state until
+   Send folds the resolved refs into the turn body and clears it. */
+
+.kit-ask-attach {
+  min-width: 2.6rem;
+  min-height: 2.6rem;
+  border: 1px solid var(--line, #ccc);
+  border-radius: 999px;
+  background: var(--surface, #fff);
+  color: var(--muted, #888);
+  cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Nested inside `.kit-ask-compose` (its parent's flex `gap` + padding
+   already space it from the input above) — no padding of its own. */
+.kit-ask-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.15rem 0.15rem 0;
+  flex: none;
+}
+.kit-ask-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 0.6rem;
+  background: var(--kit-surface-2);
+  font-size: 0.74rem;
+  color: var(--text, #111);
+}
+.kit-ask-pending-chip.is-error {
+  border-color: color-mix(in oklab, var(--kit-accent) 45%, var(--line, #ccc));
+  color: var(--kit-accent-deep-fg);
+}
+.kit-ask-pending-name {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kit-ask-pending-size {
+  font-family: var(--kit-mono);
+  font-size: 0.66rem;
+  color: var(--kit-faint);
+}
+.kit-ask-pending-chip.is-error .kit-ask-pending-size {
+  color: inherit;
+}
+.kit-ask-pending-remove {
+  border: none;
+  background: none;
+  color: var(--kit-faint);
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+}
+.kit-ask-pending-spin {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1.5px solid var(--kit-faint);
+  border-right-color: transparent;
+  animation: kit-spin 0.9s linear infinite;
+  flex: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kit-ask-pending-spin {
+    animation: none;
+  }
+}
+
+/* Drag-drop target state on the whole panel. */
+.kit-ask-panel.is-dragover {
+  outline: 2px dashed color-mix(in oklab, var(--kit-accent) 50%, var(--line, #ccc));
+  outline-offset: -2px;
 }
 
 /* ── Inline anchored references (issue #282) ────────────────────────────────
