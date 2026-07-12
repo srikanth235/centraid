@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#387) one cohesive lifecycle handler family (create/update/set-enabled/rotate/delete) sharing the same session+stage+publish plumbing; splitting duplicates the shared helpers
 // Automation lifecycle handlers for the gateway-owned builder (issue
 // #141, Phase 2): scaffold an automation app, toggle its `enabled` flag,
 // and delete it. Split out of `lifecycle-routes.ts` (file-size limit);
@@ -176,6 +177,163 @@ export async function handleAutomationSetEnabled(
     await opts.store.closeSession(sessionId);
   }
   return sendJson(res, 200, { ok: true, staged: !publish });
+}
+
+// ---- POST /centraid/_automations/update?ref= (edit name/prompt/triggers) ----
+
+/**
+ * The instructions-first editor's save path: patch an automation's
+ * `name` / `prompt` (manifest `prompt` — the human intent) / `triggers`
+ * without going through the builder chat. Every field is optional and only
+ * a present one is applied — this is `PATCH` semantics over `POST`, mirroring
+ * `set-enabled`'s "load current manifest → apply → re-validate → stage +
+ * publish" shape rather than re-scaffolding.
+ *
+ * Triggers follow create's wire shape (`CentraidCreateTrigger[]`), with one
+ * v1 refinement: a `{kind:'webhook'}` entry mints a fresh id + secret ONLY
+ * when the automation had no webhook trigger before — an edit that keeps an
+ * existing webhook must not silently rotate its secret out from under
+ * configured callers (that is `rotate-webhook`'s dedicated job). A `triggers`
+ * array that omits `webhook` drops it. Renamed automations pick up their new
+ * display name on the enrolled agent automatically: `publishAndReconcile`'s
+ * `reconcile()` re-derives `nameByOwnerApp` from the just-published manifest
+ * and re-enrolls (`ensureAgentEnrolled`'s `displayName`-driven upsert) —
+ * exactly the mechanism `set-enabled`/create already ride, no special-casing
+ * needed here.
+ */
+export async function handleAutomationUpdate(
+  opts: LifecycleRouteOptions,
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const rawRef = url.searchParams.get('ref') ?? '';
+  const ref = automation.parseRef(rawRef);
+  if (!ref) return sendJson(res, 400, { error: 'bad_request', message: 'update needs ?ref=' });
+  const body = await readJson(req);
+
+  const nameInput = typeof body.name === 'string' ? body.name : undefined;
+  const promptInput = typeof body.prompt === 'string' ? body.prompt : undefined;
+  const triggersInput = Array.isArray(body.triggers)
+    ? (body.triggers as Array<Record<string, unknown>>)
+    : undefined;
+  if (nameInput === undefined && promptInput === undefined && triggersInput === undefined) {
+    return sendJson(res, 400, {
+      error: 'bad_request',
+      message: 'update needs at least one of { name, prompt, triggers }',
+    });
+  }
+
+  const publish = body.publish === true;
+  const explicitSession =
+    typeof body.sessionId === 'string' && body.sessionId ? body.sessionId : '';
+  const sessionId = explicitSession || defaultSessionId(ref.appId);
+  const ephemeralSession = !explicitSession;
+
+  await prepareLifecycleSession(opts.store, sessionId, ephemeralSession);
+  const appDir = await opts.store.snapshotSessionAppDir(sessionId, ref.appId);
+  const current = await readFileMap(appDir);
+
+  const targetPath = `automations/${ref.automationId}/${automation.MANIFEST_FILE}`;
+  const file = current.find((f) => f.path === targetPath);
+  if (!file) {
+    if (ephemeralSession) await opts.store.closeSession(sessionId);
+    return sendJson(res, 404, {
+      error: 'not_found',
+      message: `Automation "${rawRef}" does not exist.`,
+    });
+  }
+
+  // A corrupt-on-disk manifest surfaces the same 400 an invalid patch would
+  // (via `sendLifecycleError`'s `ManifestError` mapping) rather than a 500 —
+  // the route's own try/catch (in `makeLifecycleRouteHandler`) covers this.
+  const existing = automation.parseManifest(file.content);
+
+  // Same closed trigger-kind vocabulary + validator delegation as create
+  // (see the comment above `ALLOWED_TRIGGER_KINDS` there): reject an unknown
+  // kind loudly instead of coercing it, let `validateManifest` below reject a
+  // malformed condition/data spec with its own field-scoped message.
+  const ALLOWED_TRIGGER_KINDS = new Set(['cron', 'webhook', 'condition', 'data']);
+  let webhook: { id: string; secret: string; url: string } | undefined;
+  let triggers: automation.Trigger[] | undefined;
+  if (triggersInput) {
+    const badKind = triggersInput.find(
+      (t) => t.kind !== undefined && !ALLOWED_TRIGGER_KINDS.has(t.kind as string),
+    );
+    if (badKind) {
+      if (ephemeralSession) await opts.store.closeSession(sessionId);
+      return sendJson(res, 400, {
+        error: 'bad_request',
+        message: `Unsupported trigger kind "${String(badKind.kind)}" — update accepts cron, webhook, condition and data triggers.`,
+      });
+    }
+    const existingWebhook = automation.webhookTriggerOf(existing.triggers);
+    triggers = triggersInput.map((t) => {
+      if (t.kind === 'webhook') {
+        // Wire shape carries no id/secretHash (those are gateway-minted) —
+        // the only way to tell "keep the existing one" from "mint a new
+        // one" is whether the automation already had a provisioned webhook.
+        if (existingWebhook) return existingWebhook;
+        const wid = automation.generateWebhookId();
+        const secret = automation.generateWebhookSecret();
+        webhook = { id: wid, secret, url: webhookUrl(req, wid) };
+        return { kind: 'webhook', id: wid, secretHash: automation.hashWebhookSecret(secret) };
+      }
+      if (t.kind === 'condition') {
+        return {
+          kind: 'condition',
+          entity: t.entity,
+          ...(t.where !== undefined ? { where: t.where } : {}),
+          ...(t.every !== undefined ? { every: t.every } : {}),
+        } as automation.Trigger;
+      }
+      if (t.kind === 'data') {
+        return {
+          kind: 'data',
+          entities: t.entities,
+          ...(t.every !== undefined ? { every: t.every } : {}),
+        } as automation.Trigger;
+      }
+      return { kind: 'cron', expr: typeof t.expr === 'string' ? t.expr : '0 9 * * *' };
+    });
+  }
+
+  // Round-trip through the real validator so a patched manifest can never
+  // land a shape the runtime would later reject — untouched fields (incl.
+  // `generated`, `enabled`, `history`) survive via the spread.
+  const patched: Record<string, unknown> = {
+    ...existing,
+    ...(nameInput !== undefined ? { name: nameInput } : {}),
+    ...(promptInput !== undefined ? { prompt: promptInput } : {}),
+    ...(triggers !== undefined ? { triggers } : {}),
+  };
+  const manifest = automation.validateManifest(patched);
+  const changedFile: ScaffoldFile = {
+    path: targetPath,
+    content: JSON.stringify(manifest, null, 2) + '\n',
+  };
+
+  await stageAndMaybePublish(opts, {
+    appId: ref.appId,
+    sessionId,
+    files: [changedFile],
+    publish,
+    message: `update ${ref.automationId}`,
+    ephemeralSession,
+  });
+
+  // Read the published row back for the renderer (only on `main`) — same
+  // pattern as create.
+  let row: unknown = null;
+  if (publish) {
+    const { rows } = await automation.list(opts.codeAppsDir());
+    // Compare on the parsed handle, not the raw query string — `rawRef` is
+    // whatever the caller typed and need not be byte-identical to the
+    // canonical `<appId>/<automationId>` form `Row.ref` always is.
+    const wantRef = `${ref.appId}/${ref.automationId}`;
+    row = rows.find((r) => r.ref === wantRef) ?? null;
+  }
+  return sendJson(res, 200, { row, staged: !publish, ...(webhook ? { webhook } : {}) });
 }
 
 // ---- POST /centraid/_automations/rotate-webhook?ref= (mint a fresh secret) ----

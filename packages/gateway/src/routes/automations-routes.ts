@@ -1,3 +1,4 @@
+// governance: allow-repo-hygiene file-size-limit (#387) single dispatch surface for the automation read/run/runs/SSE wire (one switch over one HTTP contract); splitting scatters the route table without a seam
 // HTTP surface for automation runtime ops (issue #141).
 //
 // The desktop used to read automation manifests off the local
@@ -424,9 +425,31 @@ export function makeAutomationsRouteHandler(
           ...(ref ? { automationRef: ref } : {}),
           limit: Number.isFinite(limit) && limit > 0 ? limit : 50,
         });
-        return sendJson(res, 200, {
-          runs: summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow),
-        });
+        const finished = summaries.filter((s) => s.kind === 'automation').map(summaryToRunRow);
+        // The `run_summary` view only covers FINISHED turns (`ended_at IS NOT
+        // NULL`), so a fire that is still executing is invisible to it. The
+        // thread screen stays put on "Run now" (it no longer jumps into the
+        // SSE run viewer), so surface in-flight turns here or a slow run
+        // looks like nothing happened. Ref-scoped only — the fleet's global
+        // feed can tolerate the completion lag.
+        if (ref) {
+          const seen = new Set(finished.map((r) => r.runId));
+          const live = runsStore
+            .listAutomationTurns(ref, { limit: 10 })
+            .filter((t) => t.endedAt === undefined && !seen.has(t.turnId))
+            .map((t) => {
+              const conversation = runsStore.getConversation(t.conversationId);
+              return turnToRunRecord(
+                t,
+                undefined,
+                runsStore.messageInText(t.turnId),
+                conversation?.automationId,
+                conversation?.title,
+              );
+            });
+          return sendJson(res, 200, { runs: [...live, ...finished] });
+        }
+        return sendJson(res, 200, { runs: finished });
       }
 
       if (sub === 'run' && method === 'GET') {
