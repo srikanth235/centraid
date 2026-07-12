@@ -15,6 +15,11 @@ CREATE TABLE home_asset_item (
   photo_asset_id      TEXT REFERENCES media_media_asset(asset_id),
   disposed_on         TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_asset_item_owner_party ON home_asset_item(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_asset_item_category_concept ON home_asset_item(category_concept_id);
+CREATE INDEX IF NOT EXISTS idx_asset_item_place ON home_asset_item(place_id);
+CREATE INDEX IF NOT EXISTS idx_asset_item_acquired_txn ON home_asset_item(acquired_txn_id);
+CREATE INDEX IF NOT EXISTS idx_asset_item_photo_asset ON home_asset_item(photo_asset_id);
 
 CREATE TABLE home_warranty (
   warranty_id       TEXT PRIMARY KEY,
@@ -25,6 +30,9 @@ CREATE TABLE home_warranty (
   terms_content_id  TEXT REFERENCES core_content_item(content_id),
   claim_uri         TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_warranty_item ON home_warranty(item_id);
+CREATE INDEX IF NOT EXISTS idx_warranty_provider_party ON home_warranty(provider_party_id);
+CREATE INDEX IF NOT EXISTS idx_warranty_terms_content ON home_warranty(terms_content_id);
 
 CREATE TABLE home_maintenance_plan (
   plan_id                 TEXT PRIMARY KEY,
@@ -35,6 +43,9 @@ CREATE TABLE home_maintenance_plan (
   instructions_content_id TEXT REFERENCES core_content_item(content_id),
   current_task_id         TEXT REFERENCES schedule_task(task_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_maintenance_plan_item ON home_maintenance_plan(item_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plan_instructions_content ON home_maintenance_plan(instructions_content_id);
+CREATE INDEX IF NOT EXISTS idx_maintenance_plan_current_task ON home_maintenance_plan(current_task_id);
 
 CREATE TABLE home_utility_meter (
   meter_id           TEXT PRIMARY KEY,
@@ -44,6 +55,9 @@ CREATE TABLE home_utility_meter (
   billing_account_id TEXT REFERENCES core_account(account_id),
   provider_party_id  TEXT REFERENCES core_party(party_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_utility_meter_place ON home_utility_meter(place_id);
+CREATE INDEX IF NOT EXISTS idx_utility_meter_billing_account ON home_utility_meter(billing_account_id);
+CREATE INDEX IF NOT EXISTS idx_utility_meter_provider_party ON home_utility_meter(provider_party_id);
 
 CREATE TABLE home_meter_reading (
   reading_id     TEXT PRIMARY KEY,
@@ -51,6 +65,7 @@ CREATE TABLE home_meter_reading (
   observation_id TEXT NOT NULL UNIQUE REFERENCES core_observation(observation_id),
   source         TEXT NOT NULL CHECK (source IN ('manual','photo_ocr','provider_api'))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_meter_reading_meter ON home_meter_reading(meter_id);
 `;
 
 export const BUSINESS_DDL = `
@@ -82,6 +97,8 @@ CREATE TABLE business_time_entry (
   rate_minor      INTEGER CHECK (rate_minor >= 0),
   invoice_line_id TEXT REFERENCES business_invoice_line(line_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_time_entry_project ON business_time_entry(project_id);
+CREATE INDEX IF NOT EXISTS idx_time_entry_invoice_line ON business_time_entry(invoice_line_id);
 
 CREATE TABLE business_invoice (
   invoice_id     TEXT PRIMARY KEY,
@@ -95,6 +112,9 @@ CREATE TABLE business_invoice (
   paid_txn_id    TEXT REFERENCES core_transaction(txn_id),
   pdf_content_id TEXT REFERENCES core_content_item(content_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invoice_client ON business_invoice(client_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_paid_txn ON business_invoice(paid_txn_id);
+CREATE INDEX IF NOT EXISTS idx_invoice_pdf_content ON business_invoice(pdf_content_id);
 
 CREATE TABLE business_invoice_line (
   line_id          TEXT PRIMARY KEY,
@@ -104,4 +124,5 @@ CREATE TABLE business_invoice_line (
   unit_price_minor INTEGER NOT NULL CHECK (unit_price_minor >= 0),
   amount_minor     INTEGER NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_invoice_line_invoice ON business_invoice_line(invoice_id);
 `;

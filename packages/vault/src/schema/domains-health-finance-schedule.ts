@@ -22,6 +22,8 @@ CREATE TABLE health_workout (
   training_load    REAL,
   route_content_id TEXT REFERENCES core_content_item(content_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_workout_sport_concept ON health_workout(sport_concept_id);
+CREATE INDEX IF NOT EXISTS idx_workout_route_content ON health_workout(route_content_id);
 
 CREATE TABLE health_sleep_session (
   sleep_id       TEXT PRIMARY KEY,
@@ -43,6 +45,8 @@ CREATE TABLE health_medication_course (
   started_at          TEXT NOT NULL,
   ended_at            TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_medication_course_subject_party ON health_medication_course(subject_party_id);
+CREATE INDEX IF NOT EXISTS idx_medication_course_prescriber_party ON health_medication_course(prescriber_party_id);
 
 CREATE TABLE health_condition (
   condition_id     TEXT PRIMARY KEY,
@@ -55,6 +59,7 @@ CREATE TABLE health_condition (
   onset_date       TEXT,
   abatement_date   TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_condition_subject_party ON health_condition(subject_party_id);
 `;
 
 export const FINANCE_DDL = `
@@ -65,6 +70,8 @@ CREATE TABLE finance_txn_split (
   category_concept_id TEXT NOT NULL REFERENCES core_concept(concept_id),
   memo                TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_txn_split_txn ON finance_txn_split(txn_id);
+CREATE INDEX IF NOT EXISTS idx_txn_split_category_concept ON finance_txn_split(category_concept_id);
 
 CREATE TABLE finance_budget (
   budget_id           TEXT PRIMARY KEY,
@@ -76,6 +83,7 @@ CREATE TABLE finance_budget (
   starts_on           TEXT NOT NULL,
   UNIQUE (owner_party_id, category_concept_id, period, starts_on)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_budget_category_concept ON finance_budget(category_concept_id);
 
 CREATE TABLE finance_holding (
   holding_id       TEXT PRIMARY KEY,
@@ -99,6 +107,9 @@ CREATE TABLE finance_recurring_series (
   last_txn_id           TEXT REFERENCES core_transaction(txn_id),
   status                TEXT NOT NULL CHECK (status IN ('active','paused','ended'))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_recurring_series_account ON finance_recurring_series(account_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_series_counterparty_party ON finance_recurring_series(counterparty_party_id);
+CREATE INDEX IF NOT EXISTS idx_recurring_series_last_txn ON finance_recurring_series(last_txn_id);
 
 CREATE TABLE finance_fx_rate (
   rate_id     TEXT PRIMARY KEY,
@@ -121,6 +132,7 @@ CREATE TABLE schedule_calendar (
   visibility     TEXT NOT NULL CHECK (visibility IN ('private','shared','public')),
   external_uri   TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_calendar_owner_party ON schedule_calendar(owner_party_id);
 
 CREATE TABLE schedule_event_ext (
   event_ext_id      TEXT PRIMARY KEY,
@@ -131,6 +143,7 @@ CREATE TABLE schedule_event_ext (
   reminders_json    TEXT CHECK (reminders_json IS NULL OR json_valid(reminders_json)),
   travel_buffer_min INTEGER CHECK (travel_buffer_min >= 0)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_event_ext_calendar ON schedule_event_ext(calendar_id);
 
 CREATE TABLE schedule_attendee (
   attendee_id  TEXT PRIMARY KEY,
@@ -141,6 +154,7 @@ CREATE TABLE schedule_attendee (
   responded_at TEXT,
   UNIQUE (event_id, party_id)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_attendee_party ON schedule_attendee(party_id);
 
 CREATE TABLE schedule_task (
   task_id        TEXT PRIMARY KEY,
@@ -156,6 +170,8 @@ CREATE TABLE schedule_task (
   rrule          TEXT,
   remind_before_min INTEGER CHECK (remind_before_min >= 0)
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_task_owner_party ON schedule_task(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_task_parent_task ON schedule_task(parent_task_id);
 
 CREATE TABLE schedule_availability_rule (
   rule_id        TEXT PRIMARY KEY,
@@ -166,4 +182,5 @@ CREATE TABLE schedule_availability_rule (
   kind           TEXT NOT NULL CHECK (kind IN ('work','focus','personal','blocked')),
   tz             TEXT NOT NULL
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_availability_rule_owner_party ON schedule_availability_rule(owner_party_id);
 `;

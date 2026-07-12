@@ -44,6 +44,10 @@ CREATE TABLE consent_access_grant (
   revoked_at          TEXT,
   status              TEXT NOT NULL CHECK (status IN ('active','expired','revoked'))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_access_grant_app ON consent_access_grant(app_id);
+CREATE INDEX IF NOT EXISTS idx_access_grant_grantee_party ON consent_access_grant(grantee_party_id);
+CREATE INDEX IF NOT EXISTS idx_access_grant_purpose_concept ON consent_access_grant(purpose_concept_id);
+CREATE INDEX IF NOT EXISTS idx_access_grant_granted_by_party ON consent_access_grant(granted_by_party_id);
 
 CREATE TABLE consent_grant_scope (
   scope_id        TEXT PRIMARY KEY,
@@ -54,6 +58,7 @@ CREATE TABLE consent_grant_scope (
   row_filter_json TEXT CHECK (row_filter_json IS NULL OR json_valid(row_filter_json)),
   field_mask_json TEXT CHECK (field_mask_json IS NULL OR json_valid(field_mask_json))
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_grant_scope_grant ON consent_grant_scope(grant_id);
 
 CREATE TABLE consent_share (
   share_id            TEXT PRIMARY KEY,
@@ -68,6 +73,9 @@ CREATE TABLE consent_share (
   expires_at          TEXT,
   revoked_at          TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_share_owner_party ON consent_share(owner_party_id);
+CREATE INDEX IF NOT EXISTS idx_share_recipient_party ON consent_share(recipient_party_id);
+CREATE INDEX IF NOT EXISTS idx_share_recipient_circle ON consent_share(recipient_circle_id);
 
 CREATE TABLE consent_policy (
   policy_id        TEXT PRIMARY KEY,
@@ -92,6 +100,7 @@ CREATE TABLE consent_device (
   last_seen_at   TEXT,
   sync_cursor    TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_device_owner_party ON consent_device(owner_party_id);
 
 CREATE TABLE consent_export_job (
   export_id             TEXT PRIMARY KEY,
@@ -103,6 +112,8 @@ CREATE TABLE consent_export_job (
   artifact_content_id   TEXT REFERENCES core_content_item(content_id),
   verify_hash           TEXT
 ) STRICT;
+CREATE INDEX IF NOT EXISTS idx_export_job_requested_by_party ON consent_export_job(requested_by_party_id);
+CREATE INDEX IF NOT EXISTS idx_export_job_artifact_content ON consent_export_job(artifact_content_id);
 `;
 
 // v14 (issue #308 A3/A4): consent memory for the install-grant top-up.

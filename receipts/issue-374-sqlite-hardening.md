@@ -246,3 +246,4 @@ PASS Zero genuine steering events detected. All 69 user-type entries in the tran
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-ce6f46f7-a6a-1783825671-1 | claude-code | ce6f46f7-a6a9-4d68-9c4d-6c2f3baec4a7 | #374 | claude-sonnet-5 | 56228 | 1228693 | 13719920 | 167101 | 1452022 | 11.3988 | 56228 | 1228693 | 13719920 | 167101 | fix(vault,app-engine): STRICT tables + JS-safe-integer bounds (#374)extTableDdl( |
+| claude-code-ce6f46f7-a6a-1783825725-1 | claude-code | ce6f46f7-a6a9-4d68-9c4d-6c2f3baec4a7 | #374 | claude-sonnet-5 | 7540 | 7066 | 467671 | 1167 | 15773 | 0.2069 | 63768 | 1235759 | 14187591 | 168268 | perf(vault): add covering index for every uncovered FK column (#374)SQLite auto- |
