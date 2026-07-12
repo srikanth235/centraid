@@ -390,3 +390,53 @@ describe('export / import', () => {
     fresh.close();
   });
 });
+
+// Issue #374 (SQLite hardening): ext tables are STRICT, and every `integer`
+// column carries a generated CHECK clamping it to Number.MAX_SAFE_INTEGER —
+// node:sqlite's default reads throw on an INTEGER past that bound, so an
+// out-of-range write would otherwise poison the row for every future read.
+describe('STRICT + the JS-safe-integer bound', () => {
+  test('generated table DDL ends STRICT; a type-violating insert is rejected', () => {
+    gw.applyAppExt(owner, APP, specs());
+    const row = db.vault
+      .prepare(
+        `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ext_gym_log_workout'`,
+      )
+      .get() as { sql: string };
+    expect(row.sql.trim().endsWith('STRICT')).toBe(true);
+    // 'reps' is declared `integer`; a TEXT value that isn't an integer
+    // literal violates the STRICT type and the whole insert rejects.
+    expect(() =>
+      db.vault
+        .prepare(`INSERT INTO ext_gym_log_workout (workout_id, reps) VALUES (?, ?)`)
+        .run('w1', 'not-a-number'),
+    ).toThrow();
+  });
+
+  test('an integer past Number.MAX_SAFE_INTEGER is rejected at insert by the generated CHECK', () => {
+    gw.applyAppExt(owner, APP, specs());
+    expect(() =>
+      db.vault
+        .prepare(`INSERT INTO ext_gym_log_workout (workout_id, reps) VALUES (?, ?)`)
+        .run('w1', 9007199254740993n),
+    ).toThrow(/CHECK/i);
+    // The bound itself, and everything under it, still writes fine.
+    expect(() =>
+      db.vault
+        .prepare(`INSERT INTO ext_gym_log_workout (workout_id, reps) VALUES (?, ?)`)
+        .run('w2', 9007199254740991n),
+    ).not.toThrow();
+  });
+
+  test('an ALTER-added integer column carries the same CHECK bound', () => {
+    gw.applyAppExt(owner, APP, specs());
+    const next = specs().filter((s) => s.name === 'workout');
+    next[0]?.columns.push({ name: 'duration_s', type: 'integer' });
+    gw.applyAppExt(owner, APP, next);
+    expect(() =>
+      db.vault
+        .prepare(`INSERT INTO ext_gym_log_workout (workout_id, duration_s) VALUES (?, ?)`)
+        .run('w3', 9007199254740993n),
+    ).toThrow(/CHECK/i);
+  });
+});

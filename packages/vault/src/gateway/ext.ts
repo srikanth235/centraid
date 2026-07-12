@@ -25,6 +25,7 @@ import {
   extPhysical,
   extPk,
   extTableDdl,
+  JS_SAFE_INTEGER_BOUND,
   parseExtLogical,
   validateExtSpecs,
   type ExtBand,
@@ -303,7 +304,12 @@ function sealExistingExtColumns(
   if (sealedAny) stampSealKeyFingerprint(db.vault, db.sealKey);
 }
 
-/** ADD COLUMN fragment (PRIMARY KEY is structurally impossible here). */
+/**
+ * ADD COLUMN fragment (PRIMARY KEY is structurally impossible here). Carries
+ * the same JS-safe-integer CHECK bound as `columnDdl` in schema/ext.ts — a
+ * column added mid-lifecycle must be exactly as poison-proof as one declared
+ * at table creation.
+ */
 function columnAddDdl(
   col: ExtTableSpec['columns'][number],
   fk: (logical: string) => { physical: string; pk: string },
@@ -318,6 +324,11 @@ function columnAddDdl(
   if (col.references !== undefined) {
     const target = fk(col.references);
     parts.push(`REFERENCES "${target.physical}"("${target.pk}")`);
+  }
+  if (col.type === 'integer') {
+    parts.push(
+      `CHECK ("${col.name}" IS NULL OR "${col.name}" BETWEEN -${JS_SAFE_INTEGER_BOUND} AND ${JS_SAFE_INTEGER_BOUND})`,
+    );
   }
   return parts.join(' ');
 }

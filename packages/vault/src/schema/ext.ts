@@ -18,6 +18,15 @@
 /** One declared column. `references` names a logical vault entity. */
 export interface ExtColumnSpec {
   name: string;
+  /**
+   * Prefer `text` for opaque external identifiers (platform snowflake IDs —
+   * Discord/Twitter/Slack — routinely exceed 2^53-1). node:sqlite's default
+   * connection reads a too-large INTEGER as a JS `number` and throws "Value
+   * is too large to be represented as a JavaScript number"; the write
+   * succeeds, the read crashes, and the row is poisoned. Canonical tables
+   * follow the same rule (`core.ts`'s `external_id`/`external_ref` columns
+   * are TEXT) — mirror it here.
+   */
   type: 'text' | 'integer' | 'real' | 'blob';
   /** Exactly one column per table, and it must be `text` (UUIDv7 ids). */
   primaryKey?: boolean;
@@ -227,8 +236,24 @@ function sqlLiteral(value: string | number): string {
 }
 
 /**
+ * JS `Number.MAX_SAFE_INTEGER` — the CHECK bound every generated `integer`
+ * column carries (see `columnDdl`). Exported so the ALTER TABLE ADD COLUMN
+ * path (gateway/ext.ts's `columnAddDdl`) applies the identical bound.
+ */
+export const JS_SAFE_INTEGER_BOUND = 9007199254740991;
+
+/**
  * One column's DDL fragment. `fkPhysical` resolves a `references` target to
  * (physical table, pk column) — band-aware, supplied by the applier.
+ *
+ * Every `integer` column carries a generated CHECK clamping it to
+ * `Number.MAX_SAFE_INTEGER` (2^53-1): node:sqlite's default connection reads
+ * an INTEGER past that bound as a JS `number` and throws, so an out-of-range
+ * value would write fine and then poison every future read of the row. This
+ * DDL is gateway-generated (apps never run DDL), so applying the bound
+ * everywhere is safe and closes the exposure at write time instead of read
+ * time. `canonicalSpecJson` doesn't encode this — it's a pure function of
+ * `col.type`, not part of the diffed spec shape.
  */
 export function columnDdl(
   col: ExtColumnSpec,
@@ -241,6 +266,11 @@ export function columnDdl(
   if (col.references !== undefined) {
     const target = fkPhysical(col.references);
     parts.push(`REFERENCES "${target.physical}"("${target.pk}")`);
+  }
+  if (col.type === 'integer') {
+    parts.push(
+      `CHECK ("${col.name}" IS NULL OR "${col.name}" BETWEEN -${JS_SAFE_INTEGER_BOUND} AND ${JS_SAFE_INTEGER_BOUND})`,
+    );
   }
   return parts.join(' ');
 }
@@ -261,7 +291,7 @@ export function extTableDdl(
     (i) =>
       `CREATE ${i.unique ? 'UNIQUE ' : ''}INDEX "${extIndexName(physical, i)}" ON "${physical}" (${i.columns.map((c) => `"${c}"`).join(', ')});`,
   );
-  return [`CREATE TABLE "${physical}" (\n  ${cols}\n);`, ...indexes].join('\n');
+  return [`CREATE TABLE "${physical}" (\n  ${cols}\n) STRICT;`, ...indexes].join('\n');
 }
 
 /**
