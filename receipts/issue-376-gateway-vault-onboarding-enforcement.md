@@ -317,3 +317,4 @@ PASS: Session 85cdf3d7-8857-4298-ae6a-5ed2ad24a40a contains 59 total user-type e
 | cost-key | agent | session | issue | model | input | cache-create | cache-read | output | new-work | cost-usd | cum-input | cum-cache-create | cum-cache-read | cum-output | note |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | claude-code-85cdf3d7-885-1783837708-1 | claude-code | 85cdf3d7-8857-4298-ae6a-5ed2ad24a40a | #376 | claude-fable-5 | 75690 | 623597 | 12536110 | 170504 | 869791 | 29.6132 | 75690 | 623597 | 12536110 | 170504 | feat(gateway,app-engine): per-device tokens enforce vault enrollment over HTTP ( |
+| claude-code-85cdf3d7-885-1783837753-1 | claude-code | 85cdf3d7-8857-4298-ae6a-5ed2ad24a40a | #376 | claude-fable-5 | 11523 | 4116 | 527829 | 2334 | 17973 | 0.8112 | 87213 | 627713 | 13063939 | 172838 | feat(desktop): pairing-ticket redemption + per-gateway vault listing IPC (#376)  |

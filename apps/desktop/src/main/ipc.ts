@@ -32,6 +32,12 @@ import {
 } from './phone-link.js';
 import { getUpdateStatus, relaunchToUpdate } from './update-watcher.js';
 import { getChangelog } from './changelog.js';
+import {
+  redeemGatewayPairing,
+  type RedeemGatewayPairingInput,
+  type RedeemGatewayPairingResult,
+} from './gateway-pairing.js';
+import { listGatewayVaults, type ListGatewayVaultsResult } from './gateway-vaults.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -82,6 +88,13 @@ export const Channel = {
   GATEWAYS_UPDATE_TOKEN: 'centraid:gateways:update-token',
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
+  // Pairing-ticket redemption (issue #376): the desktop half of "Add gateway
+  // by pairing code" — decode + dial/POST, add-or-reuse the profile, flip
+  // active gateway + active vault. See `gateway-pairing.ts`.
+  GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
+  // Read a gateway's vault list WITHOUT switching to it (issue #376) — the
+  // flat (gateway, vault) switcher preview. See `gateway-vaults.ts`.
+  GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
   // Vault addressing (issue #289): the active vault is client-side state,
   // keyed by gateway. Switching is a pure pointer flip — no server call —
   // that changes the `x-centraid-vault` header the renderer sends. The
@@ -367,6 +380,45 @@ export function registerIpcHandlers(): void {
       nudgeGatewayMonitor();
       return next;
     },
+  );
+
+  // Redeem a pairing ticket (issue #376): decode + dial (iroh) or POST
+  // (http), add-or-reuse the gateway profile, and flip BOTH the active
+  // gateway and the active vault on it (a pairing ticket enrolls into
+  // exactly one vault). On success this runs the same
+  // teardown/cache-invalidation/broadcast sequence `GATEWAYS_SET_ACTIVE`
+  // does — `gateway-pairing.ts` stays free of `BrowserWindow` so it unit-tests
+  // as a plain async function.
+  ipcMain.handle(
+    Channel.GATEWAY_PAIR_REDEEM,
+    async (_e, input: RedeemGatewayPairingInput): Promise<RedeemGatewayPairingResult> => {
+      const result = await redeemGatewayPairing(input);
+      if (result.ok) {
+        const next = await loadSettings();
+        const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
+        await shutdownAllLocalGatewaysExcept(
+          next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
+        );
+        const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
+        await closeAllIrohDialersExcept(
+          next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
+        );
+        await invalidateGatewayCaches();
+        broadcastGatewayChanged(next);
+        broadcastVaultChanged(next);
+        nudgeGatewayMonitor();
+      }
+      return result;
+    },
+  );
+
+  // Read a gateway's vaults WITHOUT switching to it (issue #376) — the flat
+  // (gateway, vault) switcher's preview. Pure read; no cache invalidation or
+  // broadcast, since nothing about the active gateway/vault changed.
+  ipcMain.handle(
+    Channel.GATEWAYS_LIST_VAULTS,
+    async (_e, input: { gatewayId: string }): Promise<ListGatewayVaultsResult> =>
+      listGatewayVaults(input.gatewayId),
   );
 
   // Vault switch (issue #289): a pure client-side pointer flip on the active

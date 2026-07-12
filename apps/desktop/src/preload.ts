@@ -32,6 +32,9 @@ const Channel = {
   GATEWAYS_SET_ACTIVE: 'centraid:gateways:set-active',
   GATEWAY_CHANGED: 'centraid:gateways:changed',
   GATEWAY_AUTH_GET: 'centraid:gateways:auth',
+  // Pairing-ticket redemption + per-gateway vault preview (issue #376).
+  GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
+  GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
   // Gateway runtime watch (heartbeat status + outage log + down alert).
   GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
   GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
@@ -151,6 +154,18 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // direct data-plane client. Token originates in keychain-backed
   // settings (main); this is the single bridge crossing for it.
   getGatewayAuth: () => ipcRenderer.invoke(Channel.GATEWAY_AUTH_GET),
+  // Pairing-ticket redemption (issue #376): decode + dial/POST, add-or-reuse
+  // the gateway profile, flip active gateway + active vault together.
+  redeemGatewayPairing: (input: {
+    ticket: string;
+    label?: string;
+    mode?: 'auto' | 'iroh' | 'http';
+    url?: string;
+  }) => ipcRenderer.invoke(Channel.GATEWAY_PAIR_REDEEM, input),
+  // Preview a gateway's vault list WITHOUT switching to it (issue #376) —
+  // the flat (gateway, vault) switcher.
+  listGatewayVaults: (input: { gatewayId: string }) =>
+    ipcRenderer.invoke(Channel.GATEWAYS_LIST_VAULTS, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
   // the per-poll push stream the Gateway page (and sidebar pill) subscribe to.
   getGatewayRuntime: () => ipcRenderer.invoke(Channel.GATEWAY_RUNTIME_GET),

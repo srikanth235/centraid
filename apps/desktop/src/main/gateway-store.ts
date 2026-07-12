@@ -274,6 +274,17 @@ export async function listGateways(): Promise<GatewayProfile[]> {
 }
 
 export interface AddGatewayInput {
+  /**
+   * Explicit id to use instead of minting a fresh UUID here. The gateway
+   * pairing flow (issue #376) needs this: an `iroh` profile's device key is
+   * keyed by gateway id (`iroh-dialer.ts`'s `ensureIrohDeviceKey`), and that
+   * key must exist and dial BEFORE the profile is written — so the caller
+   * pre-mints the id, dials with it, and only calls `addGateway({ id, ... })`
+   * once the tunnel confirms the pairing succeeded. Throws `already_exists`
+   * if a profile with this id is already on disk. Omit for the normal
+   * manual "Add gateway" flow, where a UUID is minted here as before.
+   */
+  id?: string;
   /** User-visible label. Trimmed; required. */
   label: string;
   /**
@@ -324,7 +335,10 @@ export async function addGateway(input: AddGatewayInput): Promise<GatewayProfile
       );
     }
   }
-  const id = randomUUID();
+  const id = input.id ?? randomUUID();
+  if (input.id && (await readProfile(id))) {
+    throw new GatewayError('already_exists', `Gateway "${id}" already exists.`);
+  }
   const displayName = input.displayName?.trim() || label;
   const avatarColor = isValidAvatarColor(input.avatarColor)
     ? input.avatarColor
