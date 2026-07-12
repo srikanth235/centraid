@@ -1,11 +1,18 @@
 #!/usr/bin/env node
-// Shell QA v2 Suite 2: Settings deep-walk beyond the v1 tab sweep —
-// Spaces (vault) lifecycle: create a second space via "Add profile"
-// (auto-switches, Home shows empty state), switch back via the sidebar
-// vault-switcher popover (Cmd+Shift+G surface), delete the second space
-// (confirm dialog), Connections pane empty state + "Add connection" CTA,
-// and toggle persistence: Appearance "Cool blue cast" + Layout "Show
-// sidebar" survive a full relaunch (same userDataDir).
+// governance: allow-repo-hygiene file-size-limit (#382) one continuous
+// real-Electron user journey (space create/switch/rename/test-connection/
+// delete + settings persistence across relaunch) sharing one page/session;
+// splitting mid-journey would duplicate launch/teardown boilerplate for a
+// ~68-line overage rather than improve legibility.
+// Shell QA v2 Suite 2: Settings deep-walk beyond the v1 tab sweep, rewritten
+// for issue #382's switcher/Settings redesign. Space (vault) lifecycle now
+// lives ENTIRELY in the switcher popover — Settings -> Spaces (the old
+// cross-vault list + "Add profile"/trash-icon UI) is deleted outright, per
+// the design doc — plus the switcher's per-gateway overflow menu (Test
+// connection… / Rename…). Settings -> Space (singular) only edits the
+// ACTIVE vault; its "Delete this space" button is the only remaining delete
+// path. Connections/Appearance/Layout persistence checks are unchanged
+// (those pages didn't move).
 //
 // Run with: node tests/e2e-live/flows-shell-v2-02-vaults-settings.mjs  (from apps/desktop)
 import { promises as fs } from 'node:fs';
@@ -84,6 +91,18 @@ async function openSettingsPage(pageLabel) {
     await page.getByRole('button', { name: pageLabel, exact: true }).click();
     await page.waitForTimeout(400);
   }
+}
+
+/** The sidebar-head switcher trigger — its accessible name names the active
+ *  space ("Active space: Owner's vault. Click to switch."), so this is
+ *  robust to which vault happens to be active when it's called. */
+function switcherHead() {
+  return page.getByRole('button', { name: /Active space:/ });
+}
+
+async function openSwitcher() {
+  await switcherHead().click();
+  await page.getByRole('menu').first().waitFor({ state: 'visible', timeout: 5_000 });
 }
 
 async function main() {
@@ -226,15 +245,22 @@ async function main() {
       },
     );
 
-    // ---------- Spaces: create a second vault ----------
+    // ---------- Space: create via the switcher's "+New space" ----------
     await step(
       'space-create',
-      'Add profile -> SpaceModal -> create -> auto-switch -> Home is empty',
+      'Switcher "+New space" -> SpaceModal -> create -> auto-switch -> Home is empty',
       async () => {
-        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-        await page.waitForTimeout(400);
+        await page.getByRole('button', { name: 'Home', exact: true }).first().click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        await openSwitcher();
         await shot('06-spaces-before-add');
-        await page.getByRole('button', { name: /Add profile/ }).click();
+        // The header's "New space…" action, scoped to the local gateway
+        // group (aria-label "New space on <gatewayLabel>" — see
+        // vaultSwitcher.ts's buildGroup). A fresh profile's gateway label is
+        // "Local".
+        await page.getByRole('button', { name: 'New space on Local' }).click();
         const modal = page.getByRole('dialog');
         await modal.first().waitFor({ state: 'visible', timeout: 10_000 });
         await shot('06-space-modal-open');
@@ -252,7 +278,8 @@ async function main() {
         );
         await createBtn.click();
 
-        // Creating auto-switches to the new vault and navigates Home.
+        // Creating auto-switches to the new vault and navigates Home
+        // (spaceModals.ts's `createSpace` calls `setActiveVault` itself).
         await page
           .getByRole('heading', { name: 'What should we build?' })
           .waitFor({ state: 'visible', timeout: 20_000 });
@@ -265,38 +292,96 @@ async function main() {
         );
         const notesTileCount = await page.locator('[data-app-id="notes"]').count();
         assert(notesTileCount === 0, 'Notes tile from the primary vault leaked into the new space');
-        const sidebarText = await page.locator('body').textContent();
-        assert(
-          /QA Second Space/.test(sidebarText),
-          'sidebar head does not show the new space name',
-        );
+        assert(/QA Second Space/.test(bodyText), 'sidebar head does not show the new space name');
       },
     );
 
-    // ---------- Switch back via the sidebar vault-switcher popover ----------
+    // ---------- Settings -> Space: edit the ACTIVE vault, reflects in switcher ----------
+    await step(
+      'space-edit-persists',
+      "Settings -> Space edits (name/color) save and reflect in the switcher's vault row",
+      async () => {
+        await openSettingsPage('Space');
+        await page
+          .getByRole('heading', { name: 'Space' })
+          .first()
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        await page.waitForTimeout(400);
+        const spaceBodyBefore = await page.locator('body').textContent();
+        assert(
+          /QA Second Space/.test(spaceBodyBefore),
+          'Settings -> Space is not scoped to the active (new) space',
+        );
+        const nameInput = page.locator('input[type="text"]').first();
+        await nameInput.fill('QA Renamed Space');
+        // A color swatch other than whatever the space randomly started
+        // with — SpaceModal.PROFILE_COLORS[2] renders as the 3rd swatch
+        // button in the Color field.
+        const colorButtons = page.locator('button[aria-label^="Color "]');
+        await colorButtons.nth(2).click();
+        const saveBtn = page.getByRole('button', { name: 'Save changes' });
+        assert(
+          !(await saveBtn.isDisabled()),
+          'Save changes should be enabled once the form is dirty',
+        );
+        await saveBtn.click();
+        await page.waitForTimeout(600);
+        await shot('07b-settings-space-edited');
+
+        // The sidebar head's own accessible name ("Active space: <name>. …")
+        // must pick up the rename IMMEDIATELY — no switcher open, no vault
+        // switch, no relaunch. saveSpace() only issued a direct HTTP
+        // updateVault() call with no broadcast until the #382 follow-up fix
+        // (notifyVaultMetadataChanged); before that fix this button kept
+        // showing the pre-edit name here.
+        const headNameAfterSave = await switcherHead().getAttribute('aria-label');
+        assert(
+          headNameAfterSave && /QA Renamed Space/.test(headNameAfterSave),
+          `sidebar head did not pick up the rename without opening the switcher, got ${JSON.stringify(headNameAfterSave)}`,
+        );
+        assert(
+          !/QA Second Space/.test(headNameAfterSave ?? ''),
+          'sidebar head still shows the pre-edit name',
+        );
+
+        // Also reflects in the switcher's vault row (the switcher is the
+        // pair manager now, not just a mirror of the head).
+        await openSwitcher();
+        const menu = page.getByRole('menu').first();
+        const menuText = await menu.innerText();
+        assert(
+          /QA Renamed Space/.test(menuText),
+          `switcher vault row did not pick up the Settings -> Space rename, got ${JSON.stringify(menuText)}`,
+        );
+        assert(
+          !/QA Second Space/.test(menuText),
+          'switcher vault row still shows the pre-edit name',
+        );
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+
+        // Rename it back to "QA Second Space" so the rest of the suite's
+        // assertions (which key on that literal name) keep working. Still on
+        // the Space page underneath (the switcher was an overlay) — no need
+        // to re-navigate.
+        await page.locator('input[type="text"]').first().fill('QA Second Space');
+        await page.getByRole('button', { name: 'Save changes' }).click();
+        await page.waitForTimeout(500);
+      },
+    );
+
+    // ---------- Switch back via the switcher popover ----------
     await step(
       'space-switch-back',
-      'Sidebar vault switcher lists both spaces; switching back restores Notes',
+      'Switcher lists both spaces (grouped under Local); switching back restores Notes',
       async () => {
-        // The switcher is the profile head at the top of the sidebar.
-        const head = page
-          .locator(
-            '[class*="ProfileSwitcherHead"], [class*="profileSwitcher"], [class*="switcher"]',
-          )
-          .first();
-        const headVisible = await head.isVisible().catch(() => false);
-        if (headVisible) {
-          await head.click();
-        } else {
-          // Fall back to the keyboard shortcut the Settings copy advertises.
-          await page.keyboard.press('Meta+Shift+G');
-        }
-        const menu = page.getByRole('menu');
-        await menu.waitFor({ state: 'visible', timeout: 5_000 });
-        const menuText = await menu.textContent();
+        await openSwitcher();
+        const menu = page.getByRole('menu').first();
+        const menuText = await menu.innerText();
         console.log(`[v2-02] vault switcher menu: ${JSON.stringify(menuText)}`);
-        assert(/Owner/.test(menuText ?? ''), 'switcher does not list the primary vault');
-        assert(/QA Second Space/.test(menuText ?? ''), 'switcher does not list the new space');
+        assert(/Owner/.test(menuText), 'switcher does not list the primary vault');
+        assert(/QA Second Space/.test(menuText), 'switcher does not list the new space');
+        assert(/SPACES\s*·\s*2/.test(menuText), 'switcher eyebrow does not report 2 spaces total');
         await shot('08-vault-switcher-popover');
         await menu.getByRole('menuitem', { name: /Owner/ }).click();
         await page
@@ -307,48 +392,141 @@ async function main() {
       },
     );
 
-    // ---------- Delete the second vault ----------
+    // ---------- Switcher overflow menu: Test connection… + Rename… ----------
+    await step(
+      'switcher-overflow-test-and-rename',
+      'Overflow "More" menu: Test connection… passes all stages; Rename… relabels the gateway header',
+      async () => {
+        await openSwitcher();
+        const moreBtn = page.getByRole('button', { name: 'More actions for Local' });
+        await moreBtn.waitFor({ state: 'visible', timeout: 5_000 });
+        await moreBtn.click();
+        const overflowMenu = page.getByRole('menu').last();
+        await overflowMenu.waitFor({ state: 'visible', timeout: 5_000 });
+        await overflowMenu.getByRole('menuitem', { name: /Test connection/ }).click();
+        const testDialog = page.getByRole('dialog').filter({ hasText: 'Test connection' });
+        await testDialog.waitFor({ state: 'visible', timeout: 5_000 });
+        await page.waitForTimeout(1_500);
+        await shot('10-test-connection-local');
+        const testText = await testDialog.innerText();
+        console.log(`[v2-02] test-connection modal: ${JSON.stringify(testText)}`);
+        assert(/Reach gateway/.test(testText), 'handshake ladder missing "Reach gateway" stage');
+        assert(/List vaults/.test(testText), 'handshake ladder missing "List vaults" stage');
+        await testDialog.getByRole('button', { name: 'Close', exact: true }).last().click();
+        await page.waitForTimeout(300);
+
+        await openSwitcher();
+        await page.getByRole('button', { name: 'More actions for Local' }).click();
+        const overflowMenu2 = page.getByRole('menu').last();
+        await overflowMenu2.waitFor({ state: 'visible', timeout: 5_000 });
+        await overflowMenu2.getByRole('menuitem', { name: /Rename/ }).click();
+        const renameDialog = page.getByRole('dialog').filter({ hasText: 'Rename gateway' });
+        await renameDialog.waitFor({ state: 'visible', timeout: 5_000 });
+        const renameInput = renameDialog.locator('input[type="text"]').first();
+        assert(
+          (await renameInput.inputValue()) === 'Local',
+          `rename field should prefill the gateway's current label "Local", got ${await renameInput.inputValue()}`,
+        );
+        await renameInput.fill('My Mac');
+        await renameDialog.getByRole('button', { name: 'Save', exact: true }).click();
+        await page.waitForTimeout(500);
+        await shot('11-after-rename');
+
+        await openSwitcher();
+        const menuAfterRename = await page.getByRole('menu').first().innerText();
+        assert(
+          /My Mac/.test(menuAfterRename),
+          `switcher header did not pick up the rename, got ${JSON.stringify(menuAfterRename)}`,
+        );
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
+      },
+    );
+
+    // ---------- Delete the second space via Settings -> Space ----------
     await step(
       'space-delete',
-      'Delete the second space via Settings -> Spaces trash icon + confirm dialog',
+      'Switch to the second space, delete it from Settings -> Space, active vault falls back',
       async () => {
-        await openSettingsPage('Spaces');
+        await openSwitcher();
+        const menu = page.getByRole('menu').first();
+        await menu.getByRole('menuitem', { name: /QA Second Space/ }).click();
+        await page
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 20_000 });
         await page.waitForTimeout(500);
-        const delBtn = page.getByRole('button', { name: 'Delete QA Second Space' });
+
+        await openSettingsPage('Space');
+        await page
+          .getByRole('heading', { name: 'Space' })
+          .first()
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        await page.waitForTimeout(400);
+        await shot('12-settings-space-second');
+        const spaceBody = await page.locator('body').textContent();
+        assert(
+          /QA Second Space/.test(spaceBody),
+          "Settings -> Space does not show the active (second) space's name",
+        );
+        // Settings -> Space is scoped to the active vault ONLY — no
+        // cross-vault list and no gateway "Connections" group left on it
+        // (both moved to the switcher, issue #382).
+        assert(
+          !/Add profile/.test(spaceBody),
+          'Settings -> Space still shows the deleted cross-vault "Add profile" affordance',
+        );
+
+        const delBtn = page.getByRole('button', { name: 'Delete this space' });
         await delBtn.waitFor({ state: 'visible', timeout: 10_000 });
         await delBtn.click();
-        const confirmDialog = page.getByRole('dialog', { name: 'Delete space?' });
+        const confirmDialog = page.getByRole('dialog', { name: 'Delete this space?' });
         await confirmDialog.waitFor({ state: 'visible', timeout: 5_000 });
-        await shot('10-delete-space-confirm');
+        await shot('13-delete-space-confirm');
         // First: Cancel keeps it.
         await confirmDialog.getByRole('button', { name: 'Cancel' }).click();
         await confirmDialog.waitFor({ state: 'hidden', timeout: 5_000 });
         assert(
-          (await page.getByRole('button', { name: 'Delete QA Second Space' }).count()) === 1,
+          (await page.getByRole('button', { name: 'Delete this space' }).count()) === 1,
           'space vanished after CANCEL',
         );
         // Then: confirm deletes it.
-        await page.getByRole('button', { name: 'Delete QA Second Space' }).click();
-        const confirm2 = page.getByRole('dialog', { name: 'Delete space?' });
+        await page.getByRole('button', { name: 'Delete this space' }).click();
+        const confirm2 = page.getByRole('dialog', { name: 'Delete this space?' });
         await confirm2.waitFor({ state: 'visible', timeout: 5_000 });
         await confirm2.getByRole('button', { name: 'Delete', exact: true }).click();
-        // The success toast contains the space name — assert on the row's
-        // delete button disappearing, not on body text.
+        // Deleting the ACTIVE space navigates Home and the sidebar head must
+        // fall back to the remaining vault ("Owner's vault") — this is the
+        // real regression this rewrite caught: VAULTS_DELETE previously
+        // never broadcast VAULT_CHANGED, so the shell kept showing the
+        // just-deleted space until an unrelated event refreshed it. Fixed
+        // in apps/desktop/src/main/ipc.ts (VAULTS_DELETE handler).
         await page
-          .getByRole('button', { name: 'Delete QA Second Space' })
-          .waitFor({ state: 'hidden', timeout: 10_000 });
+          .getByRole('heading', { name: 'What should we build?' })
+          .waitFor({ state: 'visible', timeout: 20_000 });
+        await page.locator('[data-app-id="notes"]').waitFor({ state: 'visible', timeout: 15_000 });
+        await page.waitForTimeout(300);
+        await shot('14-spaces-after-delete');
+        const headLabel = await switcherHead().getAttribute('aria-label');
+        console.log(`[v2-02] switcher head after deleting active space: ${headLabel}`);
         assert(
-          (await page.getByRole('button', { name: 'Delete QA Second Space' }).count()) === 0,
-          'deleted space row still present in Settings -> Spaces',
+          headLabel != null && /Owner/.test(headLabel) && !/QA Second Space/.test(headLabel),
+          `sidebar head did not fall back to the remaining vault after deleting the active one, got ${JSON.stringify(headLabel)}`,
         );
-        await shot('11-spaces-after-delete');
+        await openSwitcher();
+        const menuAfterDelete = await page.getByRole('menu').first().innerText();
+        assert(
+          !/QA Second Space/.test(menuAfterDelete),
+          'deleted space row still present in the switcher',
+        );
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(300);
       },
     );
 
     // ---------- Persistence across relaunch ----------
     await step(
       'relaunch-toggle-persistence',
-      'Relaunch: Cool blue cast stays OFF (non-default); active vault + Notes intact',
+      'Relaunch: Cool blue cast stays OFF (non-default); active vault + Notes + gateway rename intact',
       async () => {
         await session.close();
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -358,7 +536,7 @@ async function main() {
         await page.setViewportSize({ width: 1400, height: 900 });
 
         await page.locator('[data-app-id="notes"]').waitFor({ state: 'visible', timeout: 15_000 });
-        await shot('12-relaunch-home');
+        await shot('15-relaunch-home');
 
         await openSettingsPage('Appearance');
         const sw = page.getByRole('switch', { name: 'Cool blue cast' });
@@ -369,13 +547,15 @@ async function main() {
           checked === 'false',
           `Cool blue cast OFF did not persist relaunch (aria-checked=${checked})`,
         );
-        await shot('13-relaunch-cool-blue-cast-persisted');
+        await shot('16-relaunch-cool-blue-cast-persisted');
 
-        // Deleted space must not resurrect.
-        await page.getByRole('button', { name: 'Spaces', exact: true }).click();
-        await page.waitForTimeout(500);
-        const spacesText = await page.locator('body').textContent();
-        assert(!/QA Second Space/.test(spacesText), 'deleted space resurrected after relaunch');
+        // Deleted space must not resurrect, and the gateway rename ("My
+        // Mac") must have persisted, in the switcher.
+        await openSwitcher();
+        const menuText = await page.getByRole('menu').first().innerText();
+        assert(!/QA Second Space/.test(menuText), 'deleted space resurrected after relaunch');
+        assert(/My Mac/.test(menuText), 'gateway rename did not persist across relaunch');
+        await page.keyboard.press('Escape');
       },
     );
 

@@ -38,6 +38,17 @@ import {
   type RedeemGatewayPairingResult,
 } from './gateway-pairing.js';
 import { listGatewayVaults, type ListGatewayVaultsResult } from './gateway-vaults.js';
+import {
+  testGatewayConnection,
+  type ConnectivityReport,
+  type TestConnectionInput,
+} from './gateway-connectivity.js';
+import {
+  sshConnectGateway,
+  sshEnrollIntoVault,
+  type SshConnectResult,
+} from './gateway-ssh-connect.js';
+import { sshVaultCreate } from './ssh-host.js';
 
 /**
  * Status read for the auto-publish queue (issue #137: there is no
@@ -95,6 +106,14 @@ export const Channel = {
   // Read a gateway's vault list WITHOUT switching to it (issue #376) — the
   // flat (gateway, vault) switcher preview. See `gateway-vaults.ts`.
   GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
+  // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
+  // for a not-yet-added (or already-known) gateway, across every method —
+  // url/ticket/ssh/gateway. See `gateway-connectivity.ts`.
+  GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
+  // ConnectFlow "Over SSH" commit step (issue #382): (optional) create a
+  // vault remotely, mint+redeem a pairing ticket, persist the ssh block on
+  // the resulting profile. See `gateway-ssh-connect.ts`.
+  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
   // Vault addressing (issue #289): the active vault is client-side state,
   // keyed by gateway. Switching is a pure pointer flip — no server call —
   // that changes the `x-centraid-vault` header the renderer sends. The
@@ -108,6 +127,22 @@ export const Channel = {
   // against the embedded registry directly.
   VAULTS_CREATE: 'centraid:vaults:create',
   VAULTS_DELETE: 'centraid:vaults:delete',
+  // Vault metadata (name/color/icon/blurb) rides a direct renderer->gateway
+  // HTTP `updateVault()` call (`spaceModals.ts`'s `saveSpace`), not IPC — so
+  // unlike create/switch/delete it never fired any broadcast, leaving the
+  // sidebar head showing the stale name/color after a Settings -> Space
+  // save until an unrelated event refreshed it (found via live E2E, #382
+  // follow-up). VAULT_METADATA_CHANGED is the renderer->main "please notify"
+  // invoke, called right after `updateVault()` succeeds. It deliberately
+  // does NOT reuse VAULT_CHANGED's broadcast: App.tsx's `reScope` treats
+  // every VAULT_CHANGED as "the ADDRESSED vault changed" and navigates Home
+  // + wipes gateway-scoped state — correct for a real switch, wrong for a
+  // same-vault rename (confirmed live: it silently kicked the user off the
+  // Settings -> Space page mid-edit). VAULT_METADATA_PUSH is the resulting
+  // main->renderer broadcast; only `useActiveVault`'s lightweight "re-read
+  // the vault list" listens to it, not `reScope`.
+  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
+  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
   // Thin-client: hands the renderer the active gateway's HTTP base URL +
   // bearer token so it can call the runtime/data plane directly. Main
   // still owns where the token lives (keychain-backed settings); this is
@@ -421,6 +456,50 @@ export function registerIpcHandlers(): void {
       listGatewayVaults(input.gatewayId),
   );
 
+  // ConnectFlow "handshake ladder" (issue #382): a pure read, no cache
+  // invalidation or broadcast — never throws, every failure is a failed
+  // stage in the returned report.
+  ipcMain.handle(
+    Channel.GATEWAY_TEST_CONNECTION,
+    async (_e, input: TestConnectionInput): Promise<ConnectivityReport> =>
+      testGatewayConnection(input),
+  );
+
+  // ConnectFlow "Over SSH" commit (issue #382): on success this runs the
+  // same teardown/cache-invalidation/broadcast sequence GATEWAY_PAIR_REDEEM
+  // does, since `sshConnectGateway` ends with the same `redeemGatewayPairing`
+  // call under the hood (active gateway + vault both flip).
+  ipcMain.handle(
+    Channel.GATEWAY_SSH_CONNECT,
+    async (
+      _e,
+      input: {
+        destination: string;
+        dataDir?: string;
+        label?: string;
+        vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
+      },
+    ): Promise<SshConnectResult> => {
+      const result = await sshConnectGateway(input);
+      if (result.ok) {
+        const next = await loadSettings();
+        const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
+        await shutdownAllLocalGatewaysExcept(
+          next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
+        );
+        const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
+        await closeAllIrohDialersExcept(
+          next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
+        );
+        await invalidateGatewayCaches();
+        broadcastGatewayChanged(next);
+        broadcastVaultChanged(next);
+        nudgeGatewayMonitor();
+      }
+      return result;
+    },
+  );
+
   // Vault switch (issue #289): a pure client-side pointer flip on the active
   // gateway. No server call, no re-root, no session/iframe teardown — only
   // the auth cache drops so the next request carries the new
@@ -439,7 +518,9 @@ export function registerIpcHandlers(): void {
   // Vault create/delete on the LOCAL gateway only (issue #289): the desktop
   // is the landlord for its own in-process gateway. A remote gateway's vault
   // lifecycle is the server CLI's job (admin plane over SSH) — refuse here
-  // with a message pointing at it.
+  // with a message pointing at it. Still used by VAULTS_DELETE unchanged
+  // (see its comment below for why delete didn't get the ssh-routing
+  // VAULTS_CREATE got).
   const assertLocalAdmin = async (): Promise<string> => {
     const settings = await loadSettings();
     if (settings.activeGatewayKind !== 'local') {
@@ -451,15 +532,71 @@ export function registerIpcHandlers(): void {
     return settings.activeGatewayId;
   };
 
+  // Where VAULTS_CREATE routes (issue #382): local stays the desktop's own
+  // in-process create; a remote gateway routes over SSH when its profile
+  // carries an `ssh` block (set by GATEWAY_SSH_CONNECT, or a prior ssh
+  // create); a plain remote gateway (no ssh block) is still refused with
+  // the same message `assertLocalAdmin` throws.
+  const resolveVaultCreateRoute = async (): Promise<
+    | { mode: 'local'; gatewayId: string }
+    | { mode: 'ssh'; gatewayId: string; profile: GatewayProfile['ssh'] }
+  > => {
+    const settings = await loadSettings();
+    if (settings.activeGatewayKind === 'local') {
+      return { mode: 'local', gatewayId: settings.activeGatewayId };
+    }
+    const profiles = await listGateways();
+    const active = profiles.find((p) => p.id === settings.activeGatewayId);
+    if (active?.ssh) return { mode: 'ssh', gatewayId: active.id, profile: active.ssh };
+    throw new Error(
+      'Vault create/delete on a remote gateway is a server-side admin act — ' +
+        'run `centraid-gateway vault …` on that box over SSH.',
+    );
+  };
+
   ipcMain.handle(
     Channel.VAULTS_CREATE,
     async (_e, input: { name?: string }): Promise<{ vaultId: string }> => {
-      const gatewayId = await assertLocalAdmin();
-      const { createLocalVault } = await import('./local-gateway.js');
-      return createLocalVault(gatewayId, input.name);
+      const route = await resolveVaultCreateRoute();
+      if (route.mode === 'local') {
+        const { createLocalVault } = await import('./local-gateway.js');
+        return createLocalVault(route.gatewayId, input.name);
+      }
+      // ssh-routed (issue #382): create the vault remotely, then enroll THIS
+      // device into it via the exact same pair+redeem helper
+      // GATEWAY_SSH_CONNECT uses. Unlike the local path, this DOES flip the
+      // active gateway+vault — enrollment (via a pairing ticket redemption)
+      // is how a device gains access to a remote vault at all, so
+      // `redeemGatewayPairing`'s atomic "enroll + activate" is the correct
+      // outcome here, not an accidental side effect. The switcher/renderer
+      // should treat a ssh-routed create like a combined create+switch.
+      const profile = route.profile as NonNullable<GatewayProfile['ssh']>;
+      const created = await sshVaultCreate(profile, input.name);
+      if (!created.ok) throw new Error(created.message);
+      const enrolled = await sshEnrollIntoVault(profile, created.value.vaultId, undefined);
+      if (!enrolled.ok) throw new Error(enrolled.message);
+      const next = await loadSettings();
+      const { shutdownAllLocalGatewaysExcept } = await import('./local-gateway.js');
+      await shutdownAllLocalGatewaysExcept(
+        next.activeGatewayKind === 'local' ? next.activeGatewayId : undefined,
+      );
+      const { closeAllIrohDialersExcept } = await import('./iroh-dialer.js');
+      await closeAllIrohDialersExcept(
+        next.activeGatewayKind === 'remote' ? next.activeGatewayId : undefined,
+      );
+      await invalidateGatewayCaches();
+      broadcastGatewayChanged(next);
+      broadcastVaultChanged(next);
+      nudgeGatewayMonitor();
+      return { vaultId: enrolled.vaultId };
     },
   );
 
+  // VAULTS_DELETE stays local-only (issue #382 scope decision): a
+  // symmetric ssh-routed delete would need `vault delete --json` on the
+  // remote CLI first (today only `pair`/`vault list`/`vault create` got
+  // `--json`, see `packages/gateway/src/cli/vault-admin.ts`) — left as a
+  // follow-up rather than widening this issue's CLI surface further.
   ipcMain.handle(
     Channel.VAULTS_DELETE,
     async (_e, input: { vaultId: string }): Promise<{ deleted: true }> => {
@@ -467,15 +604,36 @@ export function registerIpcHandlers(): void {
       const settings = await loadSettings();
       // Never delete the vault the client is currently addressing — clear
       // the pointer first so the next request falls back to the default.
+      let next: DesktopSettings | undefined;
       if (settings.activeVaultId === input.vaultId) {
-        await setActiveVaultId(undefined);
+        next = await setActiveVaultId(undefined);
         await invalidateVaultCaches();
       }
       const { deleteLocalVault } = await import('./local-gateway.js');
       deleteLocalVault(gatewayId, input.vaultId);
+      // Every other vault-mutating handler (create/switch/pair/ssh-connect)
+      // broadcasts VAULT_CHANGED so the renderer's active-vault state
+      // (sidebar head, switcher, Settings -> Space) re-reads itself. This
+      // one didn't — deleting the ACTIVE vault left the shell showing the
+      // just-deleted vault's name until some unrelated event happened to
+      // refresh it (found via live E2E, issue #382).
+      if (next) broadcastVaultChanged(next);
       return { deleted: true };
     },
   );
+
+  // Notify-only: the renderer calls this right after a metadata-only
+  // `updateVault()` HTTP call succeeds (rename/retheme via Settings ->
+  // Space or the switcher's "New space" edit path) so every window's
+  // sidebar head re-reads the vault list immediately. Broadcasts on the
+  // SEPARATE VAULT_METADATA_PUSH channel, not VAULT_CHANGED — no addressing
+  // changed here, so this must not trigger `reScope`'s navigate-Home.
+  ipcMain.handle(Channel.VAULT_METADATA_CHANGED, (): void => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      win.webContents.send(Channel.VAULT_METADATA_PUSH);
+    }
+  });
 
   // ----- User identity + prefs (gateway-backed) -----
   // USER_ID_GET / USER_PREFS_GET / USER_PREFS_SAVE moved to the renderer's

@@ -66,9 +66,16 @@ export function useActiveVault(): ActiveVaultController {
   useEffect(() => {
     const offVault = window.CentraidApi.onVaultChanged?.(refresh);
     const offGateway = window.CentraidApi.onGatewayChanged?.(refresh);
+    // Metadata-only changes (Settings -> Space rename/retheme, issue #382
+    // follow-up) — separate from onVaultChanged/onGatewayChanged so a save
+    // here refreshes the sidebar head WITHOUT tripping App.tsx's `reScope`
+    // (which treats onVaultChanged as "the addressed vault changed" and
+    // navigates Home).
+    const offMetadata = window.CentraidApi.onVaultMetadataChanged?.(refresh);
     return () => {
       offVault?.();
       offGateway?.();
+      offMetadata?.();
     };
   }, [refresh]);
 

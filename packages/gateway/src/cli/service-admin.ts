@@ -208,6 +208,82 @@ async function launchdUninstall(parsed: ServiceArgs, fail: Fail): Promise<void> 
   );
 }
 
+/** Structured counterpart of {@link launchdStatus}'s JSON print — extracted
+ *  so `centraid-gateway status` (status-admin.ts, issue #382) can fold the
+ *  OS service state into its combined summary without shelling out twice.
+ *  Never used by `service status` itself, which keeps printing exactly what
+ *  it always has. */
+export interface ServiceStatusInfo {
+  label: string;
+  installed: boolean;
+  running?: boolean;
+  state?: string;
+  pid?: number;
+}
+
+function launchdStatusInfo(label: string, fail: Fail): ServiceStatusInfo {
+  const { code, output } = run(fail, 'launchctl', ['print', `${guiTarget()}/${label}`]);
+  if (code !== 0) return { label, installed: false };
+  const state = output.match(/state\s*=\s*(\S+)/)?.[1];
+  const pid = output.match(/\bpid\s*=\s*(\d+)/)?.[1];
+  return {
+    label,
+    installed: true,
+    running: state === 'running',
+    state: state ?? 'unknown',
+    ...(pid ? { pid: Number(pid) } : {}),
+  };
+}
+
+/** systemd counterpart of {@link launchdStatusInfo} — `systemctl --user show`
+ *  gives structured `Key=Value` properties directly, unlike `status`'s
+ *  free-text report (which `systemdStatus` below still prints verbatim). */
+function systemdStatusInfo(unitName: string, fail: Fail): ServiceStatusInfo {
+  const { code, output } = run(fail, 'systemctl', [
+    '--user',
+    'show',
+    `${unitName}.service`,
+    '--property=LoadState,ActiveState,MainPID',
+  ]);
+  if (code !== 0) return { label: unitName, installed: false };
+  const props = new Map<string, string>();
+  for (const line of output.split('\n')) {
+    const idx = line.indexOf('=');
+    if (idx === -1) continue;
+    props.set(line.slice(0, idx), line.slice(idx + 1).trim());
+  }
+  // `systemctl show` on an unknown unit still exits 0 — LoadState is how it
+  // says "never heard of it" (`not-found`).
+  const loadState = props.get('LoadState');
+  const installed = loadState !== undefined && loadState !== 'not-found';
+  if (!installed) return { label: unitName, installed: false };
+  const activeState = props.get('ActiveState');
+  const mainPid = Number(props.get('MainPID') ?? '0');
+  return {
+    label: unitName,
+    installed: true,
+    running: activeState === 'active',
+    state: activeState ?? 'unknown',
+    ...(Number.isFinite(mainPid) && mainPid > 0 ? { pid: mainPid } : {}),
+  };
+}
+
+/**
+ * Platform-appropriate structured service status — no dry-run branch (a
+ * read has nothing to preview or write). `label` falls back to each
+ * platform's default the same way `install`/`uninstall`/`status` do.
+ */
+export function queryServiceStatus(label: string | undefined, fail: Fail): ServiceStatusInfo {
+  const platform = process.platform;
+  if (platform === 'darwin') return launchdStatusInfo(label ?? DEFAULT_LAUNCHD_LABEL, fail);
+  if (platform === 'linux') return systemdStatusInfo(label ?? DEFAULT_SYSTEMD_UNIT_NAME, fail);
+  fail(
+    `service status is not supported on "${platform}" — only macOS (launchd) and ` +
+      'Linux (systemd --user) have a generator today.',
+    1,
+  );
+}
+
 function launchdStatus(parsed: ServiceArgs, fail: Fail): void {
   const label = parsed.label ?? DEFAULT_LAUNCHD_LABEL;
   const printCmd = `launchctl print ${guiTarget()}/${label}`;
@@ -324,7 +400,7 @@ export async function commandService(args: string[], fail: Fail): Promise<void> 
   }
   fail(
     `centraid-gateway service is not supported on "${platform}" — only macOS (launchd) and ` +
-      'Linux (systemd --user) have a generator today. Front the daemon with your OS\'s own ' +
+      "Linux (systemd --user) have a generator today. Front the daemon with your OS's own " +
       'service supervisor instead.',
     1,
   );

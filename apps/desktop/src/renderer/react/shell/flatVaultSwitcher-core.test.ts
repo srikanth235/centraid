@@ -2,17 +2,28 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   applyFetchOutcome,
   applySelection,
-  buildFlatRows,
-  buildSortedFlatRows,
+  buildGroupedRows,
   resolveSelection,
   type FlatSwitcherGateway,
   type GatewayVaultCache,
   type PairRow,
 } from './flatVaultSwitcher-core.js';
 
-const gwLocal: FlatSwitcherGateway = { gatewayId: 'local', gatewayLabel: 'This Mac', gatewayKind: 'local' };
-const gwHome: FlatSwitcherGateway = { gatewayId: 'home', gatewayLabel: 'home-server', gatewayKind: 'remote' };
-const gwOffice: FlatSwitcherGateway = { gatewayId: 'office', gatewayLabel: 'office', gatewayKind: 'remote' };
+const gwLocal: FlatSwitcherGateway = {
+  gatewayId: 'local',
+  gatewayLabel: 'This Mac',
+  gatewayKind: 'local',
+};
+const gwHome: FlatSwitcherGateway = {
+  gatewayId: 'home',
+  gatewayLabel: 'home-server',
+  gatewayKind: 'remote',
+};
+const gwOffice: FlatSwitcherGateway = {
+  gatewayId: 'office',
+  gatewayLabel: 'office',
+  gatewayKind: 'remote',
+};
 
 describe('applyFetchOutcome', () => {
   it('stores a ready result and marks status ready', () => {
@@ -55,134 +66,112 @@ describe('applyFetchOutcome', () => {
   });
 });
 
-describe('buildFlatRows', () => {
-  it('emits one pair row per vault for a ready gateway', () => {
+describe('buildGroupedRows', () => {
+  it('emits one header per gateway with sorted nested vaults, active gateway first', () => {
     const cache: GatewayVaultCache = {
-      local: {
+      home: {
         vaults: [
-          { vaultId: 'a', name: 'Personal', color: '#4E68DD' },
-          { vaultId: 'b', name: 'Work' },
+          { name: 'Zeta', vaultId: 'z' },
+          { name: 'Alpha', vaultId: 'y' },
         ],
         status: 'ready',
       },
+      local: { vaults: [{ name: 'Personal', vaultId: 'a' }], status: 'ready' },
     };
-    const rows = buildFlatRows([gwLocal], cache, { gatewayId: 'local', vaultId: 'a' });
-    expect(rows).toHaveLength(2);
-    expect(rows[0]).toMatchObject({ kind: 'pair', vaultId: 'a', name: 'Personal', isActive: true });
-    expect(rows[1]).toMatchObject({ kind: 'pair', vaultId: 'b', name: 'Work', isActive: false });
+    const groups = buildGroupedRows([gwHome, gwLocal], cache, { gatewayId: 'local', vaultId: 'a' });
+    expect(groups.map((g) => g.gatewayId)).toEqual(['local', 'home']);
+    expect(groups[1]!.vaults.map((v) => v.vaultId)).toEqual(['y', 'z']);
+    expect(groups[0]!.vaults[0]).toMatchObject({ isActive: true, vaultId: 'a' });
   });
 
-  it('folds a gateway with no cached vaults into a single loading row', () => {
-    const rows = buildFlatRows([gwHome], {}, { gatewayId: 'local', vaultId: 'a' });
-    expect(rows).toEqual([
-      { kind: 'gateway-status', gatewayId: 'home', gatewayLabel: 'home-server', gatewayKind: 'remote', status: 'loading' },
+  it('still emits a header for a gateway with no cached vaults, folded to a loading status', () => {
+    const groups = buildGroupedRows([gwHome], {}, { gatewayId: 'local', vaultId: 'a' });
+    expect(groups).toEqual([
+      {
+        canCreateVault: false,
+        gatewayId: 'home',
+        gatewayKind: 'remote',
+        gatewayLabel: 'home-server',
+        gatewayRefreshing: false,
+        status: 'loading',
+        transportBadge: 'iroh',
+        vaults: [],
+      },
     ]);
   });
 
-  it('folds an errored gateway with no cache into a single status row carrying the error', () => {
+  it('carries the fetch error onto the header status when there are no cached vaults', () => {
     const cache: GatewayVaultCache = {
       office: { vaults: undefined, status: 'error', error: 'auth_failed' },
     };
-    const rows = buildFlatRows([gwOffice], cache, { gatewayId: 'local', vaultId: 'a' });
-    expect(rows).toEqual([
-      { kind: 'gateway-status', gatewayId: 'office', gatewayLabel: 'office', gatewayKind: 'remote', status: 'auth_failed' },
-    ]);
+    const groups = buildGroupedRows([gwOffice], cache, { gatewayId: 'local', vaultId: 'a' });
+    expect(groups[0]!.status).toBe('auth_failed');
   });
 
-  it('renders cached pairs with gatewayRefreshing=true while a background refresh is in flight', () => {
-    const cache: GatewayVaultCache = {
-      home: { vaults: [{ vaultId: 'x', name: 'Family' }], status: 'loading' },
-    };
-    const rows = buildFlatRows([gwHome], cache, { gatewayId: 'local', vaultId: 'a' });
-    expect(rows).toEqual([
-      {
-        kind: 'pair',
-        gatewayId: 'home',
-        gatewayLabel: 'home-server',
-        gatewayKind: 'remote',
-        vaultId: 'x',
-        name: 'Family',
-        color: undefined,
-        icon: undefined,
-        blurb: undefined,
-        isActive: false,
-        gatewayRefreshing: true,
-      },
-    ]);
-  });
-
-  it('merges multiple gateways, mixing ready pairs and a folded offline row', () => {
-    const cache: GatewayVaultCache = {
-      local: { vaults: [{ vaultId: 'a', name: 'Personal' }], status: 'ready' },
-      home: { vaults: [{ vaultId: 'x', name: 'Family' }], status: 'ready' },
-      office: { vaults: undefined, status: 'error', error: 'unreachable' },
-    };
-    const rows = buildFlatRows([gwLocal, gwHome, gwOffice], cache, {
+  it('transport badge: local -> "This Mac", direct -> "URL", ssh-capable remote -> "SSH", else "iroh"', () => {
+    const local: FlatSwitcherGateway = {
       gatewayId: 'local',
-      vaultId: 'a',
-    });
-    expect(rows.map((r) => r.kind)).toEqual(['pair', 'pair', 'gateway-status']);
-    expect(rows.filter((r) => r.kind === 'pair')).toHaveLength(2);
-  });
-});
-
-describe('sortFlatRows / buildSortedFlatRows', () => {
-  it('puts the current pair first', () => {
-    const cache: GatewayVaultCache = {
-      local: {
-        vaults: [
-          { vaultId: 'a', name: 'Zebra' },
-          { vaultId: 'b', name: 'Alpha' },
-        ],
-        status: 'ready',
-      },
+      gatewayKind: 'local',
+      gatewayLabel: 'This Mac',
     };
-    const rows = buildSortedFlatRows([gwLocal], cache, { gatewayId: 'local', vaultId: 'a' });
-    expect(rows.map((r) => (r as PairRow).vaultId)).toEqual(['a', 'b']);
+    const direct: FlatSwitcherGateway = {
+      gatewayId: 'd',
+      gatewayKind: 'remote',
+      gatewayLabel: 'd',
+      transport: 'direct',
+    };
+    const ssh: FlatSwitcherGateway = {
+      gatewayId: 's',
+      gatewayKind: 'remote',
+      gatewayLabel: 's',
+      hasSsh: true,
+    };
+    const iroh: FlatSwitcherGateway = {
+      gatewayId: 'i',
+      gatewayKind: 'remote',
+      gatewayLabel: 'i',
+      transport: 'iroh',
+    };
+    const groups = buildGroupedRows(
+      [local, direct, ssh, iroh],
+      {},
+      { gatewayId: 'local', vaultId: '' },
+    );
+    const badge = (id: string): string => groups.find((g) => g.gatewayId === id)!.transportBadge;
+    expect(badge('local')).toBe('This Mac');
+    expect(badge('d')).toBe('URL');
+    expect(badge('s')).toBe('SSH');
+    expect(badge('i')).toBe('iroh');
   });
 
-  it('sorts the active gateway block before other gateways, other gateways alphabetically by label', () => {
-    const cache: GatewayVaultCache = {
-      local: { vaults: [{ vaultId: 'a', name: 'Personal' }], status: 'ready' },
-      office: { vaults: [{ vaultId: 'y', name: 'Team' }], status: 'ready' },
-      home: { vaults: [{ vaultId: 'x', name: 'Family' }], status: 'ready' },
-    };
-    const rows = buildSortedFlatRows([gwOffice, gwLocal, gwHome], cache, {
+  it('canCreateVault is true for local and ssh-capable gateways, false otherwise', () => {
+    const local: FlatSwitcherGateway = {
       gatewayId: 'local',
-      vaultId: 'a',
-    });
-    expect(rows.map((r) => r.gatewayId)).toEqual(['local', 'home', 'office']);
+      gatewayKind: 'local',
+      gatewayLabel: 'This Mac',
+    };
+    const ssh: FlatSwitcherGateway = {
+      gatewayId: 's',
+      gatewayKind: 'remote',
+      gatewayLabel: 's',
+      hasSsh: true,
+    };
+    const plain: FlatSwitcherGateway = { gatewayId: 'p', gatewayKind: 'remote', gatewayLabel: 'p' };
+    const groups = buildGroupedRows([local, ssh, plain], {}, { gatewayId: 'local', vaultId: '' });
+    const canCreate = (id: string): boolean =>
+      groups.find((g) => g.gatewayId === id)!.canCreateVault;
+    expect(canCreate('local')).toBe(true);
+    expect(canCreate('s')).toBe(true);
+    expect(canCreate('p')).toBe(false);
   });
 
-  it('sorts vaults within a non-active gateway alphabetically', () => {
+  it('gatewayRefreshing reflects an in-flight refresh even once vaults are cached', () => {
     const cache: GatewayVaultCache = {
-      local: { vaults: [{ vaultId: 'a', name: 'Personal' }], status: 'ready' },
-      home: {
-        vaults: [
-          { vaultId: 'z', name: 'Zeta' },
-          { vaultId: 'y', name: 'Alpha' },
-        ],
-        status: 'ready',
-      },
+      local: { vaults: [{ name: 'A', vaultId: 'a' }], status: 'loading' },
     };
-    const rows = buildSortedFlatRows([gwLocal, gwHome], cache, { gatewayId: 'local', vaultId: 'a' });
-    const homeRows = rows.filter((r) => r.gatewayId === 'home') as PairRow[];
-    expect(homeRows.map((r) => r.vaultId)).toEqual(['y', 'z']);
-  });
-
-  it('places a folded offline-gateway row in its alphabetical slot among other gateways', () => {
-    const cache: GatewayVaultCache = {
-      local: { vaults: [{ vaultId: 'a', name: 'Personal' }], status: 'ready' },
-      home: { vaults: [{ vaultId: 'x', name: 'Family' }], status: 'ready' },
-      office: { vaults: undefined, status: 'error', error: 'unreachable' },
-    };
-    // "office" > "home" alphabetically, so it sorts after home's pair row.
-    const rows = buildSortedFlatRows([gwOffice, gwHome, gwLocal], cache, {
-      gatewayId: 'local',
-      vaultId: 'a',
-    });
-    expect(rows.map((r) => r.gatewayId)).toEqual(['local', 'home', 'office']);
-    expect(rows[2]!.kind).toBe('gateway-status');
+    const groups = buildGroupedRows([gwLocal], cache, { gatewayId: 'local', vaultId: 'a' });
+    expect(groups[0]!.gatewayRefreshing).toBe(true);
+    expect(groups[0]!.status).toBe('ready');
   });
 });
 
@@ -218,7 +207,10 @@ describe('applySelection', () => {
   it('same-gateway: calls only setActiveVault', async () => {
     const setActiveGateway = vi.fn().mockResolvedValue({});
     const setActiveVault = vi.fn().mockResolvedValue({});
-    await applySelection({ kind: 'same-gateway', vaultId: 'b' }, { setActiveGateway, setActiveVault });
+    await applySelection(
+      { kind: 'same-gateway', vaultId: 'b' },
+      { setActiveGateway, setActiveVault },
+    );
     expect(setActiveGateway).not.toHaveBeenCalled();
     expect(setActiveVault).toHaveBeenCalledWith({ vaultId: 'b' });
   });

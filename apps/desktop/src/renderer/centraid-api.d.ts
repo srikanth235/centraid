@@ -268,6 +268,16 @@ export interface CentraidGatewayProfile {
   url?: string;
   /** The gateway's iroh EndpointId (`iroh` transport) — shown for `devices add`. */
   endpointId?: string;
+  /**
+   * SSH admin channel (issue #382) — present once this gateway has been
+   * reached over SSH (the ConnectFlow "Over SSH" method, or a prior
+   * ssh-routed vault create). Independent of `transport`. Its presence is
+   * the "can create a vault here" signal for a remote gateway: the
+   * switcher/ConnectFlow derive that capability as `kind === 'local' ||
+   * Boolean(ssh)` — a plain `direct`/`iroh` profile with no `ssh` block
+   * still refuses vault create/delete (server-side admin act only).
+   */
+  ssh?: { destination: string; dataDir?: string; remoteCli?: string };
   createdAt: string;
 }
 
@@ -305,6 +315,50 @@ export interface CentraidGatewayVaultEntry {
 export type CentraidListGatewayVaultsResult =
   | { ok: true; vaults: CentraidGatewayVaultEntry[] }
   | { ok: false; error: 'unreachable' | 'auth_failed' | 'bad_response' };
+
+/**
+ * Input to `testGatewayConnection` (issue #382) — the ConnectFlow wizard's
+ * "handshake ladder", one shape per connect method. `ssh` and `gateway`
+ * never carry a bearer token (ssh auth rides the user's key; `gateway`
+ * resolves the already-known profile's own credential).
+ */
+export type CentraidTestConnectionInput =
+  | { kind: 'url'; url: string; token?: string }
+  | { kind: 'ticket'; ticket: string }
+  | { kind: 'ssh'; destination: string; dataDir?: string }
+  | { kind: 'gateway'; gatewayId: string };
+
+/** One step of the connectivity-test "handshake ladder". */
+export interface CentraidConnectivityStage {
+  id: 'reach' | 'identify' | 'auth' | 'vaults' | 'ssh' | 'cli' | 'daemon' | 'decode';
+  label: string;
+  status: 'pass' | 'fail' | 'skip';
+  /** Human-actionable detail — always present on `fail`, sometimes on `pass`. */
+  detail?: string;
+}
+
+/**
+ * Result of `testGatewayConnection` — never rejects; every failure is a
+ * failed stage with a human-actionable `detail`, plus a stable top-level
+ * `error` code for the first failure. Stage set (and which of
+ * `gateway`/`vaults`/`ticket` gets populated) depends on the input `kind`:
+ * `url`/`gateway` run reach→identify→auth→vaults; `ticket` runs decode
+ * only; `ssh` runs ssh→cli→daemon→vaults.
+ */
+export interface CentraidConnectivityReport {
+  ok: boolean;
+  stages: CentraidConnectivityStage[];
+  gateway?: { version: string; schemaEpoch: number; instanceId: string; compatible: boolean };
+  vaults?: Array<{ vaultId: string; name: string; color?: string; icon?: string }>;
+  ticket?: { vaultName: string; expiresAt: string; gatewayEndpointId: string };
+  /** Stable code for the FIRST failing stage — absent when `ok`. */
+  error?: string;
+}
+
+/** Result of `sshConnectGateway` — the ConnectFlow "Over SSH" commit step. */
+export type CentraidSshConnectResult =
+  | { ok: true; gatewayId: string; vaultId: string; vaultName: string }
+  | { ok: false; error: string; message: string };
 
 /**
  * Which coding-agent CLIs are runnable on the GATEWAY host. Probed
@@ -640,6 +694,26 @@ interface CentraidApi {
    */
   listGatewayVaults(input: { gatewayId: string }): Promise<CentraidListGatewayVaultsResult>;
   /**
+   * ConnectFlow "handshake ladder" (issue #382): stage-by-stage
+   * connectivity check for a method the user just supplied coordinates
+   * for, OR an already-known gateway (`kind:'gateway'`). Never rejects.
+   */
+  testGatewayConnection(input: CentraidTestConnectionInput): Promise<CentraidConnectivityReport>;
+  /**
+   * ConnectFlow "Over SSH" commit step (issue #382): (optionally) create a
+   * vault on the remote box, mint a pairing ticket over ssh, and redeem it
+   * locally — same atomic "enroll + activate" `redeemGatewayPairing`
+   * always runs, so treat success like a combined `setActiveGateway` +
+   * `setActiveVault` and drop gateway/vault-scoped state; the same
+   * `onGatewayChanged`/`onVaultChanged` broadcasts fire. Never rejects.
+   */
+  sshConnectGateway(input: {
+    destination: string;
+    dataDir?: string;
+    label?: string;
+    vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
+  }): Promise<CentraidSshConnectResult>;
+  /**
    * Latest gateway-runtime snapshot from the main-process heartbeat
    * monitor. Resolves immediately from the last poll (≤5s old); the first
    * call after launch may run a probe.
@@ -685,6 +759,17 @@ interface CentraidApi {
    * names the vault being deleted.
    */
   deleteVault(input: { vaultId: string }): Promise<{ deleted: true }>;
+  /**
+   * Notify-only (issue #382 follow-up): call after a metadata-only
+   * `updateVault()` HTTP call succeeds (rename/retheme) so every window's
+   * `onVaultMetadataChanged` listeners re-read immediately — metadata edits
+   * ride a direct HTTP call, not IPC, so unlike create/switch/delete they
+   * never otherwise broadcast anything. Deliberately separate from
+   * `onVaultChanged`/`VAULT_CHANGED`: that channel means "the ADDRESSED
+   * vault changed" and drives a navigate-Home + full re-scope, which is
+   * wrong for a same-vault rename.
+   */
+  notifyVaultMetadataChanged(): Promise<void>;
   // ----- Phone link (issue #263) -----
   /** Tunnel status + the paired-device allowlist. */
   getPhoneLinkStatus(): Promise<CentraidPhoneLinkStatus>;
@@ -739,6 +824,16 @@ interface CentraidApi {
   onVaultChanged(
     cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void,
   ): () => void;
+
+  /**
+   * Subscribe to vault METADATA changes (name/color/icon/blurb) on the
+   * active vault (issue #382 follow-up). Fires from
+   * `notifyVaultMetadataChanged()`, not from any addressing change — the
+   * addressed (gateway, vault) is unchanged, so unlike `onVaultChanged`
+   * this must NOT trigger a navigate-Home/full re-scope. Returns the
+   * unsubscribe.
+   */
+  onVaultMetadataChanged(cb: () => void): () => void;
 
   // listTemplates + cloneTemplate moved to the renderer's direct HTTP client
   // (renderer/gateway-client.ts) under the thin-client pivot — the gateway

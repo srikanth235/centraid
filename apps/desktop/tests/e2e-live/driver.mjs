@@ -57,7 +57,7 @@ async function ensureSettingsSeed(userDataDir) {
 /**
  * Launch the real desktop app.
  *
- * @param {{ userDataDir?: string, show?: boolean }} [opts]
+ * @param {{ userDataDir?: string, show?: boolean, env?: Record<string, string> }} [opts]
  *   - userDataDir: reuse an existing profile dir (same gateway id 'local' ⇒
  *     same on-disk vault, so a second launch resumes state). Omit for a
  *     fresh temp dir + virgin dev vault (recreated free in v0 — see repo
@@ -65,6 +65,8 @@ async function ensureSettingsSeed(userDataDir) {
  *   - show: keep NODE_ENV off 'test' quirks that hide the window. Not needed
  *     on macOS (no headless mode either way) — present for parity with the
  *     stale suite's E2E_SHOW_WINDOW convention; unused today.
+ *   - env: extra env vars merged in on top of `process.env` (e.g.
+ *     `CENTRAID_SSH_BIN` for the "Over SSH" ConnectFlow rig, issue #382).
  * @returns {Promise<{ app: import('playwright').ElectronApplication, page: import('playwright').Page, userDataDir: string, close: () => Promise<void> }>}
  *   The launched Electron app/page handles, the resolved userDataDir, and a
  *   close() to tear the app down.
@@ -76,7 +78,7 @@ export async function launchApp(opts = {}) {
 
   const app = await _electron.launch({
     args: [DESKTOP_ROOT, `--user-data-dir=${userDataDir}`],
-    env: { ...process.env, NODE_ENV: 'test' },
+    env: { ...process.env, NODE_ENV: 'test', ...(opts.env ?? {}) },
   });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');

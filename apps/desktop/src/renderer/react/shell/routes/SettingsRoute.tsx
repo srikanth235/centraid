@@ -1,4 +1,4 @@
-import { Fragment, type JSX, useMemo, useState } from 'react';
+import { Fragment, type JSX, useEffect, useMemo, useState } from 'react';
 import type { IconName } from '@centraid/design-tokens';
 import type { AccentKey, AppearancePrefs, ThemeName } from '../../../app-shell-context.js';
 import Icon from '../../ui/Icon.js';
@@ -7,14 +7,13 @@ import PhoneScreen from '../../screens/PhoneScreen.js';
 import SettingsAppearanceScreen from '../../screens/SettingsAppearanceScreen.js';
 import SettingsConnectionsScreen from '../../screens/SettingsConnectionsScreen.js';
 import SettingsLayoutScreen from '../../screens/SettingsLayoutScreen.js';
-import SettingsProfilesScreen from '../../screens/SettingsProfilesScreen.js';
 import SettingsProvidersScreen from '../../screens/SettingsProvidersScreen.js';
+import SettingsSpaceScreen from '../../screens/SettingsSpaceScreen.js';
 import SettingsStorageScreen from '../../screens/SettingsStorageScreen.js';
 import { useShellActions } from '../actions.js';
 import { PageEmpty, PageLoading } from '../status.js';
 import { useAsyncData } from '../useAsyncData.js';
-import type { ProfileRowDTO } from '../../screen-contracts.js';
-import { importCallbacks, loadProfilesData, phoneCallbacks } from './settingsAccountData.js';
+import { importCallbacks, loadActiveSpaceData, phoneCallbacks } from './settingsAccountData.js';
 import {
   beginConnectionAuthorize,
   loadConnectionProvidersData,
@@ -23,14 +22,7 @@ import {
   submitConnectionForm,
   updateConnectionStatus,
 } from './settingsConnectionsData.js';
-import { createSpace, deleteSpace, loadSpaceInitial, saveSpace } from './spaceModals.js';
-import SpaceModal, {
-  DEFAULT_SPACE_ICON,
-  randomSpaceColor,
-  type SpaceModalInitial,
-} from './SpaceModal.js';
-import GatewayModal from './GatewayModal.js';
-import type { GatewayConnectSuccess } from './gatewayModals.js';
+import { deleteSpace, saveSpace } from './spaceModals.js';
 import { activateRunner, loadProviders, setAgentModel } from './settingsProvidersData.js';
 import {
   attachVaultConnection,
@@ -57,7 +49,7 @@ type SettingsPageId =
   | 'appearance'
   | 'layout'
   | 'workspace'
-  | 'profiles'
+  | 'space'
   | 'phone'
   | 'import'
   | 'connections'
@@ -95,12 +87,12 @@ const PAGES: readonly PageDef[] = [
     subtitle: 'Sidebar and navigation.',
   },
   {
-    id: 'profiles',
-    label: 'Spaces',
+    id: 'space',
+    label: 'Space',
     section: 'Account',
     icon: 'Users',
     subtitle:
-      'Separate spaces — each one a vault with its own apps, chats, and data. Switch, add, rename, recolor, or remove spaces; manage the connections that host them.',
+      'This space’s presentation — name, icon, color, and description. Switch, add, rename, or remove OTHER spaces and gateways from the switcher at the top of the sidebar (⌘⇧G).',
   },
   {
     id: 'phone',
@@ -177,73 +169,58 @@ export default function SettingsRoute({
     () => makeDeleteStorageConnection(confirm),
     [confirm],
   );
-  const [spacesNonce, setSpacesNonce] = useState(0);
-  const spaces = useAsyncData(loadProfilesData, [spacesNonce]);
-  const refreshSpaces = (): void => setSpacesNonce((n) => n + 1);
-  // The add/rename modal state (null = closed). `row` is set for edit/delete.
-  const [spaceModal, setSpaceModal] = useState<{
-    mode: 'add' | 'edit';
-    row?: ProfileRowDTO;
-    initial: SpaceModalInitial;
-  } | null>(null);
-
-  const openAddSpace = (): void =>
-    setSpaceModal({
-      mode: 'add',
-      initial: { icon: DEFAULT_SPACE_ICON, color: randomSpaceColor() },
-    });
-  // "Add gateway" (issue #376) — a sibling modal to the Spaces one above,
-  // separate boolean state since it doesn't need row/initial context. The
-  // active gateway/vault switch already happened inside GatewayPairingForm
-  // by the time onConnected fires; App.tsx's onGatewayChanged/onVaultChanged
-  // listener does the actual re-scope + navigate-home, so this just closes
-  // the modal, toasts, and refreshes the Connections list under it.
-  const [gatewayModalOpen, setGatewayModalOpen] = useState(false);
-  const onGatewayConnected = (result: GatewayConnectSuccess): void => {
-    setGatewayModalOpen(false);
-    showToast(`Connected · ${result.label}`);
-    refreshSpaces();
+  // Settings → Space (issue #382) — scoped to the ACTIVE vault only; the
+  // cross-vault list + gateway "Connections" group both moved to the
+  // switcher. `spaceNonce` re-fetches after a save (the preview + dirty
+  // check need the freshly-saved values as the new baseline) and on any
+  // vault/gateway change broadcast (switching spaces while this page is
+  // open should re-seed the form, not silently edit the wrong vault).
+  const [spaceNonce, setSpaceNonce] = useState(0);
+  const activeSpace = useAsyncData(loadActiveSpaceData, [spaceNonce]);
+  const refreshSpace = (): void => setSpaceNonce((n) => n + 1);
+  useEffect(() => {
+    const offVault = window.CentraidApi.onVaultChanged?.(refreshSpace);
+    const offGateway = window.CentraidApi.onGatewayChanged?.(refreshSpace);
+    return () => {
+      offVault?.();
+      offGateway?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (#382) mount-once subscription, refreshSpace is stable via setState's functional form
+  }, []);
+  const saveActiveSpace = (data: {
+    name: string;
+    icon: IconName;
+    color: string;
+    blurb: string;
+  }): void => {
+    if (activeSpace.status !== 'ready' || !activeSpace.data) return;
+    const vaultId = activeSpace.data.vaultId;
+    void saveSpace(vaultId, data)
+      .then(() => {
+        showToast(`Saved · ${data.name}`);
+        refreshSpace();
+      })
+      .catch((err: unknown) =>
+        showToast(`Save failed: ${err instanceof Error ? err.message : String(err)}`),
+      );
   };
-  const openEditSpace = (row: ProfileRowDTO): void => {
-    void loadSpaceInitial(row).then((initial) => setSpaceModal({ mode: 'edit', row, initial }));
-  };
-  const removeSpace = (row: ProfileRowDTO): void => {
+  const deleteActiveSpace = (): void => {
+    if (activeSpace.status !== 'ready' || !activeSpace.data) return;
+    const { vaultId, name } = activeSpace.data;
     void (async () => {
       const ok = await confirm({
-        title: 'Delete space?',
-        message: `Delete "${row.name}"? Its vault and everything in it are removed. This can’t be undone.`,
+        title: 'Delete this space?',
+        message: `Delete "${name}"? Its vault and everything in it are removed. This can’t be undone.`,
         confirmLabel: 'Delete',
         danger: true,
       });
       if (!ok) return;
       try {
-        await deleteSpace(row.id);
-        showToast(`Deleted · ${row.name}`);
-        refreshSpaces();
+        await deleteSpace(vaultId);
+        showToast(`Deleted · ${name}`);
+        navigate({ kind: 'home' });
       } catch (err) {
-        showToast(`Delete failed: ${String(err)}`);
-      }
-    })();
-  };
-  const commitSpace = (data: Parameters<typeof createSpace>[0]): void => {
-    const modal = spaceModal;
-    if (!modal) return;
-    void (async () => {
-      try {
-        if (modal.mode === 'add') {
-          await createSpace(data);
-          setSpaceModal(null);
-          showToast(`Space created · ${data.name}`);
-          refreshSpaces();
-          navigate({ kind: 'home' });
-        } else if (modal.row) {
-          await saveSpace(modal.row.id, data);
-          setSpaceModal(null);
-          showToast(`Saved · ${data.name}`);
-          refreshSpaces();
-        }
-      } catch (err) {
-        showToast(`Save failed: ${String(err)}`);
+        showToast(`Delete failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     })();
   };
@@ -359,31 +336,19 @@ export default function SettingsRoute({
                 detachVaultConnection={detachVaultConnection}
                 showToast={showToast}
               />
-            ) : page === 'profiles' ? (
-              spaces.status === 'loading' ? (
-                <PageLoading label="Loading spaces…" />
-              ) : spaces.status === 'error' ? (
-                <PageEmpty message={`Couldn’t load spaces: ${spaces.error}`} />
-              ) : (
-                <SettingsProfilesScreen
-                  profiles={spaces.data.profiles}
-                  connections={spaces.data.connections}
-                  onSwitch={(id) => void window.CentraidApi.setActiveVault({ vaultId: id })}
-                  onConnect={(id) => void window.CentraidApi.setActiveGateway({ id })}
-                  onRemoveConnection={(id) => void window.CentraidApi.removeGateway({ id })}
-                  onAddConnection={() => setGatewayModalOpen(true)}
-                  // Add / rename / delete drive the React <SpaceModal> below; the
-                  // gateway I/O + re-scope live in spaceModals.ts.
-                  onAdd={openAddSpace}
-                  onEdit={(id) => {
-                    const row = spaces.data.profiles.find((p) => p.id === id);
-                    if (row) openEditSpace(row);
-                  }}
-                  onDelete={(id) => {
-                    const row = spaces.data.profiles.find((p) => p.id === id);
-                    if (row) removeSpace(row);
-                  }}
+            ) : page === 'space' ? (
+              activeSpace.status === 'loading' ? (
+                <PageLoading label="Loading this space…" />
+              ) : activeSpace.status === 'error' ? (
+                <PageEmpty message={`Couldn’t load this space: ${activeSpace.error}`} />
+              ) : activeSpace.data ? (
+                <SettingsSpaceScreen
+                  space={activeSpace.data}
+                  onSave={saveActiveSpace}
+                  {...(activeSpace.data.deletable ? { onDelete: deleteActiveSpace } : {})}
                 />
+              ) : (
+                <PageEmpty message="No active space." />
               )
             ) : (
               <PageEmpty message="This settings page is being migrated to React." />
@@ -391,29 +356,6 @@ export default function SettingsRoute({
           </div>
         </section>
       </div>
-      {spaceModal ? (
-        <SpaceModal
-          mode={spaceModal.mode}
-          initial={spaceModal.initial}
-          onCancel={() => setSpaceModal(null)}
-          onCommit={commitSpace}
-          {...(spaceModal.mode === 'edit' && spaceModal.row && !spaceModal.row.primordial
-            ? {
-                onDelete: () => {
-                  const row = spaceModal.row!;
-                  setSpaceModal(null);
-                  removeSpace(row);
-                },
-              }
-            : {})}
-        />
-      ) : null}
-      {gatewayModalOpen ? (
-        <GatewayModal
-          onCancel={() => setGatewayModalOpen(false)}
-          onConnected={onGatewayConnected}
-        />
-      ) : null}
     </>
   );
 }

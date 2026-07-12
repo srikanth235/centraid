@@ -33,6 +33,7 @@ import {
 } from '../serve/pairing-store.js';
 import { DeviceTokenStore } from '../serve/device-token-store.js';
 import { daemonLayoutFor, type DaemonLayout } from './paths.js';
+import { jsonFail, runJson, type Fail } from './json-cli.js';
 
 const quietLogger = {
   info: () => undefined,
@@ -45,6 +46,8 @@ interface DeviceArgs {
   vault?: string;
   label?: string;
   ttlMinutes?: number;
+  /** Emit machine-readable JSON instead of human text (issue #382, `pair` only). */
+  json?: boolean;
   positional: string[];
 }
 
@@ -74,6 +77,9 @@ function parseDeviceArgs(args: string[], fail: (msg: string, code?: number) => n
         out.ttlMinutes = n;
         break;
       }
+      case '--json':
+        out.json = true;
+        break;
       default:
         if (flag.startsWith('--')) fail(`unknown flag "${flag}"`, 2);
         out.positional.push(flag);
@@ -125,40 +131,61 @@ export async function commandPair(
   args: string[],
   fail: (msg: string, code?: number) => never,
 ): Promise<void> {
-  const parsed = parseDeviceArgs(args, fail);
-  if (!parsed.dataDir) fail('--data-dir is required', 2);
-  const layout = daemonLayoutFor(parsed.dataDir);
-  const endpoint = readEndpointState(layout, fail);
-  const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
-  try {
-    const vault = resolveVault(registry, parsed.vault, fail);
-    const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
-    const ttlMs =
-      parsed.ttlMinutes !== undefined ? parsed.ttlMinutes * 60 * 1000 : DEFAULT_TICKET_TTL_MS;
-    const minted = tickets.mint(vault.vaultId, ttlMs);
-    const token = encodePairingTicket({
-      v: 1,
-      kind: 'centraid-gw-pair',
-      gw: endpoint.ticket,
-      t: minted.ticketId,
-      s: minted.secret,
-      vaultName: vault.name,
-      exp: minted.expiresAt,
-    });
-    process.stdout.write(
-      [
-        `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
-        `Expires: ${new Date(minted.expiresAt).toISOString()}`,
-        '',
-        'Paste this one-line ticket into the client\'s "Add gateway" dialog:',
-        '',
-        token,
-        '',
-      ].join('\n'),
-    );
-  } finally {
-    registry.stop();
-  }
+  // Pre-scan for `--json` so it governs the whole run — including a `fail()`
+  // triggered by argument parsing itself — regardless of flag order.
+  const json = args.includes('--json');
+  // Explicit annotation: TS's never-return control-flow narrowing (used
+  // below on `parsed.dataDir`) only kicks in when the call-derived const is
+  // annotated — inferred-from-call-expression alone doesn't carry it.
+  const localFail: Fail = jsonFail(json, fail);
+  await runJson(json, fail, async () => {
+    const parsed = parseDeviceArgs(args, localFail);
+    if (!parsed.dataDir) localFail('--data-dir is required', 2);
+    const layout = daemonLayoutFor(parsed.dataDir);
+    const endpoint = readEndpointState(layout, localFail);
+    const registry = openVaultRegistry({ rootDir: layout.vaultDir, logger: quietLogger });
+    try {
+      const vault = resolveVault(registry, parsed.vault, localFail);
+      const tickets = PairingTicketStore.open(layout.pairingTicketsFile);
+      const ttlMs =
+        parsed.ttlMinutes !== undefined ? parsed.ttlMinutes * 60 * 1000 : DEFAULT_TICKET_TTL_MS;
+      const minted = tickets.mint(vault.vaultId, ttlMs);
+      const token = encodePairingTicket({
+        v: 1,
+        kind: 'centraid-gw-pair',
+        gw: endpoint.ticket,
+        t: minted.ticketId,
+        s: minted.secret,
+        vaultName: vault.name,
+        exp: minted.expiresAt,
+      });
+      if (json) {
+        process.stdout.write(
+          `${JSON.stringify({
+            ok: true,
+            ticket: token,
+            vaultId: vault.vaultId,
+            vaultName: vault.name,
+            expiresAt: new Date(minted.expiresAt).toISOString(),
+          })}\n`,
+        );
+        return;
+      }
+      process.stdout.write(
+        [
+          `Pairing ticket for vault "${vault.name}" (${vault.vaultId})`,
+          `Expires: ${new Date(minted.expiresAt).toISOString()}`,
+          '',
+          'Paste this one-line ticket into the client\'s "Add gateway" dialog:',
+          '',
+          token,
+          '',
+        ].join('\n'),
+      );
+    } finally {
+      registry.stop();
+    }
+  });
 }
 
 export async function commandDevices(
@@ -222,7 +249,9 @@ export async function commandDevices(
   // with it. A key that still holds another vault's row keeps its token
   // (revoking one row is "leave this vault", not "kill the device").
   const deviceTokens = DeviceTokenStore.open(layout.deviceTokensFile);
-  const deadKeys = new Set(removed.map((r) => r.endpointId).filter((key) => !devices.isEnrolled(key)));
+  const deadKeys = new Set(
+    removed.map((r) => r.endpointId).filter((key) => !devices.isEnrolled(key)),
+  );
   for (const key of deadKeys) deviceTokens.revokeForDeviceKey(key);
   for (const row of removed) process.stdout.write(`${JSON.stringify({ revoked: row })}\n`);
 }

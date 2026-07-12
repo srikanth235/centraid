@@ -35,6 +35,9 @@ const Channel = {
   // Pairing-ticket redemption + per-gateway vault preview (issue #376).
   GATEWAY_PAIR_REDEEM: 'centraid:gateways:pair-redeem',
   GATEWAYS_LIST_VAULTS: 'centraid:gateways:list-vaults',
+  // ConnectFlow "handshake ladder" + "Over SSH" commit (issue #382).
+  GATEWAY_TEST_CONNECTION: 'centraid:gateways:test-connection',
+  GATEWAY_SSH_CONNECT: 'centraid:gateways:ssh-connect',
   // Gateway runtime watch (heartbeat status + outage log + down alert).
   GATEWAY_RUNTIME_GET: 'centraid:gateway-runtime:get',
   GATEWAY_RUNTIME_EVENT: 'centraid:gateway-runtime:event',
@@ -47,6 +50,8 @@ const Channel = {
   VAULT_CHANGED: 'centraid:vaults:changed',
   VAULTS_CREATE: 'centraid:vaults:create',
   VAULTS_DELETE: 'centraid:vaults:delete',
+  VAULT_METADATA_CHANGED: 'centraid:vaults:metadata-changed',
+  VAULT_METADATA_PUSH: 'centraid:vaults:metadata-push',
 
   // Phone link (issue #263)
   PHONE_STATUS: 'centraid:phone:status',
@@ -166,6 +171,25 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // the flat (gateway, vault) switcher.
   listGatewayVaults: (input: { gatewayId: string }) =>
     ipcRenderer.invoke(Channel.GATEWAYS_LIST_VAULTS, input),
+  // ConnectFlow "handshake ladder" (issue #382): staged connectivity check
+  // for url/ticket/ssh/gateway inputs. Never rejects.
+  testGatewayConnection: (
+    input:
+      | { kind: 'url'; url: string; token?: string }
+      | { kind: 'ticket'; ticket: string }
+      | { kind: 'ssh'; destination: string; dataDir?: string }
+      | { kind: 'gateway'; gatewayId: string },
+  ) => ipcRenderer.invoke(Channel.GATEWAY_TEST_CONNECTION, input),
+  // ConnectFlow "Over SSH" commit (issue #382): (optional) create a vault
+  // remotely, mint+redeem a pairing ticket, persist the ssh block on the
+  // resulting profile. On success the active gateway AND vault both flip,
+  // same as `redeemGatewayPairing`.
+  sshConnectGateway: (input: {
+    destination: string;
+    dataDir?: string;
+    label?: string;
+    vault: { kind: 'existing'; vaultId: string } | { kind: 'create'; name: string };
+  }) => ipcRenderer.invoke(Channel.GATEWAY_SSH_CONNECT, input),
   // Gateway runtime watch: latest heartbeat snapshot for first paint, plus
   // the per-poll push stream the Gateway page (and sidebar pill) subscribe to.
   getGatewayRuntime: () => ipcRenderer.invoke(Channel.GATEWAY_RUNTIME_GET),
@@ -209,11 +233,22 @@ contextBridge.exposeInMainWorld('CentraidApi', {
   // Vault create/delete — local gateway only (admin plane; remote is server CLI).
   createVault: (input: { name?: string }) => ipcRenderer.invoke(Channel.VAULTS_CREATE, input),
   deleteVault: (input: { vaultId: string }) => ipcRenderer.invoke(Channel.VAULTS_DELETE, input),
+  // Notify-only: call after a metadata-only `updateVault()` HTTP call
+  // succeeds so every window's `onVaultMetadataChanged` listeners (sidebar
+  // head) re-read immediately instead of waiting on an unrelated event.
+  // Deliberately separate from VAULT_CHANGED — no addressing changed here,
+  // so this must not trigger `reScope`'s navigate-Home in App.tsx.
+  notifyVaultMetadataChanged: () => ipcRenderer.invoke(Channel.VAULT_METADATA_CHANGED),
   onVaultChanged: (cb: (msg: { activeGatewayId: string; activeVaultId?: string }) => void) => {
     const handler = (_e: IpcRendererEvent, msg: unknown): void =>
       cb(msg as { activeGatewayId: string; activeVaultId?: string });
     ipcRenderer.on(Channel.VAULT_CHANGED, handler);
     return () => ipcRenderer.off(Channel.VAULT_CHANGED, handler);
+  },
+  onVaultMetadataChanged: (cb: () => void) => {
+    const handler = (): void => cb();
+    ipcRenderer.on(Channel.VAULT_METADATA_PUSH, handler);
+    return () => ipcRenderer.off(Channel.VAULT_METADATA_PUSH, handler);
   },
 
   // Templates: list + clone moved to the renderer's direct HTTP client —

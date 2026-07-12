@@ -21,6 +21,13 @@ export const EXPECTED_SCHEMA_EPOCH = 1;
 export interface GatewayInfo {
   version: string;
   schemaEpoch: number;
+  /**
+   * Per-process instance id (issue #351's `GatewayInstanceLease`, surfaced
+   * on `/centraid/_gateway/info` since issue #382's connectivity test wants
+   * it to detect a gateway swap-under-it). Optional — older gateways omit
+   * it, and it plays no part in the version/schemaEpoch judgment below.
+   */
+  instanceId?: string;
 }
 
 export type HandshakeResult =
@@ -50,7 +57,14 @@ export function judgeGatewayInfo(raw: unknown): HandshakeResult {
         'Update both to the same version.',
     };
   }
-  return { ok: true, info: { version: info.version, schemaEpoch: info.schemaEpoch } };
+  return {
+    ok: true,
+    info: {
+      version: info.version,
+      schemaEpoch: info.schemaEpoch,
+      ...(typeof info.instanceId === 'string' ? { instanceId: info.instanceId } : {}),
+    },
+  };
 }
 
 /**
