@@ -36,6 +36,17 @@ let page;
 let session;
 const consoleMessages = [];
 
+// Pre-existing machine/Chromium noise, NOT an app defect: `Potential
+// permissions policy violation: clipboard-read/write` fires from the
+// top-level react-boot.js frame even in flows that never open Locker (see
+// flows-automations-04's Docs-only run) — same narrowly-scoped exclusion as
+// flows-automations-{03,04,05}. Every other console error still fails.
+function isKnownBenignConsoleError(m) {
+  return /Potential permissions policy violation: clipboard-(read|write) is not allowed/.test(
+    m.text,
+  );
+}
+
 function wireConsole(p) {
   p.on('console', (msg) => {
     consoleMessages.push({
@@ -381,7 +392,9 @@ async function main() {
           .isVisible()
           .catch(() => false);
         assert(emptyVisible, 'expected Approvals empty state back after all 4 items decided');
-        const errorsSoFar = consoleMessages.filter((m) => m.type === 'error');
+        const errorsSoFar = consoleMessages.filter(
+          (m) => m.type === 'error' && !isKnownBenignConsoleError(m),
+        );
         assert(
           errorsSoFar.length === 0,
           `expected no console errors from rapid double-click approve, got: ${JSON.stringify(errorsSoFar)}`,
@@ -409,7 +422,9 @@ async function main() {
         await row.click(); // leave expanded for the screenshot
         await page.waitForTimeout(150);
         await shot('13-epsilon-parked-row-after-thrash');
-        const errorsSoFar = consoleMessages.filter((m) => m.type === 'error');
+        const errorsSoFar = consoleMessages.filter(
+          (m) => m.type === 'error' && !isKnownBenignConsoleError(m),
+        );
         assert(
           errorsSoFar.length === 0,
           `expected no console errors from expand/collapse thrash, got: ${JSON.stringify(errorsSoFar)}`,

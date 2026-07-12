@@ -10,19 +10,44 @@
 //
 // SOURCE-VERIFIED FACTS this suite relies on (read before touching timings
 // or assertions):
-//   - packages/automation/src/scaffold/scaffold.ts:174 -- the scaffold's
-//     default `automation.json` prompt is the literal string
-//     'Describe what this automation should do.' (SCAFFOLD_PROMPT below).
-//     scaffold.ts:102-155 DEFAULT_HANDLER's body references the placeholder
-//     tool name 'example.list_items' and returns `{summary:'nothing new'}`
-//     when nothing matches -- both are literal scaffold-only markers a real
-//     build should remove (SCAFFOLD_HANDLER_MARKERS below).
-//   - apps/desktop/src/renderer/react/shell/routes/automationsData.ts:22-26
-//     scaffoldAutomationDraft() mints `id = automation-<6 random chars>`
-//     and calls createAutomation({id, name:'New automation', enabled:false})
-//     with publish:true under the hood (gateway-client-editing.ts:347) --
-//     the SCAFFOLD itself is already live/published the instant "New
-//     automation" is clicked, before any chat turn.
+//   - packages/automation/src/scaffold/scaffold.ts:174 -- a fresh scaffold's
+//     default `handler.js` (DEFAULT_HANDLER, scaffold.ts:102-155) references
+//     the placeholder tool name 'example.list_items' and returns
+//     `{summary:'nothing new'}` when nothing matches -- literal scaffold-only
+//     markers a real build should remove (SCAFFOLD_HANDLER_MARKERS below).
+//     The scaffold's LITERAL default automation.json `prompt` -- 'Describe
+//     what this automation should do.' -- is no longer relevant to THIS
+//     suite: see the next point.
+//   - AUTOMATIONS UI REVAMP (receipts/issue-387-automations-ui-revamp.md) CHANGED THE CREATE
+//     PATH: "New automation" no longer calls the old
+//     `scaffoldAutomationDraft()` (mint-then-jump-to-builder) at all --
+//     clicking it now opens the instructions-first EDITOR (route
+//     `automation-editor`, AutomationEditorScreen.tsx) in CREATE mode, and
+//     `automationEditorData.ts`'s `DEFAULT_EDITOR_LOAD` starts the
+//     Instructions textarea BLANK (`instructions: ''`), not seeded with the
+//     scaffold literal. NOTHING is minted on the gateway until the editor's
+//     "Create automation" button is clicked
+//     (AutomationEditorRoute.tsx onSave -> `createAutomation({..., prompt:
+//     fields.instructions, ...}, publish:true)`, gateway-client-editing.ts:340-373)
+//     -- which means the automation.json `prompt` this suite's GOAL_PROMPT
+//     is typed into is ALREADY the real intent from the moment the row
+//     exists, published immediately (`publish:true`). There is no
+//     "SCAFFOLD_PROMPT -> real prompt" transition to observe anymore for a
+//     row created this way -- `lifecycle-automation-routes.ts:101-106` still
+//     calls `scaffoldAppFiles(id, {..., prompt: body.prompt})` server-side,
+//     so `handler.js` is STILL minted as the scaffold's DEFAULT_HANDLER
+//     placeholder (createAutomation only sends name/prompt/triggers, never
+//     handler source) -- the handler-code transition (scaffold placeholder
+//     -> real generated code) is what this suite now verifies, not the
+//     prompt.
+//   - The editor's "Create automation" (create mode) hands off to the SAME
+//     builder chat as before via `onOpenBuilder(instructions)` ->
+//     `navigate({kind:'automation-builder', seedMessage: instructions})`
+//     (AutomationEditorRoute.tsx / AutomationEditorScreen.tsx doSave) --
+//     `BuilderRoute.tsx` turns `route.seedMessage` into `useBuilder.ts`'s
+//     `initialPrompt`, which auto-sends via `sendUserPrompt(initialPrompt)`
+//     on mount (useBuilder.ts:562,622) -- so GOAL_PROMPT lands as the FIRST
+//     USER MESSAGE in the chat automatically, no manual fill+Send needed.
 //   - apps/desktop/src/renderer/react/shell/routes/builder/useBuilder.ts:
 //     215-312 handleStreamEvent -- the chat turn's SSE stream ends on a
 //     'final' (or 'aborted') event, which calls finishAgentTurn() (line
@@ -44,8 +69,8 @@
 //     (called from `finishAgentTurn`) re-reads via `listAutomations()`,
 //     which resolves off `getActiveMainLink()` -- the PUBLISHED tree
 //     (packages/gateway/src/routes/automations-routes.ts:248,368) -- so the
-//     Config pane will still show the OLD scaffold content right after the
-//     chat turn ends, until something publishes. For an automation,
+//     Config pane will still show the OLD scaffold `handler.js` right after
+//     the chat turn ends, until something publishes. For an automation,
 //     useBuilder.ts:655-659's primary button is 'Enable'/'Disable', not
 //     'Publish' -- but `handleToggleEnabled` -> `setAutomationEnabled(...)`
 //     always sends `publish:true` (gateway-client-editing.ts:370), which
@@ -53,8 +78,8 @@
 //     (lifecycle-automation-routes.ts:121,136-143). So this suite verifies
 //     the STAGED build immediately after the turn (reading the draft
 //     session's files directly, via the SAME `desktop-<appId>` session id),
-//     THEN clicks "Enable" as the publish step, THEN re-verifies via the
-//     live `GET /centraid/_automations/read`.
+//     THEN clicks "Enable" as the publish step, THEN re-verifies via a real
+//     Run Now (the load-bearing, functional check).
 //   - packages/skills/skills/automation-authoring/SKILL.md documents ONLY
 //     `ctx.tool(name,args)` / `ctx.agent({prompt,json})` / `ctx.state` /
 //     `ctx.runs` / `ctx.input` to the authoring LLM -- it never mentions
@@ -77,7 +102,10 @@
 //     explicit owner grant the builder chat cannot mint, and isn't taught to
 //     the authoring LLM anyway). Deterministic, mechanically checkable
 //     against the run's own `summary`/`outputJson` -- no LLM judgment call
-//     needed at verification time.
+//     needed at verification time. The prompt ALSO says "Make it
+//     manual-only -- no scheduled trigger", so the editor's trigger picker
+//     is left at its default "none" selection (matches the goal, and keeps
+//     this suite from needing to fill a second form section).
 //
 // HARNESS NOTES carried over verbatim from suites 01-05 (read first):
 //   - the enable switch is a visually-hidden `<input role="switch">` --
@@ -100,9 +128,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = path.join(__dirname, 'out');
 const USER_DATA_DIR = path.join(__dirname, 'out', 'userdata-automations-06-builder-to-run');
 
-// ---- scaffold-default literal markers (scaffold.ts) ----
-const SCAFFOLD_PROMPT = 'Describe what this automation should do.';
+// ---- scaffold-default literal markers (scaffold.ts) -- handler.js only;
+// the create path no longer seeds a scaffold-literal PROMPT (see the file
+// header note on the Automations UI revamp) ----
 const SCAFFOLD_HANDLER_MARKERS = ['example.list_items', "summary: 'nothing new'", 'nothing new'];
+
+// ---- the automation's name, typed into the editor's "Name" field ----
+const NEW_AUTO_NAME = 'Automation smoke test';
 
 // ---- the goal we give the builder ----
 const GOAL_MARKER = 'automation smoke test ok';
@@ -334,95 +366,210 @@ async function main() {
   let automationAppId = null;
   let automationRef = null;
   let sessionId = null;
-  let currentName = 'New automation';
+  let currentName = NEW_AUTO_NAME;
 
   try {
     await page.setViewportSize({ width: 1400, height: 900 });
+
+    // Pin the fire-time host agent to claude-code for this vault. The fire
+    // path is runner-agnostic (both codex and claude-code are supported
+    // runtimes; the mock provider serves both wires), but the default is
+    // codex and this machine's npm-global codex launcher is broken (its
+    // @openai/codex-darwin-arm64 vendor binary is missing — `codex
+    // --version` ENOENTs in a plain shell). claude-code is what actually
+    // runs the builder turns on this rig, so the run-now step uses it too.
+    {
+      const res = await gwFetch('/_centraid-user/prefs', {
+        method: 'PUT',
+        body: { patch: { 'agent.runner.kind': 'claude-code' } },
+      });
+      assert(res.status === 200, `runner pref pin failed: ${JSON.stringify(res)}`);
+      console.log('[auto06] pinned agent.runner.kind=claude-code for this vault');
+    }
 
     // -----------------------------------------------------------------
     // FLOW: builder-full-build
     // -----------------------------------------------------------------
     await step(
       'builder-full-build',
-      'New automation -> send the chosen goal -> wait (bounded) for the SSE turn to finish -> confirm the STAGED draft handler.js/automation.json actually changed from the scaffold',
+      'New automation -> instructions-first EDITOR (create mode, blank, no row yet) -> fill Name/Instructions with the chosen goal -> Create automation -> builder auto-sends it -> wait (bounded) for the SSE turn to finish -> confirm the STAGED draft handler.js actually changed from the scaffold placeholder',
       async () => {
         await openAutomationsOverview();
-        const newBtn = page.getByRole('button', { name: 'New automation' });
+        // .first() -- the empty-state overview (fresh vault, no automations
+        // yet) repeats "New automation" as BOTH a header action and its own
+        // empty-state CTA (AutomationsOverviewScreen.tsx EmptyState), so an
+        // unscoped role=button query is a strict-mode violation here.
+        const newBtn = page.getByRole('button', { name: 'New automation' }).first();
         await newBtn.waitFor({ state: 'visible', timeout: 10_000 });
         await newBtn.click();
 
-        // scaffoldAutomationDraft() mints a REAL, already-published gateway
-        // row named "New automation" before the builder even paints.
+        // AutomationsRoute.tsx onNewAutomation -> navigate({kind:'automation-editor'})
+        // (create mode) -- AutomationEditorRoute.tsx's loadData returns
+        // mode:'create' with NO gateway row; automationEditorData.ts's
+        // DEFAULT_EDITOR_LOAD starts Instructions BLANK. Nothing is minted
+        // until "Create automation" below (unlike the old
+        // scaffoldAutomationDraft(), which minted eagerly on click).
+        const nameInput = page.getByLabel('Name', { exact: true });
+        await nameInput.waitFor({ state: 'visible', timeout: 15_000 });
+        const instructionsField = page.getByLabel('Instructions', { exact: true });
+        await instructionsField.waitFor({ state: 'visible', timeout: 5_000 });
+        await shot('01-editor-opened-blank');
+
+        const preexisting = await gwFindRow(NEW_AUTO_NAME);
+        console.log(
+          `[auto06] gateway row named "${NEW_AUTO_NAME}" before Create automation is clicked: ${Boolean(preexisting)} (expected false)`,
+        );
+        assert(
+          !preexisting,
+          `expected NO gateway row for "${NEW_AUTO_NAME}" before saving the editor`,
+        );
+
+        console.log(
+          `[auto06] goal prompt typed into the editor's Instructions field: ${JSON.stringify(GOAL_PROMPT)}`,
+        );
+        await nameInput.fill(NEW_AUTO_NAME);
+        await instructionsField.fill(GOAL_PROMPT);
+        // Trigger picker defaults to "none" (manual-only) -- left untouched,
+        // matching the goal prompt's own "Make it manual-only" instruction.
+        await shot('02-editor-filled');
+
+        await page.getByRole('button', { name: 'Create automation', exact: true }).click();
+
+        // onSave -> createAutomation({..., prompt: GOAL_PROMPT, ...},
+        // publish:true) mints the REAL, already-published row (its
+        // automation.json prompt is GOAL_PROMPT from the moment it exists —
+        // there is no scaffold-default prompt to transition away from
+        // anymore), THEN (create mode) onOpenBuilder(instructions) navigates
+        // to the SAME builder chat as before, seeding GOAL_PROMPT as
+        // `initialPrompt` -- useBuilder.ts auto-sends it on mount.
         await page
           .getByRole('button', { name: 'Config' })
           .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
-        await shot('01-builder-opened-scaffold');
+        await shot('01b-builder-opened-scaffold');
 
-        const scaffoldRow = await gwFindRow('New automation');
+        const scaffoldRow = await gwFindRow(NEW_AUTO_NAME);
         assert(
           Boolean(scaffoldRow),
-          'expected a "New automation" gateway row to exist immediately after clicking New automation',
+          `expected "${NEW_AUTO_NAME}" to exist as a real gateway row after clicking Create automation`,
         );
         automationRef = scaffoldRow.ref;
         automationAppId = scaffoldRow.ref.split('/')[0];
         sessionId = `desktop-${automationAppId}`;
         console.log(
-          `[auto06] scaffolded ref=${automationRef} appId=${automationAppId} sessionId=${sessionId}`,
+          `[auto06] created ref=${automationRef} appId=${automationAppId} sessionId=${sessionId}`,
         );
         assert(
-          scaffoldRow.manifest?.prompt === SCAFFOLD_PROMPT,
-          `expected the fresh scaffold's prompt to be the literal default, got ${JSON.stringify(scaffoldRow.manifest?.prompt)}`,
+          scaffoldRow.manifest?.prompt === GOAL_PROMPT,
+          `expected the freshly-created row's manifest.prompt to be the goal prompt verbatim (set at create time, not the old scaffold literal), got ${JSON.stringify(scaffoldRow.manifest?.prompt)}`,
         );
 
-        console.log(`[auto06] goal prompt sent to the builder: ${JSON.stringify(GOAL_PROMPT)}`);
-        const textarea = page.getByPlaceholder('Describe a change…');
-        await textarea.waitFor({ state: 'visible', timeout: 10_000 });
-        await textarea.fill(GOAL_PROMPT);
-        await page.getByRole('button', { name: 'Send' }).click();
+        // Prove the editor's instructions actually reached the chat as the
+        // auto-sent FIRST user message (BuilderChatPane.tsx `.user
+        // .userBubble`) -- not just a pre-filled, unsent composer.
+        const firstUserBubble = page.locator('[class*="userBubble"]').first();
+        await firstUserBubble.waitFor({ state: 'visible', timeout: 15_000 });
+        const firstUserText = (await firstUserBubble.textContent())?.trim() ?? '';
+        console.log(
+          `[auto06] first user message in the seeded builder chat: ${JSON.stringify(firstUserText.slice(0, 200))}`,
+        );
+        // The editor frames the seed as an explicit compile work order (the
+        // raw instructions are already the manifest `prompt`); the
+        // instructions must ride inside it verbatim.
+        assert(
+          firstUserText.startsWith('Compile this automation now') &&
+            firstUserText.includes(GOAL_PROMPT),
+          `expected the builder chat's first user message to be the compile work order carrying the editor's instructions, got ${JSON.stringify(firstUserText.slice(0, 300))}`,
+        );
 
-        // Bounded wait #1 for the turn to finish -- up to 6 minutes of real
-        // LLM turn time, polling the role="status" progress strip per the
-        // source-verified signal above, never a blind sleep.
+        const textarea = page.getByPlaceholder('Describe a change…');
+
+        // ---- PRODUCT BUG DETECTOR (do not remove once fixed upstream --
+        // harmless no-op then) ------------------------------------------
+        // AutomationEditorRoute.tsx's onOpenBuilder navigates with
+        // `navigate({automationId: ref, kind:'automation-builder', ...})`
+        // where `ref` is the COMPOUND `<ownerApp>/<id>` automation ref
+        // (refIdRef.current, e.g. "automation-xxxxx/automation-xxxxx") --
+        // but `BuilderRoute.tsx` feeds that straight into
+        // `initialAppId`/`useBuilder.ts`'s `appId.current`, which
+        // `refreshAutomationRow` compares against `row.ownerApp` (the BARE
+        // app id, no slash) and which `ensureConversation`/`streamTurn`
+        // URL-encode as a single path segment
+        // (`/_centraid-conversations/apps/<appId>/sessions`,
+        // `/centraid/<appId>/_turn`) -- a literal "/" survives
+        // encodeURIComponent as "%2F", so the gateway 500s trying to
+        // resolve an app literally named "<id>/<id>". The OLD, deleted
+        // call sites this replaces used the BARE `row.id`
+        // (HomeRoute.tsx's old 'edit' pick, AutomationViewRoute.tsx's old
+        // automation-builder navigate -- see `git diff HEAD~1 --
+        // AutomationViewRoute.tsx`/`HomeRoute.tsx`), and
+        // AutomationViewRoute.tsx's NEW composer `onSendMessage` handler
+        // has the exact same `automationId: row.ref` bug (untested by this
+        // suite, but same code shape -- see the file's line ~148).
+        // Symptom: BuilderAutomationPane.tsx's Config tab renders
+        // "Loading automation…" FOREVER (automationRow.current never
+        // resolves), the header shows "Untitled"/"Draft" instead of the
+        // real automation, and "Enable" silently no-ops
+        // (handleToggleEnabled early-returns on `!row`).
+        const stuckLoading = await page.getByText('Loading automation…', { exact: true }).count();
+        if (stuckLoading > 0) {
+          note(
+            'PRODUCT BUG (not a selector issue): the builder opened via the editor\'s "Create automation"/' +
+              '"Open builder chat" is bound to the WRONG appId -- AutomationEditorRoute.tsx\'s onOpenBuilder ' +
+              'passes the COMPOUND automation ref (e.g. "automation-xxxxx/automation-xxxxx") as ' +
+              '`automationId` on the `automation-builder` route, but useBuilder.ts/BuilderRoute.tsx expect ' +
+              'the BARE app id there (it feeds `initialAppId` -> `appId.current`, compared against ' +
+              '`row.ownerApp` in refreshAutomationRow, and URL-encoded as a single path segment for ' +
+              '`ensureConversation`/`streamTurn` -- a literal "/" survives as "%2F", so the gateway 500s). ' +
+              'Symptom just observed: BuilderAutomationPane\'s Config tab is stuck on "Loading automation…" ' +
+              `forever. Expected fix (NOT applied -- source edits are out of scope for this e2e task): pass the ` +
+              'bare `row.id` (or split the ref on "/") at the automation-builder navigate call sites in ' +
+              'AutomationEditorRoute.tsx (onOpenBuilder, both create and edit mode) and ' +
+              'AutomationViewRoute.tsx (onSendMessage). The OLD deleted call sites (HomeRoute.tsx\'s "edit" ' +
+              'pick, the old AutomationViewRoute.tsx) correctly used `row.id`. This will make the rest of ' +
+              'this step (and publish-and-verify-plan/run-now-real-execution below) fail honestly -- ' +
+              'continuing anyway to capture full evidence rather than aborting early.',
+          );
+          await shot('BUG-builder-stuck-loading-automation');
+        }
+        console.log(
+          `[auto06] BUG CHECK: builder Config tab stuck on "Loading automation…": ${stuckLoading > 0}`,
+        );
+
+        // Bounded wait #1 for the (already auto-sent) turn to finish -- up
+        // to 6 minutes of real LLM turn time, polling the role="status"
+        // progress strip per the source-verified signal above, never a
+        // blind sleep.
         let result = await waitForTurnToFinish(6 * 60_000);
         console.log(`[auto06] first turn result: ${JSON.stringify(result)}`);
         await shot('02-after-first-turn');
 
-        let staged = await getDraftFile(
-          automationAppId,
-          sessionId,
-          `automations/${automationAppId}/automation.json`,
-        );
-        let stagedManifest = staged.content ? JSON.parse(staged.content) : null;
         let stagedHandler = await getDraftFile(
           automationAppId,
           sessionId,
           `automations/${automationAppId}/handler.js`,
         );
         console.log(
-          `[auto06] staged draft session files after turn 1: ${JSON.stringify(staged.files)}; ` +
-            `manifest.prompt=${JSON.stringify(stagedManifest?.prompt)}; handler present=${Boolean(stagedHandler.content)}`,
+          `[auto06] staged draft session handler.js after turn 1: present=${Boolean(stagedHandler.content)}`,
         );
 
-        const promptChanged = Boolean(stagedManifest) && stagedManifest.prompt !== SCAFFOLD_PROMPT;
-        const handlerChanged =
-          Boolean(stagedHandler.content) &&
-          !SCAFFOLD_HANDLER_MARKERS.some((m) => stagedHandler.content.includes(m)) &&
-          stagedHandler.content.includes('export default');
-        console.log(
-          `[auto06] after turn 1: promptChanged=${promptChanged} handlerChanged=${handlerChanged}`,
-        );
+        const handlerChanged = (content) =>
+          Boolean(content) &&
+          !SCAFFOLD_HANDLER_MARKERS.some((m) => content.includes(m)) &&
+          content.includes('export default');
+        let changed = handlerChanged(stagedHandler.content);
+        console.log(`[auto06] after turn 1: handlerChanged=${changed}`);
 
         // If the agent asked a clarifying question instead of writing code
         // (result.finished but no real file change), or aborted early, send
         // ONE bounded follow-up nudge rather than declaring failure outright
         // -- a real user would do the same. Still inside an overall bounded
         // budget (per the task brief's "generous but bounded" instruction).
-        if (result.finished && !(promptChanged && handlerChanged)) {
+        if (result.finished && !changed) {
           const lastMsg = await lastAiMessageText();
           note(
-            `after the FIRST turn, the staged handler.js/automation.json had NOT meaningfully changed from the scaffold ` +
-              `(promptChanged=${promptChanged}, handlerChanged=${handlerChanged}). Last AI message: ${JSON.stringify((lastMsg ?? '').slice(0, 400))}. ` +
+            `after the FIRST turn, the staged handler.js had NOT meaningfully changed from the scaffold placeholder ` +
+              `(handlerChanged=${changed}). Last AI message: ${JSON.stringify((lastMsg ?? '').slice(0, 400))}. ` +
               `Sending one bounded follow-up nudge rather than failing outright.`,
           );
           await textarea.waitFor({ state: 'visible', timeout: 10_000 });
@@ -432,20 +579,14 @@ async function main() {
           console.log(`[auto06] nudge-turn result: ${JSON.stringify(result)}`);
           await shot('03-after-nudge-turn');
 
-          staged = await getDraftFile(
-            automationAppId,
-            sessionId,
-            `automations/${automationAppId}/automation.json`,
-          );
-          stagedManifest = staged.content ? JSON.parse(staged.content) : null;
           stagedHandler = await getDraftFile(
             automationAppId,
             sessionId,
             `automations/${automationAppId}/handler.js`,
           );
+          changed = handlerChanged(stagedHandler.content);
           console.log(
-            `[auto06] staged draft session files after nudge: ${JSON.stringify(staged.files)}; ` +
-              `manifest.prompt=${JSON.stringify(stagedManifest?.prompt)}; handler present=${Boolean(stagedHandler.content)}`,
+            `[auto06] staged draft session handler.js after nudge: present=${Boolean(stagedHandler.content)} handlerChanged=${changed}`,
           );
         }
 
@@ -465,27 +606,14 @@ async function main() {
           'the builder chat turn never finished (progress strip never disappeared) within the bounded budget -- see findings for the exact stuck state',
         );
 
-        const finalPromptChanged =
-          Boolean(stagedManifest) && stagedManifest.prompt !== SCAFFOLD_PROMPT;
-        const finalHandlerChanged =
-          Boolean(stagedHandler.content) &&
-          !SCAFFOLD_HANDLER_MARKERS.some((m) => stagedHandler.content.includes(m)) &&
-          stagedHandler.content.includes('export default');
-        console.log(
-          `[auto06] FINAL staged-build check: promptChanged=${finalPromptChanged} handlerChanged=${finalHandlerChanged}`,
-        );
+        console.log(`[auto06] FINAL staged-build check: handlerChanged=${changed}`);
         console.log(`[auto06] staged handler.js full content:\n${stagedHandler.content}`);
         note(
-          `staged handler.js after the builder turn(s) (session=${sessionId}):\n\`\`\`\n${stagedHandler.content}\n\`\`\`\n` +
-            `automation.json prompt: ${JSON.stringify(stagedManifest?.prompt)}`,
+          `staged handler.js after the builder turn(s) (session=${sessionId}):\n\`\`\`\n${stagedHandler.content}\n\`\`\``,
         );
 
         assert(
-          finalPromptChanged,
-          `expected the staged automation.json's prompt to differ from the scaffold default "${SCAFFOLD_PROMPT}", got ${JSON.stringify(stagedManifest?.prompt)}`,
-        );
-        assert(
-          finalHandlerChanged,
+          changed,
           `expected the staged handler.js to be real generated code (no scaffold markers, has "export default"), got:\n${stagedHandler.content}`,
         );
 
@@ -506,17 +634,28 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'publish-and-verify-plan',
-      "Click Enable (automations' publish-equivalent primary action) -> GET /centraid/_automations/read shows real handler-backed manifest, not the scaffold default",
+      "Click Enable (automations' publish-equivalent primary action) -> the staged, builder-written handler.js ff-merges to `main` -> the builder Config tab and the automation thread both show the real plan",
       async () => {
-        assert(Boolean(automationRef), 'need a scaffolded automation ref from the previous flow');
+        assert(Boolean(automationRef), 'need the created automation ref from the previous flow');
 
+        // NOTE: unlike the old scaffold-then-builder flow, the LIVE manifest
+        // `prompt` is already GOAL_PROMPT before this step even starts — the
+        // editor's "Create automation" set it at creation time (see the file
+        // header note). The thing that's still UNPUBLISHED at this point is
+        // the STAGED handler.js the builder turn just wrote (verified in the
+        // previous flow via the draft session) — `main` still serves the
+        // scaffold's DEFAULT_HANDLER until Enable ff-merges the draft.
         const before = await gwReadAutomation(automationRef);
         console.log(
-          `[auto06] gateway row BEFORE publish: enabled=${before?.enabled} prompt=${JSON.stringify(before?.manifest?.prompt)}`,
+          `[auto06] gateway row BEFORE Enable: enabled=${before?.enabled} prompt=${JSON.stringify(before?.manifest?.prompt)}`,
         );
         assert(
-          before?.manifest?.prompt === SCAFFOLD_PROMPT,
-          'expected the LIVE manifest to still show the scaffold default prompt before publish (confirms the turn truly only staged, did not auto-publish)',
+          before?.manifest?.prompt === GOAL_PROMPT,
+          `expected the LIVE manifest prompt to already be the goal prompt (set at create time), got ${JSON.stringify(before?.manifest?.prompt)}`,
+        );
+        assert(
+          before?.enabled === false,
+          `expected the freshly-created automation to start disabled (createAutomation({enabled:false})), got ${JSON.stringify(before?.enabled)}`,
         );
 
         const enableBtn = page.getByRole('button', { name: 'Enable', exact: true });
@@ -525,25 +664,21 @@ async function main() {
         await page.waitForTimeout(1200);
         await shot('05-after-enable-click');
 
-        // Poll the live read until the manifest reflects the staged prompt
-        // (publish is effectively synchronous but give it a bounded margin).
+        // Poll the live read until `enabled` flips true (publish is
+        // effectively synchronous but give it a bounded margin).
         const deadline = Date.now() + 20_000;
         let after = null;
         while (Date.now() < deadline) {
           after = await gwReadAutomation(automationRef);
-          if (after?.manifest?.prompt !== SCAFFOLD_PROMPT) break;
+          if (after?.enabled === true) break;
           await page.waitForTimeout(700);
         }
         console.log(
-          `[auto06] gateway row AFTER publish: enabled=${after?.enabled} prompt=${JSON.stringify(after?.manifest?.prompt)}`,
+          `[auto06] gateway row AFTER Enable: enabled=${after?.enabled} prompt=${JSON.stringify(after?.manifest?.prompt)}`,
         );
         assert(
           after?.enabled === true,
           `expected the automation to be enabled after clicking Enable, got ${JSON.stringify(after?.enabled)}`,
-        );
-        assert(
-          after?.manifest?.prompt !== SCAFFOLD_PROMPT,
-          'expected the LIVE manifest prompt to have updated off the scaffold default after publish',
         );
         currentName = after?.manifest?.name || currentName;
 
@@ -560,8 +695,8 @@ async function main() {
           'expected the builder\'s own Config tab to no longer show the "Not described yet." placeholder after publish',
         );
 
-        // Now the automation's real VIEW screen (not the builder) -- hero
-        // behavior/prompt block, screenshotted per the brief.
+        // Now the automation's real THREAD screen (not the builder) — the
+        // trigger chips / description, screenshotted per the brief.
         await openAutomationView(currentName);
         await shot('07-automation-view-hero-after-publish');
         const viewBodyTxt = await bodyText();
@@ -570,15 +705,16 @@ async function main() {
         );
         assert(
           !/Describe what this automation should do\./i.test(viewBodyTxt),
-          'expected the automation VIEW screen to show a real prompt, not the scaffold placeholder',
+          'expected the automation thread screen to show a real prompt, not the old scaffold placeholder literal',
         );
 
         note(
-          `publish-and-verify-plan: after clicking "Enable" (the automations builder's publish-equivalent primary action, ` +
-            `useBuilder.ts handleToggleEnabled -> setAutomationEnabled(..., publish:true)), GET /centraid/_automations/read ` +
-            `for ref=${automationRef} now returns manifest.prompt=${JSON.stringify(after?.manifest?.prompt)} -- a real, ` +
-            `builder-written plan, no longer the scaffold's "${SCAFFOLD_PROMPT}" placeholder. Both the builder's own Config tab ` +
-            `and the automation's real View-screen hero reflect it.`,
+          `publish-and-verify-plan: the automation's manifest.prompt was already the goal prompt from CREATE time (the ` +
+            `revamped editor sets it immediately, no scaffold-default transition to observe) — the meaningful publish ` +
+            `event here is clicking "Enable" (useBuilder.ts handleToggleEnabled -> setAutomationEnabled(..., publish:true)), ` +
+            `which ff-merges the builder-written STAGED handler.js to \`main\` for ref=${automationRef} (enabled=${after?.enabled}). ` +
+            `Both the builder's own Config tab and the automation's real thread screen reflect it; the functional proof that ` +
+            `the NEW handler.js is what actually executes follows in run-now-real-execution.`,
         );
       },
     );
@@ -595,6 +731,16 @@ async function main() {
         await shot('08-view-before-run-now');
 
         await runNowFromViewScreen();
+        await shot('09-thread-after-run-now-click');
+
+        // "Run now" no longer navigates (AutomationThreadScreen.tsx doRun) —
+        // it stays on the thread; the fired run shows up as a
+        // `button[data-run-status]` timeline entry via the thread's own
+        // bounded poll loop. Open it to reach the (unchanged) run-view.
+        const entries = page.locator('button[data-run-status]');
+        await entries.first().waitFor({ state: 'visible', timeout: 30_000 });
+        await entries.last().click();
+        await page.waitForTimeout(500);
         await shot('09-run-view-after-click');
 
         // Same polling shape as flows-automations-01-lifecycle.mjs's

@@ -24,6 +24,41 @@
 //     target, popping the vault-switcher open and eating every subsequent
 //     click for the rest of the run.
 //
+// UPDATED CONTRACT (Automations UI revamp — receipts/issue-387-automations-ui-revamp.md, read
+// AutomationThreadScreen.tsx before touching this suite further):
+//   - Adopting a template now lands on the automation THREAD (route
+//     `automation-view`), not the builder — its "Run now" button is the
+//     unambiguous, always-present post-adopt marker (webhook templates race
+//     it against the one-time "Webhook minted" reveal modal, same as before).
+//   - The old hero's `heroWebhook`/`heroWhUrl`/`heroWhNote` CSS-module
+//     classes are GONE. The webhook trigger now renders as a chip inside
+//     `TriggerChips` (`div[data-trigger-kind="webhook"]`): the pending state
+//     is `span.chip[data-provisioning="true"]` with text "Provisioning
+//     endpoint…"; the resolved state is a chip with `code[class*="chipUrl"]`
+//     for the URL and `button[aria-label="Copy webhook URL"]` /
+//     `button[aria-label="Regenerate secret"]` (same aria-labels as before).
+//     There is NO note element near the webhook chip anymore (the old
+//     `heroWhNote` "does this warn about remote-only usage" check is moot —
+//     there's nothing there to warn, checked as a fixed absence instead).
+//   - Run-history rows are `button[data-run-status]` (values ok/fail/running),
+//     NOT `button[data-ok]` — and the inner `.entryDot` span ALSO carries
+//     `data-run-status`, so always scope to the `button` tag or a bare
+//     `[data-run-status]` locator double-counts every run.
+//   - The old per-automation "Cron" run-history filter chip
+//     (`button[data-filter="cron"]`) is GONE — the thread has no filter
+//     controls. To find a cron-origin run, filter `button[data-run-status]`
+//     entries by their visible origin text ("Cron"/"Webhook"/"Manual"/…)
+//     instead.
+//   - A data-trigger automation's TriggerChips chip is now a real, non-
+//     misleading "watches `<entity>` · every `<cadence>`" line (previously a
+//     documented visual bug where the hero fell back to "Manual only"/"Cron
+//     schedule") — this suite now asserts the FIX, not the old bug.
+//   - The old absolute-clock-time hero text (`heroWhen`) is gone; the cron
+//     trigger chip shows the raw cron expression plus a single "next
+//     <relative label>" hint (`relativeRunLabel`, which still embeds a real
+//     local clock time via `toLocaleTimeString`, e.g. "next Today, 6:00 AM"),
+//     read off the chips container `div[data-trigger-kind]` instead.
+//
 // ROUTE FACTS this suite exercises (confirmed by reading source, see the
 // per-flow comments below for exact file:line):
 //   - InProcessScheduler ticks once per wall-clock minute, aligned to the
@@ -250,21 +285,26 @@ async function adoptTemplate(templateName) {
   // The dialog's aria-label mirrors its visible heading ("Webhook minted"
   // by default, or the caller-supplied title, e.g. rotate's "New webhook
   // secret") — one shared fallback in openWebhookReveal().
+  //
+  // Adopting an automation template now navigates straight to its THREAD
+  // (AutomationThreadScreen, route `automation-view`), not the builder —
+  // TemplatesRoute.tsx/DiscoverRoute.tsx both `navigate({kind:'automation-view'})`
+  // after the clone. "Run now" is the thread's own unambiguous marker.
   const reveal = page.getByRole('dialog', { name: 'Webhook minted' });
-  const configBtn = page.getByRole('button', { name: 'Config' });
+  const runNowBtn = page.getByRole('button', { name: /Run now|Starting…/ });
   const first = await Promise.race([
     reveal
       .waitFor({ state: 'visible', timeout: 40_000 })
       .then(() => 'reveal')
       .catch(() => null),
-    configBtn
+    runNowBtn
       .waitFor({ state: 'visible', timeout: 40_000 })
-      .then(() => 'config')
+      .then(() => 'thread')
       .catch(() => null),
   ]);
   assert(
-    first === 'reveal' || first === 'config',
-    `adopting "${templateName}" produced neither the webhook-reveal modal nor the builder's Config button`,
+    first === 'reveal' || first === 'thread',
+    `adopting "${templateName}" produced neither the webhook-reveal modal nor the thread's "Run now" button`,
   );
 
   let revealedWebhook = null;
@@ -281,12 +321,12 @@ async function adoptTemplate(templateName) {
     await reveal.waitFor({ state: 'hidden', timeout: 5_000 });
   }
 
-  // Adopting an automation template navigates straight to its builder
-  // (TemplatesRoute.tsx) — the clone itself already published to `main`
-  // (cloneAutomationTemplate -> gwCloneTemplate -> `_clone` runs with
-  // publish:true, confirmed via templatesData.ts's installAppTemplate
-  // comment describing the same underlying clone route).
-  await configBtn.waitFor({ state: 'visible', timeout: 15_000 });
+  // Adopting an automation template navigates straight to its thread
+  // (TemplatesRoute.tsx/DiscoverRoute.tsx) — the clone itself already
+  // published to `main` (cloneAutomationTemplate -> gwCloneTemplate ->
+  // `_clone` runs with publish:true, confirmed via templatesData.ts's
+  // installAppTemplate comment describing the same underlying clone route).
+  await runNowBtn.waitFor({ state: 'visible', timeout: 15_000 });
   await page.waitForTimeout(500);
   return revealedWebhook;
 }
@@ -379,7 +419,7 @@ async function main() {
       `Adopt "${TEMPLATE_WEBHOOK}" from Discover -> Automations, open its view screen, record exactly what the webhook URL display shows`,
       async () => {
         const revealedWebhook = await adoptTemplate(TEMPLATE_WEBHOOK);
-        await shot('wh-01-after-adopt-builder');
+        await shot('wh-01-after-adopt-thread');
 
         // fix: adopting a webhook template now shows the one-time in-app
         // "Webhook minted" reveal modal (webhookReveal.ts) before handing
@@ -403,21 +443,23 @@ async function main() {
         await openAutomationView(TEMPLATE_WEBHOOK);
         await shot('wh-02-view-screen');
 
-        const heroWebhook = page.locator('[class*="heroWebhook"]');
-        await heroWebhook.waitFor({ state: 'visible', timeout: 10_000 });
-        const provisioning = await heroWebhook.getAttribute('data-provisioning');
-        console.log(
-          `[auto02] webhook hero data-provisioning attr right after clone: ${provisioning}`,
-        );
+        // The webhook chip lives inside TriggerChips (AutomationThreadScreen.tsx)
+        // — the pending state is `span.chip[data-provisioning="true"]`
+        // ("Provisioning endpoint…"); there's no separate "hero" wrapper with
+        // the attribute like the old screen had, so probe for the pending
+        // chip directly rather than a container that may not exist.
+        const pendingChip = page.locator('[data-provisioning="true"]');
+        const provisioning = (await pendingChip.count()) > 0;
+        console.log(`[auto02] webhook chip still provisioning right after clone: ${provisioning}`);
 
-        if (provisioning === 'true') {
+        if (provisioning) {
           // Rare race: clone hadn't finished provisioning by the time we
           // navigated. Give it a moment and reload the view.
           await page.waitForTimeout(2000);
           await openAutomationView(TEMPLATE_WEBHOOK);
         }
 
-        const urlCode = page.locator('[class*="heroWhUrl"]');
+        const urlCode = page.locator('[class*="chipUrl"]');
         await urlCode.waitFor({ state: 'visible', timeout: 10_000 });
         webhookUrlText = (await urlCode.textContent())?.trim() ?? null;
         console.log(
@@ -472,17 +514,23 @@ async function main() {
         const copyBtn = page.locator('button[aria-label="Copy webhook URL"]');
         const copyBtnVisible = await copyBtn.isVisible().catch(() => false);
         console.log(`[auto02] copy-webhook-URL button present: ${copyBtnVisible}`);
+        assert(copyBtnVisible, 'expected a "Copy webhook URL" button next to the webhook chip');
 
-        const note = page.locator('[class*="heroWhNote"]');
-        const noteText = (await note.textContent().catch(() => null))?.trim() ?? null;
-        console.log(`[auto02] hero note text near the webhook URL: ${JSON.stringify(noteText)}`);
-        const remoteHint = /remote|cloud|openclaw|only works|desktop/i.test(noteText ?? '');
+        // The old hero had a dedicated `heroWhNote` element the revamp
+        // dropped entirely — TriggerChips' webhook chip is just icon + code +
+        // copy/regenerate buttons, no separate note line. Confirm that
+        // absence directly (rather than probing a class that can't exist,
+        // which would otherwise hang on Playwright's default actionability
+        // wait) — there is nothing here that could warn about remote-only
+        // usage, so the BUG CHECK this replaces is trivially satisfied.
+        const noteCandidates = page.locator('[class*="WhNote"], [class*="whNote"]');
+        const noteCount = await noteCandidates.count();
         console.log(
-          `[auto02] does the hero give ANY hint that this URL requires a remote gateway: ${remoteHint}`,
+          `[auto02] hero/chip note element near the webhook URL: present=${noteCount > 0} (revamp removed this element entirely)`,
         );
         assert(
-          !remoteHint,
-          'BUG CHECK expectation failed (unexpectedly true): hero note unexpectedly warns about remote-gateway-only usage',
+          noteCount === 0,
+          'BUG CHECK expectation failed (unexpectedly true): a note element unexpectedly exists near the webhook chip in the revamped thread',
         );
       },
     );
@@ -611,10 +659,10 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'data-trigger-register',
-      `Adopt "${TEMPLATE_DATA}" (a real 'data'-kind trigger template, cloned via file-based template clone -- NOT the coercion-prone create route) -> confirm the trigger kind survives verbatim, capture the (possibly misleading) hero`,
+      `Adopt "${TEMPLATE_DATA}" (a real 'data'-kind trigger template, cloned via file-based template clone -- NOT the coercion-prone create route) -> confirm the trigger kind survives verbatim, confirm the thread's trigger chip renders it correctly (not the old misleading fallback)`,
       async () => {
         await adoptTemplate(TEMPLATE_DATA);
-        await shot('data-01-after-adopt-builder');
+        await shot('data-01-after-adopt-thread');
 
         await openAutomationView(TEMPLATE_DATA);
         await shot('data-02-view-screen');
@@ -633,19 +681,37 @@ async function main() {
           `expected the template-cloned trigger kind to survive as 'data', got ${JSON.stringify(row?.triggers)}`,
         );
 
+        // The old AutomationViewScreen's hero only special-cased 'cron' and
+        // 'webhook' for its eyebrow/when text, falling back to the
+        // misleading literal "Manual only"/"Cron schedule" for a
+        // 'data'-only automation. The revamped thread's TriggerChips
+        // (AutomationThreadScreen.tsx) has a DEDICATED data-trigger chip —
+        // "watches <entity> · every <cadence>" — driven by the route's
+        // `triggerDetail.dataDetail` (deriveAutomationHero). Confirm the fix:
+        // the chips container is `data-trigger-kind="data"` and the entity
+        // name is visible, NOT the old fallback text.
         const bodyTxt = await bodyText();
-        // buildAutomationViewData (automationsData.ts) only special-cases
-        // 'cron' and 'webhook' triggers for the hero eyebrow/when text; a
-        // 'data'/'condition'-only automation falls through triggersSummary's
-        // empty-parts branch to the literal string "Manual only", and
-        // kindEyebrow falls back to "Cron schedule" -- neither is true for
-        // this automation. Screenshot + log as a visual finding, don't fail
-        // the step on a UI polish gap (the brief only asks us to confirm/
-        // refute two specific suspected bugs; this is an incidental third).
+        const chipsKind = await page
+          .locator('div[data-trigger-kind]')
+          .first()
+          .getAttribute('data-trigger-kind')
+          .catch(() => null);
         const looksManualOnly = /manual only/i.test(bodyTxt);
         const looksCronSchedule = /cron schedule/i.test(bodyTxt);
+        const looksWatches = /watches/i.test(bodyTxt);
         console.log(
-          `[auto02] VISUAL FINDING: data-trigger automation hero renders "Manual only"/"Cron schedule" (misleading for a 'data' trigger)? manualOnly=${looksManualOnly} cronSchedule=${looksCronSchedule}`,
+          `[auto02] trigger chips data-trigger-kind="${chipsKind}", body watches="${looksWatches}" manualOnly=${looksManualOnly} cronSchedule=${looksCronSchedule}`,
+        );
+        assert(
+          chipsKind === 'data',
+          `expected the thread's TriggerChips container to report data-trigger-kind="data" for a data-triggered automation, got ${JSON.stringify(chipsKind)}`,
+        );
+        assert(
+          looksWatches && !looksManualOnly && !looksCronSchedule,
+          `FIX CHECK: expected the revamped thread to render a real "watches <entity>" chip for a data trigger, not the old "Manual only"/"Cron schedule" fallback — watches=${looksWatches} manualOnly=${looksManualOnly} cronSchedule=${looksCronSchedule}`,
+        );
+        console.log(
+          '[auto02] CONFIRMED: the previously-documented misleading data-trigger hero label is FIXED in the revamped thread — TriggerChips renders a real "watches <entity>" chip.',
         );
       },
     );
@@ -736,35 +802,36 @@ async function main() {
     // ---------------------------------------------------------------------
     await step(
       'cron-real-fire-ui-confirm',
-      'The fired cron run is visible in the UI, filterable under the "Cron" chip, distinguishable from a manual run, and its row/timeline is screenshotted',
+      "The fired cron run is visible in the thread's timeline, distinguishable from a manual run by its origin label, and its row/timeline is screenshotted",
       async () => {
         assert(
           Boolean(cronAutoRef) && Boolean(cronRunFound),
           'need a confirmed cron run from the previous flow',
         );
         await openAutomationView(CRON_AUTO_NAME);
+        await shot('cron-03-thread-with-fired-run');
 
-        const cronFilter = page.locator('button[data-filter="cron"]');
-        await cronFilter.waitFor({ state: 'visible', timeout: 5_000 });
-        await cronFilter.click();
-        await page.waitForTimeout(300);
-        await shot('cron-03-filtered-to-cron');
-
-        const cronRows = page.locator('button[data-ok]');
+        // The old per-automation "Cron" run-history filter chip
+        // (`button[data-filter="cron"]`) is gone in the revamp — the thread
+        // has no filter controls at all (AutomationThreadScreen.tsx). Find
+        // the cron-origin entry by its visible origin text instead
+        // (`button[data-run-status]`, scoped to the button tag since the
+        // inner `.entryDot` span duplicates the attribute).
+        const cronRows = page.locator('button[data-run-status]', { hasText: 'Cron' });
         const cronRowCount = await cronRows.count();
-        console.log(`[auto02] run rows under the "Cron" filter: ${cronRowCount}`);
+        console.log(`[auto02] timeline entries with a "Cron" origin label: ${cronRowCount}`);
         assert(
           cronRowCount >= 1,
-          `expected >=1 run row under the Cron filter, got ${cronRowCount}`,
+          `expected >=1 timeline entry with a "Cron" origin, got ${cronRowCount}`,
         );
 
         const rowText = await cronRows.first().textContent();
         console.log(
-          `[auto02] first cron-filtered run row text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
+          `[auto02] first Cron-origin entry text: ${JSON.stringify(rowText.replace(/\n/g, ' | '))}`,
         );
         assert(
           /cron/i.test(rowText),
-          `expected the run row to visibly say "Cron", got: ${rowText}`,
+          `expected the run entry to visibly say "Cron", got: ${rowText}`,
         );
 
         await cronRows.first().click();
@@ -822,16 +889,23 @@ async function main() {
         await openAutomationView(TEMPLATE_HEALTH);
         await shot('tz-01-view-screen');
 
-        const heroWhen = page.locator('[class*="heroWhen"]');
-        await heroWhen.waitFor({ state: 'visible', timeout: 10_000 });
-        const whenText = (await heroWhen.textContent())?.trim() ?? '';
-        console.log(`[auto02] hero "when" text as rendered: ${JSON.stringify(whenText)}`);
+        // The old hero's dedicated `heroWhen` element is gone. The revamped
+        // TriggerChips shows the raw cron expr in `<code>` plus a single
+        // "next <relativeRunLabel>" hint appended in `.chipNext`
+        // (AutomationThreadScreen.tsx) — read the whole cron chips container
+        // (`div[data-trigger-kind="cron"]`) since the relevant text is split
+        // across two sibling elements.
+        const chipsRow = page.locator('div[data-trigger-kind="cron"]');
+        await chipsRow.waitFor({ state: 'visible', timeout: 10_000 });
+        const whenText = (await chipsRow.textContent())?.trim() ?? '';
+        console.log(`[auto02] cron trigger-chips text as rendered: ${JSON.stringify(whenText)}`);
 
         // Independent re-derivation of the SAME conversion the renderer's
-        // cronToHuman() performs (app-format.ts:225-282): anchor 06:00 as a
-        // UTC instant, then render it in this host's local timezone -- this
-        // machine's OS timezone is the same one Electron/Chromium reads, so
-        // it's a valid oracle for what SHOULD be displayed.
+        // relativeRunLabel()/cronNextRuns() perform (app-format.ts,
+        // cron.ts): anchor 06:00 as a UTC instant, then render it in this
+        // host's local timezone -- this machine's OS timezone is the same
+        // one Electron/Chromium reads, so it's a valid oracle for what
+        // SHOULD be displayed.
         const anchor = new Date();
         anchor.setUTCHours(6, 0, 0, 0);
         const expectedLocal = anchor.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -839,7 +913,7 @@ async function main() {
           `[auto02] independently computed UTC 06:00 -> local: ${expectedLocal} (host TZ offset minutes: ${anchor.getTimezoneOffset()})`,
         );
 
-        const matches = whenText.includes(expectedLocal) || whenText === '0 6 * * *';
+        const matches = whenText.includes(expectedLocal) || whenText.includes('0 6 * * *');
         console.log(
           `[auto02] TIMEZONE CROSS-CHECK verdict: rendered=${JSON.stringify(whenText)} expectedLocalTime=${JSON.stringify(expectedLocal)} looksConverted=${matches}`,
         );

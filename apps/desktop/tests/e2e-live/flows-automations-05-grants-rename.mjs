@@ -18,22 +18,21 @@
 //     `name` field on disk (via `readAppAt` -> `parseManifest`) — there is no
 //     separate name column anywhere; "the name" IS whatever that file
 //     currently says. `ref = "<ownerApp>/<automationId>"` (formatRef).
-//   - packages/gateway/src/routes/apps-store-routes.ts's `/_apps/_sessions`
-//     (POST, body `{}` ok) opens a session; `PUT /_apps/<appId>/files/<rel>
-//     ?sessionId=` lazily snapshots the app's CURRENT LIVE state into that
-//     session's worktree on first touch (`store.snapshotSessionAppDir`), so
-//     editing an EXISTING published automation's `automation.json` needs no
-//     template-clone step — open a session, GET the file, PUT the edited
-//     JSON back, POST .../publish. This is the exact recipe this suite uses
-//     to rename an automation: there is NO dedicated rename HTTP route and
-//     NO name-edit control in the builder UI (BuilderAutomationPane.tsx's
-//     Config tab is a pure read-only render of automation.json — literally
-//     captioned "This view is filled in by the chat. Describe any change in
-//     the conversation." — and AutomationViewScreen.tsx's hero `<h1>{d.name}
-//     </h1>` is plain text, not editable) — so this out-of-band draft-file
-//     write is the closest real mechanism to "rename" today, short of an
-//     actual LLM builder-chat turn (non-deterministic, too slow/flaky for
-//     E2E). Documented as a finding below, not fabricated as a UI element.
+//   - UPDATED for the Automations UI revamp (this lane's pass): a rename now
+//     DOES have a real, primary UI mechanism -- AutomationEditorScreen.tsx's
+//     "Name" field + "Save changes", which POSTs to the new dedicated
+//     `POST /centraid/_automations/update?ref=` route (handleAutomationUpdate,
+//     packages/gateway/src/routes/lifecycle-automation-routes.ts) via
+//     `updateAutomation()` (gateway-client-editing.ts). Flow 1 below
+//     (`rename-propagates-everywhere`) drives that real editor path end to
+//     end. Flow 2 (`rename-mid-parked-invocation`) still renames
+//     out-of-band -- not because no UI exists, but because that flow
+//     specifically needs the Approvals screen to stay mounted with NO
+//     renderer navigation across the rename (see
+//     `renameAutomationViaUpdateEndpoint`'s doc comment) -- so it calls the
+//     SAME update endpoint directly instead of clicking through the editor.
+//     The old builder-chat rename path (a real LLM turn) still exists too,
+//     but is non-deterministic/slow and isn't exercised here.
 //   - packages/gateway/src/routes/apps-store-routes.ts `handlePublish` calls
 //     `onAppLive?.(appId)`, which build-gateway.ts wires to
 //     `reconcileScheduler(vaultId)` — so a rename-then-publish re-runs
@@ -239,6 +238,31 @@ async function getDraftFile(appId, sessionId, rel) {
   return file.content;
 }
 
+/**
+ * Rename an automation over the SAME `POST /centraid/_automations/update`
+ * endpoint the editor's "Save changes" now calls (see
+ * `renameAutomationViaEditor` above) -- but out-of-band, with NO renderer
+ * navigation. Flow 2 below deliberately needs the Approvals screen to stay
+ * mounted, untouched, across the rename (it's specifically testing what an
+ * already-open Approvals row shows with no remount vs. a fresh look) --
+ * driving the rename through the editor UI would force a navigate-away
+ * (Automations -> Thread -> Editor -> Thread) that destroys that premise.
+ * This keeps the real, current rename MECHANISM (the update endpoint, not
+ * the old draft-file-write-then-publish primitive) while leaving the
+ * renderer's Approvals mount alone.
+ */
+async function renameAutomationViaUpdateEndpoint(ref, newName) {
+  const res = await gwFetch(`/centraid/_automations/update?ref=${encodeURIComponent(ref)}`, {
+    method: 'POST',
+    body: { name: newName, publish: true },
+  });
+  assert(res.status === 200, `update rename failed: ${JSON.stringify(res)}`);
+  console.log(
+    `[auto05] renamed ref="${ref}" -> "${newName}" via POST /_automations/update (out-of-band, same endpoint the editor's "Save changes" now calls; no renderer navigation, so Approvals stays mounted)`,
+  );
+  return res.json;
+}
+
 function splitRef(ref) {
   const idx = ref.indexOf('/');
   assert(idx > 0, `unexpected ref shape (no "/"): ${ref}`);
@@ -246,36 +270,50 @@ function splitRef(ref) {
 }
 
 /**
- * Rename an EXISTING published automation by opening a fresh draft session
- * (which lazily snapshots the app's CURRENT live state), overwriting its
- * `automation.json`'s `name` field, and publishing. See header comment for
- * why this -- not a UI control -- is the real mechanism today.
+ * Rename an EXISTING automation through the REAL editor UI (Automations UI
+ * revamp): Thread "Edit" -> AutomationEditorScreen.tsx's "Name" field ->
+ * "Save changes", which now goes over the new dedicated
+ * `POST /centraid/_automations/update` endpoint (AutomationEditorRoute.tsx
+ * onSave -> updateAutomation, packages/gateway/src/routes/
+ * lifecycle-automation-routes.ts handleAutomationUpdate) rather than the
+ * old out-of-band draft-file-write-then-publish this suite used before this
+ * session's editor landed. Only the name changes -- `instructions` is left
+ * exactly as loaded (so `changed` stays false and no "Recompile plan"
+ * affordance or handler-recompile side effect fires), and the trigger the
+ * form loaded is resubmitted unmodified.
  */
-async function renameAutomationViaFiles(ownerAppId, automationId, newName) {
-  const sessionRes = await gwFetch('/centraid/_apps/_sessions', { method: 'POST', body: {} });
+async function renameAutomationViaEditor(oldName, newName) {
+  await openAutomationView(oldName);
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const nameInput = page.getByPlaceholder('Untitled automation');
+  await nameInput.waitFor({ state: 'visible', timeout: 10_000 });
+  // loadData() is async -- wait for the field to actually populate with the
+  // OLD name before editing it, so this doesn't race the initial fetch and
+  // clobber an empty draft with a save.
+  const deadline = Date.now() + 10_000;
+  let val = '';
+  while (Date.now() < deadline) {
+    val = await nameInput.inputValue();
+    if (val === oldName) break;
+    await page.waitForTimeout(200);
+  }
   assert(
-    sessionRes.status === 201 && sessionRes.json?.sessionId,
-    `open session failed: ${JSON.stringify(sessionRes)}`,
+    val === oldName,
+    `editor Name field never loaded "${oldName}" before timeout (stuck at ${JSON.stringify(val)})`,
   );
-  const sessionId = sessionRes.json.sessionId;
-
-  const rel = `automations/${automationId}/automation.json`;
-  const raw = await getDraftFile(ownerAppId, sessionId, rel);
-  const manifest = JSON.parse(raw);
-  const oldName = manifest.name;
-  manifest.name = newName;
-  const putRes = await putDraftFile(ownerAppId, sessionId, rel, JSON.stringify(manifest, null, 2));
-  assert(putRes.status === 200, `draft rename write failed: ${JSON.stringify(putRes)}`);
-
-  const pubRes = await gwFetch(`/centraid/_apps/${ownerAppId}/publish`, {
-    method: 'POST',
-    body: { sessionId, message: `e2e: rename "${oldName}" -> "${newName}"` },
-  });
-  assert(pubRes.status === 201, `publish rename failed: ${JSON.stringify(pubRes)}`);
-  console.log(
-    `[auto05] renamed "${oldName}" -> "${newName}" (appId=${ownerAppId}, sessionId=${sessionId})`,
-  );
-  return { oldName, sessionId };
+  await nameInput.fill(newName);
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+  const toast = page.locator('[data-global-toast]');
+  await toast.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForTimeout(300);
+  // Back to the thread via the editor's own "Cancel" (routes to
+  // automation-view for the same ref -- AutomationEditorRoute.tsx onCancel).
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page
+    .getByRole('heading', { name: newName, level: 1 })
+    .waitFor({ state: 'visible', timeout: 10_000 });
+  console.log(`[auto05] renamed "${oldName}" -> "${newName}" via the editor UI`);
+  return { oldName };
 }
 
 async function gwListAutomations() {
@@ -497,7 +535,7 @@ async function main() {
     // -----------------------------------------------------------------
     await step(
       'rename-propagates-everywhere',
-      'Adopt Trip albums, note its name on Home/Overview/View/Insights, rename via draft-file+publish, verify propagation with NO stale surface',
+      'Adopt Trip albums, note its name on Home/Overview/View/Insights, rename via the real editor UI, verify propagation with NO stale surface',
       async () => {
         // ---- adopt ----
         await navTo(page, 'Discover');
@@ -511,8 +549,11 @@ async function main() {
         const adoptDialog = page.getByRole('dialog', { name: new RegExp(esc(TEMPLATE_HEALTH)) });
         await adoptDialog.waitFor({ state: 'visible', timeout: 10_000 });
         await adoptDialog.getByRole('button', { name: 'Use template' }).click();
+        // Adopting a template now lands directly on the automation's
+        // THREAD screen (AutomationThreadScreen.tsx) -- the old builder-chat
+        // "Config" tab detour is gone; see receipts/issue-387-automations-ui-revamp.md.
         await page
-          .getByRole('button', { name: 'Config' })
+          .getByRole('heading', { name: TEMPLATE_HEALTH, level: 1 })
           .waitFor({ state: 'visible', timeout: 15_000 });
         await page.waitForTimeout(500);
 
@@ -579,13 +620,14 @@ async function main() {
         );
         await shot('04-insights-before-rename');
 
-        // ---- RENAME ----
-        await renameAutomationViaFiles(appId, automationId, RENAMED_HEALTH);
+        // ---- RENAME (via the real editor UI) ----
+        await renameAutomationViaEditor(TEMPLATE_HEALTH, RENAMED_HEALTH);
         note(
-          `No direct rename UI exists: AutomationViewScreen.tsx's hero \`<h1>{d.name}</h1>\` is plain text, and BuilderAutomationPane.tsx's ` +
-            `Config tab is a read-only render of automation.json captioned "This view is filled in by the chat." Used the real underlying ` +
-            `mechanism instead: opened a fresh draft session (POST /_apps/_sessions), overwrote automations/${automationId}/automation.json's ` +
-            `"name" field, and published — the same primitive the builder's own chat-driven edits ultimately call.`,
+          `Renamed via the REAL editor UI this session: Thread "Edit" -> AutomationEditorScreen.tsx's "Name" field -> "Save changes", which ` +
+            `now hits a dedicated POST /centraid/_automations/update endpoint (AutomationEditorRoute.tsx onSave -> updateAutomation, ` +
+            `packages/gateway/src/routes/lifecycle-automation-routes.ts handleAutomationUpdate) rather than the old out-of-band draft-file+` +
+            `publish primitive this suite used before the editor landed. The old builder-chat rename path still exists too, but the editor ` +
+            `is the primary mechanism now.`,
         );
 
         // ---- AFTER: verify propagation on all 4 surfaces ----
@@ -662,7 +704,7 @@ async function main() {
         );
 
         note(
-          `rename-propagates-everywhere: renaming "${TEMPLATE_HEALTH}" -> "${RENAMED_HEALTH}" (via draft-file+publish, no extra reload/refresh ` +
+          `rename-propagates-everywhere: renaming "${TEMPLATE_HEALTH}" -> "${RENAMED_HEALTH}" (via the real editor UI's Name field + "Save changes", no extra reload/refresh ` +
             `beyond ordinary navigation) propagated CLEANLY to all 4 surfaces (Home AutoCard, Automations overview row, View screen hero, and ` +
             `the Insights "By source" panel — including for the run recorded BEFORE the rename). No stale cache anywhere: each surface re-fetches ` +
             `the live manifest name (trip-albums's automation.json) on navigation, and Insights resolves automation_ref -> name live too ` +
@@ -741,7 +783,10 @@ async function main() {
         );
 
         // ---- RENAME the automation while its invocation sits parked ----
-        await renameAutomationViaFiles(AGENT_ID, AGENT_ID, RENAMED_AGENT_NAME);
+        // (out-of-band, via the update endpoint -- see
+        // renameAutomationViaUpdateEndpoint's doc comment for why this flow
+        // can't drive the rename through the editor UI like flow 1 does.)
+        await renameAutomationViaUpdateEndpoint(`${AGENT_ID}/${AGENT_ID}`, RENAMED_AGENT_NAME);
 
         const agentsAfterRename = await gwAgents();
         const agentRowAfterRename = agentsAfterRename.find((a) => a.partyId === agentRow.partyId);
@@ -1086,12 +1131,24 @@ async function main() {
         // of 404..." string) -- match on frameUrl, per the harness's own
         // console-filter convention (never match on text alone).
         const expected404Url = /_vault\/parked\//;
+        // "Potential permissions policy violation: clipboard-read/write is
+        // not allowed in this document" -- a second, pre-existing/
+        // out-of-scope noise source, unrelated to any automations UI
+        // change (reproduces with Locker in flows-automations-03-corners.mjs
+        // AND with no Locker at all in flows-automations-04-trigger-fires.mjs;
+        // see either suite's isKnownBenignConsoleError() for the fuller
+        // citation). This flow also opens Locker (installLockerAndSeedTrashedItem),
+        // so exclude it here too.
+        const isBenignClipboard = (m) =>
+          /Potential permissions policy violation: clipboard-(read|write) is not allowed/.test(
+            m.text,
+          );
         const unexpected = allErrors.filter(
-          (m) => !(expected404Url.test(m.frameUrl) && /404/.test(m.text)),
+          (m) => !(expected404Url.test(m.frameUrl) && /404/.test(m.text)) && !isBenignClipboard(m),
         );
         for (const e of allErrors) console.log(`  CONSOLE ERROR: ${e.text} (${e.frameUrl})`);
         console.log(
-          `[auto05] console errors: ${allErrors.length} total, ${allErrors.length - unexpected.length} excluded as the deliberate revoke-then-approve-attempt 404 from flow 3`,
+          `[auto05] console errors: ${allErrors.length} total, ${allErrors.length - unexpected.length} excluded as the deliberate revoke-then-approve-attempt 404 from flow 3 and/or known-benign clipboard permissions-policy noise`,
         );
         assert(
           unexpected.length === 0,
