@@ -77,6 +77,7 @@ import { createSchedulerHealthProbe } from './scheduler-health.js';
 import { createEnrichmentHealthProbe } from './enrichment-health.js';
 import { createBlobSweepHealthProbe } from './blob-sweep-health.js';
 import { createStorageQuotaHealthProbe } from './storage-quota-health.js';
+import { createVaultIntegrityHealthProbe } from './vault-integrity-health.js';
 import { GatewayInstanceLease } from './gateway-instance-lease.js';
 import { ConnectionBroker } from './connection-broker.js';
 import { OutboxExecutor } from './outbox-executor.js';
@@ -557,6 +558,22 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
           s3Configured: () => readBlobStoreSettings(p.db.vault).kind === 's3',
           counts: () => custodyStateCounts(p.db.vault),
           sweepStatus: () => p.db.blobs.sweepStatus(),
+        })),
+    }),
+  );
+
+  // On-disk integrity (issue #374 tier 5b) — see vault-integrity-health.ts.
+  // Self-throttled hourly per vault (quick_check is a full logical scan,
+  // not a per-tick-cheap read); distinct from the `vaults` probe above,
+  // which only proves the file still opens.
+  health.registerProbe(
+    'vault-integrity',
+    createVaultIntegrityHealthProbe({
+      vaults: () =>
+        vaultRegistry.planesList().map((p) => ({
+          vaultId: p.boot.vaultId,
+          vault: p.db.vault,
+          journal: p.db.journal,
         })),
     }),
   );
@@ -1499,7 +1516,12 @@ export async function buildGateway(options: BuildGatewayOptions): Promise<BuiltG
     // Gateway-level storage connections (issue #367 §C1): CRUD + real
     // connectivity probe + per-vault replication status. Same bearer gate,
     // same owner-facing-diagnostics family as backup/health.
-    makeStorageRouteHandler({ storageConnections, recoveryKit, vaults: vaultRegistry, storageUsage }),
+    makeStorageRouteHandler({
+      storageConnections,
+      recoveryKit,
+      vaults: vaultRegistry,
+      storageUsage,
+    }),
     // Due task/event reminders, computed live — the desktop main process
     // polls this to fire OS notifications (issue: Tasks/Agenda comparison
     // flagged "no time-based alerts, anywhere").

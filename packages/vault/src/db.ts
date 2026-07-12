@@ -202,7 +202,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         region: settings.region,
         prefix: settings.prefix,
         credentials: () => resolver(settings),
-        ...(settings.throttleBytesPerSec ? { throttleBytesPerSec: settings.throttleBytesPerSec } : {}),
+        ...(settings.throttleBytesPerSec
+          ? { throttleBytesPerSec: settings.throttleBytesPerSec }
+          : {}),
       }),
       encryptKey: encryptOn ? sealKey : undefined,
     };
@@ -217,6 +219,25 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     sealKey,
     blobs: new BlobCustody(local, remoteTier),
     close() {
+      // PRAGMA optimize (issue #374 tier 5a): a cheap, targeted ANALYZE that
+      // only touches tables whose stats look stale — recommended by SQLite
+      // to run "occasionally", and connection-close is the one point every
+      // caller reliably passes through, across 188 tables and an ad hoc SQL
+      // surface (gateway/sql.ts) the planner would otherwise run stats-blind
+      // on. Harmless (near-instant, no-op) on `:memory:` too, so it's left
+      // unconditional rather than special-cased. Never let a failure here —
+      // this is best-effort maintenance, not correctness — block the actual
+      // close of the handle underneath it.
+      try {
+        vault.exec('PRAGMA optimize');
+      } catch {
+        // best-effort; the handle still needs to close below.
+      }
+      try {
+        journal.exec('PRAGMA optimize');
+      } catch {
+        // best-effort; the handle still needs to close below.
+      }
       vault.close();
       journal.close();
     },
