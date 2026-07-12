@@ -23,13 +23,22 @@
 // and mirrors it from the derivative side. A content item can be the
 // current body of more than one document (sha256 dedup, or two documents
 // deliberately sharing bytes) — the refresh fans out to every one of them.
+//
+// Extracted text (`core_content_derivative.text_content`, async OCR/text
+// layer) is the one FTS feed with no upstream size gate of its own — the
+// per-document index budget (issue #367 §E3, `truncateForIndex`) applies
+// here too, same as every other body-shaped column.
+
+import type { DatabaseSync } from 'node:sqlite';
+import { truncateForIndex } from './fts.js';
 
 /** Body of a document's FTS row: extracted text wins, inline text else. */
-const DOCUMENT_BODY = (ref: string) => `COALESCE(
+const DOCUMENT_BODY = (ref: string) =>
+  truncateForIndex(`COALESCE(
     (SELECT dv.text_content FROM core_content_derivative dv
       WHERE dv.content_id = ${ref}."current_content_id" AND dv.variant = 'text'),
     (SELECT vault_content_text(ci."media_type", ci."content_uri") FROM core_content_item ci
-      WHERE ci.content_id = ${ref}."current_content_id"))`;
+      WHERE ci.content_id = ${ref}."current_content_id"))`);
 
 const REFRESH_DOCUMENT_FTS = (contentIdRef: string) => `
   DELETE FROM fts_core_document
@@ -116,3 +125,21 @@ WHEN OLD.variant = 'text'
 BEGIN${REFRESH_DOCUMENT_FTS('OLD.content_id')}
 END;
 `;
+
+/**
+ * Rebuild path for `fts_core_document` (issue #367 §E3) — the
+ * `core.document` counterpart to `rebuildFtsIndex` (schema/fts.ts), which
+ * explicitly refuses this entity because the generic backfill doesn't know
+ * about the derivative-aware body expression above. Re-derives every live
+ * document's row from scratch (extracted text still wins over the raw
+ * decode), so a `FTS_BODY_INDEX_BUDGET_CHARS` change reflows documents too.
+ */
+export function rebuildDocumentFtsIndex(vault: DatabaseSync): void {
+  vault.exec('DELETE FROM fts_core_document;');
+  vault.exec(`
+    INSERT INTO fts_core_document (rowid, document_id, title, body)
+    SELECT d.rowid, d."document_id", d."title", ${DOCUMENT_BODY('d')}
+      FROM core_document d
+     WHERE d."deleted_at" IS NULL;
+  `);
+}

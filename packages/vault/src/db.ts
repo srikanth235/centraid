@@ -45,14 +45,44 @@ export interface VaultDb {
   close(): void;
 }
 
-/** The `blob_store` settings bag shape (issue #296 §2). */
+/** The `blob_store` settings bag shape (issue #296 §2, extended #367). */
 export interface BlobStoreSettings {
   kind?: 'fs' | 's3';
   endpoint?: string;
   bucket?: string;
   region?: string;
   prefix?: string;
+  /**
+   * Encrypt remote objects under the vault DEK (issue #367). Defaults to
+   * `true` — a remote tier is off-vault-disk by definition, so encryption
+   * is opt-OUT, not opt-in. Only meaningful when `connectionKind` is NOT
+   * `'provider'`: a provider-backed connection cannot disable this (see
+   * `connectionKind` below and `openVaultDb`'s `remoteTier()`).
+   */
   encrypt?: boolean;
+  /**
+   * The gateway-level `storage-connections` entity (#367 §C1) this vault's
+   * remote tier resolves credentials from. When set, `s3Credentials` is
+   * expected to resolve creds keyed off this id (byo-s3: the sealed
+   * sidecar; provider: a short-lived `requestCasGrant`). Absent = the
+   * legacy harness-ambient env-var lane (`VaultPlaneOptions`'s default
+   * `s3Credentials`).
+   */
+  connectionId?: string;
+  /**
+   * Denormalized copy of the connection's kind, stamped by the gateway
+   * whenever it wires `connectionId` (issue #367 §C4) — read here so the
+   * vault package can enforce "encryption is force-ON for provider
+   * connections" without a live round-trip back to the gateway's
+   * storage-connection store. Never trust an ABSENT value to mean
+   * `'byo-s3'` is safe to assume off-path; it only relaxes the default.
+   */
+  connectionKind?: 'byo-s3' | 'provider';
+  /**
+   * Upload rate cap for the replication path, bytes/sec (issue #367 §C7,
+   * simple token bucket in `S3BlobStore`). Omitted/0 = unthrottled.
+   */
+  throttleBytesPerSec?: number;
 }
 
 export interface OpenVaultOptions {
@@ -143,6 +173,14 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     (dir === undefined ? ephemeralSealKey() : resolveSealKey(vault, sealKeyFileFor(dir)));
 
   // One remote per settings snapshot — rebuilt only when the bag changes.
+  // This is also the mechanism behind issue #367 §C9's rotation semantics:
+  // changing `endpoint`/`bucket`/`connectionId` changes the JSON key, so the
+  // NEXT use resolves a fresh S3BlobStore against the new target. Nothing
+  // migrates custody rows explicitly — `reconcile()`/`statusFor()` re-derive
+  // custody state from what the (now different) remote actually lists, which
+  // is empty for a fresh target, so every live sha reads back "local-only"
+  // until replication catches up. The old bucket is never addressed again
+  // (no client, no stale credential resolver keeps pointing at it).
   let cachedRemote: { key: string; tier: RemoteTier | null } | null = null;
   const remoteTier = (): RemoteTier | null => {
     const settings = readBlobStoreSettings(vault);
@@ -151,6 +189,12 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
     const key = JSON.stringify(settings);
     if (cachedRemote?.key === key) return cachedRemote.tier;
     const resolver = options.s3Credentials;
+    // Encryption default-ON (issue #367 §C4): opt-OUT via `encrypt: false`,
+    // except a `provider`-kind connection may never opt out — the operator
+    // doesn't control that bucket's access boundary the way they do a BYO
+    // one, so the vault's own AEAD envelope is the only guarantee.
+    const forceEncrypt = settings.connectionKind === 'provider';
+    const encryptOn = forceEncrypt || settings.encrypt !== false;
     const tier: RemoteTier = {
       store: new S3BlobStore({
         endpoint: settings.endpoint,
@@ -158,8 +202,9 @@ export function openVaultDb(options: OpenVaultOptions = {}): VaultDb {
         region: settings.region,
         prefix: settings.prefix,
         credentials: () => resolver(settings),
+        ...(settings.throttleBytesPerSec ? { throttleBytesPerSec: settings.throttleBytesPerSec } : {}),
       }),
-      encryptKey: settings.encrypt ? sealKey : undefined,
+      encryptKey: encryptOn ? sealKey : undefined,
     };
     cachedRemote = { key, tier };
     return tier;

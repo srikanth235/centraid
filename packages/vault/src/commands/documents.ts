@@ -23,6 +23,7 @@ import type { Gateway } from '../gateway/gateway.js';
 import type { CommandDefinition, HandlerCtx } from '../gateway/types.js';
 import { MAX_INLINE_DATA_URI_CHARS, mintContentFromDataUri } from '../blob/mint.js';
 import { setStarred, starredExistsSql } from './flags.js';
+import { assertInlineDataUriWithinBudget } from './inline-body-guard.js';
 import { RELATIONS_SCHEME_URI_SQL } from './links.js';
 import { recordRevision } from './revisions.js';
 
@@ -216,6 +217,7 @@ function addDocument(ctx: HandlerCtx): Record<string, unknown> {
   // content item — re-presenting known bytes dedupes the BYTES (deduped: 1)
   // but always mints a fresh document, because two documents may
   // legitimately share identical bytes.
+  if (input.data_uri !== undefined) assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
     ? ctx.blobs.claimStaged(input.staged_sha, { title: input.title })
     : mintContentFromDataUri(ctx, input.data_uri!, { title: input.title });
@@ -589,6 +591,7 @@ function editDocument(ctx: HandlerCtx): Record<string, unknown> {
   // FTS triggers decode it in-transaction. The media type carries forward —
   // an edit changes the words, never the format.
   const dataUri = `data:${doc.media_type};charset=utf-8,${encodeURIComponent(input.body_text)}`;
+  assertInlineDataUriWithinBudget(dataUri);
   const minted = mintContentFromDataUri(ctx, dataUri, {});
   const sets: string[] = ['updated_at = ?'];
   const values: string[] = [ctx.now];
@@ -699,6 +702,7 @@ function replaceDocumentContent(ctx: HandlerCtx): Record<string, unknown> {
     .prepare('SELECT current_content_id FROM core_document WHERE document_id = ?')
     .get(input.document_id) as { current_content_id: string } | undefined;
   if (!doc) throw new Error('document vanished between check and execute');
+  if (input.data_uri !== undefined) assertInlineDataUriWithinBudget(input.data_uri);
   const minted = input.staged_sha
     ? ctx.blobs.claimStaged(input.staged_sha, {})
     : mintContentFromDataUri(ctx, input.data_uri!, {});

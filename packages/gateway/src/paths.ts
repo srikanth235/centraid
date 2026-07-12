@@ -100,4 +100,16 @@ export interface GatewayPaths {
    * `gateway-logs` sibling of `vaultDir`).
    */
   logsDir?: string;
+
+  /**
+   * Optional root for gateway-level storage state (issue #367 §C1/§C10):
+   * the `storage-connections` entity (`connections.json` + its dedicated
+   * seal key, `storage-connections.ts`) and the recovery-kit confirmation
+   * flag (`recovery-kit.json`, generalized off the backup-only field it
+   * started as). Kept OUTSIDE `vaultDir` for the same reason `backupDir`
+   * is — this is gateway plumbing, not vault content, and must never ride
+   * a raw copy of a vault directory. Omit to default to a `storage`
+   * sibling of `vaultDir`.
+   */
+  storageDir?: string;
 }

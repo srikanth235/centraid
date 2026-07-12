@@ -15,7 +15,7 @@
 // never changes an address — and the local tier stays plaintext (it shares
 // vault.db's disk trust; the remote tier is the third party).
 
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -25,32 +25,18 @@ import { nowIso } from '../ids.js';
 import type { LocalBlobStore } from './local.js';
 import { sha256OfBytes, shaOfBlobUri, type BlobRange, type BlobStore } from './store.js';
 
-const NONCE_BYTES = 12;
-const TAG_BYTES = 16;
+import { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 
-/** AAD binding a remote ciphertext to its content address. */
-function blobAad(sha: string): Buffer {
-  return Buffer.from(`blob:${sha}`, 'utf8');
-}
+export { sealBlob, sealBlobStream, unsealBlob } from './seal.js';
 
-export function sealBlob(key: Buffer, sha: string, plaintext: Buffer): Buffer {
-  const nonce = randomBytes(NONCE_BYTES);
-  const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  cipher.setAAD(blobAad(sha));
-  const ct = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  return Buffer.concat([nonce, ct, cipher.getAuthTag()]);
-}
+/**
+ * Blobs at or above this size stream from disk into the remote tier instead
+ * of buffering the whole plaintext (issue #367 §C8) — mirrors
+ * `S3BlobStore`'s own `MULTIPART_THRESHOLD_BYTES` so the two decisions line
+ * up (a blob under this streams as one small buffered `put` either way).
+ */
+const STREAMING_REPLICATE_THRESHOLD_BYTES = 32 * 1024 * 1024;
 
-export function unsealBlob(key: Buffer, sha: string, sealed: Buffer): Buffer {
-  if (sealed.length < NONCE_BYTES + TAG_BYTES) throw new Error('sealed blob truncated');
-  const nonce = sealed.subarray(0, NONCE_BYTES);
-  const tag = sealed.subarray(sealed.length - TAG_BYTES);
-  const ct = sealed.subarray(NONCE_BYTES, sealed.length - TAG_BYTES);
-  const decipher = createDecipheriv('aes-256-gcm', key, nonce);
-  decipher.setAAD(blobAad(sha));
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]);
-}
 
 /** How the host resolves the (settings-declared) remote tier on demand. */
 export interface RemoteTier {
@@ -74,6 +60,25 @@ export interface ReconcileResult {
   replicated: string[];
   /** Live shas missing from BOTH tiers — an integrity error, reported. */
   missing: string[];
+  /**
+   * Remote objects that WOULD have been deleted as orphans, had the caller
+   * not passed `skipOrphanDelete` (issue #367 §C6 — the gateway instance
+   * lease is conflicted, so a second live gateway process might legitimately
+   * still be writing here). Empty whenever orphan-delete ran normally.
+   */
+  orphansSkipped: string[];
+}
+
+export interface ReconcileOptions {
+  /**
+   * Skip the orphan-DELETE phase (issue #367 §C6): while the gateway
+   * instance lease is conflicted (two processes may be live against the
+   * same vault), an object this process doesn't recognize might be one the
+   * OTHER instance just wrote — deleting it would be a real data-loss risk,
+   * not a cosmetic one. Replication (push) and missing-detection still run;
+   * only the destructive delete phase pauses.
+   */
+  skipOrphanDelete?: boolean;
 }
 
 /**
@@ -87,6 +92,13 @@ export interface ReconcileResult {
 export interface BlobSweepStatus {
   /** ISO timestamp of the last `reconcile()` that returned without throwing. */
   lastCompletedAt: string | null;
+  /**
+   * ISO timestamp of the last `reconcile()` ATTEMPT, success or failure
+   * (issue #367 §C5) — `lastCompletedAt` only moves on success, so a caller
+   * computing a failure backoff window needs this to know when the clock
+   * for "try again" actually started.
+   */
+  lastAttemptedAt: string | null;
   /** The last `reconcile()` failure's message, cleared on the next success. */
   lastError: string | null;
   /** Consecutive failures since the last success — the `blob-sweep` probe's "persistent vs. transient" line. */
@@ -95,6 +107,7 @@ export interface BlobSweepStatus {
 
 export class BlobCustody {
   private lastSweepCompletedAt: string | null = null;
+  private lastSweepAttemptedAt: string | null = null;
   private lastSweepError: string | null = null;
   private sweepConsecutiveFailures = 0;
 
@@ -112,6 +125,7 @@ export class BlobCustody {
   sweepStatus(): BlobSweepStatus {
     return {
       lastCompletedAt: this.lastSweepCompletedAt,
+      lastAttemptedAt: this.lastSweepAttemptedAt,
       lastError: this.lastSweepError,
       consecutiveFailures: this.sweepConsecutiveFailures,
     };
@@ -176,15 +190,41 @@ export class BlobCustody {
     const moved: string[] = [];
     for (const sha of want) {
       if (there.has(sha)) continue;
-      const bytes = this.local.getSync(sha);
-      if (!bytes) continue;
-      await remote.store.put(
-        sha,
-        remote.encryptKey ? sealBlob(remote.encryptKey, sha, bytes) : bytes,
-      );
-      moved.push(sha);
+      if (await this.replicateOne(remote, sha)) moved.push(sha);
     }
     return moved;
+  }
+
+  /**
+   * Push one sha to the remote tier, streaming from disk when it's large
+   * enough to matter (issue #367 §C8) and both tiers support it; otherwise
+   * the original buffered path. `false` when the local tier no longer has
+   * this sha (raced with a delete — not an error, just nothing to push).
+   */
+  private async replicateOne(remote: RemoteTier, sha: string): Promise<boolean> {
+    const openStream = this.local.openReadStreamSync?.bind(this.local);
+    if (openStream && remote.store.putStream) {
+      const opened = openStream(sha);
+      if (opened) {
+        if (opened.size < STREAMING_REPLICATE_THRESHOLD_BYTES) {
+          // Small enough that streaming buys nothing — fall through to the
+          // buffered path below, which also exercises `getSync`'s normal
+          // caching-adjacent semantics for small blobs.
+        } else {
+          const source = remote.encryptKey
+            ? opened.stream.pipe(sealBlobStream(remote.encryptKey, sha))
+            : opened.stream;
+          await remote.store.putStream(sha, source, opened.size);
+          return true;
+        }
+      } else {
+        return false; // local tier raced a delete out from under us
+      }
+    }
+    const bytes = this.local.getSync(sha);
+    if (!bytes) return false;
+    await remote.store.put(sha, remote.encryptKey ? sealBlob(remote.encryptKey, sha, bytes) : bytes);
+    return true;
   }
 
   /**
@@ -198,9 +238,10 @@ export class BlobCustody {
    * propagates (`VaultPlane.runSweep` already catches it to log a warning);
    * this only ADDS a readable trace of that same outcome.
    */
-  async reconcile(liveShas: Set<string>): Promise<ReconcileResult> {
+  async reconcile(liveShas: Set<string>, options: ReconcileOptions = {}): Promise<ReconcileResult> {
+    this.lastSweepAttemptedAt = nowIso();
     try {
-      const result = await this.doReconcile(liveShas);
+      const result = await this.doReconcile(liveShas, options);
       this.lastSweepCompletedAt = nowIso();
       this.lastSweepError = null;
       this.sweepConsecutiveFailures = 0;
@@ -212,16 +253,27 @@ export class BlobCustody {
     }
   }
 
-  private async doReconcile(liveShas: Set<string>): Promise<ReconcileResult> {
-    const result: ReconcileResult = { orphansDeleted: [], replicated: [], missing: [] };
+  private async doReconcile(
+    liveShas: Set<string>,
+    options: ReconcileOptions,
+  ): Promise<ReconcileResult> {
+    const result: ReconcileResult = {
+      orphansDeleted: [],
+      replicated: [],
+      missing: [],
+      orphansSkipped: [],
+    };
     const remote = this.remoteTier();
     const remoteShas = remote ? new Set(await remote.store.list()) : new Set<string>();
     if (remote) {
       for (const sha of remoteShas) {
-        if (!liveShas.has(sha)) {
-          await remote.store.delete(sha);
-          result.orphansDeleted.push(sha);
+        if (liveShas.has(sha)) continue;
+        if (options.skipOrphanDelete) {
+          result.orphansSkipped.push(sha);
+          continue;
         }
+        await remote.store.delete(sha);
+        result.orphansDeleted.push(sha);
       }
     }
     for (const sha of liveShas) {
@@ -390,4 +442,32 @@ export function custodyStateCounts(vault: DatabaseSync): Record<CustodyState, nu
     .all() as { custody_state: CustodyState; n: number }[];
   for (const row of rows) counts[row.custody_state] = row.n;
   return counts;
+}
+
+/**
+ * Byte-summed twin of `custodyStateCounts` (issue #367 §C7): the Storage
+ * status route wants replicated/backlog progress in BYTES, not just object
+ * counts — `core_content_item.byte_size` is already the authoritative size
+ * per content id (schema/core.ts), so this is one more GROUP BY join, not a
+ * second tier scan. Kept as a separate function rather than widening
+ * `custodyStateCounts`'s return shape — the `blob-sweep` health probe (and
+ * any other existing caller) only ever wanted counts.
+ */
+export function custodyStateByteCounts(vault: DatabaseSync): Record<CustodyState, number> {
+  const bytes: Record<CustodyState, number> = {
+    'local-only': 0,
+    replicated: 0,
+    'remote-only': 0,
+    missing: 0,
+  };
+  const rows = vault
+    .prepare(
+      `SELECT s.custody_state AS custody_state, COALESCE(SUM(c.byte_size), 0) AS bytes
+         FROM blob_custody_state s
+         JOIN core_content_item c ON c.content_id = s.content_id
+        GROUP BY s.custody_state`,
+    )
+    .all() as { custody_state: CustodyState; bytes: number }[];
+  for (const row of rows) bytes[row.custody_state] = row.bytes;
+  return bytes;
 }

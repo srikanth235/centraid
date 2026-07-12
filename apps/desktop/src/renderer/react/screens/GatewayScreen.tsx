@@ -1,8 +1,6 @@
 import { useRef, useState, type JSX } from 'react';
 import Icon from '../ui/Icon.js';
 import { cx } from '../ui/cx.js';
-import buttonCss from '../ui/Button.module.css';
-import controlsCss from '../styles/controls.module.css';
 import {
   ALERT_PRESETS,
   availabilityPct,
@@ -23,7 +21,9 @@ import SettingsDiagnosticsScreen, {
 } from './SettingsDiagnosticsScreen.js';
 import LogsScreen, { type LogsBridgeProps } from './LogsScreen.js';
 import BackupCard, { type BackupCardProps } from './BackupCard.js';
+import StorageCard, { type StorageCardProps } from './StorageCard.js';
 import AlertHistoryPanel from './AlertHistoryPanel.js';
+import RestartGatewayButton from './RestartGatewayButton.js';
 import styles from './GatewayScreen.module.css';
 
 // The Gateway page — a calm instrument panel over the main-process
@@ -70,6 +70,11 @@ export interface GatewayScreenProps {
   onRunBackupNow: BackupCardProps['onRunNow'];
   /** Recovery-kit confirmation gate (Backups card) — `POST _gateway/backup/kit-confirmed`. */
   onConfirmRecoveryKit: BackupCardProps['onConfirmRecoveryKit'];
+  /** Storage card data (Overview tab) — per-connection usage + per-vault
+   *  replication status (issue #367 §D3). */
+  loadStorageStatus: StorageCardProps['loadStatus'];
+  /** Navigates to Settings → Storage — the card's "Manage" link and empty state. */
+  onOpenStorageSettings: StorageCardProps['onOpenSettings'];
   /**
    * Restart the local embedded gateway (Overview tab, near the runtime
    * status). Refused for a remote gateway — main answers `{ok: false}`
@@ -114,45 +119,6 @@ function Figure({
       <div className={styles.figureLabel}>{label}</div>
       <div className={styles.figureValue}>{value}</div>
       {sub ? <div className={styles.figureSub}>{sub}</div> : null}
-    </div>
-  );
-}
-
-function RestartGatewayButton({
-  onRestart,
-}: {
-  onRestart: () => Promise<{ ok: boolean; error?: string }>;
-}): JSX.Element {
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const restart = async (): Promise<void> => {
-    setPending(true);
-    setError(null);
-    try {
-      const result = await onRestart();
-      if (!result.ok) setError(result.error ?? 'Restart was refused.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setPending(false);
-    }
-  };
-
-  return (
-    <div className={styles.restartWrap}>
-      <button
-        type="button"
-        className={cx(buttonCss.btn, buttonCss.sm, controlsCss.soft)}
-        disabled={pending}
-        onClick={() => void restart()}
-      >
-        <span className={styles.restartIcon} data-spin={pending || undefined}>
-          <Icon name={pending ? 'Loader' : 'Power'} size={13} />
-        </span>
-        <span>{pending ? 'Restarting…' : 'Restart gateway'}</span>
-      </button>
-      {error ? <div className={styles.restartError}>{error}</div> : null}
     </div>
   );
 }
@@ -380,6 +346,14 @@ export default function GatewayScreen(props: GatewayScreenProps): JSX.Element {
               loadStatus={props.loadBackupStatus}
               onRunNow={props.onRunBackupNow}
               onConfirmRecoveryKit={props.onConfirmRecoveryKit}
+            />
+
+            {/* Storage — remote quota + replication-drift read over the
+                gateway-level storage-connection entity (issue #367 §D3). */}
+            <StorageCard
+              now={now}
+              loadStatus={props.loadStorageStatus}
+              onOpenSettings={props.onOpenStorageSettings}
             />
           </div>
         </>

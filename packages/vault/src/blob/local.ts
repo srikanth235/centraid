@@ -9,6 +9,7 @@
 
 import {
   closeSync,
+  createReadStream,
   existsSync,
   fsyncSync,
   mkdirSync,
@@ -35,6 +36,14 @@ export interface LocalBlobStore extends BlobStore {
   deleteSync(sha256: string): void;
   listSync(): string[];
   statSync(sha256: string): BlobStat | null;
+  /**
+   * Open a large blob for streaming (issue #367 §C8) instead of reading it
+   * whole into memory — the replication path uses this for anything over
+   * the multipart threshold. `null` when the driver has no streaming seam
+   * (e.g. `MemoryBlobStore`) or the blob is absent; callers fall back to
+   * `getSync`.
+   */
+  openReadStreamSync?(sha256: string): { stream: NodeJS.ReadableStream; size: number } | null;
 }
 
 export class FsBlobStore implements LocalBlobStore {
@@ -118,6 +127,12 @@ export class FsBlobStore implements LocalBlobStore {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;
     }
+  }
+
+  openReadStreamSync(sha: string): { stream: NodeJS.ReadableStream; size: number } | null {
+    const stat = this.statSync(sha);
+    if (!stat) return null;
+    return { stream: createReadStream(this.fileFor(sha)), size: stat.size };
   }
 
   put(sha: string, bytes: Buffer): Promise<void> {

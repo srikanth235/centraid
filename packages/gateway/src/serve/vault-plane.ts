@@ -98,6 +98,9 @@ import {
   type ExtApplyOutcome,
   type ExtTableSpec,
   type DemoPurgeResult,
+  type BlobStoreSettings,
+  type S3Credentials,
+  runJournalArchival,
 } from '@centraid/vault';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -121,6 +124,49 @@ import {
 } from './vault-picker.js';
 import { applyRestoreQuarantine, type QuarantineStatus } from './vault-quarantine.js';
 
+/** Blob-sweep failure backoff (issue #367 §C5) — one step per consecutive failure, flat-capped. */
+const BLOB_SWEEP_BACKOFF_STEP_MS = 60_000;
+const BLOB_SWEEP_MAX_BACKOFF_MS = 30 * 60_000;
+
+/**
+ * Pure backoff decision (issue #367 §C5), extracted out of `runSweep` so it
+ * is unit-testable without a live timer: no failures yet, or the backoff
+ * window (since the last ATTEMPT, not the last success) has elapsed →
+ * proceed; otherwise skip this tick. Exported for `vault-plane.test.ts`.
+ */
+export function blobSweepBackoff(
+  status: { consecutiveFailures: number; lastAttemptedAt: string | null },
+  nowMs: number,
+): { skip: boolean; retryInMs: number } {
+  if (status.consecutiveFailures <= 0 || !status.lastAttemptedAt) return { skip: false, retryInMs: 0 };
+  const backoffMs = Math.min(
+    BLOB_SWEEP_BACKOFF_STEP_MS * status.consecutiveFailures,
+    BLOB_SWEEP_MAX_BACKOFF_MS,
+  );
+  const dueAtMs = Date.parse(status.lastAttemptedAt) + backoffMs;
+  const retryInMs = dueAtMs - nowMs;
+  return retryInMs > 0 ? { skip: true, retryInMs } : { skip: false, retryInMs: 0 };
+}
+
+/** The pre-#367 default: `CENTRAID_S3_*` in the gateway process environment. */
+function defaultEnvS3Credentials(): Promise<S3Credentials> {
+  const accessKeyId = process.env.CENTRAID_S3_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.CENTRAID_S3_SECRET_ACCESS_KEY;
+  if (!accessKeyId || !secretAccessKey) {
+    return Promise.reject(
+      new Error(
+        's3 blob store configured but CENTRAID_S3_ACCESS_KEY_ID / CENTRAID_S3_SECRET_ACCESS_KEY are not in the gateway environment (issue #296: creds are harness-ambient, never settings)',
+      ),
+    );
+  }
+  const sessionToken = process.env.CENTRAID_S3_SESSION_TOKEN;
+  return Promise.resolve({
+    accessKeyId,
+    secretAccessKey,
+    ...(sessionToken ? { sessionToken } : {}),
+  });
+}
+
 export interface VaultPlaneOptions {
   /** Directory holding `vault.db` + `journal.db`. Created if absent. */
   dir: string;
@@ -142,6 +188,26 @@ export interface VaultPlaneOptions {
   vaultName?: string;
   /** Sweep cadence for lifecycle duties. Default: hourly. */
   sweepIntervalMs?: number;
+  /**
+   * Whether the gateway instance lease (issue #351 tier 1) is CURRENTLY
+   * conflicted — a fresh foreign lease means a second gateway process may
+   * legitimately be live against this same vault root. Read fresh on every
+   * blob sweep tick (issue #367 §C6) to gate the orphan-delete phase of
+   * `BlobCustody.reconcile()` — deleting a remote object this process
+   * doesn't recognize would be a real data-loss risk if the OTHER instance
+   * just wrote it. Defaults to "never conflicted" (single-instance hosts,
+   * tests).
+   */
+  leaseConflicted?: () => boolean;
+  /**
+   * Resolve S3 credentials for a vault's remote blob tier (issue #367 §C3):
+   * the gateway-level `StorageConnectionStore` wires this to
+   * `settings.connectionId` (sealed byo-s3 creds, or a cached
+   * `requestCasGrant` for a provider connection). Defaults to the legacy
+   * harness-ambient env-var lane (`CENTRAID_S3_*`, issue #296 §2) for hosts
+   * that haven't adopted storage connections yet.
+   */
+  s3Credentials?: (settings: BlobStoreSettings) => Promise<S3Credentials>;
 }
 
 /** A grant request the owner approves — scopes as the manifest declares them. */
@@ -258,6 +324,9 @@ async function asVaultCallResultAsync(fn: () => Promise<unknown>): Promise<Vault
   }
 }
 
+/** Journal archival cadence (issue #367 §E2): once a day is plenty. */
+const JOURNAL_ARCHIVAL_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
 export class VaultPlane {
   readonly db: VaultDb;
   readonly gateway: VaultGateway;
@@ -275,7 +344,9 @@ export class VaultPlane {
   readonly quarantine: QuarantineStatus | null;
   private readonly logger: RuntimeLogger;
   private readonly sweepIntervalMs: number;
+  private readonly leaseConflicted: () => boolean;
   private sweepTimer: NodeJS.Timeout | undefined;
+  private lastJournalArchivalAt = 0;
   private closed = false;
   private displayName: string;
   /**
@@ -290,34 +361,22 @@ export class VaultPlane {
   constructor(options: VaultPlaneOptions) {
     this.logger = options.logger;
     this.sweepIntervalMs = options.sweepIntervalMs ?? 60 * 60 * 1000;
+    this.leaseConflicted = options.leaseConflicted ?? (() => false);
     this.dir = options.dir;
     // Runner scratch lives in a disposable cache OUTSIDE the vault tree; fall
     // back to the vault dir only for callers that don't supply one (tests).
     this.cacheDir = options.cacheDir ?? options.dir;
-    // S3 blob-store credentials are HARNESS-AMBIENT (issue #296 §2, the
-    // #290 broker posture): they live in the gateway process environment,
-    // never in settings or vault rows. A vault whose settings name an s3
-    // tier without the env pair stays local-only and the replication sweep
-    // reports the gap instead of failing writes.
+    // S3 blob-store credentials (issue #296 §2, extended #367 §C3): the
+    // default lane stays HARNESS-AMBIENT env vars, never settings — but a
+    // host that has wired a `StorageConnectionStore` (build-gateway.ts)
+    // injects `options.s3Credentials`, which resolves per `connectionId`
+    // instead (sealed byo-s3 creds, or a cached provider grant). A vault
+    // whose settings name an s3 tier without a resolvable credential stays
+    // local-only and the replication sweep reports the gap instead of
+    // failing writes.
     this.db = openVaultDb({
       dir: options.dir,
-      s3Credentials: () => {
-        const accessKeyId = process.env.CENTRAID_S3_ACCESS_KEY_ID;
-        const secretAccessKey = process.env.CENTRAID_S3_SECRET_ACCESS_KEY;
-        if (!accessKeyId || !secretAccessKey) {
-          return Promise.reject(
-            new Error(
-              's3 blob store configured but CENTRAID_S3_ACCESS_KEY_ID / CENTRAID_S3_SECRET_ACCESS_KEY are not in the gateway environment (issue #296: creds are harness-ambient, never settings)',
-            ),
-          );
-        }
-        const sessionToken = process.env.CENTRAID_S3_SESSION_TOKEN;
-        return Promise.resolve({
-          accessKeyId,
-          secretAccessKey,
-          ...(sessionToken ? { sessionToken } : {}),
-        });
-      },
+      s3Credentials: options.s3Credentials ?? defaultEnvS3Credentials,
     });
     this.boot = ensureVaultBootstrapped(this.db, {
       ownerName: options.ownerName ?? 'Owner',
@@ -1491,25 +1550,82 @@ export class VaultPlane {
       // Blob custody maintenance (issue #296): replicate to the remote tier
       // and reconcile orphans, detached — remote latency never blocks the
       // lifecycle sweep, and a vault with no remote tier no-ops.
-      void this.gateway
-        .sweepBlobs(this.ownerCredential)
-        .then((blobs) => {
-          if (blobs.replicated.length + blobs.orphansDeleted.length + blobs.missing.length > 0) {
+      //
+      // Failure backoff (issue #367 §C5): a sweep that keeps throwing (dead
+      // credentials, an unreachable endpoint) would otherwise re-attempt on
+      // every lifecycle tick — fine at the default hourly cadence, a hot
+      // loop at a test's shortened one. `BlobSweepStatus.lastAttemptedAt`
+      // (stamped by `reconcile()` itself, success or failure) is the clock;
+      // a flat window scaled by consecutive failures and capped, matching
+      // this codebase's other backoffs (`MOUNT_RETRY_BACKOFF_MS`) rather
+      // than an unbounded exponential ramp.
+      const sweepStatus = this.db.blobs.sweepStatus();
+      const backoff = blobSweepBackoff(sweepStatus, Date.now());
+      if (backoff.skip) {
+        this.logger.warn(
+          `vault plane: blob sweep backing off after ${sweepStatus.consecutiveFailures} ` +
+            `consecutive failure(s) — next attempt in ${Math.ceil(backoff.retryInMs / 1000)}s`,
+        );
+      } else {
+        this.runBlobSweep();
+      }
+      // Journal segment archival (issue #367 §E2): slow-cadence — at most
+      // once per day per plane; the 90-day window makes it a no-op on young
+      // vaults, and the segments it writes join the blob CAS, so the sweep
+      // above replicates them remotely on the next pass.
+      if (Date.now() - this.lastJournalArchivalAt >= JOURNAL_ARCHIVAL_MIN_INTERVAL_MS) {
+        this.lastJournalArchivalAt = Date.now();
+        try {
+          const archived = runJournalArchival(this.db);
+          if (archived.rowsArchived > 0) {
             this.logger.info(
-              `vault plane: blob sweep replicated=${blobs.replicated.length} orphansDeleted=${blobs.orphansDeleted.length} missing=${blobs.missing.length}`,
+              `vault plane: journal archival rowsArchived=${archived.rowsArchived} ` +
+                `manifests=${archived.manifests.length} vacuum=${archived.reclaim.mode}`,
             );
           }
-        })
-        .catch((err: unknown) => {
+        } catch (err) {
           this.logger.warn(
-            `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+            `vault plane: journal archival failed: ${err instanceof Error ? err.message : String(err)}`,
           );
-        });
+        }
+      }
     } catch (err) {
       this.logger.warn(
         `vault plane: sweep failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  }
+
+  /**
+   * The blob-custody half of `runSweep`, split out so the failure-backoff
+   * check above can skip it without a nested detached-promise indent. Lease
+   * gating (issue #367 §C6): the orphan-DELETE phase pauses while a second
+   * gateway instance appears live against this vault root — pushing new
+   * replicas and detecting missing shas still runs either way.
+   */
+  private runBlobSweep(): void {
+    void this.gateway
+      .sweepBlobs(this.ownerCredential, { skipOrphanDelete: this.leaseConflicted() })
+      .then((blobs) => {
+        if (
+          blobs.replicated.length +
+            blobs.orphansDeleted.length +
+            blobs.orphansSkipped.length +
+            blobs.missing.length >
+          0
+        ) {
+          this.logger.info(
+            `vault plane: blob sweep replicated=${blobs.replicated.length} ` +
+              `orphansDeleted=${blobs.orphansDeleted.length} orphansSkipped=${blobs.orphansSkipped.length} ` +
+              `missing=${blobs.missing.length}`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `vault plane: blob sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
   }
 
   /** Stop the clock, checkpoint the WALs, close the files. Idempotent. */

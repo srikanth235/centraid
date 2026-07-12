@@ -31,6 +31,95 @@ export interface S3BlobStoreOptions {
   credentials: () => Promise<S3Credentials>;
   /** Test seam. Defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /**
+   * Upload rate cap, bytes/sec (issue #367 §C7) — a simple token bucket
+   * applied before every PUT / multipart UploadPart. Omitted/0 = unthrottled.
+   * Downloads (`get`) are never throttled — only the replication path this
+   * store's writes serve needs pacing against the owner's uplink.
+   */
+  throttleBytesPerSec?: number;
+}
+
+/** Bodies over this size use multipart upload (issue #367 §C8) instead of one PUT. */
+export const MULTIPART_THRESHOLD_BYTES = 32 * 1024 * 1024;
+/** Multipart part size — S3's own minimum is 5 MiB; this bounds streaming memory to roughly one part. */
+const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * A plain token bucket: refills continuously at `ratePerSec`, `consume`
+ * blocks until enough tokens exist (or the request is bigger than the whole
+ * per-second budget, in which case it drains what's there and proceeds —
+ * this paces sustained throughput, it isn't a hard per-call cap).
+ */
+class TokenBucket {
+  private tokens: number;
+  private lastRefillMs: number;
+
+  constructor(private readonly ratePerSec: number) {
+    this.tokens = ratePerSec;
+    this.lastRefillMs = Date.now();
+  }
+
+  async consume(bytes: number): Promise<void> {
+    if (this.ratePerSec <= 0 || bytes <= 0) return;
+    for (;;) {
+      this.refill();
+      if (this.tokens >= bytes || bytes >= this.ratePerSec) {
+        this.tokens = Math.max(0, this.tokens - bytes);
+        return;
+      }
+      const waitMs = ((bytes - this.tokens) / this.ratePerSec) * 1000;
+      await delay(Math.min(Math.max(waitMs, 10), 1000));
+    }
+  }
+
+  private refill(): void {
+    const now = Date.now();
+    const elapsedSec = (now - this.lastRefillMs) / 1000;
+    this.lastRefillMs = now;
+    this.tokens = Math.min(this.ratePerSec, this.tokens + elapsedSec * this.ratePerSec);
+  }
+}
+
+async function streamToBuffer(source: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of source as AsyncIterable<Buffer | string>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Re-chunk a Readable into fixed-size Buffers, bounding resident memory to
+ * roughly one part size regardless of the source's total length (issue #367
+ * §C8: "never materializing the whole blob in memory").
+ */
+async function* chunkReadable(
+  source: NodeJS.ReadableStream,
+  partSize: number,
+): AsyncGenerator<Buffer> {
+  let buffered: Buffer[] = [];
+  let bufferedLen = 0;
+  for await (const raw of source as AsyncIterable<Buffer | string>) {
+    let chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+    while (chunk.length > 0) {
+      const need = partSize - bufferedLen;
+      const take = chunk.subarray(0, Math.min(need, chunk.length));
+      buffered.push(take);
+      bufferedLen += take.length;
+      chunk = chunk.subarray(take.length);
+      if (bufferedLen >= partSize) {
+        yield Buffer.concat(buffered, bufferedLen);
+        buffered = [];
+        bufferedLen = 0;
+      }
+    }
+  }
+  if (bufferedLen > 0) yield Buffer.concat(buffered, bufferedLen);
 }
 
 function hmac(key: Buffer | string, data: string): Buffer {
@@ -57,9 +146,11 @@ function encodeKeyPath(key: string): string {
 export class S3BlobStore implements BlobStore {
   readonly kind = 's3';
   private readonly base: URL;
+  private readonly throttle: TokenBucket | undefined;
 
   constructor(private readonly options: S3BlobStoreOptions) {
     this.base = new URL(options.endpoint);
+    this.throttle = options.throttleBytesPerSec ? new TokenBucket(options.throttleBytesPerSec) : undefined;
   }
 
   private keyFor(sha: string): string {
@@ -142,11 +233,104 @@ export class S3BlobStore implements BlobStore {
   }
 
   async put(sha: string, bytes: Buffer): Promise<void> {
+    if (this.throttle) await this.throttle.consume(bytes.length);
     const res = await this.request('PUT', this.keyFor(sha), {
       body: bytes,
       headers: { 'content-type': 'application/octet-stream' },
     });
     if (!res.ok) throw new Error(`s3 put ${sha}: ${res.status} ${await res.text()}`);
+  }
+
+  /**
+   * Streaming upload (issue #367 §C8): bodies at or under
+   * `MULTIPART_THRESHOLD_BYTES` buffer whole (bounded, same as `put`);
+   * larger ones go through S3 multipart upload, streamed from `source` in
+   * `MULTIPART_PART_SIZE_BYTES` chunks — at most one part resident in memory
+   * at a time, never the whole blob. Aborts the multipart upload on any
+   * failure so a partial upload doesn't bill/linger.
+   */
+  async putStream(sha: string, source: NodeJS.ReadableStream, approxSize: number): Promise<void> {
+    const key = this.keyFor(sha);
+    if (approxSize <= MULTIPART_THRESHOLD_BYTES) {
+      return this.put(sha, await streamToBuffer(source));
+    }
+    const uploadId = await this.createMultipartUpload(key);
+    try {
+      const parts: { partNumber: number; etag: string }[] = [];
+      let partNumber = 1;
+      for await (const chunk of chunkReadable(source, MULTIPART_PART_SIZE_BYTES)) {
+        const etag = await this.uploadPart(key, uploadId, partNumber, chunk);
+        parts.push({ partNumber, etag });
+        partNumber += 1;
+      }
+      if (parts.length === 0) {
+        // An empty stream — S3 refuses a zero-part complete. Abort and fall
+        // back to a trivial single PUT (a 0-byte blob is a degenerate case,
+        // not a multipart one).
+        await this.abortMultipartUpload(key, uploadId);
+        await this.put(sha, Buffer.alloc(0));
+        return;
+      }
+      await this.completeMultipartUpload(key, uploadId, parts);
+    } catch (err) {
+      await this.abortMultipartUpload(key, uploadId).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private async createMultipartUpload(key: string): Promise<string> {
+    const res = await this.request('POST', key, { query: { uploads: '' } });
+    if (!res.ok) {
+      throw new Error(`s3 create-multipart-upload: ${res.status} ${await res.text()}`);
+    }
+    const xml = await res.text();
+    const uploadId = /<UploadId>([^<]+)<\/UploadId>/.exec(xml)?.[1];
+    if (!uploadId) throw new Error('s3 create-multipart-upload: response carried no UploadId');
+    return uploadId;
+  }
+
+  private async uploadPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    body: Buffer,
+  ): Promise<string> {
+    if (this.throttle) await this.throttle.consume(body.length);
+    const res = await this.request('PUT', key, {
+      body,
+      query: { partNumber: String(partNumber), uploadId },
+    });
+    if (!res.ok) {
+      throw new Error(`s3 upload-part ${partNumber}: ${res.status} ${await res.text()}`);
+    }
+    // Some path-style test doubles don't echo an ETag — fall back to a
+    // synthetic one keyed by part number so `completeMultipartUpload`'s XML
+    // still has *something* per part (real S3 always sets this header).
+    return res.headers.get('etag') ?? `"part-${partNumber}"`;
+  }
+
+  private async completeMultipartUpload(
+    key: string,
+    uploadId: string,
+    parts: readonly { partNumber: number; etag: string }[],
+  ): Promise<void> {
+    const body = Buffer.from(
+      `<CompleteMultipartUpload>${parts
+        .map((p) => `<Part><PartNumber>${p.partNumber}</PartNumber><ETag>${p.etag}</ETag></Part>`)
+        .join('')}</CompleteMultipartUpload>`,
+      'utf8',
+    );
+    const res = await this.request('POST', key, { body, query: { uploadId } });
+    if (!res.ok) {
+      throw new Error(`s3 complete-multipart-upload: ${res.status} ${await res.text()}`);
+    }
+  }
+
+  private async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+    const res = await this.request('DELETE', key, { query: { uploadId } });
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`s3 abort-multipart-upload: ${res.status} ${await res.text()}`);
+    }
   }
 
   async get(sha: string, range?: BlobRange): Promise<Buffer | null> {

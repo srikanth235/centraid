@@ -286,7 +286,7 @@ export default function App(): JSX.Element {
         case 'templates':
           return <TemplatesRoute />;
         case 'settings':
-          return <SettingsRoute prefs={prefs} setPrefs={setPrefs} />;
+          return <SettingsRoute prefs={prefs} setPrefs={setPrefs} initialPage={nav.route.page} />;
         case 'app': {
           const id = nav.route.id;
           const app = [...userApps, ...drafts].find((a) => a.id === id);
